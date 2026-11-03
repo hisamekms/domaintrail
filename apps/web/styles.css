@@ -7926,6 +7926,53 @@ label.proposal-option {
     font-size: var(--fs-small);
     line-height: var(--lh-small);
 }
+/* an interview's choices under the question it awaits (its starter only): compact action buttons, the brand on a pale
+   wash of it, wrapping; several to check (a checkbox in each) and 送る filled; その他 last, outlined only */
+.interview-choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) 6px;
+    margin-top: var(--space-2);
+}
+.session-chat .interview-choice {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    max-width: 100%;
+    padding: 2px var(--space-2);
+    border: 1px solid var(--brand-wash-border);
+    border-radius: 6px;
+    background: var(--brand-wash);
+    color: var(--brand);
+    font: inherit;
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+    line-height: var(--lh-small);
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+.session-chat .interview-choice:hover:not(:disabled),
+.session-chat .interview-choice.checked {
+    border-color: var(--brand);
+}
+.session-chat .interview-choice input {
+    margin: 0;
+    accent-color: var(--brand);
+}
+.session-chat .interview-choice.send {
+    border-color: var(--brand);
+    background: var(--brand);
+    color: var(--on-brand);
+}
+.session-chat .interview-choice.other {
+    background: transparent;
+}
+.session-chat .interview-choice:disabled {
+    border-color: var(--disabled-border);
+    background: var(--disabled-bg);
+    color: var(--disabled-text);
+    cursor: default;
+}
 .session-chat button.chat-small.next-command {
     display: inline-flex;
     align-items: center;

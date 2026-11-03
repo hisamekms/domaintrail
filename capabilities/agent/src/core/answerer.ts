@@ -123,7 +123,9 @@ export function startAnswerer(deps: AnswererDeps, options: AnswererOptions = {})
         const read = readInterviewerReply(outputOf(result));
         if (!read.ok) return { error: `invalid output (${read.error.path})`, ...meta };
         const reply = read.value;
-        return reply.kind === 'question' ? { kind: 'question', question: reply.question, ...meta } : { kind: 'brief', brief: briefData(reply.brief), ...meta };
+        if (reply.kind === 'brief') return { kind: 'brief', brief: briefData(reply.brief), ...meta };
+        const { question, choices, multiple } = reply;
+        return { kind: 'question', question, ...(choices.length > 0 && { choices, multiple }), ...meta };
     };
 
     /** A command's turn: its candidates or its answer, as the server takes it (`AgentCommandResultBody`). */

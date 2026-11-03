@@ -86,7 +86,7 @@ import { AiAvatar, ProposalCard } from './proposal';
 import { chosenIndex } from './proposal-view';
 import { parseReplyText, referenceText } from './references';
 import { TriageRecordPanel } from './triage-record';
-import { InterviewPanel, interviewSlot } from './interview';
+import { InterviewChoices, InterviewPanel, interviewSlot } from './interview';
 import { CandidatesCard, commandSlot } from './candidates';
 import { commandComposerValue, nextAnswerOf, NextSteps } from './next-steps';
 import { canStartCommand, runningInterview, selectedOf, slashItems, slashQuery, templateValue, type SlashItem, type SlashScope } from './slash';
@@ -380,6 +380,11 @@ export function SessionChat(props: {
         },
         [composer],
     );
+    // an interview's その他: the composer, in the chat, focused
+    const focusComposer = useCallback((): void => {
+        setView('chat');
+        setReplyFocus((n) => n + 1);
+    }, []);
     // the selection confirmed for a request: the composer is in the chat
     useEffect(() => {
         if (focusPending) setView('chat');
@@ -515,6 +520,7 @@ export function SessionChat(props: {
         reveal,
         showPerson,
         putCommand,
+        focusComposer,
         replies,
     };
 
@@ -1252,6 +1258,7 @@ function AiMessageRow({ request: r, continues, hangs }: { request: RequestJson; 
                         <MarkdownText text={r.body} onNavigate={onNavigate} />
                     </Clamped>
                 )}
+                <InterviewChoices request={r.id} />
                 <ReactionRow target={{ kind: 'Message', request: r.id }} />
             </Bubble>
             <RowActions>

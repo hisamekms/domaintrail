@@ -128,6 +128,21 @@ describe('interviews', () => {
         expect(value(await use.interviewJobs({ session })).map((j) => j.request.id)).toEqual([again.request.id]);
     });
 
+    test('a question with choices: kept on the interview until its starter answers (and in the stored session)', async () => {
+        const { use, session } = await solo();
+        const started = value(await start(use, session));
+        const choices = ['返品', '交換'].map((c) => value(C.makeAnswerChoice(c)));
+        const q1 = value(await use.askInInterview({ interview: started.interview.id, answered: started.request.id, question: text('どの業務？'), choices }));
+        expect(q1.interview.asked).toEqual({ question: q1.question.id, choices, multiple: false });
+        const stored = value(await use.sessionState({ session })).interviews?.[0];
+        expect(stored).toMatchObject({ state: 'Asking', asked: { question: q1.question.id, choices: ['返品', '交換'], multiple: false } });
+        const answer = value(await say(use, session, facilitator, '返品', { replyTo: { kind: 'Message', request: q1.question.id } }));
+        expect(answer.interview?.asked).toBeUndefined();
+        // `multiple` only with choices
+        const q2 = value(await use.askInInterview({ interview: started.interview.id, answered: answer.request.id, question: text('なぜ？'), multiple: true }));
+        expect(q2.interview.asked).toEqual({ question: q2.question.id, choices: [], multiple: false });
+    });
+
     test('brief, then confirm: a run whose input carries the brief (edited); the starter only', async () => {
         const { use, session } = await collab();
         const started = value(await start(use, session));

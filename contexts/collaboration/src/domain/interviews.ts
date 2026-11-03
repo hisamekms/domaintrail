@@ -48,6 +48,10 @@ export const INTERVIEW_LIMITS = {
     text: 1500,
     /** A new storming's or context's label. */
     label: 100,
+    /** A question's choices: at least two to show any, at most six, each one short line. */
+    minChoices: 2,
+    maxChoices: 6,
+    choice: 40,
 } as const;
 
 /** Whether an interview is still running: asking, or its brief waiting to be confirmed. */
@@ -105,9 +109,17 @@ export interface BriefData {
     readonly lines: readonly BriefLine[];
 }
 
-/** The interviewer's reply to an interview job: the next question, or the brief. */
+/**
+ * The interviewer's reply to an interview job: the next question (with its choices, none when it has no natural
+ * candidates; `multiple` when several of them make one answer), or the brief.
+ */
 export type InterviewerReply =
-    | { readonly kind: 'question'; readonly question: string }
+    | {
+          readonly kind: 'question';
+          readonly question: string;
+          readonly choices: readonly Collaboration.AnswerChoice[];
+          readonly multiple: boolean;
+      }
     | { readonly kind: 'brief'; readonly brief: Collaboration.InterviewBrief };
 
 /** What went wrong reading the interviewer's output (or a brief edited on the page): where, and what. */
@@ -216,18 +228,53 @@ export function readBrief(raw: unknown, path: string): Result<Collaboration.Inte
     });
 }
 
-/** The interviewer's JSON (`{ kind: 'question', question }` or `{ kind: 'brief', brief }`), validated. */
+/** Every control character (a choice is one line): what `readChoices` turns into spaces. */
+// oxlint-disable-next-line no-control-regex -- control characters are what it finds
+const CONTROLS = /[\u0000-\u001f\u007f]+/gu;
+
+/**
+ * A question's choices as the interviewer writes them, cleaned rather than refused (they only help the person answer):
+ * what is not a string or is blank is dropped, each one is put on one line, trimmed and cut to
+ * `INTERVIEW_LIMITS.choice` characters (`…` at the end), the second of two alike (case aside) is dropped, and at most
+ * `INTERVIEW_LIMITS.maxChoices` are kept. Fewer than `INTERVIEW_LIMITS.minChoices` left: none (one is no choice).
+ * They are the model's output, shown as text and sent back as the person's answer: never read as instructions.
+ */
+export function readChoices(raw: unknown): readonly Collaboration.AnswerChoice[] {
+    if (!Array.isArray(raw)) return [];
+    const out: Collaboration.AnswerChoice[] = [];
+    const seen = new Set<string>();
+    for (const c of raw) {
+        if (out.length >= INTERVIEW_LIMITS.maxChoices) break;
+        if (typeof c !== 'string') continue;
+        const line = c.replace(CONTROLS, ' ').replace(/\s+/gu, ' ').trim();
+        if (!line) continue;
+        const cut = line.length > INTERVIEW_LIMITS.choice ? `${line.slice(0, INTERVIEW_LIMITS.choice - 1).trimEnd()}…` : line;
+        const key = cut.toLowerCase();
+        if (seen.has(key)) continue;
+        const made = Collaboration.makeAnswerChoice(cut);
+        if (!made.ok) continue;
+        seen.add(key);
+        out.push(made.value);
+    }
+    return out.length >= INTERVIEW_LIMITS.minChoices ? out : [];
+}
+
+/** The interviewer's JSON (`{ kind: 'question', question, choices?, multiple? }` or `{ kind: 'brief', brief }`), validated. */
 export function readInterviewerReply(raw: unknown): Result<InterviewerReply, InterviewProblem> {
     if (!isObject(raw)) return err({ path: 'reply', message: 'Expected an object.' });
     switch (raw.kind) {
         case 'question': {
-            const unknown = extra(raw, ['kind', 'question'], 'reply');
+            const unknown = extra(raw, ['kind', 'question', 'choices', 'multiple'], 'reply');
             if (unknown) return err(unknown);
+            if (raw.choices !== undefined && !Array.isArray(raw.choices)) return err({ path: 'reply.choices', message: 'Expected an array of strings.' });
+            if (raw.multiple !== undefined && typeof raw.multiple !== 'boolean') return err({ path: 'reply.multiple', message: 'Expected a boolean.' });
             if (typeof raw.question !== 'string' || !raw.question.trim()) return err({ path: 'reply.question', message: 'Expected a non-empty string.' });
             const q = raw.question.trim();
             if (q.length > INTERVIEW_LIMITS.question) return err({ path: 'reply.question', message: `At most ${INTERVIEW_LIMITS.question} characters.` });
             if (CONTROL.test(q)) return err({ path: 'reply.question', message: 'No control characters.' });
-            return ok({ kind: 'question', question: q });
+            const choices = readChoices(raw.choices);
+            // several at once only means something with choices to pick
+            return ok({ kind: 'question', question: q, choices, multiple: choices.length > 0 && raw.multiple === true });
         }
         case 'brief': {
             const unknown = extra(raw, ['kind', 'brief'], 'reply');
@@ -258,6 +305,12 @@ export function interviewerJsonSchema(): Record<string, unknown> {
         properties: {
             kind: { type: 'string', enum: ['question', 'brief'] },
             question: { type: 'string', minLength: 1, maxLength: INTERVIEW_LIMITS.question },
+            choices: {
+                type: 'array',
+                maxItems: INTERVIEW_LIMITS.maxChoices,
+                items: { type: 'string', minLength: 1, maxLength: INTERVIEW_LIMITS.choice },
+            },
+            multiple: { type: 'boolean' },
             brief: {
                 type: 'object',
                 properties: {
@@ -297,7 +350,7 @@ export const interviewCommands: Collaboration.InterviewCommands = {
         const session: Collaboration.SessionId = params.session;
         return ok({
             Asking: {
-                set: { id, session, command, startedBy, opening, focus, language, startedAt, awaiting: opening },
+                set: { id, session, command, startedBy, opening, focus, language, startedAt, awaiting: opening, asked: undefined },
                 events: {
                     InterviewStarted: {
                         type: 'InterviewStarted',
@@ -319,7 +372,7 @@ export const interviewCommands: Collaboration.InterviewCommands = {
         Asking: (interview, { message, heardAt }) =>
             ok({
                 Asking: {
-                    set: { awaiting: message },
+                    set: { awaiting: message, asked: undefined },
                     events: { InterviewAnswered: { type: 'InterviewAnswered', interviewId: interview.id, message, heardAt } },
                 },
             }),
@@ -327,7 +380,7 @@ export const interviewCommands: Collaboration.InterviewCommands = {
         Briefed: (interview, { message, heardAt }) =>
             ok({
                 Asking: {
-                    set: { awaiting: message },
+                    set: { awaiting: message, asked: undefined },
                     events: { InterviewAnswered: { type: 'InterviewAnswered', interviewId: interview.id, message, heardAt } },
                 },
             }),
@@ -339,8 +392,17 @@ export const interviewCommands: Collaboration.InterviewCommands = {
             const { question, askedAt } = params;
             return ok({
                 Asking: {
-                    set: { awaiting: undefined },
-                    events: { InterviewQuestionAsked: { type: 'InterviewQuestionAsked', interviewId: interview.id, question, askedAt } },
+                    set: { awaiting: undefined, asked: question },
+                    events: {
+                        InterviewQuestionAsked: {
+                            type: 'InterviewQuestionAsked',
+                            interviewId: interview.id,
+                            question: question.question,
+                            choices: question.choices,
+                            multiple: question.multiple,
+                            askedAt,
+                        },
+                    },
                 },
             });
         },

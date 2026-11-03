@@ -908,8 +908,14 @@ export interface AgentProposeResultBody {
     readonly durationMs: number;
 }
 
-/** `POST /agent/answers/:job` for an interview job: the next question, or the brief (`readInterviewerReply`). */
-export type AgentInterviewResultBody = ({ readonly kind: 'question'; readonly question: string } | { readonly kind: 'brief'; readonly brief: BriefBody }) & {
+/**
+ * `POST /agent/answers/:job` for an interview job: the next question (its choices, two to six, cleaned again by the
+ * server; `multiple` when several make one answer), or the brief (`readInterviewerReply`).
+ */
+export type AgentInterviewResultBody = (
+    | { readonly kind: 'question'; readonly question: string; readonly choices?: readonly string[]; readonly multiple?: boolean }
+    | { readonly kind: 'brief'; readonly brief: BriefBody }
+) & {
     readonly model?: string;
     readonly durationMs: number;
 };

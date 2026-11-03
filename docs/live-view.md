@@ -387,7 +387,8 @@ The chat has two views:
   replaces the current description), four or five lines with heads (目的 / 範囲 / 使い道 / レベル for `/es:start`), and 確定 /
   編集して確定 / 中止. A message instead of confirming takes it back to the questions. Confirmed, a run writes the brief as
   the `///` description right above the `storming` (or the `context`), creating it when new; the inspector shows it
-  when the storming is selected. The interview survives a reload. `/es:exceptions` (例外を洗い出す, the facilitator's) has
+  when the storming is selected. A question with natural candidates shows them as buttons under it for its starter
+  (one sends it at once; several are checked and sent with 送る; その他 goes to the composer). The interview survives a reload. `/es:exceptions` (例外を洗い出す, the facilitator's) has
   the AI list, for the storming in view (its stage or timeline when one is shown), the exceptions its main flow does
   not model yet: a card in the chat with each candidate (its label, the events as chips, how in a line, why), none
   checked; its starter checks some and 採用したものを反映 makes one run that adds them as `exception`s (中止 drops it;

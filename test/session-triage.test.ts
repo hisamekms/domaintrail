@@ -488,11 +488,19 @@ describe('the interviews of `/es:start` and `/model:start`', () => {
             author: 'Facilitator',
             transcript: [{ from: 'person', text: 'ES を始める' }],
         });
-        expect((await stream.post(first.job, { kind: 'question', question: 'どの業務ですか？', durationMs: 5 })).status).toBe(200);
+        // the question's choices: cleaned again by the server (a duplicate dropped), kept on the interview
+        const posted = { kind: 'question', question: 'どの業務ですか？', choices: ['返品', '交換', '返品'], multiple: false, durationMs: 5 };
+        expect((await stream.post(first.job, posted)).status).toBe(200);
         const question = (await ctx.state()).requests.find((r) => r.author === 'ai');
+        expect((await ctx.state()).interviews?.find((i) => i.id === interview.id)).toMatchObject({
+            state: 'Asking',
+            asked: { question: question?.id, choices: ['返品', '交換'], multiple: false },
+        });
         // the starter's answer: no triage, the next turn due; Bob's reply to the question: triaged
         const answer = await say(ctx, ctx.ada, '返品です', { replyTo: { kind: 'Message', request: question?.id } });
         expect(triageOf(await ctx.state(), answer)).toBeUndefined();
+        // answered: the choices are gone
+        expect((await ctx.state()).interviews?.find((i) => i.id === interview.id)).not.toHaveProperty('asked');
         const bobs = await say(ctx, ctx.bob, '交換も？', { replyTo: { kind: 'Message', request: question?.id } });
         expect(triageOf(await ctx.state(), bobs)).toMatchObject({ addressedBy: 'Reply' });
         // the stream holds one job at a time: Bob's triage (stage 3) and the interview's turn come in either order

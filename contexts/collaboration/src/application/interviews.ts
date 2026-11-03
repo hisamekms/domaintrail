@@ -60,11 +60,16 @@ export interface InterviewUseCases {
             | Collaboration.SessionAlreadyClosed
         >
     >;
-    /** The interviewer's next question: a message of the AI replying to the message it answers. */
+    /**
+     * The interviewer's next question: a message of the AI replying to the message it answers. Its choices (none, or two
+     * to six; `multiple` when several make one answer) are kept on the interview until its starter answers.
+     */
     askInInterview(input: {
         readonly interview: InterviewId;
         readonly answered: Collaboration.RequestId;
         readonly question: Collaboration.Text;
+        readonly choices?: readonly Collaboration.AnswerChoice[];
+        readonly multiple?: boolean;
     }): Promise<
         Result<
             { readonly question: Collaboration.SentRequest; readonly interview: Collaboration.AskingInterview },
@@ -161,7 +166,7 @@ export function createInterviews(deps: CollaborationDeps): InterviewUseCases {
             });
         },
 
-        async askInInterview({ interview, answered, question }) {
+        async askInInterview({ interview, answered, question, choices = [], multiple = false }) {
             return uow.transaction(async (stores) => {
                 const found = load(stores, interview);
                 if (!found.ok) return found;
@@ -172,7 +177,11 @@ export function createInterviews(deps: CollaborationDeps): InterviewUseCases {
                 const at = clock.now();
                 const id = knownRequestId(ids.newId());
                 // the interview first: a question to a message it no longer waits for writes nothing
-                const asked = interviewCommands.ask(i, { answered, question: id, askedAt: at });
+                const asked = interviewCommands.ask(i, {
+                    answered,
+                    question: { question: id, choices, multiple: choices.length > 0 && multiple },
+                    askedAt: at,
+                });
                 if (!asked.ok) return asked;
                 const { Sent } = decided(requestCommands.answer({ id, session: active.value, answers: answered, body: question, sentAt: at }));
                 stores.requests.save(Sent.aggregate);
