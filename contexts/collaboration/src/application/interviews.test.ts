@@ -245,6 +245,15 @@ describe('interviews', () => {
         const confirmed = value(await use.confirmInterview({ interview: started.interview.id, actor: facilitator }));
         expect(confirmed.run).toBeUndefined();
         expect(confirmed.interview).toMatchObject({ state: 'Confirmed' });
+        // dt's note: the AI's reply to the message the brief answered, the fields that changed (no workspace: one line)
+        expect(confirmed.note).toMatchObject({
+            author: AI_PARTICIPANT_ID,
+            replyTo: { kind: 'Message', request: started.request.id },
+            body: 'ブリーフを見直しました（目的・範囲・参加者・使い道・レベルが変わりました）。',
+            journeyNote: { journey: 'es:Returns', targets: [] },
+        });
+        expect(value(await use.sessionState({ session })).requests.at(-1)?.journeyNote as unknown).toEqual({ journey: 'es:Returns', targets: [] });
+        expect(value(await use.sessionSoFar({ session })).text).toContain('ブリーフを見直しました');
         expect(readJourney(journeys.text() ?? '').file.stormings.Returns).toEqual({
             purpose: '返金を早める',
             scope: '申請から返金まで',
@@ -300,6 +309,41 @@ describe('interviews', () => {
         expect(value(await use.sessionState({ session })).session.currentJourney as string | undefined).toBe('billing');
     });
 
+    test("a new storming's note waits for its run: created when it completes, else not created; once", async () => {
+        const { use, session } = await solo();
+        const started = value(await start(use, session));
+        value(await use.briefInterview({ interview: started.interview.id, answered: started.request.id, brief: brief() }));
+        const confirmed = value(await use.confirmInterview({ interview: started.interview.id, actor: facilitator }));
+        expect(confirmed.note).toBeUndefined();
+        const notes = async (): Promise<string[]> =>
+            value(await use.sessionState({ session })).requests.flatMap((r) => (r.journeyNote ? [r.body as string] : []));
+        expect(await notes()).toEqual([]);
+        const claimed = value(await use.claimNextRun({ session, owner: 'test', leaseMs: 60_000 }));
+        value(await use.startRun({ run: claimed.run.id, token: claimed.lease.token }));
+        const facts = { exitCode: 0, formatted: 'Skipped', checked: 'Skipped' } as const;
+        value(await use.finishRun({ run: claimed.run.id, token: claimed.lease.token, facts }));
+        expect(await notes()).toEqual([
+            'ストーミング「返品」を作り、旅程に加えました（ゴール：ビッグピクチャー）。\nまず出来事を出します。起きたことを話してください。',
+        ]);
+        // the same finish again (a replay): no second note
+        value(await use.finishRun({ run: claimed.run.id, token: claimed.lease.token, facts }));
+        expect(await notes()).toHaveLength(1);
+
+        // another new storming whose run is cancelled: not created, its journey kept
+        const other = value(await start(use, session));
+        value(
+            await use.briefInterview({
+                interview: other.interview.id,
+                answered: other.request.id,
+                brief: brief({ name: value(C.makeBriefName('Exchanges')), label: value(C.makeBriefLabel('交換')) }),
+            }),
+        );
+        const run = value(await use.confirmInterview({ interview: other.interview.id, actor: facilitator })).run;
+        if (!run) throw new Error('a new storming takes a run');
+        value(await use.cancelRun({ run: run.id, actor: facilitator }));
+        expect((await notes()).at(-1)).toBe('ストーミング「交換」を作れませんでした。旅程はそのまま残しています。');
+    });
+
     test('a journey file that does not read: nothing is written over it, the brief waits', async () => {
         const { use, session, journeys } = await solo(memoryJourneys('{ "version": 1, "stormings": { "Returns": {} } }'));
         const started = value(await start(use, session));
@@ -351,6 +395,13 @@ describe('an interview a participant started', () => {
         // the new storming's run is queued by the facilitator, on the message the brief answered
         expect(approved.run).toMatchObject({ queuedBy: facilitatorId });
         expect(approved.run?.input.requests.map((r) => r.request)).toEqual([answer.request.id]);
+        // its note, once the run ends, names the facilitator who approved it
+        value(await use.cancelRun({ run: approved.run?.id ?? ('' as C.AgentRunId), actor: facilitator }));
+        const note = value(await use.sessionState({ session })).requests.find((r) => r.journeyNote);
+        expect(note).toMatchObject({
+            replyTo: { kind: 'Message', request: answer.request.id },
+            body: 'ストーミング「返品」を作れませんでした。旅程はそのまま残しています。',
+        });
         expect(value(await use.sessionSoFar({ session })).text).toContain("Ada approved Bob's brief of the interview /es:start after editing it");
     });
 
