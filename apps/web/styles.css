@@ -1293,6 +1293,21 @@ a.field-origin {
     outline: 2px dashed color-mix(in srgb, var(--selected-ring) 60%, transparent);
     outline-offset: 5px;
 }
+/* a storming note selected: the notes and edges joined to it stay, the rest fades (`focusedItems`); clicking the empty
+   canvas clears the selection and brings everything back */
+.diagram-canvas .react-flow__node,
+.diagram-canvas .react-flow__edge {
+    transition: opacity 160ms ease-out;
+}
+.diagram-canvas .diagram-dim {
+    opacity: 0.25;
+}
+@media (prefers-reduced-motion: reduce) {
+    .diagram-canvas .react-flow__node,
+    .diagram-canvas .react-flow__edge {
+        transition: none;
+    }
+}
 /* on the top edge, where the selection outline goes around them (see `nodeOutlinePath`) */
 .dn-badge {
     position: absolute;
