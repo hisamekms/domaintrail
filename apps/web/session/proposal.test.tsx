@@ -112,6 +112,7 @@ function render(p: ProposalJson, me: 'f' | 'bob'): string {
         onNavigate: () => {},
         nameOf: (id: string) => id,
         jump: () => {},
+        reveal: { clamps: () => true, open: () => {} },
         proposalPicks: { ids: new Set(), toggle: () => {}, clear: () => {}, options: new Map(), choose: () => {} },
     } as unknown as ChatContextValue;
     return renderToStaticMarkup(

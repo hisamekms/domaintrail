@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 
 // The page's motion, in JavaScript: the durations are the CSS tokens of styles.css (`--motion-*`, the "motion"
 // section), read from the page, so that the OS's "reduce motion" (which sets them to 0ms there) makes these instant too.
@@ -15,6 +15,67 @@ export function parseDuration(value: string): number {
 export function motionMs(name: string): number {
     if (typeof document === 'undefined') return 0;
     return parseDuration(getComputedStyle(document.documentElement).getPropertyValue(name));
+}
+
+/** The easing token `name` (e.g. `--motion-ease-enter`) on the page, as a CSS easing (`ease-out` without a page). */
+export function motionEasing(name: string): string {
+    if (typeof document === 'undefined') return 'ease-out';
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || 'ease-out';
+}
+
+/** A box's height moving from `from` to `to` pixels in `ms`. */
+export interface Grow {
+    readonly from: number;
+    readonly to: number;
+    readonly ms: number;
+}
+
+/**
+ * The growth of a box whose content changed: from the height it had (`undefined`: it had none to grow from, so it is
+ * shown as it is) to its new one, in `ms`; none with no motion (`ms` 0: "reduce motion") or when the height is the same.
+ */
+export function growMotion(from: number | undefined, to: number, ms: number): Grow | undefined {
+    if (from === undefined || ms <= 0 || Math.abs(to - from) < 1) return undefined;
+    return { from, to, ms };
+}
+
+/**
+ * A box that grows to its new content instead of jumping to it: as `key` changes, its height moves from the one it had
+ * to the new one (`--motion-grow`, decelerating) while the content fades in. One measure per change, after the change
+ * (the height before is the one measured at the change before); `fromNothing`: on its first showing it grows from 0
+ * (a row that arrived live). Nothing moves with "reduce motion".
+ */
+export function useGrow<E extends HTMLElement>(key: unknown, fromNothing = false): RefObject<E | null> {
+    const ref = useRef<E | null>(null);
+    const last = useRef<number | undefined>(undefined);
+    useLayoutEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        const to = el.getBoundingClientRect().height;
+        const from = last.current ?? (fromNothing ? 0 : undefined);
+        last.current = to;
+        const grow = growMotion(from, to, motionMs('--motion-grow'));
+        if (!grow || typeof el.animate !== 'function') return;
+        // clipped while it grows: the new content is taller than the box until the end
+        el.style.overflow = 'clip';
+        const animation = el.animate(
+            [
+                { height: `${grow.from}px`, opacity: 0 },
+                { height: `${grow.to}px`, opacity: 1 },
+            ],
+            { duration: grow.ms, easing: motionEasing('--motion-ease-enter') },
+        );
+        const done = (): void => {
+            el.style.removeProperty('overflow');
+        };
+        animation.onfinish = done;
+        return () => {
+            animation.cancel();
+            done();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [key]);
+    return ref;
 }
 
 /** Whether the panes are opening (`enter`: decelerating, a little longer) or closing (`exit`: shorter). */

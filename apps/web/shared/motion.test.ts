@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createHold, paneMotion, parseDuration, type HoldClock } from './motion';
+import { createHold, growMotion, paneMotion, parseDuration, type HoldClock } from './motion';
 import { centeredCamera, isLaidOut } from '../view/center';
 
 const styles = readFileSync(join(import.meta.dir, '..', 'styles.css'), 'utf8');
@@ -23,6 +23,20 @@ describe('the motion tokens', () => {
         const reduced = section.slice(section.indexOf('@media (prefers-reduced-motion: reduce)'));
         const zeroed = new Set([...reduced.matchAll(/(--motion-[a-z-]+):\s*0ms;/g)].map((m) => m[1]));
         for (const token of new Set(tokens)) expect(zeroed.has(token)).toBe(true);
+    });
+});
+
+describe('a row growing to its new content', () => {
+    test('from the height it had to the new one', () => {
+        expect(growMotion(40, 320, 250)).toEqual({ from: 40, to: 320, ms: 250 });
+        // a row that arrived: from nothing
+        expect(growMotion(0, 120, 250)).toEqual({ from: 0, to: 120, ms: 250 });
+    });
+
+    test('nothing moves with "reduce motion" (the token is 0ms), without a height before, or at the same height', () => {
+        expect(growMotion(40, 320, 0)).toBeUndefined();
+        expect(growMotion(undefined, 320, 250)).toBeUndefined();
+        expect(growMotion(320, 320.4, 250)).toBeUndefined();
     });
 });
 

@@ -3292,6 +3292,8 @@ svg.chat-launcher-mark {
     --motion-dialog-out: 100ms;
     /* small changes in place: the legend folding, the tree's branches */
     --motion-medium: 180ms;
+    /* a chat row growing to its new content (the AI's card turning into its answer), the content fading in */
+    --motion-grow: 250ms;
     --motion-ease-enter: cubic-bezier(0, 0, 0.2, 1);
     --motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
     --motion-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
@@ -3305,6 +3307,7 @@ svg.chat-launcher-mark {
         --motion-dialog-in: 0ms;
         --motion-dialog-out: 0ms;
         --motion-medium: 0ms;
+        --motion-grow: 0ms;
     }
 }
 
