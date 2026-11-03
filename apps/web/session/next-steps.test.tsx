@@ -1,4 +1,4 @@
-// `/es:next`'s answer in the chat (next-steps.tsx): the steps of the command answered with a message, rendered as a
+// `/hint`'s answer in the chat (next-steps.tsx): the steps of the command answered with a message, rendered as a
 // numbered list with a command button where a step suggests one (for who may start it; disabled while one of its kind
 // runs), the button putting `/` and the command's ID in the composer; and a candidate card's chips: only the elements
 // that exist (one to be added is named by its label and how).
@@ -32,7 +32,7 @@ const next: NextAnswerJson = {
     ],
 } as NextAnswerJson;
 
-const answered = (more: object = {}) => ({ id: 'c1', kind: 'EsNext', state: 'Answered', answer: 'a1', next, opening: 'o', startedAt: at, ...more }) as never;
+const answered = (more: object = {}) => ({ id: 'c1', kind: 'Hint', state: 'Answered', answer: 'a1', next, opening: 'o', startedAt: at, ...more }) as never;
 
 function chat(me: 'f' | 'bob', slashCommands: unknown[] = [], put: (id: string) => void = () => {}): ChatContextValue {
     return {
@@ -55,7 +55,7 @@ const render = (node: React.ReactNode, value: ChatContextValue): string =>
         </TargetNamingProvider>,
     );
 
-describe("/es:next's answer", () => {
+describe("/hint's answer", () => {
     test('the steps of the command answered with a message; none for any other', () => {
         expect(nextAnswerOf({ slashCommands: [answered()] }, 'a1')).toEqual(next);
         expect(nextAnswerOf({ slashCommands: [answered()] }, 'x')).toBeUndefined();
@@ -82,6 +82,9 @@ describe("/es:next's answer", () => {
         expect(commandButton({}, true, 'es:exceptions')).toBe('enabled');
         expect(commandButton({}, false, 'es:exceptions')).toBe('hidden');
         expect(commandButton({}, false, 'es:start')).toBe('hidden');
+        // `/model:start` (an interview): the facilitator's
+        expect(commandButton({}, true, 'model:start')).toBe('enabled');
+        expect(commandButton({}, false, 'model:start')).toBe('hidden');
         expect(commandButton({ slashCommands: [{ kind: 'EsExceptions', state: 'Listed' }] } as never, true, 'es:exceptions')).toBe('disabled');
         expect(commandButton({ interviews: [{ state: 'Asking' }] } as never, true, 'es:start')).toBe('disabled');
         const running = render(<NextSteps next={next} />, chat('f', [{ kind: 'EsExceptions', state: 'Working' }]));

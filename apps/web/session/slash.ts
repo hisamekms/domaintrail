@@ -1,9 +1,10 @@
 // What `/` lists in the composer (the plan's "message templates", round 4, and "`/` commands", round 5), without
 // React: the commands — interviews (`/es:start`, `/model:start`), candidate commands (`/es:exceptions`, `/es:gaps`,
-// `/es:levels`, `/es:names`: the AI lists changes to check) and answer commands (`/es:recap`, `/es:next`: the AI
+// `/es:levels`, `/es:names`: the AI lists changes to check) and answer commands (`/es:recap`, `/hint`: the AI
 // answers) — and the templates (built in, then the team's
-// from `domaintrail.jsonc`: each only puts its text in the composer). The commands are grouped by their prefix (`es:`,
-// then `model:`), each group's `:start` first, so that `/es` lists the ES commands. The list depends on what is open and
+// from `domaintrail.jsonc`: each only puts its text in the composer). `/hint` (the coach, for the event storming and the
+// modeling alike) comes first; then the commands grouped by their prefix (`es:`, then `model:`), each group's `:start`
+// first, so that `/es` lists the ES commands. The list depends on what is open and
 // selected (`TemplateContext`); filtering after `/` matches an item's stable English ID and its name in the UI
 // language. A template's `{target}` is where the selected element goes, as a `#` mention and the message's target.
 import {
@@ -12,6 +13,7 @@ import {
     isSlashCommandName,
     SLASH_COMMAND_NAMES,
     SLASH_COMMANDS,
+    suggestedCommandId,
     tokenName,
     type InterviewCommandId,
     type SlashCommandName,
@@ -31,10 +33,16 @@ export type CommandType = 'interview' | 'candidates' | 'answer';
 /** The prefixes, in the order their commands are listed. */
 const PREFIXES = ['es', 'model'] as const;
 
-/** The commands' IDs, in the order `/` lists them: by prefix, each prefix's `:start` (an interview) first. */
-export const COMMAND_IDS: readonly CommandId[] = PREFIXES.flatMap((prefix) =>
-    [...Object.keys(INTERVIEW_COMMANDS).filter(isInterviewCommandId), ...SLASH_COMMAND_NAMES].filter((id) => id.startsWith(`${prefix}:`)),
-);
+/**
+ * The commands' IDs, in the order `/` lists them: `/hint` first (where a beginner starts: it says what to do next),
+ * then by prefix, each prefix's `:start` (an interview) first.
+ */
+export const COMMAND_IDS: readonly CommandId[] = [
+    'hint',
+    ...PREFIXES.flatMap((prefix) =>
+        [...Object.keys(INTERVIEW_COMMANDS).filter(isInterviewCommandId), ...SLASH_COMMAND_NAMES].filter((id) => id.startsWith(`${prefix}:`)),
+    ),
+];
 
 /** What a command does. */
 export const commandType = (id: CommandId): CommandType => (isSlashCommandName(id) ? SLASH_COMMANDS[id].type : 'interview');
@@ -226,4 +234,27 @@ export function canStartCommand(state: Pick<SessionStateBody, 'interviews' | 'sl
     if (!isSlashCommandName(id)) return !runningInterview(state);
     const spec = SLASH_COMMANDS[id];
     return !(state.slashCommands ?? []).some((c) => c.kind === spec.kind && (c.state === 'Working' || c.state === 'Listed'));
+}
+
+/**
+ * The hint button of the composer (ヒントをもらう): hidden when the person cannot have a hint at all (no answerer
+ * connected: the commands go unanswered), disabled while a hint runs, else ready.
+ */
+export function hintButton(
+    state: Pick<SessionStateBody, 'interviews' | 'slashCommands'>,
+    facilitator: boolean,
+    answerer: boolean,
+): 'ready' | 'disabled' | 'hidden' {
+    if (!answerer || !isCommandAllowed(facilitator, 'hint')) return 'hidden';
+    return canStartCommand(state, facilitator, 'hint') ? 'ready' : 'disabled';
+}
+
+/**
+ * The commands the latest hint answered in the session suggests (its steps' commands, by their IDs): `/` marks them
+ * (☆ ヒントのおすすめ) until another hint is answered.
+ */
+export function hintSuggestions(state: Pick<SessionStateBody, 'slashCommands'>): ReadonlySet<string> {
+    const latest = (state.slashCommands ?? []).findLast((c) => c.kind === 'Hint' && c.state === 'Answered');
+    if (latest?.state !== 'Answered' || !latest.next) return new Set();
+    return new Set(latest.next.steps.flatMap((s) => (s.command ? [suggestedCommandId(s.command)] : [])));
 }

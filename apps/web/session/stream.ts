@@ -223,7 +223,8 @@ export function streamItems(
     for (const unit of changeUnits(state)) items.push({ kind: 'card', key: `card:${unit.key}`, at: unit.start, updatedAt: unit.at, unit });
     for (const proposal of state.proposals ?? []) items.push({ kind: 'proposal', key: `proposal:${proposal.id}`, at: proposal.proposedAt, proposal });
     // an answer command's answer is the AI's message: its card says only that the AI works on it (in Solo, its slot
-    // does), or that it had nothing to work on (`/es:next` with no storming in view: listed with none, until closed)
+    // does), or that it had nothing to work on (a hint stored from when it was `/es:next` and had no storming in view:
+    // listed with none, until closed)
     const solo = state.session !== undefined && isSolo({ session: state.session });
     for (const command of state.slashCommands ?? []) {
         const card = slashCommandSpec(command.kind).type === 'candidates' || (command.state === 'Working' && !solo) || command.state === 'Listed';

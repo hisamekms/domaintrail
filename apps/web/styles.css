@@ -352,6 +352,8 @@
        avatar and name say who) */
     --chat-mention-bg: var(--p-indigo-100);
     --chat-unread: var(--p-indigo-700);
+    /* the mark of a command the latest hint suggests (`/`'s list): the brand's amber, as a filled star */
+    --chat-hint-star: var(--p-brand-amber);
     /* the agent's activity (§4.2): one hue for every running phase (reading, editing, checking, finishing), the phase
        told by its icon and text; the other outcomes take the status tokens */
     --agent-active: var(--action);
@@ -533,6 +535,7 @@
     /* 5. collaboration */
     --chat-mention-bg: var(--p-indigo-night-600);
     --chat-unread: var(--p-indigo-300);
+    --chat-hint-star: var(--p-brand-amber);
     --agent-avatar: var(--p-slate-300);
     --on-agent-avatar: var(--p-night-950);
     --participant-halo-canvas: var(--p-slate-100);
@@ -5227,6 +5230,61 @@ button.add-to-request.added:hover {
     opacity: 0.45;
     cursor: default;
 }
+/* ヒントをもらう: the bar's left end, as tall as the send button; an action (the brand on a pale wash of it), its label
+   dropped when the composer is narrow (the icon, its tooltip and its aria-label stay) */
+.chat-composer-bar {
+    container: chat-composer-bar / inline-size;
+}
+.session-chat button.chat-hint {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    height: 26px;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--brand-wash-border);
+    border-radius: 6px;
+    background: var(--brand-wash);
+    color: var(--brand);
+    font: inherit;
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.session-chat button.chat-hint:hover:not(:disabled) {
+    border-color: var(--brand);
+}
+.session-chat button.chat-hint:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+@container chat-composer-bar (max-width: 18rem) {
+    .session-chat button.chat-hint {
+        width: 32px;
+        padding: 0;
+        justify-content: center;
+    }
+    .session-chat .chat-hint-label {
+        display: none;
+    }
+}
+/* the light bulb by the AI's name on a hint's answer */
+.chat-hint-mark {
+    display: inline-flex;
+    color: var(--brand);
+}
+/* a command the latest hint suggests, in `/`'s list: a small filled star right after its name (in the name's cell) */
+.chat-slash-suggested {
+    display: inline-flex;
+    margin-left: var(--space-1);
+    vertical-align: -1px;
+    color: var(--chat-hint-star);
+}
+.chat-slash-suggested svg {
+    fill: currentColor;
+}
 
 /* the participants: the first part of the collab menu (below) */
 .chat-people {
@@ -7899,7 +7957,7 @@ label.proposal-option {
 .candidates-row.state-Stopped .proposal {
     opacity: 0.6;
 }
-/* `/es:next`'s answer: the status, then the steps numbered, each its text and its command's button on one line (wrapping),
+/* `/hint`'s answer: the status, then the steps numbered, each its text and its command's button on one line (wrapping),
    its reason muted under it */
 .next-answer {
     font-size: var(--fs-body);

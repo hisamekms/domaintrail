@@ -5,7 +5,8 @@
 // checkbox for its starter, none checked at first, and 「採用したものを反映」 / 中止; the others read them with
 // 「始めた人の選択待ち」.
 // Applied, the ones chosen stay checked, the others dimmed, with a link to the run. Nothing to work on (no storming in
-// view) or no candidate: one short line, an answer command's too (`/es:next`). An answer command (`/es:recap`) has a card
+// view) or no candidate: one short line, an answer command's too (a hint
+// stored from when `/hint` was `/es:next` and needed a storming). An answer command (`/es:recap`) has a card
 // otherwise only while the AI works, in Collab (in Solo its pending slot under the message says so); its answer is the
 // AI's message.
 import { useState } from 'react';

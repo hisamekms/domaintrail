@@ -88,8 +88,20 @@ import { parseReplyText, referenceText } from './references';
 import { TriageRecordPanel } from './triage-record';
 import { InterviewChoices, InterviewPanel, interviewSlot } from './interview';
 import { CandidatesCard, commandSlot } from './candidates';
+import { HintButton, HintMark, startHint, SuggestedMark } from './hint';
 import { commandComposerValue, nextAnswerOf, NextSteps } from './next-steps';
-import { canStartCommand, runningInterview, selectedOf, slashItems, slashQuery, templateValue, type SlashItem, type SlashScope } from './slash';
+import {
+    canStartCommand,
+    hintButton,
+    hintSuggestions,
+    runningInterview,
+    selectedOf,
+    slashItems,
+    slashQuery,
+    templateValue,
+    type SlashItem,
+    type SlashScope,
+} from './slash';
 import { isReplyable, messageReference, messageReplyTargets, repliesToMe, replyReference, replyTargets, type ReplyDraft } from './replies';
 import { useRevisionTools } from './revisions';
 import { CancelButton, CancelDialog, RowActions, StatusSizer, StatusSlot, TurnLink } from './status-slot';
@@ -371,7 +383,7 @@ export function SessionChat(props: {
         }),
         [replyDraft, state, composer, units],
     );
-    // a command a step of `/es:next` suggests: in the composer, `/`'s list open on it, the composer focused
+    // a command a step of `/hint` suggests: in the composer, `/`'s list open on it, the composer focused
     const putCommand = useCallback(
         (id: string): void => {
             composer.setValue(commandComposerValue(id));
@@ -1245,11 +1257,12 @@ function AiStatus({ ai }: { ai: MessageAi }) {
  */
 function AiMessageRow({ request: r, continues, hangs }: { request: RequestJson; continues: boolean; hangs: boolean }) {
     const { tx, onNavigate, solo, session } = useChat();
-    // `/es:next`'s answer: its steps with their command buttons, rather than its text
+    // `/hint`'s answer: its steps with their command buttons, rather than its text; a light bulb by the AI's name
     const next = nextAnswerOf(session.state, r.id);
+    const badge = next && <HintMark label={tx.chat.hint.answer} />;
     return (
         <div className="chat-row">
-            <Bubble avatar={<AiAvatar />} who={tx.chat.agent} at={r.sentAt} continues={continues} className="chat-bubble-ai">
+            <Bubble avatar={<AiAvatar />} who={tx.chat.agent} badge={badge} at={r.sentAt} continues={continues} className="chat-bubble-ai">
                 {r.replyTo?.kind === 'Message' && !hangs && <MessageReferenceLine request={r.replyTo.request} />}
                 {next ? (
                     <NextSteps next={next} />
@@ -1764,6 +1777,12 @@ function Composer(props: {
     const slashOpen = slashText !== undefined && dismissed !== slashKey;
     const running = runningInterview(session.state);
     const facilitator = session.me.participant.role === 'facilitator';
+    // ヒントをもらう: with an answerer to take it, one at a time
+    const presence = aiPresence(session.state.agent);
+    const hint = hintButton(session.state, facilitator, !(presence.kind === 'missing' && presence.role !== 'run'));
+    const [hinting, setHinting] = useState(false);
+    // the commands the latest hint suggests: marked in `/`'s list
+    const suggested = useMemo(() => hintSuggestions(session.state), [session.state]);
     const scope = useMemo(
         (): SlashScope => ({ view: props.slash.view, selected: selectedOf(props.slash.selected, props.candidates) }),
         [props.slash.view, props.slash.selected, props.candidates],
@@ -1870,6 +1889,20 @@ function Composer(props: {
         }
     };
 
+    /** ヒントをもらう pressed: `/hint` started at once, the composer left as it is (nothing to type, no file changed). */
+    const askHint = async (): Promise<void> => {
+        setHinting(true);
+        try {
+            const focus = scope.selected?.target.target;
+            await startHint(sessionApi, { body: tx.chat.slash.commands.hint, language: lang, focus, viewedAt });
+            setError(undefined);
+        } catch (e) {
+            setError(failure(e));
+        } finally {
+            setHinting(false);
+        }
+    };
+
     const send = async (): Promise<void> => {
         const revision = latestRevision(session.state);
         if (!revision || !canSend) return;
@@ -1944,7 +1977,11 @@ function Composer(props: {
                                 }}
                             >
                                 {c.kind === 'command' && <Sparkles size={13} aria-hidden className="chat-slash-icon" />}
-                                <span className="chat-mention-name">{c.name}</span>
+                                {/* the hint's star in the name's cell: the option's grid keeps its columns */}
+                                <span className="chat-mention-name">
+                                    {c.name}
+                                    {c.kind === 'command' && suggested.has(c.id) && <SuggestedMark label={tx.chat.slash.suggested} />}
+                                </span>
                                 {c.kind === 'command' && <span className="chat-slash-what muted">{tx.chat.slash.types[c.type]}</span>}
                                 {c.kind === 'template' && c.template.team && <span className="chat-mention-kind">{tx.chat.slash.team}</span>}
                                 <span className="chat-mention-where muted">/{c.id}</span>
@@ -2032,6 +2069,7 @@ function Composer(props: {
                 />
             </div>
             <div className="chat-composer-bar">
+                {hint !== 'hidden' && <HintButton state={hint} busy={hinting} label={tx.chat.hint.button} onPress={() => void askHint()} />}
                 <ComposerChips
                     chips={value.chips}
                     expanded={chipsExpanded}
