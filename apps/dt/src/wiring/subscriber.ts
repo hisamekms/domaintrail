@@ -46,6 +46,7 @@ import { type AgentCredential, readServerAddress } from '@domaintrail/collaborat
 import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/analysis';
 import { SessionError } from '../cli/ports.js';
 import { findDomainFiles, GitIgnore, gitIgnoredEntries, gitNestedRepositories, gitReadableFiles } from '@domaintrail/workspace';
+import { localConfigFiles } from '../config/config.js';
 import { processAlive } from './process.js';
 import { answererExtraViews, runnerReadScope } from './read-scope.js';
 
@@ -235,6 +236,8 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             // what git ignores, kept from the runner (it works in the workspace itself; ADR 0030 as built in M4), and
             // what it reads outside the workspace, never writes
             readScope: () => runnerReadScope(() => runnerDeniedPaths(root), runTargets),
+            // a -c file and its local override, never edited (the default names are denied at any depth already)
+            ...(options.configPath && { configFiles: [path.resolve(options.configPath), ...localConfigFiles(path.resolve(options.configPath))] }),
             ...((run?.model ?? user.model) !== undefined && { model: run?.model ?? user.model }),
             ...((run?.effort ?? user.effort) !== undefined && { effort: run?.effort ?? user.effort }),
         };

@@ -7,7 +7,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { claudeArguments, extraReadRules, READ_DENIED } from './claude-code.js';
+import { CONFIG_EDIT_DENIED, claudeArguments, deniedRules, extraReadRules, READ_DENIED, UnexpressiblePath } from './claude-code.js';
 import { checkReadPaths, readTargets, shownReadPath } from './read-paths.js';
 
 const dirs: string[] = [];
@@ -110,8 +110,13 @@ describe('the arguments of claude for what it reads outside its working director
                 'Read(//srv/specs/vendor\\[1\\]/**)',
             ],
         });
-        // a relative path is no rule
-        expect(extraReadRules({ dirs: ['specs'], files: ['a.md'], denied: ['x'] })).toEqual({ allowed: [], denied: [] });
+        // a path no rule can name refuses them all, never left out
+        for (const wrong of [{ dirs: ['specs'] }, { files: ['a.md'] }, { denied: ['/srv/specs/a\nb'] }, { denied: ['/srv/specs/a\0b'] }, { note: 'a\rb' }]) {
+            expect(() => extraReadRules({ dirs: [], files: [], denied: [], ...wrong })).toThrow(UnexpressiblePath);
+            expect(() => claudeArguments(['Read'], 1, { extraRead: { dirs: [], files: [], denied: [], ...wrong } })).toThrow(UnexpressiblePath);
+        }
+        for (const wrong of ['', '/abs', '../up', 'a/../b', 'a\nb', 'a\rb', 'a\0b']) expect(() => deniedRules([wrong])).toThrow(UnexpressiblePath);
+        expect(() => claudeArguments(['Read'], 1, { deniedPaths: ['ok', 'bad\nname'] })).toThrow(UnexpressiblePath);
     });
 
     test("the runner's: its own tools and rules kept, edits scoped to the working directory, the extra rules after", () => {
@@ -119,7 +124,15 @@ describe('the arguments of claude for what it reads outside its working director
         expect(args.filter((_, i) => args[i - 1] === '--add-dir')).toEqual(['/srv/specs']);
         expect(args[args.indexOf('--append-system-prompt') + 1]).toBe('read-only');
         const denied = args.slice(args.indexOf('--disallowedTools') + 1, args.indexOf('--allowedTools'));
-        expect(denied).toEqual([...READ_DENIED, 'Read(./dist)', 'Edit(./dist)', 'Read(./dist/**)', 'Edit(./dist/**)', ...extraReadRules(extra).denied]);
+        expect(denied).toEqual([
+            ...READ_DENIED,
+            ...CONFIG_EDIT_DENIED,
+            'Read(./dist)',
+            'Edit(./dist)',
+            'Read(./dist/**)',
+            'Edit(./dist/**)',
+            ...extraReadRules(extra).denied,
+        ]);
         expect(args.slice(args.indexOf('--allowedTools') + 1)).toEqual(['Edit(./**)', 'Bash(dt fmt:*)', 'Read(//home/me/glossary.md)']);
         // without: no flag of it
         const none = claudeArguments(['Read'], 1, {});

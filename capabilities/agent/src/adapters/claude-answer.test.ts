@@ -10,7 +10,7 @@ import * as path from 'node:path';
 import { answererJsonSchema, triageJsonSchema } from '@domaintrail/collaboration';
 import type { AnswerAgent } from '../core/ports.js';
 import { createClaudeAnswerer, type ClaudeAnswererOptions } from './claude-answer.js';
-import { READ_DENIED } from './claude-code.js';
+import { CONFIG_EDIT_DENIED, READ_DENIED } from './claude-code.js';
 
 const FAKE = path.join(import.meta.dir, '..', '..', 'test-fixtures', 'warm-claude.mjs');
 
@@ -87,7 +87,7 @@ describe("the answerer role's Claude Code", () => {
         expect(valueOf(a.args, '--tools')).toBe('Read,Grep,Glob');
         // no allow rule (a bare Read would allow reading anywhere): reading inside the working directory needs none
         expect(a.args).not.toContain('--allowedTools');
-        expect(a.args.slice(a.args.indexOf('--disallowedTools') + 1)).toEqual([...READ_DENIED]);
+        expect(a.args.slice(a.args.indexOf('--disallowedTools') + 1)).toEqual([...READ_DENIED, ...CONFIG_EDIT_DENIED]);
         expect(READ_DENIED).toContain('Read(**/.git/**)');
         expect(valueOf(a.args, '--setting-sources')).toBe('');
         for (const tool of ['Edit', 'Write', 'Bash', 'MultiEdit', 'NotebookEdit']) expect(valueOf(a.args, '--tools')?.split(',')).not.toContain(tool);

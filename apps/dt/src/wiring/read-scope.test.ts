@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { MAX_IGNORED_ENTRIES, readTargets, TooManyDeniedEntries } from '@domaintrail/agent';
+import { claudeArguments, MAX_IGNORED_ENTRIES, readTargets, TooManyDeniedEntries, UnexpressiblePath } from '@domaintrail/agent';
 import { answererExtraViews, runnerReadScope } from './read-scope.js';
 import { answererView, runnerDeniedPaths } from './subscriber.js';
 
@@ -258,5 +258,21 @@ describe('what the agents read outside the workspace (agent.read.paths), as wire
         const refused: unknown = await runnerReadScope(() => runnerDeniedPaths(ws, env), targets, env).catch((e: unknown) => e);
         expect(refused).toBeInstanceOf(TooManyDeniedEntries);
         expect(String(refused)).toContain('agent.read.paths');
+    });
+
+    test('an entry no permission rule can name (a line break in its name) refuses the run, in the workspace or outside it', async () => {
+        const base = await scratch();
+        const env = await userGit('');
+        const ws = path.join(base, 'ws');
+        await put(ws, { '.gitignore': '*.tmp\n', 'a\nb.tmp': 'x' });
+        const loose = path.join(base, 'loose');
+        await mkdir(loose);
+        await symlink(path.join(ws, 'a\nb.tmp'), path.join(loose, 'odd\nlink'));
+        const workspace = await runnerReadScope(() => runnerDeniedPaths(ws, env), [], env);
+        expect(workspace.deniedPaths).toEqual(['a\nb.tmp']);
+        expect(() => claudeArguments(['Read'], 1, { deniedPaths: workspace.deniedPaths })).toThrow(UnexpressiblePath);
+        const { targets } = readTargets([loose], ws);
+        const outside = await runnerReadScope(async () => [], targets, env);
+        expect(() => claudeArguments(['Read'], 1, { deniedPaths: [], ...(outside.extra && { extraRead: outside.extra }) })).toThrow(UnexpressiblePath);
     });
 });

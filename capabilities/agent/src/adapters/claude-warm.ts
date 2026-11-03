@@ -53,7 +53,12 @@ export async function createWarmClaudeRunner(options: WarmRunnerOptions): Promis
         if (invocation.requests > schemaRequests) schemaRequests = invocation.requests;
         // what git ignores now: a change of it replaces the process (its arguments are its key)
         const { deniedPaths, extra } = (await options.readScope?.()) ?? { deniedPaths: [] };
-        const args = claudeArguments(invocation.allowedTools, schemaRequests, { ...flags, deniedPaths, ...(extra && { extraRead: extra }) });
+        const args = claudeArguments(invocation.allowedTools, schemaRequests, {
+            ...flags,
+            deniedPaths,
+            ...(extra && { extraRead: extra }),
+            ...(options.configFiles && { configFiles: options.configFiles }),
+        });
         const end = await warm.turn({
             profile: { args, key: JSON.stringify(args) },
             prompt: (continuing) => (continuing && invocation.continuedPrompt !== undefined ? invocation.continuedPrompt : invocation.prompt),

@@ -8,7 +8,7 @@
 import { spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import * as path from 'node:path';
-import type { AgentInvocation, AgentOutcome, AgentRunner } from '../core/ports.js';
+import { type AgentInvocation, type AgentOutcome, type AgentRunner, ReadScopeTooLarge } from '../core/ports.js';
 import { replyJsonSchema } from '@domaintrail/collaboration';
 import { parseReply } from '../core/prompt.js';
 import { activityOfEvent, createStreamReader } from './claude-stream.js';
@@ -39,6 +39,11 @@ export interface ClaudeRunOptions {
     readonly deniedPaths?: readonly string[];
     /** What the agent may read outside its working directory, never edit (`agent.read.paths`). */
     readonly extraRead?: ExtraRead;
+    /**
+     * Configuration files by absolute path the agent may never edit besides `CONFIG_EDIT_DENIED` (a `-c` file and its
+     * local override, which may have other names).
+     */
+    readonly configFiles?: readonly string[];
 }
 
 /**
@@ -83,31 +88,65 @@ export const READ_DENIED: readonly string[] = [
     'Edit(**/.git)',
 ];
 
+/** The names of the configuration files (the project's and the local override) the agents never write. */
+export const CONFIG_FILE_NAMES: readonly string[] = ['domaintrail.jsonc', 'domaintrail.json', 'domaintrail.local.jsonc', 'domaintrail.local.json'];
+
+/**
+ * What no agent edits or writes, at any depth: the configuration files. A runner that wrote `domaintrail.local.jsonc`
+ * (ignored by git, so out of sight) could widen what the next agent may read or run; the scan after a run would stop
+ * the subscriber, but the file would stay for the next start. Deny rules win over every allow rule.
+ */
+export const CONFIG_EDIT_DENIED: readonly string[] = CONFIG_FILE_NAMES.flatMap((name) => [`Edit(./${name})`, `Edit(**/${name})`]);
+
 /** A path as a permission rule's (gitignore syntax): its special characters escaped. */
 const rulePath = (p: string): string => p.replace(/[\\*?[\]!#]/g, (c) => `\\${c}`);
 
-/** The deny rules of `paths` (relative to the working directory): neither read nor edited, nor anything below them. */
+/**
+ * A path the agent must be kept from (or given) that no permission rule can name: a line break or NUL in it, or (for
+ * a path of the working directory) one that leaves it. The run is refused rather than run without that rule.
+ */
+export class UnexpressiblePath extends ReadScopeTooLarge {
+    constructor(p: string) {
+        super(
+            `A path of the agent's read scope cannot be written as a permission rule (${JSON.stringify(p)}: a line break or NUL in its name, or not where it should be): rename or remove it, then run again.`,
+        );
+        this.name = 'UnexpressiblePath';
+    }
+}
+
+/** A path of the working directory (relative, `/`-separated) as a rule's: refused (`UnexpressiblePath`) when it cannot be one. */
+const relativeRule = (p: string): string => {
+    if (!p || p.startsWith('/') || p.split('/').includes('..') || /[\0\r\n]/.test(p)) throw new UnexpressiblePath(p);
+    return `./${rulePath(p)}`;
+};
+
+/** An absolute path as a rule's (`//` + the path, its special characters escaped): refused when it cannot be one. */
+const absoluteRule = (p: string): string => {
+    if (!path.isAbsolute(p) || /[\0\r\n]/.test(p)) throw new UnexpressiblePath(p);
+    return `/${rulePath(p.split(path.sep).join('/'))}`;
+};
+
+/**
+ * The deny rules of `paths` (relative to the working directory): neither read nor edited, nor anything below them. A
+ * path no rule can name refuses the whole list (`UnexpressiblePath`), never left out.
+ */
 export function deniedRules(paths: readonly string[]): string[] {
     return paths.flatMap((p) => {
-        if (!p || p.startsWith('/') || p.split('/').includes('..') || /[\0\r\n]/.test(p)) return [];
-        const r = `./${rulePath(p)}`;
+        const r = relativeRule(p);
         return [`Read(${r})`, `Edit(${r})`, `Read(${r}/**)`, `Edit(${r}/**)`];
     });
 }
 
-/** An absolute path as a permission rule's (`//` + the path, its special characters escaped); none for a relative one. */
-const absoluteRulePath = (p: string): string | undefined =>
-    path.isAbsolute(p) && !/[\0\r\n]/.test(p) ? `/${rulePath(p.split(path.sep).join('/'))}` : undefined;
-
 /**
  * The permission rules of `extra`: its files allowed for reading; nothing of it edited; `.git` and `.domaintrail`
  * denied below each directory at any depth (the static `READ_DENIED` are relative to the working directory); each of
- * `denied` neither read nor edited, nor anything below it. Not absolute (refused): no rule.
+ * `denied` neither read nor edited, nor anything below it. A path that is not absolute, or that no rule can name,
+ * refuses them all (`UnexpressiblePath`).
  */
 export function extraReadRules(extra: ExtraRead): { readonly allowed: string[]; readonly denied: string[] } {
-    const abs = (paths: readonly string[]): string[] => paths.map(absoluteRulePath).filter((r): r is string => r !== undefined);
-    const dirs = abs(extra.dirs);
-    const files = abs(extra.files);
+    const dirs = extra.dirs.map(absoluteRule);
+    const files = extra.files.map(absoluteRule);
+    if (extra.note !== undefined && /[\0\r]/.test(extra.note)) throw new UnexpressiblePath(extra.note);
     return {
         allowed: files.map((f) => `Read(${f})`),
         denied: [
@@ -117,7 +156,7 @@ export function extraReadRules(extra: ExtraRead): { readonly allowed: string[]; 
                 ...['.git', '.domaintrail'].flatMap((own) => [`Read(${d}/**/${own}/**)`, `Read(${d}/**/${own})`]),
             ]),
             ...files.map((f) => `Edit(${f})`),
-            ...abs(extra.denied).flatMap((x) => [`Read(${x})`, `Read(${x}/**)`]),
+            ...extra.denied.map(absoluteRule).flatMap((x) => [`Read(${x})`, `Read(${x}/**)`]),
         ],
     };
 }
@@ -174,7 +213,8 @@ export function claudeArguments(allowedTools: readonly string[], requests?: numb
     const tools = toolNames(allowedTools);
     const extra = options.extraRead && extraReadRules(options.extraRead);
     const allowed = [...scopedRules(allowedTools), ...(extra?.allowed ?? [])];
-    const addDirs = (options.extraRead?.dirs ?? []).filter((d) => path.isAbsolute(d) && !/[\0\r\n]/.test(d));
+    // checked by `extraReadRules`: absolute, nameable
+    const addDirs = options.extraRead?.dirs ?? [];
     return [
         '--print',
         ...(options.streamInput ? ['--input-format', 'stream-json'] : []),
@@ -202,6 +242,8 @@ export function claudeArguments(allowedTools: readonly string[], requests?: numb
               : ['--json-schema', JSON.stringify(replyJsonSchema(requests))]),
         '--disallowedTools',
         ...READ_DENIED,
+        ...CONFIG_EDIT_DENIED,
+        ...(options.configFiles ?? []).map((f) => `Edit(${absoluteRule(f)})`),
         ...deniedRules(options.deniedPaths ?? []),
         ...(extra?.denied ?? []),
         ...(allowed.length ? ['--allowedTools', ...allowed] : []),
@@ -226,6 +268,8 @@ export interface ClaudeCodeOptions {
     /** `--model` and `--effort` (unset: the user's Claude Code settings). */
     readonly model?: string;
     readonly effort?: string;
+    /** Configuration files by absolute path the agent never edits (a `-c` file and its local override). */
+    readonly configFiles?: readonly string[];
 }
 
 /** The real path of the workspace (the agent may name files by it), or the path as given when it cannot be resolved. */
@@ -290,7 +334,12 @@ export async function createClaudeCodeRunner(options: ClaudeCodeOptions): Promis
             return (options.readScope?.() ?? Promise.resolve<RunnerReadScope>({ deniedPaths: [] })).then(({ deniedPaths, extra }) => {
                 const args = [
                     ...command.args,
-                    ...claudeArguments(invocation.allowedTools, invocation.requests, { ...flags, deniedPaths, ...(extra && { extraRead: extra }) }),
+                    ...claudeArguments(invocation.allowedTools, invocation.requests, {
+                        ...flags,
+                        deniedPaths,
+                        ...(extra && { extraRead: extra }),
+                        ...(options.configFiles && { configFiles: options.configFiles }),
+                    }),
                 ];
                 return shimFor().then((shim) => spawnWithShim(shim, args));
             });

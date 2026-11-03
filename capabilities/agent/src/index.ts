@@ -25,7 +25,16 @@ export {
 export { AGENT_ROLES, type AgentRole } from '@domaintrail/collaboration/protocol';
 
 // ---- adapters, for the app that wires them ---------------------------------------------------------------------
-export { createClaudeCodeRunner, extraReadRules, type AgentCommand, type ExtraRead, type RunnerReadScope } from './adapters/claude-code.js';
+export {
+    claudeArguments,
+    CONFIG_EDIT_DENIED,
+    createClaudeCodeRunner,
+    extraReadRules,
+    type AgentCommand,
+    type ExtraRead,
+    type RunnerReadScope,
+    UnexpressiblePath,
+} from './adapters/claude-code.js';
 export { createWarmClaudeRunner, type WarmRunnerOptions } from './adapters/claude-warm.js';
 export { checkClaudeCode, type ClaudeUsability } from './adapters/claude-usable.js';
 export { userClaudeDefaults } from './adapters/claude-settings.js';

@@ -6,7 +6,7 @@
 import { describe, expect, test } from 'bun:test';
 import { buildPrompt, MAX_CHANGED_SHOWN, MAX_QUESTION, OUTCOME_MARKER, parseReply } from './prompt.js';
 import { changedPaths, changesOutsideSources, showPaths } from './subscriber.js';
-import { claudeArguments, READ_DENIED, scopedRules, toolNames } from '../adapters/claude-code.js';
+import { CONFIG_EDIT_DENIED, claudeArguments, READ_DENIED, scopedRules, toolNames } from '../adapters/claude-code.js';
 import { resultOf } from '../adapters/claude-stream.js';
 import { type Collaboration, REPLY_LIMITS, replyJsonSchema } from '@domaintrail/collaboration';
 import { parseSse } from '../adapters/http-agent-api.js';
@@ -474,6 +474,7 @@ describe('the Claude Code arguments', () => {
             'Read,Edit,Write,Glob,Grep,Bash',
             '--disallowedTools',
             ...READ_DENIED,
+            ...CONFIG_EDIT_DENIED,
             // reading inside the working directory needs no rule; editing is scoped to it
             '--allowedTools',
             'Edit(./**)',
@@ -502,7 +503,29 @@ describe('the Claude Code arguments', () => {
             'Edit(**/.git)',
         ]);
         expect(toolNames(['Bash(dt fmt:*)', 'Bash(dt check:*)', 'mcp__x__y'])).toEqual(['Bash', 'mcp__x__y']);
-        expect(claudeArguments([]).slice(-(3 + READ_DENIED.length))).toEqual(['--tools', '', '--disallowedTools', ...READ_DENIED]);
+        expect(claudeArguments([]).slice(-(3 + READ_DENIED.length + CONFIG_EDIT_DENIED.length))).toEqual([
+            '--tools',
+            '',
+            '--disallowedTools',
+            ...READ_DENIED,
+            ...CONFIG_EDIT_DENIED,
+        ]);
+        // the configuration files are never edited, at any depth; a -c file and its local override by their paths
+        expect(CONFIG_EDIT_DENIED).toEqual([
+            'Edit(./domaintrail.jsonc)',
+            'Edit(**/domaintrail.jsonc)',
+            'Edit(./domaintrail.json)',
+            'Edit(**/domaintrail.json)',
+            'Edit(./domaintrail.local.jsonc)',
+            'Edit(**/domaintrail.local.jsonc)',
+            'Edit(./domaintrail.local.json)',
+            'Edit(**/domaintrail.local.json)',
+        ]);
+        expect(claudeArguments([], undefined, { configFiles: ['/w/conf/team.jsonc', '/w/conf/team.local.jsonc'] })).toEqual([
+            ...claudeArguments([]),
+            'Edit(//w/conf/team.jsonc)',
+            'Edit(//w/conf/team.local.jsonc)',
+        ]);
         // with the number of requests: the reply's JSON schema as the structured output
         const withSchema = claudeArguments(DEFAULT_AGENT_TOOLS, 2);
         const at = withSchema.indexOf('--json-schema');

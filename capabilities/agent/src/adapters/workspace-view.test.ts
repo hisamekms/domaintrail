@@ -214,7 +214,9 @@ describe('what git ignores, kept from the runner by deny rules', () => {
         expect(await ignoredEntries(wide, { list: async () => undefined, ignores: (p) => p.endsWith('.log') }).catch((e: unknown) => e)).toBeInstanceOf(
             TooManyDeniedEntries,
         );
-        expect(deniedRules(['.env', 'a*.log', '../x', '/abs'])).toEqual([
+        // a path no rule can name refuses the list (fail closed): read-scope.test.ts
+        expect(() => deniedRules(['.env', '../x'])).toThrow(ReadScopeTooLarge);
+        expect(deniedRules(['.env', 'a*.log'])).toEqual([
             'Read(./.env)',
             'Edit(./.env)',
             'Read(./.env/**)',
