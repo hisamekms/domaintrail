@@ -104,6 +104,12 @@ export interface SessionServerOptions extends ViewServerOptions {
      * address in `CF-Connecting-IP` is that cloudflared's word (the join requests' rate limit). Default: false.
      */
     quickTunnel?: boolean;
+    /**
+     * `link`: the public URL is known only once the server listens (`dt collab --tunnel` starts its tunnel to the port
+     * then, so that nothing else can take the port in between): called with the port bound; until it resolves the
+     * server answers loopback only. A rejection stops the server and is the start's.
+     */
+    publicUrlAfterListen?: (port: number) => Promise<string>;
     /** `access` mode: a stand-in for the JWKS check of the tokens' signature (tests); default: the team's JWKS. */
     accessVerifier?: AccessTokenVerifier;
     /** `access` mode: where the JWKS and the Identity API are and their timings (tests point them at a local mock). */
@@ -207,7 +213,7 @@ function identityProvider(options: SessionServerOptions, clock: Clock, log: (lin
             throw new SessionError(`The link identity mode serves loopback only (its tunnel connects there); ${config.host} is not a loopback address.`);
         const publicUrl = linkPublicUrl(config);
         const url = publicUrl !== undefined && URL.canParse(publicUrl) ? new URL(publicUrl) : undefined;
-        if (url?.protocol !== 'https:')
+        if (url?.protocol !== 'https:' && !options.publicUrlAfterListen)
             throw new SessionError(
                 "The link identity mode needs an https public URL: run `dt collab --tunnel`, or set collab.link.publicUrl to your tunnel's.",
             );
@@ -552,19 +558,29 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         // `dt open` answers loopback only: `collab.access` (a tunnel's hosts and origins) is never its; `link` answers its
         // public URL's host and origin only
         const accessConfig = mode === 'Solo' || linkMode ? undefined : config.access;
-        const publicOrigin = publicUrl === undefined ? undefined : new URL(publicUrl);
-        const allowedHosts = publicOrigin ? [publicOrigin.hostname] : (accessConfig?.allowedHosts ?? []);
-        const allowedOrigins = publicOrigin ? [publicOrigin.origin] : (accessConfig?.allowedOrigins ?? []);
+        // `link`: the public origin, known now (configured) or once the server listens (a quick tunnel's)
+        let publicOrigin = publicUrl === undefined || options.publicUrlAfterListen ? undefined : new URL(publicUrl);
+        /** The Host and Origin rules as of now: a `link` session's public origin is added once it is known. */
+        const hostRules = (): ReturnType<typeof sessionHostPolicy> =>
+            publicOrigin
+                ? sessionHostPolicy([publicOrigin.hostname], [publicOrigin.origin])
+                : sessionHostPolicy(accessConfig?.allowedHosts ?? [], accessConfig?.allowedOrigins ?? []);
         /** The base the links are made with: the public origin of a `link` session, else the server's address. */
         const linkBase = (): string => (publicOrigin ? `${publicOrigin.origin}/` : url);
         // `link`: the invite link and the join requests, the facilitator's pages told of each change
-        const linkJoin: LinkJoin | undefined = publicOrigin
+        const linkJoin: LinkJoin | undefined = linkMode
             ? createLinkJoin({
                   session,
                   access,
                   identities,
                   requests: createJoinRequests({ clock, secrets: randomSecrets }),
-                  publicUrl: publicOrigin.origin,
+                  publicUrl: () => linkBase().replace(/\/$/, ''),
+                  // the participants who joined, and the names of the pages connected (the facilitator's own among them)
+                  participantNames: async () => {
+                      const state = await collaboration.sessionState({ session });
+                      const joined = state.ok ? state.value.session.participants.map((p) => p.name) : [];
+                      return [...new Set([...joined, ...[...pages.values()].map((c) => c.data.participant.identity.displayName)])];
+                  },
                   waitCookie: `__Host-dt_wait_${cookieSuffix}`,
                   changed: () => {
                       void linkJoin
@@ -581,7 +597,11 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             session,
             collaboration,
             identities,
-            hostPolicy: { ...sessionHostPolicy(allowedHosts, allowedOrigins), ...(linkMode && { requireOrigin: true }) },
+            hostPolicy: {
+                allowedHost: (hostname) => hostRules().allowedHost(hostname),
+                allowedOrigin: (origin, host) => hostRules().allowedOrigin?.(origin, host) ?? false,
+                ...(linkMode && { requireOrigin: true }),
+            },
             ...(linkJoin && { link: linkJoin }),
             pump,
             cursor,
@@ -620,6 +640,12 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         opened.agent = agent.server;
         const agentPort = await listen(agent.server, config.agent.port, '127.0.0.1');
         const agentUrl = serverUrl('127.0.0.1', agentPort);
+        if (options.publicUrlAfterListen) {
+            const given = await options.publicUrlAfterListen(port);
+            const parsed = URL.canParse(given) ? new URL(given) : undefined;
+            if (parsed?.protocol !== 'https:') throw new SessionError(`The public URL must be https: ${given}`);
+            publicOrigin = new URL(parsed.origin);
+        }
 
         watch = await watchLiveView(options, live, (payload) => hub.publish(payload), watcherHold);
         // the credential is never on disk: an older version's agent.json goes

@@ -124,6 +124,8 @@ export interface SessionServerOptions {
      * address in `CF-Connecting-IP` is that cloudflared's word (the join requests' rate limit). Default: false.
      */
     quickTunnel?: boolean;
+    /** `link`: the public URL, asked once the server listens, with the port bound (`--tunnel` starts its tunnel then). */
+    publicUrlAfterListen?: (port: number) => Promise<string>;
     log: (line: string) => void;
 }
 

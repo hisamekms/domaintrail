@@ -479,27 +479,28 @@ Examples:
         let settings = sessionSettings(cfg, cfg.collab, opts);
         let tunnel: StartedTunnel | undefined;
         if (opts.tunnel) {
-            if (settings.port === 0) throw new CliError('--tunnel needs a fixed port: pass --port (or set collab.port).');
             if (!isLoopback(settings.host))
                 throw new CliError(`--tunnel serves loopback only (cloudflared connects there); ${settings.host} is not a loopback address.`);
-            tunnel = await deps.startTunnel({ port: settings.port, log: io.out }).catch((e: unknown) => {
-                if (e instanceof TunnelError) throw new CliError(e.message);
-                throw e;
-            });
-            settings = { ...settings, identity: 'link', link: { publicUrl: tunnel.url } };
-            io.out(`Tunnel: ${tunnel.url} (a Cloudflare quick tunnel: public, temporary, gone when the session ends)`);
+            settings = { ...settings, identity: 'link' };
         }
+        // the tunnel starts once the server holds the port: nothing else can take it in between
+        const startTunnel = async (port: number): Promise<string> => {
+            tunnel = await deps.startTunnel({ port, log: io.out });
+            io.out(`Tunnel: ${tunnel.url} (a Cloudflare quick tunnel: public, temporary, gone when the session ends)`);
+            return tunnel.url;
+        };
         const server = await deps
             .startSessionServer({
                 ...workspaceOf(cfg),
                 base: opts.base,
                 mode: 'Collab',
                 session: settings,
-                ...(tunnel && { quickTunnel: true }),
+                ...(opts.tunnel && { quickTunnel: true, publicUrlAfterListen: startTunnel }),
                 log: io.out,
             })
             .catch(async (e: unknown) => {
                 await tunnel?.stop();
+                if (e instanceof TunnelError) throw new CliError(e.message);
                 if (e instanceof SessionError) throw new CliError(e.message);
                 if (e instanceof UnknownRevisionError) throw new CliError(`${e.message}: pass a branch, tag or commit to --base.`);
                 if (errorCode(e) === 'EADDRINUSE')

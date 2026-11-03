@@ -186,6 +186,37 @@ describe('starting a session in the link identity mode', () => {
         expect(await failed({ host: '0.0.0.0' })).toBeInstanceOf(SessionError);
     });
 
+    test('a public URL known once the server listens (a quick tunnel started then): asked with the port bound, then used', async () => {
+        const root = await workspace();
+        let asked: number | undefined;
+        const server = await startSessionServer({
+            root,
+            session: settings({ link: {} }),
+            log: () => undefined,
+            publicUrlAfterListen: async (port) => {
+                asked = port;
+                // the port is bound already: nobody else can take it
+                expect((await fetch(`http://127.0.0.1:${port}/`, { headers: { host: '127.0.0.1' } })).status).toBe(401);
+                return PUBLIC;
+            },
+        });
+        servers.push(server);
+        expect(asked).toBe(Number(new URL(server.url).port));
+        expect(server.publicUrl).toBe(PUBLIC);
+        expect(server.facilitatorLink.startsWith(`${PUBLIC}/session/facilitator?code=`)).toBe(true);
+        expect(await facilitator(server)).toMatch(/^__Host-dt_link_/);
+        const refused = await startSessionServer({
+            root: await workspace(),
+            session: settings({ link: {} }),
+            log: () => undefined,
+            publicUrlAfterListen: async () => 'http://x.example',
+        }).then(
+            (s) => s.stop().then(() => undefined),
+            (e: unknown) => e,
+        );
+        expect(refused).toBeInstanceOf(SessionError);
+    });
+
     test('makes its links with the public URL and records it for the other commands', async () => {
         const { server } = await start();
         expect(server.publicUrl).toBe(PUBLIC);
@@ -348,12 +379,99 @@ describe('a session in the link identity mode', () => {
         expect((await ask(server, link, 'B', '203.0.113.10')).wait).toBeDefined();
     });
 
-    test('without its own quick tunnel the server never reads CF-Connecting-IP: a spoofed address does not dodge the limit', async () => {
+    test('behind a proxy of ones own (no quick tunnel) clients cannot be told apart: no per-client limit, the pending cap and the per-invite cap hold, and the facilitator is told when the invite is used up', async () => {
+        const { server } = await start();
+        const cookie = await facilitator(server);
+        const fws = await socket(server, page(cookie));
+        const { link } = (await (await post(server, 'invite', cookie)).json()) as { link: string };
+        const list = async (): Promise<{ id: string }[]> =>
+            ((await (await fetch(`${server.url}api/session/join-requests`, { headers: page(cookie) })).json()) as { requests: { id: string }[] }).requests;
+        // the same "address" asks more than five times: no per-client limit applies here, whatever CF-Connecting-IP says
+        for (let i = 0; i < 20; i++) expect((await ask(server, link, `A${i}`, '203.0.113.9')).wait).toBeDefined();
+        const full = await ask(server, link, 'A20', '203.0.113.99');
+        expect(full.res.status).toBe(429);
+        expect(await full.res.text()).toContain('Too many people are waiting');
+        // denied, they free the pending places; the invite takes 100 requests in all
+        for (let round = 0; round < 5; round++) {
+            for (const r of await list()) await post(server, `join-requests/${r.id}/deny`, cookie);
+            for (let i = 0; i < (round === 0 ? 0 : 20); i++) expect((await ask(server, link, `B${round}-${i}`)).wait).toBeDefined();
+        }
+        for (const r of await list()) await post(server, `join-requests/${r.id}/deny`, cookie);
+        const usedUp = await ask(server, link, 'C');
+        expect(usedUp.res.status).toBe(429);
+        await until(() => fws.received.some((m) => m.type === 'join.requests' && m.inviteUsedUp === true));
+        // a new invite starts afresh
+        const again = (await (await post(server, 'invite', cookie)).json()) as { link: string };
+        expect((await ask(server, again.link, 'D')).wait).toBeDefined();
+        await until(() => fws.received.at(-1)?.inviteUsedUp === false);
+        fws.ws.close();
+    });
+
+    test('the Live View of a session is never framed nor kept, but its hashed files may be', async () => {
+        const { server } = await start();
+        const cookie = await facilitator(server);
+        const index = await fetch(server.url, { headers: page(cookie) });
+        expect(index.status).toBe(200);
+        expect(index.headers.get('content-security-policy')).toBe("frame-ancestors 'none'");
+        expect(index.headers.get('cache-control')).toBe('no-store');
+        const state = await fetch(`${server.url}api/state`, { headers: page(cookie) });
+        expect([state.headers.get('content-security-policy'), state.headers.get('cache-control')]).toEqual(["frame-ancestors 'none'", 'no-store']);
+        const chunk = /src="\.?\/([\w.-]+-[a-z0-9]{8}\.js)"/.exec(await index.text())?.[1];
+        if (!chunk) throw new Error('no hashed script in the page');
+        const asset = await fetch(`${server.url}${chunk}`, { headers: page(cookie) });
+        expect(asset.status).toBe(200);
+        expect(asset.headers.get('cache-control')).toBeNull();
+        expect(asset.headers.get('content-security-policy')).toBe("frame-ancestors 'none'");
+    });
+
+    test('the waiting page leaves cookies alone without its cookie, and clears only its own', async () => {
+        const { server } = await start();
+        const none = await fetch(`${server.url}session/wait`, { headers: page(), redirect: 'manual' });
+        expect(none.status).toBe(410);
+        expect(none.headers.getSetCookie()).toEqual([]);
+        const cookie = await facilitator(server);
+        const { link } = (await (await post(server, 'invite', cookie)).json()) as { link: string };
+        const { wait } = await ask(server, link, 'Ada');
+        if (!wait) throw new Error('not asked');
+        const bogus = `${wait.split('=')[0]}=${'x'.repeat(43)}`;
+        const cleared = await waiting(server, bogus);
+        expect(cleared.status).toBe(410);
+        expect(cleared.headers.getSetCookie()).toEqual([`${wait.split('=')[0]}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`]);
+    });
+
+    test('stopping the invite also turns away an approved visitor not yet in', async () => {
         const { server } = await start();
         const cookie = await facilitator(server);
         const { link } = (await (await post(server, 'invite', cookie)).json()) as { link: string };
-        for (let i = 0; i < 5; i++) expect((await ask(server, link, `A${i}`, `203.0.113.${i}`)).wait).toBeDefined();
-        expect((await ask(server, link, 'A5', '203.0.113.99')).res.status).toBe(429);
+        const { wait } = await ask(server, link, 'Ada');
+        if (!wait) throw new Error('not asked');
+        const { requests } = (await (await fetch(`${server.url}api/session/join-requests`, { headers: page(cookie) })).json()) as {
+            requests: { id: string }[];
+        };
+        await post(server, `join-requests/${requests[0].id}/approve`, cookie);
+        await post(server, 'invite/revoke', cookie);
+        expect((await waiting(server, wait)).status).toBe(410);
+    });
+
+    test('names with format characters are refused; a name already taken or asked for is marked; each request has its time', async () => {
+        const { server } = await start();
+        const cookie = await facilitator(server, 'Fiona');
+        const fws = await socket(server, page(cookie));
+        const { link } = (await (await post(server, 'invite', cookie)).json()) as { link: string };
+        const bidi = await ask(server, link, 'Ada\u202Eecila');
+        expect(bidi.res.status).toBe(400);
+        for (const name of ['ＦＩＯＮＡ', 'Ada', 'ada ', 'Bob']) expect((await ask(server, link, name)).wait).toBeDefined();
+        const { requests } = (await (await fetch(`${server.url}api/session/join-requests`, { headers: page(cookie) })).json()) as {
+            requests: { name: string; duplicate?: boolean; requestedAt: string }[];
+        };
+        expect(requests.map((r) => [r.name, r.duplicate ?? false])).toEqual([
+            ['ＦＩＯＮＡ', true],
+            ['Ada', true],
+            ['ada', true],
+            ['Bob', false],
+        ]);
+        expect(requests.every((r) => !Number.isNaN(Date.parse(r.requestedAt)))).toBe(true);
+        fws.ws.close();
     });
 
     test('a restart signs everyone out (the cookie of the earlier server is no one), and a sign-in of another mode is never accepted', async () => {

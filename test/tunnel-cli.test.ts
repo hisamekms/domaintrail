@@ -1,7 +1,8 @@
 /**
- * `dt collab --tunnel` with the tunnel and the servers faked: the quick tunnel's URL becomes the link session's public
- * URL, the invite link is printed, cloudflared stops with the session (and when the server cannot start), and the
- * refusals (identity access, port 0, cloudflared failing). The approval of `--tunnel`: apps/dt/src/cli/trust.test.ts;
+ * `dt collab --tunnel` with the tunnel and the servers faked: the tunnel starts once the server holds the port (asked
+ * for the public URL with the port bound), its URL is the link session's, the invite link is printed, cloudflared stops
+ * with the session (and when the server fails after it started), and the refusals (identity access, cloudflared
+ * failing). The approval of `--tunnel`: apps/dt/src/cli/trust.test.ts;
  * the tunnel itself: apps/dt/src/wiring/tunnel.test.ts.
  */
 import { afterAll, describe, expect, test } from 'bun:test';
@@ -33,7 +34,7 @@ interface Calls {
     serverStops: number;
 }
 
-function fakeDeps(trust: string, over: { tunnelFails?: boolean; serverFails?: boolean } = {}): { deps: CliDeps; calls: Calls } {
+function fakeDeps(trust: string, over: { tunnelFails?: boolean; serverFails?: 'before' | 'after' } = {}): { deps: CliDeps; calls: Calls } {
     const calls: Calls = { tunnels: [], sessions: [], tunnelStops: 0, serverStops: 0 };
     const deps: CliDeps = {
         ...cliDeps(),
@@ -45,7 +46,11 @@ function fakeDeps(trust: string, over: { tunnelFails?: boolean; serverFails?: bo
         },
         startSessionServer: async (options) => {
             calls.sessions.push(options);
-            if (over.serverFails) throw Object.assign(new Error('in use'), { code: 'EADDRINUSE' });
+            if (over.serverFails === 'before') throw Object.assign(new Error('in use'), { code: 'EADDRINUSE' });
+            // the server binds (port 4530 here), then asks for the public URL
+            const publicUrl = await options.publicUrlAfterListen?.(4530);
+            expect(publicUrl).toBe(URL_);
+            if (over.serverFails === 'after') throw Object.assign(new Error('agent port in use'), { code: 'EADDRINUSE' });
             return {
                 url: 'http://127.0.0.1:4530/',
                 agentUrl: 'http://127.0.0.1:2/',
@@ -78,7 +83,8 @@ describe('dt collab --tunnel', () => {
         expect(r.err).toEqual([]);
         expect(r.code).toBe(0);
         expect(calls.tunnels).toEqual([{ port: 4530 }]);
-        expect(calls.sessions[0].session).toMatchObject({ identity: 'link', link: { publicUrl: URL_ }, port: 4530, host: '127.0.0.1' });
+        expect(calls.sessions[0].session).toMatchObject({ identity: 'link', port: 4530, host: '127.0.0.1' });
+        expect(calls.sessions[0].quickTunnel).toBe(true);
         expect(r.out).toContain(`Tunnel: ${URL_} (a Cloudflare quick tunnel: public, temporary, gone when the session ends)`);
         expect(r.out.some((l) => l.startsWith(`Live View: ${URL_}/`))).toBe(true);
         expect(r.out.some((l) => l.includes(`${URL_}/session/facilitator?code=x`))).toBe(true);
@@ -98,27 +104,31 @@ describe('dt collab --tunnel', () => {
         expect(calls.tunnels).toEqual([]);
     });
 
-    test('refused with identity access, and with port 0', async () => {
+    test('refused with identity access; any port, 0 included, since the tunnel follows the port bound', async () => {
         const access = await setup('{ "collab": { "identity": "access", "access": { "teamDomain": "t.cloudflareaccess.com", "audience": "a" } } }');
         const a = await run(fakeDeps(access.trust).deps, '-r', access.root, 'collab', '--tunnel', '--yes', '--no-agent');
         expect(a.err.join('\n')).toContain('--tunnel starts a quick tunnel for the link identity mode');
         const zero = await setup();
         const z = fakeDeps(zero.trust);
         const r = await run(z.deps, '-r', zero.root, 'collab', '--tunnel', '--port', '0', '--yes', '--no-agent');
-        expect(r.err).toEqual(['--tunnel needs a fixed port: pass --port (or set collab.port).']);
-        expect(z.calls.tunnels).toEqual([]);
+        expect(r.err).toEqual([]);
+        expect(z.calls.tunnels).toEqual([{ port: 4530 }]);
     });
 
-    test('cloudflared failing: one line, no server; the server failing: cloudflared stopped', async () => {
+    test('cloudflared failing: one line; the port taken: no tunnel at all; the server failing after: cloudflared stopped', async () => {
         const one = await setup();
         const failing = fakeDeps(one.trust, { tunnelFails: true });
         const r = await run(failing.deps, '-r', one.root, 'collab', '--tunnel', '--port', '4530', '--yes', '--no-agent');
         expect(r.err).toEqual(['cloudflared not found: install cloudflared']);
-        expect(failing.calls.sessions).toEqual([]);
         const two = await setup();
-        const busy = fakeDeps(two.trust, { serverFails: true });
+        const busy = fakeDeps(two.trust, { serverFails: 'before' });
         const b = await run(busy.deps, '-r', two.root, 'collab', '--tunnel', '--port', '4530', '--yes', '--no-agent');
         expect(b.err.join('\n')).toContain('already in use');
-        expect(busy.calls.tunnelStops).toBe(1);
+        expect(busy.calls.tunnels).toEqual([]);
+        const three = await setup();
+        const late = fakeDeps(three.trust, { serverFails: 'after' });
+        const c = await run(late.deps, '-r', three.root, 'collab', '--tunnel', '--port', '4530', '--yes', '--no-agent');
+        expect(c.err.join('\n')).toContain('already in use');
+        expect(late.calls.tunnelStops).toBe(1);
     });
 });
