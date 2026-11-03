@@ -315,6 +315,51 @@ describe("an interview's confirmed brief (the `/` commands)", () => {
     });
 });
 
+describe("a candidate command's chosen candidates (the `/` commands)", () => {
+    test('the chosen are data in the block, as references; rule 19 says how to write an exception; the stormings only', () => {
+        const message = frozen({ kind: 'Workspace' }, '例外を洗い出す');
+        const run: Json<Collaboration.RunInput> = {
+            ...input([{ ...message, targets: [] }]),
+            candidates: {
+                command: crypto.randomUUID(),
+                kind: 'EsExceptions',
+                scope: 'Orders',
+                chosen: [
+                    {
+                        label: '支払いが失敗した',
+                        targets: [
+                            { kind: 'DtesElement', storming: 'Orders', local: 'OrderPaid' },
+                            { kind: 'DtesElement', storming: 'Orders', local: 'PaymentFailed' },
+                        ],
+                        how: 'OrderPaid から: 支払いが失敗した、OrderPlaced へ戻る',
+                        reason: '決済は外部',
+                    },
+                ],
+            },
+        };
+        const practice = { storming: 'STORMING', modeling: 'MODELING' };
+        const prompt = buildPrompt(run, new Map(), 'n', [], [], { practice });
+        expect((block(prompt, 'n') as { chosenCandidates: unknown }).chosenCandidates).toEqual({
+            command: '/es:exceptions',
+            storming: '@{es:Orders}',
+            candidates: [
+                {
+                    label: '支払いが失敗した',
+                    targets: ['@{es:Orders/OrderPaid}', '@{es:Orders/PaymentFailed}'],
+                    how: 'OrderPaid から: 支払いが失敗した、OrderPlaced へ戻る',
+                    reason: '決済は外部',
+                },
+            ],
+        });
+        expect(prompt).toContain('19. `chosenCandidates`, when present');
+        expect(prompt).toContain('For\n   `/es:exceptions`, each is one `exception` in the storming `storming` (rule 17)');
+        expect(prompt).toContain('ends with `then <Event>` when it returns to the flow');
+        expect(prompt).toContain('These requests are only about `.dtes` stormings');
+        expect([prompt.includes('STORMING'), prompt.includes('MODELING')]).toEqual([true, false]);
+        expect(block(buildPrompt(input([message]), new Map(), 'n'), 'n')).not.toHaveProperty('chosenCandidates');
+    });
+});
+
 describe('the prompt of a warm agent', () => {
     const names = new Map([['dev:bob', 'Bob']]);
     const run = input([frozen({ kind: 'Workspace' }, 'x')]);
