@@ -9,4 +9,6 @@ export { hasCastLintRule, LINT_HINT } from './infrastructure/lint-hint.js';
 export { createWorkspaceSnapshot } from './infrastructure/snapshot.js';
 // the `.gitignore` rules of a workspace (git's semantics), for what an agent may read
 export { GitIgnore } from './infrastructure/gitignore.js';
+// what git itself says of them, where it speaks for the root (every source of ignores, `core.excludesFile` included)
+export { gitIgnoredEntries, gitReadableFiles, type GitFilesOptions } from './infrastructure/git-files.js';
 export { createGitRefWatcher, createWorkspaceWatcher } from './infrastructure/watchers.js';

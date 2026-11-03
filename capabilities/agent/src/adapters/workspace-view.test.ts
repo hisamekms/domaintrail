@@ -19,6 +19,17 @@ const scratch = async (): Promise<string> => {
     return d;
 };
 
+const files = async (d: string, rel = ''): Promise<string[]> => {
+    const { readdir } = await import('node:fs/promises');
+    const out: string[] = [];
+    for (const e of await readdir(d, { withFileTypes: true })) {
+        const r = rel ? `${rel}/${e.name}` : e.name;
+        if (e.isDirectory()) out.push(...(await files(path.join(d, e.name), r)));
+        else out.push(r);
+    }
+    return out.sort();
+};
+
 describe("the answerer's view of the workspace", () => {
     test('the files git does not ignore; never .domaintrail/, .git/, node_modules/, a link or a file too large', async () => {
         const root = await scratch();
@@ -66,6 +77,61 @@ describe("the answerer's view of the workspace", () => {
         expect(existsSync(dir)).toBe(false);
     });
 
+    test("git's allowlist: regular files only, nothing of .git, .domaintrail or node_modules at any depth, no link above a file", async () => {
+        const root = await scratch();
+        const outside = await scratch();
+        await writeFile(path.join(outside, 'secret.txt'), 'CANARY');
+        await writeFile(path.join(root, 'README.md'), 'readme');
+        await mkdir(path.join(root, 'sub', '.git'), { recursive: true });
+        await writeFile(path.join(root, 'sub', '.git', 'config'), '[core]');
+        await mkdir(path.join(root, 'sub', '.domaintrail'), { recursive: true });
+        await writeFile(path.join(root, 'sub', '.domaintrail', 'x'), 'x');
+        await mkdir(path.join(root, 'mod'));
+        await writeFile(path.join(root, 'mod', '.git'), 'gitdir: ../.git/modules/mod');
+        await writeFile(path.join(root, 'mod', 'a.md'), 'a');
+        await writeFile(path.join(root, 'not-listed.env'), 'x');
+        await symlink(outside, path.join(root, 'linked'));
+        const listed = [
+            'README.md',
+            'sub/.git/config',
+            'sub/.domaintrail/x',
+            'mod/.git',
+            'mod/a.md',
+            'nested/',
+            'linked/secret.txt',
+            '../outside.txt',
+            'gone.md',
+        ];
+        let calls = 0;
+        const view = createWorkspaceView({
+            root,
+            list: async () => (calls++, listed),
+            ignores: () => {
+                throw new Error('not walked');
+            },
+            parent: await scratch(),
+        });
+        const dir = await view.refresh();
+        expect(calls).toBe(1);
+        expect(await files(dir)).toEqual(['README.md', 'mod/a.md']);
+        await view.dispose();
+    });
+
+    test('walked (git does not speak for the root): a nested .git file or directory and .domaintrail/ are never copied', async () => {
+        const root = await scratch();
+        await writeFile(path.join(root, 'README.md'), 'readme');
+        await mkdir(path.join(root, 'mod'));
+        await writeFile(path.join(root, 'mod', '.git'), 'gitdir: x');
+        await mkdir(path.join(root, 'sub', '.git'), { recursive: true });
+        await writeFile(path.join(root, 'sub', '.git', 'config'), '[core]');
+        await mkdir(path.join(root, 'sub', '.domaintrail'), { recursive: true });
+        await writeFile(path.join(root, 'sub', '.domaintrail', 'x'), 'x');
+        await writeFile(path.join(root, 'sub', 'notes.md'), 'n');
+        const view = createWorkspaceView({ root, list: async () => undefined, parent: await scratch() });
+        expect(await files(await view.refresh())).toEqual(['README.md', 'sub/notes.md']);
+        await view.dispose();
+    });
+
     test("the user's model and effort from ~/.claude/settings.json; nothing when absent or unfit", async () => {
         const home = await scratch();
         expect(userClaudeDefaults(home)).toEqual({});
@@ -92,7 +158,24 @@ describe('what git ignores, kept from the runner by deny rules', () => {
         await writeFile(path.join(root, 'shop.dt'), 'x');
         await mkdir(path.join(root, '.domaintrail'));
         const ignored = new Set(['dist', '.env', 'a*.log', '.domaintrail']);
-        expect((await ignoredEntries(root, (p) => ignored.has(path.relative(root, p)))).sort()).toEqual(['.env', 'a*.log', 'dist']);
+        expect((await ignoredEntries(root, { ignores: (p) => ignored.has(path.relative(root, p)) })).sort()).toEqual(['.env', 'a*.log', 'dist']);
+        // git's list when it speaks for the root (no walk): its directories without the trailing /, nothing of .git or
+        // .domaintrail at any depth, at most MAX_IGNORED_ENTRIES
+        const { MAX_IGNORED_ENTRIES } = await import('./workspace-view.js');
+        const fromGit = await ignoredEntries(root, {
+            list: async () => ['.env', 'dist/', 'sub/.git/', 'sub/.domaintrail/', ...Array.from({ length: 600 }, (_, i) => `f${i}`)],
+            ignores: () => {
+                throw new Error('not walked');
+            },
+        });
+        expect(fromGit.slice(0, 3)).toEqual(['.env', 'dist', 'f0']);
+        expect(fromGit).toHaveLength(MAX_IGNORED_ENTRIES);
+        // git does not speak for the root: walked
+        expect((await ignoredEntries(root, { list: async () => undefined, ignores: (p) => ignored.has(path.relative(root, p)) })).sort()).toEqual([
+            '.env',
+            'a*.log',
+            'dist',
+        ]);
         expect(deniedRules(['.env', 'a*.log', '../x', '/abs'])).toEqual([
             'Read(./.env)',
             'Edit(./.env)',

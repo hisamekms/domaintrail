@@ -422,9 +422,23 @@ describe('the Claude Code arguments', () => {
             'Read(docs/**)',
             'Bash(dt check:*)',
         ]);
-        expect(READ_DENIED).toEqual(['Read(./.domaintrail/**)', 'Edit(./.domaintrail/**)', 'Read(./.git/**)', 'Edit(./.git/**)']);
+        expect(READ_DENIED).toEqual([
+            'Read(./.domaintrail/**)',
+            'Edit(./.domaintrail/**)',
+            'Read(./.git/**)',
+            'Edit(./.git/**)',
+            // at any depth: a nested repository's .git/, a submodule's .git file, a nested .domaintrail/
+            'Read(**/.domaintrail/**)',
+            'Edit(**/.domaintrail/**)',
+            'Read(**/.domaintrail)',
+            'Edit(**/.domaintrail)',
+            'Read(**/.git/**)',
+            'Edit(**/.git/**)',
+            'Read(**/.git)',
+            'Edit(**/.git)',
+        ]);
         expect(toolNames(['Bash(dt fmt:*)', 'Bash(dt check:*)', 'mcp__x__y'])).toEqual(['Bash', 'mcp__x__y']);
-        expect(claudeArguments([]).slice(-7)).toEqual(['--tools', '', '--disallowedTools', ...READ_DENIED]);
+        expect(claudeArguments([]).slice(-(3 + READ_DENIED.length))).toEqual(['--tools', '', '--disallowedTools', ...READ_DENIED]);
         // with the number of requests: the reply's JSON schema as the structured output
         const withSchema = claudeArguments(DEFAULT_AGENT_TOOLS, 2);
         const at = withSchema.indexOf('--json-schema');

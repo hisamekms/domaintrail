@@ -40,9 +40,25 @@ export interface ClaudeRunOptions {
 
 /**
  * What no agent reads or edits inside its working directory, whatever its tools: the session's own state (the agent
- * API's credential is in `.domaintrail/session/agent.json`) and git's.
+ * API's credential is in `.domaintrail/session/agent.json`) and git's, at any depth (a nested repository's `.git/`, a
+ * submodule's or worktree's `.git` file, a nested workspace's `.domaintrail/`). `**` matches at any depth, the top
+ * included (measured with Claude Code 2.1.317: `sub/.git/config`, `deep/a/.git/HEAD`, `mod/.git` and
+ * `sub/.domaintrail/x` refused); the `./` rules are kept as well.
  */
-export const READ_DENIED: readonly string[] = ['Read(./.domaintrail/**)', 'Edit(./.domaintrail/**)', 'Read(./.git/**)', 'Edit(./.git/**)'];
+export const READ_DENIED: readonly string[] = [
+    'Read(./.domaintrail/**)',
+    'Edit(./.domaintrail/**)',
+    'Read(./.git/**)',
+    'Edit(./.git/**)',
+    'Read(**/.domaintrail/**)',
+    'Edit(**/.domaintrail/**)',
+    'Read(**/.domaintrail)',
+    'Edit(**/.domaintrail)',
+    'Read(**/.git/**)',
+    'Edit(**/.git/**)',
+    'Read(**/.git)',
+    'Edit(**/.git)',
+];
 
 /** A path as a permission rule's (gitignore syntax): its special characters escaped. */
 const rulePath = (p: string): string => p.replace(/[\\*?[\]!#]/g, (c) => `\\${c}`);
@@ -99,7 +115,8 @@ export function toolNames(rules: readonly string[]): string[] {
  * What it may read (ADR 0030, as built in M4): **no settings file is loaded** (`--setting-sources ""`): neither the
  * workspace's `.claude/` (files the agent can write) nor the user's, whose allow rules (a plain `Read`, say) would let it
  * read anywhere. In `dontAsk` mode Claude Code then reads only inside its working directory, and refuses any path
- * outside it; `READ_DENIED` keeps it out of `.domaintrail/` (the agent credential) and `.git/` there too (deny rules win).
+ * outside it; `READ_DENIED` keeps it out of `.domaintrail/` (the agent credential) and `.git` there too, at any depth
+ * (deny rules win).
  * The user's model and effort still apply when the role has none (`userClaudeDefaults`).
  */
 export function claudeArguments(allowedTools: readonly string[], requests?: number, options: ClaudeRunOptions = {}): string[] {

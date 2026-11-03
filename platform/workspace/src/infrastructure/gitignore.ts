@@ -1,4 +1,6 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
 import * as path from 'node:path';
 import ignore, { type Ignore } from 'ignore';
 
@@ -10,6 +12,11 @@ import ignore, { type Ignore } from 'ignore';
  * itself is never ignored: when the rules above it ignore it (a copy of a project inside an ignored directory, checked
  * with `-r`), only the `.gitignore` files from the root down apply.
  *
+ * With `userExcludes`, the user's excludes file applies too (`core.excludesFile`, by default
+ * `$XDG_CONFIG_HOME/git/ignore`), below every other source as in git; it applies even outside a repository, where git
+ * would read none (what an agent may read: the safe side). Where git speaks for a root, `gitReadableFiles` and
+ * `gitIgnoredEntries` ask git itself instead.
+ *
  * Files are read once, when first needed.
  */
 export class GitIgnore {
@@ -18,20 +25,29 @@ export class GitIgnore {
     /** The rules that apply inside a directory (its own `.gitignore` and those above it), by absolute path. */
     private readonly rules = new Map<string, Ignore>();
 
-    constructor(root: string) {
+    constructor(root: string, options: { readonly userExcludes?: boolean; readonly env?: NodeJS.ProcessEnv } = {}) {
         root = path.resolve(root);
         const top = repositoryTop(root);
         this.base = top ?? root;
+        const user = options.userExcludes ? userExcludes(root, options.env ?? process.env) : [];
         this.rules.set(
             this.base,
             rules()
+                .add(user)
                 .add(top ? infoExclude(top) : [])
                 .add(readGitignore(this.base, '')),
         );
         if (this.base !== root && this.rulesFor(path.dirname(root)).ignores(`${slashed(path.relative(this.base, root))}/`)) {
             this.base = root;
             this.rules.clear();
-            this.rules.set(root, rules().add(readGitignore(root, '')));
+            // the user's excludes still apply, and with them the repository's `info/exclude` (on the safe side)
+            this.rules.set(
+                root,
+                rules()
+                    .add(user)
+                    .add(options.userExcludes && top ? infoExclude(top) : [])
+                    .add(readGitignore(root, '')),
+            );
         }
     }
 
@@ -82,6 +98,27 @@ function infoExclude(top: string): string[] {
         if (common) gitDir = path.resolve(gitDir, common);
     }
     return patterns(readText(path.join(gitDir, 'info', 'exclude')) ?? '', '');
+}
+
+/**
+ * The patterns of the user's excludes file: `core.excludesFile` as git reads it in `root` (`git config --path`), else
+ * git's default `$XDG_CONFIG_HOME/git/ignore` (`~/.config/git/ignore`). Without git, the default.
+ */
+function userExcludes(root: string, env: NodeJS.ProcessEnv): string[] {
+    let file: string | undefined;
+    try {
+        file =
+            execFileSync('git', ['config', '--path', '--get', 'core.excludesFile'], {
+                cwd: root,
+                env,
+                encoding: 'utf8',
+                stdio: ['ignore', 'pipe', 'ignore'],
+            }).trim() || undefined;
+    } catch {
+        // unset (exit 1), or no git
+    }
+    file ??= path.join(env.XDG_CONFIG_HOME || path.join(env.HOME || homedir(), '.config'), 'git', 'ignore');
+    return patterns(readText(path.resolve(root, file)) ?? '', '');
 }
 
 function readText(file: string): string | undefined {

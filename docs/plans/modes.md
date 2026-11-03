@@ -555,6 +555,11 @@ M4 landed the triage and the answers end to end on the server and in `capabiliti
   Checked once with Claude Code 2.1.317: from the view, a README is readable; `.env` (ignored), `.domaintrail/`, the
   workspace by its absolute path and a file outside it are not; the runner cannot read or edit a denied `.env` nor
   write outside its directory.
+- **M4b** (a second security review; ADR 0030 "As built in M4b"): in a git repository the view is git's allowlist
+  (`git ls-files -co --exclude-standard`) and the runner's deny list git's ignored entries (`-o -i --directory`), so
+  `core.excludesFile` and `.git/info/exclude` apply; elsewhere `GitIgnore` plus the user's excludes file.
+  `.git` and `.domaintrail` are kept out at any depth (`**/.git/**`, `**/.git`, `**/.domaintrail/**`,
+  `**/.domaintrail` deny rules; never in the view). Checked with Claude Code 2.1.317 against canaries.
 - **Config**: no key was added in M4. `resolveAnswerConfig`, `validateAnswerConfig`, `resolveTriageConfig`,
   `validateTriageConfig` and their defaults are exported by `@domaintrail/agent`; M5's config module places them under
   `agent.answer` / `agent.triage` (see "Connected after M4 and M5").
