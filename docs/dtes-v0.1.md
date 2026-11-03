@@ -2,7 +2,7 @@
 
 > 対象: Claude Code / Codex による実装
 >
-> ステータス: 設計合意事項の統合版（2026-10-31、最終仕様反映版）。本書中の **確定** は対話で採用した方針、**提案** は実装を進めるための具体化、**要確認** はリポジトリの現行実装との照合が必要な項目を意味する。
+> ステータス: 設計合意事項の統合版（2026-10-31、最終仕様反映版。2026-11-03 に Design Level のみの Event（`level design`、§3.6）を追加）。本書中の **確定** は対話で採用した方針、**提案** は実装を進めるための具体化、**要確認** はリポジトリの現行実装との照合が必要な項目を意味する。
 >
 > 対象プロジェクト: DomainTrail（`.dt` の既存実装に独立した `.dtes` を追加）。既存のパーサー／型体系／CLI／描画基盤を先に調査して適合させること。**本書の `.dt` サンプルを現行パーサーで動く構文と決めつけない。**
 
@@ -44,7 +44,7 @@
 
 | 要素 | 意味 | 備考 |
 |---|---|---|
-| `event` | 業務上起こった出来事の型（過去形の事実） | `timeline` から参照される |
+| `event` | 業務上起こった出来事の型（過去形の事実） | `timeline` から参照される。`level design` で Design Level のみに表示（§3.6） |
 | `actor` | Command を発行し得る人・役割 | 複数の Command から参照可 |
 | `external` | Command を発行し得る外部システム | `actor` 関係の参照先として使用可。外部呼び出し先を表すものではない |
 | `command` | 実行を試みる業務上の操作 | 主対象 Aggregate は最大1つ |
@@ -67,6 +67,7 @@
 | Policy | `issues C` | Command | **1..N** | 発行し得る Command。順序/必須性/全部実行を保証しない |
 | Event / Aggregate / Command | `ref ...` | `.dt` | **0..1** | 型の合う `.dt` シンボルへの明示対応。他の要素では禁止 |
 | Hotspot | `on E` | Event | 0..1 | 関連 Event。因果ではない |
+| Event | `level design` | — | 0..1 | Design Level のみに表示する（§3.6）。値は `design` だけ |
 
 **複数 `on` と複数 `issues` を持つ Policy は許可**。ただし、任意の Event が任意の Command を必ず起動するという**直積の意味を与えてはならない**。個別の対応条件が異なるなら AI は Policy を分割するよう推奨する。`rule` のネストは v0.1 で導入しない。
 
@@ -92,6 +93,13 @@
 - `open` に `resolution` を付けることは禁止（Error）。【確定】
 - `resolved` は**業務認識の合意**を意味し、`.dt` に実装済みであることは意味しない。
 - 解決済みの重要な例外・境界・不変条件は選択的に残し、些細なものは削除可能。履歴専用 DSL は不要（Git に委ねる）。
+
+### 3.6 Design Level のみの Event【確定（2026-11-03 追加）】
+
+- Event は本体に `level design` を書くと **Design Level のみ**に表示される。仕組み側の細かい出来事（引当・与信・内部の失敗や再試行など）を、Big Picture の業務の流れから外すためのもの。
+- 書かなければ両方の抽象度に表示する（従来どおり）。`level big-picture` は書かない（Error）。値は `design` のみ。
+- `level` を書けるのは Event だけ（他の要素は Error）。1つの Event に2つ以上は Error。`ref` との順序は自由で、正規の位置は本体の最後（`ref` の後）。`dt fmt` は句の順序を変えない。
+- Big Picture に「昇格」させるときは `level design` を消す。`.dtes` の意味（timeline の順序、関係、`ref`）は変わらず、表示だけが変わる（§6）。
 
 ## 4. `.dtes` サンプル（構文の基準例）
 
@@ -169,6 +177,15 @@ storming DeliveryCancellation "配送キャンセル" {
 
 **注**: `ReceivePaymentNotice` は External System が Command を発行し得ることを示す構文例であり、外部システムを呼び出す意味ではない。実際の業務内容に応じて命名する。上記の `ReleaseFailed` は、実際に Event として採用するかを業務で検討した例であり、異常結果の厳密な排他性は DSL から導かない。`group` の `CleanupResults` は表現上の命名で、ビューのレイアウト命令ではない。
 
+Design Level のみの Event（§3.6）は本体の最後に `level design` を書く。
+
+```text
+event BikeLocked "車両がロックされた" {
+  ref Fleet.BikeLocked
+  level design
+}
+```
+
 ## 5. `.dt` 連携と検証範囲
 
 ### 5.1 `ref` の解決【確定】
@@ -212,8 +229,8 @@ type ViewOptions = {
 
 | 要素 | Big Picture | Design Level |
 |---|---|---|
-| Event | 表示 | 表示 |
-| Timeline の順序 | 表示 | 表示 |
+| Event | 表示（`level design` の Event は非表示） | 表示 |
+| Timeline の順序 | 表示（非表示の Event を飛ばして前後をつなぐ） | 表示 |
 | Hotspot | 表示 | 表示 |
 | Actor / External System | 非表示（v0.1 の既定） | 表示 |
 | Command / Policy / Aggregate / Read Model | 非表示 | 表示 |
@@ -221,6 +238,7 @@ type ViewOptions = {
 | `.dt ref` | ノード詳細等で参照可 | ノード詳細等で参照可 |
 
 - Big Picture は**詳細を隠した投影**。詳細化前の過去モデルを復元する機能ではない。
+- Big Picture では `level design` の Event（§3.6）を、その timeline のステップが書かれていないものとして投影する。順序エッジは前後の Event をつなぎ、全要素が非表示の `group` は描かない。共通 prefix 統合（§8）は表示される列で行う。Hotspot は表示し、非表示の Event への `on` だけを描かない（timeline フィルタでも、その timeline の Event への `on` を持つ Hotspot は表示する）。
 - Big Picture に戻しても、Design Level で追加・分割した Event 定義は消さない。
 - 名前付き timeline の選択に応じて、その timeline の EventOccurrence と関連要素を抽出。
 - 統合キャンバスでは timeline に属さない Event や孤立した要素も表示。
@@ -405,6 +423,7 @@ Render Graph（§7.3、本節 8.1〜8.4）は prefix trie のまま変えない�
 | Group | group 内の同じ Event ID の重複 | Error |
 | Policy | `on` 0件、`issues` 0件 | Error |
 | Hotspot | 不正 status、resolved なのに resolution なし、`on` の対象不正 | Error |
+| Level | `level` が `design` 以外（`big-picture` を含む）、Event 以外の `level`、`level` が2つ以上 | Error |
 | `.dt ref` | 完全修飾でない、未解決、種別不一致 | Error |
 | `.dt` contract | 有効な `ref` 同士で証明できる不整合 | Warning |
 | Graph | Policy→Command→Event→Policy の型レベル循環 | Warning（無限ループ断定禁止） |
@@ -432,6 +451,7 @@ Render Graph（§7.3、本節 8.1〜8.4）は prefix trie のまま変えない�
 - [ ] ES12: 異種要素間でも ID 衝突が Error。
 - [ ] ES13: Policy を含む Event/Command/Aggregate 以外の `ref` が Error。
 - [ ] ES14: `external` は Command の `actor` 参照で合法。`reads/target` など別種の関係では Error。
+- [ ] ES15: Event の `level design` は合法（`ref` の前後どちらでも）。`level big-picture` などの他の値、Event 以外の `level`、2つ目の `level` は Error。
 
 ### 12.2 投影 / 描画
 
@@ -448,10 +468,11 @@ Render Graph（§7.3、本節 8.1〜8.4）は prefix trie のまま変えない�
 - [ ] R11: Big Picture / Design Level を切替可能。DSL は不変。
 - [ ] R12: 統合 / timeline フィルタを切替可能。DSL は不変。
 - [ ] R13: `.dt ref` を修正しても Semantic ID は変わらない。
-- [ ] R14: Big Picture で Command/Policy を隠しても Event は消えない。
+- [ ] R14: Big Picture で Command/Policy を隠しても、`level design` のない Event は消えない。
 - [ ] R15: 全体ビューに timeline 未所属の Event が現れる。
 - [ ] R16: timeline のフィルタは1ホップの Event→Policy→Command→Event のみ（両端が対象 timeline）投影し、多段連鎖は自動展開しない。
 - [ ] R17: Big Picture と Design Level のどちらでも同一 `.dtes` を使い、`external` は Design Level に表示する。
+- [ ] R18: `level design` の Event は Big Picture で非表示、Design Level で表示。timeline の順序エッジは前後をつなぎ、全要素が非表示の group は描かず、共通 prefix 統合は表示される列で行う。Hotspot は残り、非表示の Event への `on` は描かない。
 
 ### 12.3 Property / 不変条件
 

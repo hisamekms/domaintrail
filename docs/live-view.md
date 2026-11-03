@@ -90,7 +90,7 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   subject is a breadcrumb of two pickers: the storming (表示するストーミング; its name alone when there is only one) ▸ the
   タイムライン — すべて（統合） for the integrated canvas, or one timeline with its one-hop causal paths (a subject, not
   a filter: the two draw different things). The level icons are ビッグピクチャー (the telescope: events, timelines
-  and hotspots only) and デザインレベル (the microscope: also commands, policies, actors, external systems, aggregates
+  and hotspots only, without the events marked `level design`) and デザインレベル (the microscope: also commands, policies, actors, external systems, aggregates
   and read models). The choices are
   remembered per browser and never change the `.dtes` file. The integrated canvas draws each event once (no group
   frames), and a dashed arrow between two events names the timelines it belongs to when not all of them do; one
