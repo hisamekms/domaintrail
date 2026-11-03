@@ -7217,6 +7217,9 @@ button.add-to-request.added:hover {
 }
 /* the AI gave up answering: one small line in the danger's ink under the text */
 .chat-ai-given-up {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     margin: 0;
     color: var(--status-danger-ink);
     font-size: var(--fs-small);

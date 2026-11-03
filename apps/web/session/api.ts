@@ -87,6 +87,8 @@ export const sessionApi = {
     /** Rejects an open change proposal (the facilitator), with a note to the requester if any. */
     rejectProposal: (id: string, note?: string): Promise<unknown> =>
         call(`proposals/${encodeURIComponent(id)}/reject`, { method: 'POST', body: note ? { note } : {} }),
+    /** Hands the AI's answer or proposal for a message out again, once the server gave it up (the facilitator). */
+    retryAnswer: (request: string): Promise<unknown> => call(`requests/${encodeURIComponent(request)}/retry-answer`, { method: 'POST', body: {} }),
     /** Withdraws my open change proposal (its requester). */
     withdrawProposal: (id: string): Promise<unknown> => call(`proposals/${encodeURIComponent(id)}/withdraw`, { method: 'POST', body: {} }),
     /** Another one-time facilitator link, to hand the role over. */

@@ -2,18 +2,7 @@
 // presence, whether a draft reaches the AI, the proposals; and how the page's state takes the agents' presence.
 import { describe, expect, test } from 'bun:test';
 import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
-import {
-    aiPresence,
-    awaitsAnswerer,
-    givenUpTriages,
-    isSolo,
-    messageAi,
-    openProposals,
-    proposalContent,
-    triagesByRequest,
-    willAddress,
-    type TriageJson,
-} from './ai';
+import { aiPresence, givenUpRequests, isSolo, messageAi, openProposals, proposalContent, triagesByRequest, willAddress, type TriageJson } from './ai';
 import { messageMarks } from './cards';
 import { collabMenuItems } from './collab';
 import { changeUnits } from './history';
@@ -61,8 +50,6 @@ const proposal = (id: string, state: string, extra: object = {}): ProposalJson =
         state,
         ...extra,
     }) as unknown as ProposalJson;
-const queuedRun = (id: string): RunJson =>
-    ({ id, session: 's', input: { requests: [] }, queuedBy: 'f', queuedAt: at(3), state: 'Queued' }) as unknown as RunJson;
 const state = (extra: Partial<Record<keyof SessionStateBody, unknown>> = {}): SessionStateBody =>
     ({
         session: { id: 's', facilitator: 'f', participants: [{ id: 'f', name: 'Fumi', role: 'Facilitator' }], mode: 'Collab', state: 'Open' },
@@ -101,7 +88,7 @@ describe('where an addressed message stands', () => {
         expect(messageAi(decided('t', 'm', 'ChangeRequest', { kind: 'Proposal', proposal: 'x' }))).toEqual({ kind: 'proposal', proposal: 'x' });
         expect(messageAi(decided('t', 'm', 'ChangeRequest', { kind: 'Run', run: 'r' }))).toEqual({ kind: 'run', run: 'r' });
         expect(messageAi(decided('t', 'm', 'NotForAi'))).toEqual({ kind: 'neither' });
-        expect(messageAi(decided('t', 'm', 'Consultation'), new Set(['t']))).toEqual({ kind: 'given-up' });
+        expect(messageAi(decided('t', 'm', 'Consultation'), new Set(['m']))).toEqual({ kind: 'given-up' });
         // a participant's page gets the outcome without the steps: read the same
         const outcome = {
             id: 't',
@@ -117,27 +104,11 @@ describe('where an addressed message stands', () => {
         expect(triagesByRequest(state({ triages: [pending('t', 'mp')] })).get('mp')?.id).toBe('t');
     });
 
-    test("the answerer is awaited for a 相談 and a participant's 依頼, not for the facilitator's (queued at once)", () => {
-        const s = state();
-        expect(awaitsAnswerer(decided('t', 'mp', 'Consultation'), s)).toBe(true);
-        expect(awaitsAnswerer(decided('t', 'mp', 'ChangeRequest'), s)).toBe(true);
-        expect(awaitsAnswerer(decided('t', 'mf', 'ChangeRequest'), s)).toBe(false);
-        expect(awaitsAnswerer(decided('t', 'mp', 'ChangeRequest', undefined, 1, { addressedBy: 'Facilitator' }), s)).toBe(false);
-        expect(awaitsAnswerer(decided('t', 'mp', 'NotForAi'), s)).toBe(false);
-        expect(awaitsAnswerer(decided('t', 'mp', 'Consultation', { kind: 'Answer', answer: 'a' }), s)).toBe(false);
-        expect(awaitsAnswerer(pending('t', 'mp'), s)).toBe(false);
-    });
-
-    test('given up: the jobs the page sees waiting beyond what the presence counts, the oldest first', () => {
-        const triages = [decided('t1', 'mp', 'Consultation', undefined, 1), decided('t2', 'mf', 'Consultation', undefined, 2), pending('t3', 'mp')];
-        const presence = (waiting: number) => ({ connected: { answer: 1, run: 1 }, waiting });
-        // the two answers and the triage at stage 3 wait, and the queued run: nothing given up
-        expect(givenUpTriages(state({ triages, runs: [queuedRun('r')], agent: presence(4) }))).toEqual(new Set());
-        // one answer less than the page sees: the oldest was given up
-        expect(givenUpTriages(state({ triages, runs: [queuedRun('r')], agent: presence(3) }))).toEqual(new Set(['t1']));
-        expect(givenUpTriages(state({ triages, agent: presence(1) }))).toEqual(new Set(['t1', 't2']));
-        // no presence (an older server): none
-        expect(givenUpTriages(state({ triages }))).toEqual(new Set());
+    test('given up: the messages the presence lists, each until it is tried again', () => {
+        const presence = { connected: { answer: 1, run: 1 }, waiting: 0, givenUp: [{ request: 'mp', kind: 'answer' as const }] };
+        expect(givenUpRequests(state({ agent: presence }))).toEqual(new Set(['mp']));
+        expect(givenUpRequests(state({ agent: { connected: { answer: 1, run: 1 }, waiting: 0 } }))).toEqual(new Set());
+        expect(givenUpRequests(state())).toEqual(new Set());
     });
 });
 

@@ -58,6 +58,8 @@ export interface ChatActions {
     approveProposals(proposals: readonly { readonly proposal: string; readonly edited?: ProposalBody }[]): Promise<boolean>;
     /** Rejects an open change proposal, with a note to its requester if any. */
     rejectProposal(proposal: string, note?: string): Promise<boolean>;
+    /** Tries the AI's answer or proposal for a message again, once the server gave it up. */
+    retryAnswer(request: string): Promise<boolean>;
     /** Withdraws my open change proposal. */
     withdrawProposal(proposal: string): Promise<boolean>;
     /** Queues the run's requests again with the answer to its questions. */
@@ -114,6 +116,7 @@ export function useChatActions(): ChatActions {
         address: (requests) => act(() => sessionApi.address([...requests])),
         approveProposals: (proposals) => act(() => sessionApi.approveProposals({ proposals: [...proposals] })),
         rejectProposal: (proposal, note) => act(() => sessionApi.rejectProposal(proposal, note?.trim() || undefined)),
+        retryAnswer: (request) => act(() => sessionApi.retryAnswer(request)),
         withdrawProposal: (proposal) => act(() => sessionApi.withdrawProposal(proposal)),
         answer: (run, answer) => queue({ requests: requestsOf(run), answerTo: run.id, answer }),
         pick: (run, assumption, alternative, note) => queue({ requests: requestsOf(run), note, pick: { pickOf: run.id, assumption, alternative } }),

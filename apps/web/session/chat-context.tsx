@@ -28,7 +28,7 @@ export interface ChatContextValue {
     readonly solo: boolean;
     /** The triage of each message addressed to the AI, by the message's ID (ADR 0030). */
     readonly triages: ReadonlyMap<string, TriageJson>;
-    /** The triages whose answer or proposal the server gave up. */
+    /** The messages whose answer or proposal the server gave up. */
     readonly givenUp: ReadonlySet<string>;
     /** The open change proposals the facilitator chose to approve together (one run). */
     readonly proposalPicks: { readonly ids: ReadonlySet<string>; toggle(id: string): void; clear(): void };

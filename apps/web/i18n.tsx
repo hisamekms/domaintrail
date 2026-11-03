@@ -718,6 +718,7 @@ const ja = {
                 toAnswer: 'AI の回答へ',
                 toProposal: '変更案へ',
                 givenUp: 'AI が答えられませんでした',
+                retry: 'もう一度',
                 willRead: 'AI に届きます',
                 presence: (role: 'all' | 'answer' | 'run', waiting: number) =>
                     `${role === 'all' ? 'AI' : role === 'answer' ? 'AI（回答）' : 'AI（実行）'} 接続なし${waiting > 0 ? `（${waiting} 件待ち）` : ''}`,
@@ -1503,6 +1504,7 @@ const en: Messages = {
                 toAnswer: "To the AI's answer",
                 toProposal: 'To the proposal',
                 givenUp: 'The AI could not answer',
+                retry: 'Try again',
                 willRead: 'The AI reads this',
                 presence: (role, waiting) =>
                     `${role === 'all' ? 'AI' : role === 'answer' ? 'AI (answers)' : 'AI (runs)'} not connected${waiting > 0 ? ` (${waiting} waiting)` : ''}`,

@@ -36,7 +36,7 @@ import { motionMs } from '../shared/motion';
 import { useT } from '../i18n';
 import { useChatActions, type QuestionChoice } from './actions';
 import { ActivityLine } from './activity';
-import { AI_PARTICIPANT, aiPresence, givenUpTriages, isAiAuthor, isRecord, isSolo, messageAi, triagesByRequest, willAddress, type MessageAi } from './ai';
+import { AI_PARTICIPANT, aiPresence, givenUpRequests, isAiAuthor, isRecord, isSolo, messageAi, triagesByRequest, willAddress, type MessageAi } from './ai';
 import { sessionApi } from './api';
 import { Bubble, Clamped, time } from './bubble';
 import { ChangedElements, ReplyButton, RunCard, useUnitAbout } from './card';
@@ -134,22 +134,6 @@ function useNow(active: boolean): number {
     return now;
 }
 
-/**
- * The triages whose answer the server gave up (`givenUpTriages`), once they have stayed so for a moment: the presence
- * and the triages' events arrive apart, so a moment's mismatch is not taken for one.
- */
-function useGivenUp(state: SessionData['state']): ReadonlySet<string> {
-    const candidates = useMemo(() => givenUpTriages(state), [state]);
-    const key = [...candidates].sort().join(',');
-    const [confirmed, setConfirmed] = useState<ReadonlySet<string>>(new Set());
-    useEffect(() => {
-        if (!key) return;
-        const timer = setTimeout(() => setConfirmed(new Set(key.split(','))), 3000);
-        return () => clearTimeout(timer);
-    }, [key]);
-    return useMemo(() => new Set([...confirmed].filter((id) => candidates.has(id))), [confirmed, candidates]);
-}
-
 export function SessionChat(props: {
     session: SessionData;
     composer: ComposerDraft;
@@ -179,7 +163,7 @@ export function SessionChat(props: {
     const control = live && me.participant.role === 'facilitator';
     const solo = isSolo(state);
     const triages = useMemo(() => triagesByRequest(state), [state]);
-    const givenUp = useGivenUp(state);
+    const givenUp = useMemo(() => givenUpRequests(state), [state]);
     // the open proposals chosen to approve together: those no longer open drop out
     const [picks, setPicks] = useState<ReadonlySet<string>>(new Set());
     const openKey = (state.proposals ?? [])
@@ -848,7 +832,16 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
                         tx={tx}
                     />
                 </Clamped>
-                {ai.kind === 'given-up' && <p className="chat-ai-given-up">{tx.chat.ai.givenUp}</p>}
+                {ai.kind === 'given-up' && (
+                    <p className="chat-ai-given-up">
+                        {tx.chat.ai.givenUp}
+                        {control && (
+                            <button type="button" className="chat-small ghost" disabled={actions.busy} onClick={() => void actions.retryAnswer(r.id)}>
+                                {tx.chat.ai.retry}
+                            </button>
+                        )}
+                    </p>
+                )}
                 <ReactionRow target={{ kind: 'Message', request: r.id }} />
                 {record && triage !== undefined && isRecord(triage) && <TriageRecordPanel triage={triage} onClose={() => setRecord(false)} />}
             </Bubble>
