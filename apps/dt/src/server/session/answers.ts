@@ -5,7 +5,8 @@
 // jobs never wait for the run queue nor hold it. What a job is waiting for is the collaboration's (`answerJobs`); what is
 // handed out, to whom and until when, is held here in memory: a job not answered within its timeout is withdrawn (a
 // triage's stage 3 is then recorded as failed, which makes it a 相談; an answer or a proposal is tried again, at most
-// `MAX_ATTEMPTS` times), and the jobs of an answerer that disconnects are handed to another one, or wait.
+// `MAX_ATTEMPTS` times, then given up until an answerer connects — each new stream gives the given-up jobs another
+// round — or the facilitator retries it), and the jobs of an answerer that disconnects are handed to another one, or wait.
 //
 // Each job carries what its prompt needs: the message, its author's name, and for stage 3 the chat around it and the
 // open proposals; for an answer or a proposal the session so far — whole, and since the last entry the stream's previous
@@ -31,7 +32,7 @@ import { AGENT_ANSWER_EVENT_TYPES, type AgentAnswerJobBody, type AgentSessionSoF
 import { sendError } from '../http/json.js';
 import { body as objectBody } from './input.js';
 
-/** How many times an answer or a proposal is handed out before it is given up (until the server starts again). */
+/** How many times an answer or a proposal is handed out before it is given up (until an answerer connects, or a retry). */
 export const MAX_ATTEMPTS = 2;
 /** How long past its timeout a job's answerer has to report that it failed, before the job is withdrawn. */
 const GRACE_MS = 5_000;
@@ -49,8 +50,8 @@ export interface AnswerDispatcherDeps {
     readonly maxStreams: number;
     /** Sends what the outbox got to the pages; called after every result. */
     readonly pump: () => Promise<void>;
-    /** The number of connected answerers changed. */
-    readonly onConnections?: () => void;
+    /** The number of connected answerers, or the jobs given up, changed. */
+    readonly onPresence?: () => void;
     /** The agent API's credential: a result that contains it is refused (defense in depth: no agent should be able to read it). */
     readonly token?: string;
     readonly log: (line: string) => void;
@@ -69,10 +70,20 @@ export interface AnswerDispatcher {
     connected(): number;
     /** How many jobs wait (handed out or not), the given-up ones left out. */
     waiting(): Promise<number>;
+    /** The answers and proposals given up that are still to write, in the order of the jobs. */
+    givenUp(): Promise<readonly GivenUpAnswer[]>;
+    /** The facilitator's retry: the given-up jobs of the message, still to write, get another round; whether there was one. */
+    retry(request: Collaboration.RequestId): Promise<boolean>;
     /** Ends every stream (the session closed: told first; the server stops). */
     close(sessionClosed: boolean): void;
     /** Resolves once the hand-outs under way have ended (tests). */
     settled(): Promise<void>;
+}
+
+/** An answer or a proposal given up after `MAX_ATTEMPTS` (the agents' presence lists them for the page). */
+export interface GivenUpAnswer {
+    readonly request: Collaboration.RequestId;
+    readonly kind: Exclude<AnswerJob['kind'], 'triage'>;
 }
 
 interface AnswerStream {
@@ -90,6 +101,7 @@ interface Handed {
     readonly key: string;
     readonly kind: AnswerJob['kind'];
     readonly triage: Collaboration.TriageId;
+    readonly request: Collaboration.RequestId;
     readonly stream: AnswerStream;
     readonly timer: ReturnType<typeof setTimeout>;
     readonly readRevision?: Collaboration.RevisionId;
@@ -110,7 +122,7 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
     const handed = new Map<string, Handed>();
     const handedKeys = new Set<string>();
     const attempts = new Map<string, number>();
-    const givenUp = new Set<string>();
+    const givenUp = new Map<string, GivenUpAnswer>();
     let streamIds = 0;
     let running: Promise<void> | undefined;
     let again = false;
@@ -144,10 +156,25 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
     const failedOnce = (h: Handed, why: string): void => {
         const n = (attempts.get(h.key) ?? 0) + 1;
         attempts.set(h.key, n);
-        if (n >= MAX_ATTEMPTS) {
-            givenUp.add(h.key);
-            log(`answer job ${h.kind} of triage ${h.triage} given up after ${n} attempts (${why})`);
+        if (n >= MAX_ATTEMPTS && h.kind !== 'triage') {
+            givenUp.set(h.key, { request: h.request, kind: h.kind });
+            log(`answer job ${h.kind} of triage ${h.triage} given up after ${n} attempts (${why}); a new answerer or a retry tries it again`);
+            deps.onPresence?.();
         } else log(`answer job ${h.kind} of triage ${h.triage} failed (${why}); it will be handed out again`);
+    };
+
+    /** The given-up jobs `which` selects get another round of `MAX_ATTEMPTS` (handed out at the next kick); how many. */
+    const another = (which: (g: GivenUpAnswer) => boolean, by: string): number => {
+        let n = 0;
+        for (const [key, g] of givenUp) {
+            if (!which(g)) continue;
+            givenUp.delete(key);
+            attempts.delete(key);
+            log(`answer job ${g.kind} of request ${g.request}: tried again (${by})`);
+            n++;
+        }
+        if (n) deps.onPresence?.();
+        return n;
     };
 
     /** Stage 3 that failed or timed out: recorded as unknown with why, which makes the triage a 相談. */
@@ -254,6 +281,7 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
                     key: keyOf(job),
                     kind: job.kind,
                     triage: job.triage.id,
+                    request: job.request.id,
                     stream,
                     timer,
                     ...(readRevision && { readRevision }),
@@ -381,15 +409,17 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
             res.write(': answers\n\n');
             const stream: AnswerStream = { id: ++streamIds, res, closed: false };
             streams.add(stream);
+            // a new answerer (another process, or one restarted after a fix) gets what was given up: another round
+            another(() => true, 'an answerer connected');
             res.on('close', () => {
                 stream.closed = true;
                 streams.delete(stream);
                 // its job goes to another answerer, or waits: it was not the job's fault
                 for (const h of handed.values()) if (h.stream === stream && !h.settling) release(h);
-                deps.onConnections?.();
+                deps.onPresence?.();
                 dispatcher.kick();
             });
-            deps.onConnections?.();
+            deps.onPresence?.();
             dispatcher.kick();
         },
 
@@ -427,6 +457,23 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
         async waiting() {
             const jobs = await use.answerJobs({ session });
             return jobs.ok ? jobs.value.filter((j) => !givenUp.has(keyOf(j))).length : 0;
+        },
+
+        async givenUp() {
+            if (!givenUp.size) return [];
+            const jobs = await use.answerJobs({ session });
+            if (!jobs.ok) return [];
+            // a job no longer waited for (answered by hand, dismissed) is forgotten
+            const due = new Set(jobs.value.map(keyOf));
+            for (const key of givenUp.keys()) if (!due.has(key)) givenUp.delete(key);
+            return jobs.value.flatMap((j) => givenUp.get(keyOf(j)) ?? []);
+        },
+
+        async retry(request) {
+            if (!(await dispatcher.givenUp()).some((g) => g.request === request)) return false;
+            another((g) => g.request === request, 'the facilitator retried it');
+            dispatcher.kick();
+            return true;
         },
 
         close(sessionClosed) {

@@ -114,7 +114,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         maxPreviousRunDiff: deps.maxPreviousRunDiff,
         maxStreams: deps.maxStreams,
         pump: deps.pump,
-        ...(deps.onPresence && { onConnections: deps.onPresence }),
+        ...(deps.onPresence && { onPresence: deps.onPresence }),
         token: deps.token,
         log: deps.log ?? (() => {}),
     });

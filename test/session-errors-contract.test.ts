@@ -57,6 +57,7 @@ const ROUTE_ERRORS = [
     'ManualRecoveryNeeded',
     'RunInProgress',
     'SubscriberOutdated',
+    'AnswerNotGivenUp',
 ];
 
 describe('the status of each error type', () => {

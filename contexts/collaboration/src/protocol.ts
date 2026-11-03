@@ -200,8 +200,19 @@ export type ParticipantTriageMessage =
 /** The agents connected to a session, per role, and the work waiting for one (ADR 0030; the chat header's AI status). */
 export interface AgentPresence {
     readonly connected: { readonly answer: number; readonly run: number };
-    /** Triages waiting for stage 3, answers and proposals to write, runs queued. */
+    /** Triages waiting for stage 3, answers and proposals to write, runs queued (the given-up ones left out). */
     readonly waiting: number;
+    /**
+     * The answers and proposals given up after failing twice (absent: none): each waits for an answerer to connect (a
+     * new answer stream tries it again) or for the facilitator's `POST /api/session/requests/:id/retry-answer`.
+     */
+    readonly givenUp?: readonly AgentGivenUpAnswer[];
+}
+
+/** An answer (to a 相談) or a proposal (for a 依頼) of the AI that was given up: the message it is for. */
+export interface AgentGivenUpAnswer {
+    readonly request: string;
+    readonly kind: 'answer' | 'propose';
 }
 
 /** The message type of a session message (`session.*`, `request.*`, `run.*`, `revision.*`, `mark.*`, `assumption.*`, `triage.*`, `proposal.*`, `agent.*`, `presence.*`). */
@@ -260,6 +271,13 @@ export interface SentBody {
 export interface AddressBody {
     readonly requests: readonly string[];
 }
+
+/**
+ * `POST /api/session/requests/:id/retry-answer` (the facilitator; an empty body): the AI's answer or proposal for the
+ * message, given up after failing twice (`AgentPresence.givenUp`), is handed out again (another round of attempts).
+ * Refused with `FacilitatorOnly` (403) and `AnswerNotGivenUp` (409: nothing of the message is given up). → 200 `{}`.
+ */
+export type RetryAnswerBody = Record<string, never>;
 
 /** `POST /api/session/requests/address` → 201: the triages opened (or addressed again), in the order of the messages. */
 export interface AddressedBody {

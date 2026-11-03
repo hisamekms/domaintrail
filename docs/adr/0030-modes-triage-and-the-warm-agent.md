@@ -156,8 +156,9 @@ one rather than rewritten.
 
 *Proposed* (M4, where the plan left the detail open; see the plan's "As built in M4"): the answers entry point holds
 what it handed out in memory (a job per answerer, withdrawn after its timeout; a failed stage 3 is a 相談, a failed
-answer or proposal is tried twice and then left until the server starts again); a participant's page gets the triages'
-outcomes without the stages, also in the events; Clef asks three questions in one call; the answerer and the triage
+answer or proposal is tried twice and then left until an answerer connects — each new answer stream gives it another
+round — or the facilitator retries it (`POST /api/session/requests/:id/retry-answer`), the given-up jobs listed in the
+agents' presence as `givenUp`); a participant's page gets the triages' outcomes without the stages, also in the events; Clef asks three questions in one call; the answerer and the triage
 model are reached through Claude Code only, the triage cold by default, the answers warm with one schema for answers and
 proposals; the session so far is given whole and since the last entry the same process saw (the runner asks for it at
 the start, the server tracks it per answer stream); `dt fmt` and `dt check` are skipped when a run changed no file.

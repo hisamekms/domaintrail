@@ -359,6 +359,43 @@ describe('the answers entry point', () => {
         expect(JSON.stringify(await ctx.state())).not.toContain(ctx.cred.token);
     });
 
+    test('an answer that fails twice is given up: in the presence, back for a new answerer, and retried by the facilitator', async () => {
+        const ctx = await setup();
+        const first = answerStream(ctx);
+        const question = await say(ctx, ctx.bob, 'Order の状態は？', { ai: true });
+        const triage = await first.job('triage');
+        expect((await first.post(triage.job, { kind: 'consultation', confidence: 0.9, reason: '質問', durationMs: 1 })).status).toBe(200);
+        const failTwice = async (stream: ReturnType<typeof answerStream>): Promise<void> => {
+            for (let i = 0; i < 2; i++) {
+                const job = await stream.job('answer');
+                expect((await stream.post(job.job, { error: 'the agent crashed', durationMs: 1 })).status).toBe(200);
+            }
+        };
+        await failTwice(first);
+        const givenUp = await until('the answer given up', async () => ((await ctx.state()).agent?.givenUp?.length ? (await ctx.state()).agent : undefined));
+        expect(givenUp).toMatchObject({ waiting: 0, givenUp: [{ request: question, kind: 'answer' }] });
+        // a participant sees it too, and cannot retry it
+        expect((await ctx.state(ctx.bob)).agent?.givenUp).toEqual([{ request: question, kind: 'answer' }]);
+        expect((await ctx.api(ctx.bob, `requests/${question}/retry-answer`, {})).status).toBe(403);
+        // the facilitator retries it: handed out again to the answerer still connected
+        expect((await ctx.api(ctx.ada, `requests/${question}/retry-answer`, {})).status).toBe(200);
+        expect((await ctx.state()).agent?.givenUp).toBeUndefined();
+        await failTwice(first);
+        await until('given up again', async () => ((await ctx.state()).agent?.givenUp?.length ? true : undefined));
+        // a new answerer gets another round
+        first.close();
+        await until('the answerer gone', async () => ((await ctx.state()).agent?.connected.answer === 0 ? true : undefined));
+        const second = answerStream(ctx);
+        const again = await second.job('answer');
+        expect(again.request.id).toBe(question);
+        expect((await ctx.state()).agent?.givenUp).toBeUndefined();
+        expect((await second.post(again.job, { kind: 'answer', answer: 'Open と Placed です。', durationMs: 3 })).status).toBe(200);
+        expect((await ctx.state()).requests.find((r) => r.author === 'ai')?.body).toBe('Open と Placed です。');
+        // nothing given up: refused
+        const refused = await ctx.api(ctx.ada, `requests/${question}/retry-answer`, {});
+        expect([refused.status, ((await refused.json()) as { error: { type: string } }).error.type]).toEqual([409, 'AnswerNotGivenUp']);
+    });
+
     test("an answerer that goes hands its job to another; the facilitator's own request goes straight to the queue", async () => {
         const ctx = await setup();
         const first = answerStream(ctx);
