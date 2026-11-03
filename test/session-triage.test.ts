@@ -295,6 +295,12 @@ describe('the answers entry point', () => {
         const second = await stream.job('answer');
         expect(second.sessionSoFarSince).toMatchObject({ since: answer.sessionSoFar?.last });
         expect(second.sessionSoFarSince?.text).toContain('なぜ？');
+        // the run fails: an unknown reason is refused; a read scope too large is a reason of its own
+        const failWith = async (reason: string): Promise<number> => (await agent(`runs/${run}/fail`, { token: claimed.lease.token, reason })).status;
+        expect(await failWith('RuleNotMet')).toBe(400);
+        expect(await failWith('ReadScopeTooLarge')).toBe(200);
+        const failed = (await ctx.state()).runs.find((r) => r.id === run);
+        expect(failed?.state === 'Failed' && failed.reason).toBe('ReadScopeTooLarge');
     });
 
     test("a participant's request: proposed, withdrawn by them, proposed again, approved edited by the facilitator as one run", async () => {

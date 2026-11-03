@@ -23,7 +23,13 @@ import {
     readToolOutcome,
     type RunActivity,
 } from '@domaintrail/collaboration';
-import { AGENT_EVENT_TYPES, type AgentParticipantsBody, type AgentSessionBody, type AgentSessionSoFar } from '@domaintrail/collaboration/protocol';
+import {
+    AGENT_EVENT_TYPES,
+    AGENT_FAIL_REASONS,
+    type AgentParticipantsBody,
+    type AgentSessionBody,
+    type AgentSessionSoFar,
+} from '@domaintrail/collaboration/protocol';
 import { isLoopbackHost } from '../http/access.js';
 import { BodyError, readJson, sendError, sendJson } from '../http/json.js';
 import { type AnswerDispatcher, createAnswerDispatcher } from './answers.js';
@@ -342,9 +348,10 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
             case 'fail': {
                 const b = await input(req, res, ['token', 'reason']);
                 if (!b) return;
-                if (b.reason !== 'AgentError' && b.reason !== 'Interrupted')
-                    return sendError(res, 400, 'InvalidInput', "Expected 'AgentError' or 'Interrupted'.", { field: 'reason' });
-                return answer(res, await use.failRun({ run, token: String(b.token), reason: b.reason }), (v) => v);
+                const reason = AGENT_FAIL_REASONS.find((r) => r === b.reason);
+                if (!reason)
+                    return sendError(res, 400, 'InvalidInput', `Expected one of ${AGENT_FAIL_REASONS.map((r) => `'${r}'`).join(', ')}.`, { field: 'reason' });
+                return answer(res, await use.failRun({ run, token: String(b.token), reason }), (v) => v);
             }
             case 'release': {
                 const b = await input(req, res, ['token']);

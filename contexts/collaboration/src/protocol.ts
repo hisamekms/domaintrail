@@ -625,9 +625,17 @@ export interface AgentActivityBody extends AgentLeaseBody {
     readonly subject?: string;
 }
 
+/**
+ * Why a runner fails its run without a report: the agent could not run or changed other files (`AgentError`), the
+ * runner was stopped (`Interrupted`), or the run was refused because the deny list that keeps what git ignores from the
+ * agent would be too long (`ReadScopeTooLarge`: ignore whole directories rather than the files in them).
+ */
+export const AGENT_FAIL_REASONS = ['AgentError', 'Interrupted', 'ReadScopeTooLarge'] as const satisfies readonly Collaboration.FailureReason[];
+export type AgentFailReason = (typeof AGENT_FAIL_REASONS)[number];
+
 /** `POST /agent/runs/:id/fail`. */
 export interface AgentFailBody extends AgentLeaseBody {
-    readonly reason: 'AgentError' | 'Interrupted';
+    readonly reason: AgentFailReason;
 }
 
 // ---- Agent API: the answerer role (ADR 0030, decision 6) ----

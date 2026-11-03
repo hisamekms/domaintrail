@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, stat, symlink, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
+import { ReadScopeTooLarge } from '../core/ports.js';
 import { userClaudeDefaults } from './claude-settings.js';
 import { createWorkspaceView } from './workspace-view.js';
 
@@ -195,6 +196,8 @@ describe('what git ignores, kept from the runner by deny rules', () => {
         expect(await ignoredEntries(root, { list: async () => many.slice(0, MAX_IGNORED_ENTRIES), ignores: notWalked })).toHaveLength(MAX_IGNORED_ENTRIES);
         const refused = await ignoredEntries(root, { list: async () => many, ignores: notWalked }).catch((e: unknown) => e);
         expect(refused).toBeInstanceOf(TooManyDeniedEntries);
+        // the subscriber fails the run as ReadScopeTooLarge (the page says why) rather than AgentError
+        expect(refused).toBeInstanceOf(ReadScopeTooLarge);
         expect(String(refused)).toContain('ignore whole directories');
         // git does not speak for the root: walked; a directory holding a .git (in any case) denied as a whole
         await mkdir(path.join(root, 'vendor', 'lib', '.GIT'), { recursive: true });
