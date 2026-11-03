@@ -3,10 +3,11 @@
 // whole for a fresh process and since its last job for a warm one with the files changed since, a withdrawn job
 // stopped without a result, a job past its timeout reported as failed, and the session's end.
 import { describe, expect, test } from 'bun:test';
-import type { AgentAnswerJobBody } from '@domaintrail/collaboration/protocol';
-import { buildProposePrompt } from './answer-prompt.js';
+import type { AgentAnswerJobBody, AgentInterviewJobBody } from '@domaintrail/collaboration/protocol';
+import { buildAnswerPrompt, buildInterviewPrompt, buildProposePrompt } from './answer-prompt.js';
 import { startAnswerer } from './answerer.js';
 import type { AgentApi, AnswerAgent, AnswerStreamItem, AnswerTurn, AnswerTurnResult } from './ports.js';
+import type { Practice } from './prompt.js';
 
 const SESSION = '00000000-0000-4000-8000-000000000001';
 const REQUEST = '00000000-0000-4000-8000-000000000002';
@@ -80,7 +81,14 @@ function fakeAgent(
         const o = outputs.shift() ?? { text: '', error: 'no output planned' };
         return typeof o === 'function' ? o(turn) : o;
     };
-    return { triage: (t) => next('triage', t), answer: (t) => next('answer', t), reset: (r) => void resets.push(r), turns, resets };
+    return {
+        triage: (t) => next('triage', t),
+        answer: (t) => next('answer', t),
+        interview: (t) => next('interview', t),
+        reset: (r) => void resets.push(r),
+        turns,
+        resets,
+    };
 }
 
 async function waitFor(check: () => boolean, ms = 3_000): Promise<void> {
@@ -93,7 +101,7 @@ async function waitFor(check: () => boolean, ms = 3_000): Promise<void> {
 
 const sleep = { sleep: (ms: number) => Bun.sleep(Math.min(ms, 10)), every: () => () => {} };
 
-function start(api: AgentApi, agent: AnswerAgent, scans: ReadonlyMap<string, string>[] = [], timeoutMs?: number) {
+function start(api: AgentApi, agent: AnswerAgent, scans: ReadonlyMap<string, string>[] = [], timeoutMs?: number, practice?: Practice) {
     const log: string[] = [];
     let scan = 0;
     let nonce = 0;
@@ -106,7 +114,7 @@ function start(api: AgentApi, agent: AnswerAgent, scans: ReadonlyMap<string, str
             nonce: () => `n${++nonce}`,
             log: (l) => log.push(l),
         },
-        { ...(timeoutMs !== undefined && { timeoutMs }), reconnect: { minMs: 10, maxMs: 10, giveUpMs: 1_000 } },
+        { ...(timeoutMs !== undefined && { timeoutMs }), reconnect: { minMs: 10, maxMs: 10, giveUpMs: 1_000 }, ...(practice && { practice }) },
     );
     return { answerer, log };
 }
@@ -152,9 +160,11 @@ describe('the answerer role', () => {
         push({ kind: 'job', job: job('answer', 1, { sessionSoFar: { text: 'FULL-1', last: 3 }, readRevision: REVISION }) });
         await waitFor(() => results.length === 1);
         expect(results[0].result).toMatchObject({ kind: 'answer', answer: 'Order は注文です。', readRevision: REVISION });
-        // the answer is Markdown for a narrow column: one heading level, short, no links or images
+        // the answer is Markdown for a narrow column: the conclusion first, short, one heading level, no links or images
         expect(agent.turns[0].turn.prompt).toContain('use at most one heading level (`#`), and no links or');
+        expect(agent.turns[0].turn.prompt).toContain('Start with the conclusion, in the first one or two sentences.');
         expect(agent.turns[0].turn.prompt).toContain('Keep it short');
+        expect(agent.turns[0].turn.prompt).toContain('when more is needed, keep only the points that matter');
         // a fresh process: the whole session so far, no continued prompt
         expect(agent.turns[0].turn.prompt).toContain('FULL-1');
         expect(agent.turns[0].turn.continuedPrompt).toBeUndefined();
@@ -231,6 +241,39 @@ describe('the answerer role', () => {
         expect(prompt).not.toMatch(/\bwhere\b \(at most/);
     });
 
+    test('the answer and propose prompts give the ways of working of the DSLs the message is about: .dtes, .dt, both or none', async () => {
+        const practice = { storming: '### Event Storming with DomainTrail\n\nSTORMING', modeling: '### Modeling with DomainTrail\n\nMODELING' };
+        const about = (...targets: AgentAnswerJobBody['request']['targets'][number]['target'][]): Partial<AgentAnswerJobBody> =>
+            ({
+                request: { ...job('answer', 1).request, targets: targets.map((target) => ({ target, sourceRevision: REVISION })) },
+            }) as Partial<AgentAnswerJobBody>;
+        const dtes = about({ kind: 'DtesStorming', storming: 'Returns' });
+        const dt = about({ kind: 'DtElement', element: 'Sales.Order' });
+        const both = about({ kind: 'DtesElement', storming: 'Returns', local: 'ReturnRequested' }, { kind: 'DtElement', element: 'Sales.Order' });
+        for (const build of [buildAnswerPrompt, buildProposePrompt]) {
+            const prompt = (extra: Partial<AgentAnswerJobBody>): string => build(job('answer', 1, extra), 'n', { practice });
+            const has = (p: string): boolean[] => [p.includes('STORMING'), p.includes('MODELING')];
+            expect(has(prompt(dtes))).toEqual([true, false]);
+            expect(has(prompt(dt))).toEqual([false, true]);
+            expect(has(prompt(both))).toEqual([true, true]);
+            const none = prompt({});
+            expect(none).toContain(`${practice.storming}\n\n${practice.modeling}`);
+            // read-only still: the practice's commands and edits are not the answerer's; outside the block of data
+            expect(none).toContain('You still change nothing\nand run nothing');
+            expect(none.indexOf('MODELING')).toBeLessThan(none.indexOf('<message-n>'));
+            expect(build(job('answer', 1), 'n')).not.toContain('How the people work');
+        }
+        // the answerer passes its practice to both of a warm process's prompts
+        const { api, push } = fakeApi();
+        const agent = fakeAgent([{ text: '', structured: { kind: 'answer', answer: 'ok' } }]);
+        const { answerer } = start(api, agent, [new Map(), new Map()], undefined, practice);
+        push({ kind: 'job', job: job('answer', 1, dtes) });
+        await waitFor(() => agent.turns.length === 1);
+        expect(agent.turns[0].turn.prompt).toContain('STORMING');
+        expect(agent.turns[0].turn.prompt).not.toContain('MODELING');
+        await answerer.stop();
+    });
+
     test('a withdrawn job is stopped and not answered; one past its timeout is reported as failed; a restore resets the agent', async () => {
         const { api, push, results } = fakeApi();
         const hang = (turn: AnswerTurn): Promise<AnswerTurnResult> =>
@@ -248,5 +291,78 @@ describe('the answerer role', () => {
         await waitFor(() => agent.resets.length === 1);
         push({ kind: 'closed' });
         expect(await answerer.done).toBe('closed');
+    });
+
+    test("an interview's turn: the interviewer's prompt (what to find out, the language, the transcript), a question or a brief", async () => {
+        const { api, push, results } = fakeApi();
+        const lines = ['目的', '範囲', '使い道', 'レベル'].map((head) => ({ head, text: 'x' }));
+        const agent = fakeAgent([
+            { structured: { kind: 'question', question: 'どの業務ですか？' }, text: '', model: 'opus' },
+            { structured: { kind: 'brief', brief: { name: 'Returns', label: '返品', isNew: true, replaces: false, lines } }, text: '' },
+            { structured: { kind: 'brief', brief: { name: '返品', isNew: true, replaces: false, lines } }, text: '' },
+        ]);
+        const { answerer, log } = start(api, agent);
+        const interview = (n: number, language: 'ja' | 'en' = 'ja'): AgentInterviewJobBody =>
+            ({
+                job: `job-${n}`,
+                kind: 'interview',
+                interview: { id: 'i-1', focus: { kind: 'DtesStorming', storming: 'Returns' } },
+                request: { id: REQUEST },
+                author: 'Ada',
+                timeoutMs: 5_000,
+                command: 'es',
+                language,
+                transcript: [{ from: 'person', text: 'ES を始める' }],
+                sessionSoFar: { text: 'SO-FAR', last: 1 },
+            }) as unknown as AgentInterviewJobBody;
+        push({ kind: 'job', job: interview(1) });
+        await waitFor(() => results.length === 1);
+        expect(results[0].result).toMatchObject({ kind: 'question', question: 'どの業務ですか？', model: 'opus' });
+        const prompt = agent.turns[0].turn.prompt;
+        expect(agent.turns[0].kind).toBe('interview');
+        for (const part of [
+            'One question per turn',
+            'Write in Japanese',
+            'the first and the last events',
+            '目的 / 範囲 / 使い道 / レベル',
+            '"focus": "@{es:Returns}"',
+            'SO-FAR',
+            '<interview-n1>',
+        ])
+            expect(prompt).toContain(part);
+        expect(prompt).toContain('their `///` descriptions above `storming`');
+        push({ kind: 'job', job: interview(2, 'en') });
+        await waitFor(() => results.length === 2);
+        expect(agent.turns[1].turn.prompt).toContain('Write in English');
+        expect(results[1].result).toMatchObject({ kind: 'brief', brief: { name: 'Returns', label: '返品', isNew: true, lines } });
+        // an invalid brief is reported as failed
+        push({ kind: 'job', job: interview(3) });
+        await waitFor(() => results.length === 3);
+        expect(results[2].result).toMatchObject({ error: 'invalid output (reply.brief.name)' });
+        expect(log.join('\n')).toContain('interview of interview i-1');
+        await answerer.stop();
+    });
+
+    test("the interviewer's prompt gives the way of working of its command: /es the storming's, /model the modeling's", () => {
+        const practice = { storming: 'STORMING', modeling: 'MODELING' };
+        const j = (command: 'es' | 'model'): AgentInterviewJobBody =>
+            ({
+                job: 'j',
+                kind: 'interview',
+                interview: { id: 'i' },
+                request: { id: REQUEST },
+                author: 'Ada',
+                timeoutMs: 1,
+                command,
+                language: 'ja',
+                transcript: [],
+            }) as unknown as AgentInterviewJobBody;
+        const es = buildInterviewPrompt(j('es'), 'n', { practice });
+        expect([es.includes('STORMING'), es.includes('MODELING')]).toEqual([true, false]);
+        expect(es).toContain('You still change nothing and run');
+        expect(es.indexOf('STORMING')).toBeLessThan(es.indexOf('<interview-n>'));
+        const model = buildInterviewPrompt(j('model'), 'n', { practice });
+        expect([model.includes('STORMING'), model.includes('MODELING')]).toEqual([false, true]);
+        expect(buildInterviewPrompt(j('es'), 'n')).not.toContain('How the people work');
     });
 });

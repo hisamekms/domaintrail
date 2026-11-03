@@ -15,6 +15,7 @@ import type { ElementChange } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
 import { useClipped } from '../view/toolbar';
 import { answerBody, type QuestionChoice } from './actions';
+import { Clamped } from './bubble';
 import { ActivityLine } from './activity';
 import { OtherDialog } from './answer-other';
 import { cardMenuItems, cardRuns, obstacleText, queueAhead, quoteDisplay, type CardRun, type Quote, type QuoteDisplay } from './cards';
@@ -289,7 +290,7 @@ function RunSection({
             {/* what the running run is doing now (in AI の作業, the unit's row above shows it) */}
             {!compact && run.message.kind === 'running' && <ActivityLine run={run.run.id} />}
             <div className="run-agent-body">
-                <AgentBody message={run.message} />
+                <AgentBody run={run.run.id} message={run.message} />
                 {/* in AI の作業, the unit's own line above already lists what it changed */}
                 {!compact && <RunFiles run={run.run} about={about} />}
                 {revert.kind === 'reverted' && (
@@ -368,9 +369,10 @@ function AnswerLine({ run }: { run: CardRun }) {
 
 /**
  * What the agent says of a run, as the chat said it; the files it changed are a line of their own below
- * (`RunFiles`). A question asked without the structured form is shown on the question's surface.
+ * (`RunFiles`). A question asked without the structured form is shown on the question's surface. An answer instead
+ * of an edit is clamped as the AI's answers are (`Clamped`: when it was there at the page's load).
  */
-function AgentBody({ message: m }: { message: AgentMessage }) {
+function AgentBody({ run, message: m }: { run: string; message: AgentMessage }) {
     const { tx, nameOf, onNavigate } = useChat();
     const says = tx.chat.agentSays;
     switch (m.kind) {
@@ -399,9 +401,9 @@ function AgentBody({ message: m }: { message: AgentMessage }) {
                                 <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
                             </p>
                         )}
-                        <p className="chat-text reply-answer">
+                        <Clamped tx={tx} revealKey={`run:${run}`} className="reply-answer">
                             <ReplyText text={m.reply.answer} onNavigate={onNavigate} />
-                        </p>
+                        </Clamped>
                         {changed && <p className="chat-text reply-answered-changed">{tx.chat.ai.answeredChanged}</p>}
                     </>
                 );

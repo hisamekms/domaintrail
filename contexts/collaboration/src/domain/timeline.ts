@@ -6,10 +6,11 @@
 // - each AI turn in a few lines: which messages, the outcome (completed, unchanged, answered, needs clarification,
 //   failed, declined, cancelled, reverted), its title and summary, what it changed (elements when known, else files;
 //   never the diff), its assumptions and how each was decided;
-// - events: proposals made, approved (edited), rejected (with the note) or withdrawn; restores; files changed outside
-//   the session (a snapshot whose content differs from the revision before it);
-// - what is open now: the AI's questions awaiting an answer, the proposals awaiting approval, the messages waiting for
-//   the AI, the queue.
+// - events: proposals made, approved (edited), rejected (with the note) or withdrawn; interviews (`/es`, `/model`)
+//   started, their brief, confirmed (with its run) or stopped; restores; files changed outside the session (a snapshot
+//   whose content differs from the revision before it);
+// - what is open now: the AI's questions awaiting an answer, the proposals awaiting approval, a running interview, the
+//   messages waiting for the AI, the queue.
 //
 // Entries are numbered in time order; an AI turn is placed when it ended (a queued or running one is "open now"), so the
 // list only grows and a warm agent can be given only the entries after the last one it saw (`since`). Limits: the newest
@@ -22,6 +23,7 @@ import { approvalOf } from './approvals.js';
 import { plainBody } from './body.js';
 import { compareFiles } from './compare.js';
 import { laterRunOf } from './marks.js';
+import { briefLines, commandId } from './interviews.js';
 import { elementReference } from './proposals.js';
 import { revertStatus } from './revert.js';
 
@@ -41,6 +43,8 @@ export interface TimelineRecords {
     readonly approvals: readonly Collaboration.AssumptionApproval[];
     readonly proposals: readonly Collaboration.ChangeProposal[];
     readonly triages: readonly Collaboration.Triage[];
+    /** The interviews of the `/` commands (absent: none). */
+    readonly interviews?: readonly Collaboration.Interview[];
     /**
      * What a run changed in the model's words (element names, by run ID), when the caller measured it; a run without
      * one is told by the files its revisions differ by.
@@ -48,7 +52,7 @@ export interface TimelineRecords {
     readonly elementChanges?: ReadonlyMap<string, readonly string[]>;
 }
 
-export type TimelineEntryKind = 'message' | 'answer' | 'turn' | 'proposal' | 'restore' | 'external';
+export type TimelineEntryKind = 'message' | 'answer' | 'turn' | 'proposal' | 'interview' | 'restore' | 'external';
 
 /** One entry of the timeline: its number (from 1, in time order), when, and its full and one-line texts. */
 export interface TimelineEntry {
@@ -185,6 +189,50 @@ function numbered(records: TimelineRecords): { readonly entries: TimelineEntry[]
         });
     }
 
+    for (const i of records.interviews ?? []) {
+        const what = `the interview /${commandId(i.command)}`;
+        drafts.push({
+            at: i.startedAt,
+            kind: 'interview',
+            key: `interview:${i.id}`,
+            render: (ref) => {
+                const line = `${nameOf(i.startedBy)} started ${what} (${ref(`request:${i.opening}`) ?? 'its opening message'}): the AI asks, ${nameOf(i.startedBy)}'s messages answer it`;
+                return { full: line, line: cut(line, LINE_CHARS) };
+            },
+        });
+        const brief = i.state === 'Briefed' || i.state === 'Confirmed' ? i.brief : undefined;
+        if (brief && i.state === 'Briefed')
+            drafts.push({
+                at: i.briefedAt,
+                kind: 'interview',
+                key: `interview-brief:${i.id}`,
+                render: () => ({
+                    full: `${AI_NAME} wrote the brief of ${what}, waiting for ${nameOf(i.startedBy)} to confirm it:\n${indent(briefOf(brief))}`,
+                    line: cut(`${AI_NAME} wrote the brief of ${what} for ${brief.name}`, LINE_CHARS),
+                }),
+            });
+        if (i.state === 'Confirmed')
+            drafts.push({
+                at: i.confirmedAt,
+                kind: 'interview',
+                key: `interview-confirmed:${i.id}`,
+                render: (ref) => ({
+                    full: `${nameOf(i.startedBy)} confirmed the brief of ${what}${i.edited ? ' after editing it' : ''} (${ref(`run:${i.run}`) ?? 'its run is in the queue'}):\n${indent(briefOf(i.brief))}`,
+                    line: cut(`${nameOf(i.startedBy)} confirmed the brief of ${what} for ${i.brief.name}`, LINE_CHARS),
+                }),
+            });
+        if (i.state === 'Stopped')
+            drafts.push({
+                at: i.stoppedAt,
+                kind: 'interview',
+                key: `interview-stopped:${i.id}`,
+                render: () => {
+                    const line = `${nameOf(i.stoppedBy)} stopped ${what}`;
+                    return { full: line, line };
+                },
+            });
+    }
+
     let previous: Collaboration.Revision | undefined;
     for (const rev of revisions) {
         const before = previous;
@@ -286,6 +334,13 @@ const content = (c: Collaboration.ProposalContent): string =>
         ),
     ].join('\n');
 
+/** A brief as the timeline tells it: where it goes, then its lines. */
+const briefOf = (b: Collaboration.InterviewBrief): string =>
+    [
+        `for: ${b.name}${b.label ? ` "${b.label}"` : ''}${b.isNew ? ' (new)' : b.replaces ? ' (replacing its description)' : ''}`,
+        ...briefLines(b.text).map((l) => (l.head ? `${l.head}: ${l.text}` : l.text)),
+    ].join('\n');
+
 /** The label of the option an approved proposal was approved with, if it had options. */
 const chosenLabel = (p: Collaboration.ChangeProposal): string | undefined =>
     p.state === 'Approved' && p.option !== undefined ? p.content.options[p.option]?.label : undefined;
@@ -383,6 +438,13 @@ export function openNow(records: TimelineRecords): string[] {
     }
     for (const p of records.proposals) {
         if (p.state === 'Open') open.push(`The proposal ${ref(`proposal:${p.id}`)} for ${ref(`request:${p.request}`)} awaits the facilitator's approval`);
+    }
+    for (const i of records.interviews ?? []) {
+        if (i.state === 'Asking')
+            open.push(
+                `The interview /${commandId(i.command)} ${ref(`interview:${i.id}`)} runs: ${i.awaiting ? 'the AI is to ask its next question' : 'the AI asked, the answer is awaited'}`,
+            );
+        if (i.state === 'Briefed') open.push(`The brief of the interview /${commandId(i.command)} ${ref(`interview:${i.id}`)} awaits confirmation`);
     }
     for (const t of records.triages) {
         if (t.state === 'Pending') open.push(`${ref(`request:${t.request}`)} waits for the AI (being triaged)`);

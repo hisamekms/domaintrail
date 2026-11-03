@@ -1,6 +1,7 @@
 import type { SourceFile } from '@domaintrail/kernel';
-import type { AnswerConfig, RunConfig, TriageConfig } from '@domaintrail/agent';
+import type { AnswerConfig, Practice, RunConfig, TriageConfig } from '@domaintrail/agent';
 import type { ResolvedClassifierConfig, ResolvedCollabConfig, ResolvedConfig } from '../config/config.js';
+import type { MessageTemplateConfig } from '@domaintrail/collaboration';
 import type { LanguageServerOptions } from '../lsp/server.js';
 
 /**
@@ -78,6 +79,8 @@ export interface SessionServerOptions {
 export interface SessionSettings extends ResolvedCollabConfig {
     agent: { port: number; allowedTools: string[]; maxPreviousRunDiff: number };
     classifier: ResolvedClassifierConfig;
+    /** The team's message templates (the top-level `templates`), sent to the pages with the state. Default: none. */
+    templates?: readonly MessageTemplateConfig[];
 }
 
 /** A running session server, as the CLI reports it. */
@@ -128,6 +131,8 @@ export interface AgentOptions {
     answer?: AnswerConfig;
     /** `agent.triage`: the light model of the triage's stage 3. */
     triage?: TriageConfig;
+    /** The ways of working the agent's prompts give: the guide's `storming-practice` and `modeling-practice`. */
+    practice?: Practice;
     log: (line: string) => void;
 }
 

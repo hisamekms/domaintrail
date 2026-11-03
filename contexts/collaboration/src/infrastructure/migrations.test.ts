@@ -199,7 +199,7 @@ describe('the reply_to column (migration 5)', () => {
 
         const db = openDatabase(file);
         expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: MIGRATIONS.length });
-        expect(MIGRATIONS.length).toBe(11);
+        expect(MIGRATIONS.length).toBe(12);
         const uow = createUnitOfWork(db);
         const loaded = await uow.transaction((s) => s.requests.load(knownRequestId(rid)));
         expect(loaded).toMatchObject({ state: 'Sent', body: 'Add cancel.' });
@@ -599,7 +599,7 @@ describe('triages and change proposals (migration 11)', () => {
         old.close();
 
         const db = openDatabase(file);
-        expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 11 });
+        expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: MIGRATIONS.length });
         const uow = createUnitOfWork(db);
         const read = await uow.transaction((s) => ({
             session: s.sessions.load(knownSessionId(sid)),

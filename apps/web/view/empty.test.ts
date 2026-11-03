@@ -3,7 +3,7 @@ import type { Diagnostic } from '@domaintrail/kernel';
 import type { DomainModel } from '@domaintrail/modeling';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { MESSAGES } from '../i18n';
-import { emptyLine, isEmptyView, VIEW_TABS } from './empty';
+import { canvasShows, emptyLine, isEmptyView, VIEW_TABS } from './empty';
 
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- only the number of BCs matters here
 const model = (contexts: number): DomainModel => ({ contexts: Array.from({ length: contexts }, () => ({})), elements: [] }) as unknown as DomainModel;
@@ -49,8 +49,25 @@ describe('a view with nothing yet', () => {
         expect(isEmptyView('structure', payload({ diagnostics: [{ ...error('a.dt'), severity: 'warning' }] }))).toBe(true);
     });
 
-    test('its one line says the chat can make it only while an AI is connected', () => {
-        expect(emptyLine(MESSAGES.ja, true)).toBe('まだありません。チャットで頼むと AI が作ります');
+    test("the canvas shows nothing under an empty view, never the previous view's graph", () => {
+        // stormings only: from the storming view to the empty catalog, context map and structure
+        for (const view of VIEW_TABS) expect(canvasShows(view, true, false)).toBe('nothing');
+        // a model only: the storming view has no graph either
+        expect(canvasShows('storming', true, false)).toBe('nothing');
+        // even a graph of an empty view (a context map of no BC) is not drawn
+        expect(canvasShows('contextMap', true, true)).toBe('nothing');
+    });
+
+    test('a view with something draws its graph; a catalog covers the canvas', () => {
+        expect(canvasShows('storming', false, true)).toBe('graph');
+        expect(canvasShows('structure', false, true)).toBe('graph');
+        expect(canvasShows('structure', false, false)).toBe('nothing');
+        expect(canvasShows('catalog', false, false)).toBe('covered');
+    });
+
+    test('its one line points to /es in the chat only while an AI is connected', () => {
+        expect(emptyLine(MESSAGES.ja, true)).toBe('まだありません。チャットで /es から始められます');
+        expect(emptyLine(MESSAGES.en, true)).toBe('Nothing yet. Start with /es in the chat');
         expect(emptyLine(MESSAGES.ja, false)).toBe('まだありません');
     });
 });

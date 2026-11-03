@@ -263,7 +263,7 @@
                 "type": "string",
                 "minLength": 1
               },
-              "default": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)"]
+              "default": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)", "Bash(dt guide:*)"]
             },
             "dt": {
               "description": "The command the agent's dt runs (and the dt fmt / dt check after it), as an argument array, e.g. [\"node\", \"../clone/dist/dt.js\"]. An element with a path separator that is not absolute is relative to this file. Default: the running dt itself.",
@@ -416,6 +416,63 @@
       },
       "then": {
         "required": ["accountId"]
+      }
+    },
+    "templates": {
+      "description": "The team's message templates of the chat: typing / in the composer lists them after the built-in ones (and after the commands). Picking one only puts its text in the composer, to edit and send. Used by dt open and dt collab.",
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "text"],
+        "properties": {
+          "id": {
+            "description": "A stable ID, matched by what is typed after / (as is the name in the page's language).",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$",
+            "maxLength": 40
+          },
+          "name": {
+            "description": "The name the list shows: one for every language, or one per language.",
+            "oneOf": [
+              { "type": "string", "minLength": 1, "maxLength": 60 },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                  "ja": { "type": "string", "minLength": 1, "maxLength": 60 },
+                  "en": { "type": "string", "minLength": 1, "maxLength": 60 }
+                }
+              }
+            ]
+          },
+          "text": {
+            "description": "The text put in the composer: one for every language, or one per language. {target} is where the selected element goes, as a # mention.",
+            "oneOf": [
+              { "type": "string", "minLength": 1, "maxLength": 2000 },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                  "ja": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                  "en": { "type": "string", "minLength": 1, "maxLength": 2000 }
+                }
+              }
+            ]
+          },
+          "when": {
+            "description": "Where it is offered (any of them; absent: everywhere): a storming at Big Picture or Design Level (or any storming), a .dt view, anything selected, an aggregate, an event, a state selected, or nothing selected.",
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "enum": ["big-picture", "design-level", "storming", "model", "element", "aggregate", "event", "state", "none"]
+            }
+          }
+        }
       }
     }
   }

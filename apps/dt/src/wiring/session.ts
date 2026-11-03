@@ -340,7 +340,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             if (state.ok)
                 connection.send({
                     type: 'session.state',
-                    state: stateBody(state.value, seq, config.quickReactions, holder, connection.data.role, agentNow),
+                    state: stateBody(state.value, seq, config.quickReactions, holder, connection.data.role, agentNow, config.templates),
                     me: meOf(session, connection.data),
                 });
         };
@@ -529,6 +529,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             },
             secureCookie: accessConfig?.publicUrl?.startsWith('https://') ?? false,
             quickReactions: config.quickReactions,
+            ...(config.templates && { templates: config.templates }),
             triaged: () => stage.kick(),
             agentPresence,
             retryAnswer: (request) => agent.answers.retry(request),

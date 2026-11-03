@@ -5,7 +5,7 @@ import type { SemanticEdgeKind, StormingElementKind as EsElementKind } from '@do
 import type { Connection } from './app/useViewSocket';
 import type { CatalogSectionKey } from './model-utils';
 import type { ElementChange, Role } from '@domaintrail/collaboration/protocol';
-import type { Collaboration, TargetStatus } from '@domaintrail/collaboration';
+import type { Collaboration, InterviewCommandId, TargetStatus } from '@domaintrail/collaboration';
 import type { Whereabouts } from './session/presence';
 import type { RestorePoint } from './session/revisions';
 
@@ -116,7 +116,7 @@ const ja = {
     noDiagram: '表示できる図がありません',
     // a view with nothing yet (no BC, or no storming): one line, and with an AI in the chat, that it can make it
     emptyView: 'まだありません',
-    emptyViewAskAi: 'まだありません。チャットで頼むと AI が作ります',
+    emptyViewAskAi: 'まだありません。チャットで /es から始められます',
 
     // Event Storming view (its level and timeline are the page's state: they never change a .dtes file)
     noStormings: 'ストーミングがありません（.dtes ファイルに storming を書くと表示されます）',
@@ -740,12 +740,37 @@ const ja = {
                 pending: '確認中',
                 toAnswer: 'AI の回答へ',
                 toProposal: '変更案へ',
+                // an answer that arrived while the reader was scrolled up: the pill that goes to its head
+                answerArrived: 'AI が回答しました',
                 givenUp: 'AI が答えられませんでした',
                 retry: 'もう一度',
                 willRead: 'AI に届きます',
                 presence: (role: 'all' | 'answer' | 'run', waiting: number) =>
                     `${role === 'all' ? 'AI' : role === 'answer' ? 'AI（回答）' : 'AI（実行）'} 接続なし${waiting > 0 ? `（${waiting} 件待ち）` : ''}`,
                 answeredChanged: '質問への回答ですが、ファイルを変更しました',
+            },
+            // what `/` lists in the composer: the commands (an interview) and the templates (text to edit)
+            slash: {
+                commands: { es: 'ES を始める', model: 'モデリングを始める' } as Record<InterviewCommandId, string>,
+                command: 'AI が聞き取ります',
+                team: 'チーム',
+                noMatch: '一致するものがありません',
+                hint: '↑↓ で選び、Enter か Tab で決める（Esc で閉じる）',
+            },
+            // a `/es` or `/model` interview: the bar above the composer, and its brief
+            interview: {
+                running: '聞き取り中',
+                thinking: 'AI が考えています',
+                stop: '中止',
+                brief: '要約',
+                newStorming: '新しいストーミング',
+                newContext: '新しいコンテキスト',
+                replaces: '今の説明を置き換えます',
+                confirm: '確定',
+                editConfirm: '編集して確定',
+                cancel: 'やめる',
+                text: '要約の本文',
+                waiting: '始めた人の確定待ち',
             },
             // the facilitator's record of a message's triage (仕分けの記録)
             triage: {
@@ -952,7 +977,7 @@ const en: Messages = {
     loading: 'Loading…',
     noDiagram: 'Nothing to draw',
     emptyView: 'Nothing yet',
-    emptyViewAskAi: 'Nothing yet. Ask in the chat and the AI makes it',
+    emptyViewAskAi: 'Nothing yet. Start with /es in the chat',
 
     noStormings: 'No stormings (write a storming in a .dtes file to see it here)',
     stormingPicker: 'Storming to show',
@@ -1545,12 +1570,34 @@ const en: Messages = {
                 pending: 'Checking',
                 toAnswer: "To the AI's answer",
                 toProposal: 'To the proposal',
+                answerArrived: 'The AI answered',
                 givenUp: 'The AI could not answer',
                 retry: 'Try again',
                 willRead: 'The AI reads this',
                 presence: (role, waiting) =>
                     `${role === 'all' ? 'AI' : role === 'answer' ? 'AI (answers)' : 'AI (runs)'} not connected${waiting > 0 ? ` (${waiting} waiting)` : ''}`,
                 answeredChanged: 'Answered as a question, yet changed files',
+            },
+            slash: {
+                commands: { es: 'Start event storming', model: 'Start modeling' },
+                command: 'The AI interviews you',
+                team: 'Team',
+                noMatch: 'Nothing matches',
+                hint: 'Choose with ↑↓, pick with Enter or Tab (Esc closes)',
+            },
+            interview: {
+                running: 'Interview',
+                thinking: 'The AI is thinking',
+                stop: 'Stop',
+                brief: 'Brief',
+                newStorming: 'New storming',
+                newContext: 'New context',
+                replaces: 'Replaces the current description',
+                confirm: 'Confirm',
+                editConfirm: 'Edit and confirm',
+                cancel: 'Cancel',
+                text: 'The brief',
+                waiting: 'Waiting for its starter to confirm',
             },
             triage: {
                 open: 'Triage record',

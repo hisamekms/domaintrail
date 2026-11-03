@@ -17,13 +17,16 @@ import {
     type IdentityKey,
     knownAgentRunId,
     knownChangeProposalId,
+    knownInterviewId,
     knownRequestId,
+    INTERVIEW_COMMANDS,
+    readBriefText,
     type PickData,
     PROPOSAL_LIMITS,
     readProposalText,
     type SessionState,
 } from '@domaintrail/collaboration';
-import type { AgentPresence, Me, ModelChangesBody, Role, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import type { AgentPresence, Me, MessageTemplateBody, ModelChangesBody, Role, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import type { AccessPolicy, Authorization } from '../http/access.js';
 import { BodyError, mediaType, readJson, readText, sendError, sendJson } from '../http/json.js';
 import type { SessionSurface } from '../http/server.js';
@@ -41,6 +44,7 @@ import {
     MAX_RUN_REQUESTS,
     requestIds,
     mentionIds,
+    modelTarget,
     replyTarget,
     requestTargets,
     text,
@@ -89,6 +93,8 @@ export interface SessionHttpDeps {
     readonly secureCookie: boolean;
     /** The emoji the add-reaction popover offers first (`session.quickReactions`), sent with the state. */
     readonly quickReactions: readonly string[];
+    /** The team's message templates (`templates`), sent with the state. */
+    readonly templates?: readonly MessageTemplateBody[];
     /** Messages were addressed to the AI: the server's stage of their triage (Clef) takes them. */
     readonly triaged: () => void;
     /** The agents connected per role and the work waiting for one, sent with the state. */
@@ -126,6 +132,11 @@ export function statusOf(type: string): number {
         case 'InvalidProposal':
         case 'NoSuchOption':
             return 400;
+        case 'NotTheInterviewer':
+            return 403;
+        case 'InterviewAlreadyRunning':
+        case 'InterviewMovedOn':
+            return 409;
         case 'Unauthenticated':
             return 401;
         case 'Forbidden':
@@ -196,9 +207,17 @@ export function stateBody(
     facilitatorHolder: Collaboration.ParticipantId | undefined,
     role: Role,
     agent?: AgentPresence,
+    templates: readonly MessageTemplateBody[] = [],
 ): SessionStateBody {
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the aggregates become their JSON when encoded (dates as ISO strings)
-    const body = { ...state, seq, quickReactions, ...(agent && { agent }), ...(facilitatorHolder && { facilitatorHolder }) } as unknown as SessionStateBody;
+    const body = {
+        ...state,
+        seq,
+        quickReactions,
+        ...(templates.length > 0 && { templates }),
+        ...(agent && { agent }),
+        ...(facilitatorHolder && { facilitatorHolder }),
+    } as unknown as SessionStateBody;
     return stateFor(role, body);
 }
 
@@ -284,6 +303,13 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
         return false;
     };
 
+    /** Whether the interview is one of this session's (answered with `NotFound` otherwise). */
+    const interviewOfSession = async (res: ServerResponse, id: string): Promise<boolean> => {
+        if ((await state()).interviews.some((i) => i.id === id)) return true;
+        fail(res, { type: 'NotFound', aggregate: 'Interview', id });
+        return false;
+    };
+
     const signIn = async (
         name: Collaboration.DisplayName,
     ): Promise<{ ok: true; secret: string; identified: Identified } | { ok: false; error: { readonly type: string } }> => {
@@ -359,7 +385,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             handle: async ({ res, auth }) => {
                 const seq = deps.cursor();
                 const [s, holder, agent] = await Promise.all([state(), identities.facilitatorParticipant(), deps.agentPresence()]);
-                sendJson(res, 200, stateBody(s, seq, deps.quickReactions, holder, who(auth).role, agent));
+                sendJson(res, 200, stateBody(s, seq, deps.quickReactions, holder, who(auth).role, agent, deps.templates));
             },
         },
         {
@@ -401,7 +427,11 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 // addressed to the AI (a mention of it, a reply to it, a Solo session): its triage opens with stage 1
                 const sent = await use.sendMessage({ session, actor: me.actor, targets, body: t, ...(replyTo && { replyTo }), mentions });
                 if (sent.ok && sent.value.triage) deps.triaged();
-                await answer(res, sent, 201, (v) => ({ request: v.request, ...(v.triage && { triage: triageFor(me.role, v.triage) }) }));
+                await answer(res, sent, 201, (v) => ({
+                    request: v.request,
+                    ...(v.triage && { triage: triageFor(me.role, v.triage) }),
+                    ...(v.interview && { interview: v.interview }),
+                }));
             },
         },
         {
@@ -518,6 +548,71 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 if (!(await proposalOfSession(res, id))) return;
                 const withdrawn = await use.withdrawProposal({ proposal: knownChangeProposalId(id), actor: who(auth).actor });
                 await answer(res, withdrawn, 200, (proposal) => ({ proposal }));
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/interviews$/,
+            role: 'facilitator',
+            handle: async ({ req, res, auth }) => {
+                // `/es` or `/model` (the plan's round 5): the opening message and the interview, the interviewer's first
+                // question due; the facilitator only (in Solo, the person)
+                const raw = await input(req, res, ['command', 'body', 'language', 'focus']);
+                if (!raw) return;
+                const command = Object.entries(INTERVIEW_COMMANDS).find(([id]) => id === raw.command)?.[1];
+                if (!command)
+                    return fail(res, { type: 'InvalidInput', field: 'command', message: `Expected one of ${Object.keys(INTERVIEW_COMMANDS).join(', ')}.` });
+                const t = checked(res, text(raw.body, 'body', 200));
+                if (!t) return;
+                if (raw.language !== 'ja' && raw.language !== 'en')
+                    return fail(res, { type: 'InvalidInput', field: 'language', message: 'Expected ja or en.' });
+                let focus: Collaboration.ModelTarget | undefined;
+                if (raw.focus !== undefined) {
+                    focus = checked(res, modelTarget(raw.focus, 'focus'));
+                    if (!focus) return;
+                }
+                const started = await use.startInterview({
+                    session,
+                    actor: who(auth).actor,
+                    command,
+                    body: t,
+                    language: raw.language === 'en' ? 'En' : 'Ja',
+                    ...(focus && { focus }),
+                });
+                await answer(res, started, 201, (v) => ({ interview: v.interview, request: v.request }));
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/interviews\/([^/]+)\/confirm$/,
+            role: 'facilitator',
+            handle: async ({ req, res, auth, params }) => {
+                const id = checked(res, uuid(params[0], 'id'));
+                if (!id) return;
+                const raw = await input(req, res, ['text']);
+                if (!raw) return;
+                let edited: Collaboration.BriefText | undefined;
+                if (raw.text !== undefined) {
+                    const read = readBriefText(raw.text, 'text');
+                    if (!read.ok) return fail(res, { type: 'InvalidInput', field: read.error.path, message: read.error.message });
+                    edited = read.value;
+                }
+                if (!(await interviewOfSession(res, id))) return;
+                const confirmed = await use.confirmInterview({ interview: knownInterviewId(id), actor: who(auth).actor, ...(edited && { text: edited }) });
+                await answer(res, confirmed, 201, (v) => ({ interview: v.interview, run: v.run }));
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/interviews\/([^/]+)\/stop$/,
+            role: 'facilitator',
+            handle: async ({ req, res, auth, params }) => {
+                const id = checked(res, uuid(params[0], 'id'));
+                if (!id) return;
+                if (!(await input(req, res, []))) return;
+                if (!(await interviewOfSession(res, id))) return;
+                const stopped = await use.stopInterview({ interview: knownInterviewId(id), actor: who(auth).actor });
+                await answer(res, stopped, 200, (interview) => ({ interview }));
             },
         },
         {

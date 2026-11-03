@@ -63,6 +63,11 @@ export interface ChatContextValue {
     };
     /** The messages chosen to apply together (selection mode while any is chosen or the mode was entered). */
     readonly selection: { readonly active: boolean; readonly ids: ReadonlySet<string>; toggle(id: string): void; start(id: string): void; clear(): void };
+    /**
+     * Whether a long text is clamped (by its key: `message:<id>`, `proposal:<id>`, `run:<id>`): only one there when the
+     * page loaded and not opened yet; `open` keeps it open (`reveal.ts`).
+     */
+    readonly reveal: { clamps(key: string): boolean; open(key: string): void };
     /** Scrolls the stream to an item (`message:<id>`, `card:<key>`) and marks it for a moment. */
     readonly jump: (key: string) => void;
     /** Opens the participants at a person (a mention of them was clicked), their row marked for a moment. */

@@ -4,7 +4,7 @@ import type { View } from './navigation';
 
 /**
  * The view tabs, in order. The storming tab shows even without a storming: a workspace started from nothing shows that
- * it can have one (the AI in the chat writes the `.dtes` on request).
+ * it can have one (`/es` in the chat starts one with the AI).
  */
 export const VIEW_TABS: readonly View['kind'][] = ['contextMap', 'structure', 'catalog', 'storming'];
 
@@ -19,5 +19,15 @@ export function isEmptyView(view: View['kind'], current: Pick<ViewPayload, 'mode
     return nothing && !current.diagnostics.some((d) => d.severity === 'error' && d.file.endsWith(ext));
 }
 
-/** The one line an empty view shows: with an AI connected to the chat, that asking there makes it. */
+/**
+ * What the canvas shows under a view: its graph, nothing, or what it drew last, covered by the catalog. An empty view
+ * shows nothing on the canvas (an empty catalog is not drawn, so it would leave the previous view's graph in sight).
+ */
+export function canvasShows(view: View['kind'], empty: boolean, hasGraph: boolean): 'graph' | 'nothing' | 'covered' {
+    if (empty) return 'nothing';
+    if (view === 'catalog') return 'covered';
+    return hasGraph ? 'graph' : 'nothing';
+}
+
+/** The one line an empty view shows: with an AI connected to the chat (and the person able to start one), that `/es` there starts it. */
 export const emptyLine = (t: Messages, aiReady: boolean): string => (aiReady ? t.emptyViewAskAi : t.emptyView);

@@ -127,6 +127,10 @@ background, or use `dt check` for a result.
 Event Storming files (`.dtes`) go through the same loop: `dt fmt`, then `dt check` until it exits 0 (see [Event
 Storming](#event-storming-dtes)). They are not generated: `dt generate ts` writes the `.dt` model only.
 
+How to work, beyond the rules of the languages: `dt guide storming-practice` for running a storming (Big Picture, then
+Design Level) and `dt guide modeling-practice` for growing the `.dt` model (terms, aggregates by their invariants,
+commands as contracts, small steps).
+
 `dt --help` and `dt <command> --help` list the options with examples.
 
 ```bash
@@ -1149,6 +1153,43 @@ export function billingPolicies({ loadOrder, newInvoiceId }: PolicyDeps): Billin
     };
 }
 ```
+
+<!-- topic: modeling-practice -->
+### Modeling with DomainTrail
+
+How to grow the `.dt` model, for people and AI agents. The rules of the language are in [DSL](#dsl); this is the way
+of working.
+
+**Start from the brief.** The `///` description above a `context` says its purpose, scope, what the generated code is
+for and how far to go (`/model` in the chat writes it). Keep to that context; ask before changing another one.
+
+**One context at a time, terms first.**
+- Agree on the words before the structure: the context's `terms` with their labels, and a `///` for any term people
+  could read two ways.
+- Name things in the business's words. A label is what people say; the ID is its stable English name.
+
+**Aggregates by their invariants.**
+- An aggregate is what must stay consistent in one decision. Draw its boundary around an invariant you can state,
+  not around a screen, a table or a noun.
+- Write the invariants as expressions where the DSL can (see [Invariant expressions](#invariant-expressions)), and as
+  a label or `///` where it cannot. Keep aggregates small; refer to another aggregate by its ID.
+- States (a union of states) when the allowed commands depend on where the thing is in its life.
+
+**Commands as contracts.**
+- A command says what it needs (`requires`), what it changes, and exactly which events it emits (`emits` is exhaustive:
+  see [Command events](#command-events)). A failure is a named error, and it emits nothing.
+- Reactions between aggregates or contexts are `policy`s on events, not commands calling commands.
+- The DSL holds structure and contracts only. Business logic is written by hand in `decide` against the generated
+  types; do not try to encode it in the model.
+
+**From a storming.** When a storming feeds the context (its brief says so), take the Design Level's commands,
+aggregates and events as the starting point, not as the answer: the model has to state invariants the storming did
+not. Then add `ref`s in the `.dtes` to the new `.dt` symbols that resolve. Open hotspots are questions to ask, not
+gaps to fill by guessing.
+
+**Small steps.** Change a little, run `dt fmt` and `dt check` until it exits 0, and keep the model valid between
+steps. Do not rename or remove what the people did not ask to change: other files, generated code and the chat refer
+to the IDs.
 
 <!-- topic: generated -->
 ## Generated TypeScript
@@ -2442,6 +2483,48 @@ storming Errands {
 }
 ```
 
+<!-- topic: storming-practice -->
+### Event Storming with DomainTrail
+
+How to run a storming in `.dtes` files, for people and AI agents. The rules of the language are in [Event
+Storming](#event-storming-dtes); this is the way of working.
+
+**Start from the brief.** The `///` description above a `storming` says its purpose, scope, what the result is for
+and how far to go (`/es` in the chat writes it). Keep to that scope; ask before going beyond it. With no brief, ask
+for the purpose and the first and last events before writing much.
+
+**Big Picture first.**
+- Events first, and mostly events: what happened in the business, in the past tense, in the words the business uses
+  (「注文を受け付けた」, not 「注文受付処理」 or 「OrderService が保存した」). One fact per event.
+- Short labels: about 12 Japanese characters or 4–5 English words. A long label is usually two events or a
+  description; put the detail in `///`.
+- Order them in `timeline`s, the usual flow first; events that happen together go in a `group`. A flow in phases
+  (preparation, the main act, follow-up) gets a `stage` per phase, each `after` the one before.
+- Each failure or detour is an `exception` that starts with the event where it branches off, written again, and ends
+  with `then <Event>` when it returns to the flow (in this stage or another); without `then`, the flow ends there. A
+  second normal path is another `timeline` from where it splits off. The usual flow should read as one straight row.
+- Anything unclear, disputed or risky becomes a `hotspot` on the events it concerns, worded as a question. Do not
+  settle it by guessing; an open hotspot is a good result.
+- No commands, policies, aggregates or read models yet, and no `ref`s.
+
+**Design Level next**, once the flow is agreed (the brief says how far to go):
+- For each event, what caused it: a `command` (and the `actor` or `external` system that issues it), or a `policy`
+  reacting to an earlier event (「〜したら〜する」).
+- What a command needs to decide: the `readmodel` it `reads`, and the `aggregate` it `target`s, which decides and
+  emits the events.
+- Fine-grained events found here (reservations, authorisations, internal failures, retries) get `level design`, so
+  that Big Picture keeps the flow people agreed on. An event the people want to see at Big Picture loses it.
+- Keep hotspots for what is still open; set `status resolved` with its `resolution "…"` only when the people settle
+  one.
+
+**Model references.** Add `ref` only to an element that has a counterpart in the `.dt` model and resolves; never
+invent a `.dt` symbol to make a `ref` work. A storming does not change the `.dt` files: moving from a storming to the
+model is modeling (see [Modeling with DomainTrail](#modeling-with-domaintrail)).
+
+**Keep it a storming.** It records what people found, including the doubts: do not tidy it into a design document,
+do not delete hotspots or events because they look redundant, and keep the IDs stable (people and the chat refer to
+them).
+
 <!-- topic: rules -->
 ## Rules
 
@@ -2664,7 +2747,13 @@ relative to the config file, and its directory becomes the root. Without a confi
       }
     }
   },
-  "open": { "port": 4321, "host": "127.0.0.1" }             // dt open; defaults shown
+  "open": { "port": 4321, "host": "127.0.0.1" },            // dt open; defaults shown
+  // the chat's message templates, listed after / with the built-in ones (dt open and dt collab); text and name: one
+  // string, or { "ja", "en" }; {target} is where the selected element goes; "when" (optional): big-picture,
+  // design-level, storming, model, element, aggregate, event, state, none
+  "templates": [
+    { "id": "glossary", "name": { "ja": "用語を確かめる", "en": "Check the terms" }, "text": "用語集と食い違うところを挙げて", "when": ["model"] }
+  ]
   // collab, agent and classifier: see dt guide session-config
 }
 ```
@@ -3122,7 +3211,7 @@ are shown. The old sections `session` and `view` are refused when the file is lo
     // the runner: the runs that edit the workspace
     "run": {
       // Claude Code permission rules; this is the default
-      "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)"],
+      "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)", "Bash(dt guide:*)"],
       "warm": true,            // one Claude Code process across runs (each run a turn); false: one process per run
       "restartAfter": 20,      // runs of one warm process before a fresh one replaces it
       "idleTimeout": 30        // minutes without a run before the warm process ends (its memory freed); 0 = never
@@ -3210,17 +3299,21 @@ The agent (`dt agent`, or in process) runs `claude` from the `PATH` in the works
 --permission-mode dontAsk --tools … --disallowedTools … --allowedTools …`, with the rules of `agent.run.allowedTools`
 only (any other tool is refused without asking, and no MCP server is loaded). The prompt tells it to read the related files, edit only
 the `.dt` and `.dtes` sources, keep a storming exploratory, and change no `.dt` when the requests are only about
-stormings, and lets it answer instead (status `answered`) a request that turns out to be a question; then `dt fmt` and
-`dt check` run when the run changed files (else both are skipped), and the server records the result.
+stormings, and lets it answer instead (status `answered`) a request that turns out to be a question. It also gives the
+ways of working of the languages the requests are about, as `dt guide storming-practice` and `dt guide
+modeling-practice` print them (both for a request about the whole workspace); the answerer's prompts give them too.
+Then `dt fmt` and `dt check` run when the run changed files (else both are skipped), and the server records the
+result.
 
-- **The agent's `dt`.** The agent may run `dt fmt` and `dt check` (the default `allowedTools`), whatever is installed:
-  for each run the subscriber puts a `dt` first on the agent's `PATH`, in a private temporary directory (0700) outside
-  the workspace. It runs `agent.run.dt` — `["node" | "bun" | "deno", "<script>"]` or `["<dt executable>"]`, e.g. a
-  clone of DomainTrail next to the workspace while developing it — or, unset, the very `dt` running the subscriber.
-  That command is read once when the subscriber starts (never again from the config file, which is in the workspace),
-  pinned to absolute real paths (the runtime found on the `PATH`), refused when the script or executable is inside the
-  workspace (symbolic links followed), and fingerprinted: a run does not start once either file changed. The agent's
-  `dt` takes `fmt` or `check` and then `.dt` / `.dtes` files of the workspace only; any option or other argument is
+- **The agent's `dt`.** The agent may run `dt fmt`, `dt check` and `dt guide` (the default `allowedTools`), whatever
+  is installed: for each run the subscriber puts a `dt` first on the agent's `PATH`, in a private temporary directory
+  (0700) outside the workspace. It runs `agent.run.dt` — `["node" | "bun" | "deno", "<script>"]` or
+  `["<dt executable>"]`, e.g. a clone of DomainTrail next to the workspace while developing it — or, unset, the very
+  `dt` running the subscriber. That command is read once when the subscriber starts (never again from the config file,
+  which is in the workspace), pinned to absolute real paths (the runtime found on the `PATH`), refused when the script
+  or executable is inside the workspace (symbolic links followed), and fingerprinted: a run does not start once either
+  file changed. The agent's `dt` takes `fmt` or `check` and then `.dt` / `.dtes` files of the workspace only, or
+  `guide` alone, with one topic or rule name, or with `--all` (it only prints); any other option or argument is
   refused with a message to the agent, and `-r <workspace>` is always added by the shim. Both the agent's `dt` and the
   `dt fmt` / `dt check` after the agent run with a private working directory, never the workspace.
 

@@ -3,7 +3,7 @@
 // and a text clamped to a few lines with a link to the rest. Shared by people's messages, the AI's answers and the
 // change proposals.
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import type { Tx } from './chat-context';
+import { useChat, type Tx } from './chat-context';
 
 export const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -52,11 +52,26 @@ export function Bubble(props: {
 }
 
 /**
- * A text clamped to a few lines, with a link to show the rest when it is longer. `blocks`: its children are blocks (the
- * AI's Markdown), in a `<div>` clamped by its height.
+ * A text clamped to a few lines, with a link to show the rest when it is longer, if it was there when the page loaded
+ * (`revealKey`: its key, `message:<id>`, `proposal:<id>`, `run:<id>`; see `reveal.ts`); one that arrived while the page
+ * is open shows in full, and one opened stays open. `blocks`: its children are blocks (the AI's Markdown), in a
+ * `<div>` clamped by its height.
  */
-export function Clamped({ children, tx, blocks = false }: { children: ReactNode; tx: Tx; blocks?: boolean }) {
-    const [open, setOpen] = useState(false);
+export function Clamped({
+    children,
+    tx,
+    revealKey,
+    blocks = false,
+    className,
+}: {
+    children: ReactNode;
+    tx: Tx;
+    revealKey: string;
+    blocks?: boolean;
+    className?: string;
+}) {
+    const { reveal } = useChat();
+    const [open, setOpen] = useState(() => !reveal.clamps(revealKey));
     const [clamped, setClamped] = useState(false);
     const ref = useRef<HTMLParagraphElement & HTMLDivElement>(null);
     const Tag = blocks ? 'div' : 'p';
@@ -66,11 +81,17 @@ export function Clamped({ children, tx, blocks = false }: { children: ReactNode;
     }, [children, open]);
     return (
         <>
-            <Tag ref={ref} className={`chat-text${blocks ? ' chat-markdown' : ''}${open ? '' : ' clamped'}`}>
+            <Tag ref={ref} className={`chat-text${blocks ? ' chat-markdown' : ''}${className ? ` ${className}` : ''}${open ? '' : ' clamped'}`}>
                 {children}
             </Tag>
             {clamped && !open && (
-                <a className="chat-more" onClick={() => setOpen(true)}>
+                <a
+                    className="chat-more"
+                    onClick={() => {
+                        reveal.open(revealKey);
+                        setOpen(true);
+                    }}
+                >
                     {tx.chat.showMore}
                 </a>
             )}

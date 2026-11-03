@@ -22,7 +22,7 @@ import {
     openSessionBlobs,
     openSessionDatabase,
 } from '@domaintrail/collaboration';
-import type { AgentAnswerJobBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import type { AgentAnswerJobBody, AgentInterviewJobBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { type AnswerStreamItem, createHttpAgentApi, DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import { createModelValidator, type SessionServer, type SessionSettings, startSessionServer, startSubscriber } from '@domaintrail/dt';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
@@ -146,6 +146,7 @@ async function until<T>(what: string, probe: () => Promise<T | undefined>, ms = 
 function answerStream(ctx: Ctx): {
     items: AnswerStreamItem[];
     job(kind: string): Promise<AgentAnswerJobBody>;
+    interviewJob(): Promise<AgentInterviewJobBody>;
     close(): void;
     post(job: string, body: unknown): Promise<Response>;
 } {
@@ -160,6 +161,8 @@ function answerStream(ctx: Ctx): {
         }
     })();
     let seen = 0;
+    // interview jobs are taken in their own order: a triage job may come before or after one
+    let seenInterview = 0;
     cleanups.push(async () => abort.abort());
     return {
         items,
@@ -169,7 +172,16 @@ function answerStream(ctx: Ctx): {
                 if (i < 0) return undefined;
                 seen = i + 1;
                 const it = items[i];
-                return it.kind === 'job' ? it.job : undefined;
+                return it.kind === 'job' && it.job.kind !== 'interview' ? it.job : undefined;
+            });
+        },
+        async interviewJob() {
+            return until('an interview job', async () => {
+                const i = items.findIndex((it, j) => j >= seenInterview && it.kind === 'job' && it.job.kind === 'interview');
+                if (i < 0) return undefined;
+                seenInterview = i + 1;
+                const it = items[i];
+                return it.kind === 'job' && it.job.kind === 'interview' ? it.job : undefined;
             });
         },
         close: () => abort.abort(),
@@ -442,6 +454,64 @@ describe('the answers entry point', () => {
         const failed = triageOf(await ctx.state(), question) as { kind: string; steps: { stage: string; error?: string }[] };
         expect(failed.kind).toBe('Consultation');
         expect(failed.steps.at(-1)).toMatchObject({ stage: 'Model', error: 'invalid output (triage.kind)' });
+    });
+});
+
+describe('the interviews of `/es` and `/model`', () => {
+    test("the facilitator only; the starter's answers go to the interviewer, others' are triaged; the brief confirmed is a run", async () => {
+        const ctx = await setup();
+        const refused = await ctx.api(ctx.bob, 'interviews', { command: 'es', body: 'ES を始める', language: 'ja' });
+        expect(refused.status).toBe(403);
+        const started = await ctx.api(ctx.ada, 'interviews', { command: 'es', body: 'ES を始める', language: 'ja' });
+        expect(started.status).toBe(201);
+        const { interview } = (await started.json()) as { interview: { id: string; opening: string } };
+        expect((await ctx.api(ctx.ada, 'interviews', { command: 'model', body: 'x', language: 'ja' })).status).toBe(409);
+        const stream = answerStream(ctx);
+        const first = await stream.interviewJob();
+        expect(first).toMatchObject({
+            kind: 'interview',
+            command: 'es',
+            language: 'ja',
+            author: 'Facilitator',
+            transcript: [{ from: 'person', text: 'ES を始める' }],
+        });
+        expect((await stream.post(first.job, { kind: 'question', question: 'どの業務ですか？', durationMs: 5 })).status).toBe(200);
+        const question = (await ctx.state()).requests.find((r) => r.author === 'ai');
+        // the starter's answer: no triage, the next turn due; Bob's reply to the question: triaged
+        const answer = await say(ctx, ctx.ada, '返品です', { replyTo: { kind: 'Message', request: question?.id } });
+        expect(triageOf(await ctx.state(), answer)).toBeUndefined();
+        const bobs = await say(ctx, ctx.bob, '交換も？', { replyTo: { kind: 'Message', request: question?.id } });
+        expect(triageOf(await ctx.state(), bobs)).toMatchObject({ addressedBy: 'Reply' });
+        // the stream holds one job at a time: Bob's triage (stage 3) and the interview's turn come in either order
+        const triaged = (async () => {
+            const triage = await stream.job('triage');
+            expect(triage.request.id).toBe(bobs);
+            await stream.post(triage.job, { kind: 'neither', confidence: 0.95, reason: '相づち', durationMs: 1 });
+        })();
+        const second = await stream.interviewJob();
+        expect(second.transcript.map((t) => t.text)).toEqual(['ES を始める', 'どの業務ですか？', '返品です']);
+        const lines = ['目的', '範囲', '使い道', 'レベル'].map((head) => ({ head, text: `${head}の答え` }));
+        const bad = await stream.post(second.job, { kind: 'brief', brief: { name: '返品', isNew: true, replaces: false, lines } });
+        expect(bad.status).toBe(400);
+        await triaged;
+        const third = await stream.interviewJob();
+        const brief = { name: 'Returns', label: '返品', isNew: true, replaces: false, lines };
+        expect((await stream.post(third.job, { kind: 'brief', brief, durationMs: 9 })).status).toBe(200);
+        const briefed = (await ctx.state(ctx.bob)).interviews?.find((i) => i.id === interview.id);
+        expect(briefed).toMatchObject({
+            state: 'Briefed',
+            brief: { name: 'Returns', text: '目的: 目的の答え\n範囲: 範囲の答え\n使い道: 使い道の答え\nレベル: レベルの答え' },
+        });
+        expect((await ctx.api(ctx.bob, `interviews/${interview.id}/confirm`, {})).status).toBe(403);
+        const confirmed = await ctx.api(ctx.ada, `interviews/${interview.id}/confirm`, { text: '目的: 返金を早める\n範囲: 返品' });
+        expect(confirmed.status).toBe(201);
+        const { run } = (await confirmed.json()) as { run: { id: string } };
+        const queued = (await ctx.state()).runs.find((r) => r.id === run.id);
+        expect(queued?.input).toMatchObject({
+            requests: [{ request: answer }],
+            brief: { command: 'Es', brief: { name: 'Returns', text: '目的: 返金を早める\n範囲: 返品' } },
+        });
+        expect((await ctx.state()).interviews?.find((i) => i.id === interview.id)).toMatchObject({ state: 'Confirmed', edited: true, run: run.id });
     });
 });
 

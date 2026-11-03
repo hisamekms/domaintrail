@@ -678,6 +678,17 @@ The maintainer's second design of the change proposal (2026-11-03; it replaces M
   「ファシリテーターの承認待ち」, and the requester 取り下げ. Approving several together takes each card's pick. Solo is
   unchanged (no proposals).
 
+### As built: the ways of working in the prompts
+
+- **Guide**: two topics, `storming-practice` (under `storming`) and `modeling-practice` (under `dsl`), with the
+  maintainer's text; `workflow` points to both.
+- **Push**: the runner's prompt and the answerer's answer and propose prompts give the topics of the languages the
+  request is about, as the guide has them (the CLI reads them from the guide it embeds and hands them to the agent;
+  no copy in the prompts): `.dtes` targets the storming's, `.dt` targets the modeling's, both or no target both. The
+  runner's prompt puts its rules first where they differ; the answerer's stays read-only.
+- **Pull**: the runner may run `dt guide` (alone, one topic or rule, or `--all`): `Bash(dt guide:*)` in the default
+  `allowedTools`, and the agent's `dt` takes it besides `fmt` and `check`. The answerer has no `dt`.
+
 ## The page
 
 - **Mode**: in solo the collab menu, invite, hand-over, leave, participants and reactions-of-others are hidden; the chat
@@ -927,3 +938,45 @@ A template only puts text in the composer.
   - The brief is written once, in the language of the interview; it is not duplicated in both languages.
   - A command is defined once, independently of language. Templates have both languages.
 - **Empty workspace:** the empty-canvas line points to `/es` instead of only "ask in the chat".
+
+### As built in M8 (first set)
+
+- **Model** (`interview.dt`, `domain/interviews.ts`): an `Interview` aggregate (聞き取り) — `command` (`Es` | `Model`,
+  wire IDs `es` / `model`), `startedBy`, `opening` (the starter's message sent with it: the command's name), `focus`
+  (the element selected then), `language` (`Ja` | `En`) — with states `Asking { awaiting? }` → `Briefed { brief,
+  answered }` → `Confirmed { brief, edited, run }`, or `Stopped`. Commands: `start` (the facilitator only:
+  `FacilitatorOnly`), `hear` (the starter wrote: `awaiting` is that message; from `Briefed` it drops the brief),
+  `ask` and `summarize` (only for the message still awaited: `InterviewMovedOn`), `confirm` and `stop` (the starter
+  only: `NotTheInterviewer`). One running per session (`InterviewAlreadyRunning`, the use case). The brief is
+  `InterviewBrief { name (an identifier), label?, isNew, replaces, text }`, its text the `head: text` lines. Stored in
+  a table of its own (migration 12); older sessions have none.
+- **Routing**: `sendMessage` gives a message of the running interview's starter to it (`hearIn`, no triage) before
+  addressing; anyone else's message is addressed and triaged as before, a reply to the AI's question included. The
+  AI's questions are messages of the AI replying to the message they answer (`Request.answer`), so the chat and the
+  session so far show them as answers.
+- **The interviewer**: an `interview` job on the answers entry point (`interviewJobs`: due while `awaiting` is set, one
+  per awaited message), with the transcript (the interview's messages), the language, `focus` and the session so far;
+  the answerer's read-only agent answers it in a warm process of its own (another JSON schema): `{ kind: 'question' }`
+  or `{ kind: 'brief', brief: { name, label?, isNew, replaces, lines[3..6] } }`, read again by the server. Its prompt
+  lists each command's items, asks one question at a time, digs into vague answers, reads the stormings' `///` and the
+  model first, follows the UI language unless the person writes in another. It is given the guide's way of working of
+  its command's DSL (`/es`: storming-practice, `/model`: modeling-practice), as the answerer is.
+- **Confirm → run**: `confirmInterview` queues a run on the message the brief answered whose input carries
+  `brief: BriefInstruction { interview, command, brief }` (the text as edited); the runner's rule 16 writes the lines as
+  the `///` description above `storming <name>` / `context <name>`, creating it when `create`, replacing an existing
+  description only when the card said so. A proposal was not reused: it needs a triage, and the starter's confirmation
+  is the approval.
+- **Session so far**: entries for the interview started, its brief waiting, confirmed (edited, its run) or stopped, and
+  what is open (a running interview, a brief to confirm).
+- **Routes**: `POST /api/session/interviews` (`{ command, body, language, focus? }`), `…/:id/confirm` (`{ text? }`),
+  `…/:id/stop`; the state has `interviews` and the team's `templates`; events `interview.*` (the page fetches the
+  state again).
+- **The page**: `/` alone in the composer lists the commands (for the facilitator, while none runs; marked with the
+  AI's spark) then the templates of the contexts (`big-picture`, `design-level`, `storming`, `model`, `element`,
+  `aggregate`, `event`, `state`, `none`); the bar above the composer shows the running interview (AI が考えています,
+  中止) and its brief (確定 / 編集して確定 / 中止; read-only for others). In Solo a question sits under the answer it follows.
+  A whole storming's link selects it, so its description (the brief) shows in the inspector. The empty view points to
+  `/es` (for the facilitator).
+- **Templates**: eight built in (both languages) and the team's in the top-level `templates` of `domaintrail.jsonc`
+  (`{ id, name, text, when? }`, a name and a text as one string or `{ ja, en }`; at most 30), validated by
+  Collaboration (`checkTemplates`) and in the JSON schema, used by `dt open` and `dt collab`.

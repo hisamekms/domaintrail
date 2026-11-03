@@ -3,7 +3,7 @@
 // the read-only agent that triages and answers (the answerer), the DSL tools run after a run, the workspace's files, and
 // time. The adapters are in `../adapters`, wired by the app (`startSubscriber`, `startAnswerer`).
 import type {
-    AgentAnswerJobBody,
+    AgentAnswerStreamJob,
     AgentClaimed,
     AgentFailReason,
     AgentReplyBody,
@@ -106,7 +106,7 @@ export interface AgentApi {
 /** What the answerer role's stream carries. */
 export type AnswerStreamItem =
     | { readonly kind: 'open' }
-    | { readonly kind: 'job'; readonly job: AgentAnswerJobBody }
+    | { readonly kind: 'job'; readonly job: AgentAnswerStreamJob }
     | { readonly kind: 'withdrawn'; readonly job: string }
     | { readonly kind: 'restored' }
     | { readonly kind: 'closed' };
@@ -142,6 +142,8 @@ export interface AnswerAgent {
     triage(turn: AnswerTurn): Promise<AnswerTurnResult>;
     /** An answer or a proposal: the reading tools only. */
     answer(turn: AnswerTurn): Promise<AnswerTurnResult>;
+    /** An interview's turn (`/es`, `/model`): the reading tools only, the interviewer's schema. */
+    interview(turn: AnswerTurn): Promise<AnswerTurnResult>;
     /** Forget the conversation (a warm process): the files it read were replaced. */
     reset?(reason: string): void;
     /** Ends the processes it keeps; resolves once they are gone. */

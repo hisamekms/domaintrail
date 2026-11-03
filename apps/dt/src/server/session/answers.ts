@@ -1,5 +1,6 @@
 // The answers entry point of the agent API (ADR 0030, decision 6; the plan's "Two roles"): the answerer role's jobs —
-// stage 3 of a triage (`triage`), the answer to a 相談 (`answer`), the proposal for a participant's 依頼 (`propose`) —
+// stage 3 of a triage (`triage`), the answer to a 相談 (`answer`), the proposal for a participant's 依頼 (`propose`), the
+// interviewer's next turn of a `/es` or `/model` interview (`interview`: a question, or the brief) —
 // handed out over an SSE stream of their own (`GET /agent/answers/events`), each to one connected answerer that has
 // none in hand, and their results taken back (`POST /agent/answers/:job`). No claim, no lease, no workspace lock: the
 // jobs never wait for the run queue nor hold it. What a job is waiting for is the collaboration's (`answerJobs`); what is
@@ -18,6 +19,10 @@ import { randomUUID } from 'node:crypto';
 import {
     AI_NAME,
     type AnswerJob,
+    commandId,
+    type InterviewJob,
+    plainBody,
+    readInterviewerReply,
     chatWindow,
     Collaboration,
     type CollaborationUseCases,
@@ -28,7 +33,13 @@ import {
     readTriageAnswer,
     type TriageStepInput,
 } from '@domaintrail/collaboration';
-import { AGENT_ANSWER_EVENT_TYPES, type AgentAnswerJobBody, type AgentSessionSoFar } from '@domaintrail/collaboration/protocol';
+import {
+    AGENT_ANSWER_EVENT_TYPES,
+    type AgentAnswerJobBody,
+    type AgentAnswerStreamJob,
+    type AgentInterviewJobBody,
+    type AgentSessionSoFar,
+} from '@domaintrail/collaboration/protocol';
 import { sendError } from '../http/json.js';
 import { body as objectBody } from './input.js';
 
@@ -80,10 +91,13 @@ export interface AnswerDispatcher {
     settled(): Promise<void>;
 }
 
-/** An answer or a proposal given up after `MAX_ATTEMPTS` (the agents' presence lists them for the page). */
+/** Any job of the answerer: about a triage, or an interview's next turn. */
+type Job = AnswerJob | InterviewJob;
+
+/** An answer, a proposal or an interview's turn given up after `MAX_ATTEMPTS` (the agents' presence lists them for the page). */
 export interface GivenUpAnswer {
     readonly request: Collaboration.RequestId;
-    readonly kind: Exclude<AnswerJob['kind'], 'triage'>;
+    readonly kind: Exclude<Job['kind'], 'triage'>;
 }
 
 interface AnswerStream {
@@ -99,8 +113,11 @@ interface AnswerStream {
 interface Handed {
     readonly id: string;
     readonly key: string;
-    readonly kind: AnswerJob['kind'];
-    readonly triage: Collaboration.TriageId;
+    readonly kind: Job['kind'];
+    /** The triage (a job about one) or the interview (an interview job): the log names it. */
+    readonly subject: string;
+    readonly triage?: Collaboration.TriageId;
+    readonly interview?: Collaboration.InterviewId;
     readonly request: Collaboration.RequestId;
     readonly stream: AnswerStream;
     readonly timer: ReturnType<typeof setTimeout>;
@@ -110,7 +127,8 @@ interface Handed {
     settling: boolean;
 }
 
-const keyOf = (job: { readonly kind: string; readonly triage: { readonly id: string } }): string => `${job.triage.id}:${job.kind}`;
+// an interview's turn is one per message it answers: the starter writing again makes another one due
+const keyOf = (job: Job): string => (job.kind === 'interview' ? `${job.interview.id}:${job.request.id}:interview` : `${job.triage.id}:${job.kind}`);
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const durationOf = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.min(v, 86_400_000) : 0);
@@ -158,9 +176,9 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
         attempts.set(h.key, n);
         if (n >= MAX_ATTEMPTS && h.kind !== 'triage') {
             givenUp.set(h.key, { request: h.request, kind: h.kind });
-            log(`answer job ${h.kind} of triage ${h.triage} given up after ${n} attempts (${why}); a new answerer or a retry tries it again`);
+            log(`answer job ${h.kind} of ${h.subject} given up after ${n} attempts (${why}); a new answerer or a retry tries it again`);
             deps.onPresence?.();
-        } else log(`answer job ${h.kind} of triage ${h.triage} failed (${why}); it will be handed out again`);
+        } else log(`answer job ${h.kind} of ${h.subject} failed (${why}); it will be handed out again`);
     };
 
     /** The given-up jobs `which` selects get another round of `MAX_ATTEMPTS` (handed out at the next kick); how many. */
@@ -179,11 +197,12 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
 
     /** Stage 3 that failed or timed out: recorded as unknown with why, which makes the triage a 相談. */
     const recordFailedTriage = async (h: Handed, error: string, durationMs: number, model?: string): Promise<void> => {
+        if (!h.triage) return;
         const recorded = await use.recordTriageStep({
             triage: h.triage,
             step: { stage: 'Model', verdict: 'Unknown', error, durationMs, ...(model && { model }) },
         });
-        if (!recorded.ok) log(`triage ${h.triage}: stage 3's failure not recorded (${recorded.error.type})`);
+        if (!recorded.ok) log(`${h.subject}: stage 3's failure not recorded (${recorded.error.type})`);
         await deps.pump();
     };
 
@@ -192,9 +211,41 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
         if (!h || h.settling) return;
         release(h);
         send(h.stream, AGENT_ANSWER_EVENT_TYPES.withdrawn, { job: h.id });
-        log(`answer job ${h.kind} of triage ${h.triage} timed out`);
+        log(`answer job ${h.kind} of ${h.subject} timed out`);
         const after = h.kind === 'triage' ? recordFailedTriage(h, 'timed out', deps.timeoutMs) : Promise.resolve(failedOnce(h, 'timed out'));
         void after.catch((e: unknown) => log(`answer job: ${e instanceof Error ? e.message : String(e)}`)).finally(() => dispatcher.kick());
+    };
+
+    /** An interview job's body: the interview, the message to answer, the transcript, the session so far. */
+    const interviewBodyOf = async (
+        job: InterviewJob,
+        state: { readonly session: Collaboration.Session; readonly revisions: readonly Collaboration.Revision[] },
+        id: string,
+    ): Promise<{ body: AgentInterviewJobBody; readRevision?: Collaboration.RevisionId }> => {
+        const names = new Map<string, string>(state.session.participants.map((p) => [p.id, p.name]));
+        const full = await use.sessionSoFar({ session });
+        const readRevision = state.revisions.at(-1)?.id;
+        return {
+            body: {
+                job: id,
+                kind: 'interview',
+                // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the aggregates become their JSON when encoded
+                interview: job.interview as unknown as AgentInterviewJobBody['interview'],
+                // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- as above
+                request: job.request as unknown as AgentInterviewJobBody['request'],
+                author: names.get(job.interview.startedBy) ?? 'a participant',
+                timeoutMs: deps.timeoutMs,
+                command: commandId(job.interview.command),
+                language: job.interview.language === 'En' ? 'en' : 'ja',
+                transcript: job.transcript.map((r) => ({
+                    from: isAi(r.author) ? 'ai' : 'person',
+                    text: plainBody(r.body, { targets: r.targets.length, people: r.mentions.length }),
+                })),
+                ...(full.ok && { sessionSoFar: { text: full.value.text, last: full.value.last } }),
+                ...(readRevision && { readRevision }),
+            },
+            ...(readRevision && { readRevision }),
+        };
     };
 
     /** The job's body for the answerer. */
@@ -258,9 +309,9 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
             again = false;
             const idle = [...streams].filter((s) => !s.closed && s.job === undefined);
             if (!idle.length) return;
-            const jobs = await use.answerJobs({ session });
-            if (!jobs.ok) return;
-            const due = jobs.value.filter((j) => !handedKeys.has(keyOf(j)) && !givenUp.has(keyOf(j)));
+            const jobs = await allJobs();
+            if (!jobs) return;
+            const due = jobs.filter((j) => !handedKeys.has(keyOf(j)) && !givenUp.has(keyOf(j)));
             if (!due.length) continue;
             const state = await use.sessionState({ session });
             if (!state.ok || state.value.session.state !== 'Open') return;
@@ -269,7 +320,8 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
                 if (!stream) break;
                 if (stream.closed) continue;
                 const id = randomUUID();
-                const { body, soFarLast, readRevision } = await bodyOf(job, state.value, stream, id);
+                const { body, soFarLast, readRevision }: { body: AgentAnswerStreamJob; soFarLast?: number; readRevision?: Collaboration.RevisionId } =
+                    job.kind === 'interview' ? await interviewBodyOf(job, state.value, id) : await bodyOf(job, state.value, stream, id);
                 if (stream.closed) {
                     again = true;
                     continue;
@@ -280,7 +332,9 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
                     id,
                     key: keyOf(job),
                     kind: job.kind,
-                    triage: job.triage.id,
+                    ...(job.kind === 'interview'
+                        ? { subject: `interview ${job.interview.id}`, interview: job.interview.id }
+                        : { subject: `triage ${job.triage.id}`, triage: job.triage.id }),
                     request: job.request.id,
                     stream,
                     timer,
@@ -296,12 +350,51 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
         } while (again);
     };
 
+    /** Every job waiting: those about triages, then the interviews' turns. */
+    const allJobs = async (): Promise<readonly Job[] | undefined> => {
+        const [answers, interviews] = await Promise.all([use.answerJobs({ session }), use.interviewJobs({ session })]);
+        if (!answers.ok) return undefined;
+        return [...answers.value, ...(interviews.ok ? interviews.value : [])];
+    };
+
+    /** An interview job's result: the next question (a message of the AI) or the brief. */
+    const takeInterview = async (
+        h: Handed,
+        raw: Record<string, unknown>,
+        r: {
+            readonly durationMs: number;
+            readonly model?: string;
+            readonly error?: string;
+            readonly fail: (status: number, type: string, message?: string, detail?: object) => void;
+            readonly done: (result: { ok: true } | { ok: false; error: { readonly type: string } }) => Promise<void>;
+        },
+    ): Promise<void> => {
+        const interview = h.interview;
+        if (!interview) return r.fail(500, 'NoInterview');
+        if (r.error !== undefined) {
+            failedOnce(h, r.error);
+            return r.done({ ok: true });
+        }
+        const { model: _m, durationMs: _d, ...reply } = raw;
+        const read = readInterviewerReply(reply);
+        if (!read.ok) {
+            failedOnce(h, `invalid output (${read.error.path})`);
+            return r.fail(400, 'InvalidReply', read.error.message, { field: read.error.path });
+        }
+        if (read.value.kind === 'question') {
+            const text = Collaboration.makeText(read.value.question);
+            if (!text.ok) return r.fail(400, 'InvalidReply', 'Not a text.', { field: 'question' });
+            return r.done(await use.askInInterview({ interview, answered: h.request, question: text.value }));
+        }
+        return r.done(await use.briefInterview({ interview, answered: h.request, brief: read.value.brief }));
+    };
+
     /** A job's result as a step, a message, an override or a proposal; the HTTP answer. */
     const take = async (res: ServerResponse, h: Handed, raw: unknown): Promise<void> => {
         if (!isObject(raw)) return sendError(res, 400, 'InvalidInput', 'Expected a JSON object.', { field: 'body' });
         // the agent's credential in an answer or a proposal would be posted to the chat: refused, and told
         if (deps.token && JSON.stringify(raw).includes(deps.token)) {
-            log(`answer job ${h.kind} of triage ${h.triage}: refused, its result contains the agent credential`);
+            log(`answer job ${h.kind} of ${h.subject}: refused, its result contains the agent credential`);
             if (h.kind === 'triage') await recordFailedTriage(h, 'refused: the output contained a credential', durationOf(raw.durationMs));
             else failedOnce(h, 'refused: the output contained a credential');
             return sendError(res, 400, 'CredentialInOutput', 'The result contains the agent credential.');
@@ -312,12 +405,15 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
         const fail = (status: number, type: string, message?: string, detail: object = {}): void => sendError(res, status, type, message, detail);
         const done = async (result: { ok: true } | { ok: false; error: { readonly type: string } }): Promise<void> => {
             if (!result.ok) {
-                log(`answer job ${h.kind} of triage ${h.triage}: refused (${result.error.type})`);
+                log(`answer job ${h.kind} of ${h.subject}: refused (${result.error.type})`);
                 return fail(409, result.error.type, undefined, result.error);
             }
             await deps.pump();
             res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end('{}');
         };
+        if (h.kind === 'interview') return takeInterview(h, raw, { durationMs, model, error, fail, done });
+        const triage = h.triage;
+        if (!triage) return fail(500, 'NoTriage');
         switch (h.kind) {
             case 'triage': {
                 if (error !== undefined) {
@@ -339,7 +435,7 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
                     ...(model && { model }),
                     durationMs,
                 };
-                const recorded = await use.recordTriageStep({ triage: h.triage, step });
+                const recorded = await use.recordTriageStep({ triage, step });
                 return done(recorded.ok ? { ok: true } : recorded);
             }
             case 'answer': {
@@ -360,13 +456,13 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
                     const revision = typeof given === 'string' && given ? given : h.readRevision;
                     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- checked against the session's revisions by the use case
                     const readRevision = revision as Collaboration.RevisionId | undefined;
-                    const answered = await use.answerMessage({ triage: h.triage, body: text.value, ...(readRevision && { readRevision }) });
+                    const answered = await use.answerMessage({ triage, body: text.value, ...(readRevision && { readRevision }) });
                     if (answered.ok) h.stream.lastSoFar = h.soFarLast ?? h.stream.lastSoFar;
                     return done(answered.ok ? { ok: true } : answered);
                 }
                 // the override (decision 18): a request after all, with its proposal; or nothing for the AI to do
                 const overridden = await use.overrideTriage({
-                    triage: h.triage,
+                    triage,
                     step: {
                         stage: 'Answerer',
                         verdict: r.kind === 'proposal' ? 'ChangeRequest' : 'NotForAi',
@@ -390,7 +486,7 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
                     failedOnce(h, `invalid output (${read.error.path})`);
                     return fail(400, 'InvalidReply', read.error.message, { field: read.error.path });
                 }
-                const proposed = await use.proposeChange({ triage: h.triage, content: read.value });
+                const proposed = await use.proposeChange({ triage, content: read.value });
                 if (proposed.ok) h.stream.lastSoFar = h.soFarLast ?? h.stream.lastSoFar;
                 return done(proposed.ok ? { ok: true } : proposed);
             }
@@ -455,18 +551,18 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
         connected: () => [...streams].filter((s) => !s.closed).length,
 
         async waiting() {
-            const jobs = await use.answerJobs({ session });
-            return jobs.ok ? jobs.value.filter((j) => !givenUp.has(keyOf(j))).length : 0;
+            const jobs = await allJobs();
+            return jobs ? jobs.filter((j) => !givenUp.has(keyOf(j))).length : 0;
         },
 
         async givenUp() {
             if (!givenUp.size) return [];
-            const jobs = await use.answerJobs({ session });
-            if (!jobs.ok) return [];
-            // a job no longer waited for (answered by hand, dismissed) is forgotten
-            const due = new Set(jobs.value.map(keyOf));
+            const jobs = await allJobs();
+            if (!jobs) return [];
+            // a job no longer waited for (answered by hand, dismissed, an interview stopped) is forgotten
+            const due = new Set(jobs.map(keyOf));
             for (const key of givenUp.keys()) if (!due.has(key)) givenUp.delete(key);
-            return jobs.value.flatMap((j) => givenUp.get(keyOf(j)) ?? []);
+            return jobs.flatMap((j) => givenUp.get(keyOf(j)) ?? []);
         },
 
         async retry(request) {

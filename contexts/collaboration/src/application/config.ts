@@ -2,10 +2,11 @@
 // owns the identity mode and the participant limit; ADR 0030: the sections `collab`, `agent` and `classifier`): in
 // `collab`, `identity` and `access` (but its `allowedHosts` and `allowedOrigins`: the app's connection guards, ADR 0027,
 // Authorization), `maxParticipants` and `quickReactions`; the top-level `classifier` (called by the server in both
-// modes); and `agent.run.maxPreviousRunDiff` (despite its place, what the run pipeline and the agent API give the agent
+// modes) and `templates` (the chat's message templates, `domain/templates.ts`, in both modes); and `agent.run.maxPreviousRunDiff` (despite its place, what the run pipeline and the agent API give the agent
 // of the previous runs: `domain/previous-runs`). Their types, defaults and validation; the app composes them with the
 // other sections and reports the first error (`fail` throws).
 import { DEFAULT_QUICK_REACTIONS, readEmoji } from '../domain/emoji.js';
+import { checkTemplates, type MessageTemplateConfig } from '../domain/templates.js';
 import { TRIAGE_THRESHOLDS } from '../domain/triage.js';
 import type { IdentityMode } from './identity.js';
 
@@ -27,7 +28,7 @@ export const MAX_QUICK_REACTIONS = 8;
 
 /** Collaboration's keys, by where they sit in the file. */
 export const COLLABORATION_CONFIG_KEYS: Readonly<Record<string, readonly string[]>> = {
-    '': ['collab', 'classifier'],
+    '': ['collab', 'classifier', 'templates'],
     collab: ['identity', 'access', 'maxParticipants', 'quickReactions'],
     'collab.access': ['teamDomain', 'audience', 'publicUrl', 'acceptCookie', 'avatarHosts'],
     'agent.run': ['maxPreviousRunDiff'],
@@ -39,6 +40,8 @@ export interface CollaborationConfigFile {
     collab?: CollabConfigFile;
     classifier?: ClassifierConfigFile;
     agent?: { run?: PreviousRunsConfigFile };
+    /** The team's message templates, offered after `/` in the chat after the built-in ones. */
+    templates?: MessageTemplateConfig[];
 }
 
 /** Collaboration's part of `agent.run`. */
@@ -120,6 +123,8 @@ export interface ResolvedCollaborationConfig {
     /** In the form reactions are kept (`normalizeEmoji`). */
     quickReactions: string[];
     classifier: ResolvedClassifierConfig;
+    /** The team's message templates as written (validated). */
+    templates: readonly MessageTemplateConfig[];
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -190,6 +195,12 @@ export function validateClassifierConfig(classifier: unknown, fail: (msg: string
     if (classifier.enabled === true && classifier.accountId === undefined) fail("'classifier' enabled needs 'accountId'");
 }
 
+/** Checks the top-level `templates` (any value: absent is fine). */
+export function validateTemplatesConfig(templates: unknown, fail: (msg: string) => never): void {
+    const checked = checkTemplates(templates);
+    if (!checked.ok) fail(checked.error);
+}
+
 /** Checks `collab.maxParticipants` and `collab.quickReactions` (`collab`: an object). */
 export function validateCollaborationConfig(collab: Record<string, unknown>, fail: (msg: string) => never): void {
     if (
@@ -213,7 +224,7 @@ export function validateCollaborationConfig(collab: Record<string, unknown>, fai
 
 /** Collaboration's settings with their defaults (validated). */
 export function resolveCollaborationConfig(config: CollaborationConfigFile = {}): ResolvedCollaborationConfig {
-    const { collab = {}, classifier } = config;
+    const { collab = {}, classifier, templates = [] } = config;
     const { access } = collab;
     return {
         identity: collab.identity ?? 'dev',
@@ -238,5 +249,6 @@ export function resolveCollaborationConfig(config: CollaborationConfigFile = {})
             apiTokenEnv: classifier?.apiTokenEnv ?? DEFAULT_CLASSIFIER_TOKEN_ENV,
             threshold: classifier?.threshold ?? DEFAULT_CLASSIFIER_THRESHOLD,
         },
+        templates,
     };
 }

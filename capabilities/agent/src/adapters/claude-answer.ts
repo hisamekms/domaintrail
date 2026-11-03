@@ -4,7 +4,7 @@
 //
 // - stage 3 (`triage`): the light model (`--model`, default `haiku`), **no tools at all** (`--tools ""`), stage 3's JSON
 //   schema; a fresh `claude -p` per turn by default, or one warm process (`triageWarm`; plan Q12);
-// - answers and proposals (`answer`): the read-only tools only — `--tools Read,Grep,Glob` with `--permission-mode
+// - answers and proposals (`answer`), and the interviews' turns (`interview`, a warm process of their own: another schema): the read-only tools only — `--tools Read,Grep,Glob` with `--permission-mode
 //   dontAsk` and no settings file loaded: no edit, write or shell tool exists in the process, whatever the prompt or the
 //   message says, and it reads only inside its working directory (the guarantee is here, not configurable) — the
 //   answerer's JSON schema (one for answers and
@@ -17,7 +17,7 @@
 // the runner does (`warm-claude.ts`). The model that answered is read from the process's `init` event. Neither a prompt
 // nor the agent's output is logged.
 import { spawn } from 'node:child_process';
-import { answererJsonSchema, triageJsonSchema } from '@domaintrail/collaboration';
+import { answererJsonSchema, interviewerJsonSchema, triageJsonSchema } from '@domaintrail/collaboration';
 import type { AnswerAgent, AnswerTurn, AnswerTurnResult } from '../core/ports.js';
 import { type ClaudeResult, createStreamReader } from './claude-stream.js';
 import { type AgentCommand, CLAUDE, claudeArguments, KILL_GRACE_MS, killTree } from './claude-code.js';
@@ -59,6 +59,11 @@ export interface ClaudeAnswererOptions extends Pick<
 /** The arguments of an answer or proposal turn: the reading tools only, the answerer's schema. */
 export function answererArguments(options: { readonly model?: string; readonly effort?: string; readonly streamInput?: boolean } = {}): string[] {
     return claudeArguments(ANSWERER_TOOLS, undefined, { ...options, schema: answererJsonSchema() });
+}
+
+/** The arguments of an interview's turn: the reading tools only, the interviewer's schema. */
+export function interviewerArguments(options: { readonly model?: string; readonly effort?: string; readonly streamInput?: boolean } = {}): string[] {
+    return claudeArguments(ANSWERER_TOOLS, undefined, { ...options, schema: interviewerJsonSchema() });
 }
 
 /** The arguments of a stage 3 turn: no tool at all, stage 3's schema, the light model. */
@@ -153,6 +158,16 @@ export function createClaudeAnswerer(options: ClaudeAnswererOptions): AnswerAgen
                   ...(answer.idleTimeoutMs !== undefined && { idleTimeoutMs: answer.idleTimeoutMs }),
               })
             : undefined;
+    // the interviews' own warm process (their schema differs from the answers'): with the answers' settings
+    const warmInterviewer: WarmClaude | undefined =
+        (answer.warm ?? true)
+            ? createWarmClaude({
+                  ...shared,
+                  name: 'interviewer',
+                  restartAfter: answer.restartAfter ?? DEFAULT_ANSWER_RESTART_AFTER,
+                  ...(answer.idleTimeoutMs !== undefined && { idleTimeoutMs: answer.idleTimeoutMs }),
+              })
+            : undefined;
     const warmTriage: WarmClaude | undefined = triage.warm
         ? createWarmClaude({
               ...shared,
@@ -220,12 +235,17 @@ export function createClaudeAnswerer(options: ClaudeAnswererOptions): AnswerAgen
             if (!warmAnswerer) return prepared(() => cold(answererArguments(answerFlags), turn, answer.model));
             return prepared(() => warmTurn(warmAnswerer, answererArguments({ ...answerFlags, streamInput: true }), turn, answer.model));
         },
+        interview(turn) {
+            if (!warmInterviewer) return prepared(() => cold(interviewerArguments(answerFlags), turn, answer.model));
+            return prepared(() => warmTurn(warmInterviewer, interviewerArguments({ ...answerFlags, streamInput: true }), turn, answer.model));
+        },
         reset(reason) {
             warmAnswerer?.reset(reason);
+            warmInterviewer?.reset(reason);
             warmTriage?.reset(reason);
         },
         async close() {
-            await Promise.all([warmAnswerer?.close(), warmTriage?.close()]);
+            await Promise.all([warmAnswerer?.close(), warmInterviewer?.close(), warmTriage?.close()]);
         },
     };
 }

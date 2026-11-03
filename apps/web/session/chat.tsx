@@ -26,14 +26,15 @@ import {
     LoaderCircle,
     MessagesSquare,
     SendHorizontal,
+    Sparkles,
     Ban,
     X,
     type LucideIcon,
 } from 'lucide-react';
 import type { SendRequestBody, ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
-import { motionMs, useSwap } from '../shared/motion';
-import { useT } from '../i18n';
+import { motionMs, useGrow, useSwap } from '../shared/motion';
+import { useLang, useT } from '../i18n';
 import { useChatActions, type QuestionChoice } from './actions';
 import { ActivityLine } from './activity';
 import {
@@ -54,6 +55,7 @@ import {
 } from './ai';
 import { sessionApi } from './api';
 import { Bubble, Clamped, time } from './bubble';
+import { arrival, clamps, followTop, HEAD_MARGIN, PAGE_REVEAL, revealKeys } from './reveal';
 import { MarkdownText } from './markdown-text';
 import { ChangedElements, ReplyButton, RunCard, useUnitAbout } from './card';
 import { AddReaction, ReactionRow, useMarking } from './mark-controls';
@@ -80,6 +82,8 @@ import { AiAvatar, ProposalCard } from './proposal';
 import { chosenIndex } from './proposal-view';
 import { parseReplyText, referenceText } from './references';
 import { TriageRecordPanel } from './triage-record';
+import { InterviewPanel, interviewSlot } from './interview';
+import { runningInterview, selectedOf, slashItems, slashQuery, templateValue, type SlashItem, type SlashScope } from './slash';
 import { isReplyable, messageReference, messageReplyTargets, repliesToMe, replyReference, replyTargetOf, replyTargets, type ReplyDraft } from './replies';
 import { useRevisionTools } from './revisions';
 import { CancelButton, CancelDialog, RowActions, StatusSizer, StatusSlot, TurnLink } from './status-slot';
@@ -186,6 +190,8 @@ export function SessionChat(props: {
     onOpenView: (target: ViewTarget) => void;
     /** What view names are made of, and which views this page can open. */
     viewScope: ViewScope;
+    /** What is open and selected, for what `/` lists. */
+    slash: { readonly view: SlashScope['view']; readonly selected: TargetDraft | undefined };
     onClose: () => void;
 }) {
     const { session, composer, focusPending } = props;
@@ -237,8 +243,14 @@ export function SessionChat(props: {
     const shown = useMemo((): Shown => {
         const waiting = settled.waiting.map((o): StreamItem => ({ kind: 'message', key: `message:${o.local}`, at: o.request.sentAt, request: o.request }));
         const slots = new Map<string, AiSlot>();
+        // the AI's message replying to each message: its answer, maybe before its triage says so
+        const aiReplies = new Map<string, string>();
+        for (const r of state.requests) if (isAiAuthor(r.author) && r.replyTo?.kind === 'Message') aiReplies.set(r.replyTo.request, r.id);
         for (const r of state.requests) {
-            const slot = aiSlot(solo, r, triages.get(r.id), givenUp, settled.sent.has(r.id));
+            // a message of an interview: the AI's question under it, or pending while the interviewer thinks
+            const inInterview = solo ? interviewSlot(state, r) : undefined;
+            const slot =
+                inInterview === 'none' ? undefined : (inInterview ?? aiSlot(solo, r, triages.get(r.id), givenUp, settled.sent.has(r.id), aiReplies.get(r.id)));
             if (slot) slots.set(r.id, slot);
         }
         for (const o of settled.waiting) slots.set(o.local, { kind: 'pending' });
@@ -423,6 +435,16 @@ export function SessionChat(props: {
     const closeCancel = useCallback((): void => setCancelling(undefined), []);
     const cancellingUnit = cancelling === undefined ? undefined : units.find((u) => u.key === cancelling);
 
+    // the long texts there when the page loaded are clamped (続きを表示); what arrives while it is open shows in full
+    const history = PAGE_REVEAL.history(state.session.id, () => revealKeys(state));
+    const reveal = useMemo(
+        (): ChatContextValue['reveal'] => ({
+            clamps: (key) => clamps(key, history, PAGE_REVEAL.opened),
+            open: (key) => PAGE_REVEAL.opened.add(key),
+        }),
+        [history],
+    );
+
     const context: ChatContextValue = {
         session,
         tx,
@@ -443,6 +465,7 @@ export function SessionChat(props: {
         marking,
         selection,
         jump,
+        reveal,
         showPerson,
         replies,
     };
@@ -501,6 +524,7 @@ export function SessionChat(props: {
                         {actions.undo && <UndoBar />}
                         {control && selection.active && <SelectionBar />}
                         {control && proposalPicks.ids.size > 0 && <ProposalsBar />}
+                        <InterviewPanel session={session} live={live} />
                     </div>
                     {live && (
                         <Composer
@@ -513,6 +537,7 @@ export function SessionChat(props: {
                             replyFocus={replyFocus}
                             onReplyDone={() => setReplyDraft(undefined)}
                             outgoing={solo ? outgoingTools : undefined}
+                            slash={props.slash}
                             tx={tx}
                         />
                     )}
@@ -598,6 +623,14 @@ const inViewOf = (list: HTMLElement, item: HTMLElement): boolean => {
     const b = item.getBoundingClientRect();
     return b.top >= a.top - 1 && b.bottom <= a.bottom + 1;
 };
+/** Whether the top of `item` is in the visible part of `list` (a long one is read from there). */
+const headInViewOf = (list: HTMLElement, item: HTMLElement): boolean => {
+    const a = list.getBoundingClientRect();
+    const top = item.getBoundingClientRect().top;
+    return top >= a.top - 1 && top < a.bottom - HEAD_MARGIN;
+};
+/** An answer of the AI or its proposal: what the stream reveals from its head as it arrives. */
+const isAiArrival = (row: Row): boolean => (row.kind === 'message' || row.kind === 'proposal') && row.author === AI_PARTICIPANT;
 
 function Stream({ shown }: { shown: Shown }) {
     const { items } = shown;
@@ -605,6 +638,9 @@ function Stream({ shown }: { shown: Shown }) {
     const ref = useRef<HTMLDivElement | null>(null);
     // follows the newest item only while the reader is at the bottom (true until they scroll up)
     const atBottom = useRef(true);
+    // the AI's answer that arrived while the reader was at the bottom: the scroll that puts its head at the top, which
+    // following the bottom goes no further than (the answer is read from its head; none: the bottom)
+    const head = useRef<number | undefined>(undefined);
     // the keys of the items there when the reader left the bottom, while they are away from it: 最新へ shows meanwhile,
     // with how many arrived since
     const [away, setAway] = useState<ReadonlySet<string> | undefined>();
@@ -613,14 +649,30 @@ function Stream({ shown }: { shown: Shown }) {
     const follow = (el: HTMLElement): void => {
         const bottom = atBottomOf(el);
         if (bottom) returning.current = false;
+        // the reader went on past the answer's head to the bottom: following goes to the bottom again
+        if (bottom && head.current !== undefined && el.scrollTop > head.current + 1) head.current = undefined;
         if (returning.current) return;
         atBottom.current = bottom;
         setAway((known) => (bottom ? undefined : (known ?? new Set(items.map((i) => i.key)))));
     };
+    // where the stream last put its scroll as it follows the bottom: while it follows, only a scroll up from there leaves
+    // the bottom; one that finds it there or further down is the stream's own or the content moving under it (a row
+    // growing faster than the bottom's few pixels a frame, the browser's scroll anchoring as texts above are clamped)
+    const placed = useRef<number | undefined>(undefined);
     const toBottom = (): void => {
         const el = ref.current;
         if (!el) return;
-        if (atBottom.current) el.scrollTop = el.scrollHeight;
+        if (atBottom.current) {
+            const max = el.scrollHeight - el.clientHeight;
+            const top = followTop(el.scrollTop, max, head.current);
+            el.scrollTop = top;
+            placed.current = el.scrollTop;
+            // stopped at the head of the AI's answer, the rest below: read from there, the stream no longer follows
+            if (top < max - 1) {
+                atBottom.current = false;
+                setAway((known) => known ?? new Set(items.map((i) => i.key)));
+            }
+        }
         // the bottom came into view without a scroll (the pane grew)
         else follow(el);
     };
@@ -629,6 +681,8 @@ function Stream({ shown }: { shown: Shown }) {
         if (!el) return;
         atBottom.current = true;
         returning.current = true;
+        head.current = undefined;
+        placed.current = undefined;
         setAway(undefined);
         el.scrollTo({ top: el.scrollHeight, behavior: motionMs('--motion-enter') === 0 ? 'auto' : 'smooth' });
     };
@@ -643,7 +697,6 @@ function Stream({ shown }: { shown: Shown }) {
                 : `ai:${e.request}=${e.content.kind === 'item' ? e.content.item.key : e.content.kind}`,
         )
         .join('|');
-    useLayoutEffect(toBottom, [signature]);
     // the pane shown again, resized, or a bubble grown: still at the bottom
     useEffect(() => {
         const el = ref.current;
@@ -657,7 +710,8 @@ function Stream({ shown }: { shown: Shown }) {
     // a card that moved on while out of sight: a pill at the bottom goes to it
     const cards = items.flatMap((i) => (i.kind === 'card' ? [{ key: i.key, updatedAt: i.updatedAt, name: unitName(i.unit).text }] : []));
     const seen = useRef(new Map<string, string>());
-    const [pill, setPill] = useState<{ key: string; name: string } | undefined>();
+    // (`head`: an answer of the AI that arrived while the reader was scrolled up, shown from its head)
+    const [pill, setPill] = useState<{ key: string; text: string; head: boolean } | undefined>();
     useEffect(() => {
         const el = ref.current;
         const changed = updatedCards(cards, seen.current);
@@ -668,17 +722,52 @@ function Stream({ shown }: { shown: Shown }) {
             return item && !inViewOf(el, item);
         });
         const last = hidden.at(-1);
-        if (last) setPill({ key: last, name: cards.find((c) => c.key === last)?.name ?? '' });
+        if (last) setPill({ key: last, text: tx.chat.cardUpdated(cards.find((c) => c.key === last)?.name ?? ''), head: false });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [signature]);
     const onScroll = (el: HTMLElement): void => {
-        follow(el);
+        if (!atBottom.current || placed.current === undefined || el.scrollTop < placed.current - 1) {
+            placed.current = undefined;
+            follow(el);
+        }
         if (!pill) return;
         const item = el.querySelector<HTMLElement>(`[data-item="${CSS.escape(pill.key)}"]`);
-        if (item && inViewOf(el, item)) setPill(undefined);
+        if (item && (pill.head ? headInViewOf(el, item) : inViewOf(el, item))) setPill(undefined);
+    };
+    // the answer's pill: the stream goes to its head, where following would have stopped
+    const toHead = (key: string): void => {
+        const el = ref.current;
+        const item = el?.querySelector<HTMLElement>(`[data-item="${CSS.escape(key)}"]`);
+        if (!el || !item) return;
+        const top = el.scrollTop + item.getBoundingClientRect().top - el.getBoundingClientRect().top - HEAD_MARGIN;
+        el.scrollTo({ top, behavior: motionMs('--motion-enter') === 0 ? 'auto' : 'smooth' });
     };
 
     const rows = streamRows(shown, tx);
+    // what arrived since the last change (a row that is new, or shows something else now: the AI's card its answer)
+    const seenRows = useRef<ReadonlyMap<string, string> | undefined>(undefined);
+    useLayoutEffect(() => {
+        const el = ref.current;
+        const before = seenRows.current;
+        seenRows.current = new Map(rows.map((r) => [r.id, r.key]));
+        const came = before ? rows.filter((r) => before.get(r.id) !== r.key) : [];
+        const answer = came.find(isAiArrival);
+        const item = answer && el?.querySelector<HTMLElement>(`[data-item="${CSS.escape(answer.key)}"]`);
+        if (el && answer && item) {
+            switch (arrival(atBottom.current, headInViewOf(el, item))) {
+                case 'follow':
+                    head.current = el.scrollTop + item.getBoundingClientRect().top - el.getBoundingClientRect().top - HEAD_MARGIN;
+                    break;
+                case 'pill':
+                    setPill({ key: answer.key, text: tx.chat.ai.answerArrived, head: true });
+                    break;
+                case 'none':
+                    break;
+            }
+        } else if (came.length > 0) head.current = undefined;
+        toBottom();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [signature]);
     const follows = continued(rows.map((r) => r.author));
     // the items there when the stream is first shown with something in it (the page loaded, the tab switched back):
     // only those posted after come in with motion
@@ -699,19 +788,7 @@ function Stream({ shown }: { shown: Shown }) {
             >
                 <ol className="chat-items">
                     {rows.map((row, i) => (
-                        <li
-                            key={row.id}
-                            className={`chat-item chat-item-${row.kind}${follows[i] ? ' continued' : ''}${initial.has(row.id) ? '' : ' motion-pop motion-pop-up'}`}
-                            data-item={row.key}
-                            onAnimationEnd={(e) => {
-                                // once in, it is an item like the others: shown again (the tab switched back), it does not come in again
-                                if (e.target !== e.currentTarget || initial.has(row.id)) return;
-                                initial.add(row.id);
-                                e.currentTarget.classList.remove('motion-pop', 'motion-pop-up');
-                            }}
-                        >
-                            {row.render(follows[i])}
-                        </li>
+                        <StreamLine key={row.id} row={row} continues={follows[i] ?? false} initial={initial} />
                     ))}
                 </ol>
             </div>
@@ -719,11 +796,12 @@ function Stream({ shown }: { shown: Shown }) {
                 <button
                     className="chat-updated-pill"
                     onClick={() => {
-                        jump(pill.key);
+                        if (pill.head) toHead(pill.key);
+                        else jump(pill.key);
                         setPill(undefined);
                     }}
                 >
-                    <span className="chat-updated-pill-text">{tx.chat.cardUpdated(pill.name)}</span>
+                    <span className="chat-updated-pill-text">{pill.text}</span>
                 </button>
             )}
             {/* away from the bottom: back to the newest, with how many arrived below (`@ n` when some are for me, as 💬) */}
@@ -745,6 +823,32 @@ function Stream({ shown }: { shown: Shown }) {
                 </button>
             )}
         </div>
+    );
+}
+
+/**
+ * A row of the stream in its line. One posted after the stream was shown comes in with motion: an answer of the AI
+ * grows from nothing as its content fades in (`useGrow`), the others come up a little as they fade in (`motion-pop`).
+ */
+function StreamLine({ row, continues, initial }: { row: Row; continues: boolean; initial: Set<string> }) {
+    const live = !initial.has(row.id);
+    // the AI's card turning into its answer grows in its own row (`AiSlotRow`); this is an answer in a row of its own
+    const grows = live && isAiArrival(row) && !row.id.startsWith('ai:');
+    const ref = useGrow<HTMLLIElement>(row.id, grows);
+    return (
+        <li
+            ref={ref}
+            className={`chat-item chat-item-${row.kind}${continues ? ' continued' : ''}${live && !grows ? ' motion-pop motion-pop-up' : ''}`}
+            data-item={row.key}
+            onAnimationEnd={(e) => {
+                // once in, it is an item like the others: shown again (the tab switched back), it does not come in again
+                if (e.target !== e.currentTarget || initial.has(row.id)) return;
+                initial.add(row.id);
+                e.currentTarget.classList.remove('motion-pop', 'motion-pop-up');
+            }}
+        >
+            {row.render(continues)}
+        </li>
     );
 }
 
@@ -833,12 +937,13 @@ function streamRows(shown: Shown, tx: Tx): Row[] {
  * The AI's card under a message in Solo: 確認中 with the AI's quiet "…" while the message is triaged (or answered), what
  * the header says when no AI is connected to do it, that it could not answer (and the facilitator's もう一度); then its
  * answer or its run card in its place, cross-faded (`--motion-swap`): the card fades out, the answer or the run card
- * fades in where it was.
+ * fades in where it was, the row growing from the card's height to its own (`useGrow`) rather than jumping to it.
  */
 function AiSlotRow({ request, phase, item }: { request: string; phase: 'pending' | 'given-up' | 'item'; item?: ReactNode }) {
     const swap = useSwap(phase);
+    const ref = useGrow<HTMLDivElement>(swap.shown);
     return (
-        <div className={`chat-ai-slot${swap.swapping ? ' swapping' : ''}`}>
+        <div ref={ref} className={`chat-ai-slot${swap.swapping ? ' swapping' : ''}`}>
             {swap.shown === 'item' && item !== undefined ? item : <AiPendingCard request={request} givenUp={swap.shown === 'given-up'} />}
         </div>
     );
@@ -974,7 +1079,7 @@ function MessageRow({ request: r, continues, slotted, waiting }: { request: Requ
                 {r.replyTo?.kind === 'Run' && <ReplyReferenceLine run={r.replyTo.run} />}
                 {r.replyTo?.kind === 'Message' && <MessageReferenceLine request={r.replyTo.request} />}
                 <TargetChips targets={r.targets} statuses={statuses} onNavigate={onNavigate} tx={tx} />
-                <Clamped tx={tx}>
+                <Clamped tx={tx} revealKey={`message:${r.id}`}>
                     <MentionedText
                         body={r.body}
                         targets={r.targets}
@@ -1051,7 +1156,7 @@ function AiMessageRow({ request: r, continues, underIt }: { request: RequestJson
         <div className="chat-row">
             <Bubble avatar={<AiAvatar />} who={tx.chat.agent} at={r.sentAt} continues={continues} className="chat-bubble-ai">
                 {r.replyTo?.kind === 'Message' && !underIt && <MessageReferenceLine request={r.replyTo.request} />}
-                <Clamped tx={tx} blocks>
+                <Clamped tx={tx} revealKey={`message:${r.id}`} blocks>
                     <MarkdownText text={r.body} onNavigate={onNavigate} />
                 </Clamped>
                 <ReactionRow target={{ kind: 'Message', request: r.id }} />
@@ -1501,6 +1606,8 @@ function Composer(props: {
     onReplyDone: () => void;
     /** Solo: the message is shown at once as it is sent, the AI's card under it. */
     outgoing: OutgoingTools | undefined;
+    /** What is open and selected, for what `/` lists. */
+    slash: { readonly view: SlashScope['view']; readonly selected: TargetDraft | undefined };
     tx: Tx;
 }) {
     const { session, composer, tx, reply, onReplyDone, outgoing } = props;
@@ -1528,7 +1635,27 @@ function Composer(props: {
     // `@` offers the others in the session: with no one else (or no session), it offers nothing and stays closed
     const people = useMemo(() => mentionablePeople(session.state, session.peers, session.me), [session.state, session.peers, session.me]);
     const queryKey = query && `${query.node}:${query.start}`;
-    const open = query !== undefined && queryKey !== dismissed && (query.sign === '#' || people.length > 0);
+    // `/` alone in the composer (then its query): the commands and the templates, instead of `#` and `@`
+    const lang = useLang();
+    const slashText = slashQuery(value.text);
+    const slashKey = slashText === undefined ? undefined : 'slash';
+    const slashOpen = slashText !== undefined && dismissed !== slashKey;
+    const running = runningInterview(session.state);
+    const scope = useMemo(
+        (): SlashScope => ({ view: props.slash.view, selected: selectedOf(props.slash.selected, props.candidates) }),
+        [props.slash.view, props.slash.selected, props.candidates],
+    );
+    const slashed: readonly SlashItem[] = slashOpen
+        ? slashItems({
+              query: slashText,
+              lang,
+              scope,
+              commandNames: tx.chat.slash.commands,
+              canStart: session.me.participant.role === 'facilitator' && !running,
+              ...(session.state.templates && { team: session.state.templates }),
+          })
+        : [];
+    const open = !slashOpen && query !== undefined && queryKey !== dismissed && (query.sign === '#' || people.length > 0);
     const matches: readonly Suggestion[] = !open
         ? []
         : query.sign === '#'
@@ -1548,7 +1675,7 @@ function Composer(props: {
         return names[c.kind.kind] ?? c.kind.kind;
     };
 
-    useEffect(() => setActive(0), [query?.start, query?.query]);
+    useEffect(() => setActive(0), [query?.start, query?.query, slashText]);
     // the active candidate stays in view when the keys move it (wrapping too); a hover moves it where the pointer
     // already is, so it never scrolls the list under the pointer
     const list = useRef<HTMLUListElement | null>(null);
@@ -1560,16 +1687,16 @@ function Composer(props: {
         if (hovered.current) return;
         const item = ul.querySelector<HTMLElement>(`[data-index="${active}"]`);
         if (item) keepInView(ul, item);
-    }, [active, open, matches.length, size.rows]);
+    }, [active, open, slashOpen, matches.length, slashed.length, size.rows]);
     // the window resized (or the pane): the list still fits above the text
     useEffect(() => {
-        if (!open) return;
+        if (!open && !slashOpen) return;
         const refit = (): void => {
             if (list.current) fitAbove(list.current);
         };
         window.addEventListener('resize', refit);
         return () => window.removeEventListener('resize', refit);
-    }, [open]);
+    }, [open, slashOpen]);
     // the selection added with 💬 or `C`: the text takes the focus, the caret at its end
     const { focusPending, onFocused } = props;
     useEffect(() => {
@@ -1594,6 +1721,28 @@ function Composer(props: {
             return setNotice(c.kind === 'element' ? tx.chat.targetsLimit(MAX_REQUEST_TARGETS) : tx.chat.mentionsLimit(MAX_REQUEST_MENTIONS));
         setNotice(undefined);
         editor.current?.pick(query, mention);
+    };
+
+    /** A `/` item picked: a template's text into the composer (to edit), or a command started (an interview). */
+    const pickSlash = async (item: SlashItem | undefined): Promise<void> => {
+        if (!item) return;
+        if (item.kind === 'template') {
+            composer.setValue(templateValue(item.template, lang, scope.selected));
+            setError(undefined);
+            requestAnimationFrame(() => editor.current?.focusEnd());
+            return;
+        }
+        setSending(true);
+        try {
+            const focus = scope.selected?.target.target;
+            await sessionApi.startInterview({ command: item.id, body: tx.chat.slash.commands[item.id], language: lang, ...(focus && { focus }) });
+            await composer.clear();
+            setError(undefined);
+        } catch (e) {
+            setError(failure(e));
+        } finally {
+            setSending(false);
+        }
     };
 
     const send = async (): Promise<void> => {
@@ -1655,6 +1804,34 @@ function Composer(props: {
                 </div>
             )}
             <div className="chat-composer-input">
+                {slashOpen && (
+                    <ul className="chat-mentions chat-slash motion-pop motion-pop-up" role="listbox" aria-label={tx.chat.slash.hint} ref={list}>
+                        {slashed.length === 0 && <li className="chat-mention-none muted">{tx.chat.slash.noMatch}</li>}
+                        {slashed.map((c, i) => (
+                            <li
+                                key={`${c.kind}:${c.id}`}
+                                data-index={i}
+                                role="option"
+                                aria-selected={i === active}
+                                className={`chat-mention-option chat-slash-option ${c.kind}${i === active ? ' active' : ''}`}
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    void pickSlash(c);
+                                }}
+                                onMouseEnter={() => {
+                                    hovered.current = true;
+                                    setActive(i);
+                                }}
+                            >
+                                {c.kind === 'command' && <Sparkles size={13} aria-hidden className="chat-slash-icon" />}
+                                <span className="chat-mention-name">{c.name}</span>
+                                {c.kind === 'command' && <span className="chat-slash-what muted">{tx.chat.slash.command}</span>}
+                                {c.kind === 'template' && c.template.team && <span className="chat-mention-kind">{tx.chat.slash.team}</span>}
+                                <span className="chat-mention-where muted">/{c.id}</span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
                 {open && (
                     <ul className="chat-mentions motion-pop motion-pop-up" role="listbox" aria-label={tx.chat.mentionHint} ref={list}>
                         {matches.length === 0 && (
@@ -1701,9 +1878,22 @@ function Composer(props: {
                     rows={size.rows}
                     input={input}
                     api={editor}
-                    onBlur={() => setDismissed(queryKey)}
+                    onBlur={() => setDismissed(slashOpen ? slashKey : queryKey)}
                     onFocus={() => setDismissed(undefined)}
                     onKeyDown={(e) => {
+                        if (slashOpen) {
+                            const action = composerKey(e, slashed.length > 0);
+                            if (action === 'none') {
+                                if (e.key === 'Escape') setDismissed(slashKey);
+                                return false;
+                            }
+                            hovered.current = false;
+                            if (action === 'next') setActive((a) => (a + 1) % slashed.length);
+                            else if (action === 'previous') setActive((a) => (a - 1 + slashed.length) % slashed.length);
+                            else if (action === 'pick' || action === 'send') void pickSlash(slashed[active]);
+                            else if (action === 'close') setDismissed(slashKey);
+                            return true;
+                        }
                         const action = composerKey(e, open && matches.length > 0);
                         if (action === 'none') {
                             if (e.key === 'Escape' && open) setDismissed(queryKey);
@@ -1733,7 +1923,7 @@ function Composer(props: {
                 />
                 <div className="chat-composer-actions">
                     {/* in Collab, the AI's mark when the message will reach it (`@AI`, a reply to the AI); in Solo every message does */}
-                    {!isSolo(session.state) && willAddress(session.state, value.people, reply) && (
+                    {!isSolo(session.state) && (willAddress(session.state, value.people, reply) || running?.startedBy === session.me.participant.id) && (
                         <span className="chat-composer-ai" role="img" aria-label={tx.chat.ai.willRead} data-tooltip={tx.chat.ai.willRead}>
                             <AiAvatar />
                         </span>

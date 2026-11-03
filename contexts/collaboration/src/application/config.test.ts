@@ -61,6 +61,7 @@ describe("Collaboration's settings", () => {
             maxParticipants: 50,
             quickReactions: ['👍', '👀', '🤔', '🎉', '❤️', '🙏'],
             classifier: CLASSIFIER_DEFAULTS,
+            templates: [],
         });
     });
 
@@ -89,6 +90,7 @@ describe("Collaboration's settings", () => {
             maxParticipants: 5,
             quickReactions: ['👍', '👀', '🤔', '🎉', '❤️', '🙏'],
             classifier: CLASSIFIER_DEFAULTS,
+            templates: [],
         });
     });
 
