@@ -5,7 +5,7 @@
 import type { Ctx, RunJson } from './seed.js';
 import { editFile, writeSource } from './workspace.js';
 
-export const SCENARIO_NAMES = ['chat', 'runs', 'questions', 'assumptions', 'replies', 'reactions', 'references'] as const;
+export const SCENARIO_NAMES = ['chat', 'runs', 'questions', 'assumptions', 'replies', 'reactions', 'references', 'revert'] as const;
 export type ScenarioName = (typeof SCENARIO_NAMES)[number];
 
 /** A text longer than the stream shows at once (clamped, with "more"). */
@@ -714,7 +714,86 @@ const references = async (s: Ctx): Promise<void> => {
     });
 };
 
-export const SCENARIOS: Record<ScenarioName, (s: Ctx) => Promise<void>> = { chat, runs, questions, assumptions, replies, reactions, references };
+const revert = async (s: Ctx): Promise<void> => {
+    // the storming of order to cash (no other scenario edits it): two units of work, each followed by a later one
+    const file = 'stormings/order-to-cash.dtes';
+    // mechanical: a later unit changes another part of the same file; reverting the first leaves the later one's change
+    const retry = await s.say('sato', '#支払に失敗した[1] のあとに、再請求のイベントを足してください', {
+        targets: [s.es('OrderToCash', 'PaymentFailed', '支払に失敗した')],
+        reads: 'request',
+    });
+    const retried = await s.apply([retry], {
+        kind: 'reply',
+        edit: (root) => editFile(root, file, /^( {2}event PaymentFailed .*\n)/m, '$1  event PaymentRetried "再請求した"\n'),
+        reply: {
+            outcome: 'done',
+            title: '再請求のイベント',
+            summary: '@{es:OrderToCash/PaymentFailed} のあとに @{es:OrderToCash/PaymentRetried} を足しました。',
+            requests: [{ request: 1, status: 'done' }],
+            assumptions: [{ text: '再請求は決済サービスが自動で行う', requests: [1], alternatives: [{ id: 'manual', label: '担当者が手動で再請求する' }] }],
+        },
+    });
+    await s.voteAssumption('tanaka', retried, 0);
+    const favorites = await s.say('suzuki', '#カート[1] のほかに、お気に入りの読みモデルも足してください', {
+        targets: [s.es('OrderToCash', 'Cart', 'カート')],
+        reads: 'request',
+    });
+    await s.apply([favorites], {
+        kind: 'reply',
+        edit: (root) => editFile(root, file, /^( {2}readmodel OrderTotal .*\n)/m, '$1  readmodel Favorites "お気に入り"\n'),
+        reply: {
+            outcome: 'done',
+            title: 'お気に入りの読みモデル',
+            summary: '@{es:OrderToCash/Favorites} を足しました。',
+            requests: [{ request: 1, status: 'done' }],
+        },
+    });
+    await s.say('takahashi', '再請求は今回の範囲から外すことになりました。取り消してもらえますか？', { replyTo: retried, reads: 'chat' });
+    await s.revert(retried, '再請求のイベント');
+
+    // by the AI: a later unit renamed what the first one added, so the revert conflicts and goes to the agent
+    const remind = await s.say('takahashi', '#請求書が発行された[1] のあとに、支払の督促のイベントを足してください', {
+        targets: [s.es('OrderToCash', 'InvoiceIssued', '請求書が発行された')],
+        reads: 'request',
+    });
+    const reminded = await s.apply([remind], {
+        kind: 'reply',
+        edit: (root) => editFile(root, file, /^( {2}event InvoiceIssued .*\n)/m, '$1  event InvoiceReminded "支払を督促した"\n'),
+        reply: {
+            outcome: 'done',
+            title: '支払の督促',
+            summary: '@{es:OrderToCash/InvoiceIssued} のあとに @{es:OrderToCash/InvoiceReminded} を足しました。',
+            requests: [{ request: 1, status: 'done' }],
+            assumptions: [{ text: '督促は支払期限の翌日に1回だけ送る', requests: [1], alternatives: [{ id: 'weekly', label: '支払われるまで毎週送る' }] }],
+        },
+    });
+    const rename = await s.say('sato', '#支払を督促した[1] は「督促状を送った」と呼んでいます', {
+        targets: [s.es('OrderToCash', 'InvoiceReminded', '支払を督促した')],
+        reads: 'request',
+    });
+    await s.apply([rename], {
+        kind: 'reply',
+        edit: (root) => editFile(root, file, /"支払を督促した"/, '"督促状を送った"'),
+        reply: {
+            outcome: 'done',
+            title: '督促の名前',
+            summary: '@{es:OrderToCash/InvoiceReminded} の名前を「督促状を送った」にしました。',
+            requests: [{ request: 1, status: 'done' }],
+        },
+    });
+    await s.revert(reminded, '支払の督促', {
+        kind: 'reply',
+        edit: (root) => editFile(root, file, /^ {2}event InvoiceReminded .*\n/m, ''),
+        reply: {
+            outcome: 'done',
+            title: '支払の督促の取り消し',
+            summary: '@{es:OrderToCash/InvoiceReminded} を消しました。あとで付けた名前（督促状を送った）は、このイベントとともになくなっています。',
+            requests: [{ request: 1, status: 'done', note: '名前の変更は、取り消したイベントのものなので残していません' }],
+        },
+    });
+};
+
+export const SCENARIOS: Record<ScenarioName, (s: Ctx) => Promise<void>> = { chat, runs, questions, assumptions, replies, reactions, references, revert };
 
 const isScenario = (name: string): name is ScenarioName => (SCENARIO_NAMES as readonly string[]).includes(name);
 

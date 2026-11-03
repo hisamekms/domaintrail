@@ -28,6 +28,8 @@ context Collaboration {
     /// 依頼が返信した相手。実行なら、エージェントにその実行の依頼・返答・変更を前の実行として渡す。
     /// メッセージなら、その依頼者と本文を引いて渡す。
     replyTo: FrozenReplyTarget? "返信先"
+    /// 打ち消しの依頼なら、変更を打ち消す実行。エージェントには、その実行の依頼・返答・ファイルごとの差分を渡す。
+    reverts: AgentRunId? "打ち消す実行"
   }
 
   /// 登録のときに写し取った、依頼の返信先。メッセージへの返信は、そのときの依頼者と本文を写し取る。
@@ -153,7 +155,25 @@ context Collaboration {
     alternative: ReplyAlternative "選んだ別案"
   }
 
+  /// 打ち消しを機械的にできず、AI に任せたわけ。
+  union RevertObstacle "AI に任せたわけ" {
+    /// あとの変更が、打ち消す実行の変更と重なる（大きすぎてマージできないファイルも）。
+    Conflict "あとの変更と重なる" {
+      paths: WorkspacePath[0..*] "重なるファイル"
+    }
+    /// 打ち消すと、いまのワークスペースにない .dt のエラーが出るか、構文解析できない .dtes ができる。
+    Check "検査が通らない" {
+      newDtErrors: Tally "増える .dt のエラー"
+      unparsedDtes: WorkspacePath[0..*] "構文解析できない .dtes"
+    }
+    /// 打ち消す実行の前後のソースが、もう残っていない。
+    Unreadable "前後の内容がない"
+  }
+
   /// ファシリテーターが依頼を束ねて登録する、エージェントの1回の実行。実行は1つずつ順に行う。
+  /// 作業の打ち消しの依頼も、ほかの依頼と同じく実行として待ちに入る。順が来ると、サーバーがまず機械的に打ち消し
+  /// （エージェントを使わない。その記録が打ち消しの状態）、できなければエージェントに任せる。
+  /// チャットでは、どちらも作業のひとまとまり（カード）になる。
   aggregate AgentRun "エージェント実行" {
     id: AgentRunId
     references session: SessionId -> Session
@@ -164,7 +184,11 @@ context Collaboration {
     /// セッションの実行は1つずつ順に行う。実行キューのリース（ストア）が守る。
     invariant serial "セッションで実行中の実行は1つ"
 
-    state Queued "待機中"
+    state Queued "待機中" {
+      /// 打ち消しの実行で、サーバーが機械的に打ち消せず、エージェントに任せたわけ。打ち消しの実行でこれがないものは、
+      /// まだサーバーが試していない: エージェントには渡さない（サーバーが先に試す）。
+      revertObstacle: RevertObstacle? "AI に任せたわけ"
+    }
     state Running "実行中" {
       baseRevision: RevisionId "基準リビジョン"
       startedAt: Timestamp "開始日時"
@@ -233,10 +257,26 @@ context Collaboration {
         reason == FailureReason.RuleNotMet implies (exists(report) and not (report.exitCode == 0 and report.formatted == true and report.checked == true and report.newDtErrors == 0 and report.unparsedDtes == 0))
       }
     }
-    state Cancelled "取消" {
+    state Cancelled "中止" {
       baseRevision: RevisionId? "基準リビジョン"
-      cancelledBy: ParticipantId "取り消した人"
-      cancelledAt: Timestamp "取消日時"
+      cancelledBy: ParticipantId "中止した人"
+      cancelledAt: Timestamp "中止日時"
+    }
+    /// エージェントを使わずに、ある実行の変更を機械的に打ち消した記録。順が来たときのワークスペースに、その実行の基準と
+    /// 結果の差を逆向きに当て（3方向のマージ）、dt fmt と dt check で確かめて書いた。打ち消す前のワークスペースが基準
+    /// リビジョン、打ち消した後が結果リビジョン。その実行の変更がもう残っていなければ、何も書かずに終わる（変更なし）。
+    state Reverted "打ち消し" {
+      baseRevision: RevisionId "基準リビジョン"
+      resultRevision: RevisionId "結果リビジョン"
+      changed: Bool "変更あり"
+      finishedAt: Timestamp "終了日時"
+
+      /// 何も変わらなかった打ち消し（打ち消すものが残っていなかった）の結果リビジョンは基準リビジョンそのもの。
+      invariant revertKeepsBaseUnchanged "打ち消すものがなければ結果は基準リビジョン" {
+        (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
+      }
+      /// 機械的な打ち消しが束ねるのは、打ち消しの依頼だけ。
+      invariant revertsRevertRequests "打ち消しの依頼を束ねる" { all(input.requests, r => exists(r.reverts)) }
     }
 
     /// 実行を登録するのはファシリテーター（問いへの回答と別案の選択も、登録の入力）。
@@ -250,6 +290,22 @@ context Collaboration {
         count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
       } else InputMismatch
       emits RunQueued
+
+    /// 順が来た打ち消しの実行を、サーバーがエージェントを使わずに機械的に打ち消した（または、打ち消すものがもうなかった）。
+    command revert(baseRevision: RevisionId "基準リビジョン", resultRevision: RevisionId "結果リビジョン", changed: Bool "変更あり", finishedAt: Timestamp) "機械的に打ち消す"
+      Queued -> Reverted
+      requires inputReverts "入力は打ち消しの依頼" { all(input.requests, r => exists(r.reverts)) } else InputMismatch
+      requires changedMatchesResult "変更の有無が結果リビジョンと合う" {
+        (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
+      } else ChangedMismatch
+      emits RunReverted
+
+    /// 順が来た打ち消しの実行を、サーバーが機械的に打ち消せなかった: 待ちのまま、わけを添えてエージェントに任せる。
+    command leaveToAgent(obstacle: RevertObstacle "わけ") "AI に任せる"
+      Queued -> Queued
+      requires inputReverts "入力は打ち消しの依頼" { all(input.requests, r => exists(r.reverts)) } else InputMismatch
+      changes revertObstacle
+      emits RevertLeftToAgent
 
     /// 開始の前に取ったワークスペースのスナップショットが基準リビジョンになる。
     command start(baseRevision: RevisionId, startedAt: Timestamp) "実行を始める"
@@ -297,10 +353,10 @@ context Collaboration {
       requires abnormal "報告のない失敗" { reason != FailureReason.RuleNotMet } else ReportRequired
       emits RunFailed
 
-    /// 取り消すのはファシリテーター。
-    command cancel(cancelledBy: ParticipantId, cancelledByRole: ParticipantRole, cancelledAt: Timestamp) "実行を取り消す"
+    /// 中止するのはファシリテーター。
+    command cancel(cancelledBy: ParticipantId, cancelledByRole: ParticipantRole, cancelledAt: Timestamp) "実行を中止する"
       Queued | Running -> Cancelled
-      requires facilitatorCancels "ファシリテーターが取り消す" {
+      requires facilitatorCancels "ファシリテーターが中止する" {
         cancelledByRole == ParticipantRole.Facilitator
       } else FacilitatorOnly
       emits RunCancelled
@@ -312,6 +368,19 @@ context Collaboration {
     requests: RequestId[1..*]
     queuedBy: ParticipantId
     queuedAt: Timestamp
+  }
+
+  persistent event RunReverted "打ち消し" {
+    runId: AgentRunId
+    baseRevision: RevisionId "基準リビジョン"
+    resultRevision: RevisionId "結果リビジョン"
+    changed: Bool "変更あり"
+    finishedAt: Timestamp
+  }
+
+  persistent event RevertLeftToAgent "AI に任せた打ち消し" {
+    runId: AgentRunId
+    obstacle: RevertObstacle "わけ"
   }
 
   persistent event RunStarted "実行開始" {
@@ -346,7 +415,7 @@ context Collaboration {
     finishedAt: Timestamp
   }
 
-  persistent event RunCancelled "実行取消" {
+  persistent event RunCancelled "実行中止" {
     runId: AgentRunId
     cancelledBy: ParticipantId
     cancelledAt: Timestamp

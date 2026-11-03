@@ -96,8 +96,8 @@ describe('what became of a run’s questions', () => {
     });
 
     test('an answering run cancelled before it started does not count: open again', () => {
-        const undone = run('a', 3, ['m1'], { state: 'Cancelled', cancelledAt: at(4), cancelledBy: 'dev:f' }, { answer });
-        expect(questionsState(asked, [asked, undone])).toEqual({ kind: 'open' });
+        const reverted = run('a', 3, ['m1'], { state: 'Cancelled', cancelledAt: at(4), cancelledBy: 'dev:f' }, { answer });
+        expect(questionsState(asked, [asked, reverted])).toEqual({ kind: 'open' });
     });
 });
 
@@ -140,8 +140,8 @@ describe('the alternative picked from a run’s assumptions', () => {
     });
 
     test('a pick cancelled before it started does not count', () => {
-        const undone = run('p', 5, ['m1'], { state: 'Cancelled', cancelledAt: at(6), cancelledBy: 'dev:f' }, pickOf('d', 1, 'net', 'Without tax'));
-        expect(pickedAlternative(done, [done, undone])).toBeUndefined();
+        const reverted = run('p', 5, ['m1'], { state: 'Cancelled', cancelledAt: at(6), cancelledBy: 'dev:f' }, pickOf('d', 1, 'net', 'Without tax'));
+        expect(pickedAlternative(done, [done, reverted])).toBeUndefined();
     });
 
     test('a run’s number: by when it was queued, from 1', () => {
@@ -189,5 +189,37 @@ describe('what became of one assumption', () => {
         expect(assumptionDecision(done, 0, [done, pick], [])).toEqual({ kind: 'left' });
         // an approval made before stays what it was
         expect(assumptionDecision(done, 0, [done, pick], [approval(0, 3)])).toEqual({ kind: 'approved', by: 'dev:f', at: at(3) });
+    });
+});
+
+describe('the assumptions of a run reverted', () => {
+    const revert = (state: object, minute = 7): RunJson =>
+        ({
+            ...run('u', minute, [], state),
+            input: { requests: [{ ...frozen('m8'), reverts: 'd' }] },
+        }) as unknown as RunJson;
+    const reverted = revert({ state: 'Reverted', baseRevision: 'r1', resultRevision: 'r2', finishedAt: at(7) });
+
+    test('closed as reverted by a mechanical revert or a completed revert of the AI: the revert, who asked and when', () => {
+        expect(assumptionDecision(done, 0, [done, reverted], [])).toEqual({ kind: 'reverted', by: { run: 'u', number: 2, by: 'dev:f', at: at(7) } });
+        const byAi = revert({ state: 'Completed', ...ended(8), changed: true, report: {} });
+        expect(assumptionDecision(done, 1, [done, byAi], []).kind).toBe('reverted');
+    });
+
+    test('open while the revert waits or runs, and again once it failed', () => {
+        expect(assumptionDecision(done, 0, [done, revert({ state: 'Queued' })], [])).toEqual({ kind: 'open' });
+        expect(assumptionDecision(done, 0, [done, revert({ state: 'Failed', ...ended(8), reason: 'AgentError' })], [])).toEqual({ kind: 'open' });
+    });
+
+    test('an assumption decided before stays as it was decided', () => {
+        const approval = {
+            id: 'a0',
+            session: 's',
+            assumption: { run: 'd', assumption: 0 },
+            approvedBy: 'dev:f',
+            approvedAt: at(3),
+            state: 'Approved',
+        } as SessionStateBody['approvals'][number];
+        expect(assumptionDecision(done, 0, [done, reverted], [approval])).toEqual({ kind: 'approved', by: 'dev:f', at: at(3) });
     });
 });

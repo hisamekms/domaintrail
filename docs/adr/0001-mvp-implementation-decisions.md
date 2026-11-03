@@ -56,7 +56,8 @@ Verification result for mapping layout output to tldraw: node coordinates map di
 Edge routes do **not** map well to tldraw's bound arrows (an elbow arrow supports a single midpoint, so multi-bend routes and
 self-loops are lost and edges cross nodes). Edges are therefore drawn with a custom `domain-edge` shape that follows the
 layout route and label position exactly. Future GUI editing will need either relayout on change or bound arrows for
-simple routes.
+simple routes. (Amended by [ADR 0029](0029-react-flow-canvas.md): the canvas is drawn with React Flow, whose custom
+edge follows the route the same way.)
 
 ### Validation scope
 

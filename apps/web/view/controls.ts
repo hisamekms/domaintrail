@@ -21,10 +21,10 @@ export const formatZoom = (zoom: number): string => `${Math.round(zoom * 100)}%`
 export type CanvasShortcut = 'fitAll' | 'fitSelection' | 'toggleControls';
 
 /**
- * The canvas's keys: `Shift+1` fits everything, `Shift+2` the selection (tldraw's own keys for the same, which the
- * canvas takes over so that they fit as its buttons do), and `U` collapses or brings back the bottom-left controls
- * (`H` is tldraw's hand tool). Nothing while typing, composing (IME) or with Ctrl / ⌘ / Alt; the digits are matched by
- * their key position, as Shift changes the character they type with the keyboard layout.
+ * The canvas's keys: `Shift+1` fits everything, `Shift+2` the selection (the canvas's own keys for the same, taken
+ * over so that they fit as its buttons do), and `U` collapses or brings back the bottom-left controls. Nothing while
+ * typing, composing (IME) or with Ctrl / ⌘ / Alt; the digits are matched by their key position, as Shift changes the
+ * character they type with the keyboard layout.
  */
 export function canvasShortcut(
     e: Pick<KeyboardEvent, 'key' | 'code' | 'shiftKey' | 'ctrlKey' | 'metaKey' | 'altKey' | 'isComposing' | 'repeat'>,

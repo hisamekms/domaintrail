@@ -2,11 +2,11 @@
 // the drafts in IndexedDB. The page is in a session only once the socket sent `session.state`; under `dt view` it never
 // does, so nothing here calls the session API or sends anything there.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Editor } from 'tldraw';
 import type { Classification, Cursor, Me, RunActivity, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import type { ViewSocket } from '../app/useViewSocket';
 import { reloadForSignIn } from '../app/sign-in';
+import type { DiagramCanvas } from '../view/diagram';
 import { SessionApiError, sessionApi, type TargetStatuses } from './api';
 import {
     COMPOSER_DRAFT,
@@ -150,12 +150,12 @@ export function useSession(socket: ViewSocket, current: ViewPayload | null): Ses
 
 /**
  * Sends this page's presence: its location and selected target when they change (and on each new connection), its
- * cursor in tldraw world coordinates while the pointer is over a canvas (at most every 50 ms), and leaves on unload.
+ * cursor in page coordinates while the pointer is over a canvas (at most every 50 ms), and leaves on unload.
  */
 export function usePresence(
     socket: ViewSocket,
     session: SessionData | undefined,
-    editor: Editor | null,
+    canvas: DiagramCanvas | null,
     location: ViewLocation,
     selectedTarget: ModelTarget | undefined,
 ): void {
@@ -183,10 +183,10 @@ export function usePresence(
     }, [active, epoch, locationKey, targetKey, updates]);
 
     useEffect(() => {
-        if (!active || !editor) return;
-        const container = editor.getContainer();
+        if (!active || !canvas) return;
+        const container = canvas.container();
         const move = (e: PointerEvent): void => {
-            const p = editor.screenToPage({ x: e.clientX, y: e.clientY });
+            const p = canvas.screenToPage({ x: e.clientX, y: e.clientY });
             latest.current = { ...latest.current, cursor: { x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 } };
             updates.push();
         };
@@ -200,7 +200,7 @@ export function usePresence(
             container.removeEventListener('pointermove', move);
             container.removeEventListener('pointerleave', leave);
         };
-    }, [active, editor, updates]);
+    }, [active, canvas, updates]);
 
     useEffect(() => {
         if (!active) return;

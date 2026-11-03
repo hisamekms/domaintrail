@@ -55,6 +55,8 @@ const ROUTE_ERRORS = [
     'LinkInvalid',
     'BlobMissing',
     'ManualRecoveryNeeded',
+    'RunInProgress',
+    'SubscriberOutdated',
 ];
 
 describe('the status of each error type', () => {
@@ -136,7 +138,6 @@ describe('refused requests of a session in dev mode', () => {
             'POST runs, participant': await call(bob, 'runs', { requests: [request] }),
             'POST runs/:id/cancel, participant': await call(bob, `runs/${run}/cancel`, {}),
             'POST revisions, participant': await call(bob, 'revisions', {}),
-            'POST revisions/:id/confirm, participant': await call(bob, `revisions/${revision}/confirm`, {}),
             'POST revisions/:id/restore, participant': await call(bob, `revisions/${revision}/restore`, {}),
             'POST facilitator/link, participant': await call(bob, 'facilitator/link', {}),
             'POST close, participant': await call(bob, 'close', {}),
@@ -164,7 +165,6 @@ describe('refused requests of a session in dev mode', () => {
                 return call(ada, `runs/${run}/cancel`, {});
             })(),
             'POST runs/:id/cancel of an unknown run': await call(ada, `runs/${unknown}/cancel`, {}),
-            'POST revisions/:id/confirm of an unknown revision': await call(ada, `revisions/${unknown}/confirm`, {}),
             'POST revisions/:id/restore of an unknown revision': await call(ada, `revisions/${unknown}/restore`, {}),
             // the routes themselves
             'GET an unknown API': await call(bob, 'nope'),

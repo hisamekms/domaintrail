@@ -47,6 +47,19 @@ export {
     type MarkTargetData,
 } from './domain/marks.js';
 export { approvalOf, assumptionStatus, type ApprovalFacts } from './domain/approvals.js';
+// reverting a run: which runs can be reverted, whether one was reverted (its assumptions closed), what the agent is told
+export {
+    awaitsServer,
+    isRevert,
+    MAX_REVERT_DIFF,
+    revertableChanges,
+    revertedRunId,
+    revertStatus,
+    type RevertChanges,
+    type RevertFile,
+    type RevertRun,
+    type RevertStatus,
+} from './domain/revert.js';
 // what a running run is doing: the phases any agent maps its own events onto, and the check of an activity
 export {
     isActivityPhase,
@@ -65,7 +78,17 @@ export { knownAgentRunId, knownAssumptionApprovalId, knownMarkId, knownRequestId
 export { DEFAULT_QUICK_REACTIONS, MAX_EMOJI_BYTES, readEmoji } from './domain/emoji.js';
 
 // ---- application: the use cases, the actor, access and identity, the classifier, the ports ----------------------
-export { createCollaboration, type CollaborationUseCases, type SessionState } from './application/use-cases.js';
+export {
+    createCollaboration,
+    REVERT_CAPABILITY,
+    SERVER_REVERT_OWNER,
+    type CollaborationUseCases,
+    type SessionState,
+    type RevertNextError,
+    type RevertObstacle,
+    type RevertOutcome,
+    type RevertRequested,
+} from './application/use-cases.js';
 export { actorOf, type Actor } from './application/actor.js';
 export { createSessionAccess, secretHash, type LinkInvalid, type SessionAccess } from './application/access.js';
 export {
@@ -93,7 +116,15 @@ export {
     type CollaborationConfigFile,
     type ResolvedCollaborationConfig,
 } from './application/config.js';
-export { type Clock, type CollaborationDeps, type ModelValidator, type OutboxEntry, type SignIn, type Stores } from './application/ports.js';
+export {
+    type Clock,
+    type CollaborationDeps,
+    type ModelValidator,
+    type OutboxEntry,
+    type SignIn,
+    type SourceFormatter,
+    type Stores,
+} from './application/ports.js';
 
 // ---- infrastructure, for the app that wires it -----------------------------------------------------------------
 export { openSessionBlobs } from './infrastructure/blobs.js';

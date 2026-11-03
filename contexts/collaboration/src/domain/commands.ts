@@ -1,6 +1,6 @@
 // The commands of the collaboration aggregates, checked against the generated contracts (ADR 0026). Each is a pure
 // decision made with the runtime's `decide`: IDs, times, snapshots and the verified types (ActiveSession,
-// PendingRequest, ReplyableRun, MentionableParticipant, RestorableRevision) are parameters that the application makes. The requirements are checked with the
+// PendingRequest, ReplyableRun, MentionableParticipant, RestorableRevision, RevertableRun) are parameters that the application makes. The requirements are checked with the
 // generated `check…Requires`, so their expressions are the DSL's; what is written here is which error each returns and
 // what each outcome sets. Who may act is a rule of the work (ADR 0027): the commands reserved to the facilitator take
 // the role of who acts as a parameter, from the use case's `Actor`. A command takes its parameters as one object
@@ -60,8 +60,22 @@ export const requestCommands: Collaboration.RequestCommands = {
         return ok({
             Sent: {
                 // a reply names the run it answers; whether it runs is the facilitator's to decide, as for any message
-                set: { id, session, author, targets, body, sentAt, replyTo, mentions },
+                set: { id, session, author, targets, body, sentAt, replyTo, mentions, reverts: undefined },
                 events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets, body, sentAt, ...(replyTo && { replyTo }), mentions } },
+            },
+        });
+    }),
+
+    // a revert of a run's changes: about the workspace as a whole (no target, no mention), the facilitator's
+    requestRevert: decide<Collaboration.RequestRevertRequestDecision>(Collaboration.RequestShape, (params) => {
+        if (Collaboration.checkRequestRevertRequestRequires(params) === 'facilitatorReverts') return err({ type: 'FacilitatorOnly' });
+        const { id, session, author, body, sentAt } = params;
+        // the run without its evidence: the aggregate stores the base type
+        const reverts: Collaboration.AgentRunId = params.reverts;
+        return ok({
+            Sent: {
+                set: { id, session, author, targets: [], body, sentAt, replyTo: undefined, mentions: [], reverts },
+                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, mentions: [], reverts } },
             },
         });
     }),
@@ -80,10 +94,43 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
         const { id, session, requests, input, queuedBy, queuedAt } = params;
         return ok({
             Queued: {
-                set: { id, session, input, queuedBy, queuedAt },
+                set: { id, session, input, queuedBy, queuedAt, revertObstacle: undefined },
                 events: { RunQueued: { type: 'RunQueued', runId: id, session, requests, queuedBy, queuedAt } },
             },
         });
+    }),
+
+    // a queued revert whose turn came, reverted mechanically by the server (no agent); unchanged when nothing was left
+    revert: decide<Collaboration.RevertAgentRunDecision>(Collaboration.AgentRunShape, {
+        Queued: (run, params) => {
+            switch (Collaboration.checkRevertAgentRunRequires(run, params)) {
+                case 'inputReverts':
+                    return err({ type: 'InputMismatch' });
+                case 'changedMatchesResult':
+                    return err({ type: 'ChangedMismatch' });
+            }
+            const { baseRevision, resultRevision, changed, finishedAt } = params;
+            return ok({
+                Reverted: {
+                    set: { baseRevision, resultRevision, changed, finishedAt },
+                    events: { RunReverted: { type: 'RunReverted', runId: run.id, baseRevision, resultRevision, changed, finishedAt } },
+                },
+            });
+        },
+    }),
+
+    // a queued revert the server could not revert mechanically: it stays queued, for the agent, with why
+    leaveToAgent: decide<Collaboration.LeaveToAgentAgentRunDecision>(Collaboration.AgentRunShape, {
+        Queued: (run, params) => {
+            if (Collaboration.checkLeaveToAgentAgentRunRequires(run, params) === 'inputReverts') return err({ type: 'InputMismatch' });
+            const { obstacle } = params;
+            return ok({
+                Queued: {
+                    set: { revertObstacle: obstacle },
+                    events: { RevertLeftToAgent: { type: 'RevertLeftToAgent', runId: run.id, obstacle } },
+                },
+            });
+        },
     }),
 
     start: decide<Collaboration.StartAgentRunDecision>(Collaboration.AgentRunShape, {
@@ -224,19 +271,6 @@ export const revisionCommands: Collaboration.RevisionCommands = {
                 },
             },
         });
-    }),
-
-    confirm: decide<Collaboration.ConfirmRevisionDecision>(Collaboration.RevisionShape, {
-        Recorded: (revision, params) => {
-            if (Collaboration.checkConfirmRevisionRequires(revision, params) === 'facilitatorConfirms') return err({ type: 'FacilitatorOnly' });
-            const { confirmedBy, confirmedAt } = params;
-            return ok({
-                Confirmed: {
-                    set: { confirmedBy, confirmedAt },
-                    events: { RevisionConfirmed: { type: 'RevisionConfirmed', revisionId: revision.id, confirmedBy, confirmedAt } },
-                },
-            });
-        },
     }),
 };
 

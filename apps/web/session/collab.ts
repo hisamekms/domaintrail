@@ -7,24 +7,23 @@ import { changeUnits, shownUnits, unitName, type ChangeUnit } from './history';
 import { listedParticipants, type Peers } from './presence';
 import { participantAvatars, participantNames } from './stream';
 
-type RevisionJson = SessionStateBody['revisions'][number];
-
 /**
  * An action of the collab menu (below its list of participants). Today the page is only ever in a collab (`dt session
  * start`); a solo page (`dt view`, one person) would get a menu of its own here, 「👤 1 人 ▾」 with `start` (コラボを始める),
  * once the page can start one.
  */
-export type CollabMenuItem = 'invite' | 'record' | 'hand-over' | 'end' | 'leave';
+export type CollabMenuItem = 'invite' | 'record' | 'restore' | 'hand-over' | 'end' | 'leave';
 
 /**
  * The actions of the collab menu for a role. Everyone can copy the invite link. The facilitator records the workspace,
- * hands the role over and ends the collab; a participant leaves. The facilitator has no 退出: leaving would leave the
+ * restores an earlier state of it (the last resort: a unit of work is reverted from its card), hands the role over and
+ * ends the collab; a participant leaves. The facilitator has no 退出: leaving would leave the
  * collab without anyone to apply, answer or end it — they hand the role over first (and can leave then, as a
  * participant), or end it. `live` false (ended, or signed out): only the list.
  */
 export function collabMenuItems(role: Me['participant']['role'], live: boolean): CollabMenuItem[] {
     if (!live) return [];
-    return role === 'facilitator' ? ['invite', 'record', 'hand-over', 'end'] : ['invite', 'leave'];
+    return role === 'facilitator' ? ['invite', 'record', 'restore', 'hand-over', 'end'] : ['invite', 'leave'];
 }
 
 /**
@@ -40,27 +39,17 @@ export interface Unfinished {
     readonly running: number;
     /** Units whose latest run asks a question nobody answered yet. */
     readonly clarification: number;
-    /** Results of runs recorded since the last revision confirmed (all of them when none was), not confirmed. */
-    readonly unconfirmed: number;
 }
 
 /** Whether there is anything unfinished. */
-export const hasUnfinished = (u: Unfinished): boolean => u.queued + u.running + u.clarification + u.unconfirmed > 0;
+export const hasUnfinished = (u: Unfinished): boolean => u.queued + u.running + u.clarification > 0;
 
-/** What is not finished in a session's state: runs waiting or running, questions unanswered, results not confirmed. */
+/** What is not finished in a session's state: runs waiting or running, questions unanswered. */
 export function unfinishedWork(state: Pick<SessionStateBody, 'runs' | 'revisions'>, units: readonly ChangeUnit[] = changeUnits(state)): Unfinished {
-    const lastConfirmed = state.revisions.reduce<string | undefined>(
-        (at, r) => (r.state === 'Confirmed' && (at === undefined || r.takenAt > at) ? r.takenAt : at),
-        undefined,
-    );
-    const unconfirmed = state.revisions.filter(
-        (r: RevisionJson) => r.origin.kind === 'RunResult' && r.state === 'Recorded' && (lastConfirmed === undefined || r.takenAt > lastConfirmed),
-    ).length;
     return {
         queued: state.runs.filter((r) => r.state === 'Queued').length,
         running: state.runs.filter((r) => r.state === 'Running').length,
         clarification: units.filter((u) => u.outcome === 'clarification').length,
-        unconfirmed,
     };
 }
 

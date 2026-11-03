@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Editor } from 'tldraw';
+import type { DiagramCanvas } from './view/diagram';
 
 /** The user's choice: follow the OS, or force light / dark. */
 export type ThemePreference = 'auto' | 'light' | 'dark';
@@ -22,8 +22,8 @@ export function useResolvedTheme(preference: ThemePreference): Theme {
     return preference === 'auto' ? (osDark ? 'dark' : 'light') : preference;
 }
 
-/** Applies the theme to the page (CSS tokens on `<html data-theme>`) and to the tldraw canvas. */
-export function applyTheme(theme: Theme, editor: Editor | null): void {
+/** Applies the theme to the page (CSS tokens on `<html data-theme>`) and to the canvas. */
+export function applyTheme(theme: Theme, canvas: DiagramCanvas | null): void {
     document.documentElement.dataset.theme = theme;
-    if (editor && editor.user.getUserPreferences().colorScheme !== theme) editor.user.updateUserPreferences({ colorScheme: theme });
+    canvas?.setTheme(theme);
 }

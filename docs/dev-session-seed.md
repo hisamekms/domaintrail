@@ -2,7 +2,7 @@
 
 For people developing DomainTrail: `bun run session:seed` starts a collaboration session already filled with the
 chat's display patterns — messages, runs in every state, questions, assumptions, replies, reactions, element
-references — so that the Live View's chat can be reviewed without writing them by hand or running Claude Code. Each
+references, reverts — so that the Live View's chat can be reviewed without writing them by hand or running Claude Code. Each
 session is a new scratch copy of [examples/shop](../examples/shop/README.md); nothing is mocked but the agent (and,
 optionally, the message classifier). For a session with the real Claude Code, see
 [A first real run of a session](session-first-run.md).
@@ -19,7 +19,7 @@ bun run session:seed --scenario chat,replies --dir /tmp/dt-seed-2 --reset
 
 | Option | |
 | --- | --- |
-| `--scenario <names>` | `chat`, `runs`, `questions`, `assumptions`, `replies`, `reactions`, `references`, or `all` (default); repeatable or a comma list. `all` plays them in that order into one timeline. |
+| `--scenario <names>` | `chat`, `runs`, `questions`, `assumptions`, `replies`, `reactions`, `references`, `revert`, or `all` (default); repeatable or a comma list. `all` plays them in that order into one timeline. |
 | `--dir <dir>` | The scratch workspace it makes (default `$TMPDIR/dt-session-seed`). A directory that is not empty is refused. |
 | `--reset` | Wipes `--dir` first, when an earlier seed made it (it has a `.dt-session-seed` file) and no session server runs on it. |
 | `--workspace <dir>` | The workspace copied (default `examples/shop`; the scenarios name its elements). |
@@ -78,12 +78,20 @@ card gives a title of its own that the card does not take.
   message (the limit is 20).
 - `references`: `@{…}` in a summary, a note, an assumption, a question and its options — `.dt` elements, states,
   commands, storming elements, ones that do not resolve, and `\@{` written as text.
+- `revert` (in `stormings/order-to-cash.dtes`, which no other scenario edits): 再請求のイベント (with an assumption) and a
+  later unit adding a read model elsewhere in the file; the first is reverted mechanically by the server — an AI
+  card, done, with what it changed; its assumption 打ち消し済み, `git diff` showing only the later read model. Then 支払の督促 (with an assumption), a
+  later unit renaming the event it added, and its revert, which conflicts and is left to the seed's agent: an AI card
+  that reverts it. To try both paths yourself, ⋯ → この作業を打ち消す on any card that changed files; edit by hand the
+  lines a unit added first to make its revert conflict (it then waits for an agent, 実行待ち with why in the tooltip on its state: stop it, or run
+  a subscriber). With `--leave-running`, a revert asked now waits behind the running run (実行待ち, 前に n 件), and the server reverts
+  it once the runs ahead of it end.
 
 Not produced by default: a run left **running** and runs **queued**. `--leave-running` leaves both: once the scenarios
 are done, 田中's message runs and the seed's agent keeps working on it (holding its lease) while the seed runs — telling
 what it is doing every 3 seconds, round and round (reading `stormings/returns.dtes`, editing it, `dt check`, …), so the
 running turn's activity line changes — and two
-runs wait behind it — 佐藤's message, then 鈴木's and 高橋's together. Cancelling the running one (✕, then 取り消す in the dialog) starts the next,
+runs wait behind it — 佐藤's message, then 鈴木's and 高橋's together. Stopping the running one (✕, then 実行を中止 in the dialog) starts the next,
 which the agent holds the same way. Without it the agent is stopped (stopped, a lease expires and the run fails);
 `--leave-queued` leaves one run queued for a real subscriber started later. The questions left open by `questions`
 show in AI の作業 as 答え待ち.

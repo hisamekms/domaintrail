@@ -4,12 +4,13 @@
 import type {
     ApproveBody,
     ApprovedBody,
-    Me,
     MarkSetBody,
+    Me,
     QueueRunBody,
     SendRequestBody,
     SessionStateBody,
     SetMarkBody,
+    RevertRequestedBody,
 } from '@domaintrail/collaboration/protocol';
 
 type RunJson = SessionStateBody['runs'][number];
@@ -66,6 +67,7 @@ export function sessionClient(base: string): {
     cancel(p: Participant, run: string): Promise<RunJson>;
     mark(p: Participant, body: SetMarkBody): Promise<MarkSetBody>;
     approve(p: Participant, body: ApproveBody): Promise<ApprovedBody>;
+    revert(p: Participant, run: string, body: string): Promise<RevertRequestedBody>;
 } {
     return {
         async join(name) {
@@ -90,6 +92,7 @@ export function sessionClient(base: string): {
         cancel: async (p, run) => (await call<{ run: RunJson }>(base, `runs/${run}/cancel`, p.cookie, {})).value.run,
         mark: async (p, body) => (await call<MarkSetBody>(base, 'marks', p.cookie, body)).value,
         approve: async (p, body) => (await call<ApprovedBody>(base, 'approvals', p.cookie, body)).value,
+        revert: async (p, run, body) => (await call<RevertRequestedBody>(base, `runs/${run}/revert`, p.cookie, { body })).value,
     };
 }
 

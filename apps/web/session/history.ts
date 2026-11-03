@@ -87,7 +87,7 @@ export function changedPaths(before: RevisionJson | undefined, after: RevisionJs
 
 /** The revisions a run went from and to, when it has both. */
 function revisionsOf(run: RunJson): { base: string; result: string } | undefined {
-    if (run.state === 'Completed' || run.state === 'NeedsClarification' || run.state === 'Declined')
+    if (run.state === 'Completed' || run.state === 'NeedsClarification' || run.state === 'Declined' || run.state === 'Reverted')
         return { base: run.baseRevision, result: run.resultRevision };
     return undefined;
 }
@@ -113,6 +113,8 @@ function outcomeOf(run: RunJson, files: number | undefined): UnitOutcome {
             return 'clarification';
         case 'Completed':
             return (files ?? 0) > 0 || (files === undefined && run.changed) ? 'changed' : 'unchanged';
+        case 'Reverted':
+            return (files ?? 1) > 0 ? 'changed' : 'unchanged';
         case 'Declined':
             return 'declined';
         case 'Failed':

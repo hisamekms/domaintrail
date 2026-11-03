@@ -23,7 +23,7 @@ describe('slotLabels', () => {
         expect(labels).toContain('失敗');
         expect(labels).toContain(runningLabel(ja.marks, '00:00'));
         expect(runningLabel(ja.marks, '12:34')).toBe('実行中 12:34');
-        expect(slotLabels(en.marks)).toContain('cancelled');
+        expect(slotLabels(en.marks)).toContain('stopped');
     });
     test('leaves out what the slot never shows (a question, done), so that it is no wider than it needs', () => {
         expect(slotLabels(ja.marks)).not.toContain('確認待ち');
@@ -34,12 +34,12 @@ describe('slotLabels', () => {
 
 describe('cancelPrompt', () => {
     test('a running run: its work so far is lost', () => {
-        expect(cancelPrompt('Running', ja.cancelDialog)).toEqual({ title: '実行を取り消しますか？', lost: 'ここまでの作業は反映されません' });
-        expect(cancelPrompt('Running', en.cancelDialog)).toEqual({ title: 'Cancel the run?', lost: 'Its work so far will not be applied' });
+        expect(cancelPrompt('Running', ja.cancelDialog)).toEqual({ title: '実行を中止しますか？', lost: 'ここまでの作業は反映されません' });
+        expect(cancelPrompt('Running', en.cancelDialog)).toEqual({ title: 'Stop the run?', lost: 'Its work so far will not be applied' });
     });
     test('a queued run: the request is cancelled, nothing lost', () => {
-        expect(cancelPrompt('Queued', ja.cancelDialog)).toEqual({ title: '依頼を取り消しますか？', lost: undefined });
-        expect(cancelPrompt('Queued', en.cancelDialog)).toEqual({ title: 'Cancel the request?', lost: undefined });
+        expect(cancelPrompt('Queued', ja.cancelDialog)).toEqual({ title: '待ちの実行を中止しますか？', lost: undefined });
+        expect(cancelPrompt('Queued', en.cancelDialog)).toEqual({ title: 'Stop the queued run?', lost: undefined });
     });
     test('a run that ended cannot be cancelled', () => {
         for (const state of ['Completed', 'NeedsClarification', 'Declined', 'Failed', 'Cancelled'] as const)
