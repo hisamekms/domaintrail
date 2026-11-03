@@ -1,7 +1,9 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { changesState, checkAccess, hostAllowList, type AccessPolicy, type Authorization } from './access.js';
+import type { PageBoot } from '@domaintrail/visualization/protocol';
 import type { Assets } from './assets.js';
+import { withBoot } from './boot.js';
 import { sendError } from './json.js';
 import { send, type ApiRoutes } from './routes.js';
 
@@ -41,6 +43,8 @@ export interface ViewHttpServerOptions {
     upgrade: UpgradeHandler;
     /** A session (`dt open`, `dt collab`): every request then needs an identity. Absent for the read-only Live View. */
     session?: SessionSurface;
+    /** What the page needs in its first frame, written into it (`withBoot`); absent: the page as built. */
+    boot?: PageBoot;
 }
 
 const isApi = (pathname: string): boolean => pathname === '/api' || pathname.startsWith('/api/');
@@ -61,13 +65,17 @@ const FACILITATOR_VIEW_API: ReadonlySet<string> = new Set(['/api/baseline']);
  * (and any other path) is served to anyone. In a session it guards everything: the page, the API, the session's API
  * and the WebSocket need an identity; without one a page request gets the session's sign-in answer, an API request 401.
  */
-export function createViewHttpServer({ host, api, assets, upgrade, session }: ViewHttpServerOptions): Server {
+export function createViewHttpServer({ host, api, assets, upgrade, session, boot }: ViewHttpServerOptions): Server {
     const viewPolicy: AccessPolicy = { allowedHost: hostAllowList(host) };
+    const page = assets.get('/index.html');
+    // the page with its boot block, made once: the facts in it do not change while the server runs
+    const booted = page && boot ? { type: page.type, body: Buffer.from(withBoot(page.body.toString('utf8'), boot)) } : page;
 
     const serveView = (req: IncomingMessage, url: URL, res: ServerResponse): Promise<void> | void => {
         const route = api.get(url.pathname);
         if (route) return route(req, url, res);
-        const asset = req.method === 'GET' || req.method === 'HEAD' ? assets.get(url.pathname) : undefined;
+        const get = req.method === 'GET' || req.method === 'HEAD';
+        const asset = !get ? undefined : url.pathname === '/' || url.pathname === '/index.html' ? booted : assets.get(url.pathname);
         if (!asset) return send(res, 404, 'text/plain', 'Not found');
         send(res, 200, asset.type, asset.body);
     };

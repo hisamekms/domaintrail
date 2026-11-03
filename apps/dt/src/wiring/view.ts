@@ -2,6 +2,7 @@ import type { AddressInfo } from 'node:net';
 import * as path from 'node:path';
 import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/analysis';
 import { type Assets, defaultWebDir, loadAssets } from '../server/http/assets.js';
+import { pageBoot } from '../server/http/boot.js';
 import { createApiRoutes } from '../server/http/routes.js';
 import { createViewHttpServer } from '../server/http/server.js';
 import { createWebSocketHub } from '../server/websocket/hub.js';
@@ -198,6 +199,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
         api: createApiRoutes({ view, git, sources: live.sources, publish: (payload) => hub.publish(payload), log }),
         assets: live.assets,
         upgrade: (req, socket, head) => hub.handleUpgrade(req, socket, head, undefined),
+        boot: pageBoot(options.root),
     });
     await new Promise<void>((resolve, reject) => {
         http.once('error', reject);

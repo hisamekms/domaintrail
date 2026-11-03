@@ -54,6 +54,7 @@ import { createSessionIdentities } from '../server/session/identities.js';
 import { createTriageStage } from '../server/session/triage.js';
 import { eventFor } from '../server/session/views.js';
 import { knownViewNames } from '../server/session/viewed-at.js';
+import { pageBoot } from '../server/http/boot.js';
 import { createViewHttpServer } from '../server/http/server.js';
 import { isLoopbackBind, sessionHostPolicy } from '../server/http/access.js';
 import { SessionError, type SessionSettings } from '../cli/ports.js';
@@ -635,6 +636,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 hub.handleUpgrade(req, socket, head, { participant: auth.participant, role: auth.role, actor: auth.actor });
             },
             session: mode === 'Solo' ? soloSurface(sessionSurface, soloSignIn) : sessionSurface,
+            boot: pageBoot(options.root, mode),
         });
         opened.http = http;
         const port = await listen(http, config.port, config.host);
