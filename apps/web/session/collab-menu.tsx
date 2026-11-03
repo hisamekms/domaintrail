@@ -4,13 +4,16 @@
 // the chat), hands the role over and ends the collab (asked first, with what is unfinished); a participant leaves.
 // Once it ended, everyone sees its summary (`CollabSummaryDialog`). What the menu offers to whom is in `collab.ts`.
 //
+// Everyone downloads the sources (a ZIP of the .dt, .dtes and config files, `download.ts`).
+//
 // In Solo (`dt open`, one person) the button is a plain ⋯ and the popover holds no people, only the workspace's
-// record and restore: the invite, the hand-over, the end and 退出 make sense only with others.
+// record, restore and download: the invite, the hand-over, the end and 退出 make sense only with others.
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { ChevronDown, Ellipsis, X } from 'lucide-react';
 import type { ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
 import { sessionApi } from './api';
+import { downloadSources } from './download';
 import { useChat, type Tx } from './chat-context';
 import { collabMenuItems, collabSummary, hasUnfinished, hoursMinutes, inviteLink, unfinishedWork, type CollabMenuItem, type CollabSummary } from './collab';
 import { unitName, type ChangeUnit } from './history';
@@ -107,6 +110,13 @@ export function CollabMenu(props: {
                 setNote(tx.error(failure(e)));
             }
         },
+        'download-sources': async () => {
+            try {
+                await downloadSources();
+            } catch (e) {
+                setNote(tx.error(e instanceof Error ? e.message : String(e)));
+            }
+        },
         end: () => setEnding(true),
         leave: () => props.onLeave(),
     };
@@ -114,6 +124,7 @@ export function CollabMenu(props: {
         invite: tx.collab.invite,
         record: tx.takeRevision,
         restore: tx.collab.restore,
+        'download-sources': tx.collab.downloadSources,
         'hand-over': tx.chat.handOver,
         end: tx.collab.end,
         leave: tx.leave,

@@ -22,6 +22,8 @@ export interface ApiDeps {
     git: Pick<GitRevisions, 'listRefs'>;
     /** Pushes a view to every page (after a change of baseline). */
     publish: (payload: ViewPayload) => void;
+    /** The ZIP archive of the workspace's sources as they are on disk now (「ソース一式をダウンロード」). Absent: 404. */
+    sources?: () => Promise<{ readonly name: string; readonly sources: number; readonly zip: Uint8Array }>;
     log: (line: string) => void;
 }
 
@@ -128,7 +130,37 @@ function baselineRoute({ view, publish, log }: ApiDeps): ApiRoute {
     };
 }
 
-/** The Live View's API: `/api/state`, `/api/focus`, `/api/compact`, `/api/git/refs` and `/api/baseline`. */
+/** The value of `Content-Disposition` downloading `file`: an ASCII `filename` for old clients, the UTF-8 `filename*`. */
+export function attachment(file: string): string {
+    const ascii = /^[\x20-\x7e]+$/.test(file) ? file.replace(/["\\]/g, '_') : 'sources.zip';
+    const encoded = encodeURIComponent(file).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+    return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`;
+}
+
+/**
+ * GET: the sources as one ZIP archive, `<workspace>-sources.zip`, made from the files on disk at the request (never
+ * cached); 404 when the workspace has none.
+ */
+function sourcesRoute({ sources }: ApiDeps): ApiRoute {
+    return async (req, _url, res) => {
+        if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'text/plain', 'Method not allowed');
+        const archive = await sources?.();
+        if (!archive?.sources) return send(res, 404, 'text/plain', 'No .dt or .dtes files in the workspace');
+        res.writeHead(200, {
+            'content-type': 'application/zip',
+            'content-length': archive.zip.length,
+            'content-disposition': attachment(`${archive.name}-sources.zip`),
+            'cache-control': 'no-store',
+            'x-content-type-options': 'nosniff',
+        });
+        res.end(req.method === 'HEAD' ? undefined : archive.zip);
+    };
+}
+
+/**
+ * The Live View's API: `/api/state`, `/api/focus`, `/api/compact`, `/api/git/refs`, `/api/baseline` and
+ * `/api/export/sources.zip`.
+ */
 export function createApiRoutes(deps: ApiDeps): ApiRoutes {
     return new Map([
         ['/api/state', stateRoute(deps)],
@@ -136,5 +168,6 @@ export function createApiRoutes(deps: ApiDeps): ApiRoutes {
         ['/api/compact', compactRoute(deps)],
         ['/api/git/refs', gitRefsRoute(deps)],
         ['/api/baseline', baselineRoute(deps)],
+        ['/api/export/sources.zip', sourcesRoute(deps)],
     ]);
 }

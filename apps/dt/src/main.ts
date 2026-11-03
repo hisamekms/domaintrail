@@ -8,6 +8,7 @@ import { fileTrustStore } from './cli/trust.js';
 import { startLanguageServer } from './lsp/start.js';
 import {
     createGeneratedOutput,
+    createSourceArchive,
     findDomainFiles as findSources,
     gitFileState,
     hasCastLintRule,
@@ -79,6 +80,8 @@ export function cliDeps(): CliDeps {
         loadConfig,
         findDomainFiles,
         loadWorkspace,
+        exportSources: ({ root, sources, respectGitignore, configFile }) =>
+            createSourceArchive({ root, selection: sourceSelection(sources, respectGitignore), ...(configFile !== undefined && { configFile }) }),
         castLintHint: async (root) => ((await hasCastLintRule(root)) ? undefined : LINT_HINT),
         generatedOutput: createGeneratedOutput(GENERATED_MARKER),
         startViewServer: async (options) => (await import('./wiring/view.js')).startViewServer(options),

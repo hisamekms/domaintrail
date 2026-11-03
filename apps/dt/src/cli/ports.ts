@@ -17,6 +17,12 @@ export interface CliDeps {
     findDomainFiles(root: string, sources: readonly string[], respectGitignore: boolean): Promise<string[]>;
     /** The sources below `root` with their text. */
     loadWorkspace(root: string, sources: readonly string[], respectGitignore: boolean): Promise<SourceFile[]>;
+    /**
+     * The ZIP archive of the workspace's sources (`dt export sources`): the files `findDomainFiles` finds (`.dt` and
+     * `.dtes` only, none git ignores) and the config file `configFile` (never its local override), below a folder named
+     * after the workspace.
+     */
+    exportSources(options: SourcesExportOptions): Promise<SourcesExport>;
     /** What `dt generate ts` prints after `hint: ` when no lint rule against casts is found from `root` up; else undefined. */
     castLintHint(root: string): Promise<string | undefined>;
     generatedOutput: GeneratedOutput;
@@ -57,11 +63,33 @@ export interface CliDeps {
     confirm?(question: string): Promise<boolean>;
 }
 
+/** What `dt export sources` (and the Live View's download) archives: the workspace's sources and its config file. */
+export interface SourcesExportOptions {
+    root: string;
+    sources: readonly string[];
+    respectGitignore: boolean;
+    /** The project's config file (absolute), if there is one. */
+    configFile?: string;
+}
+
+/** The ZIP archive of the sources. */
+export interface SourcesExport {
+    /** The archive's top folder, the workspace's name: the file is `<name>-sources.zip`. */
+    readonly name: string;
+    /** The files in it, relative to the root, `/`-separated. */
+    readonly files: readonly string[];
+    /** How many of them are sources (`.dt` and `.dtes` files). */
+    readonly sources: number;
+    readonly zip: Uint8Array;
+}
+
 /** What `dt open --host <non-loopback>` asks of the Live View. */
 export interface ViewServerOptions {
     root: string;
     sources: readonly string[];
     respectGitignore: boolean;
+    /** The project's config file (absolute), if there is one: in the download of the sources. */
+    configFile?: string;
     port: number;
     host: string;
     base?: string;
@@ -73,6 +101,8 @@ export interface SessionServerOptions {
     root: string;
     sources: readonly string[];
     respectGitignore: boolean;
+    /** The project's config file (absolute), if there is one: in the download of the sources. */
+    configFile?: string;
     base?: string;
     /** `Solo` (`dt open`) or `Collab` (`dt collab`). */
     mode: 'Solo' | 'Collab';

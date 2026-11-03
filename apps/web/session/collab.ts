@@ -8,20 +8,22 @@ import { listedParticipants, type Peers } from './presence';
 import { participantAvatars, participantNames } from './stream';
 
 /** An action of the collab menu (below its list of participants). */
-export type CollabMenuItem = 'invite' | 'record' | 'restore' | 'hand-over' | 'end' | 'leave';
+export type CollabMenuItem = 'invite' | 'record' | 'restore' | 'download-sources' | 'hand-over' | 'end' | 'leave';
 
 /**
- * The actions of the collab menu for a role. Everyone can copy the invite link. The facilitator records the workspace,
+ * The actions of the collab menu for a role. Everyone can copy the invite link and download the sources (a ZIP of the
+ * `.dt`, `.dtes` and config files, to share without git). The facilitator records the workspace,
  * restores an earlier state of it (the last resort: a unit of work is reverted from its card), hands the role over and
  * ends the collab; a participant leaves. The facilitator has no 退出: leaving would leave the
  * collab without anyone to apply, answer or end it — they hand the role over first (and can leave then, as a
  * participant), or end it. `live` false (ended, or signed out): only the list. In Solo (`dt open`): only the
- * workspace's record and restore — no one to invite or hand over to, and the session goes on with the next `dt open`.
+ * workspace's record, restore and download — no one to invite or hand over to, and the session goes on with the next
+ * `dt open`.
  */
 export function collabMenuItems(role: Me['participant']['role'], live: boolean, solo = false): CollabMenuItem[] {
     if (!live) return [];
-    if (solo) return role === 'facilitator' ? ['record', 'restore'] : [];
-    return role === 'facilitator' ? ['invite', 'record', 'restore', 'hand-over', 'end'] : ['invite', 'leave'];
+    if (solo) return role === 'facilitator' ? ['record', 'restore', 'download-sources'] : ['download-sources'];
+    return role === 'facilitator' ? ['invite', 'record', 'restore', 'download-sources', 'hand-over', 'end'] : ['invite', 'download-sources', 'leave'];
 }
 
 /**

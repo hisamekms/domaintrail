@@ -98,6 +98,7 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 - `dt show <name>` — one element, command or state resolved, with who uses it; read it instead of the `.dt` files.
 - `dt lsp` — language server over stdio: the diagnostics of `dt check`, definitions, references, hover, rename.
 - `dt open` — the Live View in the browser, with a chat to the AI; it runs until Ctrl+C, so run it in the background.
+- `dt export sources` — the `.dt`, `.dtes` and config files as one ZIP, to hand to someone without the repository.
 
 **When the contract and the implementation disagree**, follow `@see` on the generated type to the declaration and
 change the DSL, not the implementation: never emit an event or set a field only to satisfy the types.
@@ -2672,6 +2673,22 @@ own. The layout:
 A `.dtes` file has its own layout, in the same spirit: 2 spaces per level; every element, clause, timeline step and group
 event on its own line; an element without clauses on one line (an empty `{}` is dropped unless it holds a comment); one
 blank line kept where the author wrote some, one between stormings; no spaces around the dots of a `ref`.
+
+<!-- topic: export -->
+## Sharing the sources
+
+`dt export sources` writes the model's sources as one ZIP archive, `<workspace>-sources.zip` in the current directory
+(`-o <file>` for another name, `-o -` for stdout), so that someone without git or the repository can open them and run
+`dt` on them: unzip it anywhere and run `dt check` in the folder it holds. The Live View offers the same archive in its
+menu (「ソース一式をダウンロード」).
+
+- It holds the files `dt check` analyzes (the config's `sources`; only `.dt` and `.dtes` files) and the config file
+  (`domaintrail.jsonc` / `.json`), below one folder named after the workspace (the root's directory), their folders
+  kept: `shop/domaintrail.jsonc`, `shop/sales/order.dt`.
+- Never in it: the local override (`domaintrail.local.jsonc`), `.domaintrail`, `.git`, `node_modules`, generated output,
+  symlinks (neither followed nor stored), and, in a git repository, any file git ignores (even with
+  `"respectGitignore": false`).
+- Exits 1 when the workspace has no `.dt` or `.dtes` file.
 
 <!-- topic: output -->
 ## Output and exit codes
