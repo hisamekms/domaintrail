@@ -1,6 +1,8 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import { unified } from '@astrojs/markdown-remark';
+import remarkCjkFriendly from 'remark-cjk-friendly';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 
 // GitHub Pages: the workflow (.github/workflows/site.yml) passes the origin and the base path that
@@ -37,6 +39,11 @@ export default defineConfig({
     site,
     base,
     trailingSlash: 'always',
+    // Emphasis next to Japanese punctuation (`**「例外」**を`, `**…。**次`): CommonMark's flanking rules leave the `**`
+    // as text there. remark-cjk-friendly reads them as people mean them; it is a remark (micromark) plugin, so the pages
+    // (.md and .mdx) go through the unified processor rather than Astro's default, Sätteri, which takes no such
+    // extension. scripts/check-dist.ts fails the build on Markdown left as text.
+    markdown: { processor: unified({ remarkPlugins: [remarkCjkFriendly] }) },
     integrations: [
         starlight({
             title: 'DomainTrail',
