@@ -42,6 +42,8 @@ export {
     markTargetStatus,
     signKey,
     VOTE,
+    DONE,
+    guideMarksOf,
     type MarkSignData,
     type MarkStatus,
     type MarkTargetData,
@@ -179,6 +181,56 @@ export {
     type SlashCommandSpec,
     type SlashCommandType,
 } from './domain/slash-commands.js';
+// the guide's map and what is known at once (`/guide`)
+export {
+    contextDone,
+    contextFacts,
+    crossContextReferences,
+    diagnosticTarget,
+    ES_GOALS,
+    ES_STEPS,
+    esStepDone,
+    GUIDE_LIMITS,
+    GUIDE_PATTERNS,
+    GUIDE_STEP_KEYS,
+    esJourneyKey,
+    guideData,
+    guideFindings,
+    guideMap,
+    guideMaps,
+    guideMarkId,
+    guideMarks,
+    journeyMap,
+    markableGuideMark,
+    MAX_JOURNEY_MAPS,
+    NO_MARKS,
+    ROW_STEPS,
+    type EsJourney,
+    type GuideMarkKey,
+    type GuideMarkReader,
+    type GuideMarkStore,
+    type ModelJourney,
+    guideSnapshot,
+    guideStorming,
+    guideWorld,
+    MARKABLE_STEPS,
+    MIN_EVENTS,
+    MODEL_PATTERNS,
+    modelGoalStep,
+    modelStepDone,
+    NO_GOAL,
+    readGuideGoal,
+    SET_GOAL,
+    stormingFacts,
+    type ContextFacts,
+    type EsGoalLevel,
+    type EsStep,
+    type GuideGoal,
+    type GuideMapInput,
+    type GuidePatternPath,
+    type GuideWorkspace,
+    type StormingFacts,
+} from './domain/guide.js';
 export { checkTemplates, TEMPLATE_CONTEXTS, TEMPLATE_LIMITS, type MessageTemplateConfig, type TemplateContext } from './domain/templates.js';
 // where the requester was looking when they sent a message
 export {
@@ -231,6 +283,7 @@ export {
     type TriageProgress,
     type TriageStepInput,
 } from './application/conversation.js';
+export { guideMarkTarget, sessionGuideMarks, type NotAGuideMark } from './application/guide-marks.js';
 export { type SlashCommandJob, type SlashCommandStartedResult, type SlashCommandUseCases, type WrongCommandType } from './application/slash-commands.js';
 export { type InterviewJob, type InterviewStarted as InterviewStartedResult, type InterviewUseCases } from './application/interviews.js';
 export { actorOf, type Actor } from './application/actor.js';

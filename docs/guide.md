@@ -1198,8 +1198,8 @@ gaps to fill by guessing.
 
 **Small steps.** Change a little, run `dt fmt` and `dt check` until it exits 0, and keep the model valid between
 steps. Do not rename or remove what the people did not ask to change: other files, generated code and the chat refer
-to the IDs. Unsure what to do next? `/hint` (the composer's ヒントをもらう button) has the AI coach you, in the modeling
-as in the storming.
+to the IDs. Unsure what to do next? `/guide` (the composer's ガイド button) shows where you are on the way to your goal and
+what the files show at once, then has the AI coach you, in the modeling as in the storming.
 
 <!-- topic: generated -->
 ## Generated TypeScript
@@ -2530,8 +2530,9 @@ for the purpose and the first and last events before writing much.
 
 In the chat, `/es:exceptions`, `/es:gaps` (events missing between two of a flow), `/es:levels` (which events show at Big
 Picture) and `/es:names` (labels not in the past tense, inconsistent, too long or technical) list candidate changes to
-check. Unsure what to do next? `/hint` (the composer's ヒントをもらう button) has the AI coach you: where you stand and
-one to three next steps, with a button for the command that does a step.
+check. Unsure what to do next? `/guide` (the composer's ガイド button) shows the map from the brief to your goal and
+what the files show at once, then has the AI coach you: why the step you are at is next and one to three steps, with
+the command that does a step, the places to look at and the questions to ask the people.
 
 **Design Level next**, once the flow is agreed (the brief says how far to go):
 - For each event, what caused it: a `command` (and the `actor` or `external` system that issues it), or a `policy`
@@ -3046,10 +3047,11 @@ question. A **question** (相談) is answered at once by the answerer, read-only
 a message of the AI replying to it. A **request** (依頼) from the facilitator is queued as a run at once; from a
 participant, the answerer writes a **change proposal** (what, where, how) that the facilitator approves (as is or
 edited; several approved together are one run), or rejects with a note; its author may withdraw it while it waits.
-Anyone may run the `/` commands (`/es:start`, `/es:exceptions`, `/hint` …; one of each kind at a time). What changes
+Anyone may run the `/` commands (`/es:start`, `/es:exceptions`, `/guide` …; one of each kind at a time). What changes
 files is the facilitator's to approve: the candidates of `/es:exceptions` and the like are checked and applied by the
 facilitator, whoever started the command, and the brief of a participant's `/es:start` or `/model:start` (they answer
-its questions) waits for the facilitator's 承認, 編集して承認 or 却下. An answer (`/hint`, `/es:recap`) is for everyone.
+its questions) waits for the facilitator's 承認, 編集して承認 or 却下. An answer (`/guide`, `/es:recap`) is for everyone;
+the ✓ on a step of the guide's map that only people can judge is the facilitator's to set or clear.
 Participants see only where a triage went; the facilitator sees its record (each stage's answer, confidence, reason
 and model). On each message the facilitator has the robot button, AI に送る (addresses it to the AI, as a mention would
 have: its triage decides what follows, and a request the facilitator sends this way is queued without a proposal), and

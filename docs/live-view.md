@@ -402,14 +402,21 @@ The chat has two views:
   (`level design`) or back to Big Picture, and the labels to rename (not in the past tense, the same thing named
   differently, too long, technical) — the label only, the ID stays. A candidate's chips are the elements that exist;
   one to be added is named by its label and how. `/es:recap` (ここまでのまとめ) has the AI answer in the chat
-  with a short recap of the session: what was decided, what was added or changed, what is still open. `/hint`
-  (ヒントをもらう; listed first, and a button with a light bulb at the left end of the composer's bar that
-  runs it at once, its label dropped when the chat is narrow) has the AI coach the person, in the event storming or
-  the modeling: from the session so far, the view they are on, the stormings and the model, one line on where they
-  stand and one to three next steps, each with its reason. The answer is the AI's message with a light bulb by its
-  name; a step a command does has a button with the command (`/es:gaps`, `/model:start`) that puts it in the
-  composer, `/`'s list open on it, for the person to send; in `/`'s list, the commands the latest hint suggests have a
-  star (ヒントのおすすめ). A command's opening message shows in its sender's row as the command's chip (its icon, as in
+  with a short recap of the session: what was decided, what was added or changed, what is still open. `/guide`
+  (ガイド; listed first, and a button with a compass at the left end of the composer's bar that runs it at once,
+  its label dropped when the chat is narrow) shows a card at once: the map of where the person is — the steps of the
+  event storming (brief, events, flows and stages, exceptions, questions, Design Level) or of a modeling journey (its
+  pattern's steps, with a row per context: aggregates, commands, invariants), each done (✓), here (📍) or to do, up
+  to the goal (🏁), the steps past it faint; whether a step is done comes from the files, and a step the files cannot
+  tell (the BCs are split, the terms aligned) is marked done by the facilitator with a small ✓ on the latest card —,
+  then what is known at once (a stage without exceptions, open questions, long labels, a context without aggregates,
+  errors…), each with a button that shows it. Until a goal is set, the map is one step, ゴールを決める, with
+  `/es:start` or `/model:start`. With several modeling journeys, a picker chooses the map (remembered per viewer). A few
+  seconds later the AI's advice fills the card: where the person stands and why the step here is next, then one to
+  three steps, each with its reason, the command that does it (a button that puts it in the composer), the places to
+  show, and 聞くことをメモ for a question to the people (a message asking the AI to add it as a hotspot: a
+  participant's waits for the facilitator's approval). An older card keeps its map as it was, with a note; in `/`'s
+  list, the commands the latest guide suggests have a star (ガイドのおすすめ). A command's opening message shows in its sender's row as the command's chip (its icon, as in
   `/`'s list, `/id` and name; pressed, what it does), not as text. Then the **templates**: the beginnings of a message
   for what is open and selected (このあとを足す at Big Picture, 前後を詰める for a selected event, 不変条件を挙げる for an
   aggregate …), then the team's from `templates` in `domaintrail.jsonc`; picking one only puts its text in the composer

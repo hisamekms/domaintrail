@@ -4,7 +4,9 @@ import { describe, expect, test } from 'bun:test';
 import { Collaboration as C } from '../generated/index.js';
 import { readEmoji } from './emoji.js';
 import {
+    DONE,
     exclusiveGroup,
+    guideMarksOf,
     laterRunOf,
     markChange,
     markCommands,
@@ -14,6 +16,7 @@ import {
     MAX_REACTION_EMOJI,
     reactionRoom,
     signFits,
+    signKey,
     VOTE,
     type MarkRun,
     type MarkTargetData,
@@ -112,6 +115,31 @@ describe('the rules of marks', () => {
         expect(signFits(option('a'), react('❤️'))).toBe(false);
         expect(signFits({ kind: 'Message', request: 'm1' }, react('👍'))).toBe(true);
         expect(signFits({ kind: 'Turn', run: 'r1' }, VOTE)).toBe(false);
+    });
+
+    test("done goes on a step of the guide only, a step the files cannot tell; one per session, the store's key apart", () => {
+        const step = { kind: 'GuideStep', journey: 'j', step: 'bcSplit' } as const;
+        expect(signFits(step, DONE)).toBe(true);
+        for (const sign of [VOTE, react('👍')]) expect(signFits(step, sign)).toBe(false);
+        for (const target of [option('a'), { kind: 'Message', request: 'm1' } as const]) expect(signFits(target, DONE)).toBe(false);
+        expect(markKey(step)).toBe('guide:j|bcSplit|');
+        expect(markKey({ ...step, step: 'contexts', context: 'Sales' })).toBe('guide:j|contexts|Sales');
+        expect(signKey(DONE)).toBe('Done');
+        expect(markTargetStatus(step, { requests: [], runs: [] })).toBe('open');
+        // a step the files tell, or none of the map's: nothing to mark
+        expect(markTargetStatus({ kind: 'GuideStep', journey: 'j', step: 'events' }, { requests: [], runs: [] })).toBe('missing');
+        expect(markTargetStatus({ kind: 'GuideStep', journey: 'j', step: 'nope' }, { requests: [], runs: [] })).toBe('missing');
+        // a BC row, under a rows step
+        expect(markTargetStatus({ kind: 'GuideStep', journey: 'j', step: 'contexts', context: 'Sales' }, { requests: [], runs: [] })).toBe('open');
+        // the guide's marks among the session's
+        expect(
+            guideMarksOf([
+                { participant: 'p', target: step, sign: DONE },
+                { participant: 'p', target: { kind: 'Message', request: 'm1' }, sign: react('👍') },
+            ]),
+        ).toEqual([{ journey: 'j', step: 'bcSplit' }]);
+        expect(exclusiveGroup(step, [])).toBeUndefined();
+        expect(reactionRoom([], DONE)).toBe(true);
     });
 
     test("a question's options are open while its run waits for an answer and nothing took over its requests", () => {
@@ -225,5 +253,16 @@ describe('the rules of marks', () => {
             value(markCommands.place({ id, session, participant: who, role: 'Facilitator', target: turn, sign: react('👍'), placedAt: at })).Placed.aggregate
                 .sign,
         ).toEqual(react('👍'));
+        // a step of the guide is done by the facilitator only
+        const step = open({ kind: 'GuideStep', journey: value(C.makeGuideJourneyKey('j')), step: value(C.makeGuideStepKey('bcSplit')) });
+        expect(error(markCommands.place({ id, session, participant: who, role: 'Participant', target: step, sign: DONE, placedAt: at }))).toEqual({
+            type: 'FacilitatorOnly',
+        });
+        expect(error(markCommands.place({ id, session, participant: who, role: 'Facilitator', target: step, sign: VOTE, placedAt: at }))).toEqual({
+            type: 'MarkNotForTarget',
+        });
+        expect(
+            value(markCommands.place({ id, session, participant: who, role: 'Facilitator', target: step, sign: DONE, placedAt: at })).Placed.aggregate.sign,
+        ).toEqual(DONE);
     });
 });

@@ -34,8 +34,8 @@ describe('the commands and their IDs', () => {
     });
 
     test('the other commands: their type and what they need', () => {
-        // the work on a storming in its order (the flow, then its details), then the session's; the hint, of no prefix
-        expect(SLASH_COMMAND_NAMES).toEqual(['es:exceptions', 'es:gaps', 'es:levels', 'es:names', 'es:recap', 'hint']);
+        // the work on a storming in its order (the flow, then its details), then the session's; the guide, of no prefix
+        expect(SLASH_COMMAND_NAMES).toEqual(['es:exceptions', 'es:gaps', 'es:levels', 'es:names', 'es:recap', 'guide']);
         const candidates = { type: 'candidates', reply: 'candidates', needsStorming: true } as const;
         expect(slashCommandOf('es:exceptions')).toEqual({ kind: 'EsExceptions', ...candidates });
         expect(slashCommandOf('es:gaps')).toEqual({ kind: 'EsGaps', ...candidates });
@@ -43,10 +43,11 @@ describe('the commands and their IDs', () => {
         expect(slashCommandOf('es:names')).toEqual({ kind: 'EsNames', ...candidates });
         expect(slashCommandOf('es:recap')).toEqual({ kind: 'EsRecap', type: 'answer', reply: 'answer', needsStorming: false });
         // anyone's, about the event storming and the modeling alike (no storming needed), answered in a shape of its own
-        expect(slashCommandOf('hint')).toEqual({ kind: 'Hint', type: 'answer', reply: 'next', needsStorming: false });
-        expect(slashCommandName('Hint')).toBe('hint');
-        // the former ID is no command any more (a stored one reads as a Hint: `legacy.ts`)
+        expect(slashCommandOf('guide')).toEqual({ kind: 'Guide', type: 'answer', reply: 'next', needsStorming: false });
+        expect(slashCommandName('Guide')).toBe('guide');
+        // the former IDs are no commands any more (a stored one reads as a Guide: `legacy.ts`)
         expect(slashCommandOf('es:next')).toBeUndefined();
+        expect(slashCommandOf('hint')).toBeUndefined();
         expect(slashCommandOf('es:start')).toBeUndefined();
         expect(slashCommandOf('constructor')).toBeUndefined();
         expect(slashCommandName('EsRecap')).toBe('es:recap');
@@ -124,7 +125,7 @@ describe("the answerer's candidates", () => {
         expect(readCommandReply({ kind: 'candidates', candidates: [] }, 'answer')).toMatchObject({ ok: false });
     });
 
-    test("/hint's steps: read, clamped to three, one line each, an unknown command dropped; the message written from them", () => {
+    test("/guide's steps: read, clamped to three, one line each, an unknown command dropped; the message written from them", () => {
         const step = (text: string, more: object = {}): object => ({ text, reason: `${text} の理由`, ...more });
         const read = readCommandReply(
             {
@@ -142,28 +143,60 @@ describe("the answerer's candidates", () => {
                 next: {
                     status: 'Big Picture: 発行まで',
                     steps: [
-                        { text: '例外を洗い出す', reason: '例外を洗い出す の理由', command: 'EsExceptions' },
-                        { text: '専門家に聞く', reason: '専門家に聞く の理由' },
-                        { text: '揃える', reason: '揃える の理由', command: 'EsNames' },
+                        { text: '例外を洗い出す', reason: '例外を洗い出す の理由', command: 'EsExceptions', targets: [] },
+                        { text: '専門家に聞く', reason: '専門家に聞く の理由', targets: [] },
+                        { text: '揃える', reason: '揃える の理由', command: 'EsNames', targets: [] },
                     ],
                 },
             },
         });
-        // a command the steps may not suggest (itself, the former ID, an unknown one) is dropped, the step kept;
+        // a command the steps may not suggest (itself, the former IDs, an unknown one) is dropped, the step kept;
         // `/model:start` is one they may
         const odd = readCommandReply(
             {
                 kind: 'next',
                 status: 's',
-                steps: [step('a', { command: 'hint' }), step('b', { command: 'es:next' }), step('c', { command: 'model:start' })],
+                steps: [step('a', { command: 'guide' }), step('b', { command: 'hint' }), step('c', { command: 'model:start' })],
             },
             'next',
         );
         expect((odd.ok && odd.value.kind === 'answer' && odd.value.next?.steps) as unknown).toEqual([
-            { text: 'a', reason: 'a の理由' },
-            { text: 'b', reason: 'b の理由' },
-            { text: 'c', reason: 'c の理由', command: 'ModelStart' },
+            { text: 'a', reason: 'a の理由', targets: [] },
+            { text: 'b', reason: 'b の理由', targets: [] },
+            { text: 'c', reason: 'c の理由', command: 'ModelStart', targets: [] },
         ]);
+        // where to go (malformed references dropped, three at most) and what to ask, one line
+        const places = readCommandReply(
+            {
+                kind: 'next',
+                status: 's',
+                steps: [
+                    step('a', {
+                        targets: ['@{es:Issue/Preparation}', 'not a ref', '@{Sales.Order}', '@{es:Issue/Days}', '@{Billing.Invoice}'],
+                        ask: '再設定に\n何日？',
+                    }),
+                ],
+            },
+            'next',
+        );
+        const placed = places.ok && places.value.kind === 'answer' ? places.value.next?.steps[0] : undefined;
+        expect(placed as unknown).toEqual({
+            text: 'a',
+            reason: 'a の理由',
+            targets: [
+                { kind: 'DtesElement', storming: 'Issue', local: 'Preparation' },
+                { kind: 'DtElement', element: 'Sales.Order' },
+                { kind: 'DtesElement', storming: 'Issue', local: 'Days' },
+            ],
+            ask: '再設定に 何日？',
+        });
+        // sent again as the answerer sends it
+        expect(placed && nextAnswerData({ status: 's' as never, steps: [placed] }).steps[0]).toEqual({
+            text: 'a',
+            reason: 'a の理由',
+            targets: ['@{es:Issue/Preparation}', '@{Sales.Order}', '@{es:Issue/Days}'],
+            ask: '再設定に 何日？',
+        });
         expect(readCommandReply({ kind: 'next', status: 's', steps: [] }, 'next')).toMatchObject({ ok: false, error: { path: 'reply.steps' } });
         expect(readCommandReply({ kind: 'next', status: 's', steps: [step('x'.repeat(121))] }, 'next')).toMatchObject({
             ok: false,

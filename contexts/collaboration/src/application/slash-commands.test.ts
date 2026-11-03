@@ -79,8 +79,13 @@ const start = (use: CollaborationUseCases, session: C.SessionId, actor: Actor = 
 const nextAnswer: C.NextAnswer = {
     status: value(C.makeProposalText('発行まで')),
     steps: [
-        { text: value(C.makeProposalText('例外を洗い出す')), reason: value(C.makeProposalText('発行に例外がない')), command: 'EsExceptions' },
-        { text: value(C.makeProposalText('専門家に聞く')), reason: value(C.makeProposalText('未決のホットスポット')) },
+        { text: value(C.makeProposalText('例外を洗い出す')), reason: value(C.makeProposalText('発行に例外がない')), command: 'EsExceptions', targets: [] },
+        {
+            text: value(C.makeProposalText('専門家に聞く')),
+            reason: value(C.makeProposalText('未決のホットスポット')),
+            targets: [],
+            ask: value(C.makeProposalText('何日かかる？')),
+        },
     ],
 };
 
@@ -201,18 +206,16 @@ describe('answer commands', () => {
         expect(answered.command).toMatchObject({ state: 'Answered', answer: answered.answer.id });
         expect(answered.command.next).toBeUndefined();
         expect(value(await use.commandJobs({ session }))).toEqual([]);
-        // the next steps are /hint's only
+        // the next steps are /guide's only
         const again = value(await use.startCommand({ session, actor: bob, kind: 'EsRecap', body: text('ここまでのまとめ'), language: 'Ja' }));
         expect(error(await use.answerCommand({ command: again.command.id, answer: text('x'), next: nextAnswer }))).toEqual({ type: 'WrongCommandType' });
     });
 
     test("/hint: anyone's, from the storming in view or none; answered with its steps, kept for the page and read back", async () => {
         const { use, session, db } = await solo();
-        const started = value(
-            await use.startCommand({ session, actor: facilitator, kind: 'Hint', body: text('ヒントをもらう'), language: 'Ja', viewedAt: inView }),
-        );
+        const started = value(await use.startCommand({ session, actor: facilitator, kind: 'Guide', body: text('ガイド'), language: 'Ja', viewedAt: inView }));
         // the view is on its opening message (the AI reads it there): the command is about no storming of its own
-        expect(started.command).toMatchObject({ state: 'Working', kind: 'Hint' });
+        expect(started.command).toMatchObject({ state: 'Working', kind: 'Guide' });
         expect(started.command.scope).toBeUndefined();
         expect(started.request.viewedAt).toEqual(inView);
         expect(error(await use.answerCommand({ command: started.command.id, answer: text('x') }))).toEqual({ type: 'WrongCommandType' });
@@ -222,15 +225,33 @@ describe('answer commands', () => {
         expect(back[0]).toMatchObject({ state: 'Answered', next: nextAnswer });
     });
 
-    test('/hint with no storming in view: a job for the AI all the same (it reads the session); one at a time', async () => {
+    test('/guide with no storming in view: a job for the AI all the same (it reads the session); one at a time', async () => {
         const { use, session } = await collab();
-        const started = value(await use.startCommand({ session, actor: bob, kind: 'Hint', body: text('ヒントをもらう'), language: 'Ja' }));
-        expect(started.command).toMatchObject({ state: 'Working', kind: 'Hint' });
+        const started = value(await use.startCommand({ session, actor: bob, kind: 'Guide', body: text('ガイド'), language: 'Ja' }));
+        expect(started.command).toMatchObject({ state: 'Working', kind: 'Guide' });
         expect(value(await use.commandJobs({ session })).map((j) => j.command.id)).toEqual([started.command.id]);
-        expect(error(await use.startCommand({ session, actor: bob, kind: 'Hint', body: text('ヒントをもらう'), language: 'Ja' }))).toEqual({
+        expect(error(await use.startCommand({ session, actor: bob, kind: 'Guide', body: text('ガイド'), language: 'Ja' }))).toEqual({
             type: 'CommandAlreadyRunning',
         });
         expect(value(await use.stopCommand({ command: started.command.id, actor: bob }))).toMatchObject({ state: 'Stopped' });
+    });
+
+    test('/guide keeps the map and what is known at once of the workspace given, as they are when it starts', async () => {
+        const { use, session } = await collab();
+        const workspace = { model: null, stormings: [], diagnostics: [] };
+        const started = value(
+            await use.startCommand({ session, actor: bob, kind: 'Guide', body: text('ガイド'), language: 'Ja', viewedAt: inView, workspace }),
+        );
+        // nothing written yet: neither world, no goal set (the map asks for one), nothing known
+        expect(started.command.guide).toEqual({
+            maps: [{ world: 'None', steps: [{ key: 'setGoal', state: 'Here', goal: false, after: false, markable: false, marked: false }], contexts: [] }],
+            findings: [],
+        } as never);
+        // the job carries it to the AI
+        expect(value(await use.commandJobs({ session }))[0]?.command.guide).toEqual(started.command.guide);
+        // another command keeps none
+        const other = value(await use.startCommand({ session, actor: bob, kind: 'EsRecap', body: text('x'), language: 'Ja', workspace }));
+        expect(other.command.guide).toBeUndefined();
     });
 });
 

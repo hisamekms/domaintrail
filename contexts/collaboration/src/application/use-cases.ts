@@ -312,10 +312,11 @@ export interface CollaborationUseCases extends ConversationUseCases, InterviewUs
         >
     >;
     /**
-     * Places or takes off a participant's mark (a vote or a reaction; `placed`: whether it should be there). Placing
-     * a vote moves the participant's vote of the same exclusive group; setting a mark to what it is changes nothing.
-     * Refused when the target is not the session's, or is a vote that closed (`domain/marks.ts`), when the sign does
-     * not fit the target, for a vote of the facilitator, and for an emoji new to a target that has
+     * Places or takes off a participant's mark (a vote, a reaction, or done on a step of the guide's map; `placed`:
+     * whether it should be there). Placing a vote moves the participant's vote of the same exclusive group; setting a
+     * mark to what it is changes nothing; a step's done is the session's (taken off whoever placed it). Refused when the
+     * target is not the session's, or is a vote that closed (`domain/marks.ts`), when the sign does not fit the target,
+     * for a vote of the facilitator, done by anyone but the facilitator, and for an emoji new to a target that has
      * `MAX_REACTION_EMOJI` different emoji already.
      */
     setMark(input: {
@@ -334,6 +335,7 @@ export interface CollaborationUseCases extends ConversationUseCases, InterviewUs
             | Collaboration.MarkTargetClosed
             | Collaboration.MarkNotForTarget
             | Collaboration.FacilitatorDoesNotVote
+            | Collaboration.FacilitatorOnly
             | Collaboration.ReactionLimitReached
         >
     >;
@@ -853,10 +855,18 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 const active = await verify.makeActiveSession(session);
                 if (!active.ok) return active;
                 if (!stores.sessions.load(session)?.participants.some((p) => p.id === participant)) return err({ type: 'NotAParticipant', participant });
+                // a step of the guide is the facilitator's to mark and to clear (the place command refuses placing; this
+                // refuses taking off too, whoever placed it)
+                if (sign.kind === 'Done' && role !== 'Facilitator') return err({ type: 'FacilitatorOnly' });
                 const open = await verify.makeOpenMarkTarget(target, session);
                 if (!open.ok) return open;
                 const runs = stores.runs.listBySession(session);
-                const change = markChange(stores.marks.placedBy(session, participant), target, sign, placed, (t) => exclusiveGroup(t, runs));
+                // a step of the guide is done for the session: taking it off takes off whoever placed it
+                const mine =
+                    target.kind === 'GuideStep'
+                        ? stores.marks.placedBySession(session).filter((m) => m.target.kind === 'GuideStep')
+                        : stores.marks.placedBy(session, participant);
+                const change = markChange(mine, target, sign, placed, (t) => exclusiveGroup(t, runs));
                 const at = clock.now();
                 let made: Collaboration.PlacedMark | undefined;
                 const events: Collaboration.PersistentEvent[] = [];

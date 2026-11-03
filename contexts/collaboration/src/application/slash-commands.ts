@@ -7,6 +7,8 @@
 import { Collaboration, err, ok, type Result } from '../generated/index.js';
 import { requestCommands } from '../domain/commands.js';
 import { knownRequestId, knownSlashCommandId } from '../domain/ids.js';
+import { guideMarks, guideSnapshot, readGuideGoal, type GuideWorkspace } from '../domain/guide.js';
+import { guideMarksOf } from '../domain/marks.js';
 import { chosenIndices, isCommandRunning, runningCommand, slashCommandCommands, slashCommandSpec, stormingInView } from '../domain/slash-commands.js';
 import type { Actor } from './actor.js';
 import { notAllowed, notFound, type NotAllowed, type NotFound } from './errors.js';
@@ -46,7 +48,8 @@ export interface SlashCommandUseCases {
      * name), sent without triage, and the command waiting for the answerer. Anyone; one of each kind runs at a time
      * (`CommandAlreadyRunning`). A command about the
      * storming in view, with none in view, lists no candidates at once (the AI is not asked): its card then says so.
-     * `/hint` needs none: the AI reads where the person is from the session and the view.
+     * `/guide` needs none: the AI reads where the person is from the session and the view; it keeps the map and what is
+     * known at once as they are now (the goals of `readGuideGoal`, the session's marks of the guide).
      */
     startCommand(input: {
         readonly session: SessionId;
@@ -57,6 +60,11 @@ export interface SlashCommandUseCases {
         readonly focus?: Collaboration.ModelTarget;
         /** Where the starter was looking: kept on the opening message, and what the command is about. */
         readonly viewedAt?: Collaboration.ViewedAt;
+        /**
+         * The workspace as it is now (`/guide`): its map and what is known at once are computed from it and kept on the
+         * command. Absent: none kept (the AI reads the files all the same).
+         */
+        readonly workspace?: GuideWorkspace;
     }): Promise<Result<SlashCommandStartedResult, SendMessageError | Collaboration.CommandAlreadyRunning | Closed>>;
     /** The answerer's candidates (a candidate command): they wait for the facilitator to check some and apply them. */
     listCandidates(input: {
@@ -64,7 +72,7 @@ export interface SlashCommandUseCases {
         readonly candidates: readonly Collaboration.CommandCandidate[];
     }): Promise<Result<Collaboration.ListedSlashCommand, NotFound | NotAllowed | WrongCommandType | Closed>>;
     /**
-     * The answerer's answer (an answer command): a message of the AI replying to the opening message; for `/hint`,
+     * The answerer's answer (an answer command): a message of the AI replying to the opening message; for `/guide`,
      * with the next steps it was written from (required there, refused elsewhere: `WrongCommandType`).
      */
     answerCommand(input: {
@@ -114,7 +122,7 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
     };
 
     return {
-        async startCommand({ session, actor, kind, body, language, focus, viewedAt }) {
+        async startCommand({ session, actor, kind, body, language, focus, viewedAt, workspace }) {
             const spec = slashCommandSpec(kind);
             return uow.transaction(async (stores) => {
                 if (runningCommand(stores.slashCommands.listBySession(session), kind)) return err({ type: 'CommandAlreadyRunning' });
@@ -124,6 +132,17 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
                 if (!active.ok) return active;
                 const at = clock.now();
                 const scope = spec.needsStorming ? stormingInView(viewedAt, focus) : undefined;
+                // the guide's snapshot: its marks are the session's for now (`sessionGuideMarks` reads them so)
+                const guide =
+                    kind === 'Guide' && workspace
+                        ? guideSnapshot({
+                              workspace,
+                              goal: readGuideGoal(workspace),
+                              marks: guideMarks(guideMarksOf(stores.marks.placedBySession(session))),
+                              ...(viewedAt && { viewedAt }),
+                              ...(focus && { focus }),
+                          })
+                        : undefined;
                 const started = slashCommandCommands.start({
                     id: knownSlashCommandId(ids.newId()),
                     session: active.value,
@@ -133,6 +152,7 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
                     scope,
                     language,
                     startedAt: at,
+                    guide,
                 });
                 if (!started.ok) return started;
                 const { Working } = started.value;

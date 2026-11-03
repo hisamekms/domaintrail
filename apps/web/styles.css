@@ -352,8 +352,10 @@
        avatar and name say who) */
     --chat-mention-bg: var(--p-indigo-100);
     --chat-unread: var(--p-indigo-700);
-    /* the mark of a command the latest hint suggests (`/`'s list): the brand's amber, as a filled star */
-    --chat-hint-star: var(--p-brand-amber);
+    /* the mark of a command the latest guide suggests (`/`'s list): the brand's amber, as a filled star */
+    --chat-guide-star: var(--p-brand-amber);
+    /* the guide's goal (🏁): green, apart from the brand of where the person is */
+    --guide-goal: var(--p-green-700);
     /* the agent's activity (§4.2): one hue for every running phase (reading, editing, checking, finishing), the phase
        told by its icon and text; the other outcomes take the status tokens */
     --agent-active: var(--action);
@@ -535,7 +537,8 @@
     /* 5. collaboration */
     --chat-mention-bg: var(--p-indigo-night-600);
     --chat-unread: var(--p-indigo-300);
-    --chat-hint-star: var(--p-brand-amber);
+    --chat-guide-star: var(--p-brand-amber);
+    --guide-goal: var(--p-green-300);
     --agent-avatar: var(--p-slate-300);
     --on-agent-avatar: var(--p-night-950);
     --participant-halo-canvas: var(--p-slate-100);
@@ -5230,12 +5233,12 @@ button.add-to-request.added:hover {
     opacity: 0.45;
     cursor: default;
 }
-/* ヒントをもらう: the bar's left end, as tall as the send button; an action (the brand on a pale wash of it), its label
+/* ガイド: the bar's left end, as tall as the send button; an action (the brand on a pale wash of it), its label
    dropped when the composer is narrow (the icon, its tooltip and its aria-label stay) */
 .chat-composer-bar {
     container: chat-composer-bar / inline-size;
 }
-.session-chat button.chat-hint {
+.session-chat button.chat-guide {
     flex: none;
     display: inline-flex;
     align-items: center;
@@ -5253,25 +5256,25 @@ button.add-to-request.added:hover {
     white-space: nowrap;
     cursor: pointer;
 }
-.session-chat button.chat-hint:hover:not(:disabled) {
+.session-chat button.chat-guide:hover:not(:disabled) {
     border-color: var(--brand);
 }
-.session-chat button.chat-hint:disabled {
+.session-chat button.chat-guide:disabled {
     opacity: 0.45;
     cursor: default;
 }
 @container chat-composer-bar (max-width: 18rem) {
-    .session-chat button.chat-hint {
+    .session-chat button.chat-guide {
         width: 32px;
         padding: 0;
         justify-content: center;
     }
-    .session-chat .chat-hint-label {
+    .session-chat .chat-guide-label {
         display: none;
     }
 }
-/* the light bulb by the AI's name on a hint's answer */
-.chat-hint-mark {
+/* the compass by the guide's name on its card */
+.chat-guide-mark {
     display: inline-flex;
     color: var(--brand);
 }
@@ -5335,7 +5338,7 @@ button.add-to-request.added:hover {
     display: inline-flex;
     margin-left: var(--space-1);
     vertical-align: -1px;
-    color: var(--chat-hint-star);
+    color: var(--chat-guide-star);
 }
 .chat-slash-suggested svg {
     fill: currentColor;
@@ -8012,35 +8015,254 @@ label.proposal-option {
 .candidates-row.state-Stopped .proposal {
     opacity: 0.6;
 }
-/* `/hint`'s answer: the status, then the steps numbered, each its text and its command's button on one line (wrapping),
-   its reason muted under it */
-.next-answer {
+/* `/guide`'s card (guide-card.tsx): the map — the steps on a wrapping line, a dot each (done: ✓ on the brand's wash;
+   here: the brand filled, a halo; the goal to reach: a green flag; past the goal: faint) and its label under it; the
+   goal; the BC rows as a compact grid — then what is known at once on a muted panel, each with a "show" button; then
+   the AI's advice, numbered, each step its text, its reason muted and its actions (wrapping) */
+.guide-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
     font-size: var(--fs-body);
     line-height: var(--lh-body);
 }
-.next-status {
+.guide-older {
     margin: 0;
+    font-size: var(--fs-small);
 }
-.next-steps {
-    margin: var(--space-2) 0 0;
-    padding-left: 1.5em;
+.session-chat .guide-journeys {
+    align-self: flex-start;
+    max-width: 100%;
+    font: inherit;
+    font-size: var(--fs-small);
 }
-.next-step + .next-step {
-    margin-top: var(--space-2);
-}
-.next-step-head {
+.guide-path {
     display: flex;
     flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--space-1) var(--space-2);
+    gap: var(--space-2) 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
 }
-.next-step-text {
+.guide-step {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 3.75rem;
+    padding: 0 3px;
+    font-size: 0.6875rem;
+    line-height: 1.25;
+    text-align: center;
+    white-space: nowrap;
+    color: var(--muted);
+}
+/* the line between two steps: each draws its half, from its dot to its edge */
+.guide-step + .guide-step::before,
+.guide-step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 10px;
+    height: 1px;
+    background: var(--border-strong);
+}
+.guide-step + .guide-step::before {
+    left: 0;
+    right: calc(50% + 12px);
+}
+.guide-step:not(:last-child)::after {
+    left: calc(50% + 12px);
+    right: 0;
+}
+.guide-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: 1.5px solid var(--border-strong);
+    border-radius: 50%;
+    background: var(--surface);
+    color: var(--muted);
+    box-sizing: border-box;
+}
+.guide-step.done .guide-dot {
+    border-color: var(--brand-wash-border);
+    background: var(--brand-wash);
+    color: var(--brand);
+}
+.guide-step.here .guide-dot {
+    border-color: var(--brand);
+    background: var(--brand);
+    color: var(--on-brand);
+    box-shadow: 0 0 0 3px var(--brand-wash);
+}
+.guide-step.here {
+    color: var(--brand);
     font-weight: var(--fw-strong);
 }
-.next-step-reason {
+.guide-step.goal:not(.done):not(.here) .guide-dot {
+    border-color: var(--guide-goal);
+    color: var(--guide-goal);
+}
+.guide-step.after {
+    opacity: 0.45;
+}
+.session-chat button.guide-mark,
+.session-chat .guide-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: 1px dashed var(--border-strong);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+}
+.session-chat .guide-mark.on {
+    border-style: solid;
+    border-color: var(--brand-wash-border);
+    background: var(--brand-wash);
+    color: var(--brand);
+}
+.session-chat .guide-mark:disabled {
+    cursor: default;
+}
+.guide-goal {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin: 0;
+    font-size: var(--fs-small);
+    color: var(--guide-goal);
+}
+.guide-journey {
+    color: var(--muted);
+}
+.guide-rows {
+    border-collapse: collapse;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.guide-rows th,
+.guide-rows td {
+    padding: 1px var(--space-2) 1px 0;
+    text-align: left;
+    font-weight: normal;
+}
+.guide-rows thead th {
+    color: var(--muted);
+}
+.guide-rows tbody th {
+    font-weight: var(--fw-strong);
+}
+.guide-rows td {
+    font-variant-numeric: tabular-nums;
+}
+.guide-rows .guide-dot {
+    width: 16px;
+    height: 16px;
+}
+.guide-row-done .guide-dot {
+    border-color: var(--brand-wash-border);
+    background: var(--brand-wash);
+    color: var(--brand);
+}
+.guide-row-here th {
+    color: var(--brand);
+}
+.guide-at-once {
+    padding: var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface-muted);
+}
+.guide-at-once-head {
+    margin: 0 0 var(--space-1);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+    color: var(--muted);
+}
+.guide-at-once ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.guide-finding {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 24px;
+    font-size: 0.8125rem;
+}
+.guide-finding-icon {
+    flex: none;
+    color: var(--muted);
+}
+.guide-finding-text {
+    flex: 1;
+    min-width: 0;
+}
+.session-chat button.guide-go,
+.session-chat button.guide-ask {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid var(--brand-wash-border);
+    background: var(--brand-wash);
+    color: var(--brand);
+}
+/* a place's name, cut with an ellipsis when it is longer than the card */
+.session-chat button.guide-go {
+    max-width: 100%;
+    min-width: 0;
+}
+.guide-go-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.guide-thinking {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin: 0;
+    font-size: 0.8125rem;
+}
+.guide-status {
+    margin: 0;
+}
+.guide-steps {
+    margin: var(--space-1) 0 0;
+    padding-left: 1.5em;
+}
+.guide-advice-step + .guide-advice-step {
+    margin-top: var(--space-2);
+}
+.guide-step-text {
+    display: block;
+    font-weight: var(--fw-strong);
+}
+.guide-step-reason,
+.guide-question {
     display: block;
     font-size: var(--fs-small);
     line-height: var(--lh-small);
+}
+.guide-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) 6px;
+    margin: 4px 0 0;
+}
+.session-chat .guide-command {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 /* an interview's choices under the question it awaits (its starter only): compact action buttons, the brand on a pale
    wash of it, wrapping; several to check (a checkbox in each) and 送る filled; その他 last, outlined only */
@@ -8089,7 +8311,7 @@ label.proposal-option {
     color: var(--disabled-text);
     cursor: default;
 }
-.session-chat button.chat-small.next-command {
+.session-chat button.chat-small.guide-command {
     display: inline-flex;
     align-items: center;
     gap: 3px;

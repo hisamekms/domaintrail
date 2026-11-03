@@ -3,9 +3,11 @@
 //
 // - which signs fit a target: the vote (♡) on a question's option and on an assumption's choices (the assumption kept
 //   as it is, or one of its alternatives); reactions — any one emoji, to which the app gives no meaning — on a message
-//   and on an AI turn (`signFits`), at most `MAX_REACTION_EMOJI` different emoji per target (`reactionRoom`);
+//   and on an AI turn (`signFits`), at most `MAX_REACTION_EMOJI` different emoji per target (`reactionRoom`); done (✓)
+//   on a step of the guide's map that the files cannot tell, or on a BC row (`markableGuideMark` of `guide.ts`);
 // - who may mark: anyone for a reaction, participants only for a vote (the facilitator's answer is the decision; the
-//   model's `participantsVote`);
+//   model's `participantsVote`), the facilitator only for done (`facilitatorMarksSteps`); a step's done is the
+//   session's, not a person's: taking it off takes off whoever's it is (the facilitator may have handed over);
 // - exclusivity: one vote per participant in a single-choice question and in an assumption group, moved by voting
 //   another; any number in a multiple-choice question; each emoji on its own (`exclusiveGroup`);
 // - closing, derived from the runs and never stored (`markTargetStatus`): a reaction never closes; a vote is open while
@@ -17,6 +19,7 @@
 //
 // Pure, and over the plain shapes of the runs and requests, so that the server (the generated types) and the page
 // (their JSON) decide the same way.
+import { guideMarkId, markableGuideMark, type GuideMarkKey } from './guide.js';
 import { revertStatus } from './revert.js';
 import { isNormalEmoji } from './emoji.js';
 import { Collaboration, decide, err, ok } from '../generated/index.js';
@@ -26,13 +29,17 @@ export type MarkTargetData =
     | { readonly kind: 'Message'; readonly request: string }
     | { readonly kind: 'Turn'; readonly run: string }
     | { readonly kind: 'QuestionOption'; readonly run: string; readonly question: string; readonly option: string }
-    | { readonly kind: 'AssumptionChoice'; readonly run: string; readonly assumption: number; readonly alternative?: string };
+    | { readonly kind: 'AssumptionChoice'; readonly run: string; readonly assumption: number; readonly alternative?: string }
+    | { readonly kind: 'GuideStep'; readonly journey: string; readonly step: string; readonly context?: string };
 
-/** A sign as JSON carries it (the generated `MarkSign` without its brands): the vote, or a reaction's emoji. */
-export type MarkSignData = { readonly kind: 'Vote' } | { readonly kind: 'Reaction'; readonly emoji: string };
+/** A sign as JSON carries it (the generated `MarkSign` without its brands): the vote, a reaction's emoji, or done. */
+export type MarkSignData = { readonly kind: 'Vote' } | { readonly kind: 'Reaction'; readonly emoji: string } | { readonly kind: 'Done' };
 
 /** The vote (♡). */
 export const VOTE = { kind: 'Vote' } as const satisfies Collaboration.MarkSign;
+
+/** Done (✓), on a step of the guide's map. */
+export const DONE = { kind: 'Done' } as const satisfies Collaboration.MarkSign;
 
 /** Most different emoji on one message or turn: placing one more is refused (`ReactionLimitReached`). */
 export const MAX_REACTION_EMOJI = 20;
@@ -40,8 +47,8 @@ export const MAX_REACTION_EMOJI = 20;
 /** The `Emoji` primitive's constructor: one emoji, in the form reactions are kept (`./emoji.ts`). */
 export const makeEmoji: Collaboration.MakeEmoji = Collaboration.makeEmojiWith({ singleEmoji: isNormalEmoji });
 
-/** One text per sign, equal exactly for equal signs: `Vote`, or the reaction's emoji (the store's column and unique index, the page's maps). */
-export const signKey = (sign: MarkSignData): string => (sign.kind === 'Vote' ? 'Vote' : sign.emoji);
+/** One text per sign, equal exactly for equal signs: `Vote`, `Done`, or the reaction's emoji (the store's column and unique index, the page's maps). */
+export const signKey = (sign: MarkSignData): string => (sign.kind === 'Reaction' ? sign.emoji : sign.kind);
 
 /** What the rules read of a run: an `AgentRun`, or its JSON on a page. */
 export interface MarkRun {
@@ -85,20 +92,26 @@ export function markKey(target: MarkTargetData): string {
             return `option:${target.run}:${target.question}:${target.option}`;
         case 'AssumptionChoice':
             return `assumption:${target.run}:${target.assumption}:${target.alternative ?? ''}`;
+        case 'GuideStep':
+            return `guide:${guideMarkId(target)}`;
     }
 }
 
 export const isVoteTarget = (target: MarkTargetData): boolean => target.kind === 'QuestionOption' || target.kind === 'AssumptionChoice';
 
-/** Whether a sign fits a target: the vote on an option or an assumption's choice, a reaction on a message or a turn (`fitsTarget`). */
-export const signFits = (target: MarkTargetData, sign: MarkSignData): boolean => (sign.kind === 'Vote') === isVoteTarget(target);
+/**
+ * Whether a sign fits a target: the vote on an option or an assumption's choice, a reaction on a message or a turn, done
+ * on a step of the guide (`fitsTarget`).
+ */
+export const signFits = (target: MarkTargetData, sign: MarkSignData): boolean =>
+    sign.kind === 'Done' ? target.kind === 'GuideStep' : target.kind !== 'GuideStep' && (sign.kind === 'Vote') === isVoteTarget(target);
 
 /**
  * Whether a sign may be placed on a target, given the marks placed there (anyone's): a reaction with an emoji already
  * there always, another one while the target has fewer than `MAX_REACTION_EMOJI` different emoji. Votes are not limited.
  */
 export function reactionRoom(placed: readonly { readonly sign: MarkSignData }[], sign: MarkSignData): boolean {
-    if (sign.kind === 'Vote') return true;
+    if (sign.kind !== 'Reaction') return true;
     const emoji = new Set(placed.flatMap((m) => (m.sign.kind === 'Reaction' ? [m.sign.emoji] : [])));
     return emoji.has(sign.emoji) || emoji.size < MAX_REACTION_EMOJI;
 }
@@ -132,6 +145,8 @@ export type MarkStatus = 'open' | 'closed' | 'missing';
 /** Whether a target is in the session, and whether its marks can still change (see the module's comment for the rules). */
 export function markTargetStatus(target: MarkTargetData, scope: MarkScope): MarkStatus {
     if (target.kind === 'Message') return scope.requests.some((r) => r.id === target.request) ? 'open' : 'missing';
+    // a step a person marks done: one the map has, whatever the session holds
+    if (target.kind === 'GuideStep') return markableGuideMark(target) ? 'open' : 'missing';
     const run = scope.runs.find((r) => r.id === target.run);
     if (!run) return 'missing';
     switch (target.kind) {
@@ -203,6 +218,8 @@ export const markCommands: Collaboration.MarkCommands = {
                 return err({ type: 'MarkNotForTarget' });
             case 'participantsVote':
                 return err({ type: 'FacilitatorDoesNotVote' });
+            case 'facilitatorMarksSteps':
+                return err({ type: 'FacilitatorOnly' });
         }
         const { id, session, participant, target, sign, placedAt } = params;
         return ok({
@@ -225,3 +242,12 @@ export const markCommands: Collaboration.MarkCommands = {
             }),
     }),
 };
+
+/** The guide's marks among the session's placed marks: done on a step (or a BC row) of a journey. */
+export function guideMarksOf(marks: readonly MarkFacts[]): GuideMarkKey[] {
+    return marks.flatMap((m): GuideMarkKey[] =>
+        m.target.kind === 'GuideStep' && m.sign.kind === 'Done'
+            ? [{ journey: m.target.journey, step: m.target.step, ...(m.target.context !== undefined && { context: m.target.context }) }]
+            : [],
+    );
+}

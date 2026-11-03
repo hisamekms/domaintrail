@@ -23,6 +23,7 @@ import {
     type Result,
     toAgentReply,
     VOTE,
+    DONE,
 } from '@domaintrail/collaboration';
 
 /** Why an input was refused. */
@@ -387,21 +388,36 @@ export function markTarget(v: unknown, field = 'target'): Result<Collaboration.M
             if (!alternative.ok) return alternative;
             return ok({ kind: 'AssumptionChoice', run: run.value, assumption: assumption.value, alternative: alternative.value });
         }
+        case 'GuideStep': {
+            // a step (or a BC row, by its context) of a journey of the guide's map, a person marks done; which steps are
+            // markable is the domain's
+            const o = only(['kind', 'journey', 'step', 'context']);
+            if (!o.ok) return o;
+            const journey = typeof v.journey === 'string' && !hasControl(v.journey) ? Collaboration.makeGuideJourneyKey(v.journey) : undefined;
+            if (!journey?.ok) return invalid(`${field}.journey`, 'Expected a journey of the guide.');
+            const step = typeof v.step === 'string' ? Collaboration.makeGuideStepKey(v.step) : undefined;
+            if (!step?.ok) return invalid(`${field}.step`, 'Expected a step of the guide.');
+            if (v.context === undefined) return ok({ kind: 'GuideStep', journey: journey.value, step: step.value });
+            const context = typeof v.context === 'string' ? Collaboration.makeContextName(v.context) : undefined;
+            if (!context?.ok || context.value.length > 200) return invalid(`${field}.context`, 'Expected a context name.');
+            return ok({ kind: 'GuideStep', journey: journey.value, step: step.value, context: context.value });
+        }
         default:
-            return invalid(`${field}.kind`, 'Expected Message, Turn, QuestionOption or AssumptionChoice.');
+            return invalid(`${field}.kind`, 'Expected Message, Turn, QuestionOption, AssumptionChoice or GuideStep.');
     }
 }
 
 /**
- * A mark's sign: `{ kind: 'Vote' }`, or `{ kind: 'Reaction', emoji }` with exactly one emoji (one grapheme, at most
+ * A mark's sign: `{ kind: 'Vote' }`, `{ kind: 'Done' }` (a step of the guide), or `{ kind: 'Reaction', emoji }` with exactly one emoji (one grapheme, at most
  * `MAX_EMOJI_BYTES` bytes), turned into the form reactions are kept (NFC, fully qualified: ❤ is ❤️).
  */
 export function markSign(v: unknown, field = 'sign'): Result<Collaboration.MarkSign, InvalidInput> {
-    if (!isObject(v)) return invalid(field, 'Expected { "kind": "Vote" } or { "kind": "Reaction", "emoji": … }.');
+    if (!isObject(v)) return invalid(field, 'Expected { "kind": "Vote" }, { "kind": "Done" } or { "kind": "Reaction", "emoji": … }.');
     const keys = v.kind === 'Reaction' ? ['kind', 'emoji'] : ['kind'];
     if (!body(v, keys).ok) return invalid(`${field}.${Object.keys(v).find((k) => !keys.includes(k))}`, 'Unknown field.');
     if (v.kind === 'Vote') return ok(VOTE);
-    if (v.kind !== 'Reaction') return invalid(`${field}.kind`, 'Expected Vote or Reaction.');
+    if (v.kind === 'Done') return ok(DONE);
+    if (v.kind !== 'Reaction') return invalid(`${field}.kind`, 'Expected Vote, Done or Reaction.');
     const read = typeof v.emoji === 'string' ? readEmoji(v.emoji) : undefined;
     const emoji = read === undefined ? undefined : makeEmoji(read);
     if (!emoji?.ok) return invalid(`${field}.emoji`, `Expected exactly one emoji (at most ${MAX_EMOJI_BYTES} bytes).`);

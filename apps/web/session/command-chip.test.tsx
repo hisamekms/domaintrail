@@ -14,7 +14,7 @@ const at = '2026-01-01T00:00:00.000Z';
 const state = {
     slashCommands: [
         { id: 'c1', kind: 'EsRecap', state: 'Answered', opening: 'r-recap', answer: 'a1', startedAt: at },
-        { id: 'c2', kind: 'Hint', state: 'Working', opening: 'r-hint', startedAt: at },
+        { id: 'c2', kind: 'Guide', state: 'Working', opening: 'r-guide', startedAt: at },
         { id: 'c3', kind: 'EsExceptions', state: 'Listed', opening: 'r-exceptions', startedAt: at },
     ],
     interviews: [{ id: 'i1', command: 'Model', startedBy: 'me', state: 'Asking', opening: 'r-model', startedAt: at }],
@@ -23,7 +23,7 @@ const state = {
 describe('which messages are a command opening', () => {
     test("a SlashCommand's or an Interview's opening request: its command", () => {
         expect(commandOfOpening(state, 'r-recap')).toBe('es:recap');
-        expect(commandOfOpening(state, 'r-hint')).toBe('hint');
+        expect(commandOfOpening(state, 'r-guide')).toBe('guide');
         expect(commandOfOpening(state, 'r-exceptions')).toBe('es:exceptions');
         expect(commandOfOpening(state, 'r-model')).toBe('model:start');
     });
@@ -47,11 +47,11 @@ describe('the chip', () => {
         expect(html).toContain('aria-expanded="false"');
         // the description shows only once pressed
         expect(html).not.toContain(t.types.answer);
-        expect(MESSAGES.en.session.chat.slash.chip('hint', 'Get a hint')).toBe('Command /hint Get a hint');
+        expect(MESSAGES.en.session.chat.slash.chip('guide', 'Guide')).toBe('Command /guide Guide');
     });
 
     test('each command its icon', () => {
-        expect(chip('hint')).toContain('lucide-lightbulb');
+        expect(chip('guide')).toContain('lucide-compass');
         expect(chip('es:exceptions')).toContain('lucide-git-branch');
         expect(chip('es:start')).toContain('lucide-sparkles');
         expect(chip('model:start')).toContain('lucide-sparkles');

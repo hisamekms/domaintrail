@@ -87,15 +87,17 @@ import { referencesAsText } from './references';
 import { TriageRecordPanel } from './triage-record';
 import { InterviewChoices, InterviewPanel, interviewSlot } from './interview';
 import { CandidatesCard, commandSlot } from './candidates';
-import { HintButton, HintMark, startHint, SuggestedMark } from './hint';
+import { GuideButton, startGuide, SuggestedMark } from './guide';
+import { GuideCard } from './guide-card';
+import { isGuide } from './guide-view';
 import { CommandChip, CommandIcon } from './command-chip';
-import { commandComposerValue, nextAnswerOf, NextSteps } from './next-steps';
+import { commandComposerValue } from './next-steps';
 import {
     canStartCommand,
     commandOfOpening,
     commandType,
-    hintButton,
-    hintSuggestions,
+    guideButton,
+    guideSuggestions,
     runningInterview,
     selectedOf,
     slashItems,
@@ -385,7 +387,7 @@ export function SessionChat(props: {
         }),
         [replyDraft, state, composer, units],
     );
-    // a command a step of `/hint` suggests: in the composer, `/`'s list open on it, the composer focused
+    // a command a step of `/guide` suggests: in the composer, `/`'s list open on it, the composer focused
     const putCommand = useCallback(
         (id: string): void => {
             composer.setValue(commandComposerValue(id));
@@ -518,6 +520,7 @@ export function SessionChat(props: {
         nameOf,
         avatarOf,
         onNavigate: props.onNavigate,
+        openView: props.onOpenView,
         control,
         solo,
         triages,
@@ -997,7 +1000,12 @@ function streamRows(shown: Shown, tx: Tx): Row[] {
                     kind: item.kind,
                     // the AI's, under the message that started it
                     author: AI_PARTICIPANT,
-                    render: (continues) => <CandidatesCard command={item.command} continues={continues} />,
+                    render: (continues) =>
+                        isGuide(item.command) && item.command.state !== 'Listed' ? (
+                            <GuideCard command={item.command} continues={continues} />
+                        ) : (
+                            <CandidatesCard command={item.command} continues={continues} />
+                        ),
                 };
             case 'card':
                 return { key: item.key, kind: item.kind, author: undefined, render: () => <RunCard unit={item.unit} /> };
@@ -1269,21 +1277,14 @@ function AiStatus({ ai }: { ai: MessageAi }) {
  * the message it answers, unless it hangs right under it. Anyone replies to it (the reply is addressed to the AI) and reacts.
  */
 function AiMessageRow({ request: r, continues, hangs }: { request: RequestJson; continues: boolean; hangs: boolean }) {
-    const { tx, onNavigate, solo, session } = useChat();
-    // `/hint`'s answer: its steps with their command buttons, rather than its text; a light bulb by the AI's name
-    const next = nextAnswerOf(session.state, r.id);
-    const badge = next && <HintMark label={tx.chat.hint.answer} />;
+    const { tx, onNavigate, solo } = useChat();
     return (
         <div className="chat-row">
-            <Bubble avatar={<AiAvatar />} who={tx.chat.agent} badge={badge} at={r.sentAt} continues={continues} className="chat-bubble-ai">
+            <Bubble avatar={<AiAvatar />} who={tx.chat.agent} at={r.sentAt} continues={continues} className="chat-bubble-ai">
                 {r.replyTo?.kind === 'Message' && !hangs && <MessageReferenceLine request={r.replyTo.request} />}
-                {next ? (
-                    <NextSteps next={next} />
-                ) : (
-                    <Clamped tx={tx} revealKey={`message:${r.id}`} blocks>
-                        <MarkdownText text={r.body} onNavigate={onNavigate} />
-                    </Clamped>
-                )}
+                <Clamped tx={tx} revealKey={`message:${r.id}`} blocks>
+                    <MarkdownText text={r.body} onNavigate={onNavigate} />
+                </Clamped>
                 <InterviewChoices request={r.id} />
                 <ReactionRow target={{ kind: 'Message', request: r.id }} />
             </Bubble>
@@ -1787,12 +1788,12 @@ function Composer(props: {
     const slashKey = slashText === undefined ? undefined : 'slash';
     const slashOpen = slashText !== undefined && dismissed !== slashKey;
     const running = runningInterview(session.state);
-    // ヒントをもらう: with an answerer to take it, one at a time
+    // ガイド: with an answerer to take it, one at a time
     const presence = aiPresence(session.state.agent);
-    const hint = hintButton(session.state, !(presence.kind === 'missing' && presence.role !== 'run'));
-    const [hinting, setHinting] = useState(false);
-    // the commands the latest hint suggests: marked in `/`'s list
-    const suggested = useMemo(() => hintSuggestions(session.state), [session.state]);
+    const guide = guideButton(session.state, !(presence.kind === 'missing' && presence.role !== 'run'));
+    const [guiding, setGuiding] = useState(false);
+    // the commands the latest guide suggests: marked in `/`'s list
+    const suggested = useMemo(() => guideSuggestions(session.state), [session.state]);
     const scope = useMemo(
         (): SlashScope => ({ view: props.slash.view, selected: selectedOf(props.slash.selected, props.candidates) }),
         [props.slash.view, props.slash.selected, props.candidates],
@@ -1899,17 +1900,17 @@ function Composer(props: {
         }
     };
 
-    /** ヒントをもらう pressed: `/hint` started at once, the composer left as it is (nothing to type, no file changed). */
-    const askHint = async (): Promise<void> => {
-        setHinting(true);
+    /** ガイド pressed: `/guide` started at once, the composer left as it is (nothing to type, no file changed). */
+    const askGuide = async (): Promise<void> => {
+        setGuiding(true);
         try {
             const focus = scope.selected?.target.target;
-            await startHint(sessionApi, { body: tx.chat.slash.commands.hint, language: lang, focus, viewedAt });
+            await startGuide(sessionApi, { body: tx.chat.slash.commands.guide, language: lang, focus, viewedAt });
             setError(undefined);
         } catch (e) {
             setError(failure(e));
         } finally {
-            setHinting(false);
+            setGuiding(false);
         }
     };
 
@@ -1988,7 +1989,7 @@ function Composer(props: {
                                 }}
                             >
                                 {c.kind === 'command' && <CommandIcon id={c.id} />}
-                                {/* the hint's star in the name's cell: the option's grid keeps its columns */}
+                                {/* the guide's star in the name's cell: the option's grid keeps its columns */}
                                 <span className="chat-mention-name">
                                     {c.name}
                                     {c.kind === 'command' && suggested.has(c.id) && <SuggestedMark label={tx.chat.slash.suggested} />}
@@ -2080,7 +2081,7 @@ function Composer(props: {
                 />
             </div>
             <div className="chat-composer-bar">
-                {hint !== 'hidden' && <HintButton state={hint} busy={hinting} label={tx.chat.hint.button} onPress={() => void askHint()} />}
+                {guide !== 'hidden' && <GuideButton state={guide} busy={guiding} label={tx.chat.guide.button} onPress={() => void askGuide()} />}
                 <ComposerChips
                     chips={value.chips}
                     expanded={chipsExpanded}

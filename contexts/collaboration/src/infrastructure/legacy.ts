@@ -10,8 +10,9 @@
 // A change proposal written when it was three texts (`{ what, where, how }`) is read as a proposal with no targets
 // and no options whose how is the three joined (a line each, cut at the type's limit); likewise its `ChangeProposed`
 // event, an approval's edit (`edited` → `editedHow`) in the proposal and its `ProposalApproved`, and an approved
-// proposal frozen in a run's input (`content` → `instruction`). A `/` command written when `/hint` was `/es:next`
-// (`kind: 'EsNext'`), and its `SlashCommandStarted`, are read as a `Hint`.
+// proposal frozen in a run's input (`content` → `instruction`). A `/` command written when `/guide` was `/es:next`
+// (`kind: 'EsNext'`) or `/hint` (`kind: 'Hint'`), and its `SlashCommandStarted`, are read as a `Guide`; its answer's
+// steps written before they had places to go (`targets`), in the command and its `SlashCommandAnswered`, with none.
 
 type Raw = Record<string, unknown>;
 
@@ -111,18 +112,28 @@ const withMode = (v: unknown): unknown => (isObject(v) && !('mode' in v) ? { ...
 /** A session as stored. */
 export const upgradeSession = withMode;
 
-/** An object of the former kind `EsNext` (`/es:next`, now `/hint`) as a `Hint`; any other value as it is. */
-const withHintKind = (v: unknown): unknown => (isObject(v) && v.kind === 'EsNext' ? { ...v, kind: 'Hint' } : v);
+/** An object of a former kind `EsNext` (`/es:next`) or `Hint` (`/hint`), both now `/guide`, as a `Guide`; any other value as it is. */
+const withGuideKind = (v: unknown): unknown => (isObject(v) && (v.kind === 'EsNext' || v.kind === 'Hint') ? { ...v, kind: 'Guide' } : v);
+
+/** A guide's answer written before its steps had places to go: each step with none. */
+function withStepTargets(next: unknown): unknown {
+    if (!isObject(next) || !Array.isArray(next.steps)) return next;
+    return { ...next, steps: next.steps.map((st: unknown) => (isObject(st) && !('targets' in st) ? { ...st, targets: [] } : st)) };
+}
+
+/** A command, or its `SlashCommandAnswered`, with its answer's steps upgraded. */
+const withNext = (v: unknown): unknown => (isObject(v) && 'next' in v ? { ...v, next: withStepTargets(v.next) } : v);
 
 /** A `/` command as stored. */
-export const upgradeSlashCommand = withHintKind;
+export const upgradeSlashCommand = (v: unknown): unknown => withNext(withGuideKind(v));
 
 /**
  * An event of the outbox: a `RequestSent`, a `SessionStarted`, a `ChangeProposed`, a `ProposalApproved`, a
  * `SlashCommandStarted`.
  */
 export function upgradeEvent(v: unknown): unknown {
-    if (isObject(v) && v.type === 'SlashCommandStarted') return withHintKind(v);
+    if (isObject(v) && v.type === 'SlashCommandStarted') return withGuideKind(v);
+    if (isObject(v) && v.type === 'SlashCommandAnswered') return withNext(v);
     if (isObject(v) && v.type === 'SessionStarted') return withMode(v);
     if (isObject(v) && v.type === 'ChangeProposed') return { ...v, content: upgradeContent(v.content) };
     if (isObject(v) && v.type === 'ProposalApproved') return withEditedHow(v);

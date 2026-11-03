@@ -1,7 +1,6 @@
-// `/hint`'s answer in the chat (next-steps.tsx): the steps of the command answered with a message, rendered as a
-// numbered list with a command button where a step suggests one (for who may start it; disabled while one of its kind
-// runs), the button putting `/` and the command's ID in the composer; and a candidate card's chips: only the elements
-// that exist (one to be added is named by its label and how).
+// A suggested command's button (next-steps.tsx): disabled while one of its kind runs, putting `/` and the command's ID
+// in the composer; and a candidate card's chips: only the elements that exist (one to be added is named by its label
+// and how).
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { analyze } from '@domaintrail/analysis';
@@ -10,7 +9,7 @@ import { exampleSources } from '../test-helpers';
 import { CandidatesCard } from './candidates';
 import { ChatProvider, type ChatContextValue } from './chat-context';
 import { TargetNamingProvider } from './naming';
-import { commandButton, commandComposerValue, nextAnswerOf, NextSteps, type NextAnswerJson } from './next-steps';
+import { commandButton, commandComposerValue } from './next-steps';
 import { slashQuery } from './slash';
 import type { NamingContext } from './targets';
 
@@ -22,17 +21,6 @@ beforeAll(async () => {
     const a = await analyze(await exampleSources());
     naming = { mode: 'label', model: a.model ?? null, stormings: a.stormings.stormings.map((s) => ({ id: s.id, storming: s })) };
 });
-
-const next: NextAnswerJson = {
-    status: 'Big Picture: 通常フローまで',
-    steps: [
-        { text: '例外を洗い出す', reason: '発行に例外がない', command: 'EsExceptions' },
-        { text: '専門家に聞く', reason: '本籍地のホットスポットが未決' },
-        { text: 'ここまでをまとめる', reason: '決めたことが多い', command: 'EsRecap' },
-    ],
-} as NextAnswerJson;
-
-const answered = (more: object = {}) => ({ id: 'c1', kind: 'Hint', state: 'Answered', answer: 'a1', next, opening: 'o', startedAt: at, ...more }) as never;
 
 function chat(me: 'f' | 'bob', slashCommands: unknown[] = [], put: (id: string) => void = () => {}): ChatContextValue {
     return {
@@ -55,39 +43,15 @@ const render = (node: React.ReactNode, value: ChatContextValue): string =>
         </TargetNamingProvider>,
     );
 
-describe("/hint's answer", () => {
-    test('the steps of the command answered with a message; none for any other', () => {
-        expect(nextAnswerOf({ slashCommands: [answered()] }, 'a1')).toEqual(next);
-        expect(nextAnswerOf({ slashCommands: [answered()] }, 'x')).toBeUndefined();
-        expect(nextAnswerOf({ slashCommands: [answered({ kind: 'EsRecap', next: undefined })] }, 'a1')).toBeUndefined();
-    });
-
-    test('rendered: the status, the numbered steps with their reasons, a button with the command for the steps that have one', () => {
-        const html = render(<NextSteps next={next} />, chat('f'));
-        expect(html).toContain('<p class="next-status">');
-        expect(html).toContain('<ol class="next-steps">');
-        expect(html.match(/<li class="next-step">/g)).toHaveLength(3);
-        expect(html).toContain('発行に例外がない');
-        const buttons = [...html.matchAll(/<button[^>]*class="chat-small primary next-command"[^>]*>(.*?)<\/button>/g)].map((m) =>
-            m[1]?.replace(/<svg.*?<\/svg>/, ''),
-        );
-        expect(buttons).toEqual(['/es:exceptions', '/es:recap']);
-        expect(html).toContain('data-tooltip="入力欄に入れる"');
-    });
-
-    test('everyone has a button for every command; one of a kind running is disabled', () => {
-        const participant = render(<NextSteps next={next} />, chat('bob'));
-        expect(participant).toContain('/es:exceptions');
-        expect(participant).toContain('/es:recap');
+describe("a suggested command's button", () => {
+    test('everyone has it; one of a kind running is disabled', () => {
         expect(commandButton({}, 'es:exceptions')).toBe('enabled');
         expect(commandButton({}, 'model:start')).toBe('enabled');
         expect(commandButton({ slashCommands: [{ kind: 'EsExceptions', state: 'Listed' }] } as never, 'es:exceptions')).toBe('disabled');
         expect(commandButton({ interviews: [{ state: 'Asking' }] } as never, 'es:start')).toBe('disabled');
-        const running = render(<NextSteps next={next} />, chat('f', [{ kind: 'EsExceptions', state: 'Working' }]));
-        expect(running).toMatch(/<button[^>]*disabled=""[^>]*>.*?\/es:exceptions<\/button>/);
     });
 
-    test("a button puts `/` and the command's ID in the composer: `/`'s list opens on that command", () => {
+    test("it puts `/` and the command's ID in the composer: `/`'s list opens on that command", () => {
         expect(commandComposerValue('es:gaps')).toEqual({ text: '/es:gaps', chips: [], people: [] });
         expect(slashQuery(commandComposerValue('es:gaps').text)).toBe('es:gaps');
     });
