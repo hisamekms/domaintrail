@@ -1602,7 +1602,7 @@ This replaces where the guide's goal is read from (above) and where the intervie
   (a new rule, `M025`). The error names both places and says to merge them into one.
   - Today the first one in file-name order wins silently; adding or renaming a file swaps the description.
   - It is an error, not a warning, because the AI works until `dt check` exits 0, and a warning would not stop it.
-  - `dt guide` recommends keeping a split context's description and its context-wide types in `_context.dt`. This is
+  - `dt guide` recommends keeping a split context's description and its context-wide types in `context.dt`. This is
     advice, not a rule.
 - **A storming lives in one file** (decided as the intended form, not a gap).
   - The order in which things are written has meaning: the first timeline of a section is its trunk, and a stage with
