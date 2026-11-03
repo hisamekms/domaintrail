@@ -5,14 +5,16 @@ serves the page at <http://127.0.0.1:4321> (`--port`, `--host`, or `open.port` /
 and runs until Ctrl+C. [Getting started](getting-started.md#watch-it-in-the-live-view) shows what to look at first;
 this page describes every pane.
 
-The app bar runs across the top; under it the screen is laid out like an IDE: the left pane with its lists, the main
-canvas, and the inspector (right of the canvas, or below it); in a session, the chat is a pillar of its own at the
-right end. Panes are closed
-and opened with the icon buttons at their top (a closed inspector leaves a narrow rail with the buttons that open it)
-and resized by dragging; all of it is remembered per browser. A pane slides in and out as it opens and closes (its
-content does not reflow on the way), and the canvas keeps what is at its center in place whenever its size changes
-(a pane, the window); the inspector moving between right and below fades out and back in. With the OS's "reduce
-motion" setting everything is instant.
+The app bar runs across the top; under it the screen has three columns: the left column — the navigator (the lists)
+on top and the detail of the selected item (the inspector) under it — the canvas, and, in a session, the chat at the
+right end. Panes are closed and opened with the icon buttons at their top (a closed detail leaves a narrow rail at the
+bottom of the left column, with the button that opens it). The left column's width, the chat's width and the split
+between the navigator and the detail are dragged; each edge is also a separator the keyboard moves (focused, the arrow
+keys along it step it, Shift in larger steps, Home / End go to its limits) and a double click gives its default size
+back. The split has a grip, so that it is seen at rest; the navigator and the detail each keep a little room. All of it
+is remembered per browser. A pane slides in and out as it opens and closes (its content does not reflow on the way),
+and the canvas keeps what is at its center in place whenever its size changes (a pane, the window). With the OS's
+"reduce motion" setting everything is instant.
 
 ## App bar
 
@@ -20,28 +22,37 @@ It holds only what concerns the whole page. At the left, DomainTrail and the wor
 `domaintrail.jsonc`), then the world switch: **ドメインモデル** (the `.dt` model, seen through three views) and
 **イベントストーミング** (the `.dtes` stormings; it can be chosen with no storming yet, and then says how to start one).
 Switching worlds returns to the view, the storming and the conditions last used in each. At the right end: 問題 (the
-number of errors, else warnings, as a badge; a click opens the problems in the left pane, and closes it again), and in
+number of errors, else warnings, as a badge; a click opens the problems in the left column's navigator, and closes it again), and in
 a session the collab menu, the AI's state and, in Solo, ⋯ (see below). On a narrow window the world switch shows its
 icons only, each named in its tooltip.
 
-## Left pane
+## Left column
 
-A column of icons at its left edge, the activity bar, picks the list it shows — 木 and 差分, with the number of changes
-as a badge (問題 is opened from the app bar) — and clicking the list shown collapses the pane to the activity bar (it
-never disappears). At its foot:
+A column of icons at its left edge, the activity bar, picks the list the navigator shows — 木 and 差分, with the
+number of changes as a badge (問題 is opened from the app bar) — and clicking the list shown collapses the column to the
+activity bar (it never disappears); the detail goes with it (it is not shown alone: to give the detail the whole
+column, drag the split up). Opening something in the detail from elsewhere (a link in the chat, a double click in the
+tree, a problem) opens the column again. At its foot:
 
 - **The health**: a dot, green when all is well, larger and amber or red with a word when it is not (警告: connecting,
   no sources, an older diagram shown, warnings; エラー: the model does not validate, or the server is gone). A click
   shows the status, the number of files, the version, the time of the last update and the connection.
 - **The settings** (the gear): 名前の表示, the theme, the language and 文字の大きさ.
 
-Collapsed, the pane keeps the health and the gear at the bottom of the activity bar.
+Collapsed, the column keeps the health and the gear at the bottom of the activity bar.
 
 ### 木 (tree)
 
-The model tree — shared contexts first, then each context grouped by kind; aggregates expand to their states and
+The navigator follows the world. In the domain model, the model tree — shared contexts first, then each context grouped by kind; aggregates expand to their states and
 commands — and the `.dt` and `.dtes` files with error/warning counts. Click selects (a file too); double-click opens the item in
 the view or inspector tab that suits it.
+
+In event storming, the stormings › their stages › each stage's timelines (its main flow, then its exceptions, marked
+with a small arrow in the exceptions' red), and a storming's timelines that are in no stage right under it (all of
+them, for a storming without stages); a stage counts its timelines. A click shows that view — the storming's
+integrated canvas, the stage or the timeline — as the view bar's pickers do (the two always show the same choice) and
+selects it for the detail. The filter at the top keeps the rows whose name or ID holds the text, with their rows above
+(a matching storming or stage keeps all its rows); what is folded is remembered per browser.
 
 ### 問題 (problems)
 
@@ -200,11 +211,11 @@ an attachment (`Content-Disposition` with the UTF-8 `filename*`), never cached; 
 sources, told in the menu. The read-only Live View (`dt open --host <address>`) serves the same path to whoever it
 serves the view, but has no menu.
 
-## Inspector (right or below)
+## Detail (the inspector, under the navigator)
 
 The selected item — name, description, diagnostics, a back button naming the item it returns to (「〇〇 に戻る」), and
-buttons to show it in a view. Its menu (⋯, next to its close button) moves it below the canvas (下に移動) or back to its
-right (右に移動). Sub-tabs: 構造 / 状態遷移 / 振る舞い / 参照 / ソース. An event shows 永続化 / 非永続 next
+buttons to show it in a view; with nothing selected, a line says to pick one. Its close button folds it to the rail at
+the bottom of the left column. Sub-tabs (on a second row when the column is narrow): 構造 / 状態遷移 / 振る舞い / 参照 / ソース. An event shows 永続化 / 非永続 next
 to its kind, as it does in an aggregate's 発生させる Event list; persistent events have a database icon in the
 explorer.
 
@@ -246,7 +257,7 @@ neither baseline: their views are not marked.
 - Added / changed elements are highlighted; removed ones appear as ghosts (see
   [Comparing with a git revision](#comparing-with-a-git-revision)). On a syntax error the last diagram stays.
 - The language of the Live View (Japanese or English) follows the browser, or is forced in the settings (the gear at
-  the foot of the left pane). It covers the screen and the diagrams' own words (集約 / aggregate…); the model's names
+  the foot of the left column). It covers the screen and the diagrams' own words (集約 / aggregate…); the model's names
   and labels are shown as written, and diagnostics are in English.
 - The theme follows the OS (自動), or is forced with ライト / ダーク in the settings menu; both choices are remembered
   per browser.
@@ -254,7 +265,7 @@ neither baseline: their views are not marked.
   the dialogs, the tooltips and the canvas's controls and legend: 90%, 100%, 115% and 130% of the browser's default
   font size, so a larger default font size in the browser enlarges the page too (標準 at the usual 16px is the page's
   original size). The diagrams' own text is not affected; it follows the canvas's zoom. Until you drag them, the left
-  pane, the inspector and the chat open wider (and the narrow-window thresholds below grow) in proportion, so that
+  column and the chat open wider (and the narrow-window thresholds below grow) in proportion, so that
   larger text does not wrap everywhere; a width you dragged is kept.
 - Names follow the 名前の表示 setting: ラベル (the default; the string after a declaration's name, falling back to
   the name when there is none or it is blank), 名前 or 両方 (the label and the name; the name alone without a label).
@@ -275,9 +286,9 @@ else the next to run, else the one waiting longest for an answer — scrolled to
 already open; the chat keeps its scroll, so チャット brings the reader back where they were. While the chat is closed, a round 💬 button at the bottom right of the
 canvas opens it again, marked with a spinner while the agent runs, `?` while it waits for an answer, and the number of
 messages since the chat was last shown (else of the requests awaiting approval). The 💬 next to the selection (on the canvas,
-or next to the element's name in the inspector) and `C` add the selection as targets and open it too. Its width is remembered per browser; on a window narrower than about 1280px the left pane collapses to
-its activity bar while the chat is open, and below about 1024px the inspector moves below the canvas (your own choices
-come back when the window is wide again).
+or next to the element's name in the inspector) and `C` add the selection as targets and open it too. Its width is remembered per browser. The detail and the chat are seen side by side; only on a window narrower than
+about 1024px does the left column collapse to its activity bar while the chat is open (your own choice comes back
+when the window is wide again).
 
 The chat has two views:
 
