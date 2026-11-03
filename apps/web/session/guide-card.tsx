@@ -123,16 +123,19 @@ function goalName(map: GuideMapJson, t: ReturnType<typeof useChat>['tx']['chat']
 /**
  * The map: the steps on a wrapping line, the goal, the BC rows; a person marks the steps the files cannot tell (the
  * facilitator's mark is set at once, a participant's is a request). With `heading`, the journey's name (it opens the
- * journeys panel) and its 🏁 (it changes the goal).
+ * journeys panel) and its 🏁 (it changes the goal). Without `named`, no journey's name under the map (the journeys panel,
+ * whose title already says it).
  */
 export function GuideMapView({
     map: kept,
     live,
     heading = false,
+    named = true,
 }: {
     readonly map: GuideMapJson;
     readonly live: boolean;
     readonly heading?: boolean;
+    readonly named?: boolean;
 }): ReactElement {
     const { tx, session, journeys, putCommand } = useChat();
     const t = tx.chat.guide;
@@ -153,7 +156,7 @@ export function GuideMapView({
         map.world === 'Storming' ? (['es:start'] as const) : map.world === 'Model' ? (['model:start'] as const) : (['es:start', 'model:start'] as const);
     const item = [journeys.overview.current, ...journeys.overview.others].find((j) => j && j.summary.key === journey);
     const [goalOpen, setGoalOpen] = useState(false);
-    const title = item?.summary.name ?? map.journeyName ?? map.storming;
+    const title = named ? (item?.summary.name ?? map.journeyName ?? map.storming) : undefined;
     return (
         <div className="guide-map">
             {/* one row, a column per step (the labels wrap within their column): no connector dangles at a line's end */}
