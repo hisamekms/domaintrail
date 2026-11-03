@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { BADGE, badgeWidth, DIAG_RADIUS, edgeOutlinePath, nodeOutlinePath, roundRectPath } from './diagram-items';
+import { BADGE, badgeWidth, DIAG_RADIUS, edgeOutlinePath, nodeClassName, nodeOutlinePath, roundRectPath } from './diagram-items';
+import type { NodeProps } from './scene';
 
 /** The corners of a path's straight segments (`L x,y`). */
 const corners = (d: string): [number, number][] => [...d.matchAll(/L(-?[\d.]+),(-?[\d.]+)/g)].map((m) => [Number(m[1]), Number(m[2])]);
@@ -49,5 +50,28 @@ describe('the outline of a hovered or selected item', () => {
                 { x: 30, y: 40 },
             ]),
         ).toBe('M0,0 L0,40 L30,40');
+    });
+});
+
+describe('the classes of a node', () => {
+    const p: NodeProps = {
+        w: 10,
+        h: 10,
+        kind: 'esActor',
+        label: '',
+        stereotype: '',
+        scale: 1,
+        rows: [],
+        compartment: 0,
+        change: 'none',
+        badge: '',
+        diag: 'none',
+    };
+
+    test('ring the selected note, and dash the other notes of its element', () => {
+        expect(nodeClassName(p, true)).toContain(' dn-selected');
+        expect(nodeClassName(p, false, true)).toContain(' dn-same');
+        expect(nodeClassName(p, true, true)).not.toContain('dn-same');
+        expect(nodeClassName(p, false)).not.toMatch(/dn-(selected|same)/);
     });
 });
