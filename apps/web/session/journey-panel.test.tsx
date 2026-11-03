@@ -115,7 +115,10 @@ const text = (html: string): string => html.replace(/<[^>]*>/g, '');
 
 describe('the chip', () => {
     test('none: ゴールを決める; the current journey · the step here → the goal; reached; a missing subject dashed', () => {
-        expect(text(render(<JourneyChipButton />, chat('f', null)))).toBe('ゴールを決める');
+        const none = render(<JourneyChipButton />, chat('f', null));
+        expect(text(none)).toBe('ゴールを決める');
+        // its own modifier: the page's global `.empty` (the canvas's overlay) made it unclickable and out of place
+        expect(none).toContain('class="journey-chip journey-chip-empty"');
         const shop = render(<JourneyChipButton />, chat('f', FILE, 'shop'));
         // 📍 after the last step done (BC を切り出す, 集約 are): ES を見直す, not marked, is unconfirmed, not here
         expect(text(shop)).toBe('ショップ·コマンド→不変条件');
@@ -127,7 +130,7 @@ describe('the chip', () => {
         expect(text(render(<JourneyChipButton />, chat('f', FILE, 'es:Returns')))).toBe('返品·例外→ビッグピクチャー');
         // a journey whose context is gone
         const gone = { ...FILE, modeling: [{ ...FILE.modeling[1]!, from: { context: 'Nowhere' } }] };
-        expect(render(<JourneyChipButton />, chat('f', gone, 'billing'))).toContain('class="journey-chip missing"');
+        expect(render(<JourneyChipButton />, chat('f', gone, 'billing'))).toContain('class="journey-chip journey-chip-missing"');
         // the default: the most recently created active journey
         expect(text(render(<JourneyChipButton />, chat('f', FILE)))).toStartWith('Billing の深掘り');
     });

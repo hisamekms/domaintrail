@@ -85,7 +85,7 @@ export function JourneyChipButton(): ReactElement {
     return (
         <button
             type="button"
-            className={`journey-chip${current ? '' : ' empty'}${current?.missing ? ' missing' : ''}`}
+            className={`journey-chip${current ? '' : ' journey-chip-empty'}${current?.missing ? ' journey-chip-missing' : ''}`}
             aria-expanded={open}
             aria-haspopup="dialog"
             aria-label={label}

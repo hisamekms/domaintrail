@@ -2448,10 +2448,10 @@ select,
     font-weight: var(--fw-strong);
     color: var(--brand);
 }
-.journey-chip.empty .journey-chip-name {
+.journey-chip-empty .journey-chip-name {
     font-weight: normal;
 }
-.journey-chip.missing {
+.journey-chip-missing {
     border-style: dashed;
 }
 .journey-chip-where {
