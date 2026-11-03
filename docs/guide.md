@@ -98,7 +98,7 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 - `dt show <name>` — one element, command or state resolved, with who uses it; read it instead of the `.dt` files.
 - `dt lsp` — language server over stdio: the diagnostics of `dt check`, definitions, references, hover, rename.
 - `dt open` — the Live View in the browser, with a chat to the AI; it runs until Ctrl+C, so run it in the background.
-- `dt export sources` — the `.dt`, `.dtes` and config files as one ZIP, to hand to someone without the repository.
+- `dt export sources` / `svg` — the sources as one ZIP, for someone without the repository; a diagram as an SVG file.
 
 **When the contract and the implementation disagree**, follow `@see` on the generated type to the declaration and
 change the DSL, not the implementation: never emit an event or set a field only to satisfy the types.
@@ -2152,7 +2152,8 @@ Every note is a square of the same size: a long label is drawn smaller, and one 
 The layout is automatic, left to right; positions are kept in the workspace's cache directory, outside the workspace
 (`layout.json`; `dt guide config`), never in the `.dtes`.
 詰めて表示 in the canvas's controls closes up the gaps between the notes (every diagram, remembered per browser), and
-印刷 in the view bar's 書き出し menu prints the diagram alone, fitted to one landscape page (Ctrl+P too). In
+印刷 in the view bar's 書き出し menu prints the diagram alone, fitted to one landscape page (Ctrl+P too), and its PNG
+and SVG save it as a file (`dt export svg` draws the same SVG without a browser; `dt guide export`). In
 `dt open`, the イベントストーミング world shows one storming at a time, with the storming and the timeline picked as
 its view bar's subject (a breadcrumb at the left) and the level next to them; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in (and
 デザインレベルのみ for an event marked `level design`).
@@ -2696,7 +2697,7 @@ event on its own line; an element without clauses on one line (an empty `{}` is 
 blank line kept where the author wrote some, one between stormings; no spaces around the dots of a `ref`.
 
 <!-- topic: export -->
-## Sharing the sources
+## Sharing the sources and the diagrams
 
 `dt export sources` writes the model's sources as one ZIP archive, `<workspace>-sources.zip` in the current directory
 (`-o <file>` for another name, `-o -` for stdout), so that someone without git or the repository can open them and run
@@ -2710,6 +2711,39 @@ menu (「ソース一式をダウンロード」).
   symlinks (neither followed nor stored), and, in a git repository, any file git ignores (even with
   `"respectGitignore": false`).
 - Exits 1 when the workspace has no `.dt` or `.dtes` file.
+
+**Drawing a diagram as SVG.**
+
+`dt export svg` draws a diagram of the Live View as the SVG its 書き出し → SVG saves, without a browser: for the
+figures of a document or a site built in CI. `-o <file>` is required (`-o -` for stdout); an existing file is replaced.
+
+```sh
+dt export svg --storming ConvenienceStoreIssuance -o all.svg
+dt export svg --storming ConvenienceStoreIssuance --stage Issuance --level design --legend -o issuance.svg
+dt export svg --storming ConvenienceStoreIssuance --timeline PinForgottenBranch --theme dark --lang en -o pin.svg
+dt export svg --storming ConvenienceStoreIssuance --exceptions hide --heading -o main-flows.svg
+dt export svg --model --view map --all -o map.svg
+dt export svg --model --context Sales Billing --level aggregates -o - > sales.svg
+```
+
+- **An Event Storming:** `--storming <ID>`, the whole storming by default, or `--stage <ID>` (its main flows and its
+  exceptions) or `--timeline <ID>`; `--level big-picture` (default) or `design`; `--exceptions hide` leaves the
+  exceptions out of the whole storming or a stage (「例外を表示」 off).
+- **The domain model:** `--model`, the Structure View by default (`--level detail`, `overview` or `aggregates`;
+  `--context <names…>` focuses it on some bounded contexts, their dependencies as stubs) or `--view map`, the Context
+  Map (`--all` with the shared and external contexts).
+- **As the Live View's export asks:** `--heading` (the line above the diagram: workspace › world › view · conditions)
+  and `--legend` (under it). Besides: `--theme light` (default, on white as the Live View exports) or `dark` (on the
+  dark canvas), `--lang ja` (default) or `en` for the badges, the heading and the legend, and `--names label`
+  (default), `name` or `both` as the Live View's name display.
+- **The same bytes every time:** every view is laid out from scratch (never from the Live View's saved layouts), with
+  nothing marked as changed and no time or random ID in the file; the diagnostics' marks are drawn as on the screen.
+- **Colours and text:** the colours are the Live View's stylesheet's, and the text is laid out with a table of its
+  fonts' widths (Hiragino Sans and SF Mono as Chrome on macOS measures them), so labels wrap and fit their notes as the
+  Live View lays them out there. The SVG names the Live View's font stacks and embeds no font: another machine draws
+  it in its own (Noto Sans CJK on Linux), a little wider or narrower.
+- An unknown storming, stage, timeline or context is named with the choices (exit 1); options that do not go together
+  (`--stage` with `--timeline`, `--storming` with `--model`, …) exit 2.
 
 <!-- topic: output -->
 ## Output and exit codes
@@ -2752,8 +2786,8 @@ generation refused) is an `error` message in the document, e.g. `{ "error": "Roo
 | Exit code | Meaning |
 |---|---|
 | 0 | success (`check`: no errors; warnings are allowed) |
-| 1 | the model or a storming has errors, no `.dt` or `.dtes` file was found, generation was refused, `show` did not find the name (or it is ambiguous), `guide` got an unknown topic, or the root / a file could not be read |
-| 2 | invalid configuration (`domaintrail.jsonc` / `--config`, including a context name in `generate.ts.contexts` or a type in `generate.ts.tests.types` that the model does not have) or an unknown `generate` target |
+| 1 | the model or a storming has errors, no `.dt` or `.dtes` file was found, generation was refused, `show` did not find the name (or it is ambiguous), `guide` got an unknown topic, `export svg` has no such diagram, or the root / a file could not be read |
+| 2 | invalid configuration (`domaintrail.jsonc` / `--config`, including a context name in `generate.ts.contexts` or a type in `generate.ts.tests.types` that the model does not have), an unknown `generate` target, or `export svg` options that do not go together |
 
 <!-- topic: config -->
 ## Configuration
