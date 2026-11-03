@@ -3,6 +3,8 @@
 # (CONTRIBUTING.md, Tests);
 # examples/shop runs its own tests (contract and application) itself (test/contract-tests.test.ts)
 pathIgnorePatterns = ["examples/**", "dist/**", "tree-sitter-domaintrail/**", "editors/**"]
+# the approvals of security-relevant settings go to a directory of the test run's, never the user's (test/preload.ts)
+preload = ["./test/preload.ts"]
 
 [install]
 # install only versions published at least 3 days ago, matching the cooldown of Dependabot (.github/dependabot.yml)

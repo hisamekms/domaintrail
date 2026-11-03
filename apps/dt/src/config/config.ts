@@ -5,6 +5,13 @@
 // order (the first error wins), the old sections `session` and `view` refused with where their keys went, and the
 // resolved configuration. The workspace reads the file (`loadConfig`, given `CONFIG_FILE_FORMAT` by the composition)
 // and knows none of the sections. The CLI and the language server read the resolved configuration and its errors.
+//
+// The local override (`domaintrail.local.jsonc`, or `.local.json`; `<name>.local.<ext>` beside a `-c <name>.<ext>`):
+// the user's own settings, never committed, read after the project's file and merged into it (`mergeConfig`: objects
+// key by key, arrays and scalars replaced), any setting included. The project's file is validated on its own (its
+// errors name it), then the merge (its errors name the local file: the project's alone was valid). The two files sit
+// in one directory, so their relative paths resolve alike. Without a project file, a local file alone is the
+// configuration.
 import * as path from 'node:path';
 import {
     type GenerationConfigFile,
@@ -40,6 +47,21 @@ import {
 
 /** Config file names, in order of preference within one directory. */
 export const CONFIG_FILES = ['domaintrail.jsonc', 'domaintrail.json'] as const;
+
+/** The local override's names beside a config file of `CONFIG_FILES`, in order of preference. */
+export const LOCAL_CONFIG_FILES = ['domaintrail.local.jsonc', 'domaintrail.local.json'] as const;
+
+/**
+ * The local override's names beside the config file `file` (absolute): `LOCAL_CONFIG_FILES` beside one of
+ * `CONFIG_FILES`, else `<name>.local.<ext>` (`-c team.jsonc`: `team.local.jsonc`).
+ */
+export function localConfigFiles(file: string): string[] {
+    const dir = path.dirname(file);
+    const base = path.basename(file);
+    if ((CONFIG_FILES as readonly string[]).includes(base)) return LOCAL_CONFIG_FILES.map((name) => path.join(dir, name));
+    const ext = path.extname(base);
+    return [path.join(dir, `${base.slice(0, base.length - ext.length)}.local${ext}`)];
+}
 
 /** The keys of domaintrail.jsonc, by where they sit (`''`: the top level; `*`: any key), from every section's owner. */
 export const CONFIG_KEYS: Readonly<Record<string, readonly string[]>> = mergeKeys([
@@ -77,6 +99,8 @@ export interface ResolvedConfig extends ResolvedSourcesConfig, ResolvedGeneratio
     root: string;
     /** Absolute path of the config file, if one was found. */
     file?: string;
+    /** Absolute path of its local override (or of the local file alone), if one was found: merged into it. */
+    localFile?: string;
     open: { port: number; host: string };
     collab: ResolvedCollabConfig;
     agent: ResolvedAgentSection;
@@ -100,9 +124,85 @@ export function resolveConfig(text: string, file: string): ResolvedConfig {
         throw new ConfigError(`${file}: ${msg}`);
     };
     const config = validate(parseJsonc(text, file), fail);
+    refuseSharedReadPaths(config, file, fail);
     // the only check that reads the disk (the agent's adapter: symbolic links), after the pure validation
     checkAgent(config.agent, path.dirname(file), fail);
     return { root: path.dirname(file), file, ...resolved(config, path.dirname(file)) };
+}
+
+/**
+ * Resolves the config file `project` (absent: the local file alone) merged with its local override `local`
+ * (`mergeConfig`). An error of the project's file names it; an error of the merge names the local file.
+ */
+export function resolveConfigWithLocal(
+    project: { readonly text: string; readonly file: string } | undefined,
+    local: { readonly text: string; readonly file: string },
+): ResolvedConfig {
+    const failIn =
+        (file: string) =>
+        (msg: string): never => {
+            throw new ConfigError(`${file}: ${msg}`);
+        };
+    let base: unknown = {};
+    if (project) {
+        base = parseJsonc(project.text, project.file);
+        const config = validate(base, failIn(project.file));
+        refuseSharedReadPaths(config, project.file, failIn(project.file));
+        checkAgent(config.agent, path.dirname(project.file), failIn(project.file));
+    }
+    const override = parseJsonc(local.text, local.file);
+    if (!isObject(override)) return failIn(local.file)('expected an object');
+    const dir = path.dirname(local.file);
+    const config = validate(mergeConfig(base, override), failIn(local.file));
+    checkAgent(config.agent, dir, failIn(local.file));
+    return { root: dir, ...(project && { file: project.file }), localFile: local.file, ...resolved(config, dir) };
+}
+
+/**
+ * Refuses paths to read outside the workspace in a project config file (`file`): they are honoured only from the
+ * local override, which git ignores (`checkLocalReadPaths`), so that what the AI may read on a machine is that
+ * person's choice, never a commit's.
+ */
+function refuseSharedReadPaths(config: DomainTrailConfigFile, file: string, fail: (msg: string) => never): void {
+    const parts: [string, readonly string[] | undefined][] = [
+        ['agent.read.paths', config.agent?.read?.paths],
+        ['agent.answer.read.paths', config.agent?.answer?.read?.paths],
+        ['agent.run.read.paths', config.agent?.run?.read?.paths],
+    ];
+    const local = path.basename(localConfigFiles(file)[0]);
+    for (const [at, paths] of parts) if (paths?.length) fail(`'${at}' is read only from your local config file: move it to ${local} (git-ignored)`);
+}
+
+/** Whether the configuration reads anything outside the workspace (`agent.read*`). */
+export const readsOutside = (config: ResolvedConfig): boolean => config.agent.read.answer.length > 0 || config.agent.read.run.length > 0;
+
+/**
+ * Refuses the paths to read outside the workspace of a local override that git would commit (`state`: tracked, or
+ * not ignored): they are honoured only from one git ignores, or outside any repository. The CLI asks git and calls it
+ * after loading.
+ */
+export function checkLocalReadPaths(config: ResolvedConfig, state: 'tracked' | 'unignored' | 'ignored' | undefined): void {
+    if (!config.localFile || !readsOutside(config) || state === 'ignored' || state === undefined) return;
+    const name = path.basename(config.localFile);
+    throw new ConfigError(
+        `${config.localFile}: agent.read.paths (and agent.answer/run.read.paths) are read only from a local config file git ignores, and git ${state === 'tracked' ? 'tracks' : 'does not ignore'} this one: ${state === 'tracked' ? `\`git rm --cached ${name}\`, then ` : ''}add ${name} to .gitignore`,
+    );
+}
+
+/**
+ * `override` merged into `base`: two objects key by key (recursively), anything else (an array, a scalar, `null`) is
+ * replaced by the override's.
+ */
+export function mergeConfig(base: unknown, override: unknown): unknown {
+    if (!isObject(base) || !isObject(override)) return override;
+    const out: Record<string, unknown> = {};
+    // own properties only, `__proto__` included as a key (JSON.parse makes it one): never a prototype
+    const put = (key: string, value: unknown): void => {
+        Object.defineProperty(out, key, { value, enumerable: true, writable: true, configurable: true });
+    };
+    for (const [key, value] of Object.entries(base)) put(key, value);
+    for (const [key, value] of Object.entries(override)) put(key, Object.hasOwn(base, key) ? mergeConfig(base[key], value) : value);
+    return out;
 }
 
 /** Every section with its defaults, in the order the resolved configuration always had. */
@@ -122,6 +222,8 @@ function resolved(config: DomainTrailConfigFile, dir?: string): Omit<ResolvedCon
 export const CONFIG_FILE_FORMAT = {
     files: CONFIG_FILES,
     resolve: resolveConfig,
+    localFiles: localConfigFiles,
+    resolveWithLocal: resolveConfigWithLocal,
     defaults: defaultConfig,
     notFound: (configPath: string): Error => new ConfigError(`Config file not found: ${configPath}`),
 };
@@ -132,13 +234,13 @@ export const CONFIG_FILE_FORMAT = {
  */
 export function checkTsContexts(config: ResolvedConfig, contexts: readonly string[]): void {
     const wrong = unknownTsContexts(config, contexts);
-    if (wrong !== undefined) throw new ConfigError(`${config.file ?? 'config'}: ${wrong}`);
+    if (wrong !== undefined) throw new ConfigError(`${config.file ?? config.localFile ?? 'config'}: ${wrong}`);
 }
 
 /** Throws a ConfigError when `generate.ts.tests.types` names a type the model does not have (known after checking). */
 export function checkTestsTypes(config: ResolvedConfig, types: readonly string[]): void {
     const wrong = unknownTestsTypes(config, types);
-    if (wrong !== undefined) throw new ConfigError(`${config.file ?? 'config'}: ${wrong}`);
+    if (wrong !== undefined) throw new ConfigError(`${config.file ?? config.localFile ?? 'config'}: ${wrong}`);
 }
 
 /** JSON with comments and trailing commas (JSONC). */

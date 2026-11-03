@@ -135,7 +135,8 @@ async function startServer(
     options: SeedOptions,
     classifier: MockClassifier | undefined,
 ): Promise<{ child: ChildProcess; url: string; link: string; exited: Promise<number | null> }> {
-    const child = spawn(options.dt.command, [...options.dt.args, '-r', options.dir, 'collab', '--no-agent', '--port', String(options.port)], {
+    // --yes: the seed wrote this workspace's config itself (its mock classifier is a security-relevant setting)
+    const child = spawn(options.dt.command, [...options.dt.args, '-r', options.dir, 'collab', '--no-agent', '--yes', '--port', String(options.port)], {
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...process.env, ...(classifier && { DOMAINTRAIL_CLASSIFIER_URL: classifier.url, [SEED_TOKEN_ENV]: 'seed' }) },
     });

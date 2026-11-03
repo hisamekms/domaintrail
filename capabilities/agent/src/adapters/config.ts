@@ -10,6 +10,11 @@
 // Collaboration's `maxPreviousRunDiff` too) and reports the first error (`fail` throws). That `dt` lies outside the
 // workspace reads the disk (symbolic links) and is checked after the pure validation (`checkDtOutsideWorkspace`,
 // ./dt-shim.ts).
+//
+// What the AI may read outside the workspace, read-only (`agent.read.paths` for both roles, `agent.answer.read.paths`
+// and `agent.run.read.paths` added for one): directories or files, absolute, `~/…` or relative to the config file; a
+// path inside the workspace (or holding it) is an error (`checkReadPaths`, ./read-paths.ts, after the pure validation).
+import { homedir } from 'node:os';
 import * as path from 'node:path';
 
 /**
@@ -49,13 +54,35 @@ export const ANSWER_CONFIG_KEYS = ['model', 'effort', 'warm', 'restartAfter', 'i
 /** The keys of `agent.triage`. */
 export const TRIAGE_CONFIG_KEYS = ['model', 'warm'] as const;
 
+/** The keys of `agent.read`, `agent.run.read` and `agent.answer.read`. */
+export const READ_CONFIG_KEYS = ['paths'] as const;
+
 /** The agent's keys, by where they sit in the file. */
 export const AGENT_CONFIG_KEYS: Readonly<Record<string, readonly string[]>> = {
-    agent: ['run', 'answer', 'triage'],
-    'agent.run': ['allowedTools', 'dt', ...RUN_CONFIG_KEYS],
-    'agent.answer': [...ANSWER_CONFIG_KEYS],
+    agent: ['run', 'answer', 'triage', 'read'],
+    'agent.read': [...READ_CONFIG_KEYS],
+    'agent.run': ['allowedTools', 'dt', 'read', ...RUN_CONFIG_KEYS],
+    'agent.run.read': [...READ_CONFIG_KEYS],
+    'agent.answer': [...ANSWER_CONFIG_KEYS, 'read'],
+    'agent.answer.read': [...READ_CONFIG_KEYS],
     'agent.triage': [...TRIAGE_CONFIG_KEYS],
 };
+
+/** What a role may read outside the workspace (`agent.read`, `agent.<role>.read`), as the file gives it. */
+export interface ReadConfigFile {
+    /**
+     * Directories or files outside the workspace the AI may read (never write): absolute, `~/…`, or relative to the
+     * config file. In a git work tree, the files git does not ignore there; elsewhere every file; never `.git` nor
+     * `.domaintrail`.
+     */
+    paths?: string[];
+}
+
+/** What each role may read outside the workspace: absolute paths, as configured (not resolved through links). */
+export interface ReadPaths {
+    answer: string[];
+    run: string[];
+}
 
 /** How Claude Code carries out runs (`agent.run`), as the file gives it. */
 export interface RunConfigFile {
@@ -76,6 +103,8 @@ export interface RunConfigFile {
     model?: string;
     /** `claude --effort`; unset: the effort of the user's Claude Code settings. */
     effort?: AgentEffort;
+    /** What the runner may read outside the workspace besides `agent.read` (never write). */
+    read?: ReadConfigFile;
 }
 
 /** How Claude Code carries out runs, resolved (the process's settings). */
@@ -109,6 +138,8 @@ export interface AnswerConfigFile {
     idleTimeout?: number;
     /** The most seconds an answer may take. Default: `DEFAULT_ANSWER_TIMEOUT`. */
     timeout?: number;
+    /** What the answerer may read outside the workspace besides `agent.read`. */
+    read?: ReadConfigFile;
 }
 
 /** `agent.answer` resolved. */
@@ -145,6 +176,8 @@ export interface AgentConfigFile {
     answer?: AnswerConfigFile;
     /** The triage's stage 3. */
     triage?: TriageConfigFile;
+    /** What both roles may read outside the workspace. */
+    read?: ReadConfigFile;
 }
 
 /** The agent's part resolved. */
@@ -152,6 +185,8 @@ export interface ResolvedAgentConfig {
     run: ResolvedRunConfig;
     answer: AnswerConfig;
     triage: TriageConfig;
+    /** What each role may read outside the workspace (`agent.read.paths` and its own). */
+    read: ReadPaths;
 }
 
 const isRuntime = (word: string): boolean =>
@@ -173,6 +208,14 @@ export function validateAgentConfig(agent: Record<string, unknown>, fail: (msg: 
     if (agent.run !== undefined) validateRunConfig(agent.run, fail);
     if (agent.answer !== undefined) validateAnswerConfig(agent.answer, 'agent.answer', fail);
     if (agent.triage !== undefined) validateTriageConfig(agent.triage, 'agent.triage', fail);
+    if (agent.read !== undefined) validateReadConfig(agent.read, 'agent.read', fail);
+}
+
+/** Checks a `read` part (`at`: where it sits), its unknown keys excepted: `paths`, an array of paths. */
+export function validateReadConfig(read: unknown, at: string, fail: (msg: string) => never): void {
+    if (!isRecord(read)) return fail(`'${at}' must be an object`);
+    if (read.paths !== undefined && !(isStringList(read.paths) && read.paths.every((p) => !/[\0\r\n]/.test(p))))
+        fail(`'${at}.paths' must be an array of paths (directories or files outside the workspace: absolute, ~/…, or relative to the config file)`);
 }
 
 const isModel = (v: unknown): boolean => typeof v === 'string' && /^[A-Za-z0-9][\w.:@[\]/-]*$/.test(v);
@@ -201,6 +244,7 @@ function validateRunConfig(run: unknown, fail: (msg: string) => never): void {
         if (wrong) fail(`'${at}.dt' ${wrong}`);
     }
     validateProcessConfig(at, run, 'runs', fail);
+    if (run.read !== undefined) validateReadConfig(run.read, `${at}.read`, fail);
 }
 
 /** Checks `agent.answer` (`at`: where it sits, for the messages), its unknown keys excepted. */
@@ -209,6 +253,7 @@ export function validateAnswerConfig(answer: unknown, at: string, fail: (msg: st
     validateProcessConfig(at, answer, 'answers', fail);
     if (answer.timeout !== undefined && !(typeof answer.timeout === 'number' && Number.isFinite(answer.timeout) && answer.timeout > 0))
         fail(`'${at}.timeout' must be a positive number of seconds`);
+    if (answer.read !== undefined) validateReadConfig(answer.read, `${at}.read`, fail);
 }
 
 /** Checks `agent.triage` (`at`: where it sits, for the messages), its unknown keys excepted. */
@@ -229,7 +274,25 @@ export function resolveAgentConfig(agent: AgentConfigFile = {}, dir?: string): R
         },
         answer: resolveAnswerConfig(agent.answer),
         triage: resolveTriageConfig(agent.triage),
+        read: resolveReadPaths(agent, dir),
     };
+}
+
+/**
+ * A path of a `read` part as written: `~` and `~/…` from the home directory, an absolute path as it is, else relative
+ * to `dir` (the config file's directory; none: the working directory).
+ */
+export function resolveReadPath(p: string, dir?: string, home: string = homedir()): string {
+    if (p === '~') return home;
+    if (p.startsWith('~/') || p.startsWith(`~${path.sep}`)) return path.join(home, p.slice(2));
+    return path.resolve(dir ?? '.', p);
+}
+
+/** What each role reads outside the workspace: `agent.read.paths`, then the role's own, resolved, each once. */
+export function resolveReadPaths(agent: AgentConfigFile = {}, dir?: string): ReadPaths {
+    const common = agent.read?.paths ?? [];
+    const of = (own: readonly string[] = []): string[] => [...new Set([...common, ...own].map((p) => resolveReadPath(p, dir)))];
+    return { answer: of(agent.answer?.read?.paths), run: of(agent.run?.read?.paths) };
 }
 
 /**

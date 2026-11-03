@@ -8,6 +8,8 @@ import {
     type AgentConfigFile,
     type AnswerConfig,
     checkDtOutsideWorkspace,
+    checkReadPaths,
+    type ReadPaths,
     type ResolvedRunConfig,
     resolveAgentConfig,
     type TriageConfig,
@@ -71,6 +73,8 @@ export interface ResolvedAgentSection {
     run: ResolvedRunConfig & { maxPreviousRunDiff: number };
     answer: AnswerConfig;
     triage: TriageConfig;
+    /** What each role reads outside the workspace (absolute paths): `agent.read.paths` and the role's own. */
+    read: ReadPaths;
 }
 
 /** The order the keys of `collab.access` are checked in, Collaboration's and the app's together. */
@@ -119,14 +123,20 @@ export function validateAgent(agent: unknown, keys: Readonly<Record<string, read
     for (const role of ['run', 'answer', 'triage']) {
         const part = agent[role];
         if (isObject(part)) checkKeys(part, `agent.${role}`, keys, fail);
+        if (isObject(part) && isObject(part.read)) checkKeys(part.read, `agent.${role}.read`, keys, fail);
     }
+    if (isObject(agent.read)) checkKeys(agent.read, 'agent.read', keys, fail);
     validateAgentConfig(agent, fail);
     if (isObject(agent.run)) validatePreviousRunsConfig(agent.run, fail);
 }
 
-/** The check of `agent` that reads the disk, after the pure validation: the runner's `dt` lies outside `dir`. */
+/**
+ * The checks of `agent` that read the disk, after the pure validation: the runner's `dt` lies outside `dir`, and what
+ * the AI reads outside the workspace does (neither inside it nor holding it).
+ */
 export function checkAgent(agent: AgentSectionFile | undefined, dir: string, fail: (msg: string) => never): void {
     checkDtOutsideWorkspace(agent?.run?.dt, dir, fail);
+    checkReadPaths(agent, dir, fail);
 }
 
 /** `collab` with its defaults (validated). */
@@ -161,5 +171,6 @@ export function resolveAgent(agent: AgentSectionFile = {}, dir?: string): Resolv
         run: { ...roles.run, maxPreviousRunDiff: resolveCollaborationConfig({ agent }).maxPreviousRunDiff },
         answer: roles.answer,
         triage: roles.triage,
+        read: roles.read,
     };
 }

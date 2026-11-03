@@ -138,6 +138,10 @@ every `.dt` file below the current directory is part of the model.
 }
 ```
 
+Settings that are yours only (a port, the model the AI runs with, the folders outside the project the AI may read) go
+into `domaintrail.local.jsonc` beside it, which you keep out of git: it is merged into `domaintrail.jsonc` key by key
+(`dt guide config`). When the settings that widen what the AI may do change, `dt open` asks you to approve them once.
+
 The recommended layout is one directory per bounded context and one file per aggregate:
 
 ```text

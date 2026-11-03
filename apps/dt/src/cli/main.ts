@@ -1,4 +1,5 @@
 import { readFile, stat, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { contextNames, formatDomain } from '@domaintrail/modeling';
@@ -19,6 +20,7 @@ import {
     type StartedSession,
 } from './ports.js';
 import { lookup, showJson, showText } from './show.js';
+import { approveSettings, NotApproved } from './trust.js';
 import guide from '../../../../docs/guide.md' with { type: 'text' };
 
 export interface CliIO {
@@ -98,7 +100,10 @@ export async function runCli(argv: readonly string[], io: CliIO, deps: CliDeps):
         .name('dt')
         .description('Domain Modeling DSL: check, generate TypeScript, and view models live.')
         .option('-r, --root <dir>', 'where to look for domaintrail.jsonc / domaintrail.json (and the workspace root without one)', '.')
-        .option('-c, --config <file>', 'config file (default: domaintrail.jsonc / domaintrail.json in the root or a parent)')
+        .option(
+            '-c, --config <file>',
+            'config file (default: domaintrail.jsonc / domaintrail.json in the root or a parent; <name>.local.<ext> beside it is merged in)',
+        )
         .exitOverride()
         .configureOutput({ writeOut: (s) => io.out(s.trimEnd()), writeErr: (s) => io.err(s.trimEnd()) })
         .addHelpText(
@@ -319,7 +324,8 @@ Examples:
             .option('--host <host>', hostHelp)
             .option('--base <ref>', 'compare the model with this git revision (e.g. main, HEAD~3) instead of the previous save')
             .addOption(new Option('--agent <agent>', 'the agent to start in this process (an error if it cannot start)').choices(['claude']))
-            .option('--no-agent', 'do not start the agent in this process (start one later with `dt agent`)');
+            .option('--no-agent', 'do not start the agent in this process (start one later with `dt agent`)')
+            .option('--yes', 'approve changed security-relevant settings without asking (for scripts; they are printed)');
 
     const open = serveOptions(
         program
@@ -349,6 +355,7 @@ Examples:
         'host to bind (default: open.host, else 127.0.0.1; a non-loopback address serves the Live View read-only)',
     ).action(async (opts: ServeOptions) => {
         const cfg = await config();
+        await approve(cfg, opts.yes);
         const { UnknownRevisionError } = await import('@domaintrail/visualization');
         const port = opts.port ?? cfg.open.port;
         const host = opts.host ?? cfg.open.host;
@@ -363,7 +370,7 @@ Examples:
             const server = await deps
                 .startViewServer({ root: cfg.root, sources: cfg.sources, respectGitignore: cfg.respectGitignore, port, host, base: opts.base, log: io.out })
                 .catch(base);
-            if (cfg.file) io.out(`Config: ${path.relative(process.cwd(), cfg.file) || cfg.file}`);
+            await printConfig(cfg, []);
             io.out(`Live View (read-only: ${host} is not a loopback address; the chat and the agent are on loopback only): ${server.url}`);
             await new Promise<void>(() => {}); // run until interrupted
             return;
@@ -382,7 +389,7 @@ Examples:
                 if (e instanceof SessionError) throw new CliError(e.message);
                 return base(e);
             });
-        if (cfg.file) io.out(`Config: ${path.relative(process.cwd(), cfg.file) || cfg.file}`);
+        await printConfig(cfg);
         // the printed link is the only step: opened once, it signs this browser in (a cookie) as the one person
         io.out(`Live View: ${server.facilitatorLink ?? server.url}`);
         io.out(`  (a link for you only: opened once within 60 minutes, it signs that browser in; then ${server.url}; \`dt open link\` prints another)`);
@@ -417,6 +424,7 @@ Examples:
         'host to bind (default: collab.host, else 127.0.0.1; the dev identity mode allows loopback only)',
     ).action(async (opts: ServeOptions) => {
         const cfg = await config();
+        await approve(cfg, opts.yes);
         const { UnknownRevisionError } = await import('@domaintrail/visualization');
         const settings = sessionSettings(cfg, cfg.collab, opts);
         const server = await deps
@@ -436,7 +444,7 @@ Examples:
                     throw new CliError(`Port ${settings.port} on ${settings.host} (or the agent port) is already in use; pick another with --port.`);
                 throw e;
             });
-        if (cfg.file) io.out(`Config: ${path.relative(process.cwd(), cfg.file) || cfg.file}`);
+        await printConfig(cfg);
         const opened = server.opened === 'collaborated' ? 'continued from dt open' : server.opened;
         io.out(`Session: ${server.session} (${opened}, identity ${settings.identity})`);
         io.out(`Live View: ${server.url}`);
@@ -528,6 +536,7 @@ Examples:
         .option('--once', 'handle one run (waiting for one if none is queued), then exit')
         .requiredOption('--code <code>', 'the one-time pairing code of `dt collab agent-link` (or `dt open agent-link`)')
         .option('--url <url>', "the agent API's address (default: the running server's, from .domaintrail/session/server.json)")
+        .option('--yes', 'approve changed security-relevant settings without asking (for scripts; they are printed)')
         .addHelpText(
             'after',
             `
@@ -547,8 +556,10 @@ Examples:
   dt agent --code <code> --once
   dt -r examples/shop agent --code <code>`,
         )
-        .action(async (opts: { agent: 'claude'; role?: AgentRole; once?: boolean; code: string; url?: string }) => {
+        .action(async (opts: { agent: 'claude'; role?: AgentRole; once?: boolean; code: string; url?: string; yes?: boolean }) => {
             const cfg = await config();
+            await approve(cfg, opts.yes);
+            await printConfig(cfg, opts.role ? [opts.role] : AGENT_ROLES);
             const connect = { code: opts.code, ...(opts.url !== undefined && { url: opts.url }) };
             const agent = await deps
                 .startAgent({ ...agentOptions(cfg, opts.agent), connect, roles: opts.role ? [opts.role] : AGENT_ROLES, once: opts.once ?? false, log: io.out })
@@ -690,6 +701,7 @@ Examples:
             run: cfg.agent.run,
             answer: cfg.agent.answer,
             triage: cfg.agent.triage,
+            read: cfg.agent.read,
             practice: practiceOf(parseGuide(guide)),
         };
     };
@@ -740,6 +752,41 @@ Examples:
         io.out('Session closed.');
     };
 
+    /**
+     * The startup lines of a server or an agent: the config files (`Config: domaintrail.jsonc + domaintrail.local.jsonc`),
+     * a warning when git would commit the local override (with the line for `.gitignore`), and, when the AI reads
+     * anything outside the workspace, what each role of `roles` reads there (one line each).
+     */
+    const printConfig = async (cfg: ResolvedConfig, roles: readonly AgentRole[] = AGENT_ROLES): Promise<void> => {
+        const shown = (file: string): string => path.relative(process.cwd(), file) || file;
+        const files = [cfg.file, cfg.localFile].filter((f): f is string => f !== undefined);
+        if (files.length) io.out(`Config: ${files.map(shown).join(' + ')}`);
+        if (cfg.localFile) {
+            const state = await deps.localConfigState?.(cfg.localFile).catch(() => undefined);
+            const name = path.basename(cfg.localFile);
+            const ignoreFile = shown(path.join(path.dirname(cfg.localFile), '.gitignore'));
+            if (state === 'tracked')
+                io.err(
+                    `Warning: ${shown(cfg.localFile)} is tracked by git, and it is your own: \`git rm --cached ${name}\`, then add this line to ${ignoreFile}: ${name}`,
+                );
+            else if (state === 'unignored')
+                io.err(`Warning: ${shown(cfg.localFile)} is not ignored by git, and it is your own: add this line to ${ignoreFile}: ${name}`);
+        }
+        for (const line of readScopeLines(cfg, roles)) io.out(line);
+    };
+
+    /** Starts only with approved security-relevant settings (`approveSettings`); refused: a one-line error. */
+    const approve = async (cfg: ResolvedConfig, yes: boolean | undefined): Promise<void> => {
+        await approveSettings(
+            cfg,
+            { ...(deps.trust && { trust: deps.trust }), ...(deps.confirm && { confirm: (q: string) => deps.confirm!(q) }), out: io.out },
+            yes ?? false,
+        ).catch((e: unknown) => {
+            if (e instanceof NotApproved) throw new CliError(e.message);
+            throw e;
+        });
+    };
+
     const config = async () => {
         const start = path.resolve(program.opts().root);
         const info = await stat(start).catch(() => undefined);
@@ -772,6 +819,8 @@ interface ServeOptions {
     base?: string;
     /** `false` with `--no-agent`, `claude` given explicitly, else undefined (started when usable). */
     agent?: 'claude' | false;
+    /** `--yes`: approve changed security-relevant settings without asking. */
+    yes?: boolean;
 }
 
 /**
@@ -803,6 +852,23 @@ function sessionSettings(cfg: ResolvedConfig, server: { port: number; host: stri
         classifier: cfg.classifier,
         templates: cfg.templates,
     };
+}
+
+/**
+ * What each of `roles` reads outside the workspace (`agent.read.paths` and its own), one line each, when any role
+ * reads anything there: none, nothing to say.
+ */
+export function readScopeLines(cfg: ResolvedConfig, roles: readonly AgentRole[], home: string = homedir()): string[] {
+    const { read } = cfg.agent;
+    if (!roles.some((r) => read[r].length)) return [];
+    const shown = (p: string): string => {
+        const rel = path.relative(home, p);
+        return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? `~/${toPosix(rel)}` : p;
+    };
+    return roles.map((role) => {
+        const who = role === 'answer' ? 'AI answers read' : 'AI runs read (never write)';
+        return read[role].length ? `${who} outside the workspace: ${read[role].map(shown).join(', ')}` : `${who} the workspace only`;
+    });
 }
 
 /** The roles an agent took on, as the CLI prints them. */

@@ -39,13 +39,16 @@ import {
     userClaudeDefaults,
     createWorkspaceView,
     ignoredEntries,
+    readTargets,
     type WorkspaceView,
 } from '@domaintrail/agent';
 import { type AgentCredential, readServerAddress } from '@domaintrail/collaboration';
 import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/analysis';
 import { SessionError } from '../cli/ports.js';
 import { findDomainFiles, GitIgnore, gitIgnoredEntries, gitNestedRepositories, gitReadableFiles } from '@domaintrail/workspace';
+import { configFileRules, configGuardScan } from './config-guard.js';
 import { processAlive } from './process.js';
+import { answererExtraViews, runnerReadScope } from './read-scope.js';
 
 export type { SubscriberEnd };
 
@@ -82,6 +85,8 @@ export interface SubscriberOptions {
     triage?: TriageConfig;
     /** The ways of working the prompts give (the guide's); none without it. */
     practice?: Practice;
+    /** What each role may read outside the workspace, read-only (`agent.read.paths` and its own; absolute paths). */
+    read?: { readonly answer: readonly string[]; readonly run: readonly string[] };
     /** The answerer's program instead of `agentCommand`: for the tests only. */
     answerCommand?: AgentCommand;
     log?: (line: string) => void;
@@ -162,11 +167,20 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     const user = userClaudeDefaults();
     const answerConfig = options.answer ?? resolveAnswerConfig();
     const triageConfig = options.triage ?? resolveTriageConfig();
-    // the answerer reads a view of the workspace: the files git does not ignore, without .domaintrail/ and .git/
+    // what each role reads outside the workspace, by its real path now: one missing is skipped, and said
+    const readOf = (role: AgentRole): ReturnType<typeof readTargets>['targets'] => {
+        const { targets, skipped } = readTargets(options.read?.[role] ?? [], root);
+        for (const s of skipped) log(`${role === 'answer' ? 'answerer' : 'runner'}: not reading ${s}`);
+        return targets;
+    };
+    // the answerer reads a view of the workspace: the files git does not ignore, without .domaintrail/ and .git/; and
+    // views of what it reads outside it
     const view = roles.has('answer') ? answererView(root) : undefined;
     const viewDir = await view?.refresh();
+    const extraViews = roles.has('answer') ? await answererExtraViews(readOf('answer')) : undefined;
     const prepare = async (): Promise<void> => {
         await view?.refresh();
+        await extraViews?.refresh();
     };
     // the answerer: read-only, no lease, beside the runs (it never waits for them, nor they for it)
     const answerer =
@@ -177,6 +191,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
                       agent: createClaudeAnswerer({
                           root: viewDir,
                           prepare,
+                          ...(extraViews && { extraRead: extraViews.extra }),
                           ...((options.answerCommand ?? options.agentCommand) && { command: options.answerCommand ?? options.agentCommand }),
                           answer: {
                               warm: answerConfig.warm,
@@ -200,13 +215,14 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
                   },
               )
             : undefined;
-    // the view goes with the answerer
-    void answerer?.done.then(() => view?.dispose());
+    // the views go with the answerer
+    void answerer?.done.then(() => Promise.all([view?.dispose(), extraViews?.dispose()]));
     if (!roles.has('run')) {
         const done = answerer?.done ?? Promise.resolve<SubscriberEnd>('stopped');
         return { session: session.value.session, roles: taken, done, stop: async () => (await answerer?.stop()) ?? 'stopped' };
     }
 
+    const runTargets = readOf('run');
     // the agent's dt, taken once now (never read again from the config file, which is in the workspace)
     let dt: PinnedDt;
     let runner: AgentRunner;
@@ -217,8 +233,11 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             root,
             command: options.agentCommand,
             dt,
-            // what git ignores, kept from the runner (it works in the workspace itself; ADR 0030 as built in M4)
-            deniedPaths: () => runnerDeniedPaths(root),
+            // what git ignores, kept from the runner (it works in the workspace itself; ADR 0030 as built in M4), and
+            // what it reads outside the workspace, never writes
+            readScope: () => runnerReadScope(() => runnerDeniedPaths(root), runTargets),
+            // a -c file and its local override, never edited (the default names are denied at any depth already)
+            ...(options.configPath && { configFiles: configFileRules(options.configPath, root) }),
             ...((run?.model ?? user.model) !== undefined && { model: run?.model ?? user.model }),
             ...((run?.effort ?? user.effort) !== undefined && { effort: run?.effort ?? user.effort }),
         };
@@ -243,7 +262,8 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             runner,
             tools: createDtTools({ dt: dtCommandOf(dt), root, configPath: options.configPath, log }),
             workspace: {
-                scan,
+                // the runner's scan: the workspace, and the configuration files beside a -c file outside it (any case)
+                scan: async () => new Map([...(await scan()), ...(await configGuardScan(options.configPath, root))]),
                 sources: async () => new Set(await findDomainFiles(root, sourceSelection(sources, respectGitignore))),
             },
             clock: systemClock,

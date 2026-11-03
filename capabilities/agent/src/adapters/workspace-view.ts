@@ -39,7 +39,7 @@ const neverName = (name: string): boolean => NEVER.has(foldedName(name));
 const coveredName = (name: string): boolean => name === '.git' || name === '.domaintrail';
 
 /** Whether the directory `dir` holds a `.git` (a nested repository, a submodule, a worktree), in any case. */
-async function holdsRepository(dir: string): Promise<boolean> {
+export async function holdsRepository(dir: string): Promise<boolean> {
     const names = await readdir(dir).catch(() => [] as string[]);
     return names.some((n) => foldedName(n) === '.git');
 }
@@ -57,13 +57,25 @@ export interface WorkspaceViewOptions {
     readonly maxFileBytes?: number;
     /** Most files in the view (default 20,000). */
     readonly maxFiles?: number;
+    /**
+     * The most bytes the view's files may come to, asked at each refresh (absent: no bound); more is refused before
+     * copying past it, never a view cut short.
+     */
+    readonly maxTotalBytes?: () => number;
     /** Where the view's directory is made (default the system's temporary directory). */
     readonly parent?: string;
+    /**
+     * The view directory's name in `parent` (made private, refused when it exists), so that the agent sees a name that
+     * says what it is a copy of; absent, a fresh random one.
+     */
+    readonly name?: string;
 }
 
 export interface WorkspaceView {
     /** Brings the view up to date with the workspace; its directory. */
     refresh(): Promise<string>;
+    /** The bytes its files came to at its last refresh. */
+    bytes(): number;
     /** Removes the view. */
     dispose(): Promise<void>;
 }
@@ -78,6 +90,7 @@ export function createWorkspaceView(options: WorkspaceViewOptions): WorkspaceVie
     const root = path.resolve(options.root);
     const maxFileBytes = options.maxFileBytes ?? 2 * 1024 * 1024;
     const maxFiles = options.maxFiles ?? 20_000;
+    let total = 0n;
     let dir: string | undefined;
     /** The fingerprint of each file copied, by relative path. */
     const copied = new Map<string, string>();
@@ -85,7 +98,12 @@ export function createWorkspaceView(options: WorkspaceViewOptions): WorkspaceVie
 
     const make = async (): Promise<string> => {
         if (dir) return dir;
-        dir = await mkdtemp(path.join(options.parent ?? tmpdir(), 'dt-answerer-'));
+        if (options.name !== undefined) {
+            const named = path.join(options.parent ?? tmpdir(), options.name);
+            if (path.dirname(named) !== path.resolve(options.parent ?? tmpdir())) throw new Error(`Not a directory name: ${JSON.stringify(options.name)}`);
+            await mkdir(named, { mode: 0o700 });
+            dir = named;
+        } else dir = await mkdtemp(path.join(options.parent ?? tmpdir(), 'dt-answerer-'));
         await chmod(dir, 0o700);
         return dir;
     };
@@ -111,6 +129,8 @@ export function createWorkspaceView(options: WorkspaceViewOptions): WorkspaceVie
 
     const update = async (): Promise<string> => {
         const view = await make();
+        const maxBytes = options.maxTotalBytes?.();
+        let bytes = 0n;
         const seen = new Set<string>();
         /** The names in each directory below the root (relative), as `readdir` returns them, during this refresh. */
         const names = new Map<string, Promise<ReadonlySet<string>>>();
@@ -151,6 +171,11 @@ export function createWorkspaceView(options: WorkspaceViewOptions): WorkspaceVie
             // regular files only: a link may point anywhere
             if (!s?.isFile() || s.size > BigInt(maxFileBytes)) continue;
             if (seen.size >= maxFiles) throw new Error(`More than ${maxFiles} readable files below ${root}: too many for the answerer's view`);
+            bytes += s.size;
+            if (maxBytes !== undefined && bytes > BigInt(Math.max(0, Math.floor(maxBytes))))
+                throw new Error(
+                    `The readable files below ${root} come to more than the answerer's copies may hold (${maxBytes} bytes left): read fewer or smaller paths`,
+                );
             seen.add(relPath);
             const print = `${s.size}|${s.mtimeNs}|${s.ctimeNs}`;
             if (copied.get(relPath) === print) continue;
@@ -164,6 +189,7 @@ export function createWorkspaceView(options: WorkspaceViewOptions): WorkspaceVie
             await writeFile(target, content, { mode: 0o600 });
             copied.set(relPath, print);
         }
+        total = bytes;
         for (const rel of copied.keys()) {
             if (seen.has(rel)) continue;
             copied.delete(rel);
@@ -179,6 +205,7 @@ export function createWorkspaceView(options: WorkspaceViewOptions): WorkspaceVie
             tail = next.catch(() => undefined);
             return next;
         },
+        bytes: () => Number(total),
         async dispose() {
             await tail;
             if (dir) await rm(dir, { recursive: true, force: true });
@@ -201,7 +228,10 @@ async function readRegular(file: string, maxBytes: number): Promise<Buffer | und
     }
 }
 
-/** Most entries `ignoredEntries` gives (deny rules of the runner's process); more is refused, never truncated. */
+/**
+ * Most entries of the runner's deny list (its process's deny rules), the workspace's and those of the paths it reads
+ * outside it together; more is refused, never truncated.
+ */
 export const MAX_IGNORED_ENTRIES = 500;
 
 /**
@@ -211,8 +241,8 @@ export const MAX_IGNORED_ENTRIES = 500;
 export class TooManyDeniedEntries extends ReadScopeTooLarge {
     constructor() {
         super(
-            `The workspace has more than ${MAX_IGNORED_ENTRIES} ignored files, ignored directories and nested repositories for the agent's deny list: ` +
-                'ignore whole directories (e.g. `dist/` rather than the files in it) or move nested repositories out of the workspace, then run again.',
+            `The workspace and the paths the agent reads outside it (agent.read.paths) have more than ${MAX_IGNORED_ENTRIES} ignored files, ignored directories, nested repositories and links for the agent's deny list: ` +
+                'ignore whole directories (e.g. `dist/` rather than the files in it), move nested repositories out, or read fewer paths, then run again.',
         );
         this.name = 'TooManyDeniedEntries';
     }
@@ -233,14 +263,15 @@ export interface IgnoredSource {
  * (`deniedRules`): the nested repositories and submodules as a whole (git does not apply their own ignores for us), then
  * the topmost ignored files and directories present now, in git's order (relative, `/`-separated; nothing below an
  * ignored directory, nor anything below an exact `.domaintrail` or `.git`, which the static rules deny at any depth; a
- * case variant such as `.GIT` keeps its own rule). More than `MAX_IGNORED_ENTRIES` is refused (`TooManyDeniedEntries`):
- * the run fails rather than run with some of them unprotected.
+ * case variant such as `.GIT` keeps its own rule). More than `max` (default `MAX_IGNORED_ENTRIES`; less when the paths
+ * read outside the workspace take some) is refused (`TooManyDeniedEntries`): the run fails rather than run with some of
+ * them unprotected.
  */
-export async function ignoredEntries(root: string, source: IgnoredSource): Promise<string[]> {
+export async function ignoredEntries(root: string, source: IgnoredSource, max: number = MAX_IGNORED_ENTRIES): Promise<string[]> {
     const listed = await source.list?.();
     if (listed) {
         const entries = [...new Set(listed.map((p) => p.replace(/\/$/, '')))].filter((p) => p && !p.split('/').some(coveredName));
-        if (entries.length > MAX_IGNORED_ENTRIES) throw new TooManyDeniedEntries();
+        if (entries.length > max) throw new TooManyDeniedEntries();
         return entries;
     }
     const out: string[] = [];
@@ -255,7 +286,7 @@ export async function ignoredEntries(root: string, source: IgnoredSource): Promi
             // a nested repository or a submodule as a whole: its own ignores are not ours to read
             if (source.ignores(full, directory) || (directory && (await holdsRepository(full)))) {
                 out.push(relPath);
-                if (out.length > MAX_IGNORED_ENTRIES) throw new TooManyDeniedEntries();
+                if (out.length > max) throw new TooManyDeniedEntries();
                 continue;
             }
             if (directory) await walk(full, relPath);

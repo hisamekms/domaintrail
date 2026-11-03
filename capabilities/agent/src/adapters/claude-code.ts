@@ -7,7 +7,8 @@
 // its PATH (`dt-shim.ts`).
 import { spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
-import type { AgentInvocation, AgentOutcome, AgentRunner } from '../core/ports.js';
+import * as path from 'node:path';
+import { type AgentInvocation, type AgentOutcome, type AgentRunner, ReadScopeTooLarge } from '../core/ports.js';
 import { replyJsonSchema } from '@domaintrail/collaboration';
 import { parseReply } from '../core/prompt.js';
 import { activityOfEvent, createStreamReader } from './claude-stream.js';
@@ -36,6 +37,34 @@ export interface ClaudeRunOptions {
     readonly schema?: Readonly<Record<string, unknown>>;
     /** Paths of the working directory (relative, `/`-separated) the agent may neither read nor edit: e.g. those git ignores. */
     readonly deniedPaths?: readonly string[];
+    /** What the agent may read outside its working directory, never edit (`agent.read.paths`). */
+    readonly extraRead?: ExtraRead;
+    /**
+     * Configuration files the agent may never edit besides `CONFIG_EDIT_DENIED` (a `-c` file and its local override,
+     * which may have other names): absolute, or relative to the working directory (`/`-separated); one no rule can
+     * name refuses the run.
+     */
+    readonly configFiles?: readonly string[];
+}
+
+/**
+ * What an agent may read outside its working directory (`agent.read.paths`), read-only, as real absolute paths: the
+ * directories are added to its working directories (`--add-dir`) and the files allowed one by one (`Read(//…)`); none
+ * of them may be edited (`Edit(//…)` denied), `.git` and `.domaintrail` are denied below each directory at any depth,
+ * and `denied` (what git ignores there, nested repositories, links) is denied as a whole. `note` is appended to the
+ * system prompt (`--append-system-prompt`): where these are and what they stand for.
+ */
+export interface ExtraRead {
+    readonly dirs: readonly string[];
+    readonly files: readonly string[];
+    readonly denied: readonly string[];
+    readonly note?: string;
+}
+
+/** What the runner may read, asked before each run: the workspace's denied paths and what it reads outside it. */
+export interface RunnerReadScope {
+    readonly deniedPaths: readonly string[];
+    readonly extra?: ExtraRead;
 }
 
 /**
@@ -60,16 +89,91 @@ export const READ_DENIED: readonly string[] = [
     'Edit(**/.git)',
 ];
 
+/**
+ * A rule's path matching in any case, by construction: each letter as a bracket of its two cases (`[dD][oO]…`), so
+ * that a case-insensitive file system's `DOMAINTRAIL.LOCAL.JSONC`, the same file, is denied too (measured with Claude
+ * Code 2.1.317: brackets are honoured). Letters are never escaped by `rulePath`, so escapes stay as they are.
+ */
+export function caseless(rule: string): string {
+    return rule.replace(/\p{L}/gu, (c) => (c.toLowerCase() === c.toUpperCase() ? c : `[${c.toLowerCase()}${c.toUpperCase()}]`));
+}
+
+/** The names of the configuration files (the project's and the local override) the agents never write. */
+export const CONFIG_FILE_NAMES: readonly string[] = ['domaintrail.jsonc', 'domaintrail.json', 'domaintrail.local.jsonc', 'domaintrail.local.json'];
+
+/**
+ * What no agent edits or writes, at any depth: the configuration files. A runner that wrote `domaintrail.local.jsonc`
+ * (ignored by git, so out of sight) could widen what the next agent may read or run; the scan after a run would stop
+ * the subscriber, but the file would stay for the next start. Deny rules win over every allow rule.
+ */
+export const CONFIG_EDIT_DENIED: readonly string[] = CONFIG_FILE_NAMES.flatMap((name) => [
+    `Edit(./${name})`,
+    `Edit(**/${name})`,
+    `Edit(./${caseless(name)})`,
+    `Edit(**/${caseless(name)})`,
+]);
+
 /** A path as a permission rule's (gitignore syntax): its special characters escaped. */
 const rulePath = (p: string): string => p.replace(/[\\*?[\]!#]/g, (c) => `\\${c}`);
 
-/** The deny rules of `paths` (relative to the working directory): neither read nor edited, nor anything below them. */
+/**
+ * A path the agent must be kept from (or given) that no permission rule can name: a line break or NUL in it, or (for
+ * a path of the working directory) one that leaves it. The run is refused rather than run without that rule.
+ */
+export class UnexpressiblePath extends ReadScopeTooLarge {
+    constructor(p: string) {
+        super(
+            `A path of the agent's read scope cannot be written as a permission rule (${JSON.stringify(p)}: a line break or NUL in its name, or not where it should be): rename or remove it, then run again.`,
+        );
+        this.name = 'UnexpressiblePath';
+    }
+}
+
+/** A path of the working directory (relative, `/`-separated) as a rule's: refused (`UnexpressiblePath`) when it cannot be one. */
+const relativeRule = (p: string): string => {
+    if (!p || p.startsWith('/') || p.split('/').includes('..') || /[\0\r\n]/.test(p)) throw new UnexpressiblePath(p);
+    return `./${rulePath(p)}`;
+};
+
+/** An absolute path as a rule's (`//` + the path, its special characters escaped): refused when it cannot be one. */
+const absoluteRule = (p: string): string => {
+    if (!path.isAbsolute(p) || /[\0\r\n]/.test(p)) throw new UnexpressiblePath(p);
+    return `/${rulePath(p.split(path.sep).join('/'))}`;
+};
+
+/**
+ * The deny rules of `paths` (relative to the working directory): neither read nor edited, nor anything below them. A
+ * path no rule can name refuses the whole list (`UnexpressiblePath`), never left out.
+ */
 export function deniedRules(paths: readonly string[]): string[] {
     return paths.flatMap((p) => {
-        if (!p || p.startsWith('/') || p.split('/').includes('..') || /[\0\r\n]/.test(p)) return [];
-        const r = `./${rulePath(p)}`;
+        const r = relativeRule(p);
         return [`Read(${r})`, `Edit(${r})`, `Read(${r}/**)`, `Edit(${r}/**)`];
     });
+}
+
+/**
+ * The permission rules of `extra`: its files allowed for reading; nothing of it edited; `.git` and `.domaintrail`
+ * denied below each directory at any depth (the static `READ_DENIED` are relative to the working directory); each of
+ * `denied` neither read nor edited, nor anything below it. A path that is not absolute, or that no rule can name,
+ * refuses them all (`UnexpressiblePath`).
+ */
+export function extraReadRules(extra: ExtraRead): { readonly allowed: string[]; readonly denied: string[] } {
+    const dirs = extra.dirs.map(absoluteRule);
+    const files = extra.files.map(absoluteRule);
+    if (extra.note !== undefined && /[\0\r]/.test(extra.note)) throw new UnexpressiblePath(extra.note);
+    return {
+        allowed: files.map((f) => `Read(${f})`),
+        denied: [
+            ...dirs.flatMap((d) => [
+                `Edit(${d})`,
+                `Edit(${d}/**)`,
+                ...['.git', '.domaintrail'].flatMap((own) => [`Read(${d}/**/${own}/**)`, `Read(${d}/**/${own})`]),
+            ]),
+            ...files.map((f) => `Edit(${f})`),
+            ...extra.denied.map(absoluteRule).flatMap((x) => [`Read(${x})`, `Read(${x}/**)`]),
+        ],
+    };
 }
 
 /** The tools that read files: inside the working directory Claude Code lets them read without a rule. */
@@ -122,7 +226,10 @@ export function toolNames(rules: readonly string[]): string[] {
 export function claudeArguments(allowedTools: readonly string[], requests?: number, options: ClaudeRunOptions = {}): string[] {
     for (const rule of allowedTools) checkValue('a tool rule', rule);
     const tools = toolNames(allowedTools);
-    const allowed = scopedRules(allowedTools);
+    const extra = options.extraRead && extraReadRules(options.extraRead);
+    const allowed = [...scopedRules(allowedTools), ...(extra?.allowed ?? [])];
+    // checked by `extraReadRules`: absolute, nameable
+    const addDirs = options.extraRead?.dirs ?? [];
     return [
         '--print',
         ...(options.streamInput ? ['--input-format', 'stream-json'] : []),
@@ -136,6 +243,9 @@ export function claudeArguments(allowedTools: readonly string[], requests?: numb
         '',
         '--permission-mode',
         'dontAsk',
+        // what it reads outside the working directory: each flag with its one directory (the option takes several)
+        ...addDirs.flatMap((d) => ['--add-dir', d]),
+        ...(options.extraRead?.note ? ['--append-system-prompt', options.extraRead.note] : []),
         '--tools',
         tools.length ? tools.join(',') : '',
         ...(options.model === undefined ? [] : ['--model', checkValue('a model', options.model)]),
@@ -147,17 +257,23 @@ export function claudeArguments(allowedTools: readonly string[], requests?: numb
               : ['--json-schema', JSON.stringify(replyJsonSchema(requests))]),
         '--disallowedTools',
         ...READ_DENIED,
+        ...CONFIG_EDIT_DENIED,
+        ...(options.configFiles ?? []).flatMap((f) => {
+            const r = path.isAbsolute(f) ? absoluteRule(f) : relativeRule(f);
+            return [`Edit(${r})`, `Edit(${caseless(r)})`];
+        }),
         ...deniedRules(options.deniedPaths ?? []),
+        ...(extra?.denied ?? []),
         ...(allowed.length ? ['--allowedTools', ...allowed] : []),
     ];
 }
 
 export interface ClaudeCodeOptions {
     /**
-     * The paths of the workspace the agent may neither read nor edit besides `READ_DENIED` (those git ignores), asked
-     * before each run.
+     * What the agent may read, asked before each run: the paths of the workspace it may neither read nor edit besides
+     * `READ_DENIED` (those git ignores), and what it may read outside the workspace (never edit).
      */
-    readonly deniedPaths?: () => Promise<readonly string[]>;
+    readonly readScope?: () => Promise<RunnerReadScope>;
     /** The workspace root: the agent's working directory. */
     readonly root: string;
     /** The program (default `claude` on the PATH); the tests start a fake agent. */
@@ -170,12 +286,14 @@ export interface ClaudeCodeOptions {
     /** `--model` and `--effort` (unset: the user's Claude Code settings). */
     readonly model?: string;
     readonly effort?: string;
+    /** Configuration files the agent never edits (a `-c` file and its local override; see `ClaudeRunOptions`). */
+    readonly configFiles?: readonly string[];
 }
 
 /** The real path of the workspace (the agent may name files by it), or the path as given when it cannot be resolved. */
 export function realpathOr(root: string): string {
     try {
-        return realpathSync(root);
+        return realpathSync.native(root);
     } catch {
         return root;
     }
@@ -231,8 +349,16 @@ export async function createClaudeCodeRunner(options: ClaudeCodeOptions): Promis
         run(invocation: AgentInvocation): Promise<AgentOutcome> {
             const { signal } = invocation;
             if (signal.aborted) return Promise.resolve({ exitCode: -1, outcome: 'done', summary: '' });
-            return (options.deniedPaths?.() ?? Promise.resolve([])).then((deniedPaths) => {
-                const args = [...command.args, ...claudeArguments(invocation.allowedTools, invocation.requests, { ...flags, deniedPaths })];
+            return (options.readScope?.() ?? Promise.resolve<RunnerReadScope>({ deniedPaths: [] })).then(({ deniedPaths, extra }) => {
+                const args = [
+                    ...command.args,
+                    ...claudeArguments(invocation.allowedTools, invocation.requests, {
+                        ...flags,
+                        deniedPaths,
+                        ...(extra && { extraRead: extra }),
+                        ...(options.configFiles && { configFiles: options.configFiles }),
+                    }),
+                ];
                 return shimFor().then((shim) => spawnWithShim(shim, args));
             });
             function spawnWithShim(shim: DtShim | undefined, args: string[]): Promise<AgentOutcome> {

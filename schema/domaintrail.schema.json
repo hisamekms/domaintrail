@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://domaintrail.dev/schema/domaintrail.schema.json",
-  "title": "DomainTrail configuration (domaintrail.jsonc / domaintrail.json)",
-  "description": "Paths are relative to this file. CLI options (--out, --port, --host) take precedence.",
+  "title": "DomainTrail configuration (domaintrail.jsonc / domaintrail.json, and the local override domaintrail.local.jsonc / domaintrail.local.json)",
+  "description": "Paths are relative to this file. CLI options (--out, --port, --host) take precedence. A local override beside it (domaintrail.local.jsonc, or .local.json; <name>.local.<ext> beside a -c <name>.<ext>) holds your own settings and is never committed: it is read after this file and merged into it (objects key by key, arrays and scalars replaced), any setting included, and validated against this same schema. Alone, without a project file, it is the configuration.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -305,6 +305,22 @@
               "type": "integer",
               "minimum": 0,
               "default": 20480
+            },
+            "read": {
+              "description": "What the runner may also read outside the workspace, besides agent.read; it never writes there.",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "paths": {
+                  "description": "Directories or files outside the workspace: absolute, ~/..., or relative to this file. Honoured only from domaintrail.local.jsonc when git ignores it (an error in the project's file), and approved when they change (dt open / collab / agent ask). A path inside the workspace, one holding it, /, the home directory, or one that is or holds ~/.ssh, ~/.gnupg, ~/.aws, ~/.azure, ~/.config, ~/.kube, ~/.docker, ~/.netrc, ~/Library, /etc or /var is an error; one missing is skipped (the agent says so when it starts). In a git work tree the files git does not ignore there are readable, elsewhere every file; never .git nor .domaintrail, nor a nested repository inside the path. Nothing there is ever written.",
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "default": []
+                }
+              }
             }
           }
         },
@@ -344,6 +360,22 @@
               "type": "number",
               "exclusiveMinimum": 0,
               "default": 120
+            },
+            "read": {
+              "description": "What the answerer may also read outside the workspace, besides agent.read.",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "paths": {
+                  "description": "Directories or files outside the workspace: absolute, ~/..., or relative to this file. Honoured only from domaintrail.local.jsonc when git ignores it (an error in the project's file), and approved when they change (dt open / collab / agent ask). A path inside the workspace, one holding it, /, the home directory, or one that is or holds ~/.ssh, ~/.gnupg, ~/.aws, ~/.azure, ~/.config, ~/.kube, ~/.docker, ~/.netrc, ~/Library, /etc or /var is an error; one missing is skipped (the agent says so when it starts). In a git work tree the files git does not ignore there are readable, elsewhere every file; never .git nor .domaintrail, nor a nested repository inside the path. Nothing there is ever written.",
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "default": []
+                }
+              }
             }
           }
         },
@@ -362,6 +394,22 @@
               "description": "Keep one Claude Code process for the triage (true), or start a fresh claude -p per message (false).",
               "type": "boolean",
               "default": false
+            }
+          }
+        },
+        "read": {
+          "description": "What both roles of the AI may read outside the workspace, read-only (agent.answer.read and agent.run.read add to it). dt open, dt collab and dt agent print it at startup; in a collab session, any participant can make the AI quote these files.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "paths": {
+              "description": "Directories or files outside the workspace: absolute, ~/..., or relative to this file. Honoured only from domaintrail.local.jsonc when git ignores it (an error in the project's file), and approved when they change (dt open / collab / agent ask). A path inside the workspace, one holding it, /, the home directory, or one that is or holds ~/.ssh, ~/.gnupg, ~/.aws, ~/.azure, ~/.config, ~/.kube, ~/.docker, ~/.netrc, ~/Library, /etc or /var is an error; one missing is skipped (the agent says so when it starts). In a git work tree the files git does not ignore there are readable, elsewhere every file; never .git nor .domaintrail, nor a nested repository inside the path. Nothing there is ever written.",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "default": []
             }
           }
         }

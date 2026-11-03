@@ -25,11 +25,34 @@ export {
 export { AGENT_ROLES, type AgentRole } from '@domaintrail/collaboration/protocol';
 
 // ---- adapters, for the app that wires them ---------------------------------------------------------------------
-export { createClaudeCodeRunner, type AgentCommand } from './adapters/claude-code.js';
+export {
+    caseless,
+    claudeArguments,
+    CONFIG_EDIT_DENIED,
+    CONFIG_FILE_NAMES,
+    createClaudeCodeRunner,
+    extraReadRules,
+    type AgentCommand,
+    type ExtraRead,
+    type RunnerReadScope,
+    UnexpressiblePath,
+} from './adapters/claude-code.js';
 export { createWarmClaudeRunner, type WarmRunnerOptions } from './adapters/claude-warm.js';
 export { checkClaudeCode, type ClaudeUsability } from './adapters/claude-usable.js';
 export { userClaudeDefaults } from './adapters/claude-settings.js';
-export { createWorkspaceView, ignoredEntries, type IgnoredSource, type WorkspaceView, type WorkspaceViewOptions } from './adapters/workspace-view.js';
+export {
+    createWorkspaceView,
+    foldedName,
+    holdsRepository,
+    ignoredEntries,
+    type IgnoredSource,
+    MAX_IGNORED_ENTRIES,
+    TooManyDeniedEntries,
+    type WorkspaceView,
+    type WorkspaceViewOptions,
+} from './adapters/workspace-view.js';
+// what the AI reads outside the workspace (`agent.read.paths`): the configuration's check, and the paths as they are
+export { checkReadPaths, checkTarget, readPathError, readTargets, type ReadTarget, shownReadPath } from './adapters/read-paths.js';
 // the answerer role's Claude Code: stage 3 with no tools, answers and proposals with the reading tools only
 export { ANSWERER_TOOLS, answererArguments, createClaudeAnswerer, triageArguments, type ClaudeAnswererOptions } from './adapters/claude-answer.js';
 // the warm process itself, for a role other than the runs (its own tools, prompt and schema)
@@ -50,7 +73,12 @@ export {
     DEFAULT_IDLE_TIMEOUT,
     DEFAULT_RESTART_AFTER,
     DEFAULT_TRIAGE_MODEL,
+    type ReadConfigFile,
+    type ReadPaths,
+    READ_CONFIG_KEYS,
     type ResolvedRunConfig,
+    resolveReadPath,
+    resolveReadPaths,
     type RunConfig,
     resolveAnswerConfig,
     resolveTriageConfig,
@@ -61,6 +89,7 @@ export {
     validateAgentConfig,
     validateAnswerConfig,
     validateTriageConfig,
+    validateReadConfig,
     type AgentConfigFile,
     type ResolvedAgentConfig,
 } from './adapters/config.js';

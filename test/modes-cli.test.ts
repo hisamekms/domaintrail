@@ -242,7 +242,8 @@ describe('dt open and dt collab: the agent in process', () => {
                 collab: { identity: 'access', access: { teamDomain: 't.cloudflareaccess.com', audience: 'a', allowedHosts: ['tunnel.example.com'] } },
             }),
         );
-        expect((await run(open.deps, '-r', dir, 'open')).code).toBe(0);
+        // collab.access is a security-relevant setting: approved with --yes (dt guide session-agent)
+        expect((await run(open.deps, '-r', dir, 'open', '--yes')).code).toBe(0);
         expect(open.calls.sessions[0].session).toEqual(expect.objectContaining({ port: 1111, identity: 'dev' }));
         expect(open.calls.sessions[0].session.access).toBeUndefined();
     });
@@ -288,12 +289,45 @@ describe('dt open and dt collab: the agent in process', () => {
 });
 
 describe('dt agent', () => {
+    test('changed security-relevant settings are asked about before starting: a changed local file too; refused when declined or no one asks', async () => {
+        const dir = await copy();
+        const { deps, calls } = fakeDeps(USABLE);
+        const asked: string[] = [];
+        let answer = false;
+        const asking: CliDeps = { ...deps, confirm: async (q) => (asked.push(q), answer) };
+        await writeFile(path.join(dir, 'domaintrail.local.jsonc'), JSON.stringify({ agent: { run: { allowedTools: ['Read', 'Edit'] } } }));
+        const declined = await run(asking, '-r', dir, 'agent', '--code', 'c1', '--once');
+        expect(declined.code).toBe(1);
+        expect(declined.err).toEqual(['Not started: the settings were not approved.']);
+        expect(declined.out).toContain('  agent.run.allowedTools: ["Read","Edit"]');
+        expect(calls.agents).toHaveLength(0);
+        answer = true;
+        expect((await run(asking, '-r', dir, 'agent', '--code', 'c1', '--once')).code).toBe(0);
+        expect(calls.agents).toHaveLength(1);
+        expect((await run(asking, '-r', dir, 'agent', '--code', 'c1', '--once')).code).toBe(0);
+        expect(asked).toHaveLength(2);
+        // the local file changed: asked again, by dt open and dt collab as well; without a terminal, --yes or nothing
+        await writeFile(path.join(dir, 'domaintrail.local.jsonc'), JSON.stringify({ agent: { run: { allowedTools: ['Read', 'Edit', 'Write'] } } }));
+        const noTerminal = await run(deps, '-r', dir, 'open', '--no-agent');
+        expect(noTerminal.code).toBe(1);
+        expect(noTerminal.err).toEqual(['Not started: approve these settings in a terminal, or pass --yes.']);
+        expect(calls.sessions).toHaveLength(0);
+        expect((await run(deps, '-r', dir, 'collab', '--no-agent', '--yes')).code).toBe(0);
+        expect(calls.sessions).toHaveLength(1);
+        expect((await run(asking, '-r', dir, 'open', '--no-agent')).code).toBe(0);
+        expect(asked).toHaveLength(2);
+    });
+
     test('both roles by default, one with --role', async () => {
         const dir = await copy();
         const { deps, calls } = fakeDeps(USABLE);
         const both = await run(deps, '-r', dir, 'agent', '--code', 'c1', '--once');
         expect(both.code).toBe(0);
-        expect(both.out).toEqual(['Agent on session s1 with claude (roles answer, run) (one run); waiting.', 'Done.']);
+        expect(both.out).toEqual([
+            `Config: ${path.relative(process.cwd(), path.join(dir, 'domaintrail.jsonc'))}`,
+            'Agent on session s1 with claude (roles answer, run) (one run); waiting.',
+            'Done.',
+        ]);
         expect((await run(deps, '-r', dir, 'agent', '--code', 'c2', '--url', 'http://127.0.0.1:9/', '--role', 'run')).out.at(-1)).toBe('Session closed.');
         expect(calls.connects).toEqual([{ code: 'c1' }, { code: 'c2', url: 'http://127.0.0.1:9/' }]);
         // a standalone agent pairs with a code: there is no credential file to read
@@ -672,7 +706,7 @@ describe('the agent in process, with a fake claude on the PATH', () => {
         let url: string | undefined;
         const listening = Promise.withResolvers<string>();
         const done = runCli(
-            ['-r', root, 'open', '--port', '0'],
+            ['-r', root, 'open', '--port', '0', '--yes'],
             {
                 out: (l) => {
                     out.push(l);

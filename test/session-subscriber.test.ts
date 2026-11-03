@@ -618,6 +618,42 @@ describe('the pipeline', () => {
         expect(await ctx.invocations()).toHaveLength(0);
     });
 
+    integration('what the runner reads outside the workspace: agent.read.paths and its own, added read-only; the answerer’s own are not its', async () => {
+        const ctx = await setup();
+        const outside = await realpath(await scratch('domaintrail-read-outside-'));
+        for (const name of ['common', 'runs', 'answers']) await mkdir(path.join(outside, name));
+        await writeFile(path.join(outside, 'glossary.md'), 'g');
+        const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
+        const common = [path.join(outside, 'common'), path.join(outside, 'missing')];
+        const { log } = await subscribe(ctx, await ctx.plan([{}]), {
+            read: { answer: [...common, path.join(outside, 'answers')], run: [...common, path.join(outside, 'runs'), path.join(outside, 'glossary.md')] },
+        });
+        expect((await until(ctx, run, ['Completed', 'Failed'])).state).toBe('Completed');
+        const [invocation] = await ctx.invocations();
+        expect(invocation.args.filter((_, i) => invocation.args[i - 1] === '--add-dir')).toEqual([path.join(outside, 'common'), path.join(outside, 'runs')]);
+        expect(invocation.args).toContain(`Edit(/${path.join(outside, 'runs')}/**)`);
+        expect(invocation.args).toContain(`Read(/${path.join(outside, 'glossary.md')})`);
+        expect(invocation.args).toContain(`Edit(/${path.join(outside, 'glossary.md')})`);
+        expect(invocation.args.join('\n')).not.toContain('answers');
+        expect(log).toContain(`runner: not reading ${path.join(outside, 'missing')} (not found)`);
+    });
+
+    integration('an agent that writes a configuration file in any case beside a -c file outside the workspace: its run fails', async () => {
+        const ctx = await setup();
+        const conf = await scratch('domaintrail-conf-');
+        await writeFile(path.join(conf, 'team.jsonc'), '{}');
+        const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
+        const variant = path.relative(ctx.root, path.join(conf, 'Team.Local.JSONC'));
+        const { log } = await subscribe(ctx, await ctx.plan([{ edits: [{ path: variant, write: '{"agent":{}}' }] }]), {
+            configPath: path.join(conf, 'team.jsonc'),
+        });
+        const failed = await until(ctx, run, ['Completed', 'Failed']);
+        expect(failed.state === 'Failed' && failed.reason).toBe('AgentError');
+        expect(log.some((l) => l.includes('changed files other than .dt/.dtes sources') && l.includes('Team.Local.JSONC'))).toBe(true);
+        const [invocation] = await ctx.invocations();
+        expect(invocation.args).toContain(`Edit(/${path.join(conf, 'team.local.jsonc')})`);
+    });
+
     integration('an agent that writes the workspace’s .claude/ settings: its run fails, and no further run is claimed until a restart', async () => {
         const ctx = await setup();
         const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);

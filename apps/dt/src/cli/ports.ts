@@ -3,6 +3,7 @@ import type { AnswerConfig, Practice, RunConfig, TriageConfig } from '@domaintra
 import type { ResolvedClassifierConfig, ResolvedCollabConfig, ResolvedConfig } from '../config/config.js';
 import type { MessageTemplateConfig } from '@domaintrail/collaboration';
 import type { LanguageServerOptions } from '../lsp/server.js';
+import type { TrustStore } from './trust.js';
 
 /**
  * What the CLI needs from outside, defined here on its side (ADR 0025): `cliDeps` (`main.ts`)
@@ -45,6 +46,15 @@ export interface CliDeps {
     startAgent(options: AgentOptions): Promise<StartedAgent>;
     /** Starts the language server over stdio; resolves once it listens. */
     startLanguageServer(options: LanguageServerOptions): Promise<void>;
+    /**
+     * Whether git would commit the local override `file` (`tracked`, `unignored`), or not (`ignored`; `undefined`: no
+     * repository). Absent: never asked.
+     */
+    localConfigState?(file: string): Promise<'tracked' | 'unignored' | 'ignored' | undefined>;
+    /** Where the approvals of the security-relevant settings are kept (`dt open`, `dt collab`, `dt agent`). */
+    trust?: TrustStore;
+    /** Asks the person a yes/no question on the terminal; absent when there is none (stdin or stderr not a TTY). */
+    confirm?(question: string): Promise<boolean>;
 }
 
 /** What `dt open --host <non-loopback>` asks of the Live View. */
@@ -133,6 +143,8 @@ export interface AgentOptions {
     triage?: TriageConfig;
     /** The ways of working the agent's prompts give: the guide's `storming-practice` and `modeling-practice`. */
     practice?: Practice;
+    /** What each role may read outside the workspace, read-only (`agent.read.paths` and its own; absolute paths). */
+    read?: { readonly answer: readonly string[]; readonly run: readonly string[] };
     log: (line: string) => void;
 }
 
