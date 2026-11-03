@@ -5317,6 +5317,29 @@ button.add-to-request.added:hover {
     left: 0;
     right: auto;
 }
+/* `link`: the people waiting to join, in the chat's head of the facilitator's page */
+.join-requests {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-muted);
+}
+.join-request {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+.join-request-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+}
 .collab-ended {
     display: flex;
     align-items: center;

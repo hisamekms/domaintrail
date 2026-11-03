@@ -8,6 +8,7 @@ import type {
     ProposalsApprovedBody,
     ComparisonBody,
     ErrorBody,
+    InviteBody,
     MarkSetBody,
     Me,
     ModelChangesBody,
@@ -103,6 +104,15 @@ export const sessionApi = {
     /** Another one-time facilitator link, to hand the role over. */
     facilitatorLink: (): Promise<{ link: string; expiresAt: string }> => call('facilitator/link', { method: 'POST', body: {} }),
     close: (): Promise<unknown> => call('close', { method: 'POST', body: {} }),
+    /** `link`: a new invite link (the facilitator; the previous one stops working). */
+    invite: (): Promise<InviteBody> => call('invite', { method: 'POST', body: {} }),
+    /** `link`: stops the invite link (the facilitator). */
+    stopInvite: (): Promise<{ revoked: boolean }> => call('invite/revoke', { method: 'POST', body: {} }),
+    /** `link`: lets a pending join request in, or turns it away (the facilitator). */
+    decideJoin: (id: string, decision: 'approve' | 'deny'): Promise<unknown> =>
+        call(`join-requests/${encodeURIComponent(id)}/${decision}`, { method: 'POST', body: {} }),
+    /** `link`: removes a participant: their sign-in ends, their pages close (the facilitator). */
+    removeParticipant: (id: string): Promise<unknown> => call(`participants/${encodeURIComponent(id)}/remove`, { method: 'POST', body: {} }),
     queueRun: (body: QueueRunBody): Promise<{ run: { id: string } }> => call('runs', { method: 'POST', body }),
     /** Signs out (`dev`), or leaves an `access` session: `logout` is where the page goes then (Access's logout). */
     leave: (): Promise<{ left: boolean; logout?: string }> => call('leave', { method: 'POST', body: {} }),

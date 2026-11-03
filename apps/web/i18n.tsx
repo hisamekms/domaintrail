@@ -516,6 +516,12 @@ const ja = {
             invite: '招待リンクをコピー',
             inviteHint: 'このページのアドレスです。開いた人は参加者として加わります',
             inviteCopied: (link: string) => `招待リンクをコピーしました: ${link}`,
+            makeInvite: '招待',
+            makeInviteHint:
+                '招待リンクを作ってコピーします。開いた人は参加をリクエストし、あなたが許可すると加わります（60分有効、作り直すと前のリンクは無効）',
+            inviteMade: (link: string) => `招待リンクをコピーしました（60分有効）: ${link}`,
+            stopInvite: '招待を止める',
+            inviteStopped: '招待を止めました',
             restore: '以前の状態に復元',
             downloadSources: 'ソース一式をダウンロード',
             restoreTitle: '以前の状態に復元',
@@ -691,6 +697,11 @@ const ja = {
             alternativeNote: (assumption: string, alternative: string) => `前提「${assumption}」は採らず、「${alternative}」としてやり直してください。`,
             handOver: 'ファシリテーターを引き継ぐ',
             linkIssued: (link: string) => `引き継ぐリンク（10分・1回だけ有効、コピーしました）: ${link}`,
+            // `link`: the join requests in the chat's head, and removing someone from the list
+            joinRequests: '参加リクエスト',
+            joinApprove: '許可',
+            joinDeny: '拒否',
+            remove: (name: string) => `${name} を外す`,
             tabs: { chat: 'チャット', history: 'AI の作業' },
             tabsLabel: 'チャットと AI の作業',
             history: {
@@ -1373,6 +1384,12 @@ const en: Messages = {
             invite: 'Copy the invite link',
             inviteHint: "This page's address: whoever opens it joins as a participant",
             inviteCopied: (link) => `Invite link copied: ${link}`,
+            makeInvite: 'Invite',
+            makeInviteHint:
+                'Makes an invite link and copies it. Whoever opens it asks to join, and comes in once you let them (60 minutes; a new link stops the previous one)',
+            inviteMade: (link) => `Invite link copied (60 minutes): ${link}`,
+            stopInvite: 'Stop inviting',
+            inviteStopped: 'Invite link stopped',
             restore: 'Restore an earlier state',
             downloadSources: 'Download sources (.zip)',
             restoreTitle: 'Restore an earlier state',
@@ -1543,6 +1560,10 @@ const en: Messages = {
             alternativeNote: (assumption, alternative) => `Do not assume "${assumption}": redo it with "${alternative}".`,
             handOver: 'Hand the facilitator role over',
             linkIssued: (link) => `Hand-over link (10 minutes, once; copied): ${link}`,
+            joinRequests: 'Join requests',
+            joinApprove: 'Let in',
+            joinDeny: 'Deny',
+            remove: (name) => `Remove ${name}`,
             tabs: { chat: 'Chat', history: "AI's work" },
             tabsLabel: "The chat and the AI's work",
             history: {
