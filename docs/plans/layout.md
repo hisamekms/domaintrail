@@ -136,3 +136,23 @@ standalone description of the element.
 ## Small: counts in the model tree
 
 A group heading's count (「集約 1」) shows only while the group is collapsed, as a muted "(1)".
+
+## As built (steps 2–4)
+
+- **Left column.** The activity bar stays (木 / 差分, 問題 from the app bar): its lists are the navigator's contents.
+  The detail is the inspector, unchanged inside, under a splitter with a grip (drag, ↑↓ with Shift for larger steps,
+  Home / End, double click for the default: 55% of the column to the detail). The detail keeps at least 140px and the
+  navigator 96px. The column is 280px wide by default (220–560, never leaving the canvas less than 320px). The
+  inspector's right / below dock and its ⋯ menu are gone. Its tabs wrap onto a second row in the narrow column.
+- **Collapsing.** The detail goes with the left column; it is not shown alone (drag the split up instead). Closing the
+  detail folds it to a 28px rail at the column's foot; opening anything in it (or dragging the split up) opens it again,
+  and the column too.
+- **Right column.** チャット / AI の作業 and ✕, as before; its edge resizes, steps with ←→ and resets with a double click.
+  The left column now collapses for the chat only below 1024px (was 1280px), so that the detail and the chat are seen
+  together at the usual widths. With both columns open the canvas is 1094px wide at 1800px, 694px at 1400px (was about
+  410px) and 474px at 1180px.
+- **Navigator per world.** Domain model: the model tree. Event storming: stormings › stages › timelines (the main flow,
+  then the exceptions with a small arrow), a storming's timelines in no stage right under it, a stage's count of
+  timelines, and a filter. A click sets the storming view (the same function as the view bar's pickers, so the two stay
+  in sync) and selects the row's declaration for the detail.
+- Every size is remembered per browser (`domaintrail.layout.explorerWidth`, `.detailHeight`, `.conversationWidth`).

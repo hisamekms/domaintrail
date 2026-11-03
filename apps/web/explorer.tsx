@@ -26,7 +26,7 @@ export interface ExplorerProps {
 type Mark = { severity?: 'error' | 'warning'; change?: 'added' | 'changed' };
 
 /** How a row is drawn: its toggle (if it has children), and whether all its ancestors are open. */
-interface RowState {
+export interface RowState {
     depth: number;
     /** All ancestors are open, so the row can be scrolled to. */
     visible: boolean;
@@ -369,7 +369,7 @@ export function Explorer(props: ExplorerProps) {
 }
 
 /** The chevron of a row that opens and closes (an empty slot otherwise, so that names line up). */
-function Twisty({ row }: { row: RowState }) {
+export function Twisty({ row }: { row: RowState }) {
     if (!row.onToggle) return <span className="tree-twisty" />;
     const onToggle = row.onToggle;
     return (
@@ -386,7 +386,7 @@ function Twisty({ row }: { row: RowState }) {
 }
 
 /** A titled section of the pane that opens and closes with its title, like a tree row. */
-function Section({ title, hits, open, onToggle, children }: { title: string; hits?: number; open: boolean; onToggle: () => void; children: ReactNode }) {
+export function Section({ title, hits, open, onToggle, children }: { title: string; hits?: number; open: boolean; onToggle: () => void; children: ReactNode }) {
     return (
         <section className="explorer-section">
             <button type="button" className="pane-title explorer-section-title" onClick={onToggle} aria-expanded={open}>
@@ -402,7 +402,7 @@ function Section({ title, hits, open, onToggle, children }: { title: string; hit
 }
 
 /** Children that slide open and closed; they stay mounted (inert while closed) so that both ways can be animated. */
-function Collapse({ open, children }: { open: boolean; children: ReactNode }) {
+export function Collapse({ open, children }: { open: boolean; children: ReactNode }) {
     return (
         <div className={`tree-children${open ? ' open' : ''}`} inert={!open}>
             <div className="tree-children-inner">{children}</div>

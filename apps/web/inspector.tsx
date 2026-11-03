@@ -1,4 +1,4 @@
-import { PanelBottomClose, PanelRightClose, Undo2 } from 'lucide-react';
+import { PanelBottomClose, Undo2 } from 'lucide-react';
 import { createContext, useContext, type ReactNode } from 'react';
 import {
     type CommandModel,
@@ -90,10 +90,6 @@ export interface InspectorProps {
     backTo: string | undefined;
     onBack: () => void;
     onClose: () => void;
-    /** The dock's menu (where the inspector is docked), next to the close button. */
-    menu?: ReactNode;
-    /** Where the inspector is docked: its close button points that way. */
-    dock?: 'right' | 'bottom';
     /** Placed next to the selected element's name (in a session, the 💬 that adds it as a request's target). */
     headingAction?: ReactNode;
 }
@@ -141,9 +137,8 @@ export function Inspector(props: InspectorProps) {
                 </button>
             )}
             <span className="history-actions">
-                {props.menu}
                 <button className="icon-button close-button" onClick={props.onClose} data-tooltip={tx.closeInspector} aria-label={tx.closeInspector}>
-                    {props.dock === 'bottom' ? <PanelBottomClose size={16} aria-hidden /> : <PanelRightClose size={16} aria-hidden />}
+                    <PanelBottomClose size={16} aria-hidden />
                 </button>
             </span>
         </div>

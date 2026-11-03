@@ -47,6 +47,23 @@ export const hasExceptionTimelines = (storming: StormingView): boolean => stormi
 /** The picker's value of a stage's view (a timeline's is its ID: an ID never starts with `@`). */
 export const stageChoice = (stageId: string): string => `@${stageId}`;
 
+/**
+ * The choice showing `scope` of a storming — '' the integrated canvas, `@<stage ID>` a stage, else a timeline's ID —
+ * the storming shown with it. The view bar's pickers and the storming navigator both choose through it.
+ */
+export function chooseScope(choice: StormingChoice, stormingId: string, scope: string): StormingChoice {
+    const { [stormingId]: _, ...others } = choice.timelines;
+    return { ...choice, stormingId, timelines: scope ? { ...others, [stormingId]: scope } : others };
+}
+
+/** The scope of the view shown (see `chooseScope`), in the storming shown. */
+export function shownScope(stormings: readonly StormingView[], choice: StormingChoice): { stormingId: string; scope: string } | undefined {
+    const shown = shownStorming(stormings, choice);
+    if (!shown) return undefined;
+    const { timelineId, stageId } = shown.options;
+    return { stormingId: shown.storming.id, scope: timelineId ?? (stageId !== undefined ? stageChoice(stageId) : '') };
+}
+
 /** The storming shown (the chosen one, or the first) and the view of it, as the payload keys it. */
 export function shownStorming(stormings: readonly StormingView[], choice: StormingChoice): { storming: StormingView; options: ViewOptions } | undefined {
     const storming = stormings.find((s) => s.id === choice.stormingId) ?? stormings[0];
@@ -154,10 +171,7 @@ export function StormingToolbar({
                                     return { value: tl.id, label: tl.stageId !== undefined ? t.stageTimeline(stageName(tl.stageId), name) : name };
                                 }),
                             ]}
-                            onChange={(id) => {
-                                const { [storming.id]: _, ...others } = choice.timelines;
-                                onChange({ ...choice, timelines: id ? { ...others, [storming.id]: id } : others });
-                            }}
+                            onChange={(id) => onChange(chooseScope(choice, storming.id, id))}
                         />
                     </>
                 )}

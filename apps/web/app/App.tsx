@@ -10,7 +10,8 @@ import { changeCount, ChangesList, problemCounts, ProblemsList } from '../lists'
 import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from '../model-utils';
 import { StatesCanvas } from '../states-canvas';
 import { useSessionPage } from '../session/page';
-import { stageChoice, StormingDetails } from '../storming';
+import { stageChoice, StormingDetails, stormingExists } from '../storming';
+import { StormingNavigator } from '../storming-navigator';
 import { NameSwitch } from '../view/toolbar';
 import { ViewWorkspace, useViewWorkspace } from '../view/workspace';
 import { WORLDS, type World } from '../view/worlds';
@@ -30,7 +31,7 @@ function aggregateNames(model: DomainModel | null, id: string): { name: string; 
     return r?.kind === 'element' ? { name: r.el.name, label: r.el.label } : { name: id };
 }
 
-/** The Live View page: composes the shell with the left pane's lists, the view workspace, the inspector and, in a session, the chat. */
+/** The Live View page: composes the shell with the left column's lists and detail (the inspector), the view workspace and, in a session, the chat. */
 export function App() {
     const socket = useViewSocket();
     const { current, connection } = socket;
@@ -130,22 +131,35 @@ export function App() {
                 lists={{
                     tree: {
                         count: 0,
-                        content: (
-                            <Explorer
-                                model={model}
-                                files={current?.files ?? []}
-                                diagnostics={diagnostics}
-                                diff={diff}
-                                mode={mode}
-                                selected={selected}
-                                onSelect={(id) => {
-                                    select(id);
-                                    if (selectedFile(id)) setInspectorOpen(true);
-                                }}
-                                onOpen={openBest}
-                                onClose={() => setExplorerOpen(false)}
-                            />
-                        ),
+                        // the navigator follows the world: the model tree, or the stormings with their stages and timelines
+                        content:
+                            worlds.world === 'storming' ? (
+                                <StormingNavigator
+                                    stormings={stormings}
+                                    choice={settings.stormingChoice}
+                                    mode={mode}
+                                    onChoose={settings.setStormingChoice}
+                                    onSelect={(id) => {
+                                        if (stormingExists(stormings, id)) select(id, { highlight: false });
+                                    }}
+                                    onClose={() => setExplorerOpen(false)}
+                                />
+                            ) : (
+                                <Explorer
+                                    model={model}
+                                    files={current?.files ?? []}
+                                    diagnostics={diagnostics}
+                                    diff={diff}
+                                    mode={mode}
+                                    selected={selected}
+                                    onSelect={(id) => {
+                                        select(id);
+                                        if (selectedFile(id)) setInspectorOpen(true);
+                                    }}
+                                    onOpen={openBest}
+                                    onClose={() => setExplorerOpen(false)}
+                                />
+                            ),
                     },
                     problems: {
                         count: diagnostics.length,
@@ -194,10 +208,8 @@ export function App() {
                     />
                 }
                 {...(session.conversation && { conversation: session.conversation })}
-                inspector={(menu) => (
+                inspector={
                     <Inspector
-                        menu={menu}
-                        dock={panes.inspectorDock}
                         model={model}
                         mode={mode}
                         selected={selected}
@@ -261,7 +273,7 @@ export function App() {
                         onBack={goBack}
                         onClose={() => setInspectorOpen(false)}
                     />
-                )}
+                }
                 overlays={
                     current &&
                     baselineAnchor &&

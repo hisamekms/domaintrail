@@ -62,6 +62,7 @@ import { ChangedElements, ReplyButton, RunCard, useUnitAbout } from './card';
 import { AddReaction, ReactionRow, useMarking } from './mark-controls';
 import { messageMarks, updatedCards } from './cards';
 import { ChatProvider, useChat, type ChatContextValue, type Tx } from './chat-context';
+import { ChatHead, type ChatView } from './chat-head';
 import { ComposerResizer, useComposerSize } from './composer-resizer';
 import { changeUnits, requestersOf, shownUnits, statusUnit, unfinishedCount, unitName, workGroups, type ChangeUnit, type UnitOutcome } from './history';
 import {
@@ -293,7 +294,7 @@ export function SessionChat(props: {
             setLeaveError(failure(e));
         }
     };
-    const [view, setView] = useState<'chat' | 'history'>('chat');
+    const [view, setView] = useState<ChatView>('chat');
     // the stream's scroll while チャット shows, put back as it shows again, with the browser's scroll anchoring off for
     // that frame: it would move the stream a little each time the panel comes back (at the bottom, the stream follows
     // the newest itself)
@@ -495,24 +496,7 @@ export function SessionChat(props: {
                     onPeek={peekStatus}
                     tx={tx}
                 />
-                <div className="chat-head">
-                    <div className="segmented chat-views" role="tablist" aria-label={tx.chat.tabsLabel}>
-                        {(['chat', 'history'] as const).map((v) => (
-                            <button key={v} role="tab" aria-selected={view === v} className={view === v ? 'active' : ''} onClick={() => setView(v)}>
-                                {tx.chat.tabs[v]}
-                                {/* AI の作業: how many units are not finished (running and queued), whichever tab is shown */}
-                                {v === 'history' && unfinished > 0 && (
-                                    <span className="chat-views-badge" role="img" aria-label={tx.chat.history.unfinished(unfinished)}>
-                                        {unfinished}
-                                    </span>
-                                )}
-                            </button>
-                        ))}
-                    </div>
-                    <button className="icon-button" onClick={props.onClose} data-tooltip={tx.chat.close} aria-label={tx.chat.close}>
-                        <X size={16} aria-hidden />
-                    </button>
-                </div>
+                <ChatHead view={view} onView={setView} unfinished={unfinished} onClose={props.onClose} tx={tx} />
                 {session.status === 'signed-out' && <p className="session-note chat-notice">{tx.signedOut}</p>}
                 {ended && (
                     <p className="session-note chat-notice collab-ended">

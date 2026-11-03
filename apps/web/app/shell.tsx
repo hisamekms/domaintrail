@@ -1,24 +1,22 @@
-import { useRef, useState, type ReactNode } from 'react';
-import { Diff, Ellipsis, FolderTree, PanelBottomOpen, PanelRightOpen, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { useRef, type ReactNode } from 'react';
+import { Diff, FolderTree, PanelBottomOpen, TriangleAlert, type LucideIcon } from 'lucide-react';
 // the approved logo (assets/brand, never redrawn), bundled into dist/web with a hashed name: one per theme
 import logoDark from '../../../assets/brand/logo-dark.svg';
 import logoLight from '../../../assets/brand/logo-light.svg';
 import { useT } from '../i18n';
-import { Resizer, useDismiss } from '../shared/layout';
+import { Resizer, useElementHeight } from '../shared/layout';
 import { usePaneMotion } from '../shared/motion';
 import { Tooltips } from '../tooltip';
-import type { LeftView, Panes } from './panes';
+import { DETAIL_MIN, detailMax, detailSize, type LeftView, type Panes } from './panes';
 
-/** Width of the activity bar (the collapsed left pane), and of the rail a closed dock leaves (its height below the canvas); see styles.css. */
+/** Width of the activity bar (the collapsed left column); see styles.css. */
 const BAR_WIDTH = 44;
-/** Height of the app bar, at the top of the page (styles.css). */
-const APP_BAR_HEIGHT = 44;
+/** Height of the rail a closed detail leaves at the bottom of the left column, with the button that opens it. */
 const RAIL_SIZE = 28;
-/** What a resizer between two panes takes of the row (5px, overlapping both by 2px; see `.resizer-x` in styles.css). */
-const RESIZER_SPACE = 1;
-/** The dock can be widened until the canvas is this narrow, and raised until the canvas is this low. */
+/** The left column's width, between these (and never leaving the canvas less than MIN_CANVAS_WIDTH). */
+const LEFT_MIN = 220;
+const LEFT_MAX = 560;
 const MIN_CANVAS_WIDTH = 320;
-const MIN_CANVAS_HEIGHT = 200;
 
 /**
  * The conversation: a pillar at the right end of the page, the whole height, opened and closed by the reader (a
@@ -43,10 +41,10 @@ const RAIL_LISTS: readonly LeftView[] = ['tree', 'changes'];
 
 /**
  * The page's layout: the app bar across the top — the brand and the workspace's name, the world switch, then what
- * concerns the whole page (問題, and a session's people, AI state and menu) — and under it two pillars: the workspace —
- * the left pane (its activity bar and lists, the health and the settings at its foot), the canvas with its banners, and
- * the dock (the inspector, right of or below the canvas) — and the conversation at the right end, when there is one.
- * What goes in each place is the caller's.
+ * concerns the whole page (問題, and a session's people, AI state and menu) — and under it three columns: the left
+ * column — its activity bar, the navigator (the lists) over the detail (the inspector) with a splitter between them,
+ * and the health and the settings at its foot — the canvas with its banners, and the conversation at the right end,
+ * when there is one. What goes in each place is the caller's.
  */
 export function AppShell(props: {
     panes: Panes;
@@ -57,14 +55,14 @@ export function AppShell(props: {
     /** Where a session puts its controls of the whole page, at the right end of the app bar. */
     sessionSlot: (slot: HTMLDivElement | null) => void;
     lists: Record<LeftView, LeftList>;
-    /** At the foot of the left pane (at the bottom of its activity bar when collapsed). */
+    /** At the foot of the left column (at the bottom of its activity bar when collapsed). */
     health: ReactNode;
     settings: ReactNode;
     /** Notices over the canvas (connection lost, a model that does not parse…). */
     banners: ReactNode;
     workspace: ReactNode;
-    /** The inspector, given the dock's menu to place in its head. */
-    inspector: (menu: ReactNode) => ReactNode;
+    /** The detail of the selected item (the inspector), under the navigator. */
+    inspector: ReactNode;
     /** Composition point for the conversation pillar; nothing under `dt view` (yet). */
     conversation?: Conversation;
     /** Popups placed over the page (e.g. the baseline menu). */
@@ -72,27 +70,18 @@ export function AppShell(props: {
 }) {
     const { panes, conversation } = props;
     const { explorerOpen: leftOpen, setExplorerOpen, explorerWidth, setExplorerWidth, leftView, showLeft } = panes;
-    const {
-        inspectorOpen: dockOpen,
-        setInspectorOpen: setDockOpen,
-        inspectorDock: dock,
-        inspectorWidth,
-        setInspectorWidth,
-        inspectorHeight,
-        setInspectorHeight,
-    } = panes;
+    const { inspectorOpen: detailOpen, setInspectorOpen: setDetailOpen, detailHeight, setDetailHeight } = panes;
     const { conversationOpen, setConversationOpen, conversationWidth, setConversationWidth } = panes;
     const t = useT();
     const conversationShown = conversation !== undefined && conversationOpen;
-    const right = dock === 'right';
-    const dockSize = right ? inspectorWidth : inspectorHeight;
-    const menu = <DockMenu panes={panes} />;
     const leftWidth = leftOpen ? BAR_WIDTH + explorerWidth : BAR_WIDTH;
     const conversationSpace = conversationShown ? conversationWidth : 0;
+    // the split of the left column follows its height (the window's)
+    const column = useRef<HTMLElement>(null);
+    const columnHeight = useElementHeight(column);
+    const detail = detailSize(detailHeight, columnHeight);
     // opening and closing panes move at different paces (the motion section of styles.css)
-    const motion = usePaneMotion([leftOpen, dockOpen, conversationShown]);
-    // below the canvas, the inspector's content is laid out at the width it ends with while the panes beside it move
-    const bottomWidth = `calc(100vw - ${leftWidth + RESIZER_SPACE + (conversationShown ? conversationSpace + RESIZER_SPACE : 0)}px)`;
+    const motion = usePaneMotion([leftOpen, detailOpen, conversationShown]);
 
     return (
         <div className={`app motion-${motion}`}>
@@ -137,13 +126,45 @@ export function AppShell(props: {
                                 );
                             })}
                         </div>
-                        <aside className="pane left-pane" style={{ width: explorerWidth }} inert={!leftOpen}>
-                            {/* every list stays mounted, so that switching keeps the tree's filter and the lists' scroll */}
-                            {LISTS.map((k) => (
-                                <div key={k} className="left-content" hidden={leftView !== k}>
-                                    {props.lists[k].content}
+                        <aside className="pane left-pane" style={{ width: explorerWidth }} inert={!leftOpen} ref={column}>
+                            <div className="navigator">
+                                {/* every list stays mounted, so that switching keeps the tree's filter and the lists' scroll */}
+                                {LISTS.map((k) => (
+                                    <div key={k} className="left-content" hidden={leftView !== k}>
+                                        {props.lists[k].content}
+                                    </div>
+                                ))}
+                            </div>
+                            <Resizer
+                                direction="y"
+                                size={detail}
+                                min={DETAIL_MIN}
+                                max={() => detailMax(column.current?.clientHeight ?? columnHeight)}
+                                invert
+                                open={detailOpen}
+                                collapsed={RAIL_SIZE}
+                                onResize={setDetailHeight}
+                                onOpenChange={setDetailOpen}
+                                onReset={() => setDetailHeight(null)}
+                                label={t.resizeDetail}
+                                grip
+                            />
+                            {/* the detail stays mounted while closed, so that it keeps its tab, its scroll and its diagram's camera */}
+                            <div className={`detail${detailOpen ? ' open' : ''}`} style={{ height: detailOpen ? detail : RAIL_SIZE }}>
+                                <div className="rail" inert={detailOpen}>
+                                    <button
+                                        className="icon-button"
+                                        onClick={() => setDetailOpen(true)}
+                                        data-tooltip={t.openInspector}
+                                        aria-label={t.openInspector}
+                                    >
+                                        <PanelBottomOpen size={16} aria-hidden />
+                                    </button>
                                 </div>
-                            ))}
+                                <div className="detail-inner" style={{ height: detail }} inert={!detailOpen}>
+                                    {props.inspector}
+                                </div>
+                            </div>
                         </aside>
                     </div>
                     <div className="left-foot">
@@ -154,52 +175,20 @@ export function AppShell(props: {
                 <Resizer
                     direction="x"
                     size={explorerWidth}
-                    min={180}
-                    max={480}
+                    min={LEFT_MIN}
+                    max={() => Math.min(LEFT_MAX, window.innerWidth - BAR_WIDTH - conversationSpace - MIN_CANVAS_WIDTH)}
                     open={leftOpen}
                     collapsed={0}
                     onResize={setExplorerWidth}
                     onOpenChange={setExplorerOpen}
+                    onReset={() => setExplorerWidth(null)}
+                    label={t.resizeLeft}
                 />
-                <div className={`main main-${dock}`}>
+                <div className="main">
                     <div className="canvas-pane">
                         <div className="banners">{props.banners}</div>
                         {props.workspace}
                         {conversation && !conversationOpen && <div className="launcher-slot">{conversation.launcher}</div>}
-                    </div>
-                    <Resizer
-                        key={dock}
-                        direction={right ? 'x' : 'y'}
-                        size={dockSize}
-                        min={right ? 300 : 160}
-                        max={() =>
-                            right
-                                ? window.innerWidth - leftWidth - conversationSpace - MIN_CANVAS_WIDTH
-                                : window.innerHeight - APP_BAR_HEIGHT - MIN_CANVAS_HEIGHT
-                        }
-                        invert
-                        open={dockOpen}
-                        collapsed={RAIL_SIZE}
-                        onResize={right ? setInspectorWidth : setInspectorHeight}
-                        onOpenChange={setDockOpen}
-                    />
-                    <div
-                        className={`dock dock-${dock}${dockOpen ? ' open' : ''}${panes.inspectorMoving ? ' moving' : ''}`}
-                        style={right ? { width: dockOpen ? dockSize : RAIL_SIZE } : { height: dockOpen ? dockSize : RAIL_SIZE }}
-                    >
-                        <div className="rail" inert={dockOpen}>
-                            <button
-                                className="icon-button"
-                                onClick={() => panes.setInspectorOpen(true)}
-                                data-tooltip={t.openInspector}
-                                aria-label={t.openInspector}
-                            >
-                                {right ? <PanelRightOpen size={16} aria-hidden /> : <PanelBottomOpen size={16} aria-hidden />}
-                            </button>
-                        </div>
-                        <aside className="pane" style={right ? { width: dockSize } : { width: bottomWidth, height: dockSize }} inert={!dockOpen}>
-                            {props.inspector(menu)}
-                        </aside>
                     </div>
                 </div>
                 {conversation && (
@@ -215,6 +204,8 @@ export function AppShell(props: {
                                 collapsed={0}
                                 onResize={setConversationWidth}
                                 onOpenChange={setConversationOpen}
+                                onReset={() => setConversationWidth(null)}
+                                label={t.resizeConversation}
                             />
                         )}
                         <div className={`conversation${conversationOpen ? ' open' : ''}`} style={{ width: conversationSpace }} inert={!conversationOpen}>
@@ -246,41 +237,5 @@ function ProblemsButton({ panes, list }: { panes: Panes; list: LeftList }) {
             <TriangleAlert size={18} aria-hidden />
             {list.badge}
         </button>
-    );
-}
-
-/** The dock's menu (⋯ in the inspector's head): where the dock is (下に移動 / 右に移動), and room for more. */
-function DockMenu({ panes }: { panes: Panes }) {
-    const t = useT();
-    const [open, setOpen] = useState(false);
-    const root = useRef<HTMLDivElement>(null);
-    useDismiss(open, root, () => setOpen(false));
-    const below = panes.inspectorDock === 'right';
-    return (
-        <div className="pane-menu" ref={root}>
-            <button
-                className="icon-button"
-                aria-haspopup="menu"
-                aria-expanded={open}
-                aria-label={t.paneMenu}
-                data-tooltip={t.paneMenu}
-                onClick={() => setOpen(!open)}
-            >
-                <Ellipsis size={16} aria-hidden />
-            </button>
-            {open && (
-                <div className="pane-menu-list" role="menu">
-                    <button
-                        role="menuitem"
-                        onClick={() => {
-                            panes.setInspectorDock(below ? 'bottom' : 'right');
-                            setOpen(false);
-                        }}
-                    >
-                        {below ? t.dockBelow : t.dockRight}
-                    </button>
-                </div>
-            )}
-        </div>
     );
 }
