@@ -1,6 +1,6 @@
 // A card of the chat (ADR 0026, amendment): one change unit as an AI turn, updated in place — queued → running → done,
 // a question, declined, failed or cancelled — with the runs that continue it one under the other (the question, the
-// facilitator's answer or note, the result). Its state sits in the chat's status slot, at its header's right end; its actions float over its top right. At the top of each run, a quote of each message it applied (with what the
+// facilitator's answer or note, the result). Its state sits in the chat's status slot, at its header's right end; its actions float over its top right. At the top of each run (not in Solo), a quote of each message it applied (with what the
 // reply says of each, ✓ 対応 ◐ 一部 – 未対応 ? 確認); a click goes to the message, a hover marks it. The AI's question
 // and what it assumed sit on surfaces of their own, their options and alternatives as cards with ♡ at the right. The
 // facilitator answers a question by choosing, approves an assumption or sends the requests again with an alternative,
@@ -104,7 +104,7 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                     <RunSection
                         key={r.run.id}
                         run={r}
-                        display={quoteDisplay(runs, i)}
+                        display={quoteDisplay(runs, i, chat.solo)}
                         first={i === 0}
                         last={i === runs.length - 1}
                         compact={compact}
