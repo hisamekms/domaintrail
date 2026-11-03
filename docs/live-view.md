@@ -102,6 +102,11 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   and a group a dashed frame tinted with the event's orange. Every note also names its kind above its label
   («イベント»), so the colour is never the only cue. Light: soft pastel paper, a coloured edge and dark text; dark:
   muted deep paper of the same hue, a coloured edge and pale text. A storming whose file stops parsing stays as it last parsed, with a banner.
+  A storming with stages or exceptions (`stage`, `exception`) is drawn in time order: the stages as labelled frames
+  left to right, the trunk of the main flows one straight row through them, every other timeline on a row below the
+  step it branches off at (the exceptions' dashed arrows a quieter red, a dotted arrow back for `then`). The タイムライン
+  picker then also lists each stage (「…（例外を含む）」), and the toolbar has 「例外を表示」 (an icon toggle, on by
+  default, remembered per browser) to draw the integrated canvas and the stages without their exceptions.
 
 The modeling views (Context Map, Structure, Catalog, the inspector, the explorer) use the same hues for the same
 concepts, on smaller areas: the cards are neutral, and the kind is on their edge, their stereotype («集約ルート») and
