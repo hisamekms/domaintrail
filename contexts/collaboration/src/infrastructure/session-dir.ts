@@ -44,6 +44,16 @@ export async function restrict(p: string, mode: number): Promise<void> {
     }
 }
 
+/**
+ * Whether the file or directory `p` allows more than `mode`, read with `lstat` (no handle is opened on it: closing one
+ * would drop the POSIX locks SQLite holds on a database file of this process). False on Windows, where the modes do not
+ * apply.
+ */
+export async function looserThan(p: string, mode: number): Promise<boolean> {
+    if (process.platform === 'win32') return false;
+    return ((await lstat(p)).mode & 0o777 & ~mode) !== 0;
+}
+
 /** Makes the directory `dir` (0700) if it is absent (its parent must exist), refusing a symbolic link; an existing one is made 0700. */
 export async function plainDirectory(dir: string): Promise<void> {
     if ((await checkPlain(dir, 'directory')) === 'absent') {

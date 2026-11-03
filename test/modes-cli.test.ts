@@ -479,6 +479,35 @@ describe('the modes on one workspace (decision 13)', () => {
         }
     }, 30_000);
 
+    test('dt open link run as its own process, several times in a row: each link signs a browser in once', async () => {
+        // the command runs beside the server, as from a terminal: its database connection is another process's
+        const root = await copy();
+        const server = await start(root, 'Solo');
+        const linkFromAnotherProcess = (): string => {
+            const r = Bun.spawnSync(['bun', path.join(ROOT, 'bin', 'dt.ts'), '-r', root, 'open', 'link']);
+            expect(r.exitCode).toBe(0);
+            return /^Sign-in link \(single use, expires in 60 minutes\): (\S+)$/m.exec(r.stdout.toString())?.[1] ?? '';
+        };
+        try {
+            await signInSolo(server.facilitatorLink);
+            const links = [linkFromAnotherProcess(), linkFromAnotherProcess(), linkFromAnotherProcess()];
+            // issued before any is used, then one after another is used
+            for (const link of links) await signInSolo(link);
+            for (const link of [linkFromAnotherProcess(), linkFromAnotherProcess()]) await signInSolo(link);
+            // a used link stays used
+            for (const link of links) expect((await fetch(link, { redirect: 'manual' })).status).toBe(403);
+            // and an expired one is refused
+            const db = await openSessionDatabase(root);
+            const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
+            const short = await access.issueOpenCode({ session: server.session, ttlMs: 1 });
+            db.close();
+            await Bun.sleep(10);
+            expect((await fetch(`${server.url}session/open?code=${short.ok ? short.value.code : ''}`, { redirect: 'manual' })).status).toBe(403);
+        } finally {
+            await server.stop();
+        }
+    }, 30_000);
+
     test('dt open answers loopback only, whatever collab.access allows', async () => {
         const root = await copy();
         const server = await startSessionServer({

@@ -67,6 +67,52 @@ if (step === 'run') {
 }
 `;
 
+/**
+ * A server and `dt open link` as two Node processes on one session database: `serve` holds its connection open, as the
+ * server does, and asks `issue` (another process: opens the database, issues a sign-in code, closes it) for each code.
+ */
+const LINKS_ENTRY = `
+import { execFileSync } from 'node:child_process';
+import { Collaboration as C, createCollaboration, createSessionAccess, createUnitOfWork, openSessionBlobs, openSessionDatabase, randomIds, randomSecrets, systemClock } from '@domaintrail/collaboration';
+import { createModelValidator } from '@domaintrail/dt';
+import { createWorkspaceSnapshot } from '@domaintrail/workspace';
+import { sourceSelection } from '@domaintrail/analysis';
+
+const [root, step, session] = process.argv.slice(2);
+const must = (r) => { if (!r.ok) throw new Error(JSON.stringify(r.error)); return r.value; };
+const db = await openSessionDatabase(root);
+const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
+if (step === 'issue') {
+    const ttlMs = Number(process.argv[5]);
+    const code = must(await access.issueOpenCode({ session, ttlMs }));
+    db.close();
+    console.log(code.code);
+} else {
+    const use = createCollaboration({
+        uow: createUnitOfWork(db),
+        workspace: createWorkspaceSnapshot(root, sourceSelection()),
+        blobs: await openSessionBlobs(root),
+        validator: createModelValidator(),
+        clock: systemClock,
+        ids: randomIds,
+    });
+    const facilitator = must(C.makeParticipantId('facilitator'));
+    const { session: opened } = must(await use.startSession({ facilitator, name: must(C.makeDisplayName('Ada')), mode: 'Solo' }));
+    const issue = (ttlMs) => execFileSync(process.execPath, [process.argv[1], root, 'issue', opened.id, String(ttlMs)]).toString().trim();
+    const redeem = (code) => access.redeemOpenCode({ session: opened.id, code });
+    const ahead = [issue(60000), issue(60000), issue(60000)];
+    const results = { ahead: [], oneByOne: [], again: [], expired: undefined };
+    for (const code of ahead) results.ahead.push(await redeem(code));
+    for (let i = 0; i < 3; i++) results.oneByOne.push(await redeem(issue(60000)));
+    for (const code of ahead) results.again.push(await redeem(code));
+    const short = issue(1);
+    await new Promise((r) => setTimeout(r, 10));
+    results.expired = await redeem(short);
+    db.close();
+    console.log(JSON.stringify(results));
+}
+`;
+
 const SALES = `context Sales {
   id OrderId: UUID
 
@@ -124,5 +170,29 @@ describe('collaboration on Node', () => {
         const second = node([path.join(dir, 'entry.mjs'), workspace, result.session]);
         expect(second.code).toBe(0);
         expect(JSON.parse(second.out)).toEqual({ runs: ['Completed'], revisions: ['SessionStart', 'RunBase', 'RunResult', 'PreRestore', 'Restored'] });
+    }, 30_000);
+
+    test('a sign-in code issued by another process is redeemed by the one holding the database open, each once, again and again', async () => {
+        const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-node-'));
+        dirs.push(dir);
+        await symlink(path.join(ROOT, 'node_modules'), path.join(dir, 'node_modules'));
+        await writeFile(path.join(dir, 'links.ts'), LINKS_ENTRY);
+        const built = await Bun.build({
+            entrypoints: [path.join(dir, 'links.ts')],
+            outdir: dir,
+            naming: '[name].mjs',
+            target: 'node',
+            format: 'esm',
+            external: EXTERNAL,
+        });
+        expect(built.success).toBe(true);
+
+        const workspace = await mkdtemp(path.join(tmpdir(), 'domaintrail-node-ws-'));
+        dirs.push(workspace);
+        await writeFile(path.join(workspace, 'sales.dt'), SALES);
+        const served = node([path.join(dir, 'links.mjs'), workspace, 'serve']);
+        expect(served.code).toBe(0);
+        // codes issued before any is used, then one after another; used and expired ones stay refused
+        expect(JSON.parse(served.out)).toEqual({ ahead: [true, true, true], oneByOne: [true, true, true], again: [false, false, false], expired: false });
     }, 30_000);
 });

@@ -29,7 +29,7 @@ import type {
     UnitOfWork,
 } from '../application/ports.js';
 import { upgradeEvent, upgradeRequest, upgradeRun, upgradeSession } from './legacy.js';
-import { DATABASE_FILE, PRIVATE_FILE, checkPlain, restrict, sessionDirectory } from './session-dir.js';
+import { DATABASE_FILE, PRIVATE_FILE, checkPlain, looserThan, restrict, sessionDirectory } from './session-dir.js';
 
 /**
  * The schema, one migration per entry: the database's `user_version` is the number applied. Never edit an applied
@@ -320,14 +320,21 @@ export async function openSessionDatabase(root: string): Promise<DatabaseSync> {
     });
     for (const f of files) if ((await checkPlain(f, 'file')) === 'present') await restrict(f, PRIVATE_FILE);
     const db = openDatabase(file);
+    // the WAL files SQLite made, should the umask have loosened them: only looked at while the connection is open. Its
+    // locks are the process's (POSIX), and closing any other handle on these files drops them all: another process
+    // (`dt open link`) closing its connection would then take itself for the last one and remove the WAL files this one
+    // still uses, which would no longer see what the others write, nor be seen. Loose ones are tightened with it closed.
+    let loose = false;
     try {
-        // the WAL files SQLite made, should the umask have loosened them
-        for (const f of files) if ((await checkPlain(f, 'file')) === 'present') await restrict(f, PRIVATE_FILE);
+        for (const f of files) if ((await checkPlain(f, 'file')) === 'present' && (await looserThan(f, PRIVATE_FILE))) loose = true;
     } catch (e) {
         db.close();
         throw e;
     }
-    return db;
+    if (!loose) return db;
+    db.close();
+    for (const f of files) if ((await checkPlain(f, 'file')) === 'present') await restrict(f, PRIVATE_FILE);
+    return openDatabase(file);
 }
 
 // ---- Rows and JSON ----
