@@ -7,6 +7,7 @@ import type { DomainModel } from '../domain/model.js';
 import type { SourceModel } from '../domain/source-model.js';
 import { RuleSink } from '../domain/diagnostics.js';
 import { checkChanges, checkCommands, checkFactoryIds } from '../domain/rules/commands.js';
+import { checkDescriptions } from '../domain/rules/descriptions.js';
 import { checkEventIds } from '../domain/rules/events.js';
 import { checkFieldSets } from '../domain/rules/field-sets.js';
 import { checkInvariants } from '../domain/rules/expressions.js';
@@ -57,6 +58,7 @@ export async function analyzeDomain(sources: readonly SourceFile[]): Promise<Dom
         const rules = new RuleSink(diagnostics);
         checkNames(sourceModel, rules);
         checkShared(sourceModel, rules);
+        checkDescriptions(sourceModel, rules);
         checkStructure(sourceModel, rules);
         checkUnions(sourceModel, rules);
         checkFieldSets(sourceModel, rules);

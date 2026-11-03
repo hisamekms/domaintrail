@@ -53,9 +53,9 @@ import {
     type Transition,
     type TypeRef,
 } from './generated/ast.js';
-import { docComment } from './labels.js';
+import { docComment, docCommentBlock } from './labels.js';
 import type { FieldLike, ModelIndex } from './model-index.js';
-import { siteOf, type FileResolver } from './site.js';
+import { rangeSiteOf, siteOf, type FileResolver } from './site.js';
 import { regexSource } from './regex-source.js';
 import { commandId, elementId, stateId } from '../../domain/ids.js';
 import type * as src from '../../domain/source-model.js';
@@ -270,16 +270,19 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
         nameAt: site(t, 'name'),
         labelAt: site(t, 'label'),
     });
-    const fragment = (c: Context): src.ContextFragment => ({
-        name: c.name,
-        shared: c.shared,
-        ...(c.label !== undefined && { label: c.label }),
-        ...optionalDoc(c),
-        terms: c.terms.flatMap((block) => block.entries.map(term)),
-        at: site(c),
-        nameAt: site(c, 'name'),
-        labelAt: site(c, 'label'),
-    });
+    const fragment = (c: Context): src.ContextFragment => {
+        const doc = docCommentBlock(c);
+        return {
+            name: c.name,
+            shared: c.shared,
+            ...(c.label !== undefined && { label: c.label }),
+            ...(doc && { doc: doc.text, docAt: rangeSiteOf(c, fileOf, doc.range) }),
+            terms: c.terms.flatMap((block) => block.entries.map(term)),
+            at: site(c),
+            nameAt: site(c, 'name'),
+            labelAt: site(c, 'label'),
+        };
+    };
 
     const fragments = index.fragments.map(fragment);
     const elements = index.elements.map((el) => {

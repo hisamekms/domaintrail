@@ -53,6 +53,17 @@ describe('dt show', () => {
         ]);
     });
 
+    test('a context described in two files (M025): shown as before, with the first description, exit 0 with a note', async () => {
+        const dir = await workspace({
+            'customer.dt': '/// Selling to customers.\ncontext Sales {\n  value Customer { name: String }\n}\n',
+            'invoice.dt': '/// Invoices.\ncontext Sales {\n  value Invoice { total: Int }\n}\n',
+        });
+        const r = await run('-r', dir, 'show', 'Sales');
+        expect(r.code).toBe(0);
+        expect(r.out).toEqual(['context Sales', '  /// Selling to customers.', '  value Customer  // customer.dt:3', '  value Invoice  // invoice.dt:3']);
+        expect(r.err).toEqual(['note: the model has 1 error(s) (see `dt check`); shown as far as it resolves.']);
+    });
+
     test('a short name that names one thing only', async () => {
         expect((await shop('Order')).out).toEqual((await shop('Sales.Order')).out);
         expect((await shop('Money')).out[0]).toBe('value Common.Money "金額"  // common/context.dt:15');

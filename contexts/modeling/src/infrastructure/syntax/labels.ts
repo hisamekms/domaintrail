@@ -1,4 +1,4 @@
-import { AstUtils, type AstNode } from 'langium';
+import { AstUtils, type AstNode, type CstNode } from 'langium';
 import { isContext, isReferenceField, type Parameter, type TermEntry } from './generated/ast.js';
 import type { FieldLike, ModelIndex } from './model-index.js';
 
@@ -75,6 +75,17 @@ export class LabelResolver {
 
 /** Joins the `///` lines directly above a node (no blank lines in between). */
 export function docComment(node: AstNode): string | undefined {
+    return docCommentBlock(node)?.text;
+}
+
+/** The `///` lines directly above a node: their text joined, and their range (0-based, as in a Langium range). */
+export interface DocCommentBlock {
+    text: string;
+    range: CstNode['range'];
+}
+
+/** The `///` lines directly above a node (no blank lines in between), with where they are. */
+export function docCommentBlock(node: AstNode): DocCommentBlock | undefined {
     const cst = node.$cstNode;
     if (!cst) return undefined;
     const text = AstUtils.getDocument(node).textDocument.getText();
@@ -82,10 +93,15 @@ export function docComment(node: AstNode): string | undefined {
     // A comment belongs to a node only when the node starts its line, not to a field written after `{`.
     if (lines.pop()!.trim() !== '') return undefined;
     const doc: string[] = [];
+    let first = lines.length;
     for (let i = lines.length - 1; i >= 0; i--) {
         const m = /^\s*\/\/\/ ?(.*)$/.exec(lines[i]);
         if (!m) break;
         doc.unshift(m[1].trimEnd());
+        first = i;
     }
-    return doc.length ? doc.join('\n') : undefined;
+    if (!doc.length) return undefined;
+    const last = lines.length - 1;
+    const range = { start: { line: first, character: lines[first].indexOf('///') }, end: { line: last, character: lines[last].length } };
+    return { text: doc.join('\n'), range };
 }

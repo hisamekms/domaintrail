@@ -14,7 +14,11 @@ export type FileResolver = (uri: string) => string;
  */
 export function siteOf(node: AstNode, fileOf: FileResolver, property?: string, index?: number): Site {
     const cst = selectCst(node, property, index);
-    const range = cst?.range ?? { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } };
+    return rangeSiteOf(node, fileOf, cst?.range ?? { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } });
+}
+
+/** A site at `range` (0-based, as in a Langium range) of the document of `node`, in the model element `node` lies in. */
+export function rangeSiteOf(node: AstNode, fileOf: FileResolver, range: CstNode['range']): Site {
     return {
         file: fileOf(AstUtils.getDocument(node).uri.toString()),
         start: { line: range.start.line + 1, column: range.start.character + 1 },
