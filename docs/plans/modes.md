@@ -1709,8 +1709,18 @@ This replaces where the guide's goal is read from (above) and where the intervie
   - In Collab the facilitator sets it, and everyone sees the same journey. The guide's card draws that journey's map.
   - In Solo the person sets it.
   - This replaces "each viewer remembers their choice" above.
-- **Seeing it in the UI:** the current journey, its brief, its goal and where it stands are visible in Solo and Collab
-  alike. Where this goes on the page is still open; a preview will compare the candidates.
+- **Seeing it in the UI: a chip in the app bar** (it concerns the whole page, in both worlds).
+  - It reads `🧭 <journey> · 📍 <step> → 🏁 <goal>`. When narrow it shrinks to `🧭 <journey>`, then to `🧭`. With no
+    journey it reads 「🧭 ゴールを決める」, which offers `/es:start` and `/model:start`.
+  - Pressing it opens the journeys panel:
+    - the current journey: its brief (purpose, scope, constraints, participants, source), its map, and the actions
+      ガイドを見る, ゴールを変える, ブリーフを見直す and 完了にする;
+    - the other journeys, ES and modeling, each with where it stands. Choosing one makes it the current journey.
+    - A line for new journeys (`/es:start` · `/model:start`) and the count of archived ones.
+  - Everyone can read the panel. A participant's choose, change, done or archive becomes a request to the facilitator.
+  - The guide card's heading names its journey; pressing the name opens the panel.
+  - The detail also shows, briefly, the ES journey of a selected storming, or the modeling journeys that include a
+    selected context.
 - **How journeys begin:**
   - **ES:** `/es:start` on a storming with no journey creates one. On a storming that has one, it revises its brief;
     there is still one journey per storming.
