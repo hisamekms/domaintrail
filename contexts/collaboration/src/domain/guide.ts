@@ -17,7 +17,7 @@ import type { DomainModel, ElementModel, FieldModel } from '@domaintrail/modelin
 import { allTimelines, type NodeElement, type Storming } from '@domaintrail/storming';
 import { Collaboration, type Result } from '../generated/index.js';
 import { elementReference, parseElementReference } from './proposals.js';
-import { ES_GOALS, ES_STEPS, MARKABLE_STEPS, MODEL_PATTERNS, ROW_STEPS, SET_GOAL, type EsGoalLevel, type EsStep } from './guide-paths.js';
+import { ES_GOALS, ES_STEPS, MARKABLE_STEPS, MODEL_PATTERNS, placeSteps, ROW_STEPS, SET_GOAL, type EsGoalLevel, type EsStep } from './guide-paths.js';
 import { esJourneyKey, journeyOf, type JourneyFile, type JourneyAct } from './journey.js';
 
 /**
@@ -42,8 +42,10 @@ export {
     MODEL_PATTERNS,
     PATTERN_SUBJECT,
     patternMarkable,
+    placeSteps,
     ROW_STEPS,
     SET_GOAL,
+    type StepPlace,
     type EsGoalLevel,
     type EsStep,
     type GuidePatternPath,
@@ -414,12 +416,12 @@ interface Laid {
     readonly marked: boolean;
 }
 
-/** The steps placed: done, the first not done up to the goal here, the rest to do. */
+/** The steps placed (`placeSteps`): done, here after the last done, the earlier not done unconfirmed, the rest to do. */
 function placed(steps: readonly Laid[]): [Collaboration.GuideStep, ...Collaboration.GuideStep[]] {
-    const here = steps.findIndex((s) => !s.done && !s.after);
+    const places = placeSteps(steps);
     const out = steps.map((s, i): Collaboration.GuideStep => ({
         key: stepKey(s.key),
-        state: s.done ? 'Done' : i === here ? 'Here' : 'Todo',
+        state: places[i] ?? 'Todo',
         goal: s.goal,
         after: s.after,
         markable: s.markable,

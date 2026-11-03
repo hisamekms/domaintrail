@@ -507,7 +507,8 @@ only to name what changed precisely.`,
         task: `The person in \`person\` ran \`/guide\` (ガイド, "Guide"): they want a coach's advice on what to do next.
 Many are new to Event Storming and to domain modeling. The page already shows them \`guide\` (the block below),
 computed from the files when they pressed the button, with no AI: the map of where they are — the world (\`Storming\`,
-\`Model\`, or \`None\`: neither, or no view), per journey its steps to the goal, each \`Done\`, \`Here\` or \`Todo\`
+\`Model\`, or \`None\`: neither, or no view), per journey its steps to the goal, each \`Done\`, \`Here\` (the first not done after the last done), \`Unconfirmed\` (an earlier step not
+done: a judgment nobody marked yet; suggest confirming it) or \`Todo\`
 (a step past the goal is not part of it; one "marked done by a person" was judged so by them), and in the modeling the
 BC rows (each context's aggregates, commands, invariants) — and what is known at once (\`findings\`: a stage without
 exceptions, open hotspots, long labels, a context without aggregates, …, each with where to go). Do not repeat them:

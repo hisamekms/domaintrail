@@ -19,6 +19,7 @@ import {
     guideMaps,
     markableGuideMark,
     NO_MARKS,
+    placeSteps,
     readGuideGoal,
     type GuideGoal,
     type GuideWorkspace,
@@ -216,6 +217,21 @@ const COMMON = `shared context Common {
   primitive Amount: Decimal
 }`;
 
+describe('where 📍 sits', () => {
+    test('here is the first step not done after the last done one; an earlier one not done is unconfirmed', () => {
+        const at = (done: string, after = ''): string[] => placeSteps(done.split('').map((d, i) => ({ done: d === 'x', after: after[i] === '~' })));
+        expect(at('____')).toEqual(['Here', 'Todo', 'Todo', 'Todo']);
+        expect(at('xx__')).toEqual(['Done', 'Done', 'Here', 'Todo']);
+        // a judgment nobody marked before steps the files tell done: not here, unconfirmed
+        expect(at('_xx_')).toEqual(['Unconfirmed', 'Done', 'Done', 'Here']);
+        expect(at('x_x_x_')).toEqual(['Done', 'Unconfirmed', 'Done', 'Unconfirmed', 'Done', 'Here']);
+        // every step to the goal done but an earlier one: none is here
+        expect(at('_xxx')).toEqual(['Unconfirmed', 'Done', 'Done', 'Done']);
+        // a step past the goal is never here, and a done one past it does not move here
+        expect(at('x__x', '__~~')).toEqual(['Done', 'Here', 'Todo', 'Done']);
+    });
+});
+
 describe('the modeling maps', () => {
     const map = async (files: Record<string, string>, goal: GuideGoal, marked: readonly string[] = []): Promise<Collaboration.GuideMap> =>
         guideMap({ workspace: await workspace(files), goal, marks: guideMarks(marked.map((step) => ({ journey: 'j', step }))), viewedAt: MODEL_VIEW });
@@ -232,12 +248,19 @@ describe('the modeling maps', () => {
             'invariants:Todo!',
         ]);
         expect(path(await map(empty, one('Whole', 'contextMap'))).slice(3)).toEqual(['contextMap:Todo!', 'contexts:Todo~', 'invariants:Todo~']);
-        expect(path(await map(empty, one('FromStorming')))).toEqual(['review:Here', 'bcCarved:Done', 'aggregates:Todo', 'commands:Todo', 'invariants:Todo!']);
+        // a step before the last done one that is not done is unconfirmed: here is after it, the map never goes backwards
+        expect(path(await map(empty, one('FromStorming')))).toEqual([
+            'review:Unconfirmed',
+            'bcCarved:Done',
+            'aggregates:Here',
+            'commands:Todo',
+            'invariants:Todo!',
+        ]);
         expect(path(await map(empty, one('OneContext', 'commands')))).toEqual([
-            'terms:Here',
-            'aggregates:Todo',
+            'terms:Unconfirmed',
+            'aggregates:Unconfirmed',
             'values:Done',
-            'commands:Todo!',
+            'commands:Here!',
             'invariants:Todo~',
             'policies:Todo~',
         ]);
@@ -254,8 +277,8 @@ describe('the modeling maps', () => {
             ['terms', 'Done', false, false],
             ['subdomains', 'Done', true, true],
             ['bcSplit', 'Done', true, true],
-            // one context: no line on the context map yet, and not marked
-            ['contextMap', 'Here', true, false],
+            // one context: no line on the context map yet, and not marked; the steps after it done: unconfirmed
+            ['contextMap', 'Unconfirmed', true, false],
             // its one BC is in depth already
             ['contexts', 'Done', false, false],
             // a mark on a step the files tell changes nothing: Order has an invariant; that alone makes it done
@@ -284,7 +307,7 @@ describe('the modeling maps', () => {
         ]);
         // with the stormings, its commands step waits for a ref to the model
         const withStorming = await map({ 'sales.dt': SALES, 'issue.dtes': storming({ events: true }) }, goal, ['review']);
-        expect(path(withStorming)[3]).toBe('commands:Here');
+        expect(path(withStorming)[3]).toBe('commands:Unconfirmed');
     });
 
     test('pattern A: the rows grow under "each BC in depth", here while that step is', async () => {
@@ -323,7 +346,7 @@ describe('the modeling maps', () => {
         ]);
         // C on Billing: its one row; Billing has no terms of its own, an aggregate, no command
         expect(maps[0]?.contexts.map((r) => r.context as string)).toEqual(['Billing']);
-        expect(path(maps[0] as Collaboration.GuideMap).slice(0, 4)).toEqual(['terms:Here', 'aggregates:Done', 'values:Done', 'commands:Todo']);
+        expect(path(maps[0] as Collaboration.GuideMap).slice(0, 4)).toEqual(['terms:Unconfirmed', 'aggregates:Done', 'values:Done', 'commands:Here']);
         // B over no storming: no ref is waited for; the mark is this journey's only
         expect(path(maps[2] as Collaboration.GuideMap)[0]).toBe('review:Done');
         expect(path(maps[1] as Collaboration.GuideMap).slice(0, 2)).toEqual(['diagnostics:Done', 'termsAligned:Here']);
@@ -344,7 +367,7 @@ describe('the modeling maps', () => {
                     current: 'billing',
                 })[2] as Collaboration.GuideMap,
             )[0],
-        ).toBe('review:Here');
+        ).toBe('review:Unconfirmed');
     });
 
     test('a BC row marked done by its context: done, and the next row not done is here', async () => {

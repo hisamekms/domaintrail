@@ -3226,17 +3226,20 @@ export type GuidePattern =
 /**
  * 区切りの状態
  * 地図の区切りや BC の行が、済んだか、いまここか、これからか。
- * @see contexts/collaboration/model/guide.dt:22
+ * いまここは、済んだ最後の区切りより後の、最初の済んでいない区切り。それより前の済んでいない区切り（人の判断で、まだ誰も
+ * 済みにしていない）は未確認。
+ * @see contexts/collaboration/model/guide.dt:24
  */
 export type GuideStepState =
     | 'Done' // 済み
     | 'Here' // いまここ
-    | 'Todo'; // これから
+    | 'Todo' // これから
+    | 'Unconfirmed'; // 未確認
 
 /**
  * 地図の区切り
  * 地図の区切り1つ。
- * @see contexts/collaboration/model/guide.dt:25
+ * @see contexts/collaboration/model/guide.dt:27
  */
 export interface GuideStep {
     /** 区切り */
@@ -3255,7 +3258,7 @@ export interface GuideStep {
 
 /**
  * Whether two GuideStep values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/guide.dt:25
+ * @see contexts/collaboration/model/guide.dt:27
  */
 export function equalGuideStep(a: GuideStep, b: GuideStep): boolean {
     return a.key === b.key && a.state === b.state && a.goal === b.goal && a.after === b.after && a.markable === b.markable && a.marked === b.marked;
@@ -3264,7 +3267,7 @@ export function equalGuideStep(a: GuideStep, b: GuideStep): boolean {
 /**
  * BC の行
  * `.dt` のコンテキスト1つの進み具合（「各 BC を深掘り」の行）。コンテキストが足されたり分かれたりすると、行も変わる。
- * @see contexts/collaboration/model/guide.dt:39
+ * @see contexts/collaboration/model/guide.dt:41
  */
 export interface GuideContextRow {
     /** コンテキスト */
@@ -3285,7 +3288,7 @@ export interface GuideContextRow {
 
 /**
  * Whether two GuideContextRow values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/guide.dt:39
+ * @see contexts/collaboration/model/guide.dt:41
  */
 export function equalGuideContextRow(a: GuideContextRow, b: GuideContextRow): boolean {
     return a.context === b.context && a.shared === b.shared && a.aggregates === b.aggregates && a.commands === b.commands && a.invariants === b.invariants && a.state === b.state && a.marked === b.marked;
@@ -3294,7 +3297,7 @@ export function equalGuideContextRow(a: GuideContextRow, b: GuideContextRow): bo
 /**
  * ガイドの地図
  * ガイドの地図: いまいる世界の、道のりのゴールまでの道。ゴールがなければ「ゴールを決める」だけ。
- * @see contexts/collaboration/model/guide.dt:52
+ * @see contexts/collaboration/model/guide.dt:54
  */
 export interface GuideMap {
     /** 世界 */
@@ -3319,7 +3322,7 @@ export interface GuideMap {
 
 /**
  * Whether two GuideMap values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/guide.dt:52
+ * @see contexts/collaboration/model/guide.dt:54
  */
 export function equalGuideMap(a: GuideMap, b: GuideMap): boolean {
     return a.world === b.world && sameOptional(a.journey, b.journey, ($32: GuideJourneyKey, $33: GuideJourneyKey) => $32 === $33) && sameOptional(a.journeyName, b.journeyName, ($34: string, $35: string) => $34 === $35) && sameOptional(a.pattern, b.pattern, ($36: string, $37: string) => $36 === $37) && sameOptional(a.storming, b.storming, ($38: StormingName, $39: StormingName) => $38 === $39) && sameList(a.steps, b.steps, equalGuideStep) && sameList(a.contexts, b.contexts, equalGuideContextRow) && sameOptional(a.contextsAt, b.contextsAt, ($40: GuideStepKey, $41: GuideStepKey) => $40 === $41) && sameOptional(a.missing, b.missing, ($42: boolean, $43: boolean) => $42 === $43);
@@ -3328,7 +3331,7 @@ export function equalGuideMap(a: GuideMap, b: GuideMap): boolean {
 /**
  * すぐ分かることの種類
  * ファイルを見ればすぐ分かることの種類。
- * @see contexts/collaboration/model/guide.dt:70
+ * @see contexts/collaboration/model/guide.dt:72
  */
 export type GuideFindingKind =
     | 'StormingWithoutBrief' // ブリーフのないストーミング
@@ -3345,7 +3348,7 @@ export type GuideFindingKind =
 /**
  * すぐ分かること
  * ファイルを見ればすぐ分かること1つ（AI を使わない）。その場へ行く先（選ぶ要素か、開くビュー）があれば添える。
- * @see contexts/collaboration/model/guide.dt:84
+ * @see contexts/collaboration/model/guide.dt:86
  */
 export interface GuideFinding {
     /** 種類 */
@@ -3362,7 +3365,7 @@ export interface GuideFinding {
 
 /**
  * Whether two GuideFinding values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/guide.dt:84
+ * @see contexts/collaboration/model/guide.dt:86
  */
 export function equalGuideFinding(a: GuideFinding, b: GuideFinding): boolean {
     return a.kind === b.kind && a.count === b.count && sameOptional(a.subject, b.subject, ($44: string, $45: string) => $44 === $45) && sameOptional(a.target, b.target, equalModelTarget) && sameOptional(a.view, b.view, equalViewShown);
@@ -3372,7 +3375,7 @@ export function equalGuideFinding(a: GuideFinding, b: GuideFinding): boolean {
  * ガイドの下見
  * `/guide` を始めたときの下見: そのときの地図（モデリングの道のりが複数あれば、道のりごとに）と、すぐ分かること。
  * カードは履歴でもこれを出す。
- * @see contexts/collaboration/model/guide.dt:95
+ * @see contexts/collaboration/model/guide.dt:97
  */
 export interface GuideSnapshot {
     /** 地図 */
@@ -3383,7 +3386,7 @@ export interface GuideSnapshot {
 
 /**
  * Whether two GuideSnapshot values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/guide.dt:95
+ * @see contexts/collaboration/model/guide.dt:97
  */
 export function equalGuideSnapshot(a: GuideSnapshot, b: GuideSnapshot): boolean {
     return sameList(a.maps, b.maps, equalGuideMap) && sameList(a.findings, b.findings, equalGuideFinding);

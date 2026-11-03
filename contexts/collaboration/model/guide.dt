@@ -19,7 +19,9 @@ context Collaboration {
   }
 
   /// 地図の区切りや BC の行が、済んだか、いまここか、これからか。
-  enum GuideStepState "区切りの状態" { Done "済み" Here "いまここ" Todo "これから" }
+  /// いまここは、済んだ最後の区切りより後の、最初の済んでいない区切り。それより前の済んでいない区切り（人の判断で、まだ誰も
+  /// 済みにしていない）は未確認。
+  enum GuideStepState "区切りの状態" { Done "済み" Here "いまここ" Todo "これから" Unconfirmed "未確認" }
 
   /// 地図の区切り1つ。
   value GuideStep "地図の区切り" {

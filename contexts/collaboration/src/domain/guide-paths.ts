@@ -86,3 +86,17 @@ export const PATTERN_SUBJECT: Readonly<Record<Collaboration.GuidePattern, 'storm
     OneContext: 'context',
     Review: undefined,
 };
+
+/** Where a step of a path stands. */
+export type StepPlace = 'Done' | 'Here' | 'Todo' | 'Unconfirmed';
+
+/**
+ * The steps of a path placed (the map's 📍): here is the first step not done after the last step done (up to the goal:
+ * a step past it is never here); a step before that last done one that is not done is unconfirmed (a judgment nobody
+ * marked yet), never here, so that the map does not read as going backwards; the rest is to do.
+ */
+export function placeSteps(steps: readonly { readonly done: boolean; readonly after: boolean }[]): StepPlace[] {
+    const last = steps.reduce((at, s, i) => (s.done && !s.after ? i : at), -1);
+    const here = steps.findIndex((s, i) => i > last && !s.done && !s.after);
+    return steps.map((s, i): StepPlace => (s.done ? 'Done' : i === here ? 'Here' : i < last ? 'Unconfirmed' : 'Todo'));
+}

@@ -237,6 +237,8 @@ export {
     markAct,
     PATTERN_SUBJECT,
     patternMarkable,
+    placeSteps,
+    type StepPlace,
     type ContextFacts,
     type EsGoalLevel,
     type EsStep,
