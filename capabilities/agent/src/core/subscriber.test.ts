@@ -217,6 +217,15 @@ describe('events at Design Level only', () => {
     });
 });
 
+describe('stages and exceptions', () => {
+    test('the rules say to organise phases in stages, exceptions as `exception` from their branch event, and `then` to rejoin', () => {
+        const prompt = buildPrompt(input([frozen({ kind: 'DtesStorming', storming: 'S' }, 'x')]), new Map(), 'n');
+        expect(prompt).toContain('17. A `.dtes` storming that goes through several phases is organised in `stage`s, in time order, each `after`');
+        expect(prompt).toContain('each exception is an `exception` that starts with the event of\n   the flow it branches off at');
+        expect(prompt).toContain('ends with `then <Event>`');
+    });
+});
+
 describe('the session so far, approved proposals and answering instead of editing (ADR 0030)', () => {
     const names = new Map([['dev:bob', 'Bob']]);
 

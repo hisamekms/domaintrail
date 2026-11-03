@@ -10,7 +10,7 @@ export type { StormingAnalysis } from '../domain/ir.js';
 
 /**
  * Analyzes the `.dtes` sources of a workspace (ADR 0024, T6): parses them, then validates the stormings of the files that
- * parse (S001–S009, S014–S016) and links their `ref`s against the Typed Model of the `.dt` sources (S010–S013; skipped
+ * parse (S001–S009, S014–S022) and links their `ref`s against the Typed Model of the `.dt` sources (S010–S013; skipped
  * without a model). The diagnostics are sorted like `analyze`'s.
  */
 export async function analyzeStormings(sources: readonly SourceFile[], model: DomainModel | undefined): Promise<StormingAnalysis> {

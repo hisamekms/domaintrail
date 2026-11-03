@@ -13,13 +13,16 @@ import {
     type ReferenceInfo,
     type Scope,
 } from 'langium';
-import { isEsGroup, isEsStorming, isEsTimeline, type EsDeclaration, type EsStorming } from './generated/ast.js';
+import { isEsGroup, isEsStage, isEsStorming, isEsTimeline, type EsDeclaration, type EsStorming, type EsTimeline } from './generated/ast.js';
 import { EventStormingGeneratedModule, EventStormingGeneratedSharedModule } from './generated/module.js';
 import { StormingParserErrorMessageProvider } from './parser-messages.js';
 
-/** Every declaration of a storming in source order, the groups of its timelines included: one namespace (spec §2). */
+/** Every declaration of a storming in source order, its stages' timelines and the groups included: one namespace (spec §2). */
 export function stormingDeclarations(storming: EsStorming): EsDeclaration[] {
-    return storming.elements.flatMap((el): EsDeclaration[] => (isEsTimeline(el) ? [el, ...el.steps.filter(isEsGroup)] : [el]));
+    const timeline = (t: EsTimeline): EsDeclaration[] => [t, ...t.steps.filter(isEsGroup)];
+    return storming.elements.flatMap((el): EsDeclaration[] =>
+        isEsTimeline(el) ? timeline(el) : isEsStage(el) ? [el, ...el.timelines.flatMap(timeline)] : [el],
+    );
 }
 
 /** A storming's declarations are not visible outside it: nothing is exported to the workspace. */

@@ -46,7 +46,7 @@ export interface RenderOptions {
 type Variant = Pick<RenderOptions, 'mode' | 'lang' | 'transitionLabels'>;
 const textOf = (t: Texts, v: Variant): string => t[v.lang][v.mode];
 
-const GROUP_KINDS = new Set(['context', 'sharedContext', 'aggregateBoundary', 'esGroup']);
+const GROUP_KINDS = new Set(['context', 'sharedContext', 'aggregateBoundary', 'esGroup', 'esStage']);
 
 const rowsIn = (n: GraphNode, v: Variant): NodeProps['rows'] =>
     n.lines.map((l) => ({

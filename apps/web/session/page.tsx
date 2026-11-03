@@ -227,7 +227,7 @@ export function useSessionPage(input: {
             if (target.kind === 'DtesStorming') {
                 // the whole storming: its integrated canvas, at the level chosen, the storming in the inspector (its
                 // description: an interview's brief)
-                setStormingChoice({ stormingId: target.storming, level: stormingChoice.level, timelines: others });
+                setStormingChoice({ ...stormingChoice, stormingId: target.storming, level: stormingChoice.level, timelines: others });
                 setView({ kind: 'storming' });
                 select(`es/${target.storming}`, { highlight: false });
                 return;
@@ -237,7 +237,7 @@ export function useSessionPage(input: {
                 const kind = firstDeclarations(storming.storming).get(target.local)?.kind;
                 const drawn = LEVEL_KINDS[stormingChoice.level].some((k) => k === kind);
                 const level = drawn ? stormingChoice.level : 'design-level';
-                setStormingChoice({ stormingId: target.storming, level, timelines: others });
+                setStormingChoice({ ...stormingChoice, stormingId: target.storming, level, timelines: others });
                 const id = `es/${target.storming}/${target.local}`;
                 setView({ kind: 'storming' });
                 select(id, { highlight: false });
@@ -246,6 +246,7 @@ export function useSessionPage(input: {
             }
             // an occurrence: its timeline's view, and the note of that step
             const choice: StormingChoice = {
+                ...stormingChoice,
                 stormingId: target.storming,
                 level: stormingChoice.level,
                 timelines: { ...others, [target.storming]: target.timeline },
@@ -293,6 +294,7 @@ export function useSessionPage(input: {
                 case 'storming': {
                     const { [target.stormingId]: _, ...others } = stormingChoice.timelines;
                     setStormingChoice({
+                        ...stormingChoice,
                         stormingId: target.stormingId,
                         level: target.level,
                         timelines: target.timelineId === undefined ? others : { ...others, [target.stormingId]: target.timelineId },

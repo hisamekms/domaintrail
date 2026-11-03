@@ -2,7 +2,7 @@
 // path that no longer matches is shown as stale. Render node IDs are never involved: `.dt` elements are looked up by
 // model ID, storming elements by storming and local ID, occurrences by timeline, event and step path.
 import { commandsOf, type DomainModel, elementOf, hasElement, statesOf } from '@domaintrail/modeling';
-import { declarations, type Storming } from '@domaintrail/storming';
+import { allTimelines, declarations, type Storming } from '@domaintrail/storming';
 import type { Collaboration } from '../generated/index.js';
 
 /** What a target is resolved against: the analysis of one snapshot of the workspace. */
@@ -51,8 +51,8 @@ function modelIdResolves(model: DomainModel, id: string): boolean {
 
 /** Whether the occurrence at `stepPath` of a timeline is the event `eventId`. */
 function occurrenceResolves(storming: Storming, timelineId: string, eventId: string, stepPath: readonly number[]): boolean {
-    const timeline = storming.elements.find((el) => el.kind === 'timeline' && el.id === timelineId);
-    if (timeline?.kind !== 'timeline') return false;
+    const timeline = allTimelines(storming).find((t) => t.id === timelineId);
+    if (!timeline) return false;
     const [i, j] = stepPath;
     const step = timeline.steps[i];
     if (step === undefined) return false;

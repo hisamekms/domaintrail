@@ -438,6 +438,11 @@ Rules:
    file). When \`create\` is true it does not exist yet: create it with the brief and its \`label\` and nothing else (a
    new file named after it, beside the other stormings or contexts). Replace an existing description only when
    \`replaceExistingDescription\` is true; else keep it and add the brief's lines below it. Change nothing else.
+17. A \`.dtes\` storming that goes through several phases is organised in \`stage\`s, in time order, each \`after\`
+   the one before it (\`stage Issuance "発行" after Preparation { … }\`). In a stage (or a storming without stages),
+   the normal flow is a \`timeline\`, written first; each exception is an \`exception\` that starts with the event of
+   the flow it branches off at (written again) and, when it returns to the flow, ends with \`then <Event>\`. Another
+   normal path is another \`timeline\` that starts at its branch event too.
 
 ${practiceSection(practice)}${replyDescription()}
 

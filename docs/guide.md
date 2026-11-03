@@ -1951,7 +1951,7 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
   timeline CancelAfterConfirm "確定後の取消" {
     OrderPlaced
     OrderConfirmed
-    group Cancelled "取消の結果" { // one stage, no order inside
+    group Cancelled "取消の結果" { // one step, no order inside
       OrderCancelled
       RefundRequested
     }
@@ -1979,7 +1979,9 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
 | `readmodel` | information that a command is decided on | none |
 | `hotspot` | a question or an important point, open or resolved | `on` (one event at most), `status`, `resolution` |
 | `timeline` | a partial time order of events | event IDs and groups |
-| `group` | events of one stage of a timeline, without an order among them | event IDs, each once |
+| `group` | events of one step of a timeline, without an order among them | event IDs, each once |
+| `exception` | an exception from the main flows: a timeline that branches off one | event IDs and groups, then `then <Event>` (optional) |
+| `stage` | a time section of the flow: its main flows and exceptions | `after <Stage>` (at most one), then `timeline`s and `exception`s |
 
 - `kind ID "label"`, with a `{ … }` body for clauses, one per line. `///` lines above a declaration are its
   description. The IDs of a storming are one namespace across kinds, timelines and groups included; a clause or a
@@ -1993,6 +1995,15 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
 - **Timelines** hold event IDs and groups only. A timeline is partial and proves no causality; an event may appear in
   several timelines and several times in one, each an occurrence of its own; timelines are never merged into one global
   order. A group is a set: its order and ID carry no meaning. An event in no timeline is fine.
+- **Stages, main flows and exceptions.** A flow in several phases is a `stage` per phase, in time order, each
+  `after` the one before it. In a stage, a `timeline` is a main flow and an `exception` an exception: written so,
+  never guessed from the order. The first `timeline` is the *trunk*, drawn as one straight row through every stage.
+  Every other timeline starts with the step it branches off at, written again: a step of the trunk (its first, to share
+  the start), or of another timeline that branches off itself. An exception may end with `then <Event>`: it returns to
+  that step of a main flow, of its own stage first, or of a later or earlier one. Another normal path is another
+  `timeline` from its branch event. Events stay declared in the storming, and may appear in several stages. Once a
+  storming has stages, every timeline is in one (S020); without stages, `exception`s and `then` work the same at the
+  top level, and a storming with neither keeps its timelines as before.
 - **Design Level only.** An event with `level design` is a detail of the mechanism (a reservation, an authorisation,
   an internal failure or retry) rather than a business fact: Big Picture leaves it out, and Design Level shows it.
   Without the clause, an event is shown at both levels; `level design` is the only level (S016), on events only, and
@@ -2003,8 +2014,65 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
 - Not in the DSL: positions and layout, conditions, guards, compensation, ordering or transactions. Not diagnosed:
   completeness (events in no timeline or not referenced, commands without `emits`, elements without `ref`), timeline
   order against the causal relations, and policies across contexts.
-- `dt fmt` formats a storming: 2 spaces per level, each element, clause, timeline step and group event on its own line,
-  an element without clauses on one line, comments kept. It never reorders clauses.
+- `dt fmt` formats a storming: 2 spaces per level, each element, clause, timeline step (`then` included), group event
+  and timeline of a stage on its own line, an element without clauses on one line, comments kept. It never reorders
+  clauses.
+
+A storming in stages:
+
+```dtes
+// stormings/certificate.dtes
+/// A resident certificate from a convenience store: what is prepared, then issued, then handed in.
+storming CertificateIssuance "住民票のコンビニ交付" {
+  event CertificateAsked "住民票を頼まれた"
+  event MethodResearched "取り方を調べた"
+  event LeftWithCard "カードを持って出た"
+  event StoreVisited "コンビニに行った"
+  event CardRead "カードを読み取った"
+  event PinEntered "暗証番号を入力した"
+  event PinLocked "暗証番号がロックされた"
+  event PinReset "暗証番号を再設定した"
+  event FeePaid "手数料を払った"
+  event CertificateIssued "証明書が発行された"
+  event CertificateHandedIn "証明書を提出した"
+
+  hotspot ResetWhere "再設定は市役所だけ？" {
+    on PinReset
+  }
+
+  stage Preparation "準備" {
+    timeline PrepareFlow "通常" { // the first timeline: the trunk
+      CertificateAsked
+      LeftWithCard
+    }
+    timeline ResearchFirst "調べてから" { // another normal path, from the step it shares
+      CertificateAsked
+      MethodResearched
+      LeftWithCard
+    }
+  }
+  stage Issuance "コンビニでの発行" after Preparation {
+    timeline IssueFlow "通常" {
+      StoreVisited
+      CardRead
+      PinEntered
+      FeePaid
+      CertificateIssued
+    }
+    exception Locked "暗証番号のロック" { // branches off at CardRead, written again
+      CardRead
+      PinLocked
+      PinReset
+      then PinEntered // back to the main flow
+    }
+  }
+  stage Submission "提出" after Issuance {
+    timeline SubmitFlow "通常" {
+      CertificateHandedIn
+    }
+  }
+}
+```
 
 <!-- topic: storming-refs -->
 ### References to the model (`ref`)
@@ -2049,7 +2117,8 @@ A storming is viewed along two independent axes, neither of which changes the `.
   without `level design` is there. A timeline's order there skips the hidden events (their neighbours are joined),
   a group of hidden events only is not drawn, timelines that differ only in hidden events share their start, and a
   hotspot on a hidden event is shown without its line.
-- **Scope.** The *integrated canvas* shows every timeline, the events in no timeline and every element. *One timeline*
+- **Scope.** The *integrated canvas* shows every timeline, the events in no timeline and every element. A storming
+  with stages also has a view of each *stage* (its main flows and exceptions, drawn as on the integrated canvas). *One timeline*
   shows its events, plus each one-hop path event → policy → command → event whose two events are both in that timeline
   (with the command's actors, read models and target), and the hotspots on its events. Longer chains are not followed,
   and a hotspot without `on` is shown on the integrated canvas only.
@@ -2067,10 +2136,21 @@ The layout is automatic, left to right; positions are kept in `.domaintrail/layo
 its toolbar's subject (a breadcrumb at the left) and the level next to them; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in (and
 デザインレベルのみ for an event marked `level design`).
 
+A storming with stages or exceptions is drawn in time order instead: the stages left to right, each a labelled frame,
+one column per step, the trunks as one straight row through every frame (the `after` arrow joins one trunk's end to
+the next one's start). Every other timeline hangs below the step it branches off at, on a row of its own flowing right
+and named by its label: the other main flows first, then the exceptions, whose dashed arrows are a quieter red. The
+step an exception branches off at is one note for both; a dotted arrow goes from an exception's last step back to the
+step of its `then`. Elements of Design Level stand above the event they belong to. The timeline picker lists the
+stages (「コンビニでの発行（例外を含む）」) between すべて（統合） and the timelines; clicking a stage's frame selects
+it (its main flows, its exceptions and 「この段階を表示」). 「例外を表示」 in the toolbar (a storming with exceptions
+only) hides the exceptions of the integrated canvas and of a stage: their steps, the events only they have, the
+hotspots on those events and their `then` arrows; an exception's own view is unchanged.
+
 <!-- topic: storming-rules -->
 ### Diagnostics of a storming
 
-S001–S009 and S014–S016 need only the storming, S010–S013 check its `ref`s against the model. Each example below is a whole
+S001–S009 and S014–S022 need only the storming, S010–S013 check its `ref`s against the model. Each example below is a whole
 file with that one problem. Syntax errors are `SYNTAX`: an unknown keyword or clause, a `ref` or clause in a timeline or
 group, a declaration outside a storming or inside a body, a nested group, an empty group, a keyword used as an ID.
 
@@ -2298,6 +2378,111 @@ storming Checkout {
 }
 ```
 
+**S017**: a stage `after` itself, or stages whose `after`s go round in a circle. Stages are in time order: remove the
+`after` of the stage that comes first. (An `after` naming nothing is S002, naming something else than a stage S003, a
+second `after` S004.)
+
+```dtes
+// S017
+storming Errands {
+  event Requested
+  stage First after First {
+    timeline Main {
+      Requested
+    }
+  }
+}
+```
+
+**S018**: a `then` on a main flow (a `timeline`), or naming an event of no main flow. Only an `exception` returns,
+and to a step of a `timeline`: write the timeline as an `exception`, name an event of a main flow, or remove `then`.
+
+```dtes
+// S018
+storming Errands {
+  event Visited
+  event Read
+  stage Issuance {
+    timeline Main {
+      Visited
+      Read
+      then Visited
+    }
+  }
+}
+```
+
+**S019** (warning): a timeline of a stage (or, with exceptions, of a storming without stages) whose first step is in
+neither the trunk nor another timeline that branches off: it is drawn apart. Start it with the step it branches off
+at, written again.
+
+```dtes
+// S019
+storming Errands {
+  event Visited
+  event Read
+  event Closed
+  stage Issuance {
+    timeline Main {
+      Visited
+      Read
+    }
+    exception OutOfHours {
+      Closed
+    }
+  }
+}
+```
+
+**S020**: a timeline or exception outside the stages of a storming that has stages. Move it into the stage it happens
+in.
+
+```dtes
+// S020
+storming Errands {
+  event Visited
+  timeline Outside {
+    Visited
+  }
+  stage Issuance {
+    timeline Main {
+      Visited
+    }
+  }
+}
+```
+
+**S021** (warning): a second stage without `after`. It is drawn as a separate start after the stages written before
+it, with no arrow from them: add `after` with the stage it follows.
+
+```dtes
+// S021
+storming Errands {
+  event Requested
+  event Visited
+  stage Preparation {
+    timeline Prepare {
+      Requested
+    }
+  }
+  stage Issuance {
+    timeline Issue {
+      Visited
+    }
+  }
+}
+```
+
+**S022** (warning): a stage without a main flow (a `timeline`; an `exception` is not one). Add its main flow, or
+remove the stage.
+
+```dtes
+// S022
+storming Errands {
+  stage Issuance {}
+}
+```
+
 <!-- topic: storming-practice -->
 ### Event Storming with DomainTrail
 
@@ -2313,8 +2498,11 @@ for the purpose and the first and last events before writing much.
   (「注文を受け付けた」, not 「注文受付処理」 or 「OrderService が保存した」). One fact per event.
 - Short labels: about 12 Japanese characters or 4–5 English words. A long label is usually two events or a
   description; put the detail in `///`.
-- Order them in `timeline`s: the usual flow first, then the variations (failures, cancellations, exceptions) as their
-  own timelines rather than one tangled line. A step that happens together goes in a `group`.
+- Order them in `timeline`s, the usual flow first; events that happen together go in a `group`. A flow in phases
+  (preparation, the main act, follow-up) gets a `stage` per phase, each `after` the one before.
+- Each failure or detour is an `exception` that starts with the event where it branches off, written again, and ends
+  with `then <Event>` when it returns to the flow (in this stage or another); without `then`, the flow ends there. A
+  second normal path is another `timeline` from where it splits off. The usual flow should read as one straight row.
 - Anything unclear, disputed or risky becomes a `hotspot` on the events it concerns, worded as a question. Do not
   settle it by guessing; an open hotspot is a good result.
 - No commands, policies, aggregates or read models yet, and no `ref`s.
@@ -2390,6 +2578,12 @@ storming](#diagnostics-of-a-storming).
 | S014 | (warning) `.dtes`: a type-level cycle policy → command → event → policy (possible, not an infinite loop) |
 | S015 | (warning) `.dtes`: a label fits its sticky note (one too long even at the smallest font is cut short with «…») |
 | S016 | `.dtes`: an event's `level` is `design` (Design Level only); without `level`, it is shown at both levels |
+| S017 | `.dtes`: a stage comes `after` another stage, never itself or round a circle |
+| S018 | `.dtes`: only an `exception` has `then`, naming an event of a main flow (a `timeline`) |
+| S019 | (warning) `.dtes`: a timeline other than the trunk starts at a step it branches off from (of the trunk or of another timeline branching off) |
+| S020 | `.dtes`: in a storming with stages, every timeline and exception is in a stage |
+| S021 | (warning) `.dtes`: only the first stage comes after no stage |
+| S022 | (warning) `.dtes`: a stage has a main flow (a `timeline`) |
 
 <!-- topic: show -->
 ## Looking up one element
