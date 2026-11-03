@@ -15,6 +15,7 @@ import {
     type SourceRange,
     type Storming,
 } from './ir.js';
+import { labelOverflowsNote } from './sticky-note.js';
 
 /** How an element kind is named in messages. */
 const KIND_NAMES: Record<ElementKind, string> = {
@@ -40,7 +41,7 @@ const kindList = (kinds: readonly ElementKind[]): string => kinds.map((k) => art
 const line = (range: SourceRange): number => range.start.line;
 
 /**
- * The checks of a `.dtes` storming that need no `.dt` model (spec §11, ADR 0024: S001–S009 and S014), on the storming
+ * The checks of a `.dtes` storming that need no `.dt` model (spec §11, ADR 0024: S001–S009, S014 and S015), on the storming
  * IR only:
  *   - S001: a local ID declared twice in a storming (across kinds, timelines and groups included), a storming ID twice
  *   - S002: a relation target or timeline step that names no declaration of its storming
@@ -52,6 +53,7 @@ const line = (range: SourceRange): number => range.start.line;
  *   - S008: a policy without `on` or without `issues`
  *   - S009: a hotspot `status` other than `open`/`resolved`, `resolved` without `resolution`, `resolution` when open
  *   - S014 (warning): a type-level cycle policy → command → event → policy
+ *   - S015 (warning): a label too long for its sticky note even at its smallest font (`STICKY_NOTE`)
  * Not diagnosed (spec §11): timeline order against causality, completeness (unreferenced events, missing `emits`,
  * events in no timeline) and the optional Info rule on policies with several `on` and `issues`.
  */
@@ -239,6 +241,25 @@ function validateStorming(storming: Storming): Diagnostic[] {
 
         if (el.kind === 'policy') checkPolicy(el);
         if (el.kind === 'hotspot') checkHotspot(el);
+        checkLabel(el);
+    }
+
+    /** S015: a note shows its label (or its ID without one); one too long for the note is cut short with «…». */
+    function checkLabel(el: NodeElement): void {
+        const shown = el.label?.trim() ? el.label : el.id;
+        if (!labelOverflowsNote(shown)) return;
+        out.push(
+            esDiagnostic(
+                'warning',
+                'S015',
+                `The ${el.label?.trim() ? 'label' : 'ID'} of ${KIND_NAMES[el.kind]} '${el.id}' is too long for its sticky note: even at its smallest font the Live View cuts it short with «…» (the whole label shows on hover and in the inspector).`,
+                el.nameRange,
+                {
+                    hint: `shorten the label to about 12 Japanese characters (an event in the past tense, e.g. "注文が確定した"), and put the details in a \`///\` comment`,
+                    elementId: elementId(el.id),
+                },
+            ),
+        );
     }
 
     function checkPolicy(el: NodeElement): void {
