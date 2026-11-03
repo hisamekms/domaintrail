@@ -5,8 +5,8 @@
 // signs them in (the session cookie, HttpOnly, Secure, SameSite=Strict) and goes to the Live View. The invite's code is
 // a secret: only its hash is stored, it is never logged, and it leaves the URL bar after the form (a POST, then a
 // redirect). The waiting page knows its request by a cookie of its own (HttpOnly, Secure, SameSite=Strict), never by a
-// URL. Requests are limited (pending at once, per client key: `clientKey`, which trusts `CF-Connecting-IP` from
-// loopback only), and expire after 10 minutes or with the invite. The facilitator also removes a participant here: their
+// URL. Requests are limited (pending at once, in all per invite, per client key: `clientKey`, which reads
+// `CF-Connecting-IP` only from the quick tunnel this process started), and expire after 10 minutes or with the invite. The facilitator also removes a participant here: their
 // sign-ins are revoked and their pages closed.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
@@ -61,6 +61,8 @@ export interface LinkJoinDeps {
     readonly pump: () => Promise<void>;
     readonly log: (line: string) => void;
     readonly inviteTtlMs?: number;
+    /** Whether `CF-Connecting-IP` names the client: only behind the quick tunnel this process started (`--tunnel`). */
+    readonly trustForwarded?: boolean;
 }
 
 export interface LinkJoin {
@@ -122,9 +124,14 @@ export function createLinkJoin(deps: LinkJoinDeps): LinkJoin {
         const remembered = { name: rememberedName(req.headers) };
         const name = displayName(form.get('name') ?? '');
         if (!name.ok) return invitePage(res, language, 400, code, { ...remembered, error: 'invalidName' });
-        const made = requests.request({ name: name.value, key: clientKey(req.socket.remoteAddress, req.headers), inviteExpiresAt });
+        const made = requests.request({
+            name: name.value,
+            key: clientKey(req.socket.remoteAddress, req.headers, deps.trustForwarded ?? false),
+            inviteExpiresAt,
+        });
         if (!made.ok) {
             const tooMany = made.error.type === 'TooManyPending';
+            if (made.error.type === 'InviteExhausted') deps.log('join requests: the invite took as many as it may; make another');
             return invitePage(res, language, 429, code, { ...remembered, error: tooMany ? 'tooManyPending' : 'rateLimited' });
         }
         deps.log('join request: waiting for the facilitator');

@@ -495,6 +495,7 @@ Examples:
                 base: opts.base,
                 mode: 'Collab',
                 session: settings,
+                ...(tunnel && { quickTunnel: true }),
                 log: io.out,
             })
             .catch(async (e: unknown) => {

@@ -99,6 +99,11 @@ const MAX_TIMER_MS = 2 ** 31 - 1;
 export interface SessionServerOptions extends ViewServerOptions {
     /** What the session server reads of the configuration (`collab`, `agent.port`, `agent.run`'s tools, `classifier`). */
     session: SessionSettings;
+    /**
+     * `dt collab --tunnel`: the server is reached through the quick tunnel this process started, so the visitor's
+     * address in `CF-Connecting-IP` is that cloudflared's word (the join requests' rate limit). Default: false.
+     */
+    quickTunnel?: boolean;
     /** `access` mode: a stand-in for the JWKS check of the tokens' signature (tests); default: the team's JWKS. */
     accessVerifier?: AccessTokenVerifier;
     /** `access` mode: where the JWKS and the Identity API are and their timings (tests point them at a local mock). */
@@ -332,6 +337,9 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             collaboration,
             maxParticipants: config.maxParticipants,
         });
+        // `link`: the sign-ins of an earlier server (whatever mode it had) end now: everyone is approved again, the
+        // facilitator signs in with this server's link
+        if (linkMode) await access.signOutAll(session);
         const soloPerson = soloPersonName(sessionOpened.session);
         // `dt open`'s sign-in: in this server's memory, and the codes `dt open link` issued; revoked when it stops
         const soloSignIn = createSoloSignIn({ redeemIssued: (code) => access.redeemOpenCode({ session, code }) });
@@ -566,6 +574,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                   disconnect,
                   pump,
                   log,
+                  trustForwarded: options.quickTunnel ?? false,
               })
             : undefined;
         const sessionSurface = createSessionHttp({
@@ -675,8 +684,9 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 stopped ??= (async () => {
                     soloSignIn.revoke();
                     clearInterval(expiring);
-                    // the links and pairing codes not used yet die with the server
+                    // the links and pairing codes not used yet die with the server; in `link`, every sign-in too
                     await access.revokeLinks(session).catch(() => undefined);
+                    if (linkMode) await access.signOutAll(session).catch(() => undefined);
                     await reverts.stop();
                     for (const timer of expiries.values()) clearTimeout(timer);
                     expiries.clear();

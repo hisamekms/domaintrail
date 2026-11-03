@@ -119,6 +119,11 @@ export interface SessionServerOptions {
     mode: 'Solo' | 'Collab';
     /** What the session server is given of the configuration, with `--port` and `--host` applied. */
     session: SessionSettings;
+    /**
+     * `dt collab --tunnel`: the server is reached through the quick tunnel this process started, so the visitor's
+     * address in `CF-Connecting-IP` is that cloudflared's word (the join requests' rate limit). Default: false.
+     */
+    quickTunnel?: boolean;
     log: (line: string) => void;
 }
 

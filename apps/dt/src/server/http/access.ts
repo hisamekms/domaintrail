@@ -102,13 +102,14 @@ export const isLoopbackAddress = (address: string | undefined): boolean =>
 const CONNECTING_IP = 'cf-connecting-ip';
 
 /**
- * Who a request comes from, as a key for a rate limit: the socket's remote address, unless that is this machine and the
- * request carries `CF-Connecting-IP` (the visitor's address, as the local `cloudflared` of a tunnel forwards it). A
- * forwarded header is trusted only from loopback: from anywhere else it could say anything.
+ * Who a request comes from, as a key for a rate limit: the socket's remote address, unless `trustForwarded` (this
+ * process started the `cloudflared` quick tunnel itself: `dt collab --tunnel`), that address is this machine and the
+ * request carries `CF-Connecting-IP` (the visitor's address, as that `cloudflared` forwards it). Otherwise the header is
+ * never read: a local reverse proxy or any other local client could say anything in it.
  */
-export function clientKey(remoteAddress: string | undefined, headers: IncomingHttpHeaders): string {
+export function clientKey(remoteAddress: string | undefined, headers: IncomingHttpHeaders, trustForwarded = false): string {
     const forwarded = headers[CONNECTING_IP];
-    if (isLoopbackAddress(remoteAddress) && typeof forwarded === 'string' && /^[0-9a-f.:]{2,45}$/i.test(forwarded.trim()))
+    if (trustForwarded && isLoopbackAddress(remoteAddress) && typeof forwarded === 'string' && /^[0-9a-f.:]{2,45}$/i.test(forwarded.trim()))
         return forwarded.trim().toLowerCase();
     return remoteAddress ?? 'unknown';
 }

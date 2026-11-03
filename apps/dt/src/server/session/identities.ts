@@ -179,7 +179,8 @@ export function createSessionIdentities(deps: SessionIdentitiesDeps): SessionIde
                 if (!secret) return undefined;
                 const hash = secretHash(secret);
                 const signIn = signIns.get(hash) ?? (await access.signedIn(secret));
-                if (!signIn || signIn.session !== session) return undefined;
+                // a sign-in of another mode (a `dev` one in a `link` session, or the other way round) is no one
+                if (!signIn || signIn.session !== session || signIn.identity.provider !== mode) return undefined;
                 signIns.set(hash, signIn);
                 return identified(signIn.identity);
             }

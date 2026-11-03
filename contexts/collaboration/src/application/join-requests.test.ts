@@ -11,7 +11,7 @@ const name = (raw: string): C.DisplayName => {
 };
 
 /** A clock the test moves, and secrets that count up. */
-function setup(over: { maxPending?: number; perKey?: number; ttlMs?: number; windowMs?: number } = {}): {
+function setup(over: { maxPending?: number; perKey?: number; ttlMs?: number; windowMs?: number; perInvite?: number } = {}): {
     requests: JoinRequests;
     advance: (ms: number) => void;
     now: () => Date;
@@ -105,6 +105,18 @@ describe('join requests', () => {
         expect(requests.request({ name: name('B'), key: 'y', inviteExpiresAt: until() }).ok).toBe(true);
         advance(50_000);
         expect(requests.request({ name: name('A'), key: 'x', inviteExpiresAt: until() }).ok).toBe(true);
+    });
+
+    test('at most perInvite requests through one invite, whatever client keys they claim; a new invite starts again', () => {
+        const { requests, now } = setup({ perInvite: 3, maxPending: 10 });
+        const until = new Date(now().getTime() + HOUR);
+        for (let i = 0; i < 3; i++) expect(requests.request({ name: name(`A${i}`), key: `spoofed-${i}`, inviteExpiresAt: until }).ok).toBe(true);
+        expect(requests.request({ name: name('B'), key: 'spoofed-9', inviteExpiresAt: until })).toEqual({
+            ok: false,
+            error: { type: 'InviteExhausted', max: 3 },
+        });
+        requests.expirePending();
+        expect(requests.request({ name: name('B'), key: 'spoofed-9', inviteExpiresAt: until }).ok).toBe(true);
     });
 
     test('the secret is not the ID, and a request is looked up by its secret only', () => {

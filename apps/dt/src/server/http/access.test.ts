@@ -1,20 +1,24 @@
 // The access check's parts the `link` identity mode adds: an Origin required on what changes something, and the client
-// key of a rate limit, which trusts a forwarded address only from loopback (the local cloudflared).
+// key of a rate limit, which trusts a forwarded address only from loopback and only when this process started the
+// quick tunnel (its own cloudflared).
 import { describe, expect, test } from 'bun:test';
 import { changesState, checkAccess, clientKey, isLoopbackAddress, sessionHostPolicy } from './access.js';
 
 describe('the client key', () => {
-    test('is the forwarded CF-Connecting-IP only when the request comes from loopback', () => {
+    test('is the forwarded CF-Connecting-IP only from loopback, with the tunnel this process started', () => {
         const forwarded = { 'cf-connecting-ip': '203.0.113.7' };
-        expect(clientKey('127.0.0.1', forwarded)).toBe('203.0.113.7');
-        expect(clientKey('::1', forwarded)).toBe('203.0.113.7');
-        expect(clientKey('::ffff:127.0.0.1', forwarded)).toBe('203.0.113.7');
-        expect(clientKey('192.0.2.1', forwarded)).toBe('192.0.2.1');
-        expect(clientKey('10.0.0.5', { 'cf-connecting-ip': '127.0.0.1' })).toBe('10.0.0.5');
+        expect(clientKey('127.0.0.1', forwarded, true)).toBe('203.0.113.7');
+        expect(clientKey('::1', forwarded, true)).toBe('203.0.113.7');
+        expect(clientKey('::ffff:127.0.0.1', forwarded, true)).toBe('203.0.113.7');
+        expect(clientKey('192.0.2.1', forwarded, true)).toBe('192.0.2.1');
+        expect(clientKey('10.0.0.5', { 'cf-connecting-ip': '127.0.0.1' }, true)).toBe('10.0.0.5');
+        // a self-managed proxy (no --tunnel): the header is never read
+        expect(clientKey('127.0.0.1', forwarded)).toBe('127.0.0.1');
+        expect(clientKey('127.0.0.1', forwarded, false)).toBe('127.0.0.1');
     });
 
     test('ignores a forwarded value that is not an address, and falls back to the socket', () => {
-        expect(clientKey('127.0.0.1', { 'cf-connecting-ip': 'evil, 1.2.3.4' })).toBe('127.0.0.1');
+        expect(clientKey('127.0.0.1', { 'cf-connecting-ip': 'evil, 1.2.3.4' }, true)).toBe('127.0.0.1');
         expect(clientKey('127.0.0.1', {})).toBe('127.0.0.1');
         expect(clientKey(undefined, {})).toBe('unknown');
     });

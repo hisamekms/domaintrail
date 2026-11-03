@@ -3,8 +3,9 @@
 // and die with the server): the visitor holds a secret (a cookie of the waiting page) of which only the SHA-256 is
 // kept; the facilitator sees each pending request's ID and name. A request expires after `ttlMs` or with the invite it
 // came through, whichever is first; an approved one is admitted once (the visitor's next look at the waiting page
-// signs them in). Bounded: at most `maxPending` pending at once, and `perKey` requests per `windowMs` from one client
-// key (the caller decides what a key is: the client's address).
+// signs them in). Bounded: at most `maxPending` pending at once, `perInvite` requests in all through one invite
+// (whatever the client says it is), and `perKey` requests per `windowMs` from one client key (the caller decides what a
+// key is: the client's address).
 import { err, ok, type Collaboration, type Result } from '../generated/index.js';
 import { secretHash } from './access.js';
 import type { Clock, SecretGenerator } from './ports.js';
@@ -16,6 +17,8 @@ export const MAX_PENDING_JOIN_REQUESTS = 20;
 /** Most requests from one client key per window. */
 export const JOIN_REQUESTS_PER_KEY = 5;
 export const JOIN_REQUEST_WINDOW_MS = 10 * 60_000;
+/** Most requests through one invite, from anyone. */
+export const JOIN_REQUESTS_PER_INVITE = 100;
 
 export type JoinRequestState = 'pending' | 'approved' | 'denied';
 
@@ -40,6 +43,12 @@ export interface RateLimited {
     readonly retryAfterMs: number;
 }
 
+/** As many requests were made through this invite as it takes: the facilitator makes another. */
+export interface InviteExhausted {
+    readonly type: 'InviteExhausted';
+    readonly max: number;
+}
+
 /** The request is unknown, expired or decided already. */
 export interface JoinRequestNotFound {
     readonly type: 'JoinRequestNotFound';
@@ -54,7 +63,7 @@ export interface JoinRequests {
         readonly name: Collaboration.DisplayName;
         readonly key: string;
         readonly inviteExpiresAt: Date;
-    }): Result<{ readonly id: string; readonly secret: string }, TooManyPending | RateLimited>;
+    }): Result<{ readonly id: string; readonly secret: string }, TooManyPending | RateLimited | InviteExhausted>;
     /** The request of the visitor's secret. */
     status(secret: string): JoinRequestStatus;
     /** The pending requests, oldest first. */
@@ -65,7 +74,7 @@ export interface JoinRequests {
     deny(id: string): Result<JoinRequest, JoinRequestNotFound>;
     /** Takes the approved request of the visitor's secret, once: it is gone afterwards. */
     admit(secret: string): JoinRequest | undefined;
-    /** The invite was revoked or replaced: every request still pending expires. */
+    /** The invite was revoked or replaced: every request still pending expires, and the count of the next invite starts. */
     expirePending(): void;
     /** Drops what expired by now: whether the pending requests changed. */
     sweep(): boolean;
@@ -83,12 +92,16 @@ export function createJoinRequests(deps: {
     readonly maxPending?: number;
     readonly perKey?: number;
     readonly windowMs?: number;
+    readonly perInvite?: number;
 }): JoinRequests {
     const { clock, secrets } = deps;
     const ttlMs = deps.ttlMs ?? JOIN_REQUEST_TTL_MS;
     const maxPending = deps.maxPending ?? MAX_PENDING_JOIN_REQUESTS;
     const perKey = deps.perKey ?? JOIN_REQUESTS_PER_KEY;
     const windowMs = deps.windowMs ?? JOIN_REQUEST_WINDOW_MS;
+    const perInvite = deps.perInvite ?? JOIN_REQUESTS_PER_INVITE;
+    /** The requests made through the current invite. */
+    let madeThroughInvite = 0;
     /** By ID. */
     const entries = new Map<string, Entry>();
     /** By the hash of the visitor's secret: the ID. */
@@ -136,11 +149,13 @@ export function createJoinRequests(deps: {
         request({ name, key, inviteExpiresAt }) {
             sweep();
             const now = clock.now();
+            if (madeThroughInvite >= perInvite) return err({ type: 'InviteExhausted', max: perInvite });
             const times = asked.get(key) ?? [];
             if (times.length >= perKey) return err({ type: 'RateLimited', retryAfterMs: Math.max(0, times[0] + windowMs - now.getTime()) });
             if ([...entries.values()].filter((e) => e.request.state === 'pending').length >= maxPending)
                 return err({ type: 'TooManyPending', max: maxPending });
             asked.set(key, [...times, now.getTime()]);
+            madeThroughInvite++;
             const id = secrets.newSecret().slice(0, 22);
             const secret = secrets.newSecret();
             const expiresAt = new Date(Math.min(now.getTime() + ttlMs, inviteExpiresAt.getTime()));
@@ -178,6 +193,7 @@ export function createJoinRequests(deps: {
         },
 
         expirePending() {
+            madeThroughInvite = 0;
             for (const [id, entry] of entries) if (entry.request.state === 'pending') drop(id);
         },
 

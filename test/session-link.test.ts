@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import type { Me } from '@domaintrail/collaboration/protocol';
+import { createSessionAccess, createUnitOfWork, FACILITATOR_NAME, openSessionDatabase, randomSecrets, systemClock } from '@domaintrail/collaboration';
 import { issueInvite, SessionError, type SessionServer, type SessionSettings, startSessionServer, WS_REVOKED } from '@domaintrail/dt';
 
 const PUBLIC = 'https://quiet-river-1234.trycloudflare.com';
@@ -115,10 +116,20 @@ afterEach(async () => {
     for (const s of servers.splice(0)) await s.stop();
 });
 
-async function start(over: Partial<SessionSettings> = {}): Promise<{ server: SessionServer; root: string; lines: string[] }> {
-    const root = await workspace();
+async function start(
+    over: Partial<SessionSettings> = {},
+    options: { quickTunnel?: boolean; root?: string } = {},
+): Promise<{ server: SessionServer; root: string; lines: string[] }> {
+    const root = options.root ?? (await workspace());
     const lines: string[] = [];
-    const server = await startSessionServer({ root, debounceMs: 30, session: settings(over), log: (l) => lines.push(l), expireEveryMs: 50 });
+    const server = await startSessionServer({
+        root,
+        debounceMs: 30,
+        session: settings(over),
+        log: (l) => lines.push(l),
+        expireEveryMs: 50,
+        ...(options.quickTunnel && { quickTunnel: true }),
+    });
     servers.push(server);
     return { server, root, lines };
 }
@@ -326,8 +337,8 @@ describe('a session in the link identity mode', () => {
         expect((await fetch(`${server.url}${now.pathname.slice(1)}${now.search}`, { headers: page() })).status).toBe(410);
     });
 
-    test('requests are limited per client (CF-Connecting-IP from the local tunnel), and the pending ones in all', async () => {
-        const { server } = await start();
+    test('requests are limited per client (CF-Connecting-IP from the quick tunnel this process started), and the pending ones in all', async () => {
+        const { server } = await start({}, { quickTunnel: true });
         const cookie = await facilitator(server);
         const { link } = (await (await post(server, 'invite', cookie)).json()) as { link: string };
         for (let i = 0; i < 5; i++) expect((await ask(server, link, `A${i}`, '203.0.113.9')).wait).toBeDefined();
@@ -335,6 +346,35 @@ describe('a session in the link identity mode', () => {
         expect(limited.res.status).toBe(429);
         expect(await limited.res.text()).toContain('Too many requests');
         expect((await ask(server, link, 'B', '203.0.113.10')).wait).toBeDefined();
+    });
+
+    test('without its own quick tunnel the server never reads CF-Connecting-IP: a spoofed address does not dodge the limit', async () => {
+        const { server } = await start();
+        const cookie = await facilitator(server);
+        const { link } = (await (await post(server, 'invite', cookie)).json()) as { link: string };
+        for (let i = 0; i < 5; i++) expect((await ask(server, link, `A${i}`, `203.0.113.${i}`)).wait).toBeDefined();
+        expect((await ask(server, link, 'A5', '203.0.113.99')).res.status).toBe(429);
+    });
+
+    test('a restart signs everyone out (the cookie of the earlier server is no one), and a sign-in of another mode is never accepted', async () => {
+        const { server, root } = await start();
+        const cookie = await facilitator(server);
+        const value = cookie.split('=')[1];
+        await server.stop();
+        servers.splice(servers.indexOf(server), 1);
+        const again = (await start({}, { root })).server;
+        // the same secret under this server's cookie name: revoked
+        const renamed = `${(await facilitator(again)).split('=')[0]}=${value}`;
+        expect(await me(again, renamed)).toBe(401);
+        // a dev sign-in of this session, its secret under the link cookie's name: not a link identity
+        const db = await openSessionDatabase(root);
+        const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
+        const devSecret = await access.signIn({
+            session: again.session as never,
+            identity: { provider: 'dev', subject: crypto.randomUUID(), displayName: FACILITATOR_NAME },
+        });
+        db.close();
+        expect(await me(again, `${renamed.split('=')[0]}=${devSecret}`)).toBe(401);
     });
 
     test('a removed participant is signed out and their pages close; the facilitator cannot be removed', async () => {
