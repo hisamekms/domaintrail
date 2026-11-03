@@ -539,6 +539,107 @@ describe('without the exceptions (「例外を表示」 off)', () => {
     });
 });
 
+describe('without the exceptions at Design Level: the elements of the events only exceptions have go with them', () => {
+    // EnterPin emits a main flow's event and an exception's: kept. ForgetPin emits only PinForgotten, GuidePinReset is on
+    // only PinLocked and the ResetPin it issues emits only PinResetAtCityOffice (all of exceptions only): not drawn, nor
+    // their copies of Resident, MyNumberCard and CityOfficer (whom no other command has).
+    const extra = [
+        '  actor Resident "住民"',
+        '  actor CityOfficer "窓口"',
+        '  aggregate MyNumberCard "マイナンバーカード"',
+        '  command EnterPin "暗証番号を入力する" {\n    actor Resident\n    target MyNumberCard\n    emits PinEntered\n    emits PinLocked\n  }',
+        '  command ForgetPin "暗証番号を思い出せない" {\n    actor Resident\n    target MyNumberCard\n    emits PinForgotten\n  }',
+        '  command ResetPin "暗証番号を再設定する" {\n    actor CityOfficer\n    target MyNumberCard\n    emits PinResetAtCityOffice\n  }',
+        '  policy GuidePinReset "再設定を案内する" {\n    on PinLocked\n    issues ResetPin\n  }',
+        '  stage Preparation',
+    ].join('\n');
+    const storming = async (): Promise<Storming> => parse((await read('convenience-store-stages.dtes')).replace('  stage Preparation', extra));
+    const KEPT = ['n:EnterPin', 'n:Resident@EnterPin', 'n:MyNumberCard@EnterPin'];
+    const GONE = [
+        'n:ForgetPin',
+        'n:Resident@ForgetPin',
+        'n:MyNumberCard@ForgetPin',
+        'n:GuidePinReset',
+        'n:ResetPin',
+        'n:CityOfficer@ResetPin',
+        'n:MyNumberCard@ResetPin',
+    ];
+    const ids = (render: RenderGraph): string[] => render.nodes.map((n) => n.id);
+    const views: ViewOptions[] = [DL, { ...DL, stageId: 'Issuance' }];
+
+    test('the stages and the stage: hidden with the toggle off, drawn as before with it on', async () => {
+        const s = await storming();
+        for (const options of views) {
+            const without = projectView(s, { ...options, hideExceptions: true });
+            expect(ids(without)).toEqual(expect.arrayContaining(KEPT));
+            for (const id of GONE) expect(ids(without)).not.toContain(id);
+            // nothing of theirs is left below the sections, and no edge goes to a hidden element
+            for (const n of without.nodes)
+                if (n.type === 'element') expect(['ForgetPin', 'GuidePinReset', 'ResetPin', 'CityOfficer']).not.toContain(n.elementId);
+            const all = new Set(ids(without));
+            for (const e of without.edges) expect(all.has(e.source) && all.has(e.target)).toBe(true);
+            // EnterPin's emits of PinLocked goes with PinLocked; that of PinEntered stays, its copies beside it
+            const emits = without.edges
+                .filter((e) => e.type === 'semantic' && e.kind === 'emits')
+                .map((e) => `${eventOf(without, e.source)}->${eventOf(without, e.target)}`);
+            expect(emits).toContain('n:EnterPin->PinEntered');
+            expect(emits.some((e) => e.endsWith('->PinLocked'))).toBe(false);
+            const cells = without.grid!.cells;
+            for (const id of KEPT) expect(cells[id]!.col).toBe(cells[only(without, 'PinEntered').id]!.col);
+            expect(crossings(laidOut(without, s))).toEqual([]);
+            expect(crossings(layoutGrid(renderToGraph(without, s), 'compact'))).toEqual([]);
+
+            const on = projectView(s, options);
+            expect(ids(on)).toEqual(expect.arrayContaining([...KEPT, ...GONE]));
+        }
+    });
+
+    test('a policy on a main flow’s event stays, the command it issues that emits only an exception’s event goes; so does one only a hidden policy issues', async () => {
+        const s = await parse(`storming T {
+  event A
+  event B
+  event X
+  actor Clerk
+  readmodel Board
+  command Fix {
+    emits X
+  }
+  command Notify {
+    actor Clerk
+  }
+  policy OnA {
+    on A
+    issues Fix
+  }
+  policy OnX {
+    on X
+    issues Notify
+  }
+  timeline Main {
+    A
+    B
+  }
+  exception Fail {
+    A
+    X
+  }
+}
+`);
+        const without = projectView(s, { ...DL, hideExceptions: true });
+        expect(
+            ids(without)
+                .filter((id) => id.startsWith('n:'))
+                .sort(),
+        ).toEqual(['n:Board', 'n:OnA']);
+        expect(without.edges.filter((e) => e.type === 'semantic').map((e) => e.semantic)).toEqual(['on:A->OnA']);
+        expect(
+            ids(projectView(s, DL))
+                .filter((id) => id.startsWith('n:'))
+                .sort(),
+        ).toEqual(['n:Board', 'n:Clerk@Notify', 'n:Fix', 'n:Notify', 'n:OnA', 'n:OnX']);
+    });
+});
+
 describe('several main flows', () => {
     const text = `storming M {
   event A

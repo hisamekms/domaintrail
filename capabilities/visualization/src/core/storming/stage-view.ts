@@ -16,7 +16,8 @@
  * At Big Picture the events marked `level design` are left out as if their steps were not written; a timeline whose
  * branch point is hidden branches off from the nearest visible step before it (or starts the section), and a `then` to
  * a hidden step returns to the nearest visible step after it (or before it). Without the exceptions
- * (`hideExceptions`), the exceptions are not drawn, nor the events only they have, nor the hotspots on those events.
+ * (`hideExceptions`), the exceptions are not drawn, nor the events only they have, nor the elements of the Design Level
+ * that relate only to those events (`ofExceptionsOnly`), nor the hotspots on those events.
  */
 import {
     branchPoints,
@@ -54,7 +55,7 @@ import {
 } from './ir.js';
 import { filterEdges } from './filter.js';
 import { compare, compareOccurrences } from './trie.js';
-import { useEnds, useNodeId, usesOf } from './uses.js';
+import { useEnds, useNodeId, useOf, usesOf } from './uses.js';
 
 /** A step of a section's tree. */
 interface StageNode {
@@ -214,8 +215,11 @@ export function projectStageView(storming: Storming, options: ViewOptions): Rend
         );
         drawn = filterEdges(semantic.edges, events);
     }
-    // without the exceptions, a hotspot on an event only they have goes with them
-    const gone = new Set(semantic.edges.filter((e) => e.kind === 'hotspot-on' && exceptionOnly.has(e.targetId)).map((e) => e.sourceId));
+    // without the exceptions, the elements of the events only they have go with them, and a hotspot on those events
+    const gone = new Set([
+        ...ofExceptionsOnly(semantic.edges, exceptionOnly),
+        ...semantic.edges.filter((e) => e.kind === 'hotspot-on' && exceptionOnly.has(e.targetId)).map((e) => e.sourceId),
+    ]);
     drawn = drawn.filter((e) => !gone.has(e.sourceId) && !gone.has(e.targetId));
     const loose: string[] = [];
     // R15: the events of no section (of the integrated canvas only)
@@ -313,6 +317,33 @@ export function projectStageView(storming: Storming, options: ViewOptions): Rend
         edges: [...edges.values()].sort((a, b) => compare(a.id, b.id)),
         grid: { cells, frames, ...(looseRow !== undefined && { looseRow }), captions },
     };
+}
+
+/**
+ * The elements of the Design Level that relate only to the events of exceptions only (`events`), drawn with them: a
+ * command that emits only such events (one that emits none: when every policy that issues it is such), a policy on only
+ * such events, and an actor, external system, read model or aggregate that only such commands use. An element that also
+ * relates to another event, or to none at all, is not one of them.
+ */
+function ofExceptionsOnly(edges: readonly SemanticEdge[], events: ReadonlySet<string>): Set<string> {
+    const out = new Set<string>();
+    const by = (kind: SemanticEdge['kind'], end: 'sourceId' | 'targetId', id: string): string[] =>
+        edges.filter((e) => e.kind === kind && e[end] === id).map((e) => e[end === 'sourceId' ? 'targetId' : 'sourceId']);
+    const all = (ids: string[], hidden: (id: string) => boolean): boolean => ids.length > 0 && ids.every(hidden);
+    const ids = (kind: SemanticEdge['kind'], end: 'sourceId' | 'targetId'): Set<string> => new Set(edges.filter((e) => e.kind === kind).map((e) => e[end]));
+    for (const policy of ids('on', 'targetId')) if (all(by('on', 'targetId', policy), (id) => events.has(id))) out.add(policy);
+    const commands = new Set([...ids('emits', 'sourceId'), ...ids('issues', 'targetId')]);
+    for (const command of commands) {
+        const emitted = by('emits', 'sourceId', command);
+        if (emitted.length ? all(emitted, (id) => events.has(id)) : all(by('issues', 'targetId', command), (id) => out.has(id))) out.add(command);
+    }
+    const users = new Map<string, string[]>();
+    for (const e of edges) {
+        const use = useOf(e);
+        if (use) users.set(use.elementId, [...(users.get(use.elementId) ?? []), use.commandId]);
+    }
+    for (const [element, list] of users) if (all(list, (id) => out.has(id))) out.add(element);
+    return out;
 }
 
 /** The elements stacked above an event, nearest first. */
