@@ -2517,6 +2517,10 @@ for the purpose and the first and last events before writing much.
   settle it by guessing; an open hotspot is a good result.
 - No commands, policies, aggregates or read models yet, and no `ref`s.
 
+In the chat, `/es:exceptions`, `/es:gaps` (events missing between two of a flow), `/es:levels` (which events show at Big
+Picture) and `/es:names` (labels not in the past tense, inconsistent, too long or technical) list candidate changes to
+check; `/es:next` says where the storming stands and what to do next.
+
 **Design Level next**, once the flow is agreed (the brief says how far to go):
 - For each event, what caused it: a `command` (and the `actor` or `external` system that issues it), or a `policy`
   reacting to an earlier event (「〜したら〜する」).
