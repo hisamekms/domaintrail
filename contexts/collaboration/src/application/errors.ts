@@ -3,7 +3,7 @@ import type { Collaboration } from '../generated/index.js';
 
 export interface NotFound {
     readonly type: 'NotFound';
-    readonly aggregate: 'Session' | 'Request' | 'AgentRun' | 'Revision' | 'Triage' | 'ChangeProposal';
+    readonly aggregate: 'Session' | 'Request' | 'AgentRun' | 'Revision' | 'Triage' | 'ChangeProposal' | 'Interview';
     readonly id: string;
 }
 

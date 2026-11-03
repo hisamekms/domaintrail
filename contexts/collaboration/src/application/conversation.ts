@@ -31,6 +31,7 @@ import type { Actor } from './actor.js';
 import type { CollaborationDeps, Stores } from './ports.js';
 import { publish, queueRequests, type FreezeError, type NoRequests } from './queueing.js';
 import { storeVerifications } from './verifications.js';
+import { hearIn } from './interviews.js';
 
 type SessionId = Collaboration.SessionId;
 type TriageId = Collaboration.TriageId;
@@ -75,10 +76,11 @@ export interface TriageProgress {
     readonly proposal?: Collaboration.OpenChangeProposal;
 }
 
-/** A message sent, and its triage when it is addressed to the AI. */
+/** A message sent, and its triage when it is addressed to the AI, or the interview of its author that heard it. */
 export interface MessageSent {
     readonly request: Collaboration.SentRequest;
     readonly triage?: Collaboration.Triage;
+    readonly interview?: Collaboration.AskingInterview;
 }
 
 /** How a session was opened (decision 13): started anew, resumed, or a Solo session continued as a Collab one. */
@@ -135,6 +137,7 @@ export interface ConversationUseCases {
     /**
      * Sends a message of the actor (as `sendRequest`), and opens its triage when it is addressed to the AI (`addressing`:
      * every message in Solo; a mention of the AI or a reply to the AI in Collab), with stage 1 (mechanical) recorded.
+     * While an interview of the actor runs (`/es`, `/model`), their message goes to it instead, without triage.
      */
     sendMessage(input: {
         readonly session: SessionId;
@@ -529,6 +532,9 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
                 const request = sent.value;
                 const session = stores.sessions.load(input.session);
                 if (session?.state !== 'Open') return ok({ request });
+                // the starter of a running interview answers it: no triage (a reply would come out "neither")
+                const interview = hearIn(stores, request, clock.now());
+                if (interview) return ok({ request, interview });
                 const to = request.replyTo;
                 const replyTo =
                     to === undefined
@@ -787,6 +793,7 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
                     approvals: stores.approvals.listBySession(session),
                     proposals: stores.proposals.listBySession(session),
                     triages: stores.triages.listBySession(session),
+                    interviews: stores.interviews.listBySession(session),
                 };
             });
             if (!records) return err(notFound('Session', session));

@@ -58,6 +58,8 @@ context Collaboration {
     pick: AlternativePick? "前の実行の前提で選んだ別案"
     /// ファシリテーターがまとめて承認した変更案。エージェントは承認した文に従う。
     proposals: ApprovedProposals? "承認した変更案"
+    /// 始めた人が確定した聞き取りの要約。エージェントは要約を行き先の説明として書く。
+    brief: BriefInstruction? "聞き取りの要約"
 
     invariant distinctRequests "依頼は1件1回" { unique(requests, r => r.request) }
     invariant proposalsOfRequests "変更案は束ねた依頼のもの" {

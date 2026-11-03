@@ -15,3 +15,4 @@ export const knownAssumptionApprovalId = (v: string): Collaboration.AssumptionAp
 export const knownAgentRunId = (v: string): Collaboration.AgentRunId => known(Collaboration.makeAgentRunId(v));
 export const knownTriageId = (v: string): Collaboration.TriageId => known(Collaboration.makeTriageId(v));
 export const knownChangeProposalId = (v: string): Collaboration.ChangeProposalId => known(Collaboration.makeChangeProposalId(v));
+export const knownInterviewId = (v: string): Collaboration.InterviewId => known(Collaboration.makeInterviewId(v));

@@ -18,6 +18,7 @@ import type {
     RequestRepository,
     RevisionStore,
     OperationLog,
+    InterviewRepository,
     ProposalRepository,
     RestoreOperation,
     TriageRepository,
@@ -262,6 +263,21 @@ export const MIGRATIONS: readonly string[] = [
         data TEXT NOT NULL
     ) STRICT;
     CREATE INDEX proposals_by_session ON proposals(session_id, seq);
+    `,
+    // ---------- interviews of the `/` commands ----------
+    // the plan's round 5: an interview names its opening message and, once confirmed, its run. Sessions written before
+    // have none
+    `
+    CREATE TABLE interviews (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        seq INTEGER NOT NULL,
+        opening_id TEXT NOT NULL REFERENCES requests(id),
+        run_id TEXT REFERENCES agent_runs(id),
+        state TEXT NOT NULL,
+        data TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX interviews_by_session ON interviews(session_id, seq);
     `,
 ];
 
@@ -687,6 +703,37 @@ function proposals(db: DatabaseSync): ProposalRepository {
     };
 }
 
+function interviews(db: DatabaseSync): InterviewRepository {
+    const load = db.prepare('SELECT data FROM interviews WHERE id = :id');
+    const save = db.prepare(
+        `INSERT INTO interviews (id, session_id, seq, opening_id, run_id, state, data)
+         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM interviews), :opening, :run, :state, :data)
+         ON CONFLICT (id) DO UPDATE SET state = excluded.state, run_id = excluded.run_id, data = excluded.data`,
+    );
+    const list = db.prepare('SELECT data FROM interviews WHERE session_id = :session ORDER BY seq');
+    return {
+        load(id) {
+            const r = load.get(params({ id }));
+            return r ? decoded<Collaboration.Interview>(text(r, 'data')) : undefined;
+        },
+        save(interview) {
+            save.run(
+                params({
+                    id: interview.id,
+                    session: interview.session,
+                    opening: interview.opening,
+                    run: interview.state === 'Confirmed' ? interview.run : null,
+                    state: interview.state,
+                    data: encodeJson(interview),
+                }),
+            );
+        },
+        listBySession(session) {
+            return list.all(params({ session })).map((r) => decoded<Collaboration.Interview>(text(r, 'data')));
+        },
+    };
+}
+
 function outbox(db: DatabaseSync): EventOutbox {
     const append = db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (:session, :type, :payload, :at)');
     const all = db.prepare('SELECT seq, session_id, payload, recorded_at FROM outbox WHERE seq > :cursor ORDER BY seq LIMIT :limit');
@@ -846,6 +893,7 @@ export function createStores(db: DatabaseSync): Stores {
         approvals: approvals(db),
         triages: triages(db),
         proposals: proposals(db),
+        interviews: interviews(db),
         outbox: outbox(db),
         access: access(db),
         operations: operations(db),
