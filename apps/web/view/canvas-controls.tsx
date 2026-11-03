@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { BookOpen, ChevronsLeft, ChevronsRight, Download, Focus, FoldHorizontal, Maximize, Minus, Plus } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, Download, Focus, FoldHorizontal, Maximize, Minus, Plus, Shapes } from 'lucide-react';
 import { useT } from '../i18n';
 import { Legend, legendRows, type LegendView } from '../legend';
 import { useDismiss } from '../shared/layout';
@@ -110,7 +110,7 @@ export function CanvasControls(props: {
                         onClick={legend.onToggle}
                         data-tooltip={legend.open ? t.closeLegend : t.openLegend}
                     >
-                        <BookOpen size={14} aria-hidden />
+                        <Shapes size={14} aria-hidden />
                     </button>
                 )}
                 <ControlButton label={t.canvasControls.collapse} onClick={toggle}>
