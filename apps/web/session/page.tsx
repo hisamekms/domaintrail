@@ -9,7 +9,7 @@ import type { Panes } from '../app/panes';
 import type { Conversation } from '../app/shell';
 import type { ViewSocket } from '../app/useViewSocket';
 import { useT } from '../i18n';
-import { contextLabels } from '../model-utils';
+import { contextLabels, resolve } from '../model-utils';
 import { stormingGraph, type StormingChoice } from '../storming';
 import { graphNodeOf, nodeItemId } from '../scene';
 import { highlightElement, showItem } from '../view/canvas';
@@ -26,7 +26,7 @@ import { confirmSelection, isAdded, isConfirmKey, isTyping } from './selection';
 import type { ComposerValue } from './mentions';
 import { cursorsOn } from './presence';
 import { mentionCandidates } from './mentions';
-import type { ViewScope, ViewTarget } from './views';
+import { sentView, type ViewScope, type ViewTarget } from './views';
 import { occurrenceNode, targetKey, targetOfSelection, type ModelTarget, type NamingContext, type TargetDraft } from './targets';
 import { agentStatus, latestAt, streamItems, unreadCount, unreadMentions } from './stream';
 import { defaultDraftStorage, useComposerDraft, usePresence, useSession } from './useSession';
@@ -88,6 +88,32 @@ export function useSessionPage(input: {
         ...(selectedNode && { selectedNode }),
     });
     usePresence(socket, session, canvas, location, selectionTarget?.target);
+
+    // where a message is sent from: the view, a storming's stage and exceptions, the catalog's filter, and the
+    // aggregate whose state diagram the inspector shows
+    const resolvedSelection = model && nav.selected ? resolve(model, nav.selected) : undefined;
+    const statesOf =
+        panes.inspectorOpen && panes.inspectorTab === 'states' && resolvedSelection
+            ? resolvedSelection.kind === 'element'
+                ? resolvedSelection.el.kind === 'aggregate'
+                    ? resolvedSelection.el.id
+                    : undefined
+                : resolvedSelection.kind === 'state' || resolvedSelection.kind === 'command'
+                  ? resolvedSelection.agg.id
+                  : undefined
+            : undefined;
+    const shownOptions = view.kind === 'storming' ? viewGraph.shown?.options : undefined;
+    const viewedAt = sentView({
+        location,
+        ...(shownOptions && {
+            storming: {
+                ...(shownOptions.stageId !== undefined && { stageId: shownOptions.stageId }),
+                ...(shownOptions.hideExceptions && { hideExceptions: true }),
+            },
+        }),
+        ...(view.kind === 'catalog' && { catalog: workspace.catalog.filter }),
+        ...(statesOf !== undefined && { states: statesOf }),
+    });
 
     // a selection of several items on the canvas: each targetable element once (the composer's `+` adds them all)
     const selectedKey = useCanvasValue(
@@ -332,6 +358,7 @@ export function useSessionPage(input: {
                         location={location}
                         viewScope={viewScope}
                         slash={slash}
+                        viewedAt={viewedAt}
                         onOpenView={openView}
                         onNavigate={navigate}
                         onClose={() => setConversationOpen(false)}

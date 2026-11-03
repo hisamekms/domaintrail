@@ -2,7 +2,7 @@
 // participants' rows, and the chat's small layout rules.
 import { describe, expect, test } from 'bun:test';
 import type { Me, Presence, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
-import { canOpen, continued, isMac, participantRows, viewName, viewTargetOf, type ViewScope, type ViewWords } from './views';
+import { canOpen, continued, isMac, participantRows, sentView, viewName, viewTargetOf, type ViewScope, type ViewWords } from './views';
 
 const words: ViewWords = {
     views: { contextMap: 'コンテキストマップ', structure: '構造図', catalog: 'カタログ', storming: 'イベントストーミング' },
@@ -131,5 +131,32 @@ describe('the layout of the stream', () => {
 
     test('the send shortcut is ⌘ on a Mac, Ctrl elsewhere', () => {
         expect(['MacIntel', 'iPhone', 'Win32', 'Linux x86_64'].map(isMac)).toEqual([true, true, false, false]);
+    });
+});
+
+describe('the view a message is sent from', () => {
+    test('each view: the context map, the structure and its focus, the catalog and its filter, a storming and how it is shown', () => {
+        expect(sentView({ location: dt('contextMap:true') })).toEqual({ view: { kind: 'ContextMap', all: true } });
+        expect(sentView({ location: dt('structure:overview'), states: 'Sales.Order' })).toEqual({
+            view: { kind: 'Structure', level: 'Overview', focus: [] },
+            states: 'Sales.Order',
+        });
+        expect(sentView({ location: dt('structure:focus:Sales+Billing||aggregates') })).toEqual({
+            view: { kind: 'Structure', level: 'Aggregates', focus: ['Sales', 'Billing'] },
+        });
+        expect(sentView({ location: dt('catalog'), catalog: { query: ' 注文 ', sections: ['aggregates'], contexts: null } })).toEqual({
+            view: { kind: 'Catalog', query: '注文', sections: ['aggregates'], contexts: [] },
+        });
+        expect(sentView({ location: dt('catalog') })).toEqual({ view: { kind: 'Catalog', sections: [], contexts: [] } });
+        expect(sentView({ location: dtes('Delivery', 'design-level'), storming: { stageId: 'Shipping', hideExceptions: true } })).toEqual({
+            view: { kind: 'Storming', storming: 'Delivery', level: 'DesignLevel', stage: 'Shipping', exceptions: false },
+        });
+        expect(sentView({ location: dtes('Delivery', 'big-picture', 'Normal') })).toEqual({
+            view: { kind: 'Storming', storming: 'Delivery', level: 'BigPicture', timeline: 'Normal', exceptions: true },
+        });
+    });
+
+    test('nothing for a view this page cannot name', () => {
+        expect(sentView({ location: dt('loading') })).toBeUndefined();
     });
 });
