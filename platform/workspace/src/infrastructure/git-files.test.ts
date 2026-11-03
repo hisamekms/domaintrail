@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { gitIgnoredEntries, gitReadableFiles } from './git-files.js';
+import { gitExposedEntries, gitIgnoredEntries, gitReadableFiles } from './git-files.js';
 import { GitIgnore } from './gitignore.js';
 
 const dirs: string[] = [];
@@ -121,5 +121,26 @@ describe("git's own lists of a workspace's files", () => {
         const empty = path.join(home, 'empty');
         await writeFile(empty, '');
         expect(new GitIgnore(root, { userExcludes: true, env: await gitEnv(empty, xdg) }).ignores(path.join(root, 'README.md'), false)).toBe(true);
+    });
+});
+
+describe('what a commit may hold of a directory (an older .domaintrail/)', () => {
+    test('tracked or not ignored, the name in any case; none when all of it is ignored; undefined outside a repository', async () => {
+        const root = await scratch();
+        const home = await scratch();
+        await writeFile(path.join(home, 'gitconfig'), '');
+        const env = await gitEnv(path.join(home, 'gitconfig'));
+        expect(await gitExposedEntries(root, '.domaintrail', { env })).toBeUndefined();
+        gitInit(root, env);
+        await put(root, { '.domaintrail/.gitignore': '*\n', '.domaintrail/session/session.db': 'x', 'README.md': 'r' });
+        expect(await gitExposedEntries(root, '.domaintrail', { env })).toEqual([]);
+        // a case variant tracked (on a case-insensitive file system the same directory)
+        await put(root, { '.DomainTrail-tracked/x': 'x' });
+        execFileSync('git', ['add', '-f', '.DomainTrail-tracked/x'], { cwd: root, env });
+        execFileSync('git', ['mv', '.DomainTrail-tracked', '.DOMAINTRAIL2'], { cwd: root, env });
+        expect(await gitExposedEntries(root, '.domaintrail', { env })).toEqual([]);
+        await put(root, { '.DomainTrail/y': 'y' });
+        execFileSync('git', ['add', '-f', '.DomainTrail/y'], { cwd: root, env });
+        expect(await gitExposedEntries(root, '.domaintrail', { env })).toEqual(['.DomainTrail/y']);
     });
 });

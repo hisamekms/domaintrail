@@ -27,5 +27,5 @@ export {
     type StateRoots,
     type WorkspaceDirs,
 } from './infrastructure/state-dirs.js';
-export { LEGACY_DIR } from './infrastructure/legacy-state.js';
+export { LEGACY_DIR, type CleanDatabase } from './infrastructure/legacy-state.js';
 export { openWorkspaceState, pruneStateDirs, type PrunableDir, type PruneOptions, type WorkspaceStateOptions } from './infrastructure/workspace-state.js';

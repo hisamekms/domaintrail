@@ -289,5 +289,5 @@ export { openSessionBlobs } from './infrastructure/blobs.js';
 export { createClefClassifier } from './infrastructure/clef.js';
 export { createCloudflareAccess, type AccessAdapterOptions, type AccessClaims, type AccessTokenVerifier } from './infrastructure/identity.js';
 export { readServerAddress, removeSessionFiles, writeServerAddress, type AgentCredential, type ServerAddress } from './infrastructure/session-files.js';
-export { createUnitOfWork, openSessionDatabase } from './infrastructure/sqlite.js';
+export { cleanMovedDatabase, createUnitOfWork, CREDENTIAL_TABLES, openSessionDatabase } from './infrastructure/sqlite.js';
 export { randomIds, randomSecrets, systemClock } from './infrastructure/system.js';

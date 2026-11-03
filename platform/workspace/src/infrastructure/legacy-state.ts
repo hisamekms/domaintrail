@@ -10,13 +10,14 @@
 // A `.domaintrail/` may also have come with a cloned repository, crafted: it is imported only as far as it can be
 // trusted. Nothing moves when git tracks or does not ignore anything in it (dt's own was always ignored by its own
 // `.gitignore`), or when git cannot tell; only regular files of the user's, in directories nobody else can write, move
-// (the database with its WAL files all or none); the moved database loses every credential (sign-ins, facilitator
-// links, pairing and sign-in codes, invites, the facilitator's binding: made again by the links the server prints);
-// and `generated.json`, which says which files `dt generate ts` deletes, is never moved.
+// (the database with its WAL files all or none); the moved database must be one dt made (the app's `clean` checks its
+// schema) and loses every credential (sign-ins, facilitator links, pairing and sign-in codes, invites, the
+// facilitator's binding: made again by the links the server prints), else it is not moved; and `generated.json`,
+// which says which files `dt generate ts` deletes, is never moved. The directory must be named exactly `.domaintrail`
+// on disk (a case variant on a case-insensitive file system is not dt's).
 import { createHash, randomBytes } from 'node:crypto';
 import { copyFile, lstat, mkdir, readFile, readdir, rename, rm, rmdir, unlink } from 'node:fs/promises';
 import { constants } from 'node:fs';
-import { DatabaseSync } from 'node:sqlite';
 import * as path from 'node:path';
 import { gitExposedEntries } from './git-files.js';
 import {
@@ -65,8 +66,11 @@ const BLOBS = 'session/blobs';
 const DROPPED = new Set(['.gitignore', 'session/.gitignore', 'session/server.json', 'session/agent.json', 'generated.json']);
 /** The session's database and its WAL files: moved all or none. */
 const DATABASE = new Set(['session/session.db', 'session/session.db-wal', 'session/session.db-shm']);
-/** The tables of the session's database that hold credentials, emptied in the moved copy (the session's content stays). */
-const CREDENTIALS = ['sign_ins', 'facilitator_links', 'invites', 'facilitators'];
+/**
+ * Cleans the moved copy of the session's database (its WAL files beside it) of its credentials, after checking that it
+ * is one dt made; false: it must not be moved. Given by the app (the collaboration owns the schema).
+ */
+export type CleanDatabase = (file: string) => boolean;
 const DIRECTORIES = new Set(['session', BLOBS]);
 
 /** What `.domaintrail/` holds: the files to move, what is dropped, and the entries that are not dt's. */
@@ -144,40 +148,6 @@ async function trusted(legacy: string, moved: readonly Moved[]): Promise<{ reado
     return { ok: moved.filter((m) => fine.has(m.from)), refused: moved.filter((m) => !fine.has(m.from)).map((m) => m.from) };
 }
 
-/**
- * Empties the tables of credentials of the database `file` (its WAL files beside it, recovered into it): sign-ins,
- * facilitator links and codes, invites and the facilitator's binding. Triggers and views go first (dt's schema has
- * none; a crafted one could act on the deletions). False when it is no database, or something is left.
- */
-function scrubCredentials(file: string): boolean {
-    let db: DatabaseSync | undefined;
-    try {
-        db = new DatabaseSync(file);
-        db.exec('PRAGMA trusted_schema = OFF');
-        db.exec('PRAGMA foreign_keys = OFF');
-        const names = (type: string): string[] =>
-            db!
-                .prepare('SELECT name FROM sqlite_master WHERE type = ?')
-                .all(type)
-                .map((r) => String(r.name));
-        const quoted = (name: string): string => `"${name.replaceAll('"', '""')}"`;
-        for (const t of names('trigger')) db.exec(`DROP TRIGGER IF EXISTS ${quoted(t)}`);
-        for (const v of names('view')) db.exec(`DROP VIEW IF EXISTS ${quoted(v)}`);
-        const tables = new Set(names('table'));
-        const present = CREDENTIALS.filter((t) => tables.has(t));
-        db.exec('BEGIN IMMEDIATE');
-        for (const t of present) db.exec(`DELETE FROM ${quoted(t)}`);
-        db.exec('COMMIT');
-        for (const t of present) if (Number(db.prepare(`SELECT count(*) AS n FROM ${quoted(t)}`).get()?.n) !== 0) return false;
-        db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
-        return true;
-    } catch {
-        return false;
-    } finally {
-        db?.close();
-    }
-}
-
 /** Whether the state directory holds anything but its record (a session, generated files, ...). */
 async function holdsData(dir: string): Promise<boolean> {
     const entries = await readdir(dir).catch(() => []);
@@ -229,10 +199,17 @@ const some = (items: readonly string[], n = 5): string =>
  * link or not a directory is not dt's: left alone. One that git tracks or does not ignore (or of which git cannot
  * tell) is left as it is, and said: the workspace starts a new session.
  */
-export async function moveLegacyState(dirs: WorkspaceDirs, log: (line: string) => void): Promise<LegacyMove> {
+export async function moveLegacyState(dirs: WorkspaceDirs, log: (line: string) => void, clean?: CleanDatabase): Promise<LegacyMove> {
     const legacy = path.join(dirs.workspace, LEGACY_DIR);
+    // by its name on disk: on a case-insensitive file system `.DomainTrail` answers to `.domaintrail` too
+    const named = (await readdir(dirs.workspace).catch(() => [])).filter((n) => n.normalize('NFC').toLowerCase() === LEGACY_DIR);
+    if (!named.length) return 'none';
     const stat = await lstat(legacy).catch(() => undefined);
     if (!stat?.isDirectory()) return 'none';
+    if (!named.includes(LEGACY_DIR)) {
+        log(`Not moving ${named[0]}/: dt only ever wrote ${LEGACY_DIR}/, by that exact name. It stays as it is.`);
+        return 'kept';
+    }
     const where = shownPath(dirs.state);
     const server = await readFile(path.join(legacy, 'session', 'server.json'), 'utf8')
         .then((t): unknown => JSON.parse(t))
@@ -295,7 +272,7 @@ export async function moveLegacyState(dirs: WorkspaceDirs, log: (line: string) =
             for (const d of await readdir(path.join(staging, 'blobs')).catch(() => [])) await restrict(path.join(staging, 'blobs', d), PRIVATE_DIR);
             if (await exists(path.join(staging, 'blobs'))) await restrict(path.join(staging, 'blobs'), PRIVATE_DIR);
             // the copy loses every credential before it is in place; one that cannot be cleaned is not moved
-            if (toState.some((m) => DATABASE.has(m.from)) && !scrubCredentials(path.join(staging, 'session.db'))) {
+            if (toState.some((m) => DATABASE.has(m.from)) && !clean?.(path.join(staging, 'session.db'))) {
                 for (const m of toState.filter((t) => DATABASE.has(t.from))) {
                     await rm(path.join(staging, m.to), { force: true });
                     delete moved[m.from];
@@ -303,7 +280,9 @@ export async function moveLegacyState(dirs: WorkspaceDirs, log: (line: string) =
                 await rm(path.join(staging, 'session.db-journal'), { force: true });
                 inv.foreign.push(...toState.filter((t) => DATABASE.has(t.from)).map((t) => t.from));
                 inv.moved.splice(0, inv.moved.length, ...inv.moved.filter((t) => !DATABASE.has(t.from)));
-                log(`Not moving ${LEGACY_DIR}/session/session.db: it is not a session database dt can clean of its credentials. It stays there.`);
+                log(
+                    `Not moving ${LEGACY_DIR}/session/session.db: it is not a session database of dt's (its schema is not one dt made), or it could not be cleaned of its credentials. It stays there.`,
+                );
             }
             for (const f of ['session.db', 'session.db-wal', 'session.db-shm'])
                 if (await exists(path.join(staging, f))) await restrict(path.join(staging, f), PRIVATE_FILE);

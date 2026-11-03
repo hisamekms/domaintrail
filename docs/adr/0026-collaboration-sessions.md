@@ -1343,18 +1343,25 @@ the repository, was read by every tool that walks the workspace, and had to be k
   a database with sign-ins, facilitator links and invites, a `generated.json` that steers deletions — which the first
   `dt open` would otherwise import silently into the user's state). The move stays automatic (the maintainer's
   decision), but:
+  - the directory's name on disk (from `readdir` of the root) must be exactly `.domaintrail`: a case variant, which a
+    case-insensitive file system also answers to, is never moved;
   - nothing moves when git tracks or does not ignore any entry of `.domaintrail/` (`git ls-files --cached --others
-    --exclude-standard`), or git fails: it is left in place, the workspace starts a new session, and one line says how
-    to remove it. dt's own `.domaintrail/` always ignored itself. Outside a repository git is not asked;
+    --exclude-standard -- ':(icase).domaintrail'`, the results filtered again by their NFC-lowercased first segment), or
+    git fails: it is left in place, the workspace starts a new session, and one line says how to remove it. dt's own
+    `.domaintrail/` always ignored itself. Outside a repository git is not asked;
   - only regular files owned by the user (`lstat().uid === process.getuid()` on POSIX) move, in directories — from
     `.domaintrail` down — owned by the user and writable by neither group nor others; links never. Any other file is
     skipped and named in one line, and stays; the database and its WAL files move all or none (fail closed);
-  - in the staging copy, before the rename, the database loses every credential: the rows of `sign_ins`,
+  - in the staging copy, before the rename, the collaboration's `cleanMovedDatabase` (given to the workspace by the app;
+    without it no database moves) first refuses any database that is not one dt made: its `user_version` must be a
+    known migration level and its whole `sqlite_master` (type, name, table and `sql` as written) exactly what the
+    first that many migrations make in memory — so no trigger, view, extra table or column, and no case variant of a
+    name (SQLite's identifiers are case-insensitive) — and pass `quick_check`. Then the rows of `sign_ins`,
     `facilitator_links` (facilitator links, `dt open` sign-in codes, agent pairing codes), `invites` and
-    `facilitators` (who holds the role) are deleted, after dropping any trigger or view (dt's schema has none) with
-    `trusted_schema` off, and checked to be empty. The session's content stays (sessions, requests, runs, revisions,
+    `facilitators` (who holds the role) are deleted by the names dt uses (a table the level predates is skipped) and
+    checked to be empty by the same names, `trusted_schema` off. The session's content stays (sessions, requests, runs, revisions,
     the outbox, triages, proposals, interviews, marks, approvals, restores). A database that cannot be cleaned is not
-    moved. Join requests and the solo sign-in are in memory only;
+    moved (fail closed, one line). Join requests and the solo sign-in are in memory only;
   - `generated.json` is not moved: the next `dt generate ts` records its own, and generated files of earlier runs
     outside the output directories it writes are no longer deleted automatically;
   - `workspace.json` records the SHA-256 of each file as it was in `.domaintrail/` (`moved`): a later run recognizes a

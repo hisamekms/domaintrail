@@ -327,6 +327,77 @@ export function migrate(db: DatabaseSync): void {
     }
 }
 
+/**
+ * The tables that hold credentials: sign-ins, facilitator links with the sign-in and pairing codes, invites, and who
+ * holds the facilitator role. Emptied in a database moved from an older version's `.domaintrail/`.
+ */
+export const CREDENTIAL_TABLES: readonly string[] = ['sign_ins', 'facilitator_links', 'invites', 'facilitators'];
+
+type SchemaRow = { type: string; name: string; tbl_name: string; sql: string | null };
+
+/** The schema of `db` as SQLite keeps it: every object of `sqlite_master` (its `sql` as written), in a stable order. */
+function schemaOf(db: DatabaseSync): string {
+    const rows = db
+        .prepare('SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name')
+        .all()
+        .map((r): SchemaRow => ({ type: String(r.type), name: String(r.name), tbl_name: String(r.tbl_name), sql: r.sql === null ? null : String(r.sql) }));
+    return JSON.stringify(rows);
+}
+
+/** The schema dt makes at migration level `level`: the first `level` migrations, applied in memory. */
+function schemaAt(level: number): string {
+    const db = new DatabaseSync(':memory:');
+    try {
+        db.exec('PRAGMA foreign_keys = ON');
+        for (let v = 0; v < level; v++) db.exec(MIGRATIONS[v]);
+        return schemaOf(db);
+    } finally {
+        db.close();
+    }
+}
+
+/**
+ * Cleans the session database `file` moved from an older version's `.domaintrail/` (its WAL files beside it, recovered
+ * into it) of every credential, which the facilitator makes again. Fails closed — false, the database must not be used —
+ * unless it is one dt made: a known migration level (`user_version`), and exactly the schema dt makes at that level
+ * (every table, column, index, trigger and view, as written; nothing more), intact. The credential tables are then
+ * emptied by the names dt uses and checked empty by the same names. The session's content stays.
+ */
+export function cleanMovedDatabase(file: string): boolean {
+    let db: DatabaseSync | undefined;
+    try {
+        db = new DatabaseSync(file);
+        db.exec('PRAGMA trusted_schema = OFF');
+        const level = Number(row(db.prepare('PRAGMA user_version').get()).user_version);
+        if (!Number.isInteger(level) || level < 1 || level > MIGRATIONS.length) return false;
+        if (schemaOf(db) !== schemaAt(level)) return false;
+        if (text(row(db.prepare('PRAGMA quick_check').get()), 'quick_check') !== 'ok') return false;
+        const missing = (e: unknown): boolean => e instanceof Error && /no such table/i.test(e.message);
+        db.exec('BEGIN IMMEDIATE');
+        for (const table of CREDENTIAL_TABLES) {
+            try {
+                db.exec(`DELETE FROM ${table}`);
+            } catch (e) {
+                if (!missing(e)) throw e;
+            }
+        }
+        db.exec('COMMIT');
+        for (const table of CREDENTIAL_TABLES) {
+            try {
+                if (integer(row(db.prepare(`SELECT count(*) AS n FROM ${table}`).get()), 'n') !== 0) return false;
+            } catch (e) {
+                if (!missing(e)) throw e;
+            }
+        }
+        db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+        return true;
+    } catch {
+        return false;
+    } finally {
+        db?.close();
+    }
+}
+
 /** Opens (and migrates) a database: a file, or `:memory:`. */
 export function openDatabase(file: string): DatabaseSync {
     const db = new DatabaseSync(file);

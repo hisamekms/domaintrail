@@ -32,6 +32,19 @@ bun run dt -r examples/shop generate ts      # then examples/shop/src type-check
 bun run build && bun run dt -r examples/shop view
 ```
 
+`dt generate ts`, `dt open` and the other commands that keep state write it outside the workspace, per user
+(`~/.local/state/domaintrail/<workspace>/` and `~/.cache/domaintrail/<workspace>/`; `dt guide config`). To keep what
+you try on the example (and this repository's own `bun run dt generate ts`) out of your home directory, point them at a
+scratch directory first:
+
+```bash
+export DOMAINTRAIL_STATE_DIR="$(mktemp -d)/state" XDG_CACHE_HOME="$(mktemp -d)"
+```
+
+`bun test` needs nothing: `test/preload.ts` gives every test process, and the processes it starts, directories of
+their own (a test that starts one with `Bun.spawn` passes `env: process.env`: Bun gives a child the environment the
+process started with).
+
 CI (`.github/workflows/ci.yml`) runs the build, the type check, the lint, the format check and the tests, and checks
 `examples/shop` with the built CLI on Node.
 
