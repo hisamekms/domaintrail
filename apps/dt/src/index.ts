@@ -25,7 +25,8 @@ export { createModelValidator, createSourceFormatter } from './wiring/validator.
 
 // ---- the CLI ---------------------------------------------------------------------------------------------------
 export { consoleIO, runCli, type CliIO } from './cli/main.js';
-export { SessionError, type CliDeps, type SessionSettings } from './cli/ports.js';
+export { SessionError, TunnelError, type CliDeps, type SessionSettings, type StartedTunnel } from './cli/ports.js';
+export { fileTrustStore } from './cli/trust.js';
 
 // ---- the configuration: domaintrail.jsonc composed from its sections' owners (T6) -------------------------------
 export {

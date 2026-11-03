@@ -48,6 +48,12 @@ export interface CliDeps {
     issueAgentLink(root: string): Promise<{ code: string; agentUrl: string; expiresAt: Date }>;
     /** Another one-time sign-in link for the `dt open` server running on the workspace; rejects with `SessionError` when none runs or it is `dt collab`'s. */
     issueOpenLink(root: string): Promise<{ link: string; expiresAt: Date }>;
+    /**
+     * Starts a Cloudflare quick tunnel to `127.0.0.1:<port>` (`dt collab --tunnel`): resolves with its public URL once
+     * it can be used; rejects with `TunnelError` (cloudflared missing, failed, or no URL in time). It is stopped by
+     * `stop`, on Ctrl+C, and when the process exits.
+     */
+    startTunnel(options: { port: number; log: (line: string) => void }): Promise<StartedTunnel>;
     /** Whether the agent can run here (`claude` on the PATH, answering, with the flags the adapters need), or why not. */
     checkAgent(agent: 'claude'): Promise<AgentUsability>;
     /**
@@ -147,6 +153,18 @@ export interface StartedSession {
     closed: Promise<void>;
     stop(): Promise<void>;
 }
+
+/** A running quick tunnel, as the CLI uses it. */
+export interface StartedTunnel {
+    /** `https://<words>.trycloudflare.com`. */
+    readonly url: string;
+    /** Resolves when cloudflared exits. */
+    readonly exited: Promise<void>;
+    stop(): Promise<void>;
+}
+
+/** The tunnel could not start: printed as one line. */
+export class TunnelError extends Error {}
 
 /** The roles of an agent (ADR 0030): the read-only answerer and the runner. */
 export const AGENT_ROLES = ['answer', 'run'] as const;

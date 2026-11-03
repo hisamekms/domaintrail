@@ -95,6 +95,12 @@ export function cliDeps(): CliDeps {
         issueAgentLink: async (root) => (await import('./wiring/session.js')).issueAgentLink(root),
         issueInvite: async (root, stop) => (await import('./wiring/session.js')).issueInvite(root, stop),
         issueOpenLink: async (root) => (await import('./wiring/session.js')).issueOpenLink(root),
+        startTunnel: async ({ port, log }) => {
+            const tunnel = await (await import('./wiring/tunnel.js')).startQuickTunnel({ port, log });
+            // Ctrl+C stops cloudflared after the server (registered before it, stopped after it)
+            onInterrupt(() => tunnel.stop());
+            return tunnel;
+        },
         checkAgent: async () => (await import('@domaintrail/agent')).checkClaudeCode(),
         localConfigState: (file) => gitFileState(file),
         trust: fileTrustStore(),
