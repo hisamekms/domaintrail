@@ -64,6 +64,11 @@ export interface CliDeps {
     /** Starts the language server over stdio; resolves once it listens. */
     startLanguageServer(options: LanguageServerOptions): Promise<void>;
     /**
+     * `dt session prune`: the state and cache directories of workspaces that are gone (or, with `olderThanDays`, not
+     * used for that long), removed when `remove`. Absent: the command says it cannot here.
+     */
+    pruneState?(options: { olderThanDays?: number; remove: boolean }): Promise<PrunedDir[]>;
+    /**
      * Whether git would commit the local override `file` (`tracked`, `unignored`), or not (`ignored`; `undefined`: no
      * repository). Absent: never asked.
      */
@@ -227,6 +232,16 @@ export class SessionError extends Error {}
 
 /** The workspace's state directory (outside it) cannot be used, or its `.domaintrail/` moved: printed as one line. */
 export class StateError extends Error {}
+
+/** A directory `dt session prune` removes (or would). */
+export interface PrunedDir {
+    readonly dir: string;
+    readonly kind: 'state' | 'cache';
+    /** The workspace it was kept for (none: the leftover of a move stopped half way). */
+    readonly workspace?: string;
+    readonly reason: 'gone' | 'unused' | 'unfinished';
+    readonly lastUsed: Date;
+}
 
 /** A file of `dt generate ts`: `path` relative to the root (`/`-separated), `file` absolute. */
 export interface GeneratedFile {

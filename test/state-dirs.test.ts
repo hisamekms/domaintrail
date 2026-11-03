@@ -1,7 +1,8 @@
 // The workspace's state outside it (ADR 0026, State outside the workspace), end to end: `dt open`, `dt collab`,
 // `dt check` and `dt generate ts` write nothing into the workspace but the generated sources; an older version's
 // `.domaintrail/` is moved on the first run (the session resumed with its chat) or refused while its server runs; the
-// links find the running server in the state directory. The state goes to the test run's directories (test/preload.ts).
+// links find the running server in the state directory; `dt session prune` lists and removes the state of workspaces
+// that are gone. The state goes to the test run's directories (test/preload.ts).
 import { afterAll, describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { cp, lstat, readFile, rm, writeFile } from 'node:fs/promises';
@@ -161,4 +162,37 @@ describe('the running server, found in the state directory', () => {
         }
         expect((await run('-r', root, 'open', 'link')).err).toEqual(['No session server is running for this workspace (start one with `dt open`).']);
     });
+});
+
+describe('dt session prune', () => {
+    test('lists the state of a workspace that is gone (a dry run), removes it with --yes; an existing one is kept', async () => {
+        const kept = await copy();
+        const gone = await copy();
+        expect((await run('-r', kept, 'generate', 'ts')).code).toBe(0);
+        expect((await run('-r', gone, 'generate', 'ts')).code).toBe(0);
+        const goneDirs = workspaceDirs(gone);
+        const keptDirs = workspaceDirs(kept);
+        await rm(gone, { recursive: true });
+
+        const dry = await run('session', 'prune');
+        expect(dry.code).toBe(0);
+        expect(dry.out[0]).toBe('Would remove (dry run):');
+        expect(dry.out.filter((l) => l.includes(path.basename(goneDirs.state)))).toEqual([
+            `  ${goneDirs.state}  (state; ${goneDirs.workspace}: no longer exists)`,
+            `  ${goneDirs.cache}  (cache; ${goneDirs.workspace}: no longer exists)`,
+        ]);
+        expect(dry.out.join('\n')).not.toContain(path.basename(keptDirs.state));
+        expect(dry.out.at(-1)).toMatch(/^Run `dt session prune --yes` to remove /);
+        expect(await lstat(goneDirs.state).catch(() => 'gone')).not.toBe('gone');
+
+        const yes = await run('session', 'prune', '--yes');
+        expect(yes.out[0]).toBe('Removed:');
+        expect(await lstat(goneDirs.state).catch(() => 'gone')).toBe('gone');
+        expect(await lstat(goneDirs.cache).catch(() => 'gone')).toBe('gone');
+        expect(await lstat(keptDirs.state).catch(() => 'gone')).not.toBe('gone');
+
+        const none = await run('session', 'prune', '--older-than', '3650');
+        expect(none.out.join('\n')).not.toContain(path.basename(keptDirs.state));
+        expect((await run('session', 'prune', '--older-than', 'x')).code).not.toBe(0);
+    }, 60_000);
 });

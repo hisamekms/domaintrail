@@ -15,6 +15,7 @@ import {
     LINT_HINT,
     loadConfig as readConfig,
     loadWorkspace as readWorkspace,
+    pruneStateDirs,
     SourceScope,
 } from '@domaintrail/workspace';
 import { workspaceState } from './wiring/state.js';
@@ -117,6 +118,7 @@ export function cliDeps(): CliDeps {
             onInterrupt(() => agent.stop());
             return agent;
         },
+        pruneState: (options) => pruneStateDirs(options),
         // loads the language server only when `dt lsp` starts it
         startLanguageServer: (options) => startLanguageServer(options, languageServerFiles),
     };

@@ -154,7 +154,7 @@ describe('removed commands and sections', () => {
     test.each([
         [['view'], "'dt view' was removed; use 'dt open' (or 'dt open --host <address>' for a read-only Live View)"],
         [['view', '--port', '8080', '--base', 'main'], "'dt view' was removed; use 'dt open'"],
-        [['session'], "'dt session' was removed; use 'dt collab' (start), 'dt collab link' or 'dt agent'"],
+        [['session'], "'dt session' takes 'prune'; the session itself is 'dt collab' (start), 'dt collab link' or 'dt agent'"],
         [['session', 'start', '--port', '0'], "'dt session start' was removed; use 'dt collab'"],
         [['session', 'link'], "'dt session link' was removed; use 'dt collab link'"],
         [['session', 'subscribe', '--agent', 'claude', '--once'], "'dt session subscribe' was removed; use 'dt agent'"],
@@ -177,7 +177,8 @@ describe('removed commands and sections', () => {
             .filter(Boolean);
         expect(commands).toEqual(expect.arrayContaining(['open', 'collab', 'agent']));
         expect(commands).not.toContain('view');
-        expect(commands).not.toContain('session');
+        // `dt session` keeps `prune` only (the state kept outside the workspaces)
+        expect(commands).toContain('session');
     });
 
     test('a config with session or view is refused at load, by every command that reads it (exit 2)', async () => {
