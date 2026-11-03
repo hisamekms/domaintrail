@@ -1,20 +1,37 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 
 // GitHub Pages: the workflow (.github/workflows/site.yml) passes the origin and the base path that
 // actions/configure-pages gives; locally the site is served from the root.
 const site = process.env.SITE_ORIGIN || undefined;
 const base = process.env.SITE_BASE || '/';
 
-/** A step of the workshop in the sidebar: its number in a circle (data-n), its goal as a badge. */
-const step = (n, label, en, slug, goal) => ({
-    label,
-    translations: { en },
-    slug: `workshop/${slug}`,
-    attrs: { 'data-n': String(n) },
-    ...(goal && { badge: { text: goal, variant: 'success' } }),
-});
+/**
+ * The sidebar: the top page, then one group per guide. A guide is a directory of src/content/docs with a `_guide.json`
+ * (its label, order and items), so a new guide is a new directory: `event-storming/` now; `getting-started/`,
+ * `modeling/` and `reference/` are the places kept for DomainTrail's own guides. English mirrors them under `en/`.
+ */
+const DOCS = new URL('./src/content/docs/', import.meta.url);
+
+/** `{ ja, en }` as Starlight's label and its translations. */
+const labelled = (label) => ({ label: label.ja, translations: { en: label.en } });
+
+function guideGroups() {
+    return readdirSync(DOCS, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && d.name !== 'en' && existsSync(new URL(`${d.name}/_guide.json`, DOCS)))
+        .map((d) => ({ dir: d.name, ...JSON.parse(readFileSync(new URL(`${d.name}/_guide.json`, DOCS), 'utf8')) }))
+        .sort((a, b) => a.order - b.order)
+        .map((g) => ({
+            ...labelled(g.label),
+            items: g.items.map((item) =>
+                typeof item === 'string'
+                    ? { slug: item === 'index' ? g.dir : `${g.dir}/${item}` }
+                    : { ...labelled(item.label), items: [{ autogenerate: { directory: `${g.dir}/${item.directory}` } }] },
+            ),
+        }));
+}
 
 export default defineConfig({
     site,
@@ -22,8 +39,8 @@ export default defineConfig({
     trailingSlash: 'always',
     integrations: [
         starlight({
-            title: { ja: 'DomainTrail ES ガイド', en: 'DomainTrail ES guide' },
-            description: 'DomainTrail で Event Storming のワークショップを回すファシリテーターのためのガイド',
+            title: 'DomainTrail',
+            description: 'DomainTrail のドキュメント：ガイドとリファレンス',
             logo: { light: '../assets/brand/logo-light.svg', dark: '../assets/brand/logo-dark.svg', alt: 'DomainTrail' },
             favicon: '/favicon.svg',
             defaultLocale: 'root',
@@ -35,40 +52,7 @@ export default defineConfig({
             social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/hisamekms/domaintrail' }],
             customCss: ['./src/styles/site.css'],
             components: { Hero: './src/components/overrides/Hero.astro' },
-            sidebar: [
-                {
-                    label: 'はじめに',
-                    translations: { en: 'Start here' },
-                    items: [
-                        { label: 'このガイドについて', translations: { en: 'About this guide' }, slug: 'index' },
-                        { label: '人と AI の分担', translations: { en: 'People and the AI' }, slug: 'roles' },
-                    ],
-                },
-                {
-                    label: 'ワークショップの道のり',
-                    translations: { en: 'The workshop, step by step' },
-                    items: [
-                        step(1, '準備', 'Preparing', 'prepare'),
-                        step(2, 'ブリーフ', 'The brief', 'brief'),
-                        step(3, '出来事', 'Events', 'events'),
-                        step(4, '流れ・段階', 'Flows and stages', 'flows'),
-                        step(5, '例外', 'Exceptions', 'exceptions'),
-                        step(6, '問い', 'Questions', 'questions', 'BP'),
-                        step(7, 'デザインレベル', 'Design Level', 'design', 'DL'),
-                        step(8, '終わりと次へ', 'Wrapping up', 'next'),
-                    ],
-                },
-                { label: '迷ったら', translations: { en: 'When unsure' }, slug: 'lost' },
-                {
-                    label: '付録',
-                    translations: { en: 'Appendices' },
-                    items: [
-                        { label: '2時間のアジェンダ', translations: { en: 'A 2-hour agenda' }, slug: 'appendix/agenda' },
-                        { label: '参加者向けの1枚', translations: { en: 'For participants' }, slug: 'appendix/participants' },
-                        { label: 'よくあるつまずき', translations: { en: 'Common pitfalls' }, slug: 'appendix/pitfalls' },
-                    ],
-                },
-            ],
+            sidebar: [{ label: 'DomainTrail のドキュメント', translations: { en: 'DomainTrail docs' }, slug: 'index' }, ...guideGroups()],
         }),
     ],
 });

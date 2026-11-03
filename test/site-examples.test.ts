@@ -3,9 +3,9 @@ import { readdirSync } from 'node:fs';
 import * as path from 'node:path';
 import { cliDeps, runCli } from '@domaintrail/dt';
 
-// The example workspaces of the Event Storming guide (site/examples: one per phase of the workshop, its figures drawn
+// The example workspaces of the Event Storming guide (site/examples/event-storming: one per phase of the workshop, its figures drawn
 // from them) stay valid and formatted as the language changes (site/scripts/check-examples.ts checks the same).
-const EXAMPLES = path.join(import.meta.dir, '..', 'site', 'examples');
+const EXAMPLES = path.join(import.meta.dir, '..', 'site', 'examples', 'event-storming');
 const PHASES = ['events', 'flows', 'exceptions', 'questions', 'design'];
 
 async function dt(args: string[]): Promise<{ code: number; out: string }> {

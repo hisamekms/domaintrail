@@ -1,4 +1,5 @@
-// `bun run shots`: the guide's captures of the Live View, taken from the example workspaces into public/shots/<name>.png.
+// `bun run shots`: the Event Storming guide's captures of the Live View, taken from its example workspaces into
+// public/shots/event-storming/<name>.png.
 //
 // For each scene it copies an example to a scratch directory, starts `dt open --no-agent` (or `dt collab`) on a port
 // from SHOTS_PORT (4750 by default) up, and drives the page with Playwright. In place of Claude Code, a scripted
@@ -28,9 +29,10 @@ import {
     type Answerer,
 } from '@domaintrail/agent';
 import { issueAgentLink, pairAgent } from '@domaintrail/dt';
-import { EXAMPLES, SITE, dtStart } from './dt.ts';
+import { ES, ES_EXAMPLES, SITE, dtStart } from './dt.ts';
 
-const OUT = join(SITE, 'public', 'shots');
+// the captures of the Event Storming guide (public/shots/<guide>/: each guide has its own)
+const OUT = join(SITE, 'public', 'shots', ES);
 const STORMING = 'CertificateIssuance';
 const ref = (local: string): string => `@{es:${STORMING}/${local}}`;
 
@@ -169,7 +171,7 @@ function waitFor(child: ChildProcess, pattern: RegExp, ms = 60_000): Promise<str
 function workspace(name: string, example: string | undefined, edit?: (dtes: string) => string): string {
     const root = join(WORK, name);
     rmSync(root, { recursive: true, force: true });
-    if (example) cpSync(join(EXAMPLES, example), root, { recursive: true });
+    if (example) cpSync(join(ES_EXAMPLES, example), root, { recursive: true });
     else {
         mkdirSync(root, { recursive: true });
         writeFileSync(join(root, 'domaintrail.jsonc'), '{ "sources": ["**/*.dtes"] }\n');

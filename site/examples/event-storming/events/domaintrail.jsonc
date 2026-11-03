@@ -1,5 +1,5 @@
 {
-  "$schema": "../../../schema/domaintrail.schema.json",
+  "$schema": "../../../../schema/domaintrail.schema.json",
   // the example of the Event Storming guide (site/): one workspace per phase, checked by site/scripts/check-examples.ts
   "sources": ["**/*.dtes"],
 }

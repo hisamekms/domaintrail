@@ -1,8 +1,8 @@
 ---
-// A figure generated from an example workspace: a sticky-note diagram (public/figures/<name>.svg, scripts/figures.ts) or
-// a capture of the Live View (public/shots/<name>.png, scripts/shots.ts). Never drawn by hand.
+// A figure generated from an example workspace: a sticky-note diagram (public/figures/<guide>/<name>.svg, scripts/figures.ts) or
+// a capture of the Live View (public/shots/<guide>/<name>.png, scripts/shots.ts), both of the page's guide. Never drawn by hand.
 import Icon from './Icon.astro';
-import { withBase } from '../journey';
+import { guideOf, withBase } from '../journey';
 
 interface Props {
     /** the figure's name in figures.json, or a capture's name */
@@ -15,7 +15,8 @@ interface Props {
 }
 
 const { name, kind = 'figure', alt, caption, label } = Astro.props;
-const src = withBase(kind === 'figure' ? `figures/${name}.svg` : `shots/${name}.png`);
+const guide = guideOf(Astro.locals.starlightRoute.id);
+const src = withBase(kind === 'figure' ? `figures/${guide}/${name}.svg` : `shots/${guide}/${name}.png`);
 ---
 
 <figure class="gen not-content">

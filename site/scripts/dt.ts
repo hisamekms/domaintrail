@@ -36,14 +36,21 @@ export function dtStart(args: readonly string[]): ReturnType<typeof spawn> {
     return spawn(cmd, [...pre, ...args], { cwd: SITE, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
-/** The example workspaces, one per phase of the workshop, in the order of the phases. */
+/** The guide whose examples the scripts know (examples/<guide>/<phase>/, one workspace per phase of its workshop). */
+export const ES = 'event-storming';
+export const ES_EXAMPLES = join(EXAMPLES, ES);
+
+/** The Event Storming guide's example workspaces, one per phase of the workshop, in the order of the phases. */
 export const PHASES = ['events', 'flows', 'exceptions', 'questions', 'design'] as const;
 export type Phase = (typeof PHASES)[number];
 
-/** The example workspaces on disk (a directory left there that is no phase is checked too). */
+/** Every example workspace on disk, as `<guide>/<example>`, the Event Storming phases first and in their order. */
 export function exampleDirs(): string[] {
-    const onDisk = readdirSync(EXAMPLES, { withFileTypes: true })
-        .filter((d) => d.isDirectory())
-        .map((d) => d.name);
-    return [...PHASES.filter((p) => onDisk.includes(p)), ...onDisk.filter((d) => !(PHASES as readonly string[]).includes(d))];
+    const subdirs = (dir: string): string[] =>
+        readdirSync(dir, { withFileTypes: true })
+            .filter((d) => d.isDirectory())
+            .map((d) => d.name);
+    const all = subdirs(EXAMPLES).flatMap((guide) => subdirs(join(EXAMPLES, guide)).map((example) => `${guide}/${example}`));
+    const es = PHASES.map((p) => `${ES}/${p}`).filter((d) => all.includes(d));
+    return [...es, ...all.filter((d) => !es.includes(d))];
 }

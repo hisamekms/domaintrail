@@ -1,7 +1,7 @@
 ---
-// Starlight's Hero, as the approved preview has it: the title, the lead, who it is for, two actions, and the whole of
-// the example drawn from its workspace.
-import Icon from '../Icon.astro';
+// Starlight's Hero, as the approved preview has it: the title, the lead, a row of facts (`heroMeta`), the actions, and
+// beside them a figure of the guide's example (`heroFigure`) when the page names one.
+import Icon, { type IconName } from '../Icon.astro';
 import Figure from '../Figure.astro';
 import { withBase } from '../../journey';
 
@@ -13,15 +13,21 @@ const { title = data.title, tagline, actions = [] } = data.hero ?? {};
 const href = (link: string): string => (/^[a-z]+:/.test(link) ? link : withBase(link));
 ---
 
-<div class="hero2">
+<div class:list={['hero2', { single: !data.heroFigure }]}>
     <div>
         <h1 id={PAGE_TITLE_ID} data-page-title set:html={title} />
         {tagline && <p class="lead" set:html={tagline} />}
-        <div class="meta">
-            <span><Icon name="user-round" size={15} /> ファシリテーター向け</span>
-            <span><Icon name="clock" size={15} /> 2〜3時間 × 1〜3回</span>
-            <span><Icon name="users" size={15} /> 3〜8人</span>
-        </div>
+        {
+            data.heroMeta && (
+                <div class="meta">
+                    {data.heroMeta.map((m) => (
+                        <span>
+                            <Icon name={m.icon as IconName} size={15} /> {m.text}
+                        </span>
+                    ))}
+                </div>
+            )
+        }
         <div class="cta">
             {
                 actions.map((a, i) => (
@@ -32,5 +38,5 @@ const href = (link: string): string => (/^[a-z]+:/.test(link) ? link : withBase(
             }
         </div>
     </div>
-    <Figure name="es-overall" alt="住民票のコンビニ交付のストーミング（段階と例外）" caption="このガイドの例：住民票のコンビニ交付" />
+    {data.heroFigure && <Figure name={data.heroFigure} alt={data.heroFigureAlt ?? data.title} caption={data.heroFigureCaption} />}
 </div>

@@ -1,54 +1,31 @@
 ---
-title: このガイドについて
-description: DomainTrail で Event Storming のワークショップを回すファシリテーターのためのガイド。準備からモデリングへ渡すところまで。
+title: DomainTrail
+description: DomainTrail のドキュメント。人と AI が同じモデルを見ながら、ドメインを探り、型で確かめる。
 hero:
-  title: DomainTrail で<br>Event Storming をする
-  tagline: 人が話し、AI が付箋を書き、全員が同じ画面で見る。ファイルは意識しなくてよい。ワークショップの準備から、モデリングへ渡すところまで。
+  title: DomainTrail
+  tagline: 人と AI が同じ画面でドメインを探り、型で確かめられるモデルにする。ここは、そのためのガイドです。
   actions:
-    - text: 準備から始める →
-      link: workshop/prepare/
-    - text: 参加者向けの1枚
-      link: appendix/participants/
+    - text: Event Storming ガイドへ →
+      link: event-storming/
 ---
 
-import JourneyPath from '../../components/JourneyPath.astro';
+import Icon from '../../components/Icon.astro';
 
-## ワークショップの道のり
+## ガイド
 
-アプリのガイド（🧭）と同じ地図です。いま地図のどこにいるかで、読む章が決まります。
+<div class="guides not-content">
+  <a class="guide-card" href="event-storming/">
+    <span class="ic"><Icon name="sticky-note" size={22} /></span>
+    <b>Event Storming ガイド</b>
+    <span>DomainTrail でワークショップを回すファシリテーターのために。準備から、モデリングへ渡すところまで。</span>
+    <span class="go">読む <Icon name="arrow-right" size={14} /></span>
+  </a>
+  <a class="guide-card" href="https://github.com/hisamekms/domaintrail/blob/main/docs/getting-started.ja.md">
+    <span class="ic"><Icon name="route" size={22} /></span>
+    <b>はじめに（リポジトリ）</b>
+    <span>インストールと最初のモデル、生成、実装、テスト。いまはリポジトリの文書です。</span>
+    <span class="go">GitHub で読む <Icon name="arrow-right" size={14} /></span>
+  </a>
+</div>
 
-<JourneyPath />
-
-ゴールはブリーフで決めます。**Big Picture** なら「問い」まで、**Design Level** ならその先まで。
-
-## 読み方
-
-- 各章は、道のりの1つの段階です。どの章も同じ形をしています。
-  - 道のりの地図（📍 がいまの段階）
-  - 4つのカード：目的、人がすること、dt ですること、終わったと言える状態
-  - この章の前と後の図
-  - 進め方、コツ、よくあるつまずき
-- 「終わったと言える状態」は、アプリのガイドの地図が ✓ を付ける条件と同じです。
-- 次に何をするか迷ったら、[迷ったら](lost/)へ。
-
-## このガイドの例
-
-全章を通して、**住民票のコンビニ交付**を例にします。図と画面の写しは、この例のワークスペース（`site/examples/`）から自動で作っています。手で描いた図はありません。
-
-| 段階 | ワークスペース | 中身 |
-|---|---|---|
-| 出来事 | `examples/events` | 出来事だけ |
-| 流れ・段階 | `examples/flows` | 段階と本流 |
-| 例外 | `examples/exceptions` | 段階ごとの例外 |
-| 問い | `examples/questions` | 問い（ホットスポット） |
-| デザインレベル | `examples/design` | コマンド・ポリシー・集約・リードモデル |
-
-## 用意するもの
-
-- `dt`（DomainTrail の CLI）と、ワークスペース（`domaintrail.jsonc` のあるフォルダ）
-- Claude Code（`claude` が使えること）。AI はファシリテーターの PC で動きます
-- リモートの参加者がいるなら `cloudflared`（[準備](workshop/prepare/)）
-
-## Event Storming そのものについて
-
-Event Storming の考え方は、このガイドでは短く触れるだけです。方法そのものは、考案者 Alberto Brandolini による [eventstorming.com](https://www.eventstorming.com/) から辿ってください。
+DomainTrail そのものの説明（概要・はじめに・言語のリファレンス）とモデリングのガイドは、このサイトに順に加わります。

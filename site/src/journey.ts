@@ -26,7 +26,13 @@ export const STEPS: readonly JourneyStep[] = [
 ];
 
 /** The chapter of a step, from the site's root (the base path is added by the caller). */
-export const stepPath = (key: StepKey): string => `workshop/${key}/`;
+export const stepPath = (key: StepKey): string => `event-storming/workshop/${key}/`;
+
+/**
+ * The guide a page belongs to: the first segment of its id, past the locale (`event-storming`, `en/event-storming/…`).
+ * Figures and captures are kept per guide (public/figures/<guide>/, public/shots/<guide>/).
+ */
+export const guideOf = (id: string): string => id.replace(/^en\//, '').split('/')[0] ?? '';
 
 /** A path under the site's base (import.meta.env.BASE_URL ends with a slash). */
 export const withBase = (path: string): string => `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}${path.replace(/^\//, '')}`;

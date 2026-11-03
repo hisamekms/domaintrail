@@ -1,13 +1,13 @@
-// `bun run examples:check`: each example workspace of the guide passes `dt check` with no warning and is formatted
+// `bun run examples:check`: each example workspace of the guides (examples/<guide>/<example>) passes `dt check` with no warning and is formatted
 // (`dt fmt --check`). The root's tests check the same (test/site-examples.test.ts).
 import { join } from 'node:path';
-import { EXAMPLES, PHASES, dt, exampleDirs } from './dt.ts';
+import { ES, EXAMPLES, PHASES, dt, exampleDirs } from './dt.ts';
 
 let failed = 0;
 const dirs = exampleDirs();
 for (const phase of PHASES) {
-    if (dirs.includes(phase)) continue;
-    console.error(`missing: examples/${phase}`);
+    if (dirs.includes(`${ES}/${phase}`)) continue;
+    console.error(`missing: examples/${ES}/${phase}`);
     failed++;
 }
 for (const dir of dirs) {

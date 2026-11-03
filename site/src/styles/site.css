@@ -573,6 +573,10 @@ figure.gen figcaption {
     border: 1px solid var(--g-bd);
     color: var(--g-ink);
 }
+/* a hero without a figure: the text alone, as wide as the content */
+.hero2.single {
+    grid-template-columns: 1fr;
+}
 @media (max-width: 60rem) {
     .hero2 {
         grid-template-columns: 1fr;
@@ -592,4 +596,49 @@ figure.gen figcaption {
     color: var(--g-brand);
     font-size: 13px;
     white-space: nowrap;
+}
+
+/* ---- the top page: a card per guide ---- */
+
+.guides {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+    gap: 12px;
+    margin: 1rem 0;
+}
+.guide-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 16px;
+    border: 1px solid var(--g-line);
+    border-radius: 14px;
+    background: var(--g-side);
+    color: var(--g-sub);
+    font-size: 14px;
+    text-decoration: none;
+}
+.guide-card:hover {
+    border-color: var(--g-brand2);
+}
+.guide-card .ic {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: var(--g-wash);
+    color: var(--g-brand);
+}
+.guide-card b {
+    color: var(--g-ink);
+    font-size: 1rem;
+}
+.guide-card .go {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: auto;
+    color: var(--g-brand);
+    font-weight: 700;
 }
