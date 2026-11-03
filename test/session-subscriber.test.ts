@@ -1036,7 +1036,7 @@ describe('the CLI', () => {
         const bin = await fakeClaudeOnPath(await ctx.plan([{ edits: ADD_RETURN_CANCELLED }]));
         const { output, exit } = await cli(['node', path.join(ROOT, 'dist', 'dt.js')], ctx.root, bin, ['--once']);
         expect(await exit).toBe(0);
-        expect(output()).toContain(`Agent on session ${ctx.server.session} with claude (role run) (one run); waiting.`);
+        expect(output()).toContain(`Agent on session ${ctx.server.session} with claude (roles answer, run) (one run); waiting.`);
         expect(output()).toContain('Done.');
         const done = await until(ctx, run, ['Completed', 'Failed']);
         expect(done.state === 'Completed' && [done.changed, done.report]).toEqual([

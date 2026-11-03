@@ -513,7 +513,7 @@ describe('end to end with the two roles and a fake Claude Code', () => {
 describe('a Solo session (dt open)', () => {
     test('every message is addressed; a request goes straight to the queue', async () => {
         const root = await scratch();
-        // opened as Solo before the server resumes it (dt open's sign-in is M5's)
+        // opened as Solo before the server (dt open's) resumes it
         const db = await openSessionDatabase(root);
         const use = createCollaboration({
             uow: createUnitOfWork(db),
@@ -526,7 +526,7 @@ describe('a Solo session (dt open)', () => {
         const opened = await use.openSession({ mode: 'Solo', facilitator: FACILITATOR_PARTICIPANT, name: FACILITATOR_NAME });
         expect(opened.ok).toBe(true);
         db.close();
-        const server = await startSessionServer({ root, debounceMs: 30, session: sessionConfig() });
+        const server = await startSessionServer({ root, debounceMs: 30, mode: 'Solo', session: sessionConfig() });
         cleanups.push(() => server.stop());
         await server.ready;
         const state = await server.collaboration.sessionState({ session: server.session });
