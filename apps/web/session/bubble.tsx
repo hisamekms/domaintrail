@@ -51,20 +51,24 @@ export function Bubble(props: {
     );
 }
 
-/** A text clamped to a few lines, with a link to show the rest when it is longer. */
-export function Clamped({ children, tx }: { children: ReactNode; tx: Tx }) {
+/**
+ * A text clamped to a few lines, with a link to show the rest when it is longer. `blocks`: its children are blocks (the
+ * AI's Markdown), in a `<div>` clamped by its height.
+ */
+export function Clamped({ children, tx, blocks = false }: { children: ReactNode; tx: Tx; blocks?: boolean }) {
     const [open, setOpen] = useState(false);
     const [clamped, setClamped] = useState(false);
-    const ref = useRef<HTMLParagraphElement | null>(null);
+    const ref = useRef<HTMLParagraphElement & HTMLDivElement>(null);
+    const Tag = blocks ? 'div' : 'p';
     useLayoutEffect(() => {
         const el = ref.current;
         if (el && !open) setClamped(el.scrollHeight > el.clientHeight + 1);
     }, [children, open]);
     return (
         <>
-            <p ref={ref} className={`chat-text${open ? '' : ' clamped'}`}>
+            <Tag ref={ref} className={`chat-text${blocks ? ' chat-markdown' : ''}${open ? '' : ' clamped'}`}>
                 {children}
-            </p>
+            </Tag>
             {clamped && !open && (
                 <a className="chat-more" onClick={() => setOpen(true)}>
                     {tx.chat.showMore}

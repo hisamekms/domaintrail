@@ -39,6 +39,7 @@ import { ActivityLine } from './activity';
 import { AI_PARTICIPANT, aiPresence, givenUpRequests, isAiAuthor, isRecord, isSolo, messageAi, triagesByRequest, willAddress, type MessageAi } from './ai';
 import { sessionApi } from './api';
 import { Bubble, Clamped, time } from './bubble';
+import { MarkdownText } from './markdown-text';
 import { ChangedElements, ReplyButton, RunCard, useUnitAbout } from './card';
 import { AddReaction, ReactionRow, useMarking } from './mark-controls';
 import { messageMarks, updatedCards } from './cards';
@@ -62,7 +63,6 @@ import { CollabMenu, CollabSummaryDialog, openPeople, useCollabSummary } from '.
 import { Avatar, failure, MentionedText, TargetChips } from './parts';
 import { AiAvatar, ProposalCard } from './proposal';
 import { parseReplyText, referenceText } from './references';
-import { ReplyText } from './reply';
 import { TriageRecordPanel } from './triage-record';
 import { isReplyable, messageReference, messageReplyTargets, repliesToMe, replyReference, replyTargetOf, replyTargets, type ReplyDraft } from './replies';
 import { useRevisionTools } from './revisions';
@@ -888,7 +888,7 @@ function AiStatus({ ai }: { ai: MessageAi }) {
 }
 
 /**
- * An answer of the AI (ADR 0030): a message of the AI, with its avatar and name, its text with element links. On top,
+ * An answer of the AI (ADR 0030): a message of the AI, with its avatar and name, its text as Markdown with element links. On top,
  * the message it answers, unless it is right above. Anyone replies to it (the reply is addressed to the AI) and reacts.
  */
 function AiMessageRow({ request: r, continues, underIt }: { request: RequestJson; continues: boolean; underIt: boolean }) {
@@ -897,8 +897,8 @@ function AiMessageRow({ request: r, continues, underIt }: { request: RequestJson
         <div className="chat-row">
             <Bubble avatar={<AiAvatar />} who={tx.chat.agent} at={r.sentAt} continues={continues} className="chat-bubble-ai">
                 {r.replyTo?.kind === 'Message' && !underIt && <MessageReferenceLine request={r.replyTo.request} />}
-                <Clamped tx={tx}>
-                    <ReplyText text={r.body} onNavigate={onNavigate} />
+                <Clamped tx={tx} blocks>
+                    <MarkdownText text={r.body} onNavigate={onNavigate} />
                 </Clamped>
                 <ReactionRow target={{ kind: 'Message', request: r.id }} />
             </Bubble>

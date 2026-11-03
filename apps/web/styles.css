@@ -4527,6 +4527,73 @@ del.was.block {
     line-clamp: 4;
     overflow: hidden;
 }
+/* an answer of the AI as Markdown (`markdown.ts`): blocks --space-2 apart; clamped by its height (four lines), since
+   line clamping does not reach into its lists and tables, its last line fading out where it may be cut */
+.chat-text.chat-markdown.clamped {
+    display: block;
+    max-height: calc(4em * var(--lh-body));
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5em), transparent);
+}
+.chat-markdown > * {
+    margin: 0;
+}
+.chat-markdown > * + * {
+    margin-top: var(--space-2);
+}
+.chat-markdown :is(ul, ol) {
+    margin: 0;
+    padding-left: 1.5em;
+}
+/* every heading level alike: a bold line, a little larger than the body */
+.chat-markdown .chat-md-heading {
+    font-size: 1.0625em;
+    font-weight: var(--fw-strong);
+}
+.chat-markdown strong {
+    font-weight: var(--fw-strong);
+}
+.chat-markdown code {
+    font-size: 0.9em;
+    padding: 0 3px;
+    border-radius: 4px;
+    background: var(--surface-muted);
+}
+/* a code block and a table: wider than the column, they scroll inside it, never widen the chat */
+.chat-markdown .chat-md-code {
+    max-width: 100%;
+    padding: var(--space-2);
+    overflow-x: auto;
+    border-radius: 6px;
+    background: var(--surface-muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+    white-space: pre;
+}
+.chat-md-code code {
+    padding: 0;
+    background: none;
+    font-size: inherit;
+}
+.chat-markdown .chat-md-table {
+    max-width: 100%;
+    overflow-x: auto;
+}
+.chat-md-table table {
+    border-collapse: collapse;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.chat-md-table :is(th, td) {
+    padding: 2px var(--space-2);
+    border: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+    white-space: nowrap;
+}
+.chat-md-table th {
+    font-weight: var(--fw-strong);
+    background: var(--surface-muted);
+}
 .chat-more {
     margin-top: calc(-1 * var(--space-1));
     font-size: var(--fs-small);
