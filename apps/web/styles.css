@@ -3143,6 +3143,18 @@ svg.chat-launcher-mark {
     text-overflow: ellipsis;
     flex: 1;
 }
+/* the storming navigator: an exception's timeline marked by a small arrow in the exceptions' red, a stage's number of
+   timelines muted at the right */
+.storming-nav-exception {
+    flex: none;
+    display: inline-flex;
+    color: var(--es-exception-text);
+}
+.storming-nav-count {
+    flex: none;
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+}
 .tree-dot {
     width: 8px;
     height: 8px;

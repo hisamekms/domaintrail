@@ -265,6 +265,9 @@ const ja = {
     // explorer
     model: 'モデル',
     files: 'ファイル',
+    /** The storming navigator (the event storming world's tree): its section, and the mark of an exception's timeline. */
+    stormingsTitle: 'ストーミング',
+    exceptionMark: '例外',
     fileKind: 'ファイル',
     filter: 'フィルタ',
     clearFilter: 'フィルタを消す',
@@ -1142,6 +1145,8 @@ const en: Messages = {
 
     model: 'Model',
     files: 'Files',
+    stormingsTitle: 'Stormings',
+    exceptionMark: 'Exception',
     fileKind: 'File',
     filter: 'Filter',
     clearFilter: 'Clear the filter',
