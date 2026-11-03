@@ -49,9 +49,9 @@ the view or inspector tab that suits it.
 
 In event storming, the stormings › their stages › each stage's timelines (its main flow, then its exceptions, marked
 with a small arrow in the exceptions' red), and a storming's timelines that are in no stage right under it (all of
-them, for a storming without stages); a stage counts its timelines. A click shows that view — the storming's
-integrated canvas, the stage or the timeline — as the view bar's pickers do (the two always show the same choice) and
-selects it for the detail. The filter at the top keeps the rows whose name or ID holds the text, with their rows above
+them, for a storming without stages); a collapsed stage counts its timelines after its name, muted, as 「(3)」, as the
+model tree's groups do. A click shows that view — the storming's integrated canvas, the stage or the timeline — as the
+view bar's pickers do (the two always show the same choice) and selects it for the detail. The filter at the top keeps the rows whose name or ID holds the text, with their rows above
 (a matching storming or stage keeps all its rows); what is folded is remembered per browser.
 
 ### 問題 (problems)

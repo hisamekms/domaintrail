@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createViewService, ElkLayoutEngine } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
+import { groupCount } from './explorer';
 import { I18nProvider } from './i18n';
 import { chooseScope, shownScope, shownStorming, stageChoice, type StormingChoice } from './storming';
 import { navigatorRows, StormingNavigator, stormingNavigatorTree, type NavigatorNode } from './storming-navigator';
@@ -41,6 +42,14 @@ const outline = (nodes: readonly NavigatorNode[], depth = 0): string[] =>
     nodes.flatMap((n) => [`${'  '.repeat(depth)}${n.kind}:${n.exception ? '!' : ''}${n.id}`, ...outline(n.children, depth + 1)]);
 
 const STAGED = 'ConvenienceStoreIssuance';
+
+/** localStorage of a browser, in memory. */
+function storage(saved: Record<string, string> = {}): void {
+    const items = new Map(Object.entries(saved));
+    Object.assign(globalThis, {
+        localStorage: { getItem: (k: string) => items.get(k) ?? null, setItem: (k: string, v: string) => void items.set(k, v) },
+    });
+}
 const choice: StormingChoice = { stormingId: undefined, level: 'big-picture', timelines: {} };
 
 describe('the tree of the storming navigator', () => {
@@ -117,8 +126,24 @@ describe('the navigator and the view bar choose the same view', () => {
         const html = render(choice);
         expect(html).toContain('aria-label="例外"');
         expect(html).toContain('placeholder="フィルタ"');
-        // a stage counts its timelines, the stormings and the timelines count nothing
-        expect([...html.matchAll(/storming-nav-count">(\d+)/g)].map((m) => Number(m[1]))).toEqual([1, 9, 2]);
+        // everything open: nothing counts its rows
+        expect(html).not.toContain('tree-count');
+    });
+
+    test('a stage counts its timelines only while collapsed, after its name, as the model tree’s groups do', () => {
+        storage({ 'domaintrail.stormingNavigator.collapsed': JSON.stringify([`${STAGED}@Issuance`]) });
+        try {
+            const html = renderToStaticMarkup(
+                <I18nProvider lang="ja">
+                    <StormingNavigator stormings={stormings} choice={choice} mode="label" onChoose={() => {}} onSelect={() => {}} onClose={() => {}} />
+                </I18nProvider>,
+            );
+            // the same element as the model tree's collapsed group count, and only on the collapsed stage
+            expect(html).toContain(`コンビニでの発行<span class="muted tree-count"> ${groupCount(9)}</span>`);
+            expect(html.match(/tree-count/g)?.length).toBe(1);
+        } finally {
+            Reflect.deleteProperty(globalThis, 'localStorage');
+        }
     });
 
     test('without stormings it says how to start one', () => {
