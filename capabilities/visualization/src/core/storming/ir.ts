@@ -38,7 +38,10 @@ export interface ViewOptions {
 export type ViewLevel = ViewOptions['level'];
 export const VIEW_LEVELS: ViewLevel[] = ['big-picture', 'design-level'];
 
-/** The element kinds shown at each level (spec §6): Big Picture shows events and hotspots only. */
+/**
+ * The element kinds shown at each level (spec §6): Big Picture shows events and hotspots only, and of the events not
+ * those marked `level design` (`isDesignLevelOnly`, applied by the projection).
+ */
 export const LEVEL_KINDS: Record<ViewLevel, readonly NodeElementKind[]> = {
     'big-picture': ['event', 'hotspot'],
     'design-level': ['event', 'actor', 'external', 'command', 'policy', 'aggregate', 'readmodel', 'hotspot'],

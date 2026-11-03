@@ -2,15 +2,31 @@
  * The render graph of one view of a storming (spec §6, §7.3, §9.2, §9.3): the prefix trie of its timelines, the events
  * of none, and the other elements of the level with their semantic edges. Sharing an event node between occurrences is
  * a drawing optimization only: every render edge is either the drawing of a semantic edge or a timeline `sequence` edge.
+ *
+ * At Big Picture, the events marked `level design` are left out as if their timeline steps were not written: the trie is
+ * built over the visible steps only, so the order edges join the neighbours of a hidden event, a group of hidden events
+ * only disappears, and timelines that differ only in hidden events share their prefix (§8 on the visible sequence).
+ * Hotspots stay, without their `on` edge to a hidden event.
  */
-import { buildSemanticGraph, type NodeElementKind, semanticEdgeKey, type SemanticEdge, type Storming, stormingTimelines } from '@domaintrail/storming';
+import {
+    buildSemanticGraph,
+    isDesignLevelOnly,
+    type NodeElementKind,
+    semanticEdgeKey,
+    type SemanticEdge,
+    type Storming,
+    stormingTimelines,
+    timelineOccurrences,
+} from '@domaintrail/storming';
 import { LEVEL_KINDS, type RenderEdge, type RenderEventNode, type RenderGraph, type RenderNode, type ViewOptions } from './ir.js';
 import { buildTrie, compare, memberId, type TrieNode } from './trie.js';
 
 export function projectView(storming: Storming, options: ViewOptions): RenderGraph {
     const semantic = buildSemanticGraph(storming);
     const kinds = new Map<string, NodeElementKind>(semantic.nodes.map((n) => [n.id, n.kind]));
-    const trie = buildTrie(stormingTimelines(storming), (id) => kinds.get(id) === 'event');
+    const hidden = new Set(options.level === 'big-picture' ? semantic.nodes.filter(isDesignLevelOnly).map((n) => n.id) : []);
+    const timelines = stormingTimelines(storming);
+    const trie = buildTrie(timelines, (id) => kinds.get(id) === 'event' && !hidden.has(id));
     const timelineId = options.timelineId !== undefined && trie.paths.has(options.timelineId) ? options.timelineId : undefined;
     const shown = new Set(LEVEL_KINDS[options.level]);
 
@@ -52,13 +68,15 @@ export function projectView(storming: Storming, options: ViewOptions): RenderGra
         for (const [id, path] of trie.paths) addSequence(id, path);
         // R15: the events of no timeline
         for (const n of semantic.nodes)
-            if (n.kind === 'event' && !eventNodes.has(n.id)) addEvent({ type: 'event', id: `e:${n.id}`, eventId: n.id, occurrences: [] });
+            if (n.kind === 'event' && !eventNodes.has(n.id) && !hidden.has(n.id)) addEvent({ type: 'event', id: `e:${n.id}`, eventId: n.id, occurrences: [] });
         drawn = semantic.edges;
     } else {
         const path = trie.paths.get(timelineId) ?? [];
         for (const node of path) addStep(node);
         addSequence(timelineId, path);
-        drawn = filterEdges(semantic.edges, new Set(eventNodes.keys()));
+        // the timeline's events, hidden ones included: a hotspot on one is still shown (its edge has nothing to end at)
+        const events = timelineOccurrences(timelines.find((t) => t.id === timelineId)!).map((o) => o.eventId);
+        drawn = filterEdges(semantic.edges, new Set(events.filter((id) => kinds.get(id) === 'event')));
     }
 
     for (const n of semantic.nodes) {

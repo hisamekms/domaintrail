@@ -15,6 +15,7 @@ import {
 } from '@domaintrail/storming';
 import { VIEW_LEVELS, type RenderEventNode, type RenderGraph, type ViewOptions } from './ir.js';
 import { matchRenderNodes, projectView } from './render.js';
+import { renderToGraph } from './graph.js';
 
 // ---- IR built by hand (the parser is not needed) ----
 
@@ -335,6 +336,108 @@ describe('views (spec §6, §9.3)', () => {
     });
 });
 
+describe('events shown at Design Level only (`level design`, spec §6)', () => {
+    /** The element with a `level` clause (only `design` on an event hides it). */
+    const leveled = (e: NodeElement, value = 'design'): NodeElement => ({ ...e, clauses: [...e.clauses, { type: 'level', value, range }] });
+    const designOnly = (...ids: string[]): NodeElement[] => events(...ids).map((e) => leveled(e));
+
+    test('Big Picture hides them, and the order edges of a timeline join their neighbours', () => {
+        const s = storming(...events('A', 'B'), ...designOnly('X', 'Y'), tl('T', 'A', 'X', 'Y', 'B', 'X'));
+        const bp = projectView(s, BP);
+        expect(nodeIds(bp)).toEqual(['t:e:A', 't:e:A>e:B']);
+        expect(sequences(bp)).toEqual(['t:e:A -> t:e:A>e:B']);
+        // the occurrences keep their source positions
+        expect(nodesOf(bp, 'B')[0].occurrences).toEqual([{ timelineId: 'T', stepPath: [3], eventId: 'B' }]);
+        expect(nodeIds(projectView(s, { level: 'big-picture', timelineId: 'T' }))).toEqual(['t:e:A', 't:e:A>e:B']);
+    });
+
+    test('Design Level is unchanged by the marks', () => {
+        const plain = storming(
+            ...events('A', 'B', 'X', 'Z'),
+            el('command', 'C', ['emits', 'X']),
+            el('hotspot', 'H', ['on', 'X']),
+            tl('T', 'A', 'X', ['B', 'Z']),
+        );
+        const marked = { ...plain, elements: plain.elements.map((e) => (e.kind === 'event' && (e.id === 'X' || e.id === 'Z') ? leveled(e) : e)) };
+        for (const options of [DL, { level: 'design-level' as const, timelineId: 'T' }])
+            expect(projectView(marked, options)).toEqual(projectView(plain, options));
+    });
+
+    test('a group keeps its visible events, and one whose events are all hidden is hidden', () => {
+        const s = storming(...events('A', 'B', 'C'), ...designOnly('X', 'Y'), tl('T', 'A', ['X', 'C'], ['X', 'Y'], 'B'));
+        const bp = projectView(s, BP);
+        expect(nodeIds(bp)).toEqual(['t:e:A', 't:e:A>g:C', 't:e:A>g:C/C', 't:e:A>g:C>e:B']);
+        expect(sequences(bp)).toEqual(['t:e:A -> t:e:A>g:C', 't:e:A>g:C -> t:e:A>g:C>e:B']);
+        expect(nodesOf(bp, 'C')[0].occurrences).toEqual([{ timelineId: 'T', stepPath: [1, 1], eventId: 'C' }]);
+    });
+
+    test('an event in no timeline is hidden too', () => {
+        const s = storming(...events('A'), ...designOnly('Z'), tl('T', 'A'));
+        expect(nodesOf(projectView(s, BP), 'Z')).toEqual([]);
+        expect(nodesOf(projectView(s, DL), 'Z')).toEqual([{ type: 'event', id: 'e:Z', eventId: 'Z', occurrences: [] }]);
+    });
+
+    test('hotspots stay, without their `on` edge to a hidden event, on the integrated canvas and in a timeline', () => {
+        const s = storming(
+            ...events('A', 'B'),
+            ...designOnly('X'),
+            el('hotspot', 'OnX', ['on', 'X']),
+            el('hotspot', 'OnA', ['on', 'A']),
+            tl('T', 'A', 'X', 'B'),
+        );
+        for (const options of [BP, { level: 'big-picture' as const, timelineId: 'T' }]) {
+            const g = projectView(s, options);
+            expect(elementIds(g)).toEqual(['OnA', 'OnX']);
+            expect(semanticEdges(g)).toEqual(['hotspot-on:n:OnA->t:e:A']);
+        }
+        expect(semanticEdges(projectView(s, DL))).toEqual(['hotspot-on:n:OnA->t:e:A', 'hotspot-on:n:OnX->t:e:A>e:X']);
+    });
+
+    test('only a valid `level design` on an event hides it', () => {
+        const s = storming(leveled(el('event', 'A'), 'big-picture'), leveled(el('event', 'B'), 'desing'), tl('T', 'A', 'B'));
+        expect(nodeIds(projectView(s, BP))).toEqual(['t:e:A', 't:e:A>e:B']);
+    });
+
+    test('§8 prefix sharing works on the visible steps, and the integrated canvas names the timelines consistently', () => {
+        // Normal: A X B C, Retry: A B D (X is Design Level only): at Big Picture both start with A B
+        const s = storming(...events('A', 'B', 'C', 'D'), ...designOnly('X'), tl('Normal', 'A', 'X', 'B', 'C'), tl('Retry', 'A', 'B', 'D'));
+        const bp = projectView(s, BP);
+        expect(nodeIds(bp)).toEqual(['t:e:A', 't:e:A>e:B', 't:e:A>e:B>e:C', 't:e:A>e:B>e:D']);
+        expect(nodesOf(bp, 'B')[0].occurrences).toEqual([
+            { timelineId: 'Normal', stepPath: [2], eventId: 'B' },
+            { timelineId: 'Retry', stepPath: [1], eventId: 'B' },
+        ]);
+        // at Design Level they share A only
+        expect(nodeIds(projectView(s, DL))).toEqual(['t:e:A', 't:e:A>e:B', 't:e:A>e:B>e:D', 't:e:A>e:X', 't:e:A>e:X>e:B', 't:e:A>e:X>e:B>e:C']);
+        const order = (options: ViewOptions) =>
+            renderToGraph(projectView(s, options), s)
+                .edges.filter((e) => e.kind === 'esSequence')
+                .map((e) => `${e.source} -> ${e.target}${e.label ? ` (${e.label.en.name})` : ''}`)
+                .sort();
+        expect(order(BP)).toEqual(['e:A -> e:B', 'e:B -> e:C (Normal)', 'e:B -> e:D (Retry)']);
+        expect(order(DL)).toEqual(['e:A -> e:B (Retry)', 'e:A -> e:X (Normal)', 'e:B -> e:C (Normal)', 'e:B -> e:D (Retry)', 'e:X -> e:B (Normal)']);
+    });
+
+    test('properties hold at Big Picture: every visible occurrence on exactly one event node, no hidden event drawn', () => {
+        fc.assert(
+            fc.property(arbitraryLeveled, (s) => {
+                const hidden = new Set(['A', 'C']);
+                for (const options of [
+                    BP,
+                    ...s.elements.filter((e) => e.kind === 'timeline').map((t) => ({ level: 'big-picture' as const, timelineId: t.id })),
+                ]) {
+                    const g = projectView(s, options);
+                    const drawn = eventNodes(g).flatMap((n) => n.occurrences.map(occurrenceKey));
+                    const visible = allOccurrences(s, options.timelineId).filter((o) => !hidden.has(o.eventId));
+                    expect(drawn.sort()).toEqual(visible.map(occurrenceKey).sort());
+                    expect(eventNodes(g).filter((n) => hidden.has(n.eventId))).toEqual([]);
+                }
+            }),
+            { numRuns: 100 },
+        );
+    });
+});
+
 // ---- §12.3 properties ----
 
 const EVENTS = ['A', 'B', 'C', 'D', 'E'];
@@ -365,6 +468,15 @@ const arbitraryStorming = fc
         ...timelines.map((steps, i) => tl(`T${i}`, ...steps)),
     ])
     .chain((elements) => fc.tuple(fc.constant(elements), fc.shuffledSubarray(elements, { minLength: elements.length, maxLength: elements.length })));
+
+/** An arbitrary storming whose events A and C are Design Level only. */
+const arbitraryLeveled = arbitraryStorming.map(([elements]) =>
+    storming(
+        ...elements.map((e): StormingElement =>
+            e.kind === 'event' && (e.id === 'A' || e.id === 'C') ? { ...e, clauses: [{ type: 'level', value: 'design', range }] } : e,
+        ),
+    ),
+);
 
 const viewsOf = (s: Storming): ViewOptions[] =>
     VIEW_LEVELS.flatMap((level) => [{ level }, ...s.elements.filter((e) => e.kind === 'timeline').map((t) => ({ level, timelineId: t.id }))]);
