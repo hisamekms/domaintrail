@@ -15,15 +15,19 @@ import { StormingNavigator } from '../storming-navigator';
 import { NameSwitch } from '../view/toolbar';
 import { ViewWorkspace, useViewWorkspace } from '../view/workspace';
 import { WORLDS, type World } from '../view/worlds';
+import { readBoot } from './boot';
 import { usePanes } from './panes';
 import { SettingsDialog } from '../settings-dialog';
 import { usePreferences } from './preferences';
-import { AppShell } from './shell';
+import { AppShell, type Conversation } from './shell';
 import { workspaceName } from './health';
 import { HealthButton } from './status';
 import { useViewSocket } from './useViewSocket';
 
 const WORLD_ICONS: Record<World, LucideIcon> = { model: Blocks, storming: StickyNote };
+
+/** The conversation's column while the session the server announced has not arrived: its place, quiet and empty. */
+const PENDING_CONVERSATION: Conversation = { content: <div className="conversation-pending" aria-busy="true" />, launcher: null };
 
 /** An aggregate's name and label (its ID while the model does not have it). */
 function aggregateNames(model: DomainModel | null, id: string): { name: string; label?: string | undefined } {
@@ -33,6 +37,8 @@ function aggregateNames(model: DomainModel | null, id: string): { name: string; 
 
 /** The Live View page: composes the shell with the left column's lists and detail (the inspector), the view workspace and, in a session, the chat. */
 export function App() {
+    // what the server wrote into the page for its first frame (none: the page waits for the payload, as before)
+    const [boot] = useState(() => readBoot());
     const socket = useViewSocket();
     const { current, connection } = socket;
     const model = current?.model ?? null;
@@ -41,7 +47,8 @@ export function App() {
     const preferences = usePreferences();
     const { mode, setMode, themePreference, setThemePreference, theme, langPreference, setLangPreference, lang, textSize, setTextSize } = preferences;
     const t = MESSAGES[lang];
-    const panes = usePanes(preferences.uiScale);
+    // a session's page opens on its chat (useSessionPage): from the first frame when the server said there is one
+    const panes = usePanes(preferences.uiScale, boot?.session !== undefined);
     const { setExplorerOpen, setInspectorOpen, showLeft, legends } = panes;
     const { inspectorTab, setInspectorTab, openInspector } = panes;
     /** The button the baseline menu was opened from (it opens next to it), or null while closed. */
@@ -90,7 +97,7 @@ export function App() {
         <I18nProvider lang={lang}>
             <AppShell
                 panes={panes}
-                workspaceName={current ? workspaceName(current.root) : undefined}
+                workspaceName={current ? workspaceName(current.root) : boot?.workspaceName}
                 world={
                     <NameSwitch
                         label={t.worldsLabel}
@@ -103,6 +110,7 @@ export function App() {
                     />
                 }
                 sessionSlot={setSessionSlot}
+                session={boot?.session && { mode: boot.session.mode, ready: session.conversation !== undefined }}
                 health={<HealthButton current={current} connection={connection} />}
                 settings={
                     <SettingsDialog
@@ -206,7 +214,7 @@ export function App() {
                         aiReady={session.aiReady}
                     />
                 }
-                {...(session.conversation && { conversation: session.conversation })}
+                {...((session.conversation ?? boot?.session) && { conversation: session.conversation ?? PENDING_CONVERSATION })}
                 inspector={
                     <Inspector
                         model={model}
