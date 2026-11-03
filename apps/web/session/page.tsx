@@ -15,6 +15,7 @@ import { graphNodeOf, nodeItemId } from '../scene';
 import { highlightElement, showItem } from '../view/canvas';
 import { useCanvasValue } from '../view/diagram';
 import type { Workspace } from '../view/workspace';
+import { aiPresence } from './ai';
 import { ChatLauncher, SessionChat } from './chat';
 import { PeerCursors } from './cursors';
 import { TargetNamingProvider } from './naming';
@@ -40,6 +41,8 @@ export interface SessionPage {
     readonly baselineLocked: boolean;
     /** The collab ended: the server is gone for good, so the page does not say it waits to reconnect (the summary says it ended). */
     readonly ended: boolean;
+    /** An AI is connected to the live chat (every role): an empty view says that asking there makes it. */
+    readonly aiReady: boolean;
 }
 
 export function useSessionPage(input: {
@@ -273,11 +276,12 @@ export function useSessionPage(input: {
         [setView, setMapAll, setStructureLevel, setStructureContexts, setHiddenContexts, stormingChoice, setStormingChoice],
     );
 
-    if (!session) return { conversation: undefined, canvasOverlay: undefined, inspectorAction: undefined, baselineLocked: false, ended: false };
+    if (!session) return { conversation: undefined, canvasOverlay: undefined, inspectorAction: undefined, baselineLocked: false, ended: false, aiReady: false };
     const facilitator = session.me.participant.role === 'facilitator';
     return {
         baselineLocked: !facilitator,
         ended,
+        aiReady: !ended && aiPresence(session.state.agent).kind === 'connected',
         canvasOverlay: (
             <>
                 <PeerCursors canvas={canvas} cursors={cursorsOn(session.peers, location)} />

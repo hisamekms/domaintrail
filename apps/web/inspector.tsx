@@ -176,13 +176,11 @@ export function Inspector(props: InspectorProps) {
     }
     // a storming is shown even without a model (a workspace of .dtes files only, or .dt files that do not parse)
     if (isStormingSelection(selected)) return <div className="inspector">{props.stormingView(selected, history)}</div>;
+    // nothing to say without a model: the explorer and the view already say there is none yet
     if (!model)
         return (
             <div className="inspector">
-                <div className="inspector-head">
-                    {history}
-                    <p className="muted">{tx.noModel}</p>
-                </div>
+                <div className="inspector-head">{history}</div>
             </div>
         );
     const r = selected ? resolve(model, selected) : undefined;

@@ -164,6 +164,7 @@ export function App() {
                         legendOpen={legendOpen}
                         onLegendToggle={() => setLegendOpen(!legendOpen)}
                         overlay={session.canvasOverlay}
+                        aiReady={session.aiReady}
                     />
                 }
                 {...(session.conversation && { conversation: session.conversation })}
