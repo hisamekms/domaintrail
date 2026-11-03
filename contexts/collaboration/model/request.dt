@@ -26,6 +26,14 @@ context Collaboration {
   /// リビジョンが違う）で、まだ打ち消されておらず、打ち消しの待ちや最中でもない。
   verified RevertableRun "打ち消せる実行" of AgentRunId for SessionId errors RunNotFound, RunOfAnotherSession, RunNotRevertable
 
+  /// 聞き取りを確定したあとに dt が AI の名で書くお知らせの、次の一手のボタン（文は本文）: どの道のりか、勧めるコマンド
+  /// （押すと入力欄に入る）と、見せる場（もとのストーミングなど）。お知らせは AI を呼ばずに、決まった文で書く。
+  value JourneyNote "旅程のお知らせ" {
+    journey: GuideJourneyKey "道のり"
+    command: SuggestedCommand? "勧めるコマンド"
+    targets: ModelTarget[0..3] "その場"
+  }
+
   /// 本文で言及できると、依頼を送るときに確かめた人。そのセッションの参加者（オフラインの人も）と、AI（予約の参加者 ID `ai`）。
   verified MentionableParticipant "言及できる参加者" of ParticipantId for SessionId errors MentionedNotAParticipant
 
@@ -49,6 +57,8 @@ context Collaboration {
     references reverts: AgentRunId? -> AgentRun "打ち消す実行"
     /// 送ったときに依頼者が見ていたビュー。以前のメッセージ、AI の回答、打ち消しの依頼にはない。
     viewedAt: ViewedAt? "送ったときのビュー"
+    /// 聞き取りを確定したあとの dt のお知らせ（AI の名で書く）なら、その道のりと次の一手のボタン。ほかのメッセージにはない。
+    journeyNote: JourneyNote? "旅程のお知らせ"
 
     invariant atMostTwentyTargets "対象は20件まで" { count(targets) <= 20 }
     invariant distinctTargets "同じ対象は1回" { unique(targets, t => t.target) }
@@ -87,7 +97,8 @@ context Collaboration {
       emits RequestSent
 
     /// 読むだけの AI（回答役）が、相談のメッセージに答える。書き手は AI（`ai`）で、答えたメッセージへの返信。対象も言及もない。
-    create command answer(id: RequestId, session: ActiveSession, answers: RequestId "答えるメッセージ", body: Text, sentAt: Timestamp) "AI が答える"
+    /// 聞き取りを確定したあとの dt のお知らせも、これで AI の名で書く（`journeyNote` を添える）。
+    create command answer(id: RequestId, session: ActiveSession, answers: RequestId "答えるメッセージ", body: Text, sentAt: Timestamp, journeyNote: JourneyNote?) "AI が答える"
       -> Sent
       emits RequestSent
   }
@@ -104,6 +115,8 @@ context Collaboration {
     /// 打ち消しの依頼なら、打ち消す実行。
     reverts: AgentRunId? "打ち消す実行"
     viewedAt: ViewedAt? "送ったときのビュー"
+    /// 聞き取りを確定したあとの dt のお知らせなら、その道のりと次の一手のボタン。
+    journeyNote: JourneyNote? "旅程のお知らせ"
   }
 
   /// 以前のセッションのアウトボックスに残る見送り。いまは発行しないが、読み直し（再生）のために残す。

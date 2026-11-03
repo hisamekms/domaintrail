@@ -286,6 +286,19 @@ export {
     type JourneyUse,
     type ModelJourneyEntry,
 } from './domain/journey.js';
+// dt's note in the interview's thread once a brief is confirmed: what was decided, where the journey is, the next step
+export {
+    BRIEF_FIELDS,
+    changedBriefFields,
+    decidedOf,
+    journeyNext,
+    journeyNote,
+    type BriefFieldKey,
+    type JourneyDecided,
+    type JourneyNext,
+    type JourneyNoteInput,
+    type JourneyNoteText,
+} from './domain/journey-note.js';
 export { checkTemplates, TEMPLATE_CONTEXTS, TEMPLATE_LIMITS, type MessageTemplateConfig, type TemplateContext } from './domain/templates.js';
 // where the requester was looking when they sent a message
 export {
