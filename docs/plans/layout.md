@@ -156,3 +156,33 @@ A group heading's count (「集約 1」) shows only while the group is collapsed
   timelines, and a filter. A click sets the storming view (the same function as the view bar's pickers, so the two stay
   in sync) and selects the row's declaration for the detail.
 - Every size is remembered per browser (`domaintrail.layout.explorerWidth`, `.detailHeight`, `.conversationWidth`).
+
+## As built (step 5)
+
+- **Canvas highlight.** `focusedItems` (`apps/web/scene.ts`) works on the scene, so the ELK drawings and the stages'
+  grid share it: the selected elements' notes (every copy of an element drawn once per use), the notes joined to them
+  by one edge, and those edges; the command that causes a selected event also brings its dotted relations (actor or
+  external system, read model, aggregate). An event in a group is joined through its group (scene nodes now carry
+  their container, `parent`), and a group reached keeps its events. Containers are never dimmed. The canvas puts
+  `diagram-dim` (opacity 0.25, a 160ms fade, none with reduced motion) on React Flow's wrappers. It applies to storming
+  notes only: the domain-model diagrams are as before.
+- **Detail.** `StormingDetails` keeps the heading (kind chip, the Design Level only badge as a grey microscope, the
+  name and the 💬, now an action-coloured square) and shows rows labelled by grey icons, each only when it has content:
+  problems on top (`storming-detail.ts` maps the codes that have an easy sentence, S001–S022; the others show the
+  message; the code is the tooltip), the description, other places, hidden connections (Big Picture), talk, AI runs,
+  added or changed, the `.dt` ref, a resolved hotspot's conclusion. The talk, runs and change come from
+  `session/element-activity.ts`: the requests whose targets name the element or an occurrence of it, the runs whose
+  frozen requests do or whose element changes touched it, and the run that added it (else the latest that changed it).
+  The element changes are the server's per run (`loadModelChanges` between the run's base and result revisions,
+  loaded once each); until they arrive a run counts by its messages only.
+- **Actions** put a beginning in the composer (`beginMessage`): the element becomes a chip (or keeps its number) and
+  its `#` mention starts a new line after what is written; the chat opens with the caret in it. 「デザインレベルで見る」
+  switches the level instead (it is a view change, not a message), keeping the selection. The links of the talk and
+  the change jump in the chat (`message:<id>`, the run's `card:<unit>`), the runs' opens AI の作業 at the run's unit;
+  `SessionChat` takes them as `goTo`.
+- **Stage and timeline.** Their rows got icons (この前の段階 `ArrowLeft`, 本流 `MoveRight`, 例外 `CornerDownRight`,
+  steps `ListOrdered`, return `Undo2`, a group's events `Layers`); 「この段階を表示」 and a timeline's view are an eye.
+- **Colours.** New tokens `--brand`, `--brand-wash`, `--brand-wash-border`, `--on-brand` (indigo 700 / 50 / 200 and
+  white; dark: indigo 300 on the indigo night 700 wash, night 950 on it), their contrast pinned in `palette.test.ts`
+  (4.5:1 for the icon on the wash and the surface, and for the primary's icon).
+- **Tree counts.** A model-tree group heading shows its count only while collapsed, as a muted 「(1)」.

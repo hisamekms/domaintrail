@@ -90,7 +90,12 @@ export function buildScene(graph: LaidOutGraph, opts: RenderOptions): Scene {
                 props: { w: l.width, h: l.height, kind: n.kind, label: textOf(n.label, opts), lines: n.lines.map((r) => textOf(r.key, opts)), scale, ...marks },
             });
         } else {
-            nodes.push({ ...base, type: 'node', props: { ...nodeProps(graph, n, l, opts), ...marks, badge: badgeText(marks.change, opts.lang) } });
+            nodes.push({
+                ...base,
+                ...(n.parent !== undefined && { parent: nodeItemId(n.parent) }),
+                type: 'node',
+                props: { ...nodeProps(graph, n, l, opts), ...marks, badge: badgeText(marks.change, opts.lang) },
+            });
             internal.push(...internalRows(graph, n, l, opts, (id) => ({ change: change(id), diag: severity.get(id) ?? 'none' })));
         }
     }

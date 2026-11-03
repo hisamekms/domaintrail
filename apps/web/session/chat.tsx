@@ -123,6 +123,12 @@ type RequestJson = SessionData['state']['requests'][number];
 type Peek = { readonly key: string; readonly n: number };
 
 /**
+ * Where another part of the page sends the chat (the detail of a storming element): a message or a run's card in the
+ * chat, or a run's unit in AI の作業. `n` tells a second ask for the same place apart.
+ */
+export type ChatGoTo = { readonly kind: 'message' | 'run' | 'unit'; readonly id: string; readonly n: number };
+
+/**
  * What the stream shows: its items by time (the messages still on their way last), its lines with the AI's cards placed
  * (Solo), the server's messages that stand for ones this page sent (their ID → this page's key for them, kept as their
  * rows' keys) and the messages still on their way (by that key).
@@ -202,6 +208,8 @@ export function SessionChat(props: {
     onClose: () => void;
     /** The app bar's place for the collab menu and the AI's state (they concern the whole page). */
     barSlot: HTMLElement | null;
+    /** A place of the chat or of AI の作業 to show (asked from elsewhere on the page). */
+    goTo?: ChatGoTo | undefined;
 }) {
     const { session, composer, focusPending } = props;
     const { state, me } = session;
@@ -437,6 +445,22 @@ export function SessionChat(props: {
         const unit = statusUnit(status.kind, units);
         if (unit) setPeek((p) => ({ key: unit.key, n: (p?.n ?? 0) + 1 }));
     };
+
+    // a place asked from elsewhere on the page: a message or a run's card in the chat, a run's unit in AI の作業
+    const goTo = props.goTo;
+    useEffect(() => {
+        if (!goTo) return;
+        const unit = units.find((u) => u.runs.some((r) => r.run.id === goTo.id));
+        if (goTo.kind === 'message') jump(`message:${goTo.id}`);
+        else if (goTo.kind === 'run') {
+            if (unit) jump(`card:${unit.key}`);
+        } else {
+            setView('history');
+            if (unit) setPeek((p) => ({ key: unit.key, n: (p?.n ?? 0) + 1 }));
+        }
+        // only a new ask moves the chat
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [goTo?.n]);
 
     // a person shown among the participants (a mention of them clicked): the collab menu opens at them
     const showPerson = useCallback((id: string): void => openPeople(id), []);

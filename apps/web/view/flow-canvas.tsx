@@ -57,6 +57,7 @@ import {
     type SceneInternal,
     type SceneItem,
     type SceneNode,
+    focusedItems,
     sameElementNodes,
     sceneItems,
 } from '../scene';
@@ -286,30 +287,40 @@ class CanvasState {
     }
 }
 
+/** How an item is drawn besides itself: selected, another note of a selected element, dimmed outside the focus. */
+interface ItemLook {
+    selected: boolean;
+    same: boolean;
+    dim: boolean;
+}
+
+const sameLook = (a: ItemLook, b: ItemLook): boolean => a.selected === b.selected && a.same === b.same && a.dim === b.dim;
+
 /** React Flow's nodes and edges for the state, reusing those of unchanged items (so that React Flow redraws only what changed). */
 function useFlowElements(state: CanvasState): { nodes: FlowNode[]; edges: ItemEdge[] } {
     const rendered = useSyncExternalStore(state.subscribeRender, () => state.rendered);
-    const cache = useRef(new Map<SceneId, { item: SceneItem; selected: boolean; same: boolean; element: FlowNode | ItemEdge }>());
+    const cache = useRef(new Map<SceneId, { item: SceneItem; look: ItemLook; element: FlowNode | ItemEdge }>());
     return useMemo(() => {
         void rendered;
         const previous = cache.current;
-        const next = new Map<SceneId, { item: SceneItem; selected: boolean; same: boolean; element: FlowNode | ItemEdge }>();
+        const next = new Map<SceneId, { item: SceneItem; look: ItemLook; element: FlowNode | ItemEdge }>();
         const nodes: FlowNode[] = [];
         const edges: ItemEdge[] = [];
         const anchors = new Set<SceneId>();
         const same = sameElementNodes(state.items.values(), state.selected);
-        const reuse = (item: SceneItem, build: (selected: boolean, same: boolean) => FlowNode | ItemEdge): FlowNode | ItemEdge => {
-            const selected = state.selected.has(item.id);
-            const isSame = same.has(item.id);
+        // a storming note selected: what is joined to it stays, the rest is dimmed (containers never are)
+        const focus = focusedItems(state.items.values(), state.selected);
+        const reuse = (item: SceneItem, build: (look: ItemLook) => FlowNode | ItemEdge): FlowNode | ItemEdge => {
+            const look = { selected: state.selected.has(item.id), same: same.has(item.id), dim: !!focus && item.type !== 'group' && !focus.has(item.id) };
             const old = previous.get(item.id);
-            const element = old && old.item === item && old.selected === selected && old.same === isSame ? old.element : build(selected, isSame);
-            next.set(item.id, { item, selected, same: isSame, element });
+            const element = old && old.item === item && sameLook(old.look, look) ? old.element : build(look);
+            next.set(item.id, { item, look, element });
             return element;
         };
         for (const item of state.items.values()) {
             if (item.type === 'edge') {
                 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- built as an edge below
-                edges.push(reuse(item, (selected) => toEdge(item, selected)) as ItemEdge);
+                edges.push(reuse(item, (look) => toEdge(item, look)) as ItemEdge);
                 for (const end of ['source', 'target'] as const) {
                     if (state.items.has(item[end]) || anchors.has(item[end])) continue;
                     anchors.add(item[end]);
@@ -317,7 +328,7 @@ function useFlowElements(state: CanvasState): { nodes: FlowNode[]; edges: ItemEd
                 }
             } else {
                 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- built as a node below
-                nodes.push(reuse(item, (selected, isSame) => toNode(item, selected, isSame)) as FlowNode);
+                nodes.push(reuse(item, (look) => toNode(item, look)) as FlowNode);
             }
         }
         cache.current = next;
@@ -325,8 +336,13 @@ function useFlowElements(state: CanvasState): { nodes: FlowNode[]; edges: ItemEd
     }, [state, rendered]);
 }
 
-function toNode(item: BoxItem, selected: boolean, same: boolean): ItemNode {
+/** React Flow's classes of an item's wrapper: a ghost's, and the dimming outside the focus. */
+const wrapperClass = (ghost: boolean, dim: boolean): string | undefined =>
+    [ghost ? 'diagram-ghost' : '', dim ? 'diagram-dim' : ''].filter(Boolean).join(' ') || undefined;
+
+function toNode(item: BoxItem, { selected, same, dim }: ItemLook): ItemNode {
     const ghost = item.ghost === true;
+    const className = wrapperClass(ghost, dim);
     return {
         id: item.id,
         type: NODE_TYPE[item.type],
@@ -342,11 +358,11 @@ function toNode(item: BoxItem, selected: boolean, same: boolean): ItemNode {
         focusable: false,
         zIndex: layerOf(item),
         handles: HANDLES,
-        ...(ghost && { className: 'diagram-ghost' }),
+        ...(className && { className }),
     };
 }
 
-function toEdge(item: SceneEdge, selected: boolean): ItemEdge {
+function toEdge(item: SceneEdge, { selected, dim }: ItemLook): ItemEdge {
     return {
         id: item.id,
         type: 'domain-edge',
@@ -358,6 +374,7 @@ function toEdge(item: SceneEdge, selected: boolean): ItemEdge {
         focusable: false,
         reconnectable: false,
         zIndex: LAYER.edge,
+        ...(dim && { className: 'diagram-dim' }),
     };
 }
 

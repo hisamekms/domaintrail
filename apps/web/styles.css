@@ -191,6 +191,12 @@
     /* primary controls and links, and what is written on them */
     --action: var(--p-indigo-700);
     --on-action: var(--p-white);
+    /* the icons of actions that act on an element (the detail of a storming element): the brand colour on a pale wash of
+       it, and the primary one filled; the icons that only describe a row stay --muted */
+    --brand: var(--p-indigo-700);
+    --brand-wash: var(--p-indigo-50);
+    --brand-wash-border: var(--p-indigo-200);
+    --on-brand: var(--p-white);
     /* the keyboard focus ring (outline), and a soft halo of it */
     --focus: var(--p-indigo-500);
     --focus-ring: color-mix(in srgb, var(--focus) 30%, transparent);
@@ -425,6 +431,10 @@
     --border-strong: var(--p-night-500);
     --action: var(--p-indigo-300);
     --on-action: var(--p-night-950);
+    --brand: var(--p-indigo-300);
+    --brand-wash: var(--p-indigo-night-700);
+    --brand-wash-border: var(--p-indigo-night-600);
+    --on-brand: var(--p-night-950);
     --focus: var(--p-indigo-300);
     --selected-bg: var(--p-indigo-night-700);
     --selected-text: var(--p-indigo-100);
@@ -899,6 +909,128 @@ code.block {
 .es-list li {
     padding: 2px 0;
 }
+/* the detail of a storming element (docs/plans/layout.md, step 5): rows named by a grey icon (its name the tooltip),
+   actions as brand-coloured icon buttons, problems on top */
+.es-detail {
+    padding-top: 8px;
+}
+.es-detail > .doc {
+    margin-top: 0;
+}
+.es-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 4px 0;
+    min-width: 0;
+}
+.es-row-icon {
+    flex: none;
+    display: inline-flex;
+    margin-top: 3px;
+    color: var(--muted);
+}
+.es-row-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 6px;
+}
+.es-row-body > .es-list {
+    flex-basis: 100%;
+}
+.es-flow {
+    min-width: 0;
+}
+/* the latest message about it, and the request that added it: one line, the whole in the tooltip */
+.es-quote {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--text-secondary);
+}
+a.es-quote {
+    color: var(--action);
+}
+q.es-quote::before,
+.es-quote > q::before {
+    content: '「';
+}
+q.es-quote::after,
+.es-quote > q::after {
+    content: '」';
+}
+.es-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 5px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--muted);
+}
+.es-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+button.es-action,
+.es-detail-head button.add-to-request {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 26px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--brand-wash-border);
+    border-radius: 6px;
+    background: var(--brand-wash);
+    color: var(--brand);
+    cursor: pointer;
+}
+button.es-action:hover,
+.es-detail-head button.add-to-request:hover {
+    border-color: var(--brand);
+    background: var(--brand-wash);
+    color: var(--brand);
+}
+button.es-action.primary {
+    border-color: var(--brand);
+    background: var(--brand);
+    color: var(--on-brand);
+}
+button.es-action.primary:hover {
+    background: var(--brand);
+    color: var(--on-brand);
+    filter: brightness(1.1);
+}
+.es-detail-head button.add-to-request.added {
+    border-color: var(--border);
+    background: transparent;
+    color: var(--muted);
+}
+.es-problem {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 8px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    background: var(--warning-wash);
+    color: var(--text);
+}
+.es-problem .es-row-icon {
+    margin-top: 0;
+    color: var(--warning);
+}
+.es-problem-text {
+    flex: 1;
+    min-width: 0;
+}
 .kind-error {
     background: var(--model-error-tint);
     color: var(--model-error);
@@ -1292,6 +1424,21 @@ a.field-origin {
 .dn.dn-same {
     outline: 2px dashed color-mix(in srgb, var(--selected-ring) 60%, transparent);
     outline-offset: 5px;
+}
+/* a storming note selected: the notes and edges joined to it stay, the rest fades (`focusedItems`); clicking the empty
+   canvas clears the selection and brings everything back */
+.diagram-canvas .react-flow__node,
+.diagram-canvas .react-flow__edge {
+    transition: opacity 160ms ease-out;
+}
+.diagram-canvas .diagram-dim {
+    opacity: 0.25;
+}
+@media (prefers-reduced-motion: reduce) {
+    .diagram-canvas .react-flow__node,
+    .diagram-canvas .react-flow__edge {
+        transition: none;
+    }
 }
 /* on the top edge, where the selection outline goes around them (see `nodeOutlinePath`) */
 .dn-badge {

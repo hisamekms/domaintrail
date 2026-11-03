@@ -10,13 +10,15 @@ import type { Conversation } from '../app/shell';
 import type { ViewSocket } from '../app/useViewSocket';
 import { useT } from '../i18n';
 import { contextLabels, resolve } from '../model-utils';
-import { stormingGraph, type StormingChoice } from '../storming';
+import { stormingGraph, type StormingChoice, type StormingDetailSession } from '../storming';
 import { graphNodeOf, nodeItemId } from '../scene';
 import { highlightElement, showItem } from '../view/canvas';
 import { useCanvasValue } from '../view/diagram';
 import type { Workspace } from '../view/workspace';
 import { aiPresence } from './ai';
-import { ChatLauncher, SessionChat } from './chat';
+import { ChatLauncher, SessionChat, type ChatGoTo } from './chat';
+import { beginMessage, elementActivity, useRunChanges } from './element-activity';
+import { selectedOf } from './slash';
 import { PAGE_REVEAL, revealKeys } from './reveal';
 import { PeerCursors } from './cursors';
 import { TargetNamingProvider } from './naming';
@@ -38,6 +40,8 @@ export interface SessionPage {
     readonly canvasOverlay: ReactNode;
     /** The 💬 next to the selected element's name in the inspector's heading, while a session is live. */
     readonly inspectorAction: ReactNode;
+    /** What the detail of a storming element shows of the session and the actions it begins; undefined outside a session. */
+    readonly stormingDetail: StormingDetailSession | undefined;
     /** In a session only the facilitator changes the shared baseline (the server answers others 403). */
     readonly baselineLocked: boolean;
     /** The collab ended: the server is gone for good, so the page does not say it waits to reconnect (the summary says it ended). */
@@ -221,6 +225,29 @@ export function useSessionPage(input: {
     // the inspector's 💬 adds the element the inspector shows
     const inspectorAdd = addAction(selectionTarget ? [selectionTarget] : []);
 
+    // the detail of a storming element: what the session did about it, the way to it in the chat and AI の作業, and the
+    // beginnings of messages about it
+    const runChanges = useRunChanges(session?.state);
+    const [goTo, setGoTo] = useState<ChatGoTo | undefined>();
+    const go = useCallback(
+        (kind: ChatGoTo['kind'], id: string): void => {
+            setConversationOpen(true);
+            setGoTo((g) => ({ kind, id, n: (g?.n ?? 0) + 1 }));
+        },
+        [setConversationOpen],
+    );
+    const begin = useCallback(
+        (elementId: string, write: (target: string) => string): void => {
+            const target = targetOfSelection({ selected: elementId, model, stormings, sources: sources ?? [] });
+            if (!target) return;
+            const mention = selectedOf(target, candidates)?.mention ?? target.label ?? elementId;
+            setComposerValue(beginMessage(composerValue, target, mention, write));
+            setConversationOpen(true);
+            setFocusPending(true);
+        },
+        [model, stormings, sources, candidates, composerValue, setComposerValue, setConversationOpen],
+    );
+
     // the chat is the session's first place: the conversation opens when the page joins a session
     const inSession = session !== undefined;
     useEffect(() => {
@@ -334,7 +361,16 @@ export function useSessionPage(input: {
         [setView, setMapAll, setStructureLevel, setStructureContexts, setHiddenContexts, stormingChoice, setStormingChoice],
     );
 
-    if (!session) return { conversation: undefined, canvasOverlay: undefined, inspectorAction: undefined, baselineLocked: false, ended: false, aiReady: false };
+    if (!session)
+        return {
+            conversation: undefined,
+            canvasOverlay: undefined,
+            inspectorAction: undefined,
+            stormingDetail: undefined,
+            baselineLocked: false,
+            ended: false,
+            aiReady: false,
+        };
     const facilitator = session.me.participant.role === 'facilitator';
     return {
         baselineLocked: !facilitator,
@@ -348,6 +384,13 @@ export function useSessionPage(input: {
             </>
         ),
         inspectorAction: inspectorAdd && <AddButton action={inspectorAdd} />,
+        stormingDetail: {
+            activity: (el) => elementActivity(session.state, runChanges, el),
+            ...(live && { begin }),
+            openMessage: (id) => go('message', id),
+            openRun: (id) => go('run', id),
+            openRuns: (id) => go('unit', id),
+        },
         conversation: {
             content: (
                 <TargetNamingProvider value={naming}>
@@ -363,6 +406,7 @@ export function useSessionPage(input: {
                         viewedAt={viewedAt}
                         onOpenView={openView}
                         onNavigate={navigate}
+                        goTo={goTo}
                         onOpen={() => setConversationOpen(true)}
                         onClose={() => setConversationOpen(false)}
                         barSlot={input.barSlot}
