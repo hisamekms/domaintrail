@@ -50,7 +50,7 @@ const request = knownRequestId('00000000-0000-4000-8000-000000000010');
 const revision = knownRevisionId('00000000-0000-4000-8000-000000000020');
 
 function openSession(stores: Stores, id: C.SessionId): void {
-    const { Open } = value(sessionCommands.start({ id, facilitator, name: value(C.makeDisplayName('Ada')), startedAt: at }));
+    const { Open } = value(sessionCommands.start({ id, facilitator, name: value(C.makeDisplayName('Ada')), mode: 'Collab', startedAt: at }));
     stores.sessions.save(Open.aggregate);
     stores.outbox.append(id, [Open.events.SessionStarted], at);
 }
@@ -100,12 +100,14 @@ describe('schema and transactions', () => {
             'facilitators',
             'marks',
             'outbox',
+            'proposals',
             'requests',
             'restore_operations',
             'revisions',
             'run_requests',
             'sessions',
             'sign_ins',
+            'triages',
         ]);
         db.exec(`PRAGMA user_version = ${MIGRATIONS.length + 1}`);
         db.close();

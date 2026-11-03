@@ -15,6 +15,7 @@ import {
     knownAgentRunId,
     type OutboxEntry,
     readActivity,
+    readToolOutcome,
     type RunActivity,
 } from '@domaintrail/collaboration';
 import { AGENT_EVENT_TYPES, type AgentParticipantsBody, type AgentSessionBody } from '@domaintrail/collaboration/protocol';
@@ -243,13 +244,21 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
                 const { exitCode, formatted, checked } = b;
                 if (typeof exitCode !== 'number' || !Number.isInteger(exitCode) || exitCode < -1024 || exitCode > 1024)
                     return sendError(res, 400, 'InvalidInput', 'Expected the exit code.', { field: 'exitCode' });
-                if (typeof formatted !== 'boolean') return sendError(res, 400, 'InvalidInput', 'Expected true or false.', { field: 'formatted' });
-                if (typeof checked !== 'boolean') return sendError(res, 400, 'InvalidInput', 'Expected true or false.', { field: 'checked' });
+                // ran, failed or skipped (ADR 0030); a boolean from a subscriber before skipping existed (true: ran)
+                const fmt = readToolOutcome(formatted);
+                const check = readToolOutcome(checked);
+                if (!fmt) return sendError(res, 400, 'InvalidInput', "Expected 'ran', 'failed' or 'skipped'.", { field: 'formatted' });
+                if (!check) return sendError(res, 400, 'InvalidInput', "Expected 'ran', 'failed' or 'skipped'.", { field: 'checked' });
                 const reply = b.reply === undefined ? undefined : agentReply(b.reply, 'done');
                 if (reply && !reply.ok) return sendError(res, 400, 'InvalidInput', reply.error.message, { field: reply.error.field });
                 return answer(
                     res,
-                    await use.finishRun({ run, token: String(b.token), facts: { exitCode, formatted, checked }, ...(reply && { reply: reply.value }) }),
+                    await use.finishRun({
+                        run,
+                        token: String(b.token),
+                        facts: { exitCode, formatted: fmt, checked: check },
+                        ...(reply && { reply: reply.value }),
+                    }),
                     (v) => v,
                 );
             }

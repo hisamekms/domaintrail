@@ -75,7 +75,7 @@ const facilitator = value(C.makeParticipantId('facilitator'));
 const ann = value(C.makeParticipantId('ann'));
 const name = value(C.makeDisplayName('Ada'));
 const text = (t: string): C.Text => value(C.makeText(t));
-const facts = { exitCode: 0, formatted: true, checked: true };
+const facts = { exitCode: 0, formatted: 'Ran', checked: 'Ran' } as const;
 
 interface Fixture {
     readonly root: string;

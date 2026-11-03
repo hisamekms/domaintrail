@@ -39,8 +39,8 @@ export function ReplyText({ text, onNavigate }: { text: string; onNavigate: Navi
     );
 }
 
-/** The mark of a request's status: ✓ done, ◐ partly, – not done, ? a question. */
-const MARK: Record<RequestProgress, string> = { Done: '✓', Partial: '◐', Skipped: '–', Question: '?' };
+/** The mark of a request's status: ✓ done, ◐ partly, – not done, ? a question, ↩ answered as a question. */
+const MARK: Record<RequestProgress, string> = { Done: '✓', Partial: '◐', Skipped: '–', Question: '?', Answered: '↩' };
 
 /** The first characters of a request's body on one line. */
 function head(r: ReplyRequest, max = 48): string {

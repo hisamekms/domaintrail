@@ -40,7 +40,7 @@ export interface SessionFull {
     readonly maxParticipants: number;
 }
 
-export type SignInError = SessionFull | Collaboration.SessionNotFound | Collaboration.SessionAlreadyClosed;
+export type SignInError = SessionFull | Collaboration.SessionNotFound | Collaboration.SessionAlreadyClosed | Collaboration.SoloSession;
 
 export interface SessionIdentities {
     readonly mode: IdentityMode;

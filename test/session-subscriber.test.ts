@@ -315,7 +315,7 @@ describe('a run from the browser to the Live View (the plan’s acceptance, with
             if (done.state !== 'Completed') return;
             expect(done.changed).toBe(true);
             expect(done.resultRevision).not.toBe(done.baseRevision);
-            expect(done.report).toEqual({ exitCode: 0, formatted: true, checked: true, newDtErrors: 0, unparsedDtes: 0 });
+            expect(done.report).toEqual({ exitCode: 0, formatted: 'Ran', checked: 'Ran', newDtErrors: 0, unparsedDtes: 0 });
             const revisions = (await state(ctx)).revisions;
             expect(revisions.find((r) => r.id === done.resultRevision)?.origin).toEqual({ kind: 'RunResult', run });
 
@@ -478,7 +478,7 @@ describe('the pipeline', () => {
         expect(failed.state).toBe('Failed');
         if (failed.state !== 'Failed') return;
         expect(failed.reason).toBe('RuleNotMet');
-        expect(failed.report).toEqual({ exitCode: 3, formatted: true, checked: true, newDtErrors: 0, unparsedDtes: 0 });
+        expect(failed.report).toEqual({ exitCode: 3, formatted: 'Ran', checked: 'Ran', newDtErrors: 0, unparsedDtes: 0 });
     });
 
     integration('a .dtes the agent leaves broken: dt fmt skips it, the run fails with an unparsed .dtes', async () => {
@@ -488,7 +488,7 @@ describe('the pipeline', () => {
         const failed = await until(ctx, run, ['Completed', 'Failed']);
         expect(failed.state === 'Failed' && [failed.reason, failed.report]).toEqual([
             'RuleNotMet',
-            { exitCode: 0, formatted: true, checked: true, newDtErrors: 0, unparsedDtes: 1 },
+            { exitCode: 0, formatted: 'Ran', checked: 'Ran', newDtErrors: 0, unparsedDtes: 1 },
         ]);
     });
 
@@ -1042,7 +1042,7 @@ describe('the CLI', () => {
         const done = await until(ctx, run, ['Completed', 'Failed']);
         expect(done.state === 'Completed' && [done.changed, done.report]).toEqual([
             true,
-            { exitCode: 0, formatted: true, checked: true, newDtErrors: 0, unparsedDtes: 0 },
+            { exitCode: 0, formatted: 'Ran', checked: 'Ran', newDtErrors: 0, unparsedDtes: 0 },
         ]);
     });
 

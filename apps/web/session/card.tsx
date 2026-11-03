@@ -34,8 +34,8 @@ import { elapsed, oneLine, revisionLookup, type AgentMessage, type ReplyView, ty
 type RunJson = CardRun['run'];
 
 const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-/** The mark of a request's status: ✓ done, ◐ partly, – not done, ? a question. */
-export const PROGRESS_MARK: Record<RequestProgress, string> = { Done: '✓', Partial: '◐', Skipped: '–', Question: '?' };
+/** The mark of a request's status: ✓ done, ◐ partly, – not done, ? a question, ↩ answered as a question. */
+export const PROGRESS_MARK: Record<RequestProgress, string> = { Done: '✓', Partial: '◐', Skipped: '–', Question: '?', Answered: '↩' };
 
 export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; compact?: boolean; actions?: ReactNode }) {
     const chat = useChat();

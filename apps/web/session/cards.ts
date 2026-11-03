@@ -85,7 +85,8 @@ export interface MessageMark {
     readonly card: string;
 }
 
-const PROGRESS: Record<RequestProgress, MarkState> = { Done: 'done', Partial: 'partial', Skipped: 'skipped', Question: 'question' };
+// `Answered` (ADR 0030: the run answered instead of editing) shows as done until M6 draws it as a reply bubble
+const PROGRESS: Record<RequestProgress, MarkState> = { Done: 'done', Partial: 'partial', Skipped: 'skipped', Question: 'question', Answered: 'done' };
 
 /** The state of a message in a run: the run's, or for an ended run with a reply, what it says of the message. */
 function markState(run: RunJson, request: string): MarkState {

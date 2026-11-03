@@ -221,6 +221,20 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
             };
             return { state: { ...at, approvals: [...approvals, approval] }, refetch: false };
         }
+        case 'SessionCollaborated':
+            return { state: session({ ...state.session, mode: 'Collab' }), refetch: false };
+        // the triages and proposals (ADR 0030) are drawn by M6: until then the state is fetched again to hold them
+        case 'TriageOpened':
+        case 'TriageStepRecorded':
+        case 'TriageDecided':
+        case 'TriageOverridden':
+        case 'TriageReaddressed':
+        case 'TriageConcluded':
+        case 'ChangeProposed':
+        case 'ProposalApproved':
+        case 'ProposalRejected':
+        case 'ProposalWithdrawn':
+            return { state: at, refetch: true };
     }
 }
 

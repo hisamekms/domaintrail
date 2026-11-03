@@ -11,6 +11,7 @@ testing.checkVersion('0.6.0');
 export interface Arbitraries {
     readonly AgentRunId: fc.Arbitrary<Collaboration.AgentRunId>;
     readonly FailureReason: fc.Arbitrary<Collaboration.FailureReason>;
+    readonly ToolOutcome: fc.Arbitrary<Collaboration.ToolOutcome>;
     readonly RunReport: fc.Arbitrary<Collaboration.RunReport>;
     readonly FrozenRequest: fc.Arbitrary<Collaboration.FrozenRequest>;
     readonly FrozenReplyTarget: fc.Arbitrary<Collaboration.FrozenReplyTarget>;
@@ -68,6 +69,20 @@ export interface Arbitraries {
     readonly Mark: fc.Arbitrary<Collaboration.Mark>;
     readonly MarkPlaced: fc.Arbitrary<Collaboration.MarkPlaced>;
     readonly MarkRemoved: fc.Arbitrary<Collaboration.MarkRemoved>;
+    readonly ChangeProposalId: fc.Arbitrary<Collaboration.ChangeProposalId>;
+    readonly ProposalText: fc.Arbitrary<Collaboration.ProposalText>;
+    readonly ProposalContent: fc.Arbitrary<Collaboration.ProposalContent>;
+    readonly ApprovedProposal: fc.Arbitrary<Collaboration.ApprovedProposal>;
+    readonly ApprovedProposals: fc.Arbitrary<Collaboration.ApprovedProposals>;
+    readonly OpenChangeProposal: fc.Arbitrary<Collaboration.OpenChangeProposal>;
+    readonly ApprovedChangeProposal: fc.Arbitrary<Collaboration.ApprovedChangeProposal>;
+    readonly RejectedChangeProposal: fc.Arbitrary<Collaboration.RejectedChangeProposal>;
+    readonly WithdrawnChangeProposal: fc.Arbitrary<Collaboration.WithdrawnChangeProposal>;
+    readonly ChangeProposal: fc.Arbitrary<Collaboration.ChangeProposal>;
+    readonly ChangeProposed: fc.Arbitrary<Collaboration.ChangeProposed>;
+    readonly ProposalApproved: fc.Arbitrary<Collaboration.ProposalApproved>;
+    readonly ProposalRejected: fc.Arbitrary<Collaboration.ProposalRejected>;
+    readonly ProposalWithdrawn: fc.Arbitrary<Collaboration.ProposalWithdrawn>;
     readonly RequestId: fc.Arbitrary<Collaboration.RequestId>;
     readonly PendingRequest: fc.Arbitrary<Collaboration.PendingRequest>;
     readonly ReplyTarget: fc.Arbitrary<Collaboration.ReplyTarget>;
@@ -92,12 +107,14 @@ export interface Arbitraries {
     readonly ParticipantId: fc.Arbitrary<Collaboration.ParticipantId>;
     readonly DisplayName: fc.Arbitrary<Collaboration.DisplayName>;
     readonly ParticipantRole: fc.Arbitrary<Collaboration.ParticipantRole>;
+    readonly SessionMode: fc.Arbitrary<Collaboration.SessionMode>;
     readonly ActiveSession: fc.Arbitrary<Collaboration.ActiveSession>;
     readonly OpenSession: fc.Arbitrary<Collaboration.OpenSession>;
     readonly ClosedSession: fc.Arbitrary<Collaboration.ClosedSession>;
     readonly Session: fc.Arbitrary<Collaboration.Session>;
     readonly Participant: fc.Arbitrary<Collaboration.Participant>;
     readonly SessionStarted: fc.Arbitrary<Collaboration.SessionStarted>;
+    readonly SessionCollaborated: fc.Arbitrary<Collaboration.SessionCollaborated>;
     readonly ParticipantJoined: fc.Arbitrary<Collaboration.ParticipantJoined>;
     readonly SessionClosed: fc.Arbitrary<Collaboration.SessionClosed>;
     readonly ElementName: fc.Arbitrary<Collaboration.ElementName>;
@@ -109,6 +126,25 @@ export interface Arbitraries {
     readonly ModelTarget: fc.Arbitrary<Collaboration.ModelTarget>;
     readonly SourceRange: fc.Arbitrary<Collaboration.SourceRange>;
     readonly TargetSnapshot: fc.Arbitrary<Collaboration.TargetSnapshot>;
+    readonly TriageId: fc.Arbitrary<Collaboration.TriageId>;
+    readonly Confidence: fc.Arbitrary<Collaboration.Confidence>;
+    readonly Milliseconds: fc.Arbitrary<Collaboration.Milliseconds>;
+    readonly AddressedBy: fc.Arbitrary<Collaboration.AddressedBy>;
+    readonly TriageStage: fc.Arbitrary<Collaboration.TriageStage>;
+    readonly TriageVerdict: fc.Arbitrary<Collaboration.TriageVerdict>;
+    readonly TriageStep: fc.Arbitrary<Collaboration.TriageStep>;
+    readonly TriageOutcome: fc.Arbitrary<Collaboration.TriageOutcome>;
+    readonly AddressableRequest: fc.Arbitrary<Collaboration.AddressableRequest>;
+    readonly ProposableTriage: fc.Arbitrary<Collaboration.ProposableTriage>;
+    readonly PendingTriage: fc.Arbitrary<Collaboration.PendingTriage>;
+    readonly DecidedTriage: fc.Arbitrary<Collaboration.DecidedTriage>;
+    readonly Triage: fc.Arbitrary<Collaboration.Triage>;
+    readonly TriageOpened: fc.Arbitrary<Collaboration.TriageOpened>;
+    readonly TriageStepRecorded: fc.Arbitrary<Collaboration.TriageStepRecorded>;
+    readonly TriageDecided: fc.Arbitrary<Collaboration.TriageDecided>;
+    readonly TriageOverridden: fc.Arbitrary<Collaboration.TriageOverridden>;
+    readonly TriageReaddressed: fc.Arbitrary<Collaboration.TriageReaddressed>;
+    readonly TriageConcluded: fc.Arbitrary<Collaboration.TriageConcluded>;
 }
 
 /** Checks of the invariants and requirements of Collaboration that the DSL does not express, as your code implements them. */
@@ -118,6 +154,8 @@ export interface DeclaredChecks {
     readonly Revision?: Partial<Collaboration.RevisionDeclaredChecks>;
     readonly TakeRevision?: Partial<Collaboration.TakeRevisionDeclaredRequires>;
     readonly RestoreRevision?: Partial<Collaboration.RestoreRevisionDeclaredRequires>;
+    readonly Triage?: Partial<Collaboration.TriageDeclaredChecks>;
+    readonly RecordTriage?: Partial<Collaboration.RecordTriageDeclaredRequires>;
 }
 
 /** Examples run before the generated inputs: aggregates per state (mixed into the generated ones) and arguments per command. */
@@ -134,9 +172,13 @@ export interface Examples {
         readonly states?: { readonly Placed?: readonly Collaboration.PlacedMark[]; readonly Removed?: readonly Collaboration.RemovedMark[] };
         readonly commands?: { readonly place?: readonly Parameters<Collaboration.MarkCommands['place']>[]; readonly remove?: readonly Parameters<Collaboration.MarkCommands['remove']>[] };
     };
+    readonly ChangeProposal?: {
+        readonly states?: { readonly Open?: readonly Collaboration.OpenChangeProposal[]; readonly Approved?: readonly Collaboration.ApprovedChangeProposal[]; readonly Rejected?: readonly Collaboration.RejectedChangeProposal[]; readonly Withdrawn?: readonly Collaboration.WithdrawnChangeProposal[] };
+        readonly commands?: { readonly propose?: readonly Parameters<Collaboration.ChangeProposalCommands['propose']>[]; readonly approve?: readonly Parameters<Collaboration.ChangeProposalCommands['approve']>[]; readonly reject?: readonly Parameters<Collaboration.ChangeProposalCommands['reject']>[]; readonly withdraw?: readonly Parameters<Collaboration.ChangeProposalCommands['withdraw']>[] };
+    };
     readonly Request?: {
         readonly states?: { readonly Sent?: readonly Collaboration.SentRequest[]; readonly Dismissed?: readonly Collaboration.DismissedRequest[] };
-        readonly commands?: { readonly send?: readonly Parameters<Collaboration.RequestCommands['send']>[]; readonly requestRevert?: readonly Parameters<Collaboration.RequestCommands['requestRevert']>[] };
+        readonly commands?: { readonly send?: readonly Parameters<Collaboration.RequestCommands['send']>[]; readonly requestRevert?: readonly Parameters<Collaboration.RequestCommands['requestRevert']>[]; readonly answer?: readonly Parameters<Collaboration.RequestCommands['answer']>[] };
     };
     readonly Revision?: {
         readonly states?: { readonly Recorded?: readonly Collaboration.RecordedRevision[] };
@@ -144,7 +186,11 @@ export interface Examples {
     };
     readonly Session?: {
         readonly states?: { readonly Open?: readonly Collaboration.OpenSession[]; readonly Closed?: readonly Collaboration.ClosedSession[] };
-        readonly commands?: { readonly start?: readonly Parameters<Collaboration.SessionCommands['start']>[]; readonly join?: readonly Parameters<Collaboration.SessionCommands['join']>[]; readonly close?: readonly Parameters<Collaboration.SessionCommands['close']>[] };
+        readonly commands?: { readonly start?: readonly Parameters<Collaboration.SessionCommands['start']>[]; readonly join?: readonly Parameters<Collaboration.SessionCommands['join']>[]; readonly collaborate?: readonly Parameters<Collaboration.SessionCommands['collaborate']>[]; readonly close?: readonly Parameters<Collaboration.SessionCommands['close']>[] };
+    };
+    readonly Triage?: {
+        readonly states?: { readonly Pending?: readonly Collaboration.PendingTriage[]; readonly Decided?: readonly Collaboration.DecidedTriage[] };
+        readonly commands?: { readonly open?: readonly Parameters<Collaboration.TriageCommands['open']>[]; readonly record?: readonly Parameters<Collaboration.TriageCommands['record']>[]; readonly override?: readonly Parameters<Collaboration.TriageCommands['override']>[]; readonly readdress?: readonly Parameters<Collaboration.TriageCommands['readdress']>[]; readonly conclude?: readonly Parameters<Collaboration.TriageCommands['conclude']>[] };
     };
 }
 
@@ -162,13 +208,15 @@ export interface Options extends Generation {
 
 /** What `contract` tests: the constructors of domain primitives and the commands of aggregates, each optional. */
 export interface Implementation {
-    readonly make?: { readonly AgentRunId?: Collaboration.MakeAgentRunId; readonly ReplyKey?: Collaboration.MakeReplyKey; readonly AssumptionApprovalId?: Collaboration.MakeAssumptionApprovalId; readonly Text?: Collaboration.MakeText; readonly LineNumber?: Collaboration.MakeLineNumber; readonly ColumnNumber?: Collaboration.MakeColumnNumber; readonly Tally?: Collaboration.MakeTally; readonly ContentHash?: Collaboration.MakeContentHash; readonly WorkspacePath?: Collaboration.MakeWorkspacePath; readonly MarkId?: Collaboration.MakeMarkId; readonly Emoji?: Collaboration.MakeEmoji; readonly RequestId?: Collaboration.MakeRequestId; readonly RevisionId?: Collaboration.MakeRevisionId; readonly SessionId?: Collaboration.MakeSessionId; readonly ParticipantId?: Collaboration.MakeParticipantId; readonly DisplayName?: Collaboration.MakeDisplayName; readonly ElementName?: Collaboration.MakeElementName; readonly StormingName?: Collaboration.MakeStormingName; readonly StormingLocalName?: Collaboration.MakeStormingLocalName; readonly TimelineName?: Collaboration.MakeTimelineName; readonly StormingEventName?: Collaboration.MakeStormingEventName; readonly OccurrencePath?: Collaboration.MakeOccurrencePath };
+    readonly make?: { readonly AgentRunId?: Collaboration.MakeAgentRunId; readonly ReplyKey?: Collaboration.MakeReplyKey; readonly AssumptionApprovalId?: Collaboration.MakeAssumptionApprovalId; readonly Text?: Collaboration.MakeText; readonly LineNumber?: Collaboration.MakeLineNumber; readonly ColumnNumber?: Collaboration.MakeColumnNumber; readonly Tally?: Collaboration.MakeTally; readonly ContentHash?: Collaboration.MakeContentHash; readonly WorkspacePath?: Collaboration.MakeWorkspacePath; readonly MarkId?: Collaboration.MakeMarkId; readonly Emoji?: Collaboration.MakeEmoji; readonly ChangeProposalId?: Collaboration.MakeChangeProposalId; readonly ProposalText?: Collaboration.MakeProposalText; readonly RequestId?: Collaboration.MakeRequestId; readonly RevisionId?: Collaboration.MakeRevisionId; readonly SessionId?: Collaboration.MakeSessionId; readonly ParticipantId?: Collaboration.MakeParticipantId; readonly DisplayName?: Collaboration.MakeDisplayName; readonly ElementName?: Collaboration.MakeElementName; readonly StormingName?: Collaboration.MakeStormingName; readonly StormingLocalName?: Collaboration.MakeStormingLocalName; readonly TimelineName?: Collaboration.MakeTimelineName; readonly StormingEventName?: Collaboration.MakeStormingEventName; readonly OccurrencePath?: Collaboration.MakeOccurrencePath; readonly TriageId?: Collaboration.MakeTriageId; readonly Confidence?: Collaboration.MakeConfidence; readonly Milliseconds?: Collaboration.MakeMilliseconds };
     readonly AgentRun?: Collaboration.AgentRunCommands;
     readonly AssumptionApproval?: Collaboration.AssumptionApprovalCommands;
     readonly Mark?: Collaboration.MarkCommands;
+    readonly ChangeProposal?: Collaboration.ChangeProposalCommands;
     readonly Request?: Collaboration.RequestCommands;
     readonly Revision?: Collaboration.RevisionCommands;
     readonly Session?: Collaboration.SessionCommands;
+    readonly Triage?: Collaboration.TriageCommands;
 }
 
 /** The arbitraries of Collaboration, with the overrides, declared checks and examples of the options. */
@@ -180,18 +228,19 @@ export function arbitraries(options: Options = {}): Arbitraries {
     const a: Arbitraries = testing.lazy<Arbitraries>({
         AgentRunId: () => testing.valid(given.AgentRunId ?? testing.collide(testing.cast<Collaboration.AgentRunId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkAgentRunId(v).length === 0, 'Collaboration.AgentRunId'),
         FailureReason: () => given.FailureReason ?? fc.constantFrom<Collaboration.FailureReason>('RuleNotMet', 'AgentError', 'LeaseExpired', 'Interrupted'),
-        RunReport: () => given.RunReport ?? testing.cast<Collaboration.RunReport>(fc.record({ exitCode: testing.cast<number>(scalar.Int), formatted: testing.cast<boolean>(scalar.Bool), checked: testing.cast<boolean>(scalar.Bool), newDtErrors: a.Tally, unparsedDtes: a.Tally })),
+        ToolOutcome: () => given.ToolOutcome ?? fc.constantFrom<Collaboration.ToolOutcome>('Ran', 'Failed', 'Skipped'),
+        RunReport: () => given.RunReport ?? testing.cast<Collaboration.RunReport>(fc.record({ exitCode: testing.cast<number>(scalar.Int), formatted: a.ToolOutcome, checked: a.ToolOutcome, newDtErrors: a.Tally, unparsedDtes: a.Tally })),
         FrozenRequest: () => given.FrozenRequest ?? testing.cast<Collaboration.FrozenRequest>(fc.record({ request: a.RequestId, author: a.ParticipantId, targets: testing.many(a.TargetSnapshot, 0, 20), body: a.Text, replyTo: a.FrozenReplyTarget, reverts: a.AgentRunId }, { requiredKeys: ['request', 'author', 'targets', 'body'] })),
         FrozenReplyTarget: () => given.FrozenReplyTarget ?? testing.cast<Collaboration.FrozenReplyTarget>(fc.oneof(fc.record({ kind: fc.constant('Run' as const), run: a.AgentRunId }), fc.record({ kind: fc.constant('Message' as const), request: a.RequestId, author: a.ParticipantId, body: a.Text }))),
-        RunInput: () => testing.valid(given.RunInput ?? testing.cast<Collaboration.RunInput>(fc.record({ requests: testing.many(a.FrozenRequest, 1), note: a.Text, answer: a.Answer, pick: a.AlternativePick }, { requiredKeys: ['requests'] })), (v) => Collaboration.checkRunInput(v).length === 0, 'Collaboration.RunInput'),
+        RunInput: () => testing.valid(given.RunInput ?? testing.cast<Collaboration.RunInput>(fc.record({ requests: testing.many(a.FrozenRequest, 1), note: a.Text, answer: a.Answer, pick: a.AlternativePick, proposals: a.ApprovedProposals }, { requiredKeys: ['requests'] })), (v) => Collaboration.checkRunInput(v).length === 0, 'Collaboration.RunInput'),
         ReplyKey: () => testing.valid(given.ReplyKey ?? testing.collide(testing.cast<Collaboration.ReplyKey>(testing.base('String', { pattern: '^[A-Za-z0-9_-]+$' })), seed), (v) => Collaboration.checkReplyKey(v).length === 0, 'Collaboration.ReplyKey'),
-        RequestProgress: () => given.RequestProgress ?? fc.constantFrom<Collaboration.RequestProgress>('Done', 'Partial', 'Skipped', 'Question'),
+        RequestProgress: () => given.RequestProgress ?? fc.constantFrom<Collaboration.RequestProgress>('Done', 'Partial', 'Skipped', 'Question', 'Answered'),
         RequestReply: () => testing.valid(given.RequestReply ?? testing.cast<Collaboration.RequestReply>(fc.record({ request: a.RequestId, status: a.RequestProgress, note: a.Text }, { requiredKeys: ['request', 'status'] })), (v) => Collaboration.checkRequestReply(v).length === 0, 'Collaboration.RequestReply'),
         ReplyOption: () => given.ReplyOption ?? testing.cast<Collaboration.ReplyOption>(fc.record({ id: a.ReplyKey, label: a.Text, detail: a.Text }, { requiredKeys: ['id', 'label'] })),
         ReplyQuestion: () => testing.valid(given.ReplyQuestion ?? testing.cast<Collaboration.ReplyQuestion>(fc.record({ id: a.ReplyKey, text: a.Text, requests: testing.many(a.RequestId, 0), options: testing.many(a.ReplyOption, 0), multiple: testing.cast<boolean>(scalar.Bool) })), (v) => Collaboration.checkReplyQuestion(v).length === 0, 'Collaboration.ReplyQuestion'),
         ReplyAlternative: () => given.ReplyAlternative ?? testing.cast<Collaboration.ReplyAlternative>(fc.record({ id: a.ReplyKey, label: a.Text })),
         ReplyAssumption: () => testing.valid(given.ReplyAssumption ?? testing.cast<Collaboration.ReplyAssumption>(fc.record({ text: a.Text, requests: testing.many(a.RequestId, 0), alternatives: testing.many(a.ReplyAlternative, 0) })), (v) => Collaboration.checkReplyAssumption(v).length === 0, 'Collaboration.ReplyAssumption'),
-        AgentReply: () => testing.valid(given.AgentReply ?? testing.cast<Collaboration.AgentReply>(fc.record({ title: a.Text, summary: a.Text, requests: testing.many(a.RequestReply, 0), questions: testing.many(a.ReplyQuestion, 0), assumptions: testing.many(a.ReplyAssumption, 0) }, { requiredKeys: ['summary', 'requests', 'questions', 'assumptions'] })), (v) => Collaboration.checkAgentReply(v).length === 0, 'Collaboration.AgentReply'),
+        AgentReply: () => testing.valid(given.AgentReply ?? testing.cast<Collaboration.AgentReply>(fc.record({ title: a.Text, summary: a.Text, requests: testing.many(a.RequestReply, 0), questions: testing.many(a.ReplyQuestion, 0), assumptions: testing.many(a.ReplyAssumption, 0), answer: a.Text }, { requiredKeys: ['summary', 'requests', 'questions', 'assumptions'] })), (v) => Collaboration.checkAgentReply(v).length === 0, 'Collaboration.AgentReply'),
         AnsweredQuestion: () => testing.valid(given.AnsweredQuestion ?? testing.cast<Collaboration.AnsweredQuestion>(fc.record({ question: a.ReplyKey, text: a.Text, chosen: testing.many(a.ReplyOption, 0), freeText: a.Text }, { requiredKeys: ['question', 'text', 'chosen'] })), (v) => Collaboration.checkAnsweredQuestion(v).length === 0, 'Collaboration.AnsweredQuestion'),
         Answer: () => testing.valid(given.Answer ?? testing.cast<Collaboration.Answer>(fc.record({ answerTo: a.AgentRunId, answers: testing.many(a.AnsweredQuestion, 1) })), (v) => Collaboration.checkAnswer(v).length === 0, 'Collaboration.Answer'),
         AlternativePick: () => given.AlternativePick ?? testing.cast<Collaboration.AlternativePick>(fc.record({ pickOf: a.AgentRunId, assumption: a.Tally, text: a.Text, alternative: a.ReplyAlternative })),
@@ -237,6 +286,20 @@ export function arbitraries(options: Options = {}): Arbitraries {
         Mark: () => given.Mark ?? fc.oneof(a.PlacedMark, a.RemovedMark),
         MarkPlaced: () => given.MarkPlaced ?? testing.cast<Collaboration.MarkPlaced>(fc.record({ type: fc.constant('MarkPlaced' as const), markId: a.MarkId, session: a.SessionId, participant: a.ParticipantId, target: a.MarkTarget, sign: a.MarkSign, placedAt: testing.cast<Date>(scalar.Timestamp) })),
         MarkRemoved: () => given.MarkRemoved ?? testing.cast<Collaboration.MarkRemoved>(fc.record({ type: fc.constant('MarkRemoved' as const), markId: a.MarkId, participant: a.ParticipantId, target: a.MarkTarget, sign: a.MarkSign, removedAt: testing.cast<Date>(scalar.Timestamp) })),
+        ChangeProposalId: () => testing.valid(given.ChangeProposalId ?? testing.collide(testing.cast<Collaboration.ChangeProposalId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkChangeProposalId(v).length === 0, 'Collaboration.ChangeProposalId'),
+        ProposalText: () => testing.valid(given.ProposalText ?? testing.collide(testing.cast<Collaboration.ProposalText>(testing.base('String', { minLength: 1, maxLength: 2000 })), seed), (v) => Collaboration.checkProposalText(v).length === 0, 'Collaboration.ProposalText'),
+        ProposalContent: () => given.ProposalContent ?? testing.cast<Collaboration.ProposalContent>(fc.record({ what: a.ProposalText, where: a.ProposalText, how: a.ProposalText })),
+        ApprovedProposal: () => given.ApprovedProposal ?? testing.cast<Collaboration.ApprovedProposal>(fc.record({ proposal: a.ChangeProposalId, request: a.RequestId, content: a.ProposalContent })),
+        ApprovedProposals: () => testing.valid(given.ApprovedProposals ?? testing.cast<Collaboration.ApprovedProposals>(fc.record({ approved: testing.many(a.ApprovedProposal, 1) })), (v) => Collaboration.checkApprovedProposals(v).length === 0, 'Collaboration.ApprovedProposals'),
+        OpenChangeProposal: () => testing.withExamples(given.OpenChangeProposal ?? testing.cast<Collaboration.OpenChangeProposal>(fc.record({ state: fc.constant('Open' as const), id: a.ChangeProposalId, session: a.SessionId, triage: a.TriageId, request: a.RequestId, requestedBy: a.ParticipantId, content: a.ProposalContent, proposedAt: testing.cast<Date>(scalar.Timestamp) })), options.examples?.ChangeProposal?.states?.Open, () => [], 'Collaboration.OpenChangeProposal'),
+        ApprovedChangeProposal: () => testing.withExamples(given.ApprovedChangeProposal ?? testing.cast<Collaboration.ApprovedChangeProposal>(fc.record({ state: fc.constant('Approved' as const), id: a.ChangeProposalId, session: a.SessionId, triage: a.TriageId, request: a.RequestId, requestedBy: a.ParticipantId, content: a.ProposalContent, proposedAt: testing.cast<Date>(scalar.Timestamp), approvedBy: a.ParticipantId, approvedAt: testing.cast<Date>(scalar.Timestamp), edited: a.ProposalContent, run: a.AgentRunId }, { requiredKeys: ['state', 'id', 'session', 'triage', 'request', 'requestedBy', 'content', 'proposedAt', 'approvedBy', 'approvedAt', 'run'] })), options.examples?.ChangeProposal?.states?.Approved, () => [], 'Collaboration.ApprovedChangeProposal'),
+        RejectedChangeProposal: () => testing.withExamples(given.RejectedChangeProposal ?? testing.cast<Collaboration.RejectedChangeProposal>(fc.record({ state: fc.constant('Rejected' as const), id: a.ChangeProposalId, session: a.SessionId, triage: a.TriageId, request: a.RequestId, requestedBy: a.ParticipantId, content: a.ProposalContent, proposedAt: testing.cast<Date>(scalar.Timestamp), rejectedBy: a.ParticipantId, rejectedAt: testing.cast<Date>(scalar.Timestamp), note: a.Text }, { requiredKeys: ['state', 'id', 'session', 'triage', 'request', 'requestedBy', 'content', 'proposedAt', 'rejectedBy', 'rejectedAt'] })), options.examples?.ChangeProposal?.states?.Rejected, () => [], 'Collaboration.RejectedChangeProposal'),
+        WithdrawnChangeProposal: () => testing.withExamples(given.WithdrawnChangeProposal ?? testing.cast<Collaboration.WithdrawnChangeProposal>(fc.record({ state: fc.constant('Withdrawn' as const), id: a.ChangeProposalId, session: a.SessionId, triage: a.TriageId, request: a.RequestId, requestedBy: a.ParticipantId, content: a.ProposalContent, proposedAt: testing.cast<Date>(scalar.Timestamp), withdrawnAt: testing.cast<Date>(scalar.Timestamp) })), options.examples?.ChangeProposal?.states?.Withdrawn, () => [], 'Collaboration.WithdrawnChangeProposal'),
+        ChangeProposal: () => given.ChangeProposal ?? fc.oneof(a.OpenChangeProposal, a.ApprovedChangeProposal, a.RejectedChangeProposal, a.WithdrawnChangeProposal),
+        ChangeProposed: () => given.ChangeProposed ?? testing.cast<Collaboration.ChangeProposed>(fc.record({ type: fc.constant('ChangeProposed' as const), proposalId: a.ChangeProposalId, session: a.SessionId, triage: a.TriageId, request: a.RequestId, requestedBy: a.ParticipantId, content: a.ProposalContent, proposedAt: testing.cast<Date>(scalar.Timestamp) })),
+        ProposalApproved: () => given.ProposalApproved ?? testing.cast<Collaboration.ProposalApproved>(fc.record({ type: fc.constant('ProposalApproved' as const), proposalId: a.ChangeProposalId, approvedBy: a.ParticipantId, edited: a.ProposalContent, run: a.AgentRunId, approvedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'proposalId', 'approvedBy', 'run', 'approvedAt'] })),
+        ProposalRejected: () => given.ProposalRejected ?? testing.cast<Collaboration.ProposalRejected>(fc.record({ type: fc.constant('ProposalRejected' as const), proposalId: a.ChangeProposalId, rejectedBy: a.ParticipantId, note: a.Text, rejectedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'proposalId', 'rejectedBy', 'rejectedAt'] })),
+        ProposalWithdrawn: () => given.ProposalWithdrawn ?? testing.cast<Collaboration.ProposalWithdrawn>(fc.record({ type: fc.constant('ProposalWithdrawn' as const), proposalId: a.ChangeProposalId, withdrawnBy: a.ParticipantId, withdrawnAt: testing.cast<Date>(scalar.Timestamp) })),
         RequestId: () => testing.valid(given.RequestId ?? testing.collide(testing.cast<Collaboration.RequestId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkRequestId(v).length === 0, 'Collaboration.RequestId'),
         PendingRequest: () => given.PendingRequest ?? testing.cast<Collaboration.PendingRequest>(a.RequestId),
         ReplyTarget: () => given.ReplyTarget ?? testing.cast<Collaboration.ReplyTarget>(fc.oneof(fc.record({ kind: fc.constant('Run' as const), run: a.AgentRunId }), fc.record({ kind: fc.constant('Message' as const), request: a.RequestId }))),
@@ -261,12 +324,14 @@ export function arbitraries(options: Options = {}): Arbitraries {
         ParticipantId: () => testing.valid(given.ParticipantId ?? testing.collide(testing.cast<Collaboration.ParticipantId>(testing.base('String', { minLength: 1 })), seed), (v) => Collaboration.checkParticipantId(v).length === 0, 'Collaboration.ParticipantId'),
         DisplayName: () => testing.valid(given.DisplayName ?? testing.collide(testing.cast<Collaboration.DisplayName>(testing.base('String', { minLength: 1, maxLength: 200 })), seed), (v) => Collaboration.checkDisplayName(v).length === 0, 'Collaboration.DisplayName'),
         ParticipantRole: () => given.ParticipantRole ?? fc.constantFrom<Collaboration.ParticipantRole>('Facilitator', 'Participant'),
+        SessionMode: () => given.SessionMode ?? fc.constantFrom<Collaboration.SessionMode>('Solo', 'Collab'),
         ActiveSession: () => given.ActiveSession ?? testing.cast<Collaboration.ActiveSession>(a.SessionId),
-        OpenSession: () => testing.withExamples(testing.valid(given.OpenSession ?? testing.cast<Collaboration.OpenSession>(fc.record({ state: fc.constant('Open' as const), id: a.SessionId, facilitator: a.ParticipantId, participants: testing.many(a.Participant, 1), startedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkOpenSession(v).length === 0, 'Collaboration.OpenSession'), options.examples?.Session?.states?.Open, Collaboration.checkOpenSession, 'Collaboration.OpenSession'),
-        ClosedSession: () => testing.withExamples(testing.valid(given.ClosedSession ?? testing.cast<Collaboration.ClosedSession>(fc.record({ state: fc.constant('Closed' as const), id: a.SessionId, facilitator: a.ParticipantId, participants: testing.many(a.Participant, 1), startedAt: testing.cast<Date>(scalar.Timestamp), closedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkClosedSession(v).length === 0, 'Collaboration.ClosedSession'), options.examples?.Session?.states?.Closed, Collaboration.checkClosedSession, 'Collaboration.ClosedSession'),
+        OpenSession: () => testing.withExamples(testing.valid(given.OpenSession ?? testing.cast<Collaboration.OpenSession>(fc.record({ state: fc.constant('Open' as const), id: a.SessionId, facilitator: a.ParticipantId, mode: a.SessionMode, participants: testing.many(a.Participant, 1), startedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkOpenSession(v).length === 0, 'Collaboration.OpenSession'), options.examples?.Session?.states?.Open, Collaboration.checkOpenSession, 'Collaboration.OpenSession'),
+        ClosedSession: () => testing.withExamples(testing.valid(given.ClosedSession ?? testing.cast<Collaboration.ClosedSession>(fc.record({ state: fc.constant('Closed' as const), id: a.SessionId, facilitator: a.ParticipantId, mode: a.SessionMode, participants: testing.many(a.Participant, 1), startedAt: testing.cast<Date>(scalar.Timestamp), closedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkClosedSession(v).length === 0, 'Collaboration.ClosedSession'), options.examples?.Session?.states?.Closed, Collaboration.checkClosedSession, 'Collaboration.ClosedSession'),
         Session: () => given.Session ?? fc.oneof(a.OpenSession, a.ClosedSession),
         Participant: () => given.Participant ?? testing.cast<Collaboration.Participant>(fc.record({ id: a.ParticipantId, name: a.DisplayName, role: a.ParticipantRole, joinedAt: testing.cast<Date>(scalar.Timestamp) })),
-        SessionStarted: () => given.SessionStarted ?? testing.cast<Collaboration.SessionStarted>(fc.record({ type: fc.constant('SessionStarted' as const), sessionId: a.SessionId, facilitator: a.ParticipantId, name: a.DisplayName, startedAt: testing.cast<Date>(scalar.Timestamp) })),
+        SessionStarted: () => given.SessionStarted ?? testing.cast<Collaboration.SessionStarted>(fc.record({ type: fc.constant('SessionStarted' as const), sessionId: a.SessionId, facilitator: a.ParticipantId, name: a.DisplayName, mode: a.SessionMode, startedAt: testing.cast<Date>(scalar.Timestamp) })),
+        SessionCollaborated: () => given.SessionCollaborated ?? testing.cast<Collaboration.SessionCollaborated>(fc.record({ type: fc.constant('SessionCollaborated' as const), sessionId: a.SessionId, collaboratedAt: testing.cast<Date>(scalar.Timestamp) })),
         ParticipantJoined: () => given.ParticipantJoined ?? testing.cast<Collaboration.ParticipantJoined>(fc.record({ type: fc.constant('ParticipantJoined' as const), sessionId: a.SessionId, participant: a.ParticipantId, name: a.DisplayName, joinedAt: testing.cast<Date>(scalar.Timestamp) })),
         SessionClosed: () => given.SessionClosed ?? testing.cast<Collaboration.SessionClosed>(fc.record({ type: fc.constant('SessionClosed' as const), sessionId: a.SessionId, closedAt: testing.cast<Date>(scalar.Timestamp) })),
         ElementName: () => testing.valid(given.ElementName ?? testing.collide(testing.cast<Collaboration.ElementName>(testing.base('String', { minLength: 1 })), seed), (v) => Collaboration.checkElementName(v).length === 0, 'Collaboration.ElementName'),
@@ -278,6 +343,25 @@ export function arbitraries(options: Options = {}): Arbitraries {
         ModelTarget: () => given.ModelTarget ?? testing.cast<Collaboration.ModelTarget>(fc.oneof(fc.record({ kind: fc.constant('Workspace' as const), scope: a.SourceLanguage }, { requiredKeys: ['kind'] }), fc.record({ kind: fc.constant('DtElement' as const), element: a.ElementName }), fc.record({ kind: fc.constant('DtesElement' as const), storming: a.StormingName, local: a.StormingLocalName }), fc.record({ kind: fc.constant('DtesOccurrence' as const), storming: a.StormingName, timeline: a.TimelineName, eventName: a.StormingEventName, occurrence: a.OccurrencePath }))),
         SourceRange: () => testing.valid(given.SourceRange ?? testing.cast<Collaboration.SourceRange>(fc.record({ path: a.WorkspacePath, startLine: a.LineNumber, startColumn: a.ColumnNumber, endLine: a.LineNumber, endColumn: a.ColumnNumber })), (v) => Collaboration.checkSourceRange(v).length === 0, 'Collaboration.SourceRange'),
         TargetSnapshot: () => testing.valid(given.TargetSnapshot ?? testing.cast<Collaboration.TargetSnapshot>(fc.record({ target: a.ModelTarget, sourceRevision: a.RevisionId, label: testing.cast<string>(scalar.String), range: a.SourceRange }, { requiredKeys: ['target', 'sourceRevision'] })), (v) => Collaboration.checkTargetSnapshot(v).length === 0, 'Collaboration.TargetSnapshot'),
+        TriageId: () => testing.valid(given.TriageId ?? testing.collide(testing.cast<Collaboration.TriageId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkTriageId(v).length === 0, 'Collaboration.TriageId'),
+        Confidence: () => testing.valid(given.Confidence ?? testing.collide(testing.cast<Collaboration.Confidence>(testing.base('Decimal', { ge: 0, le: 1 })), seed), (v) => Collaboration.checkConfidence(v).length === 0, 'Collaboration.Confidence'),
+        Milliseconds: () => testing.valid(given.Milliseconds ?? testing.collide(testing.cast<Collaboration.Milliseconds>(testing.base('Int', { ge: 0 })), seed), (v) => Collaboration.checkMilliseconds(v).length === 0, 'Collaboration.Milliseconds'),
+        AddressedBy: () => given.AddressedBy ?? fc.constantFrom<Collaboration.AddressedBy>('Mention', 'Reply', 'Solo', 'Facilitator'),
+        TriageStage: () => given.TriageStage ?? fc.constantFrom<Collaboration.TriageStage>('Mechanical', 'Clef', 'Model', 'Answerer', 'Runner', 'Facilitator'),
+        TriageVerdict: () => given.TriageVerdict ?? fc.constantFrom<Collaboration.TriageVerdict>('Consultation', 'ChangeRequest', 'NotForAi', 'Unknown'),
+        TriageStep: () => testing.valid(given.TriageStep ?? testing.cast<Collaboration.TriageStep>(fc.record({ stage: a.TriageStage, verdict: a.TriageVerdict, confidence: a.Confidence, reason: a.Text, model: testing.cast<string>(scalar.String), durationMs: a.Milliseconds, error: a.Text, at: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['stage', 'verdict', 'durationMs', 'at'] })), (v) => Collaboration.checkTriageStep(v).length === 0, 'Collaboration.TriageStep'),
+        TriageOutcome: () => given.TriageOutcome ?? testing.cast<Collaboration.TriageOutcome>(fc.oneof(fc.record({ kind: fc.constant('Answer' as const), answer: a.RequestId, readRevision: a.RevisionId }, { requiredKeys: ['kind', 'answer'] }), fc.record({ kind: fc.constant('Proposal' as const), proposal: a.ChangeProposalId }), fc.record({ kind: fc.constant('Run' as const), run: a.AgentRunId }))),
+        AddressableRequest: () => given.AddressableRequest ?? testing.cast<Collaboration.AddressableRequest>(a.RequestId),
+        ProposableTriage: () => given.ProposableTriage ?? testing.cast<Collaboration.ProposableTriage>(a.TriageId),
+        PendingTriage: () => testing.withExamples(testing.valid(given.PendingTriage ?? testing.cast<Collaboration.PendingTriage>(fc.record({ state: fc.constant('Pending' as const), id: a.TriageId, session: a.SessionId, request: a.RequestId, addressedBy: a.AddressedBy, addressedByParticipant: a.ParticipantId, steps: testing.many(a.TriageStep, 0), openedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkPendingTriageWith(testing.declared<Collaboration.TriageDeclaredChecks>(['onePerRequest'], declared.Triage))(v).length === 0, 'Collaboration.PendingTriage'), options.examples?.Triage?.states?.Pending, Collaboration.checkPendingTriageWith(testing.declared<Collaboration.TriageDeclaredChecks>(['onePerRequest'], declared.Triage)), 'Collaboration.PendingTriage'),
+        DecidedTriage: () => testing.withExamples(testing.valid(given.DecidedTriage ?? testing.cast<Collaboration.DecidedTriage>(fc.record({ state: fc.constant('Decided' as const), id: a.TriageId, session: a.SessionId, request: a.RequestId, addressedBy: a.AddressedBy, addressedByParticipant: a.ParticipantId, steps: testing.many(a.TriageStep, 0), openedAt: testing.cast<Date>(scalar.Timestamp), kind: a.TriageVerdict, decidedBy: a.TriageStage, decidedAt: testing.cast<Date>(scalar.Timestamp), outcome: a.TriageOutcome }, { requiredKeys: ['state', 'id', 'session', 'request', 'addressedBy', 'addressedByParticipant', 'steps', 'openedAt', 'kind', 'decidedBy', 'decidedAt'] })), (v) => Collaboration.checkDecidedTriageWith(testing.declared<Collaboration.TriageDeclaredChecks>(['onePerRequest'], declared.Triage))(v).length === 0, 'Collaboration.DecidedTriage'), options.examples?.Triage?.states?.Decided, Collaboration.checkDecidedTriageWith(testing.declared<Collaboration.TriageDeclaredChecks>(['onePerRequest'], declared.Triage)), 'Collaboration.DecidedTriage'),
+        Triage: () => given.Triage ?? fc.oneof(a.PendingTriage, a.DecidedTriage),
+        TriageOpened: () => given.TriageOpened ?? testing.cast<Collaboration.TriageOpened>(fc.record({ type: fc.constant('TriageOpened' as const), triageId: a.TriageId, session: a.SessionId, request: a.RequestId, addressedBy: a.AddressedBy, addressedByParticipant: a.ParticipantId, openedAt: testing.cast<Date>(scalar.Timestamp) })),
+        TriageStepRecorded: () => given.TriageStepRecorded ?? testing.cast<Collaboration.TriageStepRecorded>(fc.record({ type: fc.constant('TriageStepRecorded' as const), triageId: a.TriageId, step: a.TriageStep })),
+        TriageDecided: () => given.TriageDecided ?? testing.cast<Collaboration.TriageDecided>(fc.record({ type: fc.constant('TriageDecided' as const), triageId: a.TriageId, kind: a.TriageVerdict, decidedBy: a.TriageStage, decidedAt: testing.cast<Date>(scalar.Timestamp) })),
+        TriageOverridden: () => given.TriageOverridden ?? testing.cast<Collaboration.TriageOverridden>(fc.record({ type: fc.constant('TriageOverridden' as const), triageId: a.TriageId, step: a.TriageStep, kind: a.TriageVerdict })),
+        TriageReaddressed: () => given.TriageReaddressed ?? testing.cast<Collaboration.TriageReaddressed>(fc.record({ type: fc.constant('TriageReaddressed' as const), triageId: a.TriageId, by: a.ParticipantId, readdressedAt: testing.cast<Date>(scalar.Timestamp) })),
+        TriageConcluded: () => given.TriageConcluded ?? testing.cast<Collaboration.TriageConcluded>(fc.record({ type: fc.constant('TriageConcluded' as const), triageId: a.TriageId, to: a.TriageOutcome, concludedAt: testing.cast<Date>(scalar.Timestamp) })),
     });
     return a;
 }
@@ -395,6 +479,24 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 make: impl.make.Emoji,
                 given: declared.Emoji,
             }, options) : []),
+            ...(impl.make.ChangeProposalId ? testing.primitiveCases({
+                type: 'Collaboration.ChangeProposalId',
+                base: 'UUID',
+                hints: {},
+                invariants: ['uuid'],
+                declared: [],
+                check: () => Collaboration.checkChangeProposalId,
+                make: impl.make.ChangeProposalId,
+            }, options) : []),
+            ...(impl.make.ProposalText ? testing.primitiveCases({
+                type: 'Collaboration.ProposalText',
+                base: 'String',
+                hints: { minLength: 1, maxLength: 2000 },
+                invariants: ['valid'],
+                declared: [],
+                check: () => Collaboration.checkProposalText,
+                make: impl.make.ProposalText,
+            }, options) : []),
             ...(impl.make.RequestId ? testing.primitiveCases({
                 type: 'Collaboration.RequestId',
                 base: 'UUID',
@@ -493,6 +595,33 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 declared: [],
                 check: () => Collaboration.checkOccurrencePath,
                 make: impl.make.OccurrencePath,
+            }, options) : []),
+            ...(impl.make.TriageId ? testing.primitiveCases({
+                type: 'Collaboration.TriageId',
+                base: 'UUID',
+                hints: {},
+                invariants: ['uuid'],
+                declared: [],
+                check: () => Collaboration.checkTriageId,
+                make: impl.make.TriageId,
+            }, options) : []),
+            ...(impl.make.Confidence ? testing.primitiveCases({
+                type: 'Collaboration.Confidence',
+                base: 'Decimal',
+                hints: { ge: 0, le: 1 },
+                invariants: ['valid'],
+                declared: [],
+                check: () => Collaboration.checkConfidence,
+                make: impl.make.Confidence,
+            }, options) : []),
+            ...(impl.make.Milliseconds ? testing.primitiveCases({
+                type: 'Collaboration.Milliseconds',
+                base: 'Int',
+                hints: { ge: 0 },
+                invariants: ['valid'],
+                declared: [],
+                check: () => Collaboration.checkMilliseconds,
+                make: impl.make.Milliseconds,
             }, options) : []),
         ]),
         impl.AgentRun && testing.suite('AgentRun', [
@@ -675,6 +804,59 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 counted: [],
             }, options),
         ]),
+        impl.ChangeProposal && testing.suite('ChangeProposal', [
+            ...testing.commandCases({
+                name: 'ChangeProposal.propose',
+                run: impl.ChangeProposal.propose,
+                input: () => fc.tuple(fc.record({ id: a.ChangeProposalId, session: a.ActiveSession, triage: a.ProposableTriage, request: a.RequestId, requestedBy: a.ParticipantId, content: a.ProposalContent, proposedAt: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.ChangeProposal?.commands?.propose ?? [],
+                factory: true,
+                requires: [],
+                declaredRequires: [],
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'ChangeProposal.approve',
+                run: impl.ChangeProposal.approve,
+                input: () => fc.tuple(fc.oneof(a.OpenChangeProposal), fc.record({ approvedBy: a.ParticipantId, approvedByRole: a.ParticipantRole, edited: a.ProposalContent, run: a.AgentRunId, approvedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['approvedBy', 'approvedByRole', 'run', 'approvedAt'] })),
+                examples: options.examples?.ChangeProposal?.commands?.approve ?? [],
+                factory: false,
+                requires: [{ name: 'facilitatorApproves', error: 'FacilitatorOnly' }],
+                declaredRequires: [],
+                firstFailing: () => Collaboration.checkApproveChangeProposalRequires,
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'ChangeProposal.reject',
+                run: impl.ChangeProposal.reject,
+                input: () => fc.tuple(fc.oneof(a.OpenChangeProposal), fc.record({ rejectedBy: a.ParticipantId, rejectedByRole: a.ParticipantRole, note: a.Text, rejectedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['rejectedBy', 'rejectedByRole', 'rejectedAt'] })),
+                examples: options.examples?.ChangeProposal?.commands?.reject ?? [],
+                factory: false,
+                requires: [{ name: 'facilitatorRejects', error: 'FacilitatorOnly' }],
+                declaredRequires: [],
+                firstFailing: () => Collaboration.checkRejectChangeProposalRequires,
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'ChangeProposal.withdraw',
+                run: impl.ChangeProposal.withdraw,
+                input: () => fc.tuple(fc.oneof(a.OpenChangeProposal), fc.record({ withdrawnBy: a.ParticipantId, withdrawnAt: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.ChangeProposal?.commands?.withdraw ?? [],
+                factory: false,
+                requires: [{ name: 'requesterWithdraws', error: 'NotTheRequester' }],
+                declaredRequires: [],
+                firstFailing: () => Collaboration.checkWithdrawChangeProposalRequires,
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+        ]),
         impl.Request && testing.suite('Request', [
             ...testing.commandCases({
                 name: 'Request.send',
@@ -699,6 +881,19 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 requires: [{ name: 'facilitatorReverts', error: 'FacilitatorOnly' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkRequestRevertRequestRequires,
+                invariants: () => Collaboration.checkRequest,
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'Request.answer',
+                run: impl.Request.answer,
+                input: () => fc.tuple(fc.record({ id: a.RequestId, session: a.ActiveSession, answers: a.RequestId, body: a.Text, sentAt: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.Request?.commands?.answer ?? [],
+                factory: true,
+                requires: [],
+                declaredRequires: [],
                 invariants: () => Collaboration.checkRequest,
                 declaredInvariants: [],
                 stateful: true,
@@ -743,7 +938,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Session.start',
                 run: impl.Session.start,
-                input: () => fc.tuple(fc.record({ id: a.SessionId, facilitator: a.ParticipantId, name: a.DisplayName, startedAt: testing.cast<Date>(scalar.Timestamp) })),
+                input: () => fc.tuple(fc.record({ id: a.SessionId, facilitator: a.ParticipantId, name: a.DisplayName, mode: a.SessionMode, startedAt: testing.cast<Date>(scalar.Timestamp) })),
                 examples: options.examples?.Session?.commands?.start ?? [],
                 factory: true,
                 requires: [],
@@ -759,9 +954,23 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 input: () => fc.tuple(fc.oneof(a.OpenSession), fc.record({ participant: a.ParticipantId, name: a.DisplayName, joinedAt: testing.cast<Date>(scalar.Timestamp) })),
                 examples: options.examples?.Session?.commands?.join ?? [],
                 factory: false,
-                requires: [{ name: 'newcomer', error: 'AlreadyJoined' }],
+                requires: [{ name: 'newcomer', error: 'AlreadyJoined' }, { name: 'collaborative', error: 'SoloSession' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkJoinSessionRequires,
+                invariants: () => Collaboration.checkSession,
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'Session.collaborate',
+                run: impl.Session.collaborate,
+                input: () => fc.tuple(fc.oneof(a.OpenSession), fc.record({ collaboratedAt: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.Session?.commands?.collaborate ?? [],
+                factory: false,
+                requires: [{ name: 'solo', error: 'NotSolo' }],
+                declaredRequires: [],
+                firstFailing: () => Collaboration.checkCollaborateSessionRequires,
                 invariants: () => Collaboration.checkSession,
                 declaredInvariants: [],
                 stateful: true,
@@ -778,6 +987,83 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 firstFailing: () => Collaboration.checkCloseSessionRequires,
                 invariants: () => Collaboration.checkSession,
                 declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+        ]),
+        impl.Triage && testing.suite('Triage', [
+            ...testing.commandCases({
+                name: 'Triage.open',
+                run: impl.Triage.open,
+                input: () => fc.tuple(fc.record({ id: a.TriageId, session: a.ActiveSession, request: a.AddressableRequest, addressedBy: a.AddressedBy, addressedByParticipant: a.ParticipantId, openedAt: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.Triage?.commands?.open ?? [],
+                factory: true,
+                requires: [],
+                declaredRequires: [],
+                invariants: Collaboration.checkTriageWith,
+                declaredInvariants: ['onePerRequest'],
+                givenInvariants: declared.Triage,
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'Triage.record',
+                run: impl.Triage.record,
+                input: () => fc.tuple(fc.oneof(a.PendingTriage), fc.record({ step: a.TriageStep, recordedAt: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.Triage?.commands?.record ?? [],
+                factory: false,
+                requires: [{ name: 'cascadeStage', error: 'InvalidTriageStep' }, { name: 'mechanicalDecidesNeither', error: 'InvalidTriageStep' }, { name: 'inOrder', error: 'TriageStepOutOfOrder' }],
+                declaredRequires: ['inOrder'],
+                firstFailing: Collaboration.checkRecordTriageRequiresWith,
+                givenRequires: declared.RecordTriage,
+                invariants: Collaboration.checkTriageWith,
+                declaredInvariants: ['onePerRequest'],
+                givenInvariants: declared.Triage,
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'Triage.override',
+                run: impl.Triage.override,
+                input: () => fc.tuple(fc.oneof(a.DecidedTriage), fc.record({ step: a.TriageStep, overriddenAt: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.Triage?.commands?.override ?? [],
+                factory: false,
+                requires: [{ name: 'overridable', error: 'TriageNotOverridable' }],
+                declaredRequires: [],
+                firstFailing: () => Collaboration.checkOverrideTriageRequires,
+                invariants: Collaboration.checkTriageWith,
+                declaredInvariants: ['onePerRequest'],
+                givenInvariants: declared.Triage,
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'Triage.readdress',
+                run: impl.Triage.readdress,
+                input: () => fc.tuple(fc.oneof(a.DecidedTriage), fc.record({ by: a.ParticipantId, byRole: a.ParticipantRole, readdressedAt: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.Triage?.commands?.readdress ?? [],
+                factory: false,
+                requires: [{ name: 'facilitatorReaddresses', error: 'FacilitatorOnly' }, { name: 'decidedNotForAi', error: 'RequestAlreadyAddressed' }],
+                declaredRequires: [],
+                firstFailing: () => Collaboration.checkReaddressTriageRequires,
+                invariants: Collaboration.checkTriageWith,
+                declaredInvariants: ['onePerRequest'],
+                givenInvariants: declared.Triage,
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'Triage.conclude',
+                run: impl.Triage.conclude,
+                input: () => fc.tuple(fc.oneof(a.DecidedTriage), fc.record({ to: a.TriageOutcome, concludedAt: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.Triage?.commands?.conclude ?? [],
+                factory: false,
+                requires: [{ name: 'noOutcomeYet', error: 'TriageAlreadyConcluded' }, { name: 'outcomeFits', error: 'TriageNotConcludable' }],
+                declaredRequires: [],
+                firstFailing: () => Collaboration.checkConcludeTriageRequires,
+                invariants: Collaboration.checkTriageWith,
+                declaredInvariants: ['onePerRequest'],
+                givenInvariants: declared.Triage,
                 stateful: true,
                 counted: [],
             }, options),

@@ -127,7 +127,7 @@ describe('the prompt', () => {
                 queuedAt: '2026-10-31T09:00:00.000Z',
                 baseRevision: crypto.randomUUID(),
                 startedAt: '2026-10-31T09:00:00.000Z',
-                report: { exitCode: 0, formatted: true, checked: true, newDtErrors: 0, unparsedDtes: 0 },
+                report: { exitCode: 0, formatted: 'Ran', checked: 'Ran', newDtErrors: 0, unparsedDtes: 0 },
                 resultRevision: crypto.randomUUID(),
                 changed: true,
                 reply: {
@@ -490,7 +490,7 @@ const completed = (id: string): Json<Collaboration.AgentRun> => ({
     queuedAt: '2026-11-01T09:00:00.000Z',
     baseRevision: '00000000-0000-4000-8000-0000000000c1',
     startedAt: '2026-11-01T09:00:01.000Z',
-    report: { exitCode: 0, formatted: true, checked: true, newDtErrors: 0, unparsedDtes: 0 },
+    report: { exitCode: 0, formatted: 'Ran', checked: 'Ran', newDtErrors: 0, unparsedDtes: 0 },
     resultRevision: '00000000-0000-4000-8000-0000000000c2',
     changed: true,
     reply: {

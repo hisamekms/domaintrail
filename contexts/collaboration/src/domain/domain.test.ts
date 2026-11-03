@@ -11,7 +11,7 @@ import { checkAgentReplyDeep, readAnswer, readReply, REPLY_LIMITS, requestNumber
 import { sha256Hex } from './sha256.js';
 import { changedPaths, hashBytes, languageOf, snapshotFile, snapshotHash, workspacePath } from './snapshot.js';
 import { decodeOccurrencePath, encodeOccurrencePath, targetStatus, type TargetScope } from './targets.js';
-import { diagnosticsDiff, runReport, succeeded, summarize, tally, unparsedDtes } from './validation.js';
+import { diagnosticsDiff, readToolOutcome, runReport, succeeded, summarize, tally, unparsedDtes } from './validation.js';
 import { check } from '../test-helpers.js';
 import { knownAgentRunId, knownRequestId, knownRevisionId, knownSessionId } from './ids.js';
 
@@ -116,10 +116,10 @@ describe('validation per DSL and the run success rule', () => {
         expect(diff.resolvedDtes.map((d) => d.code)).toEqual(['S010']);
         expect(diff.unparsedDtes).toEqual(['t.dtes']);
         expect(unparsedDtes(base)).toEqual([]);
-        expect(runReport({ exitCode: 0, formatted: true, checked: true }, diff)).toEqual({
+        expect(runReport({ exitCode: 0, formatted: 'Ran', checked: 'Ran' }, diff)).toEqual({
             exitCode: 0,
-            formatted: true,
-            checked: true,
+            formatted: 'Ran',
+            checked: 'Ran',
             newDtErrors: tally(2),
             unparsedDtes: tally(1),
         });
@@ -127,15 +127,45 @@ describe('validation per DSL and the run success rule', () => {
 
     test('pre-existing errors and new .dtes warnings do not fail a run', () => {
         const diff = diagnosticsDiff(base, [...base, diagnostic('s.dtes', 'S003', 'warning', 'Another unused event.')]);
-        expect(succeeded(runReport({ exitCode: 0, formatted: true, checked: true }, diff))).toBe(true);
+        expect(succeeded(runReport({ exitCode: 0, formatted: 'Ran', checked: 'Ran' }, diff), true)).toBe(true);
     });
 
-    test('a run succeeds only with exit 0, fmt and check run, no new .dt error and every .dtes parsing', () => {
-        const ok: C.RunReport = { exitCode: 0, formatted: true, checked: true, newDtErrors: tally(0), unparsedDtes: tally(0) };
-        expect(succeeded(ok)).toBe(true);
-        for (const broken of [{ exitCode: 1 }, { formatted: false }, { checked: false }, { newDtErrors: tally(1) }, { unparsedDtes: tally(1) }]) {
-            expect(succeeded({ ...ok, ...broken })).toBe(false);
-        }
+    test('a run that changed files succeeds only with exit 0, fmt and check run, no new .dt error and every .dtes parsing', () => {
+        const ok: C.RunReport = { exitCode: 0, formatted: 'Ran', checked: 'Ran', newDtErrors: tally(0), unparsedDtes: tally(0) };
+        expect(succeeded(ok, true)).toBe(true);
+        const broken: Partial<C.RunReport>[] = [
+            { exitCode: 1 },
+            { formatted: 'Failed' },
+            { checked: 'Failed' },
+            { formatted: 'Skipped' },
+            { checked: 'Skipped' },
+            { newDtErrors: tally(1) },
+            { unparsedDtes: tally(1) },
+        ];
+        for (const b of broken) expect(succeeded({ ...ok, ...b }, true)).toBe(false);
+    });
+
+    test('a run that changed nothing may skip fmt and check, but never fail them (ADR 0030)', () => {
+        const skipped: C.RunReport = { exitCode: 0, formatted: 'Skipped', checked: 'Skipped', newDtErrors: tally(0), unparsedDtes: tally(0) };
+        expect(succeeded(skipped, false)).toBe(true);
+        expect(succeeded({ ...skipped, formatted: 'Ran', checked: 'Ran' }, false)).toBe(true);
+        expect(succeeded({ ...skipped, checked: 'Failed' }, false)).toBe(false);
+        expect(succeeded({ ...skipped, formatted: 'Failed' }, false)).toBe(false);
+        expect(succeeded({ ...skipped, exitCode: 2 }, false)).toBe(false);
+        expect(succeeded({ ...skipped, newDtErrors: tally(1) }, false)).toBe(false);
+    });
+
+    test('the tool outcome of a finish body: the new words, and booleans from an older subscriber', () => {
+        expect(['ran', 'failed', 'skipped', true, false, 'yes', undefined, 1].map(readToolOutcome)).toEqual([
+            'Ran',
+            'Failed',
+            'Skipped',
+            'Ran',
+            'Failed',
+            undefined,
+            undefined,
+            undefined,
+        ]);
     });
 });
 
@@ -231,7 +261,7 @@ describe('transitions', () => {
     const result = knownRevisionId('00000000-0000-4000-8000-000000000003');
 
     test('a session starts with its facilitator, admits a newcomer once, and closes', () => {
-        const open = value(sessionCommands.start({ id: sessionId, facilitator, name, startedAt: at })).Open.aggregate;
+        const open = value(sessionCommands.start({ id: sessionId, facilitator, name, mode: 'Collab', startedAt: at })).Open.aggregate;
         expect(open.participants).toEqual([{ id: facilitator, name, role: 'Facilitator', joinedAt: at }]);
         const joined = value(sessionCommands.join(open, { participant: guest, name, joinedAt: later })).Open.aggregate;
         expect(joined.participants.map((p) => [p.id, p.role])).toEqual([
@@ -270,8 +300,8 @@ describe('transitions', () => {
     };
     const report = (newDtErrors: number): C.RunReport => ({
         exitCode: 0,
-        formatted: true,
-        checked: true,
+        formatted: 'Ran',
+        checked: 'Ran',
         newDtErrors: tally(newDtErrors),
         unparsedDtes: tally(0),
     });

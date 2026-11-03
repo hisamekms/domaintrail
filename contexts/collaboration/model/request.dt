@@ -26,13 +26,14 @@ context Collaboration {
   /// リビジョンが違う）で、まだ打ち消されておらず、打ち消しの待ちや最中でもない。
   verified RevertableRun "打ち消せる実行" of AgentRunId for SessionId errors RunNotFound, RunOfAnotherSession, RunNotRevertable
 
-  /// 本文で言及できると、依頼を送るときに確かめた人。そのセッションの参加者（オフラインの人も）。
+  /// 本文で言及できると、依頼を送るときに確かめた人。そのセッションの参加者（オフラインの人も）と、AI（予約の参加者 ID `ai`）。
   verified MentionableParticipant "言及できる参加者" of ParticipantId for SessionId errors MentionedNotAParticipant
 
-  /// 参加者がモデルの要素について送る依頼。送ったあとは変わらない。下書きはブラウザにだけ置く。
+  /// 参加者がモデルの要素について送るメッセージ（以前の名前は依頼）。送ったあとは変わらない。下書きはブラウザにだけ置く。
+  /// AI の回答も、書き手が AI（`ai`）のメッセージで、答えたメッセージへの返信。AI として送れるのはサーバーの `answer` だけ。
   /// 対象は0〜20件。対象がなければワークスペース全体についての依頼。本文の要素の言及（`#注文[1]`、以前の `@注文[1]`）は
   /// 対象の番号で、人の言及（`@佐藤[p1]`）は言及した人の番号で指す。
-  aggregate Request "依頼" {
+  aggregate Request "メッセージ" {
     id: RequestId
     references session: SessionId -> Session
     author: ParticipantId "依頼者"
@@ -81,6 +82,11 @@ context Collaboration {
       requires facilitatorReverts "ファシリテーターが打ち消す" {
         authorRole == ParticipantRole.Facilitator
       } else FacilitatorOnly
+      emits RequestSent
+
+    /// 読むだけの AI（回答役）が、相談のメッセージに答える。書き手は AI（`ai`）で、答えたメッセージへの返信。対象も言及もない。
+    create command answer(id: RequestId, session: ActiveSession, answers: RequestId "答えるメッセージ", body: Text, sentAt: Timestamp) "AI が答える"
+      -> Sent
       emits RequestSent
   }
 

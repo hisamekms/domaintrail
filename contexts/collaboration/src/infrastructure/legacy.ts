@@ -5,6 +5,8 @@
 // written before people could be mentioned are read as mentioning no one (`mentions: []`), and a reply written
 // before a message could reply to a message names its run by its ID alone (`replyTo: "<id>"`): it is read as
 // `{ kind: 'Run', run }` in a request, the frozen copy of a request in a run's input, and the `RequestSent` event.
+// Since ADR 0030, a session and its `SessionStarted` written before sessions had a mode are read as Collab, and a run's
+// report written when `formatted` / `checked` were booleans is read with `Ran` (true) or `Failed` (false: did not run).
 
 type Raw = Record<string, unknown>;
 
@@ -34,13 +36,32 @@ function withReplyTarget(v: unknown): unknown {
 /** A request as stored. */
 export const upgradeRequest = (v: unknown): unknown => withReplyTarget(withMentions(withTargets(v)));
 
-/** A run: the frozen requests of its input. */
-export function upgradeRun(v: unknown): unknown {
-    if (!isObject(v) || !isObject(v.input) || !Array.isArray(v.input.requests)) return v;
-    return { ...v, input: { ...v.input, requests: v.input.requests.map((r) => withReplyTarget(withTargets(r))) } };
+/** A tool's former boolean in a report as its outcome. */
+const outcome = (v: unknown): unknown => (v === true ? 'Ran' : v === false ? 'Failed' : v);
+
+/** A run's report with its former booleans as outcomes; any other value as it is. */
+function withOutcomes(v: Raw): Raw {
+    const report = v.report;
+    if (!isObject(report) || (typeof report.formatted !== 'boolean' && typeof report.checked !== 'boolean')) return v;
+    return { ...v, report: { ...report, formatted: outcome(report.formatted), checked: outcome(report.checked) } };
 }
 
-/** An event of the outbox: a `RequestSent`. */
+/** A run: the frozen requests of its input, and its report's outcomes. */
+export function upgradeRun(v: unknown): unknown {
+    if (!isObject(v)) return v;
+    const run = withOutcomes(v);
+    if (!isObject(run.input) || !Array.isArray(run.input.requests)) return run;
+    return { ...run, input: { ...run.input, requests: run.input.requests.map((r) => withReplyTarget(withTargets(r))) } };
+}
+
+/** An object without `mode` (a session, or its `SessionStarted`, written before modes) as a Collab one. */
+const withMode = (v: unknown): unknown => (isObject(v) && !('mode' in v) ? { ...v, mode: 'Collab' } : v);
+
+/** A session as stored. */
+export const upgradeSession = withMode;
+
+/** An event of the outbox: a `RequestSent`, a `SessionStarted`. */
 export function upgradeEvent(v: unknown): unknown {
+    if (isObject(v) && v.type === 'SessionStarted') return withMode(v);
     return isObject(v) && v.type === 'RequestSent' ? withReplyTarget(withMentions(withTargets(v))) : v;
 }

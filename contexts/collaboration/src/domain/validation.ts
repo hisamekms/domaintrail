@@ -85,10 +85,21 @@ export function diagnosticsDiff(base: readonly Diagnostic[], result: readonly Di
 /** What the agent and the pipeline report about a run, before the diagnostics are compared. */
 export interface RunFacts {
     readonly exitCode: number;
-    /** `dt fmt` ran. */
-    readonly formatted: boolean;
-    /** `dt check` ran. */
-    readonly checked: boolean;
+    /** `dt fmt`: ran, failed, or skipped (no file changed). */
+    readonly formatted: Collaboration.ToolOutcome;
+    /** `dt check`: ran, failed, or skipped (no file changed). */
+    readonly checked: Collaboration.ToolOutcome;
+}
+
+/**
+ * A tool's outcome as an agent API body gives it: `'ran'`, `'failed'` or `'skipped'`, or a boolean from a subscriber
+ * before skipping existed (true: ran; false: did not run, a failure). `undefined` for anything else.
+ */
+export function readToolOutcome(v: unknown): Collaboration.ToolOutcome | undefined {
+    if (v === true || v === 'ran') return 'Ran';
+    if (v === false || v === 'failed') return 'Failed';
+    if (v === 'skipped') return 'Skipped';
+    return undefined;
 }
 
 /** The report of a run: the facts, and the counts of the diagnostics diff that the success rule looks at. */
@@ -101,9 +112,15 @@ export const runReport = (facts: RunFacts, diff: DiagnosticsDiff): Collaboration
 });
 
 /**
- * The run success rule (ADR 0026): the agent exited 0, `dt fmt` and `dt check` ran, no `.dt` error is new compared
- * with the base revision, and every `.dtes` file parses. Pre-existing diagnostics and `.dtes` warnings do not count.
- * The same expression as the invariant `succeeded` of a completed run.
+ * The run success rule (ADR 0026, amended by ADR 0030): the agent exited 0, no `.dt` error is new compared with the base
+ * revision, every `.dtes` file parses, neither `dt fmt` nor `dt check` failed, and — when the run changed files — both
+ * ran (a run that changed nothing may skip them). Pre-existing diagnostics and `.dtes` warnings do not count. The same
+ * expression as the invariant `succeeded` of a completed run.
  */
-export const succeeded = (report: Collaboration.RunReport): boolean =>
-    report.exitCode === 0 && report.formatted && report.checked && report.newDtErrors === 0 && report.unparsedDtes === 0;
+export const succeeded = (report: Collaboration.RunReport, changed: boolean): boolean =>
+    report.exitCode === 0 &&
+    report.newDtErrors === 0 &&
+    report.unparsedDtes === 0 &&
+    report.formatted !== 'Failed' &&
+    report.checked !== 'Failed' &&
+    (!changed || (report.formatted === 'Ran' && report.checked === 'Ran'));

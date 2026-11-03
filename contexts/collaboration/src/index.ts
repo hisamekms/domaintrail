@@ -72,8 +72,56 @@ export {
     type RunActivityPhase,
 } from './domain/activity.js';
 export { MAX_REQUEST_TARGETS, type TargetStatus } from './domain/targets.js';
+// who talks to the AI (ADR 0030): the AI as a participant, addressing, the triage's stages, proposals, the answerer's
+// output, the session so far, the modes
+export { AI_NAME, AI_PARTICIPANT, AI_PARTICIPANT_ID, isAi } from './domain/ai.js';
+export {
+    ACKNOWLEDGEMENTS,
+    addressing,
+    answerJobOf,
+    CASCADE,
+    clefVerdict,
+    decisionOf,
+    inCascadeOrder,
+    mechanicalVerdict,
+    modelVerdict,
+    nextStage,
+    triageRoute,
+    TRIAGE_THRESHOLDS,
+    type AddressingFacts,
+    type ClefProbabilities,
+    type MechanicalRule,
+    type ModelAnswer,
+    type TriageRoute,
+} from './domain/triage.js';
+export { approvedContent, PROPOSAL_LIMITS, proposalJsonSchema, readProposal, type ProposalData, type ProposalProblem } from './domain/proposals.js';
+export {
+    answererJsonSchema,
+    proposeJsonSchema,
+    readAnswererReply,
+    readProposeReply,
+    readTriageAnswer,
+    TRIAGE_KINDS,
+    TRIAGE_REASON_LIMIT,
+    triageJsonSchema,
+    type AnswererReply,
+    type TriageAnswer,
+    type TriageKindData,
+} from './domain/answers.js';
+export { chatWindow, sessionSoFar, TIMELINE_LIMITS, timelineEntries, type SessionSoFar, type TimelineEntry, type TimelineRecords } from './domain/timeline.js';
+export { sessionOpening, type SessionOpening } from './domain/modes.js';
+export { readToolOutcome, succeeded } from './domain/validation.js';
 // the IDs from values known to be UUIDs (the ID generator's, input already checked); the generated constructors check
-export { knownAgentRunId, knownAssumptionApprovalId, knownMarkId, knownRequestId, knownRevisionId, knownSessionId } from './domain/ids.js';
+export {
+    knownAgentRunId,
+    knownAssumptionApprovalId,
+    knownChangeProposalId,
+    knownMarkId,
+    knownRequestId,
+    knownRevisionId,
+    knownSessionId,
+    knownTriageId,
+} from './domain/ids.js';
 // the rule of the `Emoji` primitive: what counts as one emoji and the form it is kept in (the page decides alike)
 export { DEFAULT_QUICK_REACTIONS, MAX_EMOJI_BYTES, readEmoji } from './domain/emoji.js';
 
@@ -89,6 +137,18 @@ export {
     type RevertOutcome,
     type RevertRequested,
 } from './application/use-cases.js';
+export {
+    MAX_TRIAGE_REASON,
+    type AnswerJob,
+    type AnswerTooLong,
+    type ConversationUseCases,
+    type InvalidTriageInput,
+    type MessageSent,
+    type ProposalsApproved,
+    type SessionOpened,
+    type TriageProgress,
+    type TriageStepInput,
+} from './application/conversation.js';
 export { actorOf, type Actor } from './application/actor.js';
 export { createSessionAccess, secretHash, type LinkInvalid, type SessionAccess } from './application/access.js';
 export {
@@ -101,6 +161,8 @@ export {
     type IdentityMode,
     type IdentityProvider,
 } from './application/identity.js';
+// the classification of every message for the facilitator's 「AI に送る」 (superseded by the triage's stage 2, ADR 0030):
+// kept for today's page until M4/M6 remove it
 export { createClassifications, type Classifications, type MessageClassifier } from './application/classifier.js';
 export { createRunActivities, RUN_ENDING_EVENTS, type RunActivities } from './application/activities.js';
 // its settings in the `session` section of domaintrail.jsonc (T6), composed by the app

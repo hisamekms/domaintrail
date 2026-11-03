@@ -105,6 +105,9 @@ export function statusOf(type: string): number {
         case 'AssumptionNotFound':
         case 'PickMismatch':
         case 'MarkNotForTarget':
+        case 'InvalidTriageStep':
+        case 'InvalidTriageInput':
+        case 'AnswerTooLong':
             return 400;
         case 'Unauthenticated':
             return 401;
@@ -113,6 +116,7 @@ export function statusOf(type: string): number {
         case 'NotYourRequest':
         case 'NotAParticipant':
         case 'FacilitatorDoesNotVote':
+        case 'NotTheRequester':
             return 403;
         case 'NotFound':
         case 'SessionNotFound':
@@ -122,6 +126,8 @@ export function statusOf(type: string): number {
         case 'MarkTargetNotFound':
         case 'RunNotFound':
         case 'RunOfAnotherSession':
+        case 'TriageNotFound':
+        case 'TriageOfAnotherSession':
             return 404;
         case 'BlobMissing':
         case 'ManualRecoveryNeeded':

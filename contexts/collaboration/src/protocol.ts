@@ -45,6 +45,15 @@ export interface SessionStateBody {
     readonly marks: Json<readonly Collaboration.PlacedMark[]>;
     /** The assumptions the facilitator approved, in the order they were approved. */
     readonly approvals: Json<readonly Collaboration.AssumptionApproval[]>;
+    /**
+     * The triages of the messages addressed to the AI, in the order they were opened (ADR 0030; absent from a server
+     * before them). M4 sends each page the outcome and the facilitator the record.
+     */
+    readonly triages?: Json<readonly Collaboration.Triage[]>;
+    /** The change proposals, in the order they were made (absent from a server before them). */
+    readonly proposals?: Json<readonly Collaboration.ChangeProposal[]>;
+    /** Whether an agent is connected, per role, and how many triages, answers and runs wait for one (M4). */
+    readonly agent?: AgentPresence;
     /** The emoji the add-reaction popover offers first (`session.quickReactions`), in the form reactions are kept. */
     readonly quickReactions: readonly string[];
     /** The outbox position the state includes: event messages with a `seq` up to it are already in it. */
@@ -95,6 +104,7 @@ export const EVENT_MESSAGE_TYPES = {
     SessionStarted: 'session.started',
     ParticipantJoined: 'session.participant_joined',
     SessionClosed: 'session.closed',
+    SessionCollaborated: 'session.collaborated',
     RequestSent: 'request.sent',
     RequestDismissed: 'request.dismissed',
     RunQueued: 'run.queued',
@@ -111,6 +121,16 @@ export const EVENT_MESSAGE_TYPES = {
     MarkPlaced: 'mark.placed',
     MarkRemoved: 'mark.removed',
     AssumptionApproved: 'assumption.approved',
+    TriageOpened: 'triage.opened',
+    TriageStepRecorded: 'triage.step_recorded',
+    TriageDecided: 'triage.decided',
+    TriageOverridden: 'triage.overridden',
+    TriageReaddressed: 'triage.readdressed',
+    TriageConcluded: 'triage.concluded',
+    ChangeProposed: 'proposal.proposed',
+    ProposalApproved: 'proposal.approved',
+    ProposalRejected: 'proposal.rejected',
+    ProposalWithdrawn: 'proposal.withdrawn',
 } as const satisfies Record<Collaboration.PersistentEvent['type'], string>;
 
 type EventType = Collaboration.PersistentEvent['type'];
@@ -131,7 +151,9 @@ export type SessionServerMessage =
     | { readonly type: 'presence.snapshot'; readonly peers: readonly Presence[] }
     | { readonly type: 'presence.update'; readonly presence: Presence }
     | { readonly type: 'presence.leave'; readonly connection: string }
-    // the facilitator's only (ADR 0026, amendment): how the chat's messages read, when a classifier is configured
+    // the facilitator's only (ADR 0026, amendment): how the chat's messages read, when a classifier is configured.
+    // Superseded by the triage (ADR 0030): kept for today's page until M4/M6 remove it
+    | { readonly type: 'agent.presence'; readonly agent: AgentPresence }
     | { readonly type: 'session.classifications'; readonly classifications: Readonly<Record<string, Classification>> }
     | { readonly type: 'session.classification'; readonly request: string; readonly classification: Classification }
     // what the running runs are doing (ADR 0026, amendment): transient, never an event; every activity held on connect,
@@ -139,7 +161,14 @@ export type SessionServerMessage =
     | { readonly type: 'session.activities'; readonly activities: Readonly<Record<string, RunActivity>> }
     | { readonly type: 'run.activity'; readonly run: string; readonly activity: RunActivity };
 
-/** The message type of a session message (`session.*`, `request.*`, `run.*`, `revision.*`, `mark.*`, `assumption.*`, `presence.*`). */
+/** The agents connected to a session, per role, and the work waiting for one (ADR 0030; the chat header's AI status). */
+export interface AgentPresence {
+    readonly connected: { readonly answer: number; readonly run: number };
+    /** Triages waiting for stage 3, answers and proposals to write, runs queued. */
+    readonly waiting: number;
+}
+
+/** The message type of a session message (`session.*`, `request.*`, `run.*`, `revision.*`, `mark.*`, `assumption.*`, `triage.*`, `proposal.*`, `agent.*`, `presence.*`). */
 export type SessionMessageType = SessionServerMessage['type'];
 
 /** An error of the session APIs: `{ "error": { "type": …, … } }` with an HTTP status. */
@@ -173,6 +202,32 @@ export interface SendRequestBody {
     readonly body: string;
     readonly replyTo?: Json<Collaboration.ReplyTarget>;
     readonly mentions?: readonly string[];
+}
+
+/** `POST /api/session/requests/:id/address` and `POST /api/session/requests/address` (the facilitator's 「AI に送る」, ADR 0030): the messages. */
+export interface AddressBody {
+    readonly requests: readonly string[];
+}
+
+/** A change proposal's text: what, where (elements as `#name`), how (`PROPOSAL_LIMITS` of `domain/proposals.ts`). */
+export interface ProposalBody {
+    readonly what: string;
+    readonly where: string;
+    readonly how: string;
+}
+
+/**
+ * `POST /api/session/proposals/approve` (the facilitator): open proposals of the session, each as is or edited; approved
+ * together, one run (`note`: the facilitator's note on it).
+ */
+export interface ApproveProposalsBody {
+    readonly proposals: readonly { readonly proposal: string; readonly edited?: ProposalBody }[];
+    readonly note?: string;
+}
+
+/** `POST /api/session/proposals/:id/reject` (the facilitator): an optional note to the requester. */
+export interface RejectProposalBody {
+    readonly note?: string;
 }
 
 /**
@@ -425,7 +480,11 @@ export interface AgentReplyBody {
     readonly outcome: 'done' | 'clarification' | 'declined';
     readonly title?: string;
     readonly summary: string;
-    readonly requests: readonly { readonly request: string; readonly status: 'done' | 'partial' | 'skipped' | 'question'; readonly note?: string }[];
+    readonly requests: readonly {
+        readonly request: string;
+        readonly status: 'done' | 'partial' | 'skipped' | 'question' | 'answered';
+        readonly note?: string;
+    }[];
     readonly questions?: readonly {
         readonly id: string;
         readonly text: string;
@@ -438,7 +497,15 @@ export interface AgentReplyBody {
         readonly requests?: readonly string[];
         readonly alternatives?: readonly { readonly id: string; readonly label: string }[];
     }[];
+    /** The answer, when the agent judged a request a question and changed nothing (its status `answered`). */
+    readonly answer?: string;
 }
+
+/**
+ * How `dt fmt` / `dt check` went after a run: ran, failed, or skipped because no file changed (ADR 0030). A boolean is
+ * a subscriber before skipping existed (true: ran; false: failed): still taken.
+ */
+export type ToolOutcomeBody = 'ran' | 'failed' | 'skipped' | boolean;
 
 /**
  * `POST /agent/runs/:id/finish`: the agent's facts; the server compares the diagnostics and decides the rest. `reply`
@@ -446,8 +513,8 @@ export interface AgentReplyBody {
  */
 export interface AgentFinishBody extends AgentLeaseBody {
     readonly exitCode: number;
-    readonly formatted: boolean;
-    readonly checked: boolean;
+    readonly formatted: ToolOutcomeBody;
+    readonly checked: ToolOutcomeBody;
     readonly reply?: AgentReplyBody;
 }
 
@@ -476,4 +543,84 @@ export interface AgentActivityBody extends AgentLeaseBody {
 /** `POST /agent/runs/:id/fail`. */
 export interface AgentFailBody extends AgentLeaseBody {
     readonly reason: 'AgentError' | 'Interrupted';
+}
+
+// ---- Agent API: the answerer role (ADR 0030, decision 6). Types only: the routes are M4's ----
+
+/** The two roles of an agent: the read-only answerer (triage, answers, proposals) and the runner (runs). */
+export const AGENT_ROLES = ['answer', 'run'] as const;
+export type AgentRole = (typeof AGENT_ROLES)[number];
+
+/**
+ * The SSE stream `GET /agent/answers/events` (the answerer role; no claim, no lease, no workspace lock): `event:` one of
+ * these, `data:` an `AgentAnswerJobBody` (`answer.job`), `{ job }` (`answer.job_withdrawn`: handed to another answerer or
+ * no longer needed), or the `EventMessage` of `session.closed`. Each job is handed to one connected answerer; one not
+ * answered within its timeout, or whose answerer disconnects, is handed to another or waits.
+ */
+export const AGENT_ANSWER_EVENT_TYPES = {
+    job: 'answer.job',
+    withdrawn: 'answer.job_withdrawn',
+    closed: 'session.closed',
+} as const;
+
+export type AgentAnswerEventType = (typeof AGENT_ANSWER_EVENT_TYPES)[keyof typeof AGENT_ANSWER_EVENT_TYPES];
+
+/** The kinds of answer jobs: stage 3 of the triage, an answer to a 相談, a proposal for a participant's 依頼. */
+export type AgentAnswerJobKind = 'triage' | 'answer' | 'propose';
+
+/** An answer job as the answerer gets it. */
+export interface AgentAnswerJobBody {
+    /** The job's ID: `POST /agent/answers/:job` returns its result. */
+    readonly job: string;
+    readonly kind: AgentAnswerJobKind;
+    readonly triage: Json<Collaboration.Triage>;
+    /** The addressed message. */
+    readonly request: Json<Collaboration.Request>;
+    /** Its author's display name. */
+    readonly author: string;
+    /** The most milliseconds the result may take (`agent.answer.timeout`). */
+    readonly timeoutMs: number;
+    /** A triage job: the chat before the message, one line each (`chatWindow` of `domain/timeline.ts`). */
+    readonly chat?: readonly string[];
+    /** A triage job: the open change proposals, so that 「それでお願いします」 reads as a 依頼. */
+    readonly openProposals?: Json<readonly Collaboration.OpenChangeProposal[]>;
+    /** An answer or propose job: the session so far (`sessionSoFar`), whole or since the answerer's last entry. */
+    readonly sessionSoFar?: { readonly text: string; readonly last: number; readonly since?: number };
+    /** An answer or propose job: the runs the message replies to, with what they changed. */
+    readonly previousRuns?: readonly AgentPreviousRun[];
+    /** An answer job: the files changed since the answerer's previous job ended (for a warm process). */
+    readonly changedSinceYourLastAnswer?: readonly string[];
+}
+
+/** `POST /agent/answers/:job` for a triage job: stage 3's answer (`readTriageAnswer` of `domain/answers.ts`), or why it failed. */
+export type AgentTriageResultBody =
+    | {
+          readonly kind: 'consultation' | 'change_request' | 'neither' | 'unknown';
+          readonly confidence: number;
+          readonly reason: string;
+          readonly model?: string;
+          readonly durationMs: number;
+      }
+    | { readonly error: string; readonly durationMs: number };
+
+/**
+ * `POST /agent/answers/:job` for an answer job: the answer (`readRevision`: the revision the answerer read, the latest
+ * at its start), "this is a request" with a proposal (the override), or "neither" (`readAnswererReply`).
+ */
+export type AgentAnswerResultBody = (
+    | { readonly kind: 'answer'; readonly answer: string; readonly readRevision?: string }
+    | { readonly kind: 'proposal'; readonly proposal: ProposalBody; readonly reason?: string }
+    | { readonly kind: 'neither'; readonly reason?: string }
+) & { readonly model?: string; readonly durationMs: number };
+
+/** `POST /agent/answers/:job` for a propose job: the proposal (`readProposeReply`). */
+export interface AgentProposeResultBody {
+    readonly proposal: ProposalBody;
+    readonly durationMs: number;
+}
+
+/** `POST /agent/answers/:job` for any job that failed (the process crashed, timed out, gave no valid output). */
+export interface AgentAnswerFailedBody {
+    readonly error: string;
+    readonly durationMs: number;
 }

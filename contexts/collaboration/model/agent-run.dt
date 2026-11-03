@@ -10,11 +10,14 @@ context Collaboration {
     Interrupted "中断"
   }
 
+  /// 実行のあとの `dt fmt` / `dt check` の結果。ファイルが変わらなかった実行は省く。
+  enum ToolOutcome "dt の工程の結果" { Ran "実行した" Failed "失敗した" Skipped "変更がなく省いた" }
+
   /// エージェントの実行のあとに、実行パイプラインが集めた事実。
   value RunReport "実行の報告" {
     exitCode: Int "終了コード"
-    formatted: Bool "dt fmt を実行した"
-    checked: Bool "dt check を実行した"
+    formatted: ToolOutcome "dt fmt"
+    checked: ToolOutcome "dt check"
     newDtErrors: Tally "基準リビジョンより増えた .dt のエラー"
     unparsedDtes: Tally "構文解析できない .dtes"
   }
@@ -52,8 +55,13 @@ context Collaboration {
     note: Text? "ファシリテーターの補足"
     answer: Answer? "前の実行の問いへの回答"
     pick: AlternativePick? "前の実行の前提で選んだ別案"
+    /// ファシリテーターがまとめて承認した変更案。エージェントは承認した文に従う。
+    proposals: ApprovedProposals? "承認した変更案"
 
     invariant distinctRequests "依頼は1件1回" { unique(requests, r => r.request) }
+    invariant proposalsOfRequests "変更案は束ねた依頼のもの" {
+      exists(proposals) implies all(proposals.approved, p => any(requests, r => r.request == p.request))
+    }
   }
 
   /// エージェントの返答の中で、問いや選択肢を指す短いキー（英数字と `_` `-`）。長さの上限は返答の上限（コード）が決める。
@@ -65,6 +73,8 @@ context Collaboration {
     Partial "一部だけ対応した"
     Skipped "対応しなかった"
     Question "問いがある"
+    /// 依頼でなく問いだと判じて、ファイルを変えずに答えた（返答の `answer`）。
+    Answered "問いとして答えた"
   }
 
   /// 依頼1件についての返答。
@@ -122,9 +132,14 @@ context Collaboration {
     requests: RequestReply[0..*] "依頼ごとの返答"
     questions: ReplyQuestion[0..*] "問い"
     assumptions: ReplyAssumption[0..*] "前提"
+    /// 依頼が問いだったときの答え（上限はコードの `REPLY_LIMITS.answer`）。問いとして答えた依頼があれば、ある。
+    answer: Text? "回答"
 
     invariant distinctRequests "依頼は1件1回" { unique(requests, r => r.request) }
     invariant distinctQuestions "問いのキーは1回" { unique(questions, q => q.id) }
+    invariant answeredHasAnswer "問いとして答えた依頼には回答がある" {
+      any(requests, r => r.status == RequestProgress.Answered) implies exists(answer)
+    }
   }
 
   /// ファシリテーターが選んだ、問い1つへの答え。登録のときに問いと選択肢を写し取る。
@@ -202,9 +217,10 @@ context Collaboration {
       reply: AgentReply? "エージェントの返答"
       finishedAt: Timestamp "終了日時"
 
-      /// エージェントが 0 で終了し、dt fmt と dt check を実行し、基準リビジョンより .dt のエラーが増えず、すべての .dtes が構文解析できる。
+      /// エージェントが 0 で終了し、基準リビジョンより .dt のエラーが増えず、すべての .dtes が構文解析でき、dt fmt と dt check が
+      /// 失敗せず、ファイルを変えたなら両方を実行した（変えなかったなら省いてよい）。
       invariant succeeded "成功の条件を満たす" {
-        report.exitCode == 0 and report.formatted == true and report.checked == true and report.newDtErrors == 0 and report.unparsedDtes == 0
+        report.exitCode == 0 and report.newDtErrors == 0 and report.unparsedDtes == 0 and report.formatted != ToolOutcome.Failed and report.checked != ToolOutcome.Failed and (changed == true implies (report.formatted == ToolOutcome.Ran and report.checked == ToolOutcome.Ran))
       }
       /// 何も変わらなかった実行の結果リビジョンは基準リビジョンそのもの。
       invariant unchangedKeepsBase "変更がなければ結果は基準リビジョン" {
@@ -254,7 +270,7 @@ context Collaboration {
       finishedAt: Timestamp "終了日時"
 
       invariant ruleNotMetReported "成功の条件を満たさないことが報告にある" {
-        reason == FailureReason.RuleNotMet implies (exists(report) and not (report.exitCode == 0 and report.formatted == true and report.checked == true and report.newDtErrors == 0 and report.unparsedDtes == 0))
+        reason == FailureReason.RuleNotMet implies (exists(report) and exists(resultRevision) and not (report.exitCode == 0 and report.newDtErrors == 0 and report.unparsedDtes == 0 and report.formatted != ToolOutcome.Failed and report.checked != ToolOutcome.Failed and (resultRevision != baseRevision implies (report.formatted == ToolOutcome.Ran and report.checked == ToolOutcome.Ran))))
       }
     }
     state Cancelled "中止" {
@@ -312,7 +328,8 @@ context Collaboration {
       Queued -> Running
       emits RunStarted
 
-    /// 報告が成功の条件を満たせば完了、満たさなければ失敗（RuleNotMet）。
+    /// 報告が成功の条件を満たせば完了、満たさなければ失敗（RuleNotMet）。成功の条件は変更の有無による（変えなかった実行は
+    /// dt fmt / dt check を省いてよい）。
     /// 返答は完了のときだけ残す（失敗は事実が決め、返答を見せない）。
     command finish(report: RunReport, resultRevision: RevisionId, changed: Bool, reply: AgentReply?, finishedAt: Timestamp) "実行を終える"
       Running -> Completed | Failed

@@ -55,7 +55,7 @@ if (step === 'run') {
     must(await use.startRun({ run: run.id, token: lease.token }));
     const file = path.join(root, 'sales.dt');
     writeFileSync(file, readFileSync(file, 'utf8').replace('id: OrderId', 'id: OrderId\\n    note: String?'));
-    const finished = must(await use.finishRun({ run: run.id, token: lease.token, facts: { exitCode: 0, formatted: true, checked: true } }));
+    const finished = must(await use.finishRun({ run: run.id, token: lease.token, facts: { exitCode: 0, formatted: 'Ran', checked: 'Ran' } }));
     const restored = must(await use.restoreRevision({ session: session.id, revision: revision.id, actor }));
     db.close();
     console.log(JSON.stringify({ session: session.id, run: finished.run.state, changed: finished.run.changed, restored: restored.restored.contentHash === revision.contentHash }));

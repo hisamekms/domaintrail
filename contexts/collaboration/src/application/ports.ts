@@ -59,6 +59,26 @@ export interface ApprovalRepository {
     listBySession(session: SessionId): Collaboration.AssumptionApproval[];
 }
 
+/** The triages of the addressed messages: at most one per message (a unique index). */
+export interface TriageRepository {
+    load(id: Collaboration.TriageId): Collaboration.Triage | undefined;
+    /** Inserts or replaces the triage; a second triage of the same message is refused by the store (it throws). */
+    save(triage: Collaboration.Triage): void;
+    /** The triage of a message, if it was addressed. */
+    ofRequest(request: Collaboration.RequestId): Collaboration.Triage | undefined;
+    /** The triages of a session, in the order they were opened. */
+    listBySession(session: SessionId): Collaboration.Triage[];
+}
+
+/** The change proposals of the sessions. */
+export interface ProposalRepository {
+    load(id: Collaboration.ChangeProposalId): Collaboration.ChangeProposal | undefined;
+    /** Inserts or replaces the proposal. */
+    save(proposal: Collaboration.ChangeProposal): void;
+    /** The proposals of a session, in the order they were made. */
+    listBySession(session: SessionId): Collaboration.ChangeProposal[];
+}
+
 /** A claim on a run: who holds it, its secret token, and until when. */
 export interface Lease {
     readonly owner: string;
@@ -201,6 +221,8 @@ export interface Stores {
     readonly revisions: RevisionStore;
     readonly marks: MarkRepository;
     readonly approvals: ApprovalRepository;
+    readonly triages: TriageRepository;
+    readonly proposals: ProposalRepository;
     readonly outbox: EventOutbox;
     readonly access: AccessStore;
     readonly operations: OperationLog;

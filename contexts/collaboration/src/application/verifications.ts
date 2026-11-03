@@ -6,6 +6,8 @@ import { assumptionStatus } from '../domain/approvals.js';
 import { markTargetStatus } from '../domain/marks.js';
 import { changedPaths, workspacePath } from '../domain/snapshot.js';
 import { revertableChanges, revertStatus } from '../domain/revert.js';
+import { isAi } from '../domain/ai.js';
+import { triageRoute } from '../domain/triage.js';
 import type { Stores, UnitOfWork, WorkspaceSnapshot } from './ports.js';
 
 export interface StoreVerifications {
@@ -16,6 +18,8 @@ export interface StoreVerifications {
     readonly makeMentionableParticipant: Collaboration.MakeMentionableParticipant;
     readonly makeDecidableAssumption: Collaboration.MakeDecidableAssumption;
     readonly makeRevertableRun: Collaboration.MakeRevertableRun;
+    readonly makeAddressableRequest: Collaboration.MakeAddressableRequest;
+    readonly makeProposableTriage: Collaboration.MakeProposableTriage;
 }
 
 /** The states of a run that a message may reply to: it ended, and it does not wait for an answer (a clarification has its form). */
@@ -68,7 +72,11 @@ export function storeVerifications(stores: Stores): StoreVerifications {
             return ok(target as Collaboration.ReplyableTarget);
         },
         async makeMentionableParticipant(id, session) {
-            // anyone who joined the session, online or not (the facilitator too)
+            // anyone who joined the session, online or not (the facilitator too), and the AI, which never joins
+            if (isAi(id)) {
+                // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the AI is part of every session
+                return ok(id as Collaboration.MentionableParticipant);
+            }
             if (!stores.sessions.load(session)?.participants.some((p) => p.id === id)) return err({ type: 'MentionedNotAParticipant', participant: id });
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the check above is the evidence
             return ok(id as Collaboration.MentionableParticipant);
@@ -98,6 +106,36 @@ export function storeVerifications(stores: Stores): StoreVerifications {
                 return err({ type: 'RunNotRevertable', run: id });
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the checks above are the evidence
             return ok(id as Collaboration.RevertableRun);
+        },
+        async makeAddressableRequest(id, session) {
+            const request = stores.requests.load(id);
+            if (!request) return err({ type: 'RequestNotFound', request: id });
+            if (request.session !== session) return err({ type: 'RequestOfAnotherSession', request: id });
+            // a person's message: not the AI's answer, not a revert (the server's own work)
+            if (isAi(request.author) || request.reverts !== undefined) return err({ type: 'RequestNotAddressable', request: id });
+            // one triage per message (the store's unique index keeps it)
+            if (stores.triages.ofRequest(id)) return err({ type: 'RequestAlreadyAddressed', request: id });
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the checks above are the evidence
+            return ok(id as Collaboration.AddressableRequest);
+        },
+        async makeProposableTriage(id, session) {
+            const triage = stores.triages.load(id);
+            if (!triage) return err({ type: 'TriageNotFound', triage: id });
+            if (triage.session !== session) return err({ type: 'TriageOfAnotherSession', triage: id });
+            const found = stores.sessions.load(session);
+            const request = stores.requests.load(triage.request);
+            // a participant's change request, not concluded: the facilitator's, a Solo session's and those the
+            // facilitator addressed go to the queue without a proposal
+            if (
+                triage.state !== 'Decided' ||
+                triage.outcome !== undefined ||
+                !found ||
+                !request ||
+                triageRoute(triage, { mode: found.mode, authorIsFacilitator: request.author === found.facilitator }) !== 'propose'
+            )
+                return err({ type: 'TriageNotProposable', triage: id });
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the checks above are the evidence
+            return ok(id as Collaboration.ProposableTriage);
         },
     };
 }

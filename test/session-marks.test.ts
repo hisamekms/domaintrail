@@ -157,7 +157,7 @@ async function ended(f: Fixture, how: 'clarification' | 'completed'): Promise<C.
             questions: [],
             assumptions: [{ text: 'Only drafts.', requests: [f.message], alternatives: [{ id: 'all', label: 'Any state' }] }],
         });
-        value(await f.use.finishRun({ run: queued.id, token: lease.token, facts: { exitCode: 0, formatted: true, checked: true }, reply }));
+        value(await f.use.finishRun({ run: queued.id, token: lease.token, facts: { exitCode: 0, formatted: 'Ran', checked: 'Ran' }, reply }));
     }
     return queued.id;
 }

@@ -11,13 +11,19 @@ context Collaboration {
   /// セッションでの役割。ファシリテーターはセッションを始めた人で、認証から導かない。
   enum ParticipantRole "役割" { Facilitator "ファシリテーター" Participant "参加者" }
 
+  /// セッションの形。ひとり（`dt open`: ファシリテーターだけで、どのメッセージも AI 宛て）か、共同編集（`dt collab`）か。
+  /// ひとりのセッションは共同編集に切り替えられる（その人がファシリテーターのまま、履歴も残る）。逆はない。
+  enum SessionMode "セッションの形" { Solo "ひとり" Collab "共同編集" }
+
   /// いま開いていることを、依頼の送信やエージェント実行の登録のときに確かめたセッション。
   verified ActiveSession "開いているセッション" of SessionId errors SessionNotFound, SessionAlreadyClosed
 
-  /// ファシリテーターが `dt session start` で開く共同編集の場。
+  /// ファシリテーターが `dt collab`（共同編集）か `dt open`（ひとり）で開く場。AI は参加者 ID `ai`（予約）の仮想の参加者で、
+  /// 参加せず（参加者に含めず、人数にも数えない）、言及でき、回答のメッセージを書く。
   aggregate Session "セッション" {
     id: SessionId
     facilitator: ParticipantId
+    mode: SessionMode "形"
     owns participants: Participant[1..*] "参加者"
     startedAt: Timestamp "開始日時"
 
@@ -34,16 +40,24 @@ context Collaboration {
       closedAt: Timestamp "終了日時"
     }
 
-    create command start(id: SessionId, facilitator: ParticipantId, name: DisplayName, startedAt: Timestamp) "セッションを始める"
+    create command start(id: SessionId, facilitator: ParticipantId, name: DisplayName, mode: SessionMode, startedAt: Timestamp) "セッションを始める"
       -> Open
       emits SessionStarted
 
-    /// 認証された人が初めて参加する。同じ人が開き直しても参加し直しにはならない。
+    /// 認証された人が初めて参加する。同じ人が開き直しても参加し直しにはならない。ひとりのセッションにはほかの人は参加しない。
     command join(participant: ParticipantId, name: DisplayName, joinedAt: Timestamp) "参加する"
       Open -> Open
       requires newcomer "まだ参加していない" { all(participants, p => p.id != participant) } else AlreadyJoined
+      requires collaborative "共同編集のセッション" { mode == SessionMode.Collab } else SoloSession
       changes participants
       emits ParticipantJoined
+
+    /// ひとりのセッションを、共同編集のセッションとして続ける（`dt collab` が開いているひとりのセッションを引き継ぐ）。
+    command collaborate(collaboratedAt: Timestamp) "共同編集にする"
+      Open -> Open
+      requires solo "ひとりのセッション" { mode == SessionMode.Solo } else NotSolo
+      changes mode
+      emits SessionCollaborated
 
     /// セッションを終えるのはファシリテーター。
     command close(closedByRole: ParticipantRole, closedAt: Timestamp) "セッションを終える"
@@ -65,7 +79,13 @@ context Collaboration {
     sessionId: SessionId
     facilitator: ParticipantId
     name: DisplayName
+    mode: SessionMode
     startedAt: Timestamp
+  }
+
+  persistent event SessionCollaborated "共同編集に切り替え" {
+    sessionId: SessionId
+    collaboratedAt: Timestamp
   }
 
   persistent event ParticipantJoined "参加" {
@@ -85,7 +105,17 @@ context Collaboration {
     participant: ParticipantId
   }
 
-  /// ファシリテーターだけができる操作（実行の登録と中止・打ち消し、スナップショット、リビジョンの確認と復元、セッションの終了）を、参加者が求めた。
+  /// ひとりのセッションには、ほかの人は参加しない（共同編集に切り替えてから）。
+  error SoloSession "ひとりのセッション"
+
+  /// セッションはひとりのセッションでない（共同編集にはもうなっている）。
+  error NotSolo "ひとりのセッションでない"
+
+  /// 共同編集のセッションが開いているワークスペースでは、ひとりのセッション（`dt open`）を開かない。`dt collab` で続けるか、
+  /// 共同編集のメニューから終える。
+  error CollabSessionOpen "共同編集のセッションが開いている"
+
+  /// ファシリテーターだけができる操作（実行の登録と中止・打ち消し、スナップショット、リビジョンの復元、変更案の承認と却下、AI への送り直し、セッションの終了）を、参加者が求めた。
   error FacilitatorOnly "ファシリテーターだけの操作"
 
   /// 指定したセッションがない。
