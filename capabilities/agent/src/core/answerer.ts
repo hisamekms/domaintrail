@@ -7,7 +7,7 @@
 //   interview → the read-only agent (the interviewer) → the next question of a `/es:start` or `/model:start`
 //               interview, or its brief
 //   command → the read-only agent → the candidates of a candidate command (`/es:exceptions`, …), or the answer of an
-//             answer command (`/es:recap`; `/es:next` its next steps)
+//             answer command (`/es:recap`; `/hint` its next steps)
 //
 // No claim, no lease, no revision, no `dt fmt` / `dt check`: an answer changes nothing to record, and the read-only
 // guarantee is the agent's tools (its adapter), not this code. A job withdrawn by the server (it timed out there, or is
@@ -35,6 +35,7 @@ import {
     buildProposePrompt,
     buildTriagePrompt,
     commandReadsDiagnostics,
+    type DiagnosticsScope,
 } from './answer-prompt.js';
 import { AgentApiError, type AgentApi, type AnswerAgent, type AnswerTurnResult, type Clock, type WorkspaceFiles } from './ports.js';
 import { changedPaths } from './subscriber.js';
@@ -45,10 +46,11 @@ export interface AnswererDeps {
     readonly agent: AnswerAgent;
     readonly workspace: Pick<WorkspaceFiles, 'scan'>;
     /**
-     * `dt check`'s findings on the `.dtes` files now, one line each (`file:line:column severity code: message`), for
-     * the commands that read them (`/es:names`, `/es:next`); without it, those commands go without.
+     * `dt check`'s findings now, one line each (`file:line:column severity code: message`), on the `.dtes` files
+     * (`stormings`) or on all (`workspace`), for the commands that read them (`/es:names`, `/hint`); without it, those
+     * commands go without.
      */
-    readonly diagnostics?: () => Promise<readonly string[]>;
+    readonly diagnostics?: (scope: DiagnosticsScope) => Promise<readonly string[]>;
     readonly clock: Clock;
     /** A random string per job (the prompt's block delimiter). */
     readonly nonce: () => string;
@@ -132,7 +134,8 @@ export function startAnswerer(deps: AnswererDeps, options: AnswererOptions = {})
     const commandResultOf = async (job: AgentCommandJobBody, signal: AbortSignal, started: number): Promise<Record<string, unknown>> => {
         const elapsed = (): number => Math.max(0, Math.round(now() - started));
         // the findings are a help, not a need: a check that fails leaves them out
-        const diagnostics = deps.diagnostics && commandReadsDiagnostics(job.name) ? await deps.diagnostics().catch(() => undefined) : undefined;
+        const scope = commandReadsDiagnostics(job.name);
+        const diagnostics = deps.diagnostics && scope ? await deps.diagnostics(scope).catch(() => undefined) : undefined;
         const prompt = buildCommandPrompt(job, deps.nonce(), { ...practice, ...(diagnostics && { diagnostics }) });
         const result = await deps.agent.command({ prompt, type: job.type, signal });
         const meta = { ...(result.model && { model: result.model }), durationMs: elapsed() };
@@ -141,7 +144,7 @@ export function startAnswerer(deps: AnswererDeps, options: AnswererOptions = {})
         if (!read.ok) return { error: `invalid output (${read.error.path})`, ...meta };
         const reply = read.value;
         // the candidates as read (clamped, malformed references dropped) go as the answerer sends them: the server reads them
-        // again; `/es:next`'s steps too, the server writing the message from them
+        // again; `/hint`'s steps too, the server writing the message from them
         if (reply.kind === 'candidates') return { kind: 'candidates', candidates: reply.candidates.map(candidateData), ...meta };
         if (reply.next) return { kind: 'next', ...nextAnswerData(reply.next), ...meta };
         return { kind: 'answer', answer: reply.answer, ...meta };
