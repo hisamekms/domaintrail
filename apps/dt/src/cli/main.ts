@@ -7,7 +7,7 @@ import { generateTypeScript, policyModes, staysInside, testsWarnings } from '@do
 import { type Analysis, analyze } from '@domaintrail/analysis';
 import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/kernel';
 import { checkTestsTypes, checkTsContexts, ConfigError, type ResolvedConfig } from '../config/config.js';
-import { guideTopic, parseGuide, quickReference } from './guide.js';
+import { guideTopic, parseGuide, practiceOf, quickReference } from './guide.js';
 import {
     AGENT_ROLES,
     type AgentOptions,
@@ -690,6 +690,7 @@ Examples:
             run: cfg.agent.run,
             answer: cfg.agent.answer,
             triage: cfg.agent.triage,
+            practice: practiceOf(parseGuide(guide)),
         };
     };
 

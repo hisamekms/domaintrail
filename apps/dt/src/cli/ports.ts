@@ -1,5 +1,5 @@
 import type { SourceFile } from '@domaintrail/kernel';
-import type { AnswerConfig, RunConfig, TriageConfig } from '@domaintrail/agent';
+import type { AnswerConfig, Practice, RunConfig, TriageConfig } from '@domaintrail/agent';
 import type { ResolvedClassifierConfig, ResolvedCollabConfig, ResolvedConfig } from '../config/config.js';
 import type { LanguageServerOptions } from '../lsp/server.js';
 
@@ -128,6 +128,8 @@ export interface AgentOptions {
     answer?: AnswerConfig;
     /** `agent.triage`: the light model of the triage's stage 3. */
     triage?: TriageConfig;
+    /** The ways of working the agent's prompts give: the guide's `storming-practice` and `modeling-practice`. */
+    practice?: Practice;
     log: (line: string) => void;
 }
 

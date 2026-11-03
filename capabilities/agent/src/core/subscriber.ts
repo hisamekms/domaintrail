@@ -32,7 +32,7 @@ import {
     type WorkspaceFiles,
 } from './ports.js';
 import { createActivityReporter } from './activity.js';
-import { buildPrompt } from './prompt.js';
+import { buildPrompt, type Practice } from './prompt.js';
 
 export interface SubscriberDeps {
     readonly api: AgentApi;
@@ -60,6 +60,8 @@ export interface SubscriberOptions {
     readonly activityGapMs?: number;
     /** Reconnection delays of the stream: from `minMs`, doubling up to `maxMs`; ends when none opens for `giveUpMs`. */
     readonly reconnect?: { readonly minMs: number; readonly maxMs: number; readonly giveUpMs: number };
+    /** The ways of working the prompts give for the DSLs a run is about (the guide's); none without it. */
+    readonly practice?: Practice;
 }
 
 /** Why a subscriber ended. */
@@ -134,6 +136,7 @@ export function showPaths(paths: readonly string[]): string {
 export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions): Subscriber {
     const { api, clock, log } = deps;
     const reconnect = options.reconnect ?? DEFAULT_RECONNECT;
+    const practice = options.practice && { practice: options.practice };
     const heartbeatMs = options.heartbeatMs ?? Math.max(50, Math.floor(options.leaseMs / 4));
     const stopping = new AbortController();
     let end: SubscriberEnd | undefined;
@@ -301,9 +304,10 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
             if (soFar) lastSoFar = soFar.last;
             try {
                 outcome = await deps.runner.run({
-                    prompt: buildPrompt(input, names, nonce, previousRuns, revert, { ...(soFar && { sessionSoFar: soFar.text }) }),
+                    prompt: buildPrompt(input, names, nonce, previousRuns, revert, { ...(soFar && { sessionSoFar: soFar.text }), ...practice }),
                     ...(sinceLast && {
                         continuedPrompt: buildPrompt(input, names, nonce, previousRuns, revert, {
+                            ...practice,
                             changedSinceYourLastRun: sinceLast,
                             ...(soFarSince && { sessionSoFar: soFarSince.text }),
                         }),

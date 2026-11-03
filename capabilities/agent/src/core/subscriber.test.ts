@@ -179,6 +179,26 @@ describe('the prompt', () => {
             expect(both).toContain(rule);
         }
     });
+
+    test('the ways of working follow the DSLs the requests are about: .dtes the storming, .dt the modeling, both or none both', () => {
+        const practice = { storming: '### Event Storming with DomainTrail\n\nSTORMING', modeling: '### Modeling with DomainTrail\n\nMODELING' };
+        const prompt = (...requests: Json<Collaboration.FrozenRequest>[]): string => buildPrompt(input(requests), names, 'n', [], [], { practice });
+        const dtes = prompt(frozen({ kind: 'DtesElement', storming: 'Returns', local: 'ReturnRequested' }, 'x'));
+        const dt = prompt(frozen({ kind: 'DtElement', element: 'Sales.Order' }, 'x'));
+        const both = prompt(frozen({ kind: 'DtesStorming', storming: 'Returns' }, 'x'), frozen({ kind: 'DtElement', element: 'Sales.Order' }, 'y'));
+        const none = prompt(frozen({ kind: 'Workspace' }, 'x'));
+        expect([dtes.includes('STORMING'), dtes.includes('MODELING')]).toEqual([true, false]);
+        expect([dt.includes('STORMING'), dt.includes('MODELING')]).toEqual([false, true]);
+        for (const p of [both, none]) expect(p.indexOf('STORMING')).toBeLessThan(p.indexOf('MODELING'));
+        expect(none).toContain(`${practice.storming}\n\n${practice.modeling}`);
+        // after the rules, which win, and before the reply; outside the block of data
+        expect(none.indexOf('14. `sessionSoFar`')).toBeLessThan(none.indexOf('How to work'));
+        expect(none).toContain('The rules above win where they differ');
+        expect(none.indexOf('MODELING')).toBeLessThan(none.indexOf('Your final answer is the reply'));
+        expect(none.indexOf('MODELING')).toBeLessThan(none.indexOf('<requests-n>'));
+        // without the guide's text, no section
+        expect(buildPrompt(input([frozen({ kind: 'Workspace' }, 'x')]), names, 'n')).not.toContain('How to work');
+    });
 });
 
 describe('the session so far, approved proposals and answering instead of editing (ADR 0030)', () => {

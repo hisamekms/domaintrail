@@ -4,9 +4,10 @@
 // stopped without a result, a job past its timeout reported as failed, and the session's end.
 import { describe, expect, test } from 'bun:test';
 import type { AgentAnswerJobBody } from '@domaintrail/collaboration/protocol';
-import { buildProposePrompt } from './answer-prompt.js';
+import { buildAnswerPrompt, buildProposePrompt } from './answer-prompt.js';
 import { startAnswerer } from './answerer.js';
 import type { AgentApi, AnswerAgent, AnswerStreamItem, AnswerTurn, AnswerTurnResult } from './ports.js';
+import type { Practice } from './prompt.js';
 
 const SESSION = '00000000-0000-4000-8000-000000000001';
 const REQUEST = '00000000-0000-4000-8000-000000000002';
@@ -93,7 +94,7 @@ async function waitFor(check: () => boolean, ms = 3_000): Promise<void> {
 
 const sleep = { sleep: (ms: number) => Bun.sleep(Math.min(ms, 10)), every: () => () => {} };
 
-function start(api: AgentApi, agent: AnswerAgent, scans: ReadonlyMap<string, string>[] = [], timeoutMs?: number) {
+function start(api: AgentApi, agent: AnswerAgent, scans: ReadonlyMap<string, string>[] = [], timeoutMs?: number, practice?: Practice) {
     const log: string[] = [];
     let scan = 0;
     let nonce = 0;
@@ -106,7 +107,7 @@ function start(api: AgentApi, agent: AnswerAgent, scans: ReadonlyMap<string, str
             nonce: () => `n${++nonce}`,
             log: (l) => log.push(l),
         },
-        { ...(timeoutMs !== undefined && { timeoutMs }), reconnect: { minMs: 10, maxMs: 10, giveUpMs: 1_000 } },
+        { ...(timeoutMs !== undefined && { timeoutMs }), reconnect: { minMs: 10, maxMs: 10, giveUpMs: 1_000 }, ...(practice && { practice }) },
     );
     return { answerer, log };
 }
@@ -229,6 +230,39 @@ describe('the answerer role', () => {
         expect(prompt).toContain('two or three, never more');
         expect(prompt).toContain('Mark exactly one recommended');
         expect(prompt).not.toMatch(/\bwhere\b \(at most/);
+    });
+
+    test('the answer and propose prompts give the ways of working of the DSLs the message is about: .dtes, .dt, both or none', async () => {
+        const practice = { storming: '### Event Storming with DomainTrail\n\nSTORMING', modeling: '### Modeling with DomainTrail\n\nMODELING' };
+        const about = (...targets: AgentAnswerJobBody['request']['targets'][number]['target'][]): Partial<AgentAnswerJobBody> =>
+            ({
+                request: { ...job('answer', 1).request, targets: targets.map((target) => ({ target, sourceRevision: REVISION })) },
+            }) as Partial<AgentAnswerJobBody>;
+        const dtes = about({ kind: 'DtesStorming', storming: 'Returns' });
+        const dt = about({ kind: 'DtElement', element: 'Sales.Order' });
+        const both = about({ kind: 'DtesElement', storming: 'Returns', local: 'ReturnRequested' }, { kind: 'DtElement', element: 'Sales.Order' });
+        for (const build of [buildAnswerPrompt, buildProposePrompt]) {
+            const prompt = (extra: Partial<AgentAnswerJobBody>): string => build(job('answer', 1, extra), 'n', { practice });
+            const has = (p: string): boolean[] => [p.includes('STORMING'), p.includes('MODELING')];
+            expect(has(prompt(dtes))).toEqual([true, false]);
+            expect(has(prompt(dt))).toEqual([false, true]);
+            expect(has(prompt(both))).toEqual([true, true]);
+            const none = prompt({});
+            expect(none).toContain(`${practice.storming}\n\n${practice.modeling}`);
+            // read-only still: the practice's commands and edits are not the answerer's; outside the block of data
+            expect(none).toContain('You still change nothing\nand run nothing');
+            expect(none.indexOf('MODELING')).toBeLessThan(none.indexOf('<message-n>'));
+            expect(build(job('answer', 1), 'n')).not.toContain('How the people work');
+        }
+        // the answerer passes its practice to both of a warm process's prompts
+        const { api, push } = fakeApi();
+        const agent = fakeAgent([{ text: '', structured: { kind: 'answer', answer: 'ok' } }]);
+        const { answerer } = start(api, agent, [new Map(), new Map()], undefined, practice);
+        push({ kind: 'job', job: job('answer', 1, dtes) });
+        await waitFor(() => agent.turns.length === 1);
+        expect(agent.turns[0].turn.prompt).toContain('STORMING');
+        expect(agent.turns[0].turn.prompt).not.toContain('MODELING');
+        await answerer.stop();
     });
 
     test('a withdrawn job is stopped and not answered; one past its timeout is reported as failed; a restore resets the agent', async () => {
