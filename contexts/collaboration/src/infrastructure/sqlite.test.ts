@@ -2,18 +2,28 @@
 // queue's claim, lease and serial rule, the session directory and its blobs, never through a symbolic link.
 import { afterAll, describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import type { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync } from 'node:sqlite';
 import { Collaboration as C } from '../generated/index.js';
 import type { Stores } from '../application/ports.js';
 import { agentRunCommands, sessionCommands } from '../domain/commands.js';
 import { createFileBlobs, openSessionBlobs } from './blobs.js';
 import { writeServerAddress } from './session-files.js';
 import { UnsafeSessionPath } from './session-dir.js';
-import { MIGRATIONS, NewerSchema, createUnitOfWork, decodeJson, encodeJson, openDatabase, openSessionDatabase } from './sqlite.js';
-import { knownAgentRunId, knownRequestId, knownRevisionId, knownSessionId } from '../domain/ids.js';
+import {
+    CREDENTIAL_TABLES,
+    MIGRATIONS,
+    NewerSchema,
+    cleanMovedDatabase,
+    createUnitOfWork,
+    decodeJson,
+    encodeJson,
+    openDatabase,
+    openSessionDatabase,
+} from './sqlite.js';
+import { knownAgentRunId, knownInterviewId, knownRequestId, knownRevisionId, knownSessionId } from '../domain/ids.js';
 
 /** The error a promise rejects with (fails when it resolves). */
 async function thrown(p: Promise<unknown>): Promise<Error> {
@@ -110,6 +120,7 @@ describe('schema and transactions', () => {
             'run_requests',
             'sessions',
             'sign_ins',
+            'slash_commands',
             'triages',
         ]);
         db.exec(`PRAGMA user_version = ${MIGRATIONS.length + 1}`);
@@ -239,36 +250,40 @@ describe('the run queue', () => {
 });
 
 describe('the session directory and blobs', () => {
-    test('the database is .domaintrail/session/session.db, next to a .gitignore that ignores everything', async () => {
-        const root = await tempDir();
-        const db = await openSessionDatabase(root);
+    test('the database is session.db in the session directory given (made if absent, its parent must exist)', async () => {
+        const dir = path.join(await tempDir(), 'shop-01234567');
+        const db = await openSessionDatabase(dir);
         db.close();
-        expect((await lstat(path.join(root, '.domaintrail', 'session', 'session.db'))).isFile()).toBe(true);
-        expect(await readFile(path.join(root, '.domaintrail', 'session', '.gitignore'), 'utf8')).toBe('*\n');
+        expect((await lstat(path.join(dir, 'session.db'))).isFile()).toBe(true);
+        expect(await thrown(openSessionDatabase(path.join(await tempDir(), 'missing', 'shop-01234567')))).toMatchObject(errorLike(/ENOENT/));
     });
 
     test('nothing is written through a symbolic link', async () => {
         const outside = await tempDir();
-        const linkedTop = await tempDir();
-        await symlink(outside, path.join(linkedTop, '.domaintrail'));
-        expect(await thrown(openSessionDatabase(linkedTop))).toMatchObject(errorLike(UnsafeSessionPath));
-
-        const linkedSession = await tempDir();
-        await mkdir(path.join(linkedSession, '.domaintrail'));
-        await symlink(outside, path.join(linkedSession, '.domaintrail', 'session'));
-        expect(await thrown(openSessionDatabase(linkedSession))).toMatchObject(errorLike(UnsafeSessionPath));
+        const linkedDir = path.join(await tempDir(), 'shop-01234567');
+        await symlink(outside, linkedDir);
+        expect(await thrown(openSessionDatabase(linkedDir))).toMatchObject(errorLike(UnsafeSessionPath));
 
         const linkedDb = await tempDir();
-        await mkdir(path.join(linkedDb, '.domaintrail', 'session'), { recursive: true });
-        await symlink(path.join(outside, 'x.db'), path.join(linkedDb, '.domaintrail', 'session', 'session.db'));
+        await symlink(path.join(outside, 'x.db'), path.join(linkedDb, 'session.db'));
         expect(await thrown(openSessionDatabase(linkedDb))).toMatchObject(errorLike(UnsafeSessionPath));
 
+        const linkedWal = await tempDir();
+        await symlink(path.join(outside, 'x.db-wal'), path.join(linkedWal, 'session.db-wal'));
+        expect(await thrown(openSessionDatabase(linkedWal))).toMatchObject(errorLike(UnsafeSessionPath));
+
         const linkedBlobs = await tempDir();
-        await mkdir(path.join(linkedBlobs, '.domaintrail', 'session'), { recursive: true });
-        await symlink(outside, path.join(linkedBlobs, '.domaintrail', 'session', 'blobs'));
+        await symlink(outside, path.join(linkedBlobs, 'blobs'));
         const blobs = await openSessionBlobs(linkedBlobs);
         const bytes = new TextEncoder().encode('context A {}');
         expect(await thrown(blobs.put([{ hash: createHash('sha256').update(bytes).digest('hex'), bytes }]))).toMatchObject(errorLike(UnsafeSessionPath));
+
+        const linkedServer = await tempDir();
+        await symlink(path.join(outside, 'victim.json'), path.join(linkedServer, 'server.json'));
+        expect(await thrown(writeServerAddress(linkedServer, { url: 'http://127.0.0.1:1', session: 's', pid: process.pid }))).toMatchObject(
+            errorLike(UnsafeSessionPath),
+        );
+        expect(await readdir(outside)).toEqual([]);
     });
 
     test('blobs are stored once by content hash, and read back only with that content', async () => {
@@ -296,22 +311,18 @@ describe('the session is private to the user', () => {
     const sha = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 
     test.skipIf(process.platform === 'win32')('its directories are 0700 and its files 0600, whatever the umask', async () => {
-        const root = await tempDir();
+        const session = path.join(await tempDir(), 'shop-01234567');
         const umask = process.umask(0o000);
         try {
-            const db = await openSessionDatabase(root);
+            const db = await openSessionDatabase(session);
             db.exec('CREATE TABLE IF NOT EXISTS probe (x)');
-            const blobs = await openSessionBlobs(root);
+            const blobs = await openSessionBlobs(session);
             const bytes = new TextEncoder().encode('context A {}');
             await blobs.put([{ hash: sha(bytes), bytes }]);
-            await writeServerAddress(root, { url: 'http://127.0.0.1:1', session: 's', pid: process.pid });
-            const top = path.join(root, '.domaintrail');
-            const session = path.join(top, 'session');
+            await writeServerAddress(session, { url: 'http://127.0.0.1:1', session: 's', pid: process.pid });
             const blobDir = path.join(session, 'blobs', sha(bytes).slice(0, 2));
-            for (const dir of [top, session, path.join(session, 'blobs'), blobDir]) expect({ dir, mode: await modeOf(dir) }).toEqual({ dir, mode: 0o700 });
+            for (const dir of [session, path.join(session, 'blobs'), blobDir]) expect({ dir, mode: await modeOf(dir) }).toEqual({ dir, mode: 0o700 });
             const files = [
-                path.join(top, '.gitignore'),
-                path.join(session, '.gitignore'),
                 path.join(session, 'session.db'),
                 path.join(session, 'session.db-wal'),
                 path.join(session, 'session.db-shm'),
@@ -326,22 +337,20 @@ describe('the session is private to the user', () => {
     });
 
     test.skipIf(process.platform === 'win32')('directories and files an older version left readable by others are tightened when opened', async () => {
-        const root = await tempDir();
-        const old = await openSessionDatabase(root);
-        const blobs = await openSessionBlobs(root);
+        const session = await tempDir();
+        const old = await openSessionDatabase(session);
+        const blobs = await openSessionBlobs(session);
         const bytes = new TextEncoder().encode('context B {}');
         await blobs.put([{ hash: sha(bytes), bytes }]);
         old.close();
-        const top = path.join(root, '.domaintrail');
-        const session = path.join(top, 'session');
         const blobDir = path.join(session, 'blobs', sha(bytes).slice(0, 2));
-        const dirs = [top, session, path.join(session, 'blobs'), blobDir];
-        const files = [path.join(top, '.gitignore'), path.join(session, '.gitignore'), path.join(session, 'session.db'), path.join(blobDir, sha(bytes))];
+        const dirs = [session, path.join(session, 'blobs'), blobDir];
+        const files = [path.join(session, 'session.db'), path.join(blobDir, sha(bytes))];
         for (const dir of dirs) await chmod(dir, 0o755);
         for (const file of files) await chmod(file, 0o644);
 
-        const db = await openSessionDatabase(root);
-        await openSessionBlobs(root);
+        const db = await openSessionDatabase(session);
+        await openSessionBlobs(session);
         db.close();
         for (const dir of dirs) expect({ dir, mode: await modeOf(dir) }).toEqual({ dir, mode: 0o700 });
         for (const file of files) expect({ file, mode: await modeOf(file) }).toEqual({ file, mode: 0o600 });
@@ -441,6 +450,37 @@ describe('rows written before requests had several targets', () => {
             return st.requests.load(request);
         });
         expect(loaded?.viewedAt).toEqual(viewedAt);
+    });
+});
+
+describe("an interview's question with its choices", () => {
+    test('keeps them through the store, after the database is opened again; one stored without them loads as before', async () => {
+        const file = path.join(await tempDir(), 'session.db');
+        const interviewId = knownInterviewId('00000000-0000-4000-8000-000000000030');
+        const question = knownRequestId('00000000-0000-4000-8000-000000000011');
+        const asking = (asked?: C.AskedQuestion): C.AskingInterview => ({
+            state: 'Asking',
+            id: interviewId,
+            session: sessionId,
+            command: 'Es',
+            startedBy: facilitator,
+            opening: request,
+            language: 'Ja',
+            startedAt: at,
+            ...(asked && { asked }),
+        });
+        const asked: C.AskedQuestion = { question, choices: ['返品', '交換'].map((c) => value(C.makeAnswerChoice(c))), multiple: true };
+        const db = openDatabase(file);
+        await createUnitOfWork(db).transaction((st) => {
+            openSession(st, sessionId);
+            sendRequest(st);
+            st.interviews.save(asking(asked));
+        });
+        db.close();
+        const again = createUnitOfWork(openDatabase(file));
+        expect(await again.transaction((st) => st.interviews.load(interviewId))).toEqual(asking(asked));
+        await again.transaction((st) => st.interviews.save(asking()));
+        expect((await again.transaction((st) => st.interviews.load(interviewId))) as unknown).toEqual(asking());
     });
 });
 
@@ -575,5 +615,120 @@ describe('change proposals written when a proposal was three texts', () => {
         // reading changes nothing in the database
         expect(JSON.stringify(db.prepare('SELECT data FROM proposals').all())).toBe(stored);
         db.close();
+    });
+});
+
+describe('a database moved from an older .domaintrail/', () => {
+    /** A session database as dt makes it, with a session and every kind of credential in it. */
+    async function withCredentials(): Promise<string> {
+        const dir = await tempDir();
+        const db = await openSessionDatabase(dir);
+        db.exec(`
+            INSERT INTO sessions (id, state, data) VALUES ('s', 'Open', '{}');
+            INSERT INTO sign_ins (token_hash, session_id, identity, created_at) VALUES ('t', 's', '{}', 1);
+            INSERT INTO facilitator_links (code_hash, session_id, expires_at) VALUES ('c', 's', 1);
+            INSERT INTO invites (code_hash, session_id, created_at, expires_at) VALUES ('i', 's', 1, 2);
+            INSERT INTO facilitators (session_id, provider, subject, bound_at) VALUES ('s', 'access', 'mallory@example.com', 1);
+        `);
+        db.close();
+        return path.join(dir, 'session.db');
+    }
+    const count = (file: string, sql: string): number => {
+        const db = new DatabaseSync(file);
+        try {
+            return Number(db.prepare(sql).get()?.n);
+        } finally {
+            db.close();
+        }
+    };
+
+    test('one dt made: every credential deleted, the session kept', async () => {
+        const file = await withCredentials();
+        expect(cleanMovedDatabase(file)).toBe(true);
+        for (const t of CREDENTIAL_TABLES) expect([t, count(file, `SELECT count(*) AS n FROM ${t}`)]).toEqual([t, 0]);
+        expect(count(file, 'SELECT count(*) AS n FROM sessions')).toBe(1);
+    });
+
+    test('one made at an older migration level (without the later credential tables): cleaned too', async () => {
+        const level = MIGRATIONS.findIndex((m) => m.includes('CREATE TABLE sign_ins')) + 1;
+        expect(level).toBeLessThan(MIGRATIONS.length);
+        const file = path.join(await tempDir(), 'session.db');
+        const db = new DatabaseSync(file);
+        db.exec('PRAGMA foreign_keys = ON');
+        for (let v = 0; v < level; v++) db.exec(MIGRATIONS[v]);
+        db.exec(`PRAGMA user_version = ${level}`);
+        db.exec("INSERT INTO sessions (id, state, data) VALUES ('s', 'Open', '{}')");
+        db.exec("INSERT INTO sign_ins (token_hash, session_id, identity, created_at) VALUES ('t', 's', '{}', 1)");
+        db.close();
+        expect(cleanMovedDatabase(file)).toBe(true);
+        expect(count(file, 'SELECT count(*) AS n FROM sign_ins')).toBe(0);
+    });
+
+    test('refused (false, nothing to use) unless its schema is exactly one dt made: case variants, triggers, views, extra tables, unknown levels', async () => {
+        const crafted = async (sql: string): Promise<string> => {
+            const file = await withCredentials();
+            const db = new DatabaseSync(file);
+            db.exec(sql);
+            db.close();
+            return file;
+        };
+        for (const sql of [
+            'ALTER TABLE sign_ins RENAME TO tmp; ALTER TABLE tmp RENAME TO SIGN_INS',
+            "CREATE TRIGGER keep AFTER DELETE ON sign_ins BEGIN INSERT INTO sign_ins VALUES (old.token_hash || 'x', old.session_id, old.identity, 1, NULL); END",
+            'CREATE VIEW v AS SELECT * FROM sign_ins',
+            'CREATE TABLE extra (x)',
+            'ALTER TABLE sessions ADD COLUMN extra TEXT',
+            'PRAGMA user_version = 0',
+            `PRAGMA user_version = ${MIGRATIONS.length + 1}`,
+            `PRAGMA user_version = ${MIGRATIONS.length - 1}`,
+        ])
+            expect([sql, cleanMovedDatabase(await crafted(sql))]).toEqual([sql, false]);
+        const garbage = path.join(await tempDir(), 'session.db');
+        await writeFile(garbage, 'not a database'.repeat(200));
+        expect(cleanMovedDatabase(garbage)).toBe(false);
+    });
+});
+
+describe('a `/` command written when `/hint` was `/es:next`', () => {
+    test('is read as a Hint, its SlashCommandStarted too; nothing rewritten', async () => {
+        const db = openDatabase(':memory:');
+        // the row alone: its session and opening message are beside the point
+        db.exec('PRAGMA foreign_keys = OFF');
+        const session = knownSessionId('0a7c4f2e-1b3d-4e5f-8a9b-0c1d2e3f4a5b');
+        const command = {
+            state: 'Answered',
+            id: 'c-legacy',
+            session,
+            kind: 'EsNext',
+            startedBy: 'p1',
+            opening: 'r1',
+            language: 'Ja',
+            startedAt: { $date: at.toISOString() },
+            answer: 'r2',
+            next: { status: 'Big Picture まで', steps: [{ text: '例外を洗い出す', reason: '発行に例外がない', command: 'EsExceptions' }] },
+            answeredAt: { $date: at.toISOString() },
+        };
+        db.prepare('INSERT INTO slash_commands (id, session_id, seq, opening_id, run_id, state, data) VALUES (?, ?, 1, ?, NULL, ?, ?)').run(
+            command.id,
+            session,
+            'r1',
+            'Answered',
+            JSON.stringify(command),
+        );
+        const started = { type: 'SlashCommandStarted', commandId: 'c-legacy', session, kind: 'EsNext', startedBy: 'p1', opening: 'r1', language: 'Ja' };
+        db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(
+            session,
+            started.type,
+            JSON.stringify(started),
+            at.toISOString(),
+        );
+        const uow = createUnitOfWork(db);
+        const { commands, events } = await uow.transaction((st) => ({
+            commands: st.slashCommands.listBySession(session),
+            events: st.outbox.readAfter(0, 10, session),
+        }));
+        expect(commands.map((c) => [c.kind, c.state])).toEqual([['Hint', 'Answered']]);
+        expect(events.map((e) => (e.event.type === 'SlashCommandStarted' ? e.event.kind : undefined))).toEqual(['Hint']);
+        expect(JSON.parse((db.prepare('SELECT data FROM slash_commands').get() as { data: string }).data)).toMatchObject({ kind: 'EsNext' });
     });
 });

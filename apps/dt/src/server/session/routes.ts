@@ -4,7 +4,7 @@
 // the boundary (`input.ts`); every error is typed JSON (`{ "error": { "type": … } }`). Participants read, send
 // messages (addressed to the AI by a mention of it or a reply to it, ADR 0030), react to messages and AI turns, vote on
 // a question's options or an assumption's choices and withdraw their change proposals; only the facilitator addresses
-// any message to the AI (「AI に送る」), approves and rejects proposals, queues, cancels and reverts runs, takes and
+// any message to the AI (「AI に送る」), approves and rejects proposals, an interview's brief and a command's candidates, queues, cancels and reverts runs, takes and
 // restores revisions, hands the role over and closes the session. A participant sees the triages' outcomes only, the
 // facilitator their record (`views.ts`). Who
 // may do what is the collaboration's (ADR 0027): each use case takes the `Actor` of the identity and its commands
@@ -20,7 +20,10 @@ import {
     knownChangeProposalId,
     knownInterviewId,
     knownRequestId,
-    INTERVIEW_COMMANDS,
+    knownSlashCommandId,
+    interviewCommandOf,
+    SLASH_COMMAND_NAMES,
+    slashCommandOf,
     type KnownViewNames,
     readBriefText,
     resolveViewedAt,
@@ -143,11 +146,15 @@ export function statusOf(type: string): number {
         case 'AnswerTooLong':
         case 'InvalidProposal':
         case 'NoSuchOption':
+        case 'NoSuchCandidate':
+        case 'WrongCommandType':
             return 400;
         case 'NotTheInterviewer':
+        case 'NotTheStarter':
             return 403;
         case 'InterviewAlreadyRunning':
         case 'InterviewMovedOn':
+        case 'CommandAlreadyRunning':
             return 409;
         case 'Unauthenticated':
             return 401;
@@ -335,6 +342,13 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
     const interviewOfSession = async (res: ServerResponse, id: string): Promise<boolean> => {
         if ((await state()).interviews.some((i) => i.id === id)) return true;
         fail(res, { type: 'NotFound', aggregate: 'Interview', id });
+        return false;
+    };
+
+    /** Whether the command is one of this session's (answered with `NotFound` otherwise). */
+    const commandOfSession = async (res: ServerResponse, id: string): Promise<boolean> => {
+        if ((await state()).slashCommands.some((c) => c.id === id)) return true;
+        fail(res, { type: 'NotFound', aggregate: 'SlashCommand', id });
         return false;
     };
 
@@ -592,15 +606,15 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
         {
             method: 'POST',
             path: /^\/api\/session\/interviews$/,
-            role: 'facilitator',
+            role: 'participant',
             handle: async ({ req, res, auth }) => {
-                // `/es` or `/model` (the plan's round 5): the opening message and the interview, the interviewer's first
-                // question due; the facilitator only (in Solo, the person)
+                // `/es:start` or `/model:start` (the plan's round 5; the former `es`, `model` too): the opening message
+                // and the interview, the interviewer's first question due; anyone (a participant's brief waits for the
+                // facilitator)
                 const raw = await input(req, res, ['command', 'body', 'language', 'focus', 'viewedAt']);
                 if (!raw) return;
-                const command = Object.entries(INTERVIEW_COMMANDS).find(([id]) => id === raw.command)?.[1];
-                if (!command)
-                    return fail(res, { type: 'InvalidInput', field: 'command', message: `Expected one of ${Object.keys(INTERVIEW_COMMANDS).join(', ')}.` });
+                const command = interviewCommandOf(raw.command);
+                if (!command) return fail(res, { type: 'InvalidInput', field: 'command', message: 'Expected es:start or model:start.' });
                 const t = checked(res, text(raw.body, 'body', 200));
                 if (!t) return;
                 if (raw.language !== 'ja' && raw.language !== 'en')
@@ -646,8 +660,28 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
         },
         {
             method: 'POST',
-            path: /^\/api\/session\/interviews\/([^/]+)\/stop$/,
+            path: /^\/api\/session\/interviews\/([^/]+)\/reject$/,
             role: 'facilitator',
+            handle: async ({ req, res, auth, params }) => {
+                // the brief rejected, with an optional note to its starter (as a proposal's): the interview ends
+                const id = checked(res, uuid(params[0], 'id'));
+                if (!id) return;
+                const raw = await input(req, res, ['note']);
+                if (!raw) return;
+                let note: Collaboration.Text | undefined;
+                if (raw.note !== undefined) {
+                    note = checked(res, text(raw.note, 'note', PROPOSAL_LIMITS.note));
+                    if (!note) return;
+                }
+                if (!(await interviewOfSession(res, id))) return;
+                const rejected = await use.rejectInterview({ interview: knownInterviewId(id), actor: who(auth).actor, ...(note && { note }) });
+                await answer(res, rejected, 200, (interview) => ({ interview }));
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/interviews\/([^/]+)\/stop$/,
+            role: 'participant',
             handle: async ({ req, res, auth, params }) => {
                 const id = checked(res, uuid(params[0], 'id'));
                 if (!id) return;
@@ -655,6 +689,71 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 if (!(await interviewOfSession(res, id))) return;
                 const stopped = await use.stopInterview({ interview: knownInterviewId(id), actor: who(auth).actor });
                 await answer(res, stopped, 200, (interview) => ({ interview }));
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/commands$/,
+            role: 'participant',
+            handle: async ({ req, res, auth }) => {
+                // a candidate or answer command (`/es:exceptions`, `/es:recap`): the opening message and the command, its
+                // job due; anyone
+                const raw = await input(req, res, ['command', 'body', 'language', 'focus', 'viewedAt']);
+                if (!raw) return;
+                const spec = slashCommandOf(raw.command);
+                if (!spec) return fail(res, { type: 'InvalidInput', field: 'command', message: `Expected one of ${SLASH_COMMAND_NAMES.join(', ')}.` });
+                const t = checked(res, text(raw.body, 'body', 200));
+                if (!t) return;
+                if (raw.language !== 'ja' && raw.language !== 'en')
+                    return fail(res, { type: 'InvalidInput', field: 'language', message: 'Expected ja or en.' });
+                let focus: Collaboration.ModelTarget | undefined;
+                if (raw.focus !== undefined) {
+                    focus = checked(res, modelTarget(raw.focus, 'focus'));
+                    if (!focus) return;
+                }
+                const viewed = sentView(res, raw.viewedAt);
+                if (viewed === false) return;
+                const started = await use.startCommand({
+                    session,
+                    actor: who(auth).actor,
+                    kind: spec.kind,
+                    body: t,
+                    language: raw.language === 'en' ? 'En' : 'Ja',
+                    ...(focus && { focus }),
+                    ...(viewed && { viewedAt: viewed }),
+                });
+                await answer(res, started, 201, (v) => ({ command: v.command, request: v.request }));
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/commands\/([^/]+)\/apply$/,
+            role: 'facilitator',
+            handle: async ({ req, res, auth, params }) => {
+                const id = checked(res, uuid(params[0], 'id'));
+                if (!id) return;
+                const raw = await input(req, res, ['chosen']);
+                if (!raw) return;
+                const chosen = raw.chosen;
+                if (!Array.isArray(chosen) || chosen.length === 0 || chosen.length > 20 || !chosen.every((n) => Number.isInteger(n) && n >= 0))
+                    return fail(res, { type: 'InvalidInput', field: 'chosen', message: 'Expected the numbers of the candidates chosen (one or more).' });
+                if (!(await commandOfSession(res, id))) return;
+                // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- checked above: integers
+                const applied = await use.applyCandidates({ command: knownSlashCommandId(id), actor: who(auth).actor, chosen: chosen as number[] });
+                await answer(res, applied, 201, (v) => ({ command: v.command, run: v.run }));
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/commands\/([^/]+)\/stop$/,
+            role: 'participant',
+            handle: async ({ req, res, auth, params }) => {
+                const id = checked(res, uuid(params[0], 'id'));
+                if (!id) return;
+                if (!(await input(req, res, []))) return;
+                if (!(await commandOfSession(res, id))) return;
+                const stopped = await use.stopCommand({ command: knownSlashCommandId(id), actor: who(auth).actor });
+                await answer(res, stopped, 200, (command) => ({ command }));
             },
         },
         {

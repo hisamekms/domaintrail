@@ -31,7 +31,6 @@ import {
     randomIds,
     randomSecrets,
     readServerAddress,
-    removeLegacyAgentFile,
     removeSessionFiles,
     RUN_ENDING_EVENTS,
     sameIdentity,
@@ -64,6 +63,7 @@ import { processAlive } from './process.js';
 import { createModelValidator, createSourceFormatter } from './validator.js';
 import { prepareLiveView, serverUrl, watchLiveView, type ViewServerOptions } from './view.js';
 import { createWatcherHold, type WatcherHold } from './watcher-hold.js';
+import { workspaceState } from './state.js';
 import { createSoloSignIn, SOLO_LINK_PATH, SOLO_LINK_TTL_MS, soloIdentities, soloName, soloSurface } from './solo.js';
 import * as path from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -134,7 +134,7 @@ export interface SessionServerOptions extends ViewServerOptions {
 export interface SessionServer {
     /** The page and the session's API. */
     url: string;
-    /** The agent API, on 127.0.0.1 (also in `.domaintrail/session/server.json`, without its credential). */
+    /** The agent API, on 127.0.0.1 (also in `server.json` in the workspace's state directory, without its credential). */
     agentUrl: string;
     /** The agent API's bearer token, in memory only: for the agent in process (a standalone one pairs with a code). */
     agentToken: string;
@@ -279,7 +279,9 @@ export async function startSessionServer(options: SessionServerOptions): Promise
     const provider = identityProvider(options, clock, log);
     // one live server per workspace: a second one would open (or change the mode of) the session under the first
     const root = path.resolve(options.root);
-    const running = await readServerAddress(root).catch(() => undefined);
+    // the session's files are in the workspace's state directory, outside it (an older `.domaintrail/` moved there)
+    const state = options.state ?? (await workspaceState(root, log));
+    const running = await readServerAddress(state.state).catch(() => undefined);
     if (served.has(root) || (running && running.pid !== process.pid && processAlive(running.pid)))
         throw new SessionError(
             `A session server is already running for this workspace${running ? ` (pid ${running.pid}, ${running.url})` : ''}: stop it before starting another.`,
@@ -288,9 +290,9 @@ export async function startSessionServer(options: SessionServerOptions): Promise
     const sources = options.sources ?? DEFAULT_SOURCES;
     const respectGitignore = options.respectGitignore ?? true;
 
-    const live = await prepareLiveView(options);
+    const live = await prepareLiveView({ ...options, state });
     const { view, git, engine } = live;
-    const db = await openSessionDatabase(options.root);
+    const db = await openSessionDatabase(state.state);
     const disposeEngine = (): void => {
         if ('dispose' in engine && typeof engine.dispose === 'function') engine.dispose();
     };
@@ -302,7 +304,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         const collaboration = createCollaboration({
             uow,
             workspace: snapshot,
-            blobs: await openSessionBlobs(options.root),
+            blobs: await openSessionBlobs(state.state),
             validator: createModelValidator(),
             formatter: createSourceFormatter(),
             clock,
@@ -648,9 +650,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         }
 
         watch = await watchLiveView(options, live, (payload) => hub.publish(payload), watcherHold);
-        // the credential is never on disk: an older version's agent.json goes
-        if (await removeLegacyAgentFile(options.root)) log('Removed .domaintrail/session/agent.json (an agent credential an older version wrote).');
-        await writeServerAddress(options.root, { url, agentUrl, ...(publicOrigin && { publicUrl: publicOrigin.origin }), session, pid: process.pid });
+        await writeServerAddress(state.state, { url, agentUrl, ...(publicOrigin && { publicUrl: publicOrigin.origin }), session, pid: process.pid });
 
         const issueFacilitatorLink = async (): Promise<string> => {
             const link = await access.issueFacilitatorLink({ session, ttlMs: FACILITATOR_LINK_TTL_MS });
@@ -726,7 +726,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                     await pump().catch(() => undefined);
                     await uow.transaction(() => undefined);
                     db.close();
-                    await removeSessionFiles(options.root, process.pid);
+                    await removeSessionFiles(state.state, process.pid);
                     disposeEngine();
                     served.delete(root);
                 })();
@@ -748,9 +748,10 @@ export async function startSessionServer(options: SessionServerOptions): Promise
  * serves a Solo session (`dt open`: its one person is the facilitator already).
  */
 export async function issueFacilitatorLink(root: string): Promise<{ link: string; expiresAt: Date }> {
-    const address = await readServerAddress(root);
+    const { state } = await workspaceState(root, (line) => console.error(line));
+    const address = await readServerAddress(state);
     if (!address || !processAlive(address.pid)) throw new SessionError('No session server is running for this workspace (start one with `dt collab`).');
-    const db = await openSessionDatabase(root);
+    const db = await openSessionDatabase(state);
     try {
         const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
         const open = await openSessionOf(db);
@@ -773,11 +774,12 @@ export async function issueFacilitatorLink(root: string): Promise<{ link: string
  * `SessionError` when no `link` session runs.
  */
 export async function issueInvite(root: string, stop = false): Promise<{ link: string; expiresAt: Date } | { stopped: boolean }> {
-    const address = await readServerAddress(root);
+    const { state } = await workspaceState(root, (line) => console.error(line));
+    const address = await readServerAddress(state);
     if (!address || !processAlive(address.pid))
         throw new SessionError('No session server is running for this workspace (start one with `dt collab --tunnel`).');
     if (!address.publicUrl) throw new SessionError('The running session is not of the link identity mode: people join it without an invite link.');
-    const db = await openSessionDatabase(root);
+    const db = await openSessionDatabase(state);
     try {
         const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
         const open = await openSessionOf(db);
@@ -798,11 +800,12 @@ export async function issueInvite(root: string, stop = false): Promise<{ link: s
  * server runs.
  */
 export async function issueAgentLink(root: string): Promise<{ code: string; agentUrl: string; expiresAt: Date }> {
-    const address = await readServerAddress(root);
+    const { state } = await workspaceState(root, (line) => console.error(line));
+    const address = await readServerAddress(state);
     if (!address || !processAlive(address.pid))
         throw new SessionError('No session server is running for this workspace (start one with `dt open` or `dt collab`).');
     if (!address.agentUrl) throw new SessionError('The running session server is of an older version: restart it.');
-    const db = await openSessionDatabase(root);
+    const db = await openSessionDatabase(state);
     try {
         const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
         const open = await openSessionOf(db);
@@ -821,9 +824,10 @@ export async function issueAgentLink(root: string): Promise<{ code: string; agen
  * server redeems it; revoked when it stops. Rejects with `SessionError` when no server runs, or when it is `dt collab`'s.
  */
 export async function issueOpenLink(root: string): Promise<{ link: string; expiresAt: Date }> {
-    const address = await readServerAddress(root);
+    const { state } = await workspaceState(root, (line) => console.error(line));
+    const address = await readServerAddress(state);
     if (!address || !processAlive(address.pid)) throw new SessionError('No session server is running for this workspace (start one with `dt open`).');
-    const db = await openSessionDatabase(root);
+    const db = await openSessionDatabase(state);
     try {
         const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
         const open = await openSessionOf(db);

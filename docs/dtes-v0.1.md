@@ -279,7 +279,7 @@ type ViewOptions = {
 - **使われるごとに描く要素**【確定（2026-11-03 追加）】: Design Level では Actor / External System（Command の実行者）、Read Model（Command の `reads`）、Aggregate（Command の `target`）を、そのビューで使う Command ごとに1枚ずつ、その Command の隣に描く（線は付箋から Command への短い1本）。どの Command にも使われないものは従来どおり1枚。表示上の分割で、`.dtes` も意味的なグラフも変わらない。どの付箋を選んでも同じ要素を選び（インスペクタは1つ）、同じ要素のほかの付箋を控えめに示す。変更マーク・参照・在席表示は要素に付くので全部の付箋に出る。チャットやカタログから要素へ飛ぶときは、画面の中央に最も近い付箋を選ぶ。
 - 複数 timeline フィルタ／抽象度切替は `.dtes` を変更しない。
 - **段階・例外のある storming**（§3.7）: 統合キャンバスは区画を時間順に左→右へ並べ、段階をラベル付きの枠で描く（§8.6）。**段階ビュー**（その段階の本流と例外を同じ描き方で統合）を段階ごとに選べる。名前付き timeline のビューは従来どおり。
-- **例外の表示切替**（「例外を表示」）: 統合キャンバスと段階ビューで、例外を描かないこともできる。そのとき例外のステップ、例外にしか現れない Event、それらだけに付いた Hotspot、例外の `then` を描かない。例外そのものの timeline ビューには影響しない。表示状態は閲覧者ごとの UI 状態で、`.dtes` を変更しない。
+- **例外の表示切替**（「例外を表示」）: 統合キャンバスと段階ビューで、例外を描かないこともできる。そのとき例外のステップ、例外にしか現れない Event、それらだけに付いた Hotspot、例外の `then` を描かない。デザインレベルでは、例外にしか現れない Event だけに関わる要素（それだけを emits する Command、それだけに `on` する Policy とそれが issues する Command、それらの Command の横の Actor・外部システム・Read Model・集約のコピー）も描かない。例外そのものの timeline ビューには影響しない。表示状態は閲覧者ごとの UI 状態で、`.dtes` を変更しない。
 
 ## 7. グラフの3階層【確定】
 
@@ -416,7 +416,8 @@ Render Graph（§7.3、本節 8.1〜8.4）は prefix trie のまま変えない�
 - **境界**: 選択 timeline に登場しない Event へ無制限にたどらない。Policy の他の `issues` を自動的にすべて表示する必要はない。
 - **安全性**: 選択 timeline 内で因果経路が**実際に起きた**と確定的に描かない。因果エッジは「型レベルの可能な関連」として表示する。
 - **確定**: 選択 timeline 上の Event を両端とする `Event → Policy → Command → Event` **1ホップ連鎖**に限定する。対象 Command の `actor/reads/target` と両端 Event に `on` で結びつく Hotspot を付加する。片端が timeline 外なら経路を投影しない。孤立した timeline Event は常に表示。多段経路は v0.1 で自動展開しない。
-- `emits` で選択 Event に結びつく Command が存在しても、対応する `Event → Policy → Command` が存在しなければ、それをシナリオ上で発火したと推定しない。統合ビューでは型レベルの全関係を表示できる。
+- **Event の原因**【確定（2026-11-03 追加）】: 選択 timeline の Event を `emits` する Command は、Policy に発行されていなくても、その Event の原因として描く（統合キャンバスで同じ Event に描くものと同じ）。その Command の `actor/reads/target` を付加し（Actor・Read Model・Aggregate は §6 の使われるごとに描く）、`emits` は timeline の Event へのものだけを描く。その Command を発行する Policy は、上の1ホップ連鎖に当たるときだけ描く（Command からさかのぼらない）。段階ビューも同じ規則で、その段階の Event を対象にする。Big Picture では Command を描かないので変わらない。
+- `emits` で選択 Event に結びつく Command は型レベルの原因として描くが、対応する `Event → Policy → Command` が存在しなければ、Policy を補ってシナリオ上で発火したと推定しない。統合ビューでは型レベルの全関係を表示できる。
 
 ### 9.4 視覚表現
 
@@ -523,7 +524,7 @@ Render Graph（§7.3、本節 8.1〜8.4）は prefix trie のまま変えない�
 - [ ] R13: `.dt ref` を修正しても Semantic ID は変わらない。
 - [ ] R14: Big Picture で Command/Policy を隠しても、`level design` のない Event は消えない。
 - [ ] R15: 全体ビューに timeline 未所属の Event が現れる。
-- [ ] R16: timeline のフィルタは1ホップの Event→Policy→Command→Event のみ（両端が対象 timeline）投影し、多段連鎖は自動展開しない。
+- [ ] R16: timeline のフィルタは1ホップの Event→Policy→Command→Event のみ（両端が対象 timeline）投影し、多段連鎖は自動展開しない。Design Level では timeline の Event を `emits` する Command（とその `actor/reads/target`）も描く。timeline ビュー・例外のビュー・段階ビューで同じ。
 - [ ] R17: Big Picture と Design Level のどちらでも同一 `.dtes` を使い、`external` は Design Level に表示する。
 - [ ] R18: `level design` の Event は Big Picture で非表示、Design Level で表示。timeline の順序エッジは前後をつなぎ、全要素が非表示の group は描かず、共通 prefix 統合は表示される列で行う。Hotspot は残り、非表示の Event への `on` は描かない。
 - [ ] R19: 段階のある統合キャンバスで、幹の付箋の x 座標は全段階を通して狭義単調増加し、y は同じ。段階の枠は重ならない。
@@ -579,7 +580,7 @@ Render Graph（§7.3、本節 8.1〜8.4）は prefix trie のまま変えない�
 | Hotspot `on` | Event のみ、最大1件 |
 | External System | **`external` 宣言を導入**。`command.actor` は Actor / External System を参照可能。外部呼び出し関係は導入しない |
 | CLI | 既存 `dt` CLI と workspace root 指定の慣習に合わせる。別 CLI 製品は作らない。正確なサブコマンド・フラグは現行コードを確認して整合する名称を採用 |
-| timeline フィルタ | **1ホップ** `Event → Policy → Command → Event` のみ。多段自動展開なし |
+| timeline フィルタ | **1ホップ** `Event → Policy → Command → Event` と、timeline の Event を `emits` する Command。多段自動展開なし |
 | レイアウト | 既存描画基盤を優先し、決定的 canonical layout と増分レイアウトを実現。ライブラリ名自体は意味論・公開仕様ではない |
 | Occurrence ID | **永続 ID の DSL 構文なし**。構文位置 + 編集差分から一時的に対応付ける |
 

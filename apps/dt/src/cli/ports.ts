@@ -64,6 +64,11 @@ export interface CliDeps {
     /** Starts the language server over stdio; resolves once it listens. */
     startLanguageServer(options: LanguageServerOptions): Promise<void>;
     /**
+     * `dt session prune`: the state and cache directories of workspaces that are gone (or, with `olderThanDays`, not
+     * used for that long), removed when `remove`. Absent: the command says it cannot here.
+     */
+    pruneState?(options: { olderThanDays?: number; remove: boolean }): Promise<PrunedDir[]>;
+    /**
      * Whether git would commit the local override `file` (`tracked`, `unignored`), or not (`ignored`; `undefined`: no
      * repository). Absent: never asked.
      */
@@ -225,6 +230,19 @@ export interface StartedAgent {
 /** A session cannot be started, or no session server runs (`dt open`, `dt collab`, `dt agent`): printed as one line. */
 export class SessionError extends Error {}
 
+/** The workspace's state directory (outside it) cannot be used, or its `.domaintrail/` moved: printed as one line. */
+export class StateError extends Error {}
+
+/** A directory `dt session prune` removes (or would). */
+export interface PrunedDir {
+    readonly dir: string;
+    readonly kind: 'state' | 'cache';
+    /** The workspace it was kept for (none: the leftover of a move stopped half way). */
+    readonly workspace?: string;
+    readonly reason: 'gone' | 'unused' | 'unfinished';
+    readonly lastUsed: Date;
+}
+
 /** A file of `dt generate ts`: `path` relative to the root (`/`-separated), `file` absolute. */
 export interface GeneratedFile {
     path: string;
@@ -234,15 +252,14 @@ export interface GeneratedFile {
 
 /** The output of `dt generate ts` on disk. */
 export interface GeneratedOutput {
-    /** The manifest of the generated files, relative to the root. */
-    readonly manifestFile: string;
     /** The first existing path component between `root` (exclusive) and `target` that is a symlink; `target` when outside `root`. */
     symlinkOnPath(root: string, target: string): Promise<string | undefined>;
     /** Existing entries at `files` that the generator may not replace: anything but a regular file it wrote. */
     foreignFiles(files: readonly string[]): Promise<string[]>;
     /**
      * Replaces the output of the previous run with `files` (stale files removed, the output directories cleaned, the
-     * manifest written); `recorded` is false when the manifest could not be written.
+     * manifest written in the workspace's state directory, outside it); `recorded` is false when the manifest, the file
+     * `manifest`, could not be written. Rejects with `StateError` when the state directory cannot be used.
      */
-    replace(root: string, files: readonly GeneratedFile[]): Promise<{ recorded: boolean }>;
+    replace(root: string, files: readonly GeneratedFile[]): Promise<{ recorded: boolean; manifest: string }>;
 }

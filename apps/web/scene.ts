@@ -96,6 +96,8 @@ export interface SceneNode extends ItemBase {
     readonly type: 'node';
     /** The graph node it draws (not on ghosts). */
     readonly graphNode?: string;
+    /** The container it is drawn in, when the graph nests it (a storming group's events): the container's item. */
+    readonly parent?: SceneId;
     readonly props: NodeProps;
 }
 
@@ -183,6 +185,59 @@ export function sameElementNodes(items: Iterable<SceneItem>, selected: ReadonlyS
     const nodes = [...items].filter((s) => s.type === 'node' && !s.ghost);
     const elements = new Set(nodes.filter((s) => selected.has(s.id)).map((s) => s.elementId));
     return new Set(nodes.filter((s) => elements.has(s.elementId) && !selected.has(s.id)).map((s) => s.id));
+}
+
+/** The kinds of an Event Storming note (`dn-es…`): what the canvas focuses on when one is selected. */
+const isStormingNote = (item: SceneItem): item is SceneNode => item.type === 'node' && !item.ghost && item.props.kind.startsWith('es');
+
+/**
+ * What stays in full view while storming notes are selected (docs/plans/layout.md, step 5): the notes of the selected
+ * elements (every copy of an element drawn once per use), the notes joined to them by an edge (the previous and next
+ * steps, the command that causes an event and the policies reacting to it, its hotspots; for a command its actor, read
+ * model, aggregate and events), and those edges. A command that causes a selected event brings its actor or external
+ * system, its read model and its aggregate along. A selected event in a group is joined through its group (the time
+ * order runs to and from the group), and a group joined to it brings its events. Containers are never dimmed, so they
+ * are not listed. `undefined` when no storming note is selected: nothing is dimmed.
+ */
+export function focusedItems(items: Iterable<SceneItem>, selected: ReadonlySet<SceneId>): Set<SceneId> | undefined {
+    const all = [...items];
+    const seeds = all.filter((s) => selected.has(s.id) && isStormingNote(s));
+    if (seeds.length === 0) return undefined;
+    const elements = new Set(seeds.map((s) => s.elementId));
+    const notes = all.filter(isStormingNote);
+    const edges = all.filter((s): s is SceneEdge => s.type === 'edge' && !s.ghost);
+    const byId = new Map(all.map((s) => [s.id, s]));
+    const members = (group: SceneId): SceneId[] => notes.filter((n) => n.parent === group).map((n) => n.id);
+    const kept = new Set<SceneId>();
+    /** Keeps a note, or a group's events (the group itself is never dimmed). */
+    const keep = (id: SceneId): void => {
+        if (byId.get(id)?.type !== 'group') kept.add(id);
+        else for (const m of members(id)) kept.add(m);
+    };
+    // the selected elements' notes, and what their edges end at (a note in a group: its group's edges too)
+    const own = notes.filter((n) => elements.has(n.elementId));
+    const ends = new Set(own.flatMap((n) => (n.parent === undefined ? [n.id] : [n.id, n.parent])));
+    for (const n of own) kept.add(n.id);
+    const causes: SceneId[] = [];
+    for (const e of edges) {
+        const [from, to] = [ends.has(e.source), ends.has(e.target)];
+        if (!from && !to) continue;
+        kept.add(e.id);
+        const other = from ? e.target : e.source;
+        keep(other);
+        // a command whose solid edge leads into a selected note: what causes it
+        const source = byId.get(e.source);
+        if (to && e.props.kind === 'esCausal' && source?.type === 'node' && source.props.kind === 'esCommand') causes.push(source.id);
+    }
+    // the cause's actor or external system, read model and aggregate (the dotted relations of the command)
+    for (const e of edges) {
+        if (e.props.kind !== 'esRelated') continue;
+        const at = causes.includes(e.source) ? e.target : causes.includes(e.target) ? e.source : undefined;
+        if (at === undefined) continue;
+        kept.add(e.id);
+        keep(at);
+    }
+    return kept;
 }
 
 /** A rectangle on the page (or on the screen, as said where it is used). */

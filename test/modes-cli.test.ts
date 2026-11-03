@@ -32,6 +32,7 @@ import {
     randomSecrets,
     systemClock,
 } from '@domaintrail/collaboration';
+import { workspaceDirs } from '@domaintrail/workspace';
 import { tempCopyOfExamples } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
@@ -153,7 +154,7 @@ describe('removed commands and sections', () => {
     test.each([
         [['view'], "'dt view' was removed; use 'dt open' (or 'dt open --host <address>' for a read-only Live View)"],
         [['view', '--port', '8080', '--base', 'main'], "'dt view' was removed; use 'dt open'"],
-        [['session'], "'dt session' was removed; use 'dt collab' (start), 'dt collab link' or 'dt agent'"],
+        [['session'], "'dt session' takes 'prune'; the session itself is 'dt collab' (start), 'dt collab link' or 'dt agent'"],
         [['session', 'start', '--port', '0'], "'dt session start' was removed; use 'dt collab'"],
         [['session', 'link'], "'dt session link' was removed; use 'dt collab link'"],
         [['session', 'subscribe', '--agent', 'claude', '--once'], "'dt session subscribe' was removed; use 'dt agent'"],
@@ -176,7 +177,8 @@ describe('removed commands and sections', () => {
             .filter(Boolean);
         expect(commands).toEqual(expect.arrayContaining(['open', 'collab', 'agent']));
         expect(commands).not.toContain('view');
-        expect(commands).not.toContain('session');
+        // `dt session` keeps `prune` only (the state kept outside the workspaces)
+        expect(commands).toContain('session');
     });
 
     test('a config with session or view is refused at load, by every command that reads it (exit 2)', async () => {
@@ -352,14 +354,16 @@ describe('dt agent', () => {
 describe('pairing a standalone dt agent (the credential never on disk)', () => {
     test('dt collab agent-link prints a one-time code that pairs once; expired, reused and facilitator codes are refused', async () => {
         const root = await copy();
-        // what an older version left: removed when a server starts
+        // what an older version left: deleted (never moved) with its .domaintrail/ when a server starts
         await mkdir(path.join(root, '.domaintrail', 'session'), { recursive: true });
         await writeFile(path.join(root, '.domaintrail', 'session', 'agent.json'), JSON.stringify({ url: 'http://127.0.0.1:1/', token: 'old' }));
         const lines: string[] = [];
         const server = await startSessionServer({ root, debounceMs: 30, mode: 'Collab', session: settings, log: (l) => lines.push(l) });
+        const { state } = workspaceDirs(root);
         try {
             expect(await readFile(path.join(root, '.domaintrail', 'session', 'agent.json'), 'utf8').catch(() => 'gone')).toBe('gone');
-            expect(lines).toContain('Removed .domaintrail/session/agent.json (an agent credential an older version wrote).');
+            expect(await readFile(path.join(state, 'agent.json'), 'utf8').catch(() => 'gone')).toBe('gone');
+            expect(lines).toContain('Removed .domaintrail/ (nothing in it to keep).');
             const printed = await run(cliDeps(), '-r', root, 'collab', 'agent-link');
             expect(printed.code).toBe(0);
             const code = /^Agent code \(single use, expires in 10 minutes\): (\S+)$/.exec(printed.out[0])?.[1] ?? '';
@@ -382,17 +386,19 @@ describe('pairing a standalone dt agent (the credential never on disk)', () => {
             expect((await pairAgent(root, agentCode, server.agentUrl)).token).toBe(server.agentToken);
 
             // expired
-            const db = await openSessionDatabase(root);
+            const db = await openSessionDatabase(workspaceDirs(root).state);
             const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
             const short = await access.issueAgentCode({ session: server.session, ttlMs: 1 });
+            // issued in the session's database (the state directory's), so the refusal below is the expiry's
+            expect(short.ok).toBe(true);
             db.close();
             await Bun.sleep(10);
             expect(await pairAgent(root, short.ok ? short.value.code : '').catch((e: unknown) => e)).toBeInstanceOf(SessionError);
             // only to the agent API on this machine
             expect(String(await pairAgent(root, 'x', 'http://example.com:1/').catch((e: unknown) => e))).toContain('on this machine only');
             // nothing secret on disk
-            expect(await readFile(path.join(root, '.domaintrail', 'session', 'agent.json'), 'utf8').catch(() => 'gone')).toBe('gone');
-            expect(await readFile(path.join(root, '.domaintrail', 'session', 'server.json'), 'utf8')).not.toContain(server.agentToken);
+            expect(await readFile(path.join(state, 'agent.json'), 'utf8').catch(() => 'gone')).toBe('gone');
+            expect(await readFile(path.join(state, 'server.json'), 'utf8')).not.toContain(server.agentToken);
         } finally {
             await server.stop();
         }
@@ -495,9 +501,11 @@ describe('the modes on one workspace (decision 13)', () => {
             const { code: agentCode } = await issueAgentLink(root);
             expect((await fetch(`${server.url}session/open?code=${agentCode}`, { redirect: 'manual' })).status).toBe(403);
             // expired
-            const db = await openSessionDatabase(root);
+            const db = await openSessionDatabase(workspaceDirs(root).state);
             const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
             const short = await access.issueOpenCode({ session: server.session, ttlMs: 1 });
+            // issued in the session's database (the state directory's), so the refusal below is the expiry's
+            expect(short.ok).toBe(true);
             db.close();
             await Bun.sleep(10);
             expect((await fetch(`${server.url}session/open?code=${short.ok ? short.value.code : ''}`, { redirect: 'manual' })).status).toBe(403);
@@ -529,7 +537,8 @@ describe('the modes on one workspace (decision 13)', () => {
         const root = await copy();
         const server = await start(root, 'Solo');
         const linkFromAnotherProcess = (): string => {
-            const r = Bun.spawnSync(['bun', path.join(ROOT, 'bin', 'dt.ts'), '-r', root, 'open', 'link']);
+            // Bun.spawn passes the environment the process started with: the test's state directories are given
+            const r = Bun.spawnSync(['bun', path.join(ROOT, 'bin', 'dt.ts'), '-r', root, 'open', 'link'], { env: process.env });
             expect(r.exitCode).toBe(0);
             return /^Sign-in link \(single use, expires in 60 minutes\): (\S+)$/m.exec(r.stdout.toString())?.[1] ?? '';
         };
@@ -542,9 +551,11 @@ describe('the modes on one workspace (decision 13)', () => {
             // a used link stays used
             for (const link of links) expect((await fetch(link, { redirect: 'manual' })).status).toBe(403);
             // and an expired one is refused
-            const db = await openSessionDatabase(root);
+            const db = await openSessionDatabase(workspaceDirs(root).state);
             const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
             const short = await access.issueOpenCode({ session: server.session, ttlMs: 1 });
+            // issued in the session's database (the state directory's), so the refusal below is the expiry's
+            expect(short.ok).toBe(true);
             db.close();
             await Bun.sleep(10);
             expect((await fetch(`${server.url}session/open?code=${short.ok ? short.value.code : ''}`, { redirect: 'manual' })).status).toBe(403);

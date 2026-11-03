@@ -10,6 +10,7 @@
 // card, cancel, and the menus of the cards and of the head. In Solo (`dt open`) what only makes sense with others is
 // hidden: every message goes to the AI as it is sent.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from 'react';
+import { createPortal } from 'react-dom';
 import {
     ArrowDown,
     Bot,
@@ -26,11 +27,11 @@ import {
     LoaderCircle,
     MessagesSquare,
     SendHorizontal,
-    Sparkles,
     Ban,
     X,
     type LucideIcon,
 } from 'lucide-react';
+import { isInterviewCommandId } from '@domaintrail/collaboration';
 import type { ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
 import { motionMs, useGrow, useSwap } from '../shared/motion';
@@ -61,6 +62,7 @@ import { ChangedElements, ReplyButton, RunCard, useUnitAbout } from './card';
 import { AddReaction, ReactionRow, useMarking } from './mark-controls';
 import { messageMarks, updatedCards } from './cards';
 import { ChatProvider, useChat, type ChatContextValue, type Tx } from './chat-context';
+import { ChatHead, type ChatView } from './chat-head';
 import { ComposerResizer, useComposerSize } from './composer-resizer';
 import { changeUnits, requestersOf, shownUnits, statusUnit, unfinishedCount, unitName, workGroups, type ChangeUnit, type UnitOutcome } from './history';
 import {
@@ -83,8 +85,25 @@ import { AiAvatar, ProposalCard } from './proposal';
 import { chosenIndex } from './proposal-view';
 import { referencesAsText } from './references';
 import { TriageRecordPanel } from './triage-record';
-import { InterviewPanel, interviewSlot } from './interview';
-import { runningInterview, selectedOf, slashItems, slashQuery, templateValue, type SlashItem, type SlashScope } from './slash';
+import { InterviewChoices, InterviewPanel, interviewSlot } from './interview';
+import { CandidatesCard, commandSlot } from './candidates';
+import { HintButton, HintMark, startHint, SuggestedMark } from './hint';
+import { CommandChip, CommandIcon } from './command-chip';
+import { commandComposerValue, nextAnswerOf, NextSteps } from './next-steps';
+import {
+    canStartCommand,
+    commandOfOpening,
+    commandType,
+    hintButton,
+    hintSuggestions,
+    runningInterview,
+    selectedOf,
+    slashItems,
+    slashQuery,
+    templateValue,
+    type SlashItem,
+    type SlashScope,
+} from './slash';
 import { isReplyable, messageReference, messageReplyTargets, repliesToMe, replyReference, replyTargets, type ReplyDraft } from './replies';
 import { useRevisionTools } from './revisions';
 import { CancelButton, CancelDialog, RowActions, StatusSizer, StatusSlot, TurnLink } from './status-slot';
@@ -111,7 +130,8 @@ import { ComposerChips } from './composer-chips';
 import { ComposerEditor, type ComposerEditorApi, type EditorQuery, type MentionLook } from './composer-editor';
 import { mentionFits, type ComposerMention } from './composer-text';
 import type { ModelTarget, TargetDraft } from './targets';
-import { interviewBody, messageBody } from './outgoing';
+import { commandBody, interviewBody, messageBody } from './outgoing';
+import { replyLooks, threadLines, type ReplyLook } from './threads';
 import { continued, isMac } from './views';
 import type { SentView, ViewScope, ViewTarget } from './views';
 import type { ComposerDraft, SessionData } from './useSession';
@@ -119,6 +139,12 @@ import type { ComposerDraft, SessionData } from './useSession';
 type RequestJson = SessionData['state']['requests'][number];
 /** A unit to open and reveal in AI の作業 (the header status clicked); `n` tells a click on the same unit again apart. */
 type Peek = { readonly key: string; readonly n: number };
+
+/**
+ * Where another part of the page sends the chat (the detail of a storming element): a message or a run's card in the
+ * chat, or a run's unit in AI の作業. `n` tells a second ask for the same place apart.
+ */
+export type ChatGoTo = { readonly kind: 'message' | 'run' | 'unit'; readonly id: string; readonly n: number };
 
 /**
  * What the stream shows: its items by time (the messages still on their way last), its lines with the AI's cards placed
@@ -196,7 +222,12 @@ export function SessionChat(props: {
     slash: { readonly view: SlashScope['view']; readonly selected: TargetDraft | undefined };
     /** Where this page is looking: sent with each message. */
     viewedAt: SentView | undefined;
+    onOpen: () => void;
     onClose: () => void;
+    /** The app bar's place for the collab menu and the AI's state (they concern the whole page). */
+    barSlot: HTMLElement | null;
+    /** A place of the chat or of AI の作業 to show (asked from elsewhere on the page). */
+    goTo?: ChatGoTo | undefined;
 }) {
     const { session, composer, focusPending } = props;
     const { state, me } = session;
@@ -252,7 +283,7 @@ export function SessionChat(props: {
         for (const r of state.requests) if (isAiAuthor(r.author) && r.replyTo?.kind === 'Message') aiReplies.set(r.replyTo.request, r.id);
         for (const r of state.requests) {
             // a message of an interview: the AI's question under it, or pending while the interviewer thinks
-            const inInterview = solo ? interviewSlot(state, r) : undefined;
+            const inInterview = solo ? (interviewSlot(state, r) ?? commandSlot(state, r)) : undefined;
             const slot =
                 inInterview === 'none' ? undefined : (inInterview ?? aiSlot(solo, r, triages.get(r.id), givenUp, settled.sent.has(r.id), aiReplies.get(r.id)));
             if (slot) slots.set(r.id, slot);
@@ -290,7 +321,7 @@ export function SessionChat(props: {
             setLeaveError(failure(e));
         }
     };
-    const [view, setView] = useState<'chat' | 'history'>('chat');
+    const [view, setView] = useState<ChatView>('chat');
     // the stream's scroll while チャット shows, put back as it shows again, with the browser's scroll anchoring off for
     // that frame: it would move the stream a little each time the panel comes back (at the bottom, the stream follows
     // the newest itself)
@@ -354,6 +385,20 @@ export function SessionChat(props: {
         }),
         [replyDraft, state, composer, units],
     );
+    // a command a step of `/hint` suggests: in the composer, `/`'s list open on it, the composer focused
+    const putCommand = useCallback(
+        (id: string): void => {
+            composer.setValue(commandComposerValue(id));
+            setView('chat');
+            setReplyFocus((n) => n + 1);
+        },
+        [composer],
+    );
+    // an interview's その他: the composer, in the chat, focused
+    const focusComposer = useCallback((): void => {
+        setView('chat');
+        setReplyFocus((n) => n + 1);
+    }, []);
     // the selection confirmed for a request: the composer is in the chat
     useEffect(() => {
         if (focusPending) setView('chat');
@@ -427,10 +472,27 @@ export function SessionChat(props: {
     // the header status clicked: AI の作業, at the unit it stands for (opened and revealed); the chat keeps its scroll
     const [peek, setPeek] = useState<Peek | undefined>();
     const peekStatus = (): void => {
+        props.onOpen();
         setView('history');
         const unit = statusUnit(status.kind, units);
         if (unit) setPeek((p) => ({ key: unit.key, n: (p?.n ?? 0) + 1 }));
     };
+
+    // a place asked from elsewhere on the page: a message or a run's card in the chat, a run's unit in AI の作業
+    const goTo = props.goTo;
+    useEffect(() => {
+        if (!goTo) return;
+        const unit = units.find((u) => u.runs.some((r) => r.run.id === goTo.id));
+        if (goTo.kind === 'message') jump(`message:${goTo.id}`);
+        else if (goTo.kind === 'run') {
+            if (unit) jump(`card:${unit.key}`);
+        } else {
+            setView('history');
+            if (unit) setPeek((p) => ({ key: unit.key, n: (p?.n ?? 0) + 1 }));
+        }
+        // only a new ask moves the chat
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [goTo?.n]);
 
     // a person shown among the participants (a mention of them clicked): the collab menu opens at them
     const showPerson = useCallback((id: string): void => openPeople(id), []);
@@ -471,13 +533,16 @@ export function SessionChat(props: {
         jump,
         reveal,
         showPerson,
+        putCommand,
+        focusComposer,
         replies,
     };
 
     return (
         <ChatProvider value={context}>
             <div className="session-chat" ref={root}>
-                <ChatHeader
+                <SessionBar
+                    slot={props.barSlot}
                     session={session}
                     status={status}
                     now={now}
@@ -487,24 +552,11 @@ export function SessionChat(props: {
                     viewScope={props.viewScope}
                     onOpenView={props.onOpenView}
                     onLeave={() => void leave()}
-                    onClose={props.onClose}
                     onPeek={peekStatus}
                     tx={tx}
                 />
                 {live && <JoinRequests session={session} />}
-                <div className="segmented chat-views" role="tablist" aria-label={tx.chat.tabsLabel}>
-                    {(['chat', 'history'] as const).map((v) => (
-                        <button key={v} role="tab" aria-selected={view === v} className={view === v ? 'active' : ''} onClick={() => setView(v)}>
-                            {tx.chat.tabs[v]}
-                            {/* AI の作業: how many units are not finished (running and queued), whichever tab is shown */}
-                            {v === 'history' && unfinished > 0 && (
-                                <span className="chat-views-badge" role="img" aria-label={tx.chat.history.unfinished(unfinished)}>
-                                    {unfinished}
-                                </span>
-                            )}
-                        </button>
-                    ))}
-                </div>
+                <ChatHead view={view} onView={setView} unfinished={unfinished} onClose={props.onClose} tx={tx} />
                 {session.status === 'signed-out' && <p className="session-note chat-notice">{tx.signedOut}</p>}
                 {ended && (
                     <p className="session-note chat-notice collab-ended">
@@ -559,7 +611,12 @@ export function SessionChat(props: {
     );
 }
 
-function ChatHeader(props: {
+/**
+ * The session's controls of the whole page, put in the app bar (rendered here, inside the chat's context): the collab
+ * menu (the avatars ▾; in Solo a plain ⋯, after the AI's state) and the AI's state at a glance.
+ */
+function SessionBar(props: {
+    slot: HTMLElement | null;
     session: SessionData;
     status: AgentStatus;
     now: number;
@@ -569,27 +626,32 @@ function ChatHeader(props: {
     viewScope: ViewScope;
     onOpenView: (target: ViewTarget) => void;
     onLeave: () => void;
-    onClose: () => void;
     onPeek: () => void;
     tx: Tx;
 }) {
     const { session, status, tx } = props;
+    const solo = isSolo(session.state);
     const label =
         status.kind === 'running' ? tx.chat.status.running(elapsed(status.since, props.now)) : status.kind === 'idle' ? '' : tx.chat.status[status.kind];
     // the AI: nothing while it is connected; else which role is missing and how much waits for it
     const presence = aiPresence(session.state.agent);
-    return (
-        <div className="chat-header">
-            <CollabMenu
-                solo={isSolo(session.state)}
-                session={session}
-                location={props.location}
-                scope={props.viewScope}
-                units={props.units}
-                live={props.live}
-                onOpenView={props.onOpenView}
-                onLeave={props.onLeave}
-            />
+    if (!props.slot) return null;
+    const menu = (
+        <CollabMenu
+            solo={solo}
+            session={session}
+            location={props.location}
+            scope={props.viewScope}
+            units={props.units}
+            live={props.live}
+            onOpenView={props.onOpenView}
+            onLeave={props.onLeave}
+        />
+    );
+    // `session-chat`: the chat's own look for its buttons and the menu's popover, here outside the chat's pillar
+    return createPortal(
+        <div className="session-chat session-bar">
+            {!solo && menu}
             {/* idle says nothing: only running, a question or a queued run shows; a click opens it in AI の作業 */}
             <span className="chat-status-slot" aria-live="polite">
                 {presence.kind === 'missing' && (
@@ -614,10 +676,9 @@ function ChatHeader(props: {
                     </button>
                 )}
             </span>
-            <button className="icon-button" onClick={props.onClose} data-tooltip={tx.chat.close} aria-label={tx.chat.close}>
-                <X size={16} aria-hidden />
-            </button>
-        </div>
+            {solo && menu}
+        </div>,
+        props.slot,
     );
 }
 
@@ -774,7 +835,9 @@ function Stream({ shown }: { shown: Shown }) {
         toBottom();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [signature]);
-    const follows = continued(rows.map((r) => r.author));
+    // a row continues the one before of the same author on the same line of replies only (a reply hanging under a
+    // message shows its avatar, the line joining the two; so does the row after the replies)
+    const follows = continued(rows.map((r) => r.author)).map((c, i) => c && rows[i - 1]?.look.hangsOn === rows[i]?.look.hangsOn);
     // the items there when the stream is first shown with something in it (the page loaded, the tab switched back):
     // only those posted after come in with motion
     const [initial] = useState(() => new Set<string>());
@@ -838,13 +901,15 @@ function Stream({ shown }: { shown: Shown }) {
  */
 function StreamLine({ row, continues, initial }: { row: Row; continues: boolean; initial: Set<string> }) {
     const live = !initial.has(row.id);
+    const { look } = row;
+    const thread = `${look.head ? ' chat-thread-head' : ''}${look.hangsOn !== undefined ? ' chat-thread-reply' : ''}${look.more ? ' chat-thread-more' : ''}`;
     // the AI's card turning into its answer grows in its own row (`AiSlotRow`); this is an answer in a row of its own
     const grows = live && isAiArrival(row) && !row.id.startsWith('ai:');
     const ref = useGrow<HTMLLIElement>(row.id, grows);
     return (
         <li
             ref={ref}
-            className={`chat-item chat-item-${row.kind}${continues ? ' continued' : ''}${live && !grows ? ' motion-pop motion-pop-up' : ''}`}
+            className={`chat-item chat-item-${row.kind}${continues ? ' continued' : ''}${thread}${live && !grows ? ' motion-pop motion-pop-up' : ''}`}
             data-item={row.key}
             onAnimationEnd={(e) => {
                 // once in, it is an item like the others: shown again (the tab switched back), it does not come in again
@@ -853,6 +918,8 @@ function StreamLine({ row, continues, initial }: { row: Row; continues: boolean;
                 e.currentTarget.classList.remove('motion-pop', 'motion-pop-up');
             }}
         >
+            {/* the line it hangs on says it without words: what it replies to, for those who do not see it */}
+            {look.hangsOn !== undefined && row.to && <RepliesTo to={row.to} />}
             {row.render(continues)}
         </li>
     );
@@ -862,25 +929,30 @@ function StreamLine({ row, continues, initial }: { row: Row; continues: boolean;
  * A line of the stream: a divider, a card, a message of an author that may continue the one before, or the AI's card
  * under a message (Solo). `key` names what it shows (`message:<id>`, `card:<key>`: what `jump` and the pills look for);
  * `id` is its row's, kept while what it shows changes (the AI's card turning into its answer, a message sent from this
- * page becoming the server's).
+ * page becoming the server's). `look`: how it stands among the replies (`threads.ts`), `to` what it replies to.
  */
 interface Row {
     readonly id: string;
     readonly key: string;
     readonly kind: string;
     readonly author: string | undefined;
+    readonly look: ReplyLook;
+    readonly to: ReplyTo | undefined;
     readonly render: (continues: boolean) => ReactNode;
 }
 
+/** What a row replies to: a message, or a run (on its card). */
+type ReplyTo = { readonly kind: 'Message'; readonly request: string } | { readonly kind: 'Run'; readonly run: string };
+
 function streamRows(shown: Shown, tx: Tx): Row[] {
-    const keyOf = (e: ChatEntry): string => (e.kind === 'item' ? e.item.key : `ai:${e.request}`);
     const slotted = new Set(shown.entries.flatMap((e) => (e.kind === 'slot' ? [e.request] : [])));
     // the row of a message sent from this page keeps the key it had while on its way
     const rowId = (item: StreamItem): string => {
         const local = item.kind === 'message' ? shown.sent.get(item.request.id) : undefined;
         return local === undefined ? item.key : `message:${local}`;
     };
-    const itemRow = (item: StreamItem, above: string | undefined): Omit<Row, 'id'> => {
+    const looks = replyLooks(threadLines(shown.entries));
+    const itemRow = (item: StreamItem, look: ReplyLook): Omit<Row, 'id' | 'look' | 'to'> => {
         switch (item.kind) {
             case 'session-start':
                 return { key: item.key, kind: item.kind, author: undefined, render: () => <Divider at={item.at}>{tx.chat.started}</Divider> };
@@ -896,9 +968,8 @@ function streamRows(shown: Shown, tx: Tx): Row[] {
                     ),
                 };
             case 'message': {
-                const to = item.request.replyTo;
-                // the item right above: an answer or a proposal right under its message needs no line naming it
-                const underIt = to?.kind === 'Message' && above === `message:${to.request}`;
+                // hanging right under what it replies to: no line quoting it
+                const hangs = look.hangsOn !== undefined;
                 const id = item.request.id;
                 return {
                     key: item.key,
@@ -906,9 +977,9 @@ function streamRows(shown: Shown, tx: Tx): Row[] {
                     author: item.request.author,
                     render: (continues) =>
                         isAiAuthor(item.request.author) ? (
-                            <AiMessageRow request={item.request} continues={continues} underIt={underIt} />
+                            <AiMessageRow request={item.request} continues={continues} hangs={hangs} />
                         ) : (
-                            <MessageRow request={item.request} continues={continues} slotted={slotted.has(id)} waiting={shown.waiting.has(id)} />
+                            <MessageRow request={item.request} continues={continues} hangs={hangs} slotted={slotted.has(id)} waiting={shown.waiting.has(id)} />
                         ),
                 };
             }
@@ -920,22 +991,39 @@ function streamRows(shown: Shown, tx: Tx): Row[] {
                     author: AI_PARTICIPANT,
                     render: (continues) => <ProposalCard proposal={item.proposal} continues={continues} />,
                 };
+            case 'command':
+                return {
+                    key: item.key,
+                    kind: item.kind,
+                    // the AI's, under the message that started it
+                    author: AI_PARTICIPANT,
+                    render: (continues) => <CandidatesCard command={item.command} continues={continues} />,
+                };
             case 'card':
                 return { key: item.key, kind: item.kind, author: undefined, render: () => <RunCard unit={item.unit} /> };
         }
     };
+    const toOf = (item: StreamItem): ReplyTo | undefined => (item.kind === 'message' ? item.request.replyTo : undefined);
     return shown.entries.map((entry, i): Row => {
-        const prev = shown.entries[i - 1];
-        const above = prev && keyOf(prev);
-        if (entry.kind === 'item') return { id: rowId(entry.item), ...itemRow(entry.item, above) };
+        const look = looks[i] ?? { hangsOn: undefined, head: false, more: false, quote: false };
+        if (entry.kind === 'item') return { id: rowId(entry.item), look, to: toOf(entry.item), ...itemRow(entry.item, look) };
         const local = shown.sent.get(entry.request);
         const id = `ai:${local ?? entry.request}`;
+        const to: ReplyTo = { kind: 'Message', request: entry.request };
         const content = entry.content;
         if (content.kind !== 'item')
-            return { id, key: id, kind: 'ai-slot', author: AI_PARTICIPANT, render: () => <AiSlotRow request={entry.request} phase={content.kind} /> };
+            return {
+                id,
+                key: id,
+                kind: 'ai-slot',
+                author: AI_PARTICIPANT,
+                look,
+                to,
+                render: () => <AiSlotRow request={entry.request} phase={content.kind} />,
+            };
         // the answer or the run card, right under its message
-        const row = itemRow(content.item, `message:${entry.request}`);
-        return { ...row, id, render: (continues) => <AiSlotRow request={entry.request} phase="item" item={row.render(continues)} /> };
+        const row = itemRow(content.item, look);
+        return { ...row, id, look, to, render: (continues) => <AiSlotRow request={entry.request} phase="item" item={row.render(continues)} /> };
     });
 }
 
@@ -1004,7 +1092,19 @@ function AiPendingCard({ request, givenUp }: { request: string; givenUp: boolean
  * judged to need nothing) and its … (several together; the triage's record); ↩ and ☺+. In Solo, a message with the AI's
  * card under it (`slotted`) leaves all that to the card; one still on its way to the server (`waiting`) has no actions.
  */
-function MessageRow({ request: r, continues, slotted, waiting }: { request: RequestJson; continues: boolean; slotted: boolean; waiting: boolean }) {
+function MessageRow({
+    request: r,
+    continues,
+    hangs,
+    slotted,
+    waiting,
+}: {
+    request: RequestJson;
+    continues: boolean;
+    hangs: boolean;
+    slotted: boolean;
+    waiting: boolean;
+}) {
     const { session, tx, nameOf, avatarOf, onNavigate, control, solo, marks, selection, actions, showPerson, triages, givenUp } = useChat();
     const author = nameOf(r.author);
     const avatarUrl = avatarOf(r.author);
@@ -1017,6 +1117,7 @@ function MessageRow({ request: r, continues, slotted, waiting }: { request: Requ
     const triage = triages.get(r.id);
     const ai = messageAi(triage, givenUp);
     const selected = selection.ids.has(r.id);
+    const command = commandOfOpening(session.state, r.id);
     const [record, setRecord] = useState(false);
     // 「AI に送る」: a message not addressed yet, or one judged to need nothing (sent again as 相談); never in Solo,
     // where every message is addressed as it is sent
@@ -1082,21 +1183,32 @@ function MessageRow({ request: r, continues, slotted, waiting }: { request: Requ
                 className={`chat-bubble-request${mine ? ' mine' : ''}`}
                 side={side}
             >
-                {r.replyTo?.kind === 'Run' && <ReplyReferenceLine run={r.replyTo.run} />}
-                {r.replyTo?.kind === 'Message' && <MessageReferenceLine request={r.replyTo.request} />}
+                {/* what it replies to, unless it hangs right under it */}
+                {!hangs && r.replyTo?.kind === 'Run' && <ReplyReferenceLine run={r.replyTo.run} />}
+                {!hangs && r.replyTo?.kind === 'Message' && <MessageReferenceLine request={r.replyTo.request} />}
                 <TargetChips targets={r.targets} statuses={statuses} onNavigate={onNavigate} tx={tx} />
-                <Clamped tx={tx} revealKey={`message:${r.id}`}>
-                    <MentionedText
-                        body={r.body}
-                        targets={r.targets}
-                        statuses={statuses}
-                        onNavigate={onNavigate}
-                        mentions={r.mentions}
-                        nameOf={nameOf}
-                        onPerson={showPerson}
-                        tx={tx}
+                {/* a `/` command's opening message: the command's chip in place of its name as text */}
+                {command ? (
+                    <CommandChip
+                        id={command}
+                        name={tx.chat.slash.commands[command]}
+                        description={tx.chat.slash.types[commandType(command)]}
+                        label={tx.chat.slash.chip(command, tx.chat.slash.commands[command])}
                     />
-                </Clamped>
+                ) : (
+                    <Clamped tx={tx} revealKey={`message:${r.id}`}>
+                        <MentionedText
+                            body={r.body}
+                            targets={r.targets}
+                            statuses={statuses}
+                            onNavigate={onNavigate}
+                            mentions={r.mentions}
+                            nameOf={nameOf}
+                            onPerson={showPerson}
+                            tx={tx}
+                        />
+                    </Clamped>
+                )}
                 {ai.kind === 'given-up' && !slotted && (
                     <p className="chat-ai-given-up">
                         {tx.chat.ai.givenUp}
@@ -1154,17 +1266,25 @@ function AiStatus({ ai }: { ai: MessageAi }) {
 
 /**
  * An answer of the AI (ADR 0030): a message of the AI, with its avatar and name, its text as Markdown with element links. On top,
- * the message it answers, unless it is right above. Anyone replies to it (the reply is addressed to the AI) and reacts.
+ * the message it answers, unless it hangs right under it. Anyone replies to it (the reply is addressed to the AI) and reacts.
  */
-function AiMessageRow({ request: r, continues, underIt }: { request: RequestJson; continues: boolean; underIt: boolean }) {
-    const { tx, onNavigate, solo } = useChat();
+function AiMessageRow({ request: r, continues, hangs }: { request: RequestJson; continues: boolean; hangs: boolean }) {
+    const { tx, onNavigate, solo, session } = useChat();
+    // `/hint`'s answer: its steps with their command buttons, rather than its text; a light bulb by the AI's name
+    const next = nextAnswerOf(session.state, r.id);
+    const badge = next && <HintMark label={tx.chat.hint.answer} />;
     return (
         <div className="chat-row">
-            <Bubble avatar={<AiAvatar />} who={tx.chat.agent} at={r.sentAt} continues={continues} className="chat-bubble-ai">
-                {r.replyTo?.kind === 'Message' && !underIt && <MessageReferenceLine request={r.replyTo.request} />}
-                <Clamped tx={tx} revealKey={`message:${r.id}`} blocks>
-                    <MarkdownText text={r.body} onNavigate={onNavigate} />
-                </Clamped>
+            <Bubble avatar={<AiAvatar />} who={tx.chat.agent} badge={badge} at={r.sentAt} continues={continues} className="chat-bubble-ai">
+                {r.replyTo?.kind === 'Message' && !hangs && <MessageReferenceLine request={r.replyTo.request} />}
+                {next ? (
+                    <NextSteps next={next} />
+                ) : (
+                    <Clamped tx={tx} revealKey={`message:${r.id}`} blocks>
+                        <MarkdownText text={r.body} onNavigate={onNavigate} />
+                    </Clamped>
+                )}
+                <InterviewChoices request={r.id} />
                 <ReactionRow target={{ kind: 'Message', request: r.id }} />
             </Bubble>
             <RowActions>
@@ -1173,6 +1293,23 @@ function AiMessageRow({ request: r, continues, underIt }: { request: RequestJson
             </RowActions>
         </div>
     );
+}
+
+/**
+ * What a reply hanging right under it replies to, for a screen reader (the line it hangs on says it to the eye):
+ * 「返信: <its author>」, or the name of the run's card.
+ */
+function RepliesTo({ to }: { to: ReplyTo }) {
+    const { session, tx, nameOf, replies } = useChat();
+    let who: string | undefined;
+    if (to.kind === 'Message') {
+        const ref = replies.messageReferenceOf(to.request);
+        who = ref && speakerName(ref.author, session.me.participant.id, nameOf, tx.chat.you);
+    } else {
+        const ref = replies.referenceOf(to.run);
+        who = ref && tx.chat.replies.reference(ref.name);
+    }
+    return who === undefined ? null : <span className="visually-hidden">{tx.chat.replies.repliesTo(who)}</span>;
 }
 
 /**
@@ -1604,7 +1741,10 @@ function Composer(props: {
     candidates: readonly MentionCandidate[];
     focusPending: boolean;
     onFocused: () => void;
-    /** The run or message the message replies to, while a reply is written; `replyFocus` changes when one starts. */
+    /**
+     * The run or message the message replies to, while a reply is written; `replyFocus` changes when one starts (and when
+     * a command is put in the composer).
+     */
     reply: ReplyDraft | undefined;
     replyFocus: number;
     onReplyDone: () => void;
@@ -1647,6 +1787,12 @@ function Composer(props: {
     const slashKey = slashText === undefined ? undefined : 'slash';
     const slashOpen = slashText !== undefined && dismissed !== slashKey;
     const running = runningInterview(session.state);
+    // ヒントをもらう: with an answerer to take it, one at a time
+    const presence = aiPresence(session.state.agent);
+    const hint = hintButton(session.state, !(presence.kind === 'missing' && presence.role !== 'run'));
+    const [hinting, setHinting] = useState(false);
+    // the commands the latest hint suggests: marked in `/`'s list
+    const suggested = useMemo(() => hintSuggestions(session.state), [session.state]);
     const scope = useMemo(
         (): SlashScope => ({ view: props.slash.view, selected: selectedOf(props.slash.selected, props.candidates) }),
         [props.slash.view, props.slash.selected, props.candidates],
@@ -1657,7 +1803,7 @@ function Composer(props: {
               lang,
               scope,
               commandNames: tx.chat.slash.commands,
-              canStart: session.me.participant.role === 'facilitator' && !running,
+              canStart: (id) => canStartCommand(session.state, id),
               ...(session.state.templates && { team: session.state.templates }),
           })
         : [];
@@ -1729,9 +1875,9 @@ function Composer(props: {
         editor.current?.pick(query, mention);
     };
 
-    /** A `/` item picked: a template's text into the composer (to edit), or a command started (an interview). */
+    /** A `/` item picked: a template's text into the composer (to edit), or a command started (an interview, or another). */
     const pickSlash = async (item: SlashItem | undefined): Promise<void> => {
-        if (!item) return;
+        if (!item || (item.kind === 'command' && item.disabled)) return;
         if (item.kind === 'template') {
             composer.setValue(templateValue(item.template, lang, scope.selected));
             setError(undefined);
@@ -1741,13 +1887,29 @@ function Composer(props: {
         setSending(true);
         try {
             const focus = scope.selected?.target.target;
-            await sessionApi.startInterview(interviewBody({ command: item.id, body: tx.chat.slash.commands[item.id], language: lang, focus, viewedAt }));
+            const start = { body: tx.chat.slash.commands[item.id], language: lang, focus, viewedAt };
+            if (isInterviewCommandId(item.id)) await sessionApi.startInterview(interviewBody({ ...start, command: item.id }));
+            else await sessionApi.startCommand(commandBody({ ...start, command: item.id }));
             await composer.clear();
             setError(undefined);
         } catch (e) {
             setError(failure(e));
         } finally {
             setSending(false);
+        }
+    };
+
+    /** ヒントをもらう pressed: `/hint` started at once, the composer left as it is (nothing to type, no file changed). */
+    const askHint = async (): Promise<void> => {
+        setHinting(true);
+        try {
+            const focus = scope.selected?.target.target;
+            await startHint(sessionApi, { body: tx.chat.slash.commands.hint, language: lang, focus, viewedAt });
+            setError(undefined);
+        } catch (e) {
+            setError(failure(e));
+        } finally {
+            setHinting(false);
         }
     };
 
@@ -1814,7 +1976,8 @@ function Composer(props: {
                                 data-index={i}
                                 role="option"
                                 aria-selected={i === active}
-                                className={`chat-mention-option chat-slash-option ${c.kind}${i === active ? ' active' : ''}`}
+                                {...(c.kind === 'command' && c.disabled && { 'aria-disabled': true })}
+                                className={`chat-mention-option chat-slash-option ${c.kind}${c.kind === 'command' && c.disabled ? ' disabled' : ''}${i === active ? ' active' : ''}`}
                                 onMouseDown={(e) => {
                                     e.preventDefault();
                                     void pickSlash(c);
@@ -1824,9 +1987,13 @@ function Composer(props: {
                                     setActive(i);
                                 }}
                             >
-                                {c.kind === 'command' && <Sparkles size={13} aria-hidden className="chat-slash-icon" />}
-                                <span className="chat-mention-name">{c.name}</span>
-                                {c.kind === 'command' && <span className="chat-slash-what muted">{tx.chat.slash.command}</span>}
+                                {c.kind === 'command' && <CommandIcon id={c.id} />}
+                                {/* the hint's star in the name's cell: the option's grid keeps its columns */}
+                                <span className="chat-mention-name">
+                                    {c.name}
+                                    {c.kind === 'command' && suggested.has(c.id) && <SuggestedMark label={tx.chat.slash.suggested} />}
+                                </span>
+                                {c.kind === 'command' && <span className="chat-slash-what muted">{tx.chat.slash.types[c.type]}</span>}
                                 {c.kind === 'template' && c.template.team && <span className="chat-mention-kind">{tx.chat.slash.team}</span>}
                                 <span className="chat-mention-where muted">/{c.id}</span>
                             </li>
@@ -1913,6 +2080,7 @@ function Composer(props: {
                 />
             </div>
             <div className="chat-composer-bar">
+                {hint !== 'hidden' && <HintButton state={hint} busy={hinting} label={tx.chat.hint.button} onPress={() => void askHint()} />}
                 <ComposerChips
                     chips={value.chips}
                     expanded={chipsExpanded}

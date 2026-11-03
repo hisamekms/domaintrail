@@ -4,7 +4,10 @@
 //   triage  → stage 3: the light model with no tools → { kind, confidence, reason } (or why it failed)
 //   answer  → the read-only agent → an answer, or "a request after all" with a proposal, or "neither"
 //   propose → the read-only agent → the change proposal for a participant's 依頼
-//   interview → the read-only agent (the interviewer) → the next question of a `/es` or `/model` interview, or its brief
+//   interview → the read-only agent (the interviewer) → the next question of a `/es:start` or `/model:start`
+//               interview, or its brief
+//   command → the read-only agent → the candidates of a candidate command (`/es:exceptions`, …), or the answer of an
+//             answer command (`/es:recap`; `/hint` its next steps)
 //
 // No claim, no lease, no revision, no `dt fmt` / `dt check`: an answer changes nothing to record, and the read-only
 // guarantee is the agent's tools (its adapter), not this code. A job withdrawn by the server (it timed out there, or is
@@ -13,9 +16,27 @@
 // since its previous job ended (`changedSinceYourLastAnswer`). A restored revision makes the agent forget. The output is
 // validated here before it is sent (the server validates it again). Functions over the ports only; the log has job
 // kinds and IDs, never a message's text or an answer.
-import { briefData, proposalData, readAnswererReply, readInterviewerReply, readTriageAnswer, TRIAGE_KINDS } from '@domaintrail/collaboration';
-import type { AgentAnswerStreamJob, AgentInterviewJobBody } from '@domaintrail/collaboration/protocol';
-import { buildAnswerPrompt, buildInterviewPrompt, buildProposePrompt, buildTriagePrompt } from './answer-prompt.js';
+import {
+    briefData,
+    candidateData,
+    nextAnswerData,
+    proposalData,
+    readAnswererReply,
+    readCommandReply,
+    readInterviewerReply,
+    readTriageAnswer,
+    TRIAGE_KINDS,
+} from '@domaintrail/collaboration';
+import type { AgentAnswerStreamJob, AgentCommandJobBody, AgentInterviewJobBody } from '@domaintrail/collaboration/protocol';
+import {
+    buildAnswerPrompt,
+    buildCommandPrompt,
+    buildInterviewPrompt,
+    buildProposePrompt,
+    buildTriagePrompt,
+    commandReadsDiagnostics,
+    type DiagnosticsScope,
+} from './answer-prompt.js';
 import { AgentApiError, type AgentApi, type AnswerAgent, type AnswerTurnResult, type Clock, type WorkspaceFiles } from './ports.js';
 import { changedPaths } from './subscriber.js';
 import type { Practice } from './prompt.js';
@@ -24,6 +45,12 @@ export interface AnswererDeps {
     readonly api: AgentApi;
     readonly agent: AnswerAgent;
     readonly workspace: Pick<WorkspaceFiles, 'scan'>;
+    /**
+     * `dt check`'s findings now, one line each (`file:line:column severity code: message`), on the `.dtes` files
+     * (`stormings`) or on all (`workspace`), for the commands that read them (`/es:names`, `/hint`); without it, those
+     * commands go without.
+     */
+    readonly diagnostics?: (scope: DiagnosticsScope) => Promise<readonly string[]>;
     readonly clock: Clock;
     /** A random string per job (the prompt's block delimiter). */
     readonly nonce: () => string;
@@ -98,13 +125,36 @@ export function startAnswerer(deps: AnswererDeps, options: AnswererOptions = {})
         const read = readInterviewerReply(outputOf(result));
         if (!read.ok) return { error: `invalid output (${read.error.path})`, ...meta };
         const reply = read.value;
-        return reply.kind === 'question' ? { kind: 'question', question: reply.question, ...meta } : { kind: 'brief', brief: briefData(reply.brief), ...meta };
+        if (reply.kind === 'brief') return { kind: 'brief', brief: briefData(reply.brief), ...meta };
+        const { question, choices, multiple } = reply;
+        return { kind: 'question', question, ...(choices.length > 0 && { choices, multiple }), ...meta };
+    };
+
+    /** A command's turn: its candidates or its answer, as the server takes it (`AgentCommandResultBody`). */
+    const commandResultOf = async (job: AgentCommandJobBody, signal: AbortSignal, started: number): Promise<Record<string, unknown>> => {
+        const elapsed = (): number => Math.max(0, Math.round(now() - started));
+        // the findings are a help, not a need: a check that fails leaves them out
+        const scope = commandReadsDiagnostics(job.name);
+        const diagnostics = deps.diagnostics && scope ? await deps.diagnostics(scope).catch(() => undefined) : undefined;
+        const prompt = buildCommandPrompt(job, deps.nonce(), { ...practice, ...(diagnostics && { diagnostics }) });
+        const result = await deps.agent.command({ prompt, type: job.type, signal });
+        const meta = { ...(result.model && { model: result.model }), durationMs: elapsed() };
+        if (result.error !== undefined) return { error: result.error, ...meta };
+        const read = readCommandReply(outputOf(result), job.type);
+        if (!read.ok) return { error: `invalid output (${read.error.path})`, ...meta };
+        const reply = read.value;
+        // the candidates as read (clamped, malformed references dropped) go as the answerer sends them: the server reads them
+        // again; `/hint`'s steps too, the server writing the message from them
+        if (reply.kind === 'candidates') return { kind: 'candidates', candidates: reply.candidates.map(candidateData), ...meta };
+        if (reply.next) return { kind: 'next', ...nextAnswerData(reply.next), ...meta };
+        return { kind: 'answer', answer: reply.answer, ...meta };
     };
 
     /** The result of a job as the server takes it (`AgentTriageResultBody`, `AgentAnswerResultBody`, `AgentProposeResultBody`). */
     const resultOf = async (job: AgentAnswerStreamJob, signal: AbortSignal): Promise<Record<string, unknown>> => {
         const started = now();
         if (job.kind === 'interview') return interviewResultOf(job, signal, started);
+        if (job.kind === 'command') return commandResultOf(job, signal, started);
         const elapsed = (): number => Math.max(0, Math.round(now() - started));
         const failed = (error: string, model?: string): Record<string, unknown> => ({ error, durationMs: elapsed(), ...(model && { model }) });
         if (job.kind === 'triage') {
@@ -154,7 +204,9 @@ export function startAnswerer(deps: AnswererDeps, options: AnswererOptions = {})
         const limit = Math.max(1, Math.min(job.timeoutMs, options.timeoutMs ?? Number.POSITIVE_INFINITY));
         const timeout = AbortSignal.timeout(limit);
         const signal = AbortSignal.any([withdrawn.signal, stopping.signal, timeout]);
-        log(`answer job ${job.job}: ${job.kind} of ${job.kind === 'interview' ? `interview ${job.interview.id}` : `triage ${job.triage.id}`}`);
+        const subject =
+            job.kind === 'interview' ? `interview ${job.interview.id}` : job.kind === 'command' ? `command ${job.command.id}` : `triage ${job.triage.id}`;
+        log(`answer job ${job.job}: ${job.kind} of ${subject}`);
         try {
             let result: Record<string, unknown>;
             try {

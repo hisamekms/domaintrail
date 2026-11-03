@@ -7,7 +7,7 @@
 //   or `agent.run.dt`, for the agent too) and the workspace's files;
 // - the answerer: stage 3 of the triage (a light model with no tools: `agent.triage`), answers and proposals (Claude
 //   Code with the reading tools only: `agent.answer`), from the answers entry point.
-import { hostname } from 'node:os';
+import { homedir, hostname } from 'node:os';
 import * as path from 'node:path';
 import {
     AGENT_ROLES,
@@ -24,6 +24,7 @@ import {
     dtCommandOf,
     pinDt,
     type PinnedDt,
+    type DiagnosticsScope,
     type Practice,
     randomNonce,
     resolveAnswerConfig,
@@ -43,9 +44,19 @@ import {
     type WorkspaceView,
 } from '@domaintrail/agent';
 import { type AgentCredential, readServerAddress } from '@domaintrail/collaboration';
-import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/analysis';
+import { analyze, DEFAULT_SOURCES, sourceSelection } from '@domaintrail/analysis';
+import { isStormingFile } from '@domaintrail/storming';
 import { SessionError } from '../cli/ports.js';
-import { findDomainFiles, GitIgnore, gitIgnoredEntries, gitNestedRepositories, gitReadableFiles } from '@domaintrail/workspace';
+import {
+    createWorkspaceReader,
+    findDomainFiles,
+    GitIgnore,
+    gitIgnoredEntries,
+    gitNestedRepositories,
+    gitReadableFiles,
+    stateRoots,
+} from '@domaintrail/workspace';
+import { workspaceState } from './state.js';
 import { configFileRules, configGuardScan } from './config-guard.js';
 import { processAlive } from './process.js';
 import { answererExtraViews, runnerReadScope } from './read-scope.js';
@@ -120,7 +131,7 @@ const isLoopbackUrl = (url: string): boolean => {
 export async function pairAgent(root: string, code: string, url?: string): Promise<AgentCredential> {
     let at = url;
     if (at === undefined) {
-        const address = await readServerAddress(root);
+        const address = await readServerAddress((await workspaceState(root, (line) => console.error(line))).state);
         if (!address || !processAlive(address.pid))
             throw new SessionError('No session server is running for this workspace (start one with `dt open` or `dt collab`).');
         if (!address.agentUrl) throw new SessionError('The running session server is of an older version: restart it, or pass --url.');
@@ -156,6 +167,8 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     if (session.value.state !== 'Open') throw new SessionError('The session is closed.');
 
     const roles = new Set<AgentRole>(taken);
+    const sources = options.sources ?? DEFAULT_SOURCES;
+    const respectGitignore = options.respectGitignore ?? true;
     const scan = (): Promise<ReadonlyMap<string, string>> => scanWorkspace(root);
     const owner = `${options.agent}@${
         hostname()
@@ -167,9 +180,11 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     const user = userClaudeDefaults();
     const answerConfig = options.answer ?? resolveAnswerConfig();
     const triageConfig = options.triage ?? resolveTriageConfig();
-    // what each role reads outside the workspace, by its real path now: one missing is skipped, and said
+    // what each role reads outside the workspace, by its real path now: one missing is skipped, and said; never dt's
+    // own state and cache directories
+    const roots = stateRoots();
     const readOf = (role: AgentRole): ReturnType<typeof readTargets>['targets'] => {
-        const { targets, skipped } = readTargets(options.read?.[role] ?? [], root);
+        const { targets, skipped } = readTargets(options.read?.[role] ?? [], root, homedir(), [roots.state, roots.cache]);
         for (const s of skipped) log(`${role === 'answer' ? 'answerer' : 'runner'}: not reading ${s}`);
         return targets;
     };
@@ -204,6 +219,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
                           log,
                       }),
                       workspace: { scan },
+                      diagnostics: (scope) => workspaceDiagnostics(createWorkspaceReader(root, sourceSelection(sources, respectGitignore)), scope),
                       clock: systemClock,
                       nonce: randomNonce,
                       log,
@@ -254,8 +270,6 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
         await answerer?.stop();
         throw new SessionError(e instanceof Error ? e.message : String(e));
     }
-    const sources = options.sources ?? DEFAULT_SOURCES;
-    const respectGitignore = options.respectGitignore ?? true;
     const subscriber: Subscriber = subscribe(
         {
             api,
@@ -294,6 +308,20 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             return why;
         },
     };
+}
+
+/**
+ * `dt check`'s findings on the workspace now, one line each (`file:line:column severity code: message`): on the `.dtes`
+ * files only (`stormings`: what `/es:names` reads) or on all of them (`workspace`: what `/hint` reads).
+ */
+export async function workspaceDiagnostics(
+    reader: { readSources(): Promise<readonly { path: string; text: string }[]> },
+    scope: DiagnosticsScope,
+): Promise<readonly string[]> {
+    const a = await analyze(await reader.readSources());
+    return a.diagnostics
+        .filter((d) => scope === 'workspace' || isStormingFile(d.file))
+        .map((d) => `${d.file}:${d.start.line}:${d.start.column} ${d.severity} ${d.code}: ${d.message}`);
 }
 
 /**

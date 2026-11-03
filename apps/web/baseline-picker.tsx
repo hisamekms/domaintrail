@@ -1,9 +1,10 @@
 import { GitCompare } from 'lucide-react';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { GitRefs } from '@domaintrail/visualization';
 import type { Baseline, BaselineSpec } from '@domaintrail/visualization/protocol';
 import { fetchServer } from './app/sign-in';
 import { useT } from './i18n';
+import { useDismissOutside } from './shared/layout';
 
 /** How the baseline is named in the header: the previous save, or the ref with its commit. */
 export function baselineName(b: Baseline, previous: string): string {
@@ -61,7 +62,7 @@ export function menuPlacement(anchor: DOMRect, viewport: { width: number; height
 /**
  * The menu choosing what the model is compared with: the previous save, or a git revision (a branch, a tag, one of the
  * latest commits, or any ref typed in), next to `anchor`, the button that opened it. The choice is the server's, so it
- * applies to every open page. It closes on Escape, on a choice, and on a click outside it and its button (which
+ * applies to every open page. It closes on Escape, on a choice, and on a press outside it and its button (which
  * toggles it).
  */
 export function BaselineMenu({ baseline, anchor, onClose }: { baseline: Baseline; anchor: HTMLElement; onClose: () => void }) {
@@ -72,21 +73,11 @@ export function BaselineMenu({ baseline, anchor, onClose }: { baseline: Baseline
     const [waited, setWaited] = useState(false);
     const root = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        const onDown = (e: MouseEvent) => {
-            const inside = (el: Node | null) => !!el && e.target instanceof Node && el.contains(e.target);
-            if (!inside(root.current) && !inside(anchor)) onClose();
-        };
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') onClose();
-        };
-        document.addEventListener('mousedown', onDown);
-        document.addEventListener('keydown', onKey);
-        return () => {
-            document.removeEventListener('mousedown', onDown);
-            document.removeEventListener('keydown', onKey);
-        };
-    }, [anchor, onClose]);
+    useDismissOutside(
+        true,
+        useCallback(() => [root.current, anchor], [anchor]),
+        onClose,
+    );
 
     // the branches and commits change while the page is open: list them each time it opens
     useEffect(() => {

@@ -1,6 +1,6 @@
 // What the composer sends (apps/web/session/outgoing.ts): a message and a `/` command started, each with the view.
 import { describe, expect, test } from 'bun:test';
-import { interviewBody, messageBody } from './outgoing';
+import { commandBody, interviewBody, messageBody } from './outgoing';
 import type { SentView } from './views';
 
 const viewedAt: SentView = { view: { kind: 'Storming', storming: 'OrderToCash', level: 'DesignLevel', exceptions: true } };
@@ -30,14 +30,20 @@ describe('what the composer sends', () => {
 
     test('a `/` command: its opening, the language, the element selected and the view', () => {
         expect(
-            interviewBody({ command: 'es', body: 'ES を始める', language: 'ja', focus: { kind: 'DtesStorming', storming: 'OrderToCash' }, viewedAt }),
+            interviewBody({ command: 'es:start', body: 'ES を始める', language: 'ja', focus: { kind: 'DtesStorming', storming: 'OrderToCash' }, viewedAt }),
         ).toEqual({
-            command: 'es',
+            command: 'es:start',
             body: 'ES を始める',
             language: 'ja',
             focus: { kind: 'DtesStorming', storming: 'OrderToCash' },
             viewedAt,
         });
-        expect(interviewBody({ command: 'model', body: 'x', language: 'en' })).toEqual({ command: 'model', body: 'x', language: 'en' });
+        expect(interviewBody({ command: 'model:start', body: 'x', language: 'en' })).toEqual({ command: 'model:start', body: 'x', language: 'en' });
+        expect(commandBody({ command: 'es:exceptions', body: '例外を洗い出す', language: 'ja', viewedAt })).toEqual({
+            command: 'es:exceptions',
+            body: '例外を洗い出す',
+            language: 'ja',
+            viewedAt,
+        });
     });
 });

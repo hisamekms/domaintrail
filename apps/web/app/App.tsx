@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { Blocks, StickyNote, type LucideIcon } from 'lucide-react';
 import type { Diagnostic } from '@domaintrail/kernel';
 import type { DomainModel } from '@domaintrail/modeling';
 import { BaselineButton, BaselineMenu, baselineName } from '../baseline-picker';
@@ -9,8 +10,11 @@ import { changeCount, ChangesList, problemCounts, ProblemsList } from '../lists'
 import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from '../model-utils';
 import { StatesCanvas } from '../states-canvas';
 import { useSessionPage } from '../session/page';
-import { stageChoice, StormingDetails } from '../storming';
+import { chooseScope, StormingDetails, stormingExists } from '../storming';
+import { StormingNavigator } from '../storming-navigator';
+import { NameSwitch } from '../view/toolbar';
 import { ViewWorkspace, useViewWorkspace } from '../view/workspace';
+import { WORLDS, type World } from '../view/worlds';
 import { usePanes } from './panes';
 import { SettingsDialog } from '../settings-dialog';
 import { usePreferences } from './preferences';
@@ -19,13 +23,15 @@ import { workspaceName } from './health';
 import { HealthButton } from './status';
 import { useViewSocket } from './useViewSocket';
 
+const WORLD_ICONS: Record<World, LucideIcon> = { model: Blocks, storming: StickyNote };
+
 /** An aggregate's name and label (its ID while the model does not have it). */
 function aggregateNames(model: DomainModel | null, id: string): { name: string; label?: string | undefined } {
     const r = model ? resolve(model, id) : undefined;
     return r?.kind === 'element' ? { name: r.el.name, label: r.el.label } : { name: id };
 }
 
-/** The Live View page: composes the shell with the left pane's lists, the view workspace, the inspector and, in a session, the chat. */
+/** The Live View page: composes the shell with the left column's lists and detail (the inspector), the view workspace and, in a session, the chat. */
 export function App() {
     const socket = useViewSocket();
     const { current, connection } = socket;
@@ -42,9 +48,11 @@ export function App() {
     const [baselineAnchor, setBaselineAnchor] = useState<HTMLElement | null>(null);
     const toggleBaselineMenu = (anchor: HTMLElement) => setBaselineAnchor((a) => (a === anchor ? null : anchor));
     const closeBaselineMenu = useCallback(() => setBaselineAnchor(null), []);
+    /** The app bar's place for a session's controls of the whole page (the chat puts them there). */
+    const [sessionSlot, setSessionSlot] = useState<HTMLDivElement | null>(null);
 
     const workspace = useViewWorkspace(current, { mode, lang, theme });
-    const { stormings, nav, settings, viewGraph } = workspace;
+    const { stormings, nav, worlds, settings, viewGraph } = workspace;
     const { view, setView, selected, sourceFocus, setSourceFocus, select, backTo, goBack, reveal } = nav;
     const { shown, stormingShown } = viewGraph;
 
@@ -63,7 +71,7 @@ export function App() {
     };
 
     // in a session (dt session start) only: the session's chat, the facilitator's session pane and the others' cursors
-    const session = useSessionPage({ socket, current, workspace, panes, mode, openBest });
+    const session = useSessionPage({ socket, current, workspace, panes, mode, openBest, barSlot: sessionSlot });
 
     const locate = (d: Diagnostic) => {
         // e.g. syntax errors belong to no element: only their file can show them
@@ -83,6 +91,18 @@ export function App() {
             <AppShell
                 panes={panes}
                 workspaceName={current ? workspaceName(current.root) : undefined}
+                world={
+                    <NameSwitch
+                        label={t.worldsLabel}
+                        className="world-switch"
+                        choices={WORLDS}
+                        value={worlds.world}
+                        icons={WORLD_ICONS}
+                        names={t.worlds}
+                        onChange={worlds.setWorld}
+                    />
+                }
+                sessionSlot={setSessionSlot}
                 health={<HealthButton current={current} connection={connection} />}
                 settings={
                     <SettingsDialog
@@ -111,22 +131,35 @@ export function App() {
                 lists={{
                     tree: {
                         count: 0,
-                        content: (
-                            <Explorer
-                                model={model}
-                                files={current?.files ?? []}
-                                diagnostics={diagnostics}
-                                diff={diff}
-                                mode={mode}
-                                selected={selected}
-                                onSelect={(id) => {
-                                    select(id);
-                                    if (selectedFile(id)) setInspectorOpen(true);
-                                }}
-                                onOpen={openBest}
-                                onClose={() => setExplorerOpen(false)}
-                            />
-                        ),
+                        // the navigator follows the world: the model tree, or the stormings with their stages and timelines
+                        content:
+                            worlds.world === 'storming' ? (
+                                <StormingNavigator
+                                    stormings={stormings}
+                                    choice={settings.stormingChoice}
+                                    mode={mode}
+                                    onChoose={settings.setStormingChoice}
+                                    onSelect={(id) => {
+                                        if (stormingExists(stormings, id)) select(id, { highlight: false });
+                                    }}
+                                    onClose={() => setExplorerOpen(false)}
+                                />
+                            ) : (
+                                <Explorer
+                                    model={model}
+                                    files={current?.files ?? []}
+                                    diagnostics={diagnostics}
+                                    diff={diff}
+                                    mode={mode}
+                                    selected={selected}
+                                    onSelect={(id) => {
+                                        select(id);
+                                        if (selectedFile(id)) setInspectorOpen(true);
+                                    }}
+                                    onOpen={openBest}
+                                    onClose={() => setExplorerOpen(false)}
+                                />
+                            ),
                     },
                     problems: {
                         count: diagnostics.length,
@@ -175,10 +208,8 @@ export function App() {
                     />
                 }
                 {...(session.conversation && { conversation: session.conversation })}
-                inspector={(menu) => (
+                inspector={
                     <Inspector
-                        menu={menu}
-                        dock={panes.inspectorDock}
                         model={model}
                         mode={mode}
                         selected={selected}
@@ -212,20 +243,24 @@ export function App() {
                                 stormings={stormings}
                                 selected={id}
                                 render={view.kind === 'storming' && shown && id.startsWith(`es/${shown.storming.id}/`) ? stormingShown?.render : undefined}
+                                level={shown?.options.level ?? settings.stormingChoice.level}
                                 model={model}
                                 mode={mode}
                                 diagnostics={current?.diagnostics ?? []}
                                 history={history}
                                 headingAction={session.inspectorAction}
+                                session={session.stormingDetail}
                                 onSelect={(x) => select(x)}
-                                onShowStage={(stormingId, stageId) => {
-                                    const choice = settings.stormingChoice;
-                                    settings.setStormingChoice({
-                                        ...choice,
-                                        stormingId,
-                                        timelines: { ...choice.timelines, [stormingId]: stageChoice(stageId) },
-                                    });
+                                onShowScope={(stormingId, scope, then) => {
+                                    settings.setStormingChoice(chooseScope(settings.stormingChoice, stormingId, scope));
                                     setView({ kind: 'storming' });
+                                    // the element in the view just chosen, once it is drawn
+                                    if (then) requestAnimationFrame(() => requestAnimationFrame(() => select(then)));
+                                }}
+                                onLevel={(level) => {
+                                    settings.setStormingChoice({ ...settings.stormingChoice, level });
+                                    setView({ kind: 'storming' });
+                                    requestAnimationFrame(() => requestAnimationFrame(() => select(id)));
                                 }}
                             />
                         )}
@@ -242,7 +277,7 @@ export function App() {
                         onBack={goBack}
                         onClose={() => setInspectorOpen(false)}
                     />
-                )}
+                }
                 overlays={
                     current &&
                     baselineAnchor &&

@@ -1162,7 +1162,7 @@ How to grow the `.dt` model, for people and AI agents. The rules of the language
 of working.
 
 **Start from the brief.** The `///` description above a `context` says its purpose, scope, what the generated code is
-for and how far to go (`/model` in the chat writes it). Keep to that context; ask before changing another one.
+for and how far to go (`/model:start` in the chat writes it). Keep to that context; ask before changing another one.
 
 **One context at a time, terms first.**
 - Agree on the words before the structure: the context's `terms` with their labels, and a `///` for any term people
@@ -1190,7 +1190,8 @@ gaps to fill by guessing.
 
 **Small steps.** Change a little, run `dt fmt` and `dt check` until it exits 0, and keep the model valid between
 steps. Do not rename or remove what the people did not ask to change: other files, generated code and the chat refer
-to the IDs.
+to the IDs. Unsure what to do next? `/hint` (the composer's ヒントをもらう button) has the AI coach you, in the modeling
+as in the storming.
 
 <!-- topic: generated -->
 ## Generated TypeScript
@@ -1847,8 +1848,9 @@ context the module through which its package exports its generated code, next to
   generated together, and the Live View shows them all.
 
 Each run replaces the files generated before (recognized by their header). The files written are recorded in
-`.domaintrail/generated.json` under the root, and generated files of earlier runs that are no longer written (an output
-directory moved, a context removed) are deleted, along with a directory left empty. Only recorded paths inside the root
+`generated.json` in the workspace's state directory, outside the workspace (see `dt guide config`, Where dt keeps its
+files), and generated files of earlier runs that are no longer written (an output directory moved, a context removed)
+are deleted, along with a directory left empty. Only recorded paths inside the root
 and not reached through a symlink are deleted; other entries in that file are ignored. Other files are never deleted —
 neither hand-written files nor generated files you edited — and generation stops instead of overwriting one.
 <!-- topic: storming -->
@@ -2120,9 +2122,11 @@ A storming is viewed along two independent axes, neither of which changes the `.
   hotspot on a hidden event is shown without its line.
 - **Scope.** The *integrated canvas* shows every timeline, the events in no timeline and every element. A storming
   with stages also has a view of each *stage* (its main flows and exceptions, drawn as on the integrated canvas). *One timeline*
-  shows its events, plus each one-hop path event → policy → command → event whose two events are both in that timeline
-  (with the command's actors, read models and target), and the hotspots on its events. Longer chains are not followed,
-  and a hotspot without `on` is shown on the integrated canvas only.
+  shows its events, plus each one-hop path event → policy → command → event whose two events are both in that timeline,
+  the commands that emit one of its events (their cause, as on the integrated canvas), the actors, read models and
+  target of those commands, and the hotspots on its events. A stage's view picks them the same way over the stage's
+  events. Longer chains are not followed (a command's policy is shown only on such a path), and a hotspot without `on`
+  is shown on the integrated canvas only.
 
 The integrated canvas draws each event once, without group frames: the time order is one dashed arrow per pair of
 consecutive events, naming the timelines it belongs to when not all of them do, and an event that repeats loops back
@@ -2137,11 +2141,12 @@ them, one note per command, so their lines stay short (one that no command uses 
 notes selects the element and marks its other notes with a fainter dashed ring.
 Every note is a square of the same size: a long label is drawn smaller, and one too long even then is cut short with
 «…» (hovering it shows the whole label; S015 warns about it), so keep labels short (about 12 Japanese characters).
-The layout is automatic, left to right; positions are kept in `.domaintrail/layout.json`, never in the `.dtes`.
+The layout is automatic, left to right; positions are kept in the workspace's cache directory, outside the workspace
+(`layout.json`; `dt guide config`), never in the `.dtes`.
 詰めて表示 in the canvas's controls closes up the gaps between the notes (every diagram, remembered per browser), and
-印刷 in the toolbar's 書き出し menu prints the diagram alone, fitted to one landscape page (Ctrl+P too). In
-`dt open`, the イベントストーミング tab shows one storming at a time, with the storming and the timeline picked as
-its toolbar's subject (a breadcrumb at the left) and the level next to them; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in (and
+印刷 in the view bar's 書き出し menu prints the diagram alone, fitted to one landscape page (Ctrl+P too). In
+`dt open`, the イベントストーミング world shows one storming at a time, with the storming and the timeline picked as
+its view bar's subject (a breadcrumb at the left) and the level next to them; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in (and
 デザインレベルのみ for an event marked `level design`).
 
 A storming with stages or exceptions is drawn in time order instead: the stages left to right, each a labelled frame,
@@ -2151,7 +2156,7 @@ and named by its label: the other main flows first, then the exceptions, whose d
 step an exception branches off at is one note for both; a dotted arrow goes from an exception's last step back to the
 step of its `then`. Elements of Design Level stand above the event they belong to. The timeline picker lists the
 stages (「コンビニでの発行（例外を含む）」) between すべて（統合） and the timelines; clicking a stage's frame selects
-it (its main flows, its exceptions and 「この段階を表示」). 「例外を表示」 in the toolbar's 絞り込み (a storming with
+it (its main flows, its exceptions and 「この段階を表示」). 「例外を表示」 in the view bar's 絞り込み (a storming with
 exceptions only) hides the exceptions of the integrated canvas and of a stage: their steps, the events only they have, the
 hotspots on those events and their `then` arrows; an exception's own view is unchanged.
 
@@ -2498,7 +2503,7 @@ How to run a storming in `.dtes` files, for people and AI agents. The rules of t
 Storming](#event-storming-dtes); this is the way of working.
 
 **Start from the brief.** The `///` description above a `storming` says its purpose, scope, what the result is for
-and how far to go (`/es` in the chat writes it). Keep to that scope; ask before going beyond it. With no brief, ask
+and how far to go (`/es:start` in the chat writes it). Keep to that scope; ask before going beyond it. With no brief, ask
 for the purpose and the first and last events before writing much.
 
 **Big Picture first.**
@@ -2514,6 +2519,11 @@ for the purpose and the first and last events before writing much.
 - Anything unclear, disputed or risky becomes a `hotspot` on the events it concerns, worded as a question. Do not
   settle it by guessing; an open hotspot is a good result.
 - No commands, policies, aggregates or read models yet, and no `ref`s.
+
+In the chat, `/es:exceptions`, `/es:gaps` (events missing between two of a flow), `/es:levels` (which events show at Big
+Picture) and `/es:names` (labels not in the past tense, inconsistent, too long or technical) list candidate changes to
+check. Unsure what to do next? `/hint` (the composer's ヒントをもらう button) has the AI coach you: where you stand and
+one to three next steps, with a button for the command that does a step.
 
 **Design Level next**, once the flow is agreed (the brief says how far to go):
 - For each event, what caused it: a `command` (and the `actor` or `external` system that issues it), or a `policy`
@@ -2830,6 +2840,52 @@ from the root down only. So a generated or cloned copy of the model in an ignore
 checkout, a build output) is not checked twice. `"respectGitignore": false` turns this off; files named on the command
 line (`dt fmt <files>`) are never skipped.
 
+**Where dt keeps its files.** Nothing of dt's is written into the workspace but the generated sources: what dt keeps of
+a workspace is outside it, per user, in one directory per workspace named after it and a short hash of its real path
+(`shop-3f9a1c2b`), with a `workspace.json` that records that path:
+
+| What | Where (Linux and macOS) | Windows |
+|---|---|---|
+| State: the session (`session.db` and its WAL files, `blobs/`), the running server's address (`server.json`), the record of `dt generate ts` (`generated.json`) | `$XDG_STATE_HOME/domaintrail/<workspace>/`, by default `~/.local/state/domaintrail/<workspace>/` | `%LOCALAPPDATA%\domaintrail\state\<workspace>\` |
+| Cache, made again when missing: the layouts (`layout.json`) | `$XDG_CACHE_HOME/domaintrail/<workspace>/`, by default `~/.cache/domaintrail/<workspace>/` | `%LOCALAPPDATA%\domaintrail\cache\<workspace>\` |
+
+`DOMAINTRAIL_STATE_DIR` (an absolute path, or one relative to the working directory) replaces the state's root, for CI
+and containers: the workspaces' directories go below it. A state or cache directory inside the workspace (or a workspace
+inside one) is refused: the AI reads the workspace, and never the sessions (`agent.read.paths` refuses them too).
+Directories are 0700 and files 0600, private to you, and dt never writes through a symbolic link there. Two workspaces
+whose names and hashes are the same are told apart by `workspace.json`: the second is refused, and says so. A moved
+workspace starts a new session (its directory has another hash); the first run says where the old one is.
+
+Nothing there is removed by itself. `dt session prune` lists the directories of workspaces that no longer exist (deleted,
+or moved), and with `--older-than <days>` also those not used for that long; `--yes` removes them. The state of a
+running server is kept.
+
+Older versions kept all of this in `.domaintrail/` in the workspace. The first command that uses the state (`dt open`,
+`dt collab`, `dt agent`, the links, `dt generate ts`) moves it — the session database with its WAL files, the blobs,
+the layouts — prints `Moved .domaintrail/ to ~/.local/state/domaintrail/<workspace>/` once, and deletes the emptied
+`.domaintrail/`. It refuses while a server of the older version still runs there (stop it first), keeps `.domaintrail/`
+as it is when the new directory already holds a session, and keeps the files in it that are not dt's. The move copies,
+checks and then renames the files into place: a move cut short leaves the old directory whole, and the next run
+finishes it.
+
+A `.domaintrail/` can also come with a cloned repository, so the move takes only what it can trust:
+
+- Nothing moves when git tracks or does not ignore anything in `.domaintrail/` (in any case of its name; dt's own
+  always ignored itself), or when git cannot tell: it is left as it is, the workspace starts a new session, and the
+  line says how to remove it (`git rm -r --cached .domaintrail` when it is tracked). Outside a git repository there is
+  nothing to ask. A directory named in another case (`.DomainTrail`) is not dt's and is never moved.
+- Only regular files of yours, in directories of yours that nobody else can write, move; the others stay, named in one
+  line. The session database moves with its WAL files or not at all.
+- The moved database keeps the session — messages, runs, revisions, participants — but none of its credentials: the
+  sign-ins, the facilitator links, the sign-in and pairing codes, the invites and who holds the facilitator role are
+  deleted, so everyone signs in again (`dt open` prints a new link; `dt collab` a new facilitator link). Only a
+  database dt made moves: its schema must be exactly the one a known version of dt made (every table, column and index;
+  no trigger or view, nothing more); any other is not moved.
+- The record of `dt generate ts` (`generated.json`) is not moved: it says which files a run deletes. The next
+  `dt generate ts` writes its output as usual and records it; generated files of earlier runs outside the output
+  directories it writes (a moved output directory, a removed context) are not deleted then: delete them by hand.
+- Its `.gitignore` files, a stopped server's `server.json` and an old `agent.json` are not kept either.
+
 <!-- topic: lsp -->
 ## Language server
 
@@ -2969,7 +3025,7 @@ behind Access in `access` mode), and 退出 for a participant (it signs out). Th
 以前の状態に復元 (below), ファシリテーターを引き継ぐ and コラボを終える instead of 退出: they hand the role over first to leave. Ending asks first and
 lists what is not finished — runs queued or running and questions waiting for an answer — then 終える. Every page then shows コラボを終えました: the changes (the runs that changed
 files, with how many files and who asked), the participants and how long it lasted, computed from what the page held
-when it ended; the session's record stays in the workspace's `.domaintrail`.
+when it ended; the session's record stays in the workspace's state directory (outside the workspace).
 
 **Messages and sending to the AI.** Everything posted in the chat is a **message**, shown in the stream as it is
 sent. A message is **addressed to the AI** when it mentions `@AI` or replies to the AI (one of its answers, or a run);
@@ -2981,6 +3037,10 @@ question. A **question** (相談) is answered at once by the answerer, read-only
 a message of the AI replying to it. A **request** (依頼) from the facilitator is queued as a run at once; from a
 participant, the answerer writes a **change proposal** (what, where, how) that the facilitator approves (as is or
 edited; several approved together are one run), or rejects with a note; its author may withdraw it while it waits.
+Anyone may run the `/` commands (`/es:start`, `/es:exceptions`, `/hint` …; one of each kind at a time). What changes
+files is the facilitator's to approve: the candidates of `/es:exceptions` and the like are checked and applied by the
+facilitator, whoever started the command, and the brief of a participant's `/es:start` or `/model:start` (they answer
+its questions) waits for the facilitator's 承認, 編集して承認 or 却下. An answer (`/hint`, `/es:recap`) is for everyone.
 Participants see only where a triage went; the facilitator sees its record (each stage's answer, confidence, reason
 and model). On each message the facilitator has the robot button, AI に送る (addresses it to the AI, as a mention would
 have: its triage decides what follows, and a request the facilitator sends this way is queued without a proposal), and
@@ -3094,6 +3154,10 @@ that asked in the same way. The current files stay the truth for the agent: othe
 one's own included, starts a reply to it. The chip reads `↩ 田中への返信 ✕` (the author by their current name), the
 composer's targets start with those of the message, and the posted reply shows `↩ 田中: <the head of its text>` on one
 muted line at its top, a click scrolling to the message and flashing it (nothing shows when the message is not there).
+A reply right under what it replies to (the AI's answers included, and in Solo the AI's card under your message) has
+no such line: it stays at the level of the other messages, joined by a thin line in the avatar column from the avatar
+of the message (or the card) it replies to down to its own, and the replies that follow it on the same message hang
+on the same line.
 A reply to your message is marked in your stream as a message that mentions you is; nothing else notifies, and the
 stream stays one list (no threads). Applied, such a reply continues no card, and the agent is given the message it
 replies to — its author and text as they were sent — as context for the request.
@@ -3207,15 +3271,17 @@ never logged; an avatar is shown only from the hosts in `collab.access.avatarHos
 has no token, cookie, link code or e-mail. A run's prompt carries the requests' text and their authors' names to the
 agent.
 
-**What is stored where.** Everything of the session is in `.domaintrail/session/` of the workspace, beside a
-`.gitignore` that ignores it all: `session.db` (SQLite: the session, requests, runs, revisions, the event outbox,
-sign-ins and facilitator links as hashes, the log of restores), `blobs/` (the revisions' file contents, by SHA-256),
-and `server.json` (the page's and the agent API's addresses, no secret, mode 0600, removed when the server stops; for
-`dt collab link`, `dt collab agent-link` and `dt agent`). The agent API's credential is never written to disk: the
-agent in process is handed it in memory, and a standalone `dt agent` exchanges the one-time code of `dt collab
-agent-link` (or `dt open agent-link`; single use, 10 minutes, revoked when the server stops) for it and keeps it in
-memory. An `agent.json` an older version left is removed when a server starts. `.domaintrail/` gets a `.gitignore`
-(`*`) when it has none. Drafts are in each browser; presence only in memory.
+**What is stored where.** Everything of the session is outside the workspace, in its state directory
+(`~/.local/state/domaintrail/<workspace>/` by default; `dt guide config`, Where dt keeps its files): `session.db`
+(SQLite: the session, requests, runs, revisions, the event outbox, sign-ins and facilitator links as hashes, the log of
+restores), `blobs/` (the revisions' file contents, by SHA-256), and `server.json` (the page's and the agent API's
+addresses, no secret, mode 0600, removed when the server stops; for `dt open link`, `dt collab link`, `dt collab
+agent-link` and `dt agent`). Nothing is written into the workspace, so there is nothing to ignore in git. The agent
+API's credential is never written to disk: the agent in process is handed it in memory, and a standalone `dt agent`
+exchanges the one-time code of `dt collab agent-link` (or `dt open agent-link`; single use, 10 minutes, revoked when the
+server stops) for it and keeps it in memory. The `.domaintrail/` of an older version is moved there on the first run,
+without its credentials: everyone signs in again (`dt guide config`). `dt session prune` removes the state of workspaces that are gone. Drafts are in each
+browser; presence only in memory.
 
 **Limitations.** The log of restores is in `session.db` only, not served over HTTP. In the `access` mode, leaving the
 session sends the page to Access's logout, but the server cannot see a sign-out made elsewhere: the person's other
@@ -3387,7 +3453,7 @@ result.
   plain `Bash`).
 - **What the agents can read: the workspace, minus what git ignores.** Both roles may read any file inside the
   workspace's root — the model, READMEs, notes, code — and nothing else: no path outside the root (your home, `..`,
-  absolute paths) unless `agent.read.paths` names it (below), never `.domaintrail/` (the session's state) nor `.git/`, and no file `.gitignore` ignores (`.env`,
+  absolute paths) unless `agent.read.paths` names it (below), never the sessions' state (outside the workspace) nor an older version's `.domaintrail/` nor `.git/`, and no file `.gitignore` ignores (`.env`,
   build outputs, `node_modules`). **Keeping secrets out of the repository is your responsibility**: a secret committed
   or merely not ignored can be read by the agents and quoted in the chat to every participant. `claude` is started
   without any settings file (`--setting-sources ""`): neither the workspace's `.claude/` (the agent could write it) nor
@@ -3408,8 +3474,9 @@ result.
   about when they change (see the approval in `dt guide config`). A path inside the workspace, one holding it, one in a
   `.git` or `.domaintrail` directory, `/`, your home directory, and a path that is or holds `~/.ssh`, `~/.gnupg`,
   `~/.aws`, `~/.azure`, `~/.config`, `~/.kube`, `~/.docker`, `~/.netrc`, `~/Library`, `/etc`, `/private/etc`, `/var`
-  or `/private/var` (or is inside one of them, but `~/Library`, `/var` and `/private/var`) is a config error naming
-  its key. Each path is taken by its real path (symbolic links followed, the file system's case) when the agent starts,
+  or `/private/var` (or is inside one of them, but `~/Library`, `/var` and `/private/var`), or is inside or holds dt's
+  state or cache directory (`~/.local/state/domaintrail`, `~/.cache/domaintrail` or where `DOMAINTRAIL_STATE_DIR`,
+  `XDG_STATE_HOME` and `XDG_CACHE_HOME` put them: every workspace's session) is a config error naming its key. Each path is taken by its real path (symbolic links followed, the file system's case) when the agent starts,
   and one that is missing is skipped (its log says so); before each answer and each run it must still be the same
   directory or file (else that turn or run fails: restart the agent). In each, the workspace's rules apply: in a git
   work tree the files git does not ignore there, elsewhere every file; never `.git` nor `.domaintrail` at any depth; a

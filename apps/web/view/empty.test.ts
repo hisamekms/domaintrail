@@ -3,7 +3,8 @@ import type { Diagnostic } from '@domaintrail/kernel';
 import type { DomainModel } from '@domaintrail/modeling';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { MESSAGES } from '../i18n';
-import { canvasShows, emptyLine, isEmptyView, VIEW_TABS } from './empty';
+import { canStartFromEmpty, canvasShows, emptyLine, isEmptyView } from './empty';
+import { MODEL_VIEWS } from './worlds';
 
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- only the number of BCs matters here
 const model = (contexts: number): DomainModel => ({ contexts: Array.from({ length: contexts }, () => ({})), elements: [] }) as unknown as DomainModel;
@@ -17,6 +18,7 @@ const error = (file: string): Diagnostic => ({
     code: 'SYNTAX',
     message: 'x',
 });
+const VIEWS = [...MODEL_VIEWS, 'storming'] as const;
 const payload = (p: { model?: DomainModel | null; stormings?: StormingView[]; diagnostics?: Diagnostic[] }): Parameters<typeof isEmptyView>[1] => ({
     model: p.model ?? null,
     stormings: p.stormings ?? [],
@@ -24,12 +26,8 @@ const payload = (p: { model?: DomainModel | null; stormings?: StormingView[]; di
 });
 
 describe('a view with nothing yet', () => {
-    test('every tab shows, the storming tab too, even without a storming', () => {
-        expect(VIEW_TABS).toEqual(['contextMap', 'structure', 'catalog', 'storming']);
-    });
-
     test('an empty workspace: every view is empty', () => {
-        for (const view of VIEW_TABS) expect(isEmptyView(view, payload({}))).toBe(true);
+        for (const view of VIEWS) expect(isEmptyView(view, payload({}))).toBe(true);
     });
 
     test("the model's views are empty without a BC, the storming view without a storming", () => {
@@ -51,7 +49,7 @@ describe('a view with nothing yet', () => {
 
     test("the canvas shows nothing under an empty view, never the previous view's graph", () => {
         // stormings only: from the storming view to the empty catalog, context map and structure
-        for (const view of VIEW_TABS) expect(canvasShows(view, true, false)).toBe('nothing');
+        for (const view of VIEWS) expect(canvasShows(view, true, false)).toBe('nothing');
         // a model only: the storming view has no graph either
         expect(canvasShows('storming', true, false)).toBe('nothing');
         // even a graph of an empty view (a context map of no BC) is not drawn
@@ -65,9 +63,30 @@ describe('a view with nothing yet', () => {
         expect(canvasShows('catalog', false, false)).toBe('covered');
     });
 
-    test('its one line points to /es in the chat only while an AI is connected', () => {
-        expect(emptyLine(MESSAGES.ja, true)).toBe('まだありません。チャットで /es から始められます');
-        expect(emptyLine(MESSAGES.en, true)).toBe('Nothing yet. Start with /es in the chat');
-        expect(emptyLine(MESSAGES.ja, false)).toBe('まだありません');
+    test('an empty storming view points to /es:start in the chat while an AI is connected', () => {
+        expect(emptyLine(MESSAGES.ja, 'storming', true)).toBe('まだありません。チャットで /es:start から始められます');
+        expect(emptyLine(MESSAGES.en, 'storming', true)).toBe('Nothing yet. Start with /es:start in the chat');
+    });
+
+    test('an empty view of the domain model points to /model:start, also when there are stormings but no BC', () => {
+        for (const view of MODEL_VIEWS) {
+            // stormings exist, the model has no BC: the model's view is empty all the same
+            expect(isEmptyView(view, { model: model(0), stormings: [storming], diagnostics: [] })).toBe(true);
+            expect(emptyLine(MESSAGES.ja, view, true)).toBe('まだありません。チャットで /model:start から始められます');
+            expect(emptyLine(MESSAGES.en, view, true)).toBe('Nothing yet. Start with /model:start in the chat');
+        }
+    });
+
+    test('with no AI to start it, an empty view of either world says only that there is nothing yet', () => {
+        for (const view of VIEWS) {
+            expect(emptyLine(MESSAGES.ja, view, false)).toBe('まだありません');
+            expect(emptyLine(MESSAGES.en, view, false)).toBe('Nothing yet');
+        }
+    });
+
+    test('with an AI connected and the session going on, everyone is pointed to /…:start', () => {
+        expect(canStartFromEmpty({ ended: false, aiConnected: true })).toBe(true);
+        expect(canStartFromEmpty({ ended: false, aiConnected: false })).toBe(false);
+        expect(canStartFromEmpty({ ended: true, aiConnected: true })).toBe(false);
     });
 });

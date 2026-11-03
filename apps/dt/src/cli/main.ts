@@ -20,6 +20,7 @@ import {
     type StartedAgent,
     type StartedSession,
     type StartedTunnel,
+    StateError,
     TunnelError,
 } from './ports.js';
 import { lookup, showJson, showText } from './show.js';
@@ -254,10 +255,10 @@ Examples:
                 return;
             }
             const outDirs = [...new Set(files.map((f) => path.dirname(f.file)))];
-            const { recorded } = await deps.generatedOutput.replace(cfg.root, files);
+            const { recorded, manifest } = await deps.generatedOutput.replace(cfg.root, files);
             if (!recorded)
                 io.err(
-                    `Warning: generated files not recorded in ${deps.generatedOutput.manifestFile}, which is not a plain file in a plain directory; they will not be removed automatically.`,
+                    `Warning: generated files not recorded in ${manifest}, which is not a plain file in a plain directory; they will not be removed automatically.`,
                 );
             const written = outDirs.map((d) => path.relative(process.cwd(), d) || '.');
             const hint = cfg.lintHint ? await deps.castLintHint(cfg.root) : undefined;
@@ -382,8 +383,9 @@ Examples:
 Serves the Live View and a chat for one person on loopback. It prints a one-time link: opened within 60 minutes, it
 signs that browser in as you, the facilitator (a cookie; no join form); nothing else is let in (\`dt open link\` prints
 another link while it runs). Every message you send goes to the AI, which answers questions and applies change requests. It re-checks on
-every save and pushes updates to the browser. The chat, the runs and the revisions are kept in .domaintrail/session/
-across restarts. The agent (Claude Code) starts in this process when \`claude\` is usable; otherwise the server starts
+every save and pushes updates to the browser. The chat, the runs and the revisions are kept across restarts, outside
+the workspace (~/.local/state/domaintrail/<workspace>/; \`dt session prune\` removes those of workspaces that are
+gone). The agent (Claude Code) starts in this process when \`claude\` is usable; otherwise the server starts
 without it and says why (\`dt agent\` connects one later). Refused while the workspace has an open collab session
 (\`dt collab\` resumes it). With --host on a non-loopback address, the Live View is served read-only: no chat, no agent.
 Use \`dt check\` for a one-shot result (e.g. from scripts or AI agents).
@@ -634,7 +636,7 @@ Examples:
         .addOption(new Option('--role <role>', 'take on one role only: answer (read-only answers) or run (the runs); default: both').choices([...AGENT_ROLES]))
         .option('--once', 'handle one run (waiting for one if none is queued), then exit')
         .requiredOption('--code <code>', 'the one-time pairing code of `dt collab agent-link` (or `dt open agent-link`)')
-        .option('--url <url>', "the agent API's address (default: the running server's, from .domaintrail/session/server.json)")
+        .option('--url <url>', "the agent API's address (default: the running server's, from server.json in the workspace's state directory)")
         .option('--yes', 'approve changed security-relevant settings without asking (for scripts; they are printed)')
         .addHelpText(
             'after',
@@ -674,7 +676,58 @@ Examples:
 
     // the commands removed by ADR 0030: an error naming the replacement, no alias
     removed(program, 'view', "'dt view' was removed; use 'dt open' (or 'dt open --host <address>' for a read-only Live View)");
-    const session = removed(program, 'session', "'dt session' was removed; use 'dt collab' (start), 'dt collab link' or 'dt agent'");
+    // `dt session` keeps `prune` (the state dt keeps outside the workspaces); its other commands were removed
+    const session = program
+        .command('session')
+        .description("Manage what dt keeps of the workspaces' sessions outside them: `dt session prune`.")
+        .helpOption(false)
+        .allowUnknownOption()
+        .allowExcessArguments()
+        .argument('[args...]')
+        .action(() => {
+            throw new CliError("'dt session' takes 'prune'; the session itself is 'dt collab' (start), 'dt collab link' or 'dt agent'", 2);
+        });
+    session
+        .command('prune')
+        .description('List the state of workspaces that are gone (or unused for a while); remove it with --yes.')
+        .option('--older-than <days>', 'also the state of existing workspaces not used for this many days', parseDays)
+        .option('--yes', 'remove them (without it, only lists them)')
+        .addHelpText(
+            'after',
+            `
+dt keeps each workspace's session (the chat, the runs, the revisions), the running server's address and the record of
+\`dt generate ts\` outside the workspace, in $XDG_STATE_HOME/domaintrail/<workspace>/ (by default
+~/.local/state/domaintrail/, on macOS too; %LOCALAPPDATA%\\domaintrail\\state on Windows; $DOMAINTRAIL_STATE_DIR
+instead when set), and the layouts in $XDG_CACHE_HOME/domaintrail/<workspace>/ (~/.cache/domaintrail/). Nothing is
+ever removed by itself: this lists the directories of workspaces that no longer exist (deleted, or moved) and, with
+--older-than, of those not used for that many days; --yes removes them. The state of a running server is kept.
+
+Examples:
+  dt session prune                    lists what --yes would remove
+  dt session prune --yes
+  dt session prune --older-than 90`,
+        )
+        .action(async (opts: { olderThan?: number; yes?: boolean }) => {
+            if (!deps.pruneState) throw new CliError('dt session prune is not available here.');
+            const remove = opts.yes ?? false;
+            const found = await deps.pruneState({ ...(opts.olderThan !== undefined && { olderThanDays: opts.olderThan }), remove });
+            if (!found.length) {
+                io.out(
+                    `Nothing to prune: every workspace dt keeps a session for exists${opts.olderThan !== undefined ? ` and was used within ${opts.olderThan} days` : ''}.`,
+                );
+                return;
+            }
+            const why = (p: (typeof found)[number]): string =>
+                p.reason === 'unfinished'
+                    ? 'a move of .domaintrail/ that stopped half way'
+                    : `${p.workspace}: ${p.reason === 'gone' ? 'no longer exists' : `last used ${p.lastUsed.toISOString().slice(0, 10)}`}`;
+            io.out(remove ? 'Removed:' : 'Would remove (dry run):');
+            for (const p of found) io.out(`  ${shownHome(p.dir)}  (${p.kind}; ${why(p)})`);
+            if (!remove)
+                io.out(
+                    `Run \`dt session prune${opts.olderThan !== undefined ? ` --older-than ${opts.olderThan}` : ''} --yes\` to remove ${found.length === 1 ? 'it' : `these ${found.length}`}.`,
+                );
+        });
     removed(session, 'start', "'dt session start' was removed; use 'dt collab'");
     removed(session, 'link', "'dt session link' was removed; use 'dt collab link'");
     removed(session, 'subscribe', "'dt session subscribe' was removed; use 'dt agent'");
@@ -900,6 +953,7 @@ Examples:
     } catch (e) {
         if (e instanceof ConfigError) fail(e.message, 2);
         else if (e instanceof CliError) fail(e.message, e.exitCode);
+        else if (e instanceof StateError) fail(e.message, 1);
         // File system and network failures (unreadable directories, permissions…) are reported, not thrown.
         else if (errorCode(e)) fail(e instanceof Error ? e.message : String(e), 1);
         else {
@@ -1003,6 +1057,17 @@ function workspaceOf(cfg: ResolvedConfig): SourcesExportOptions {
 
 function noSourcesMessage(cfg: ResolvedConfig): string {
     return `No .dt or .dtes files found under ${cfg.root} (sources: ${cfg.sources.join(', ')}).`;
+}
+
+function parseDays(value: string): number {
+    if (!/^\d+$/.test(value)) throw new InvalidArgumentError('Expected a whole number of days.');
+    return Number(value);
+}
+
+/** `p` with the home directory written `~`. */
+function shownHome(p: string, home: string = homedir()): string {
+    const rel = path.relative(home, p);
+    return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? `~/${toPosix(rel)}` : p;
 }
 
 function parsePort(value: string): number {

@@ -1,4 +1,4 @@
-// The session's persistence on node:sqlite (ADR 0026): one database per workspace, `.domaintrail/session/session.db`.
+// The session's persistence on node:sqlite (ADR 0026): one database per workspace, `session.db` in its state directory.
 // Aggregates are stored whole as JSON next to the columns the queries and constraints need; the outbox is a table
 // appended in the transaction that saves the aggregates. Every transaction is BEGIN IMMEDIATE, one at a time.
 // Only node:sqlite's DatabaseSync is used (no Bun API), so the same code runs in the CLI under Node and in the tests under Bun as well.
@@ -19,6 +19,7 @@ import type {
     RevisionStore,
     OperationLog,
     InterviewRepository,
+    SlashCommandRepository,
     ProposalRepository,
     RestoreOperation,
     TriageRepository,
@@ -29,7 +30,7 @@ import type {
     Stores,
     UnitOfWork,
 } from '../application/ports.js';
-import { upgradeEvent, upgradeProposal, upgradeRequest, upgradeRun, upgradeSession } from './legacy.js';
+import { upgradeEvent, upgradeProposal, upgradeRequest, upgradeRun, upgradeSession, upgradeSlashCommand } from './legacy.js';
 import { DATABASE_FILE, PRIVATE_FILE, checkPlain, looserThan, restrict, sessionDirectory } from './session-dir.js';
 
 /**
@@ -290,6 +291,20 @@ export const MIGRATIONS: readonly string[] = [
     ) STRICT;
     CREATE INDEX invites_by_session ON invites(session_id) WHERE revoked_at IS NULL;
     `,
+    // ---------- the candidate and answer commands of the `/` list ----------
+    // a command names its opening message and, once applied, its run. Sessions written before have none
+    `
+    CREATE TABLE slash_commands (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        seq INTEGER NOT NULL,
+        opening_id TEXT NOT NULL REFERENCES requests(id),
+        run_id TEXT REFERENCES agent_runs(id),
+        state TEXT NOT NULL,
+        data TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX slash_commands_by_session ON slash_commands(session_id, seq);
+    `,
 ];
 
 /** The database was written by a newer DomainTrail: its schema is unknown here. */
@@ -312,6 +327,77 @@ export function migrate(db: DatabaseSync): void {
     }
 }
 
+/**
+ * The tables that hold credentials: sign-ins, facilitator links with the sign-in and pairing codes, invites, and who
+ * holds the facilitator role. Emptied in a database moved from an older version's `.domaintrail/`.
+ */
+export const CREDENTIAL_TABLES: readonly string[] = ['sign_ins', 'facilitator_links', 'invites', 'facilitators'];
+
+type SchemaRow = { type: string; name: string; tbl_name: string; sql: string | null };
+
+/** The schema of `db` as SQLite keeps it: every object of `sqlite_master` (its `sql` as written), in a stable order. */
+function schemaOf(db: DatabaseSync): string {
+    const rows = db
+        .prepare('SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name')
+        .all()
+        .map((r): SchemaRow => ({ type: String(r.type), name: String(r.name), tbl_name: String(r.tbl_name), sql: r.sql === null ? null : String(r.sql) }));
+    return JSON.stringify(rows);
+}
+
+/** The schema dt makes at migration level `level`: the first `level` migrations, applied in memory. */
+function schemaAt(level: number): string {
+    const db = new DatabaseSync(':memory:');
+    try {
+        db.exec('PRAGMA foreign_keys = ON');
+        for (let v = 0; v < level; v++) db.exec(MIGRATIONS[v]);
+        return schemaOf(db);
+    } finally {
+        db.close();
+    }
+}
+
+/**
+ * Cleans the session database `file` moved from an older version's `.domaintrail/` (its WAL files beside it, recovered
+ * into it) of every credential, which the facilitator makes again. Fails closed — false, the database must not be used —
+ * unless it is one dt made: a known migration level (`user_version`), and exactly the schema dt makes at that level
+ * (every table, column, index, trigger and view, as written; nothing more), intact. The credential tables are then
+ * emptied by the names dt uses and checked empty by the same names. The session's content stays.
+ */
+export function cleanMovedDatabase(file: string): boolean {
+    let db: DatabaseSync | undefined;
+    try {
+        db = new DatabaseSync(file);
+        db.exec('PRAGMA trusted_schema = OFF');
+        const level = Number(row(db.prepare('PRAGMA user_version').get()).user_version);
+        if (!Number.isInteger(level) || level < 1 || level > MIGRATIONS.length) return false;
+        if (schemaOf(db) !== schemaAt(level)) return false;
+        if (text(row(db.prepare('PRAGMA quick_check').get()), 'quick_check') !== 'ok') return false;
+        const missing = (e: unknown): boolean => e instanceof Error && /no such table/i.test(e.message);
+        db.exec('BEGIN IMMEDIATE');
+        for (const table of CREDENTIAL_TABLES) {
+            try {
+                db.exec(`DELETE FROM ${table}`);
+            } catch (e) {
+                if (!missing(e)) throw e;
+            }
+        }
+        db.exec('COMMIT');
+        for (const table of CREDENTIAL_TABLES) {
+            try {
+                if (integer(row(db.prepare(`SELECT count(*) AS n FROM ${table}`).get()), 'n') !== 0) return false;
+            } catch (e) {
+                if (!missing(e)) throw e;
+            }
+        }
+        db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+        return true;
+    } catch {
+        return false;
+    } finally {
+        db?.close();
+    }
+}
+
 /** Opens (and migrates) a database: a file, or `:memory:`. */
 export function openDatabase(file: string): DatabaseSync {
     const db = new DatabaseSync(file);
@@ -331,13 +417,13 @@ export function openDatabase(file: string): DatabaseSync {
 }
 
 /**
- * Opens the session database of a workspace, `.domaintrail/session/session.db`, making the directory (with its
- * `.gitignore`) if needed. Refuses (`UnsafeSessionPath`) when the directory, the database or its WAL files are
+ * Opens the session database in the session's directory `sessionDir`, `session.db`, making the directory if needed
+ * (its parent must exist). Refuses (`UnsafeSessionPath`) when the directory, the database or its WAL files are
  * symbolic links. The database and its WAL files are 0600: an absent database is made empty (a valid one) 0600 before
  * SQLite opens it, since SQLite gives its WAL files the database's permissions; existing ones are tightened.
  */
-export async function openSessionDatabase(root: string): Promise<DatabaseSync> {
-    const dir = await sessionDirectory(root);
+export async function openSessionDatabase(sessionDir: string): Promise<DatabaseSync> {
+    const dir = await sessionDirectory(sessionDir);
     const file = path.join(dir, DATABASE_FILE);
     const files = [file, `${file}-wal`, `${file}-shm`];
     for (const f of files) await checkPlain(f, 'file');
@@ -745,6 +831,37 @@ function interviews(db: DatabaseSync): InterviewRepository {
     };
 }
 
+function slashCommands(db: DatabaseSync): SlashCommandRepository {
+    const load = db.prepare('SELECT data FROM slash_commands WHERE id = :id');
+    const save = db.prepare(
+        `INSERT INTO slash_commands (id, session_id, seq, opening_id, run_id, state, data)
+         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM slash_commands), :opening, :run, :state, :data)
+         ON CONFLICT (id) DO UPDATE SET state = excluded.state, run_id = excluded.run_id, data = excluded.data`,
+    );
+    const list = db.prepare('SELECT data FROM slash_commands WHERE session_id = :session ORDER BY seq');
+    return {
+        load(id) {
+            const r = load.get(params({ id }));
+            return r ? decoded<Collaboration.SlashCommand>(text(r, 'data'), upgradeSlashCommand) : undefined;
+        },
+        save(command) {
+            save.run(
+                params({
+                    id: command.id,
+                    session: command.session,
+                    opening: command.opening,
+                    run: command.state === 'Applied' ? command.run : null,
+                    state: command.state,
+                    data: encodeJson(command),
+                }),
+            );
+        },
+        listBySession(session) {
+            return list.all(params({ session })).map((r) => decoded<Collaboration.SlashCommand>(text(r, 'data'), upgradeSlashCommand));
+        },
+    };
+}
+
 function outbox(db: DatabaseSync): EventOutbox {
     const append = db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (:session, :type, :payload, :at)');
     const all = db.prepare('SELECT seq, session_id, payload, recorded_at FROM outbox WHERE seq > :cursor ORDER BY seq LIMIT :limit');
@@ -934,6 +1051,7 @@ export function createStores(db: DatabaseSync): Stores {
         triages: triages(db),
         proposals: proposals(db),
         interviews: interviews(db),
+        slashCommands: slashCommands(db),
         outbox: outbox(db),
         access: access(db),
         operations: operations(db),

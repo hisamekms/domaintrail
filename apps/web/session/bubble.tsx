@@ -52,6 +52,16 @@ export function Bubble(props: {
 }
 
 /**
+ * The classes of a clamped text: `clamped` while it is not opened (history), `cut` too when it is taller than the clamp
+ * (measured): only then does the last line of the AI's Markdown fade out (the CSS), so that one that fits shows whole,
+ * unfaded.
+ */
+export function clampedClass(input: { readonly blocks: boolean; readonly className?: string; readonly open: boolean; readonly cut: boolean }): string {
+    const { blocks, className, open, cut } = input;
+    return `chat-text${blocks ? ' chat-markdown' : ''}${className ? ` ${className}` : ''}${open ? '' : ' clamped'}${cut && !open ? ' cut' : ''}`;
+}
+
+/**
  * A text clamped to a few lines, with a link to show the rest when it is longer, if it was there when the page loaded
  * (`revealKey`: its key, `message:<id>`, `proposal:<id>`, `run:<id>`; see `reveal.ts`); one that arrived while the page
  * is open shows in full, and one opened stays open. `blocks`: its children are blocks (the AI's Markdown), in a
@@ -81,7 +91,7 @@ export function Clamped({
     }, [children, open]);
     return (
         <>
-            <Tag ref={ref} className={`chat-text${blocks ? ' chat-markdown' : ''}${className ? ` ${className}` : ''}${open ? '' : ' clamped'}`}>
+            <Tag ref={ref} className={clampedClass({ blocks, className, open, cut: clamped })}>
                 {children}
             </Tag>
             {clamped && !open && (

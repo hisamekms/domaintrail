@@ -1,35 +1,29 @@
 import { describe, expect, test } from 'bun:test';
 import { healthOf, workspaceName } from './health';
-import { COLLAPSE_LEFT_BELOW, DOCK_BELOW_BELOW, effectiveLayout, keptOverrides, NO_OVERRIDES } from './responsive';
+import { COLLAPSE_LEFT_BELOW, effectiveLayout, keptOverrides, NO_OVERRIDES } from './responsive';
 
 describe('the layout on a narrow window', () => {
-    const saved = { left: true, dock: 'right' as const, overrides: NO_OVERRIDES };
+    const saved = { left: true, overrides: NO_OVERRIDES };
 
-    test("the reader's choices while the conversation is closed, whatever the width", () => {
-        expect(effectiveLayout({ ...saved, width: 800, conversationOpen: false })).toMatchObject({ left: true, dock: 'right' });
+    test("the reader's choice while the conversation is closed, whatever the width", () => {
+        expect(effectiveLayout({ ...saved, width: 800, conversationOpen: false })).toMatchObject({ left: true });
     });
 
-    test('with the conversation open: the left pane collapsed below 1280px, the inspector below the canvas below 1024px', () => {
-        expect(effectiveLayout({ ...saved, width: COLLAPSE_LEFT_BELOW, conversationOpen: true })).toMatchObject({ left: true, dock: 'right' });
-        expect(effectiveLayout({ ...saved, width: COLLAPSE_LEFT_BELOW - 1, conversationOpen: true })).toMatchObject({
-            left: false,
-            dock: 'right',
-            forced: { left: true, dock: false },
-        });
-        expect(effectiveLayout({ ...saved, width: DOCK_BELOW_BELOW - 1, conversationOpen: true })).toMatchObject({
-            left: false,
-            dock: 'bottom',
-            forced: { left: true, dock: true },
-        });
+    test('the detail (in the left column) and the chat are seen together on the usual widths, down to 1024px', () => {
+        for (const width of [1800, 1400, 1180, 1024]) expect(effectiveLayout({ ...saved, width, conversationOpen: true })).toMatchObject({ left: true });
     });
 
-    test('what the reader chooses meanwhile is shown, and forgotten once the window is wide again; the saved choices are kept', () => {
-        const overrides = { left: true, dock: 'right' as const };
-        expect(effectiveLayout({ ...saved, overrides, width: 900, conversationOpen: true })).toMatchObject({ left: true, dock: 'right' });
-        expect(keptOverrides(overrides, { left: true, dock: false })).toEqual({ left: true });
-        expect(keptOverrides(overrides, { left: false, dock: false })).toEqual({});
-        expect(keptOverrides(overrides, { left: true, dock: true })).toBe(overrides);
-        // a saved choice to keep the left pane collapsed stays so when the window is wide
+    test('with the conversation open: the left column collapsed below the threshold', () => {
+        expect(effectiveLayout({ ...saved, width: COLLAPSE_LEFT_BELOW, conversationOpen: true })).toMatchObject({ left: true });
+        expect(effectiveLayout({ ...saved, width: COLLAPSE_LEFT_BELOW - 1, conversationOpen: true })).toEqual({ left: false, forced: { left: true } });
+    });
+
+    test('what the reader chooses meanwhile is shown, and forgotten once the window is wide again; the saved choice is kept', () => {
+        const overrides = { left: true };
+        expect(effectiveLayout({ ...saved, overrides, width: 900, conversationOpen: true })).toMatchObject({ left: true });
+        expect(keptOverrides(overrides, { left: true })).toBe(overrides);
+        expect(keptOverrides(overrides, { left: false })).toEqual({});
+        // a saved choice to keep the left column collapsed stays so when the window is wide
         expect(effectiveLayout({ ...saved, left: false, width: 1600, conversationOpen: true })).toMatchObject({ left: false });
     });
 });
@@ -51,16 +45,6 @@ describe('the head and the foot of the left pane', () => {
         expect(healthOf({ ...ok, status: undefined })).toBe('warning');
         expect(healthOf({ ...ok, status: 'empty' })).toBe('warning');
         expect(healthOf({ ...ok, warnings: 2 })).toBe('warning');
-    });
-});
-
-describe("the inspector's width until it is dragged", () => {
-    test('about a third of the room the other panes leave, within 300–420px', async () => {
-        const { autoInspectorWidth } = await import('./responsive');
-        // 1600px with the left pane (304) and the chat (380) open
-        expect(autoInspectorWidth(1600 - 304 - 380)).toBe(330);
-        expect(autoInspectorWidth(2400)).toBe(420);
-        expect(autoInspectorWidth(500)).toBe(300);
     });
 });
 
@@ -90,23 +74,18 @@ describe('the text size (文字の大きさ)', () => {
 
     test("the panes' default sizes follow the UI scale; a dragged size is kept", async () => {
         const { DEFAULT_PANE_SIZES, paneSize } = await import('./panes');
-        expect(paneSize(null, DEFAULT_PANE_SIZES.explorerWidth, 1)).toBe(260);
+        expect(paneSize(null, DEFAULT_PANE_SIZES.explorerWidth, 1)).toBe(280);
         expect(paneSize(null, DEFAULT_PANE_SIZES.conversationWidth, 1)).toBe(380);
-        expect(paneSize(null, DEFAULT_PANE_SIZES.explorerWidth, 1.3)).toBe(338);
+        expect(paneSize(null, DEFAULT_PANE_SIZES.explorerWidth, 1.3)).toBe(364);
         expect(paneSize(null, DEFAULT_PANE_SIZES.conversationWidth, 0.9)).toBe(342);
         expect(paneSize(300, DEFAULT_PANE_SIZES.explorerWidth, 1.3)).toBe(300);
     });
 
-    test("the inspector's automatic width and the narrow-window thresholds grow with the UI scale", async () => {
-        const { autoInspectorWidth } = await import('./responsive');
-        expect(autoInspectorWidth(500, 1.3)).toBe(390);
-        expect(autoInspectorWidth(2400, 1.3)).toBe(546);
-        expect(autoInspectorWidth(1000, 1.3)).toBe(390);
-        const saved = { left: true, dock: 'right' as const, overrides: NO_OVERRIDES, conversationOpen: true };
-        // 1400px fits the left pane beside the conversation at 標準, not at 特大
-        expect(effectiveLayout({ ...saved, width: 1400 })).toMatchObject({ left: true });
-        expect(effectiveLayout({ ...saved, width: 1400, scale: 1.3 })).toMatchObject({ left: false, dock: 'right' });
-        expect(effectiveLayout({ ...saved, width: 1300, scale: 1.3 })).toMatchObject({ left: false, dock: 'bottom' });
+    test('the narrow-window threshold grows with the UI scale', () => {
+        const saved = { left: true, overrides: NO_OVERRIDES, conversationOpen: true };
+        // 1300px fits the left column beside the conversation at 標準, not at 特大
+        expect(effectiveLayout({ ...saved, width: 1300 })).toMatchObject({ left: true });
+        expect(effectiveLayout({ ...saved, width: 1300, scale: 1.3 })).toMatchObject({ left: false });
     });
 
     test("the UI's font sizes in styles.css are in rem (the canvas's shapes keep px: the zoom scales them)", async () => {

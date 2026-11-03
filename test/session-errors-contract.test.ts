@@ -146,6 +146,10 @@ describe('refused requests of a session in dev mode', () => {
             'POST revisions/:id/restore, participant': await call(bob, `revisions/${revision}/restore`, {}),
             'POST facilitator/link, participant': await call(bob, 'facilitator/link', {}),
             'POST close, participant': await call(bob, 'close', {}),
+            // a brief and candidates are approved by the facilitator, whoever started the interview or the command
+            'POST interviews/:id/confirm, participant': await call(bob, `interviews/${unknown}/confirm`, {}),
+            'POST interviews/:id/reject, participant': await call(bob, `interviews/${unknown}/reject`, {}),
+            'POST commands/:id/apply, participant': await call(bob, `commands/${unknown}/apply`, { chosen: [0] }),
             // rules the handlers hold
             'POST requests apply (gone), participant': await call(bob, 'requests', { targets: [], body: 'Do it now.', apply: true }),
             'POST requests/address, participant': await call(bob, 'requests/address', { requests: [request] }),

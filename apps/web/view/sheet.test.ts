@@ -64,15 +64,15 @@ describe('the heading of a printed diagram', () => {
 
     test('the Context Map, the Structure View and a state view', () => {
         const structure = canvasSubject('structure', { structureLevel: 'overview', mapAll: false, stormingChoice: choice() }, [], null, []);
-        expect(sheetHeading('shop', structure!, ja, 'label')).toBe('shop › 構造図 · 概観');
+        expect(sheetHeading('shop', structure!, ja, 'label')).toBe('shop › ドメインモデル › 構造図 · 概観');
         const focused: SheetSubject = { view: 'structure', level: 'detail', contexts: [{ id: 'Sales', label: '販売' }, { id: 'Billing' }] };
-        expect(sheetHeading('shop', focused, ja, 'label')).toBe('shop › 構造図 › 販売, Billing · 詳細');
-        expect(sheetHeading('shop', focused, en, 'name')).toBe('shop › Structure › Sales, Billing · Detail');
-        expect(sheetHeading('shop', { view: 'contextMap', all: false }, ja, 'label')).toBe('shop › コンテキストマップ');
-        expect(sheetHeading('shop', { view: 'contextMap', all: true }, ja, 'label')).toBe('shop › コンテキストマップ · すべてのコンテキスト');
+        expect(sheetHeading('shop', focused, ja, 'label')).toBe('shop › ドメインモデル › 構造図 › 販売, Billing · 詳細');
+        expect(sheetHeading('shop', focused, en, 'name')).toBe('shop › Domain model › Structure › Sales, Billing · Detail');
+        expect(sheetHeading('shop', { view: 'contextMap', all: false }, ja, 'label')).toBe('shop › ドメインモデル › コンテキストマップ');
+        expect(sheetHeading('shop', { view: 'contextMap', all: true }, ja, 'label')).toBe('shop › ドメインモデル › コンテキストマップ · すべてのコンテキスト');
         const states: SheetSubject = { view: 'states', aggregate: { id: 'Sales.Order', name: 'Order', label: '注文' } };
-        expect(sheetHeading('shop', states, ja, 'label')).toBe('shop › 状態遷移 › 注文');
-        expect(sheetHeading('shop', states, en, 'name')).toBe('shop › States › Order');
+        expect(sheetHeading('shop', states, ja, 'label')).toBe('shop › ドメインモデル › 状態遷移 › 注文');
+        expect(sheetHeading('shop', states, en, 'name')).toBe('shop › Domain model › States › Order');
         expect(canvasSubject('catalog', { structureLevel: 'detail', mapAll: false, stormingChoice: choice() }, [], null, [])).toBeUndefined();
     });
 });

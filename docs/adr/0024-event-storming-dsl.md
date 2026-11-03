@@ -3,7 +3,7 @@
 - Status: accepted. Three choices the spec leaves open were decided by the maintainer: storming IDs unique in the
   workspace, the hotspots of a timeline filter, and the default `sources` (marked *Decided by the maintainer*).
   Amended 2026-11-03: events at Design Level only (`level design`, below); stages and exceptions; actors, read models
-  and aggregates drawn once per use.
+  and aggregates drawn once per use; the cause of an event in a timeline's or a stage's view.
 - Date: 2026-10-31
 - Spec: [docs/dtes-v0.1.md](../dtes-v0.1.md). Its semantics, the sections marked 確定 in particular, are the reference.
   This ADR fixes only how they are implemented, plus the details the spec leaves to "実装調査" (§13, §14).
@@ -360,8 +360,10 @@ attach an exception that does not share the whole prefix, and its left-to-right 
   shows the stage it comes after, its main flows and exceptions and 「この段階を表示」. The timeline picker lists the
   stages (「コンビニでの発行（例外を含む）」) between すべて（統合） and the timelines (「段階 / タイムライン」, an
   exception as 「例外：…」). The toolbar's 「例外を表示」 toggle (only for a storming with exceptions, not on a
-  timeline's view) is the page's state like the level, saved per browser. The legend gains the exceptions' order and
-  `then`.
+  timeline's view) is the page's state like the level, saved per browser. Off, it also hides at Design Level the
+  elements that relate only to the events only exceptions have: the commands that emit only those, the policies `on`
+  only those with the commands they alone issue, and those commands' copies of actors, read models and aggregates.
+  The legend gains the exceptions' order and `then`.
 - **Agent**: the runner's rule 16: phases as `stage`s with `after`, the normal flow a `timeline` first, exceptions as
   `exception`s starting at their branch event, `then` to rejoin, another normal path another `timeline`.
 
@@ -377,6 +379,18 @@ issuer and the read model on its left, the aggregate on its right); the grid sta
 Live View resolves everything by element (selection, inspector, change marks, references, presence): selecting one
 note marks the element's other notes (`dn-same`, a fainter dashed ring), and a jump to the element picks the note
 nearest the middle of the view, else the first in reading order (`itemForElement`).
+
+## Amendment (2026-11-03): the cause of an event in a timeline's or a stage's view
+
+At Design Level a timeline's view (an exception's included) and a stage's view drew a command only on a 1-hop path
+`Event → Policy → Command → Event` within the view, so the command a user issues (`command EnterPin { actor Resident
+emits PinEntered }`, which no policy issues) was on the integrated canvas but on none of the views of its event. Now
+`filterEdges` (`core/storming/filter.ts`) also keeps, for each event in view, every `emits` into it, and the `actor`,
+`reads` and `target` edges of the commands so kept (copies per use as above; the grid stacks them in the column of the
+emitted event, as on the integrated canvas). An `emits` to an event out of view is not drawn, and the policy that
+issues such a command is drawn only on a 1-hop path within the view: nothing is followed back from a command, so R16
+(no multi-hop chain) holds. Big Picture draws no command and is unchanged; Design Level does not depend on `level
+design` marks. Spec §9.3 and R16.
 
 ## Task interfaces
 

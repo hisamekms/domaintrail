@@ -1,12 +1,7 @@
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import type { Messages } from '../i18n';
 import type { View } from './navigation';
-
-/**
- * The view tabs, in order. The storming tab shows even without a storming: a workspace started from nothing shows that
- * it can have one (`/es` in the chat starts one with the AI).
- */
-export const VIEW_TABS: readonly View['kind'][] = ['contextMap', 'structure', 'catalog', 'storming'];
+import { worldOf } from './worlds';
 
 /**
  * Whether a view has nothing yet: no BC in the model for the model's views, no storming for the storming view. A file of
@@ -29,5 +24,18 @@ export function canvasShows(view: View['kind'], empty: boolean, hasGraph: boolea
     return hasGraph ? 'graph' : 'nothing';
 }
 
-/** The one line an empty view shows: with an AI connected to the chat (and the person able to start one), that `/es` there starts it. */
-export const emptyLine = (t: Messages, aiReady: boolean): string => (aiReady ? t.emptyViewAskAi : t.emptyView);
+/**
+ * The one line an empty view shows: with an AI connected to the chat (and the person able to start one), the command
+ * of the view's own world that starts it there — `/es:start` under the storming view, `/model:start` under the model's
+ * views (a context map, a structure or a catalog of no BC, even with stormings).
+ */
+export const emptyLine = (t: Messages, view: View['kind'], aiReady: boolean): string => {
+    if (!aiReady) return t.emptyView;
+    return worldOf(view) === 'storming' ? t.emptyViewStartEs : t.emptyViewStartModel;
+};
+
+/**
+ * Whether an empty view may point to its `/…:start`: in a session not ended, with an AI connected (anyone may start an
+ * interview).
+ */
+export const canStartFromEmpty = (session: { ended: boolean; aiConnected: boolean }): boolean => !session.ended && session.aiConnected;

@@ -40,7 +40,7 @@ describe("the view toolbar's right end", () => {
     test('on a narrow toolbar its buttons are icons: their labels hidden by a container query, their names kept', () => {
         const styles = readFileSync(join(import.meta.dir, '..', 'styles.css'), 'utf8');
         expect(styles).toMatch(/\.view-toolbar \{\n\s+container: view-toolbar \/ inline-size;/);
-        expect(styles).toMatch(/@container view-toolbar \(max-width: 40rem\) \{\s+\.toolbar-end-label \{\s+display: none;/);
+        expect(styles).toMatch(/@container view-toolbar \(max-width: [\d.]+rem\) \{\s+\.toolbar-end-label \{\s+display: none;/);
         const buttons = [
             render(<ExportButton control={control()} />),
             render(<PrintButton onPrint={() => {}} />),

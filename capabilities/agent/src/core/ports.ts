@@ -18,7 +18,7 @@ import type {
     Json,
     RunActivity,
 } from '@domaintrail/collaboration/protocol';
-import type { Collaboration, ReplyData, ReplyOutcome } from '@domaintrail/collaboration';
+import type { Collaboration, CommandReplyShape, ReplyData, ReplyOutcome } from '@domaintrail/collaboration';
 
 /** An answer of the agent API other than 2xx: its HTTP status and the error's `type` (`LeaseLost`, `NothingQueued`, …). */
 export interface ApiFailure {
@@ -120,6 +120,11 @@ export interface AnswerTurn {
     readonly signal: AbortSignal;
 }
 
+/** A command's turn: what it returns (its candidates, an answer, or the next steps) picks the schema. */
+export interface CommandTurn extends AnswerTurn {
+    readonly type: CommandReplyShape;
+}
+
 /** What a turn of the read-only agent gave: its structured output (unvalidated), or why it gave none. */
 export interface AnswerTurnResult {
     /** The structured output (`--json-schema`), else undefined. */
@@ -142,8 +147,10 @@ export interface AnswerAgent {
     triage(turn: AnswerTurn): Promise<AnswerTurnResult>;
     /** An answer or a proposal: the reading tools only. */
     answer(turn: AnswerTurn): Promise<AnswerTurnResult>;
-    /** An interview's turn (`/es`, `/model`): the reading tools only, the interviewer's schema. */
+    /** An interview's turn (`/es:start`, `/model:start`): the reading tools only, the interviewer's schema. */
     interview(turn: AnswerTurn): Promise<AnswerTurnResult>;
+    /** A candidate or answer command of the `/` list: the reading tools only, the schema of its type, a fresh process. */
+    command(turn: CommandTurn): Promise<AnswerTurnResult>;
     /** Forget the conversation (a warm process): the files it read were replaced. */
     reset?(reason: string): void;
     /** Ends the processes it keeps; resolves once they are gone. */

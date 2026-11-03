@@ -1,0 +1,186 @@
+context Collaboration {
+  /// 候補型・答え型の `/` コマンドの識別子。
+  id SlashCommandId "コマンドID": UUID
+
+  /// 候補型・答え型の `/` コマンド（聞き取りは `Interview`）。`/` のあとに打つ ID（`es:exceptions`、`es:recap`、`hint`）は
+  /// 英語のまま、名前は画面の言語で出す。どちらの型かはコード（`domain/slash-commands.ts` の `SLASH_COMMANDS`）が決める。`Hint` は以前 `EsNext`（`/es:next`）だった: 保存済みのものは読むときに `Hint` になる。
+  enum SlashCommandKind "コマンドの種類" {
+    EsExceptions "例外を洗い出す（/es:exceptions）"
+    EsRecap "ここまでのまとめ（/es:recap）"
+    EsLevels "レベルを見直す（/es:levels）"
+    EsNames "名前を揃える（/es:names）"
+    EsGaps "間を埋める（/es:gaps）"
+    Hint "ヒントをもらう（/hint）"
+  }
+
+  /// ヒントの一手が勧めるコマンド（押すと入力欄にそのコマンドが入る。送るのは人）。
+  enum SuggestedCommand "勧めるコマンド" {
+    EsStart "ES を始める（/es:start）"
+    EsExceptions "例外を洗い出す（/es:exceptions）"
+    EsGaps "間を埋める（/es:gaps）"
+    EsLevels "レベルを見直す（/es:levels）"
+    EsNames "名前を揃える（/es:names）"
+    EsRecap "ここまでのまとめ（/es:recap）"
+    ModelStart "モデリングを始める（/model:start）"
+  }
+
+  /// ヒントの一手: 何をするか、なぜ（どちらも1行）、当てはまるコマンド（あれば）。上限はコード
+  /// （`NEXT_LIMITS`）が決める。
+  value NextStep "次の一手" {
+    text: ProposalText "何をするか"
+    reason: ProposalText "理由"
+    command: SuggestedCommand? "勧めるコマンド"
+  }
+
+  /// `/hint` の答えの中身: いまの状態を1行と、次の一手を1〜3。答えのメッセージ（Markdown）はこれから作る。
+  value NextAnswer "ヒント" {
+    status: ProposalText "いまの状態"
+    steps: NextStep[1..3] "次の一手"
+  }
+
+  /// 候補の見出し（「支払いが失敗した」など）。上限はコード（`CANDIDATE_LIMITS`）が決める。
+  primitive CandidateLabel "候補の見出し": String { length(value) >= 1 and length(value) <= 100 }
+
+  /// 候補の番号（0 から）。
+  primitive CandidateIndex "候補の番号": Int { value >= 0 and value <= 19 }
+
+  /// AI が挙げた候補1つ: 見出し、対象の要素、どうするかを1行で、理由（あれば）。
+  value CommandCandidate "候補" {
+    label: CandidateLabel "見出し"
+    /// 対象のモデルの要素。まだない要素（足すもの）も指せる。
+    targets: ModelTarget[0..20] "対象"
+    how: ProposalText "どう"
+    reason: ProposalText? "理由"
+  }
+
+  /// 採用した候補が実行に求めること: どのコマンドの、どのストーミングについての、どの候補か。
+  value CandidatesInstruction "採用した候補の指示" {
+    command: SlashCommandId "コマンド"
+    kind: SlashCommandKind "種類"
+    scope: StormingName? "対象のストーミング"
+    chosen: CommandCandidate[1..20] "採用した候補"
+  }
+
+  /// 候補型（`/es:exceptions` など）と答え型（`/es:recap`、`/hint`）の `/` コマンド。始めた人のメッセージ（コマンドの名前）は仕分けを
+  /// 経ずに、回答役（読むだけの AI）がコマンドの指示で受け持つ。コラボでは誰でも始められる。候補型は候補を挙げ、
+  /// ファシリテーターが選んだものを1つの実行が反映する（反映が承認になる）。答え型は AI のメッセージで答える。
+  aggregate SlashCommand "コマンド" {
+    id: SlashCommandId
+    references session: SessionId -> Session
+    kind: SlashCommandKind "種類"
+    startedBy: ParticipantId "始めた人"
+    /// 始めたときに始めた人が送ったメッセージ（コマンドの名前）。候補も答えも、これに応える。
+    references opening: RequestId -> Request "始めのメッセージ"
+    /// 見ていたストーミング（ストーミングについてのコマンド）。ないとき候補型は何も聞かず、候補なしで止まる。
+    scope: StormingName? "対象のストーミング"
+    language: UiLanguage "画面の言語"
+    startedAt: Timestamp "開始日時"
+
+    state Working "AI が考えている"
+    state Listed "候補の選択待ち" {
+      candidates: CommandCandidate[0..20] "候補"
+      listedAt: Timestamp "候補を挙げた日時"
+    }
+    state Applied "反映" {
+      candidates: CommandCandidate[0..20] "候補"
+      /// ファシリテーターが採用した候補の番号。
+      chosen: CandidateIndex[1..20] "採用した候補"
+      /// 反映したファシリテーター。前の行にはない（始めた人が反映した）。
+      appliedBy: ParticipantId? "反映した人"
+      appliedAt: Timestamp "反映日時"
+      references run: AgentRunId -> AgentRun "実行"
+    }
+    state Answered "回答済み" {
+      /// AI の答え（始めのメッセージに応える AI のメッセージ）。
+      references answer: RequestId -> Request "答え"
+      /// 答えの中身（`/hint`）: 画面はこれで一手ごとにコマンドのボタンを出す。
+      next: NextAnswer? "ヒント"
+      answeredAt: Timestamp "回答日時"
+    }
+    state Stopped "中止" {
+      stoppedBy: ParticipantId "中止した人"
+      stoppedAt: Timestamp "中止日時"
+    }
+
+    /// コマンドを始める。コラボでは誰でも。
+    create command start(id: SlashCommandId, session: ActiveSession, kind: SlashCommandKind, startedBy: ParticipantId, opening: RequestId, scope: StormingName?, language: UiLanguage, startedAt: Timestamp) "コマンドを始める"
+      -> Working
+      emits SlashCommandStarted
+
+    /// AI が候補を挙げる（候補型）。見ているストーミングがなければ、候補なしで。
+    command list(candidates: CommandCandidate[0..20], listedAt: Timestamp) "候補を挙げる"
+      Working -> Listed
+      emits CandidatesListed
+
+    /// AI が答える（答え型）。始めのメッセージに応える AI のメッセージとして。`/hint` は、その中身も。
+    command answer(answer: RequestId, next: NextAnswer?, answeredAt: Timestamp) "答える"
+      Working -> Answered
+      emits SlashCommandAnswered
+
+    /// ファシリテーターが候補を選んで反映する（誰が始めたコマンドでも。反映が承認になる）。実行の登録と同じ取引で、その
+    /// 実行を記録する。
+    command apply(appliedBy: ParticipantId, appliedByRole: ParticipantRole, chosen: CandidateIndex[1..20], run: AgentRunId, appliedAt: Timestamp) "採用したものを反映する"
+      Listed -> Applied
+      requires facilitatorApplies "ファシリテーターが反映する" {
+        appliedByRole == ParticipantRole.Facilitator
+      } else FacilitatorOnly
+      requires chosenOfList "挙げた候補から選ぶ" { all(chosen, c => c < count(candidates)) } else NoSuchCandidate
+      emits CandidatesApplied
+
+    /// 始めた人かファシリテーターがコマンドを中止する（考えているあいだか、候補の選択待ち）。
+    command stop(stoppedBy: ParticipantId, stoppedByRole: ParticipantRole, stoppedAt: Timestamp) "コマンドを中止する"
+      Working | Listed -> Stopped
+      requires starterOrFacilitatorStops "始めた人かファシリテーターが中止する" {
+        stoppedBy == startedBy or stoppedByRole == ParticipantRole.Facilitator
+      } else NotTheStarter
+      emits SlashCommandStopped
+  }
+
+  persistent event SlashCommandStarted "コマンドの開始" {
+    commandId: SlashCommandId
+    session: SessionId
+    kind: SlashCommandKind
+    startedBy: ParticipantId
+    opening: RequestId
+    scope: StormingName?
+    language: UiLanguage
+    startedAt: Timestamp
+  }
+
+  persistent event CandidatesListed "候補を挙げた" {
+    commandId: SlashCommandId
+    candidates: CommandCandidate[0..20]
+    listedAt: Timestamp
+  }
+
+  persistent event SlashCommandAnswered "コマンドの答え" {
+    commandId: SlashCommandId
+    answer: RequestId
+    next: NextAnswer?
+    answeredAt: Timestamp
+  }
+
+  persistent event CandidatesApplied "候補の反映" {
+    commandId: SlashCommandId
+    chosen: CandidateIndex[1..20]
+    /// 前のイベントにはない（始めた人が反映した）。
+    appliedBy: ParticipantId? "反映した人"
+    run: AgentRunId
+    appliedAt: Timestamp
+  }
+
+  persistent event SlashCommandStopped "コマンドの中止" {
+    commandId: SlashCommandId
+    stoppedBy: ParticipantId
+    stoppedAt: Timestamp
+  }
+
+  /// コマンドを中止できるのは、始めた人かファシリテーターだけ。
+  error NotTheStarter "コマンドを始めた人でない"
+
+  /// 採用した候補の番号が、挙げた候補にない。
+  error NoSuchCandidate "そんな候補はない"
+
+  /// セッションには、同じコマンドで走っているものがある（考えているか、候補の選択待ち）。
+  error CommandAlreadyRunning "同じコマンドが走っている"
+}

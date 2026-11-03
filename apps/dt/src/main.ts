@@ -15,8 +15,10 @@ import {
     LINT_HINT,
     loadConfig as readConfig,
     loadWorkspace as readWorkspace,
+    pruneStateDirs,
     SourceScope,
 } from '@domaintrail/workspace';
+import { workspaceState } from './wiring/state.js';
 
 /** domaintrail.jsonc, read by the workspace and resolved by the sections' owners as the app composes them. */
 const loadConfig = async (opts: { start: string; configPath?: string }): Promise<ResolvedConfig> => {
@@ -83,7 +85,8 @@ export function cliDeps(): CliDeps {
         exportSources: ({ root, sources, respectGitignore, configFile }) =>
             createSourceArchive({ root, selection: sourceSelection(sources, respectGitignore), ...(configFile !== undefined && { configFile }) }),
         castLintHint: async (root) => ((await hasCastLintRule(root)) ? undefined : LINT_HINT),
-        generatedOutput: createGeneratedOutput(GENERATED_MARKER),
+        // the manifest in the workspace's state directory (an older `.domaintrail/` moved there first, said on stderr)
+        generatedOutput: createGeneratedOutput(GENERATED_MARKER, async (root) => (await workspaceState(root, (line) => console.error(line))).state),
         startViewServer: async (options) => (await import('./wiring/view.js')).startViewServer(options),
         startSessionServer: async (options) => {
             const server = await (await import('./wiring/session.js')).startSessionServer(options);
@@ -115,6 +118,7 @@ export function cliDeps(): CliDeps {
             onInterrupt(() => agent.stop());
             return agent;
         },
+        pruneState: (options) => pruneStateDirs(options),
         // loads the language server only when `dt lsp` starts it
         startLanguageServer: (options) => startLanguageServer(options, languageServerFiles),
     };

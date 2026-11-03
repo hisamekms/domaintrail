@@ -6,6 +6,7 @@ import { elementOf } from '@domaintrail/modeling';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { tempCopyOfExamples } from './helpers.js';
 import { sourceSelection } from '@domaintrail/analysis';
+import { workspaceDirs } from '@domaintrail/workspace';
 
 let dir: string;
 let server: ViewServer;
@@ -173,8 +174,9 @@ describe('Live View', () => {
         expect(p.structure?.nodes.map((n) => n.id)).not.toContain('Shipping.Address');
     });
 
-    test('layout state is persisted separately from the DSL', async () => {
-        const file = path.join(dir, '.domaintrail', 'layout.json');
+    test('layout state is persisted separately from the DSL: in the cache directory of the workspace, outside it', async () => {
+        const file = path.join(workspaceDirs(dir).cache, 'layout.json');
+        expect(await stat(path.join(dir, '.domaintrail')).catch(() => 'absent')).toBe('absent');
         expect((await stat(file)).isFile()).toBe(true);
         const layout = JSON.parse(await readFile(file, 'utf8'));
         expect(Object.keys(layout.graphs)).toContain('structure');
@@ -210,30 +212,31 @@ describe('layout persistence', () => {
             const a = path.join(base, 'a');
             await mk(a);
             await write(path.join(a, 'm.dt'), 'context S { id AId: UUID aggregate A { id: AId } }');
-            await symlink(outside, path.join(a, '.domaintrail'));
+            await symlink(outside, path.join(base, 'a-cache'));
             await createViewService({
                 root: a,
                 engine,
                 workspace: createWorkspaceReader(a, sourceSelection()),
-                layoutStore: createFileLayoutStore(a),
+                layoutStore: createFileLayoutStore(path.join(base, 'a-cache')),
                 git: createGitRevisions(a),
             }).refresh();
             expect((await import('node:fs')).existsSync(path.join(outside, 'layout.json'))).toBe(false);
 
             // 2. layout.json is a symlink -> it is replaced, the target is untouched
             const b = path.join(base, 'b');
-            await mk(path.join(b, '.domaintrail'), { recursive: true });
+            await mk(path.join(base, 'b-cache'), { recursive: true });
+            await mk(b);
             await write(path.join(b, 'm.dt'), 'context S { id AId: UUID aggregate A { id: AId } }');
-            await symlink(path.join(outside, 'victim.txt'), path.join(b, '.domaintrail', 'layout.json'));
+            await symlink(path.join(outside, 'victim.txt'), path.join(base, 'b-cache', 'layout.json'));
             await createViewService({
                 root: b,
                 engine,
                 workspace: createWorkspaceReader(b, sourceSelection()),
-                layoutStore: createFileLayoutStore(b),
+                layoutStore: createFileLayoutStore(path.join(base, 'b-cache')),
                 git: createGitRevisions(b),
             }).refresh();
             expect(await read(path.join(outside, 'victim.txt'), 'utf8')).toBe('keep me');
-            expect(await readlink(path.join(b, '.domaintrail', 'layout.json')).catch(() => 'replaced')).toBe('replaced');
+            expect(await readlink(path.join(base, 'b-cache', 'layout.json')).catch(() => 'replaced')).toBe('replaced');
         } finally {
             engine.dispose();
             await remove(base, { recursive: true, force: true });

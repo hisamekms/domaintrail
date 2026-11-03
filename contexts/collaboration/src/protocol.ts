@@ -76,6 +76,8 @@ export interface SessionStateBody {
     readonly proposals?: Json<readonly Collaboration.ChangeProposal[]>;
     /** The interviews of the `/` commands, in the order they were started (absent from a server before them). */
     readonly interviews?: Json<readonly Collaboration.Interview[]>;
+    /** The candidate and answer commands of the `/` list, in the order they were started (absent from a server before them). */
+    readonly slashCommands?: Json<readonly Collaboration.SlashCommand[]>;
     /** The team's message templates (`templates` in domaintrail.jsonc), shown after the built-in ones (absent: none). */
     readonly templates?: readonly MessageTemplateBody[];
     /** Whether an agent is connected, per role, and how many triages, answers and runs wait for one. */
@@ -183,6 +185,12 @@ export const EVENT_MESSAGE_TYPES = {
     InterviewBriefed: 'interview.briefed',
     InterviewConfirmed: 'interview.confirmed',
     InterviewStopped: 'interview.stopped',
+    InterviewRejected: 'interview.rejected',
+    SlashCommandStarted: 'command.started',
+    CandidatesListed: 'command.candidates_listed',
+    SlashCommandAnswered: 'command.answered',
+    CandidatesApplied: 'command.candidates_applied',
+    SlashCommandStopped: 'command.stopped',
 } as const satisfies Record<Collaboration.PersistentEvent['type'], string>;
 
 type EventType = Collaboration.PersistentEvent['type'];
@@ -253,7 +261,7 @@ export interface AgentPresence {
 /** An answer (to a 相談), a proposal (for a 依頼) or an interview's turn of the AI that was given up: the message it is for. */
 export interface AgentGivenUpAnswer {
     readonly request: string;
-    readonly kind: 'answer' | 'propose' | 'interview';
+    readonly kind: 'answer' | 'propose' | 'interview' | 'command';
 }
 
 /** The message type of a session message (`session.*`, `request.*`, `run.*`, `revision.*`, `mark.*`, `assumption.*`, `triage.*`, `proposal.*`, `interview.*`, `agent.*`, `presence.*`). */
@@ -367,14 +375,15 @@ export interface RejectProposalBody {
 }
 
 /**
- * `POST /api/session/interviews` (the facilitator; in Solo, the person): starts the `/es` or `/model` interview
- * (`command`: its stable ID). `body` is the opening message the starter sends with it (the command's name in the UI
+ * `POST /api/session/interviews` (any participant): starts the `/es:start` or `/model:start`
+ * interview (`command`: its stable ID; the former `es` and `model` are read too). `body` is the opening message the starter sends with it (the command's name in the UI
  * language, `ja` or `en`, which the interviewer follows unless the person writes in another); `focus` the element
  * selected then (a storming for `/es`, an element of a context for `/model`). → 201 `{ interview, request }`;
- * `InterviewAlreadyRunning` (409) while one runs, `FacilitatorOnly` (403) for a participant of a Collab session.
+ * `InterviewAlreadyRunning` (409) while one runs. A participant who starts one answers it; its brief waits for the
+ * facilitator.
  */
 export interface StartInterviewBody {
-    readonly command: 'es' | 'model';
+    readonly command: 'es:start' | 'model:start' | 'es' | 'model';
     readonly body: string;
     readonly language: 'ja' | 'en';
     readonly focus?: Json<Collaboration.ModelTarget>;
@@ -383,12 +392,45 @@ export interface StartInterviewBody {
 }
 
 /**
- * `POST /api/session/interviews/:id/confirm` (its starter): the brief confirmed, as is or with its text edited
- * (`text`); a run is queued that writes it. → 201 `{ interview, run }`. `POST /api/session/interviews/:id/stop` (its
- * starter, an empty body) → 200 `{ interview }`.
+ * `POST /api/session/interviews/:id/confirm` (the facilitator; for an interview a participant started, the approval):
+ * the brief confirmed, as is or with its text edited (`text`); a run is queued that writes it. → 201
+ * `{ interview, run }`. `POST /api/session/interviews/:id/stop` (its starter or the facilitator, an empty body) → 200
+ * `{ interview }` (`NotTheInterviewer` 403 for anyone else).
  */
 export interface ConfirmInterviewBody {
     readonly text?: string;
+}
+
+/**
+ * `POST /api/session/interviews/:id/reject` (the facilitator): the brief rejected, with an optional note to its
+ * starter; the interview ends. → 200 `{ interview }`.
+ */
+export interface RejectInterviewBody {
+    readonly note?: string;
+}
+
+/**
+ * `POST /api/session/commands` (any participant): starts a candidate or answer command of the `/` list (`command`: its stable ID,
+ * `es:exceptions`, `hint`, …). `body` is the opening message (the command's name in the UI language); `viewedAt` and
+ * `focus` say what it is about (the storming in view). → 201 `{ command, request }`; `CommandAlreadyRunning` (409)
+ * while one of the same kind runs.
+ */
+export interface StartCommandBody {
+    readonly command: string;
+    readonly body: string;
+    readonly language: 'ja' | 'en';
+    readonly focus?: Json<Collaboration.ModelTarget>;
+    readonly viewedAt?: Json<Collaboration.ViewedAt>;
+}
+
+/**
+ * `POST /api/session/commands/:id/apply` (the facilitator, whoever started it: applying is the approval): the
+ * candidates checked (their numbers in the list) become one run. → 201 `{ command, run }`.
+ * `POST /api/session/commands/:id/stop` (its starter or the facilitator, an empty body) → 200 `{ command }`
+ * (`NotTheStarter` 403 for anyone else).
+ */
+export interface ApplyCandidatesBody {
+    readonly chosen: readonly number[];
 }
 
 /**
@@ -772,7 +814,31 @@ export type AgentAnswerEventType = (typeof AGENT_ANSWER_EVENT_TYPES)[keyof typeo
 export type AgentAnswerJobKind = 'triage' | 'answer' | 'propose';
 
 /** Any job of the answer stream: a job about a triage, or the interviewer's next turn of an interview. */
-export type AgentAnswerStreamJob = AgentAnswerJobBody | AgentInterviewJobBody;
+export type AgentAnswerStreamJob = AgentAnswerJobBody | AgentInterviewJobBody | AgentCommandJobBody;
+
+/**
+ * A command job (the `/` list's candidate and answer commands, `/es:exceptions`, `/es:recap`): the answerer lists the
+ * command's candidates or answers it, for the starter's opening message (`request`, with the view it was sent from).
+ */
+export interface AgentCommandJobBody {
+    readonly job: string;
+    readonly kind: 'command';
+    readonly command: Json<Collaboration.SlashCommand>;
+    /** The command's stable ID (`es:exceptions`). */
+    readonly name: string;
+    /** What the answerer returns: candidates, an answer, or the next steps (`/hint`, an answer written from them). */
+    readonly type: 'candidates' | 'answer' | 'next';
+    /** The starter's opening message. */
+    readonly request: Json<Collaboration.Request>;
+    /** The starter's display name. */
+    readonly author: string;
+    readonly timeoutMs: number;
+    /** The UI language the command started in: the output follows it, or the person's own language. */
+    readonly language: 'ja' | 'en';
+    /** The session so far, whole. */
+    readonly sessionSoFar?: AgentSessionSoFar;
+    readonly readRevision?: string;
+}
 
 /**
  * An interview job (the `/` commands, `/es` and `/model`): the interviewer's next turn — a question, or the brief —
@@ -789,7 +855,7 @@ export interface AgentInterviewJobBody {
     readonly author: string;
     readonly timeoutMs: number;
     /** The command's stable ID. */
-    readonly command: 'es' | 'model';
+    readonly command: 'es:start' | 'model:start';
     /** The UI language the interview started in: the questions and the brief follow it, or the person's own language. */
     readonly language: 'ja' | 'en';
     readonly transcript: readonly { readonly from: 'ai' | 'person'; readonly text: string }[];
@@ -854,11 +920,41 @@ export interface AgentProposeResultBody {
     readonly durationMs: number;
 }
 
-/** `POST /agent/answers/:job` for an interview job: the next question, or the brief (`readInterviewerReply`). */
-export type AgentInterviewResultBody = ({ readonly kind: 'question'; readonly question: string } | { readonly kind: 'brief'; readonly brief: BriefBody }) & {
+/**
+ * `POST /agent/answers/:job` for an interview job: the next question (its choices, two to six, cleaned again by the
+ * server; `multiple` when several make one answer), or the brief (`readInterviewerReply`).
+ */
+export type AgentInterviewResultBody = (
+    | { readonly kind: 'question'; readonly question: string; readonly choices?: readonly string[]; readonly multiple?: boolean }
+    | { readonly kind: 'brief'; readonly brief: BriefBody }
+) & {
     readonly model?: string;
     readonly durationMs: number;
 };
+
+/** `POST /agent/answers/:job` for a command job: its candidates, its answer, or its next steps (`readCommandReply`). */
+export type AgentCommandResultBody = (
+    | { readonly kind: 'candidates'; readonly candidates: readonly CandidateBody[] }
+    | { readonly kind: 'answer'; readonly answer: string }
+    | ({ readonly kind: 'next' } & NextAnswerBody)
+) & {
+    readonly model?: string;
+    readonly durationMs: number;
+};
+
+/** `/hint`'s answer as the answerer writes it (`NextAnswerData` of `domain/slash-commands.ts`): the status and the steps. */
+export interface NextAnswerBody {
+    readonly status: string;
+    readonly steps: readonly { readonly text: string; readonly reason: string; readonly command?: string }[];
+}
+
+/** A candidate as the answerer writes it (`CandidateData` of `domain/slash-commands.ts`). */
+export interface CandidateBody {
+    readonly label: string;
+    readonly targets: readonly string[];
+    readonly how: string;
+    readonly reason?: string;
+}
 
 /** A brief as the interviewer writes it (`BriefData` of `domain/interviews.ts`). */
 export interface BriefBody {

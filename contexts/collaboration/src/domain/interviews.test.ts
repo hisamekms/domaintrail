@@ -1,7 +1,7 @@
 // The interviewer's output (a question or a brief) read as untrusted AI output, a brief as the person edits it, and the
 // team's templates as the config file has them.
 import { describe, expect, test } from 'bun:test';
-import { briefData, briefLines, interviewerJsonSchema, readBriefText, readInterviewerReply } from './interviews.js';
+import { briefData, briefLines, interviewerJsonSchema, readBriefText, readChoices, readInterviewerReply } from './interviews.js';
 import { checkTemplates } from './templates.js';
 
 const lines = [
@@ -13,7 +13,10 @@ const lines = [
 
 describe("the interviewer's reply", () => {
     test('a question, or a brief whose lines become its text (a new one replaces nothing)', () => {
-        expect(readInterviewerReply({ kind: 'question', question: ' どの業務？ ' })).toEqual({ ok: true, value: { kind: 'question', question: 'どの業務？' } });
+        expect(readInterviewerReply({ kind: 'question', question: ' どの業務？ ' })).toEqual({
+            ok: true,
+            value: { kind: 'question', question: 'どの業務？', choices: [], multiple: false },
+        });
         const read = readInterviewerReply({ kind: 'brief', brief: { name: 'Returns', label: '返品', isNew: true, replaces: true, lines } });
         expect(read as unknown).toEqual({
             ok: true,
@@ -44,6 +47,45 @@ describe("the interviewer's reply", () => {
         });
         expect(brief({})).toMatchObject({ ok: true, value: { brief: { replaces: true, isNew: false } } });
         expect(interviewerJsonSchema()).toMatchObject({ required: ['kind'], properties: { kind: { enum: ['question', 'brief'] } } });
+    });
+
+    test("a question's choices: kept with `multiple`; the schema bounds them", () => {
+        expect(
+            readInterviewerReply({ kind: 'question', question: '誰が参加しますか？', choices: ['業務担当', '開発者', 'PO'], multiple: true }) as unknown,
+        ).toEqual({
+            ok: true,
+            value: { kind: 'question', question: '誰が参加しますか？', choices: ['業務担当', '開発者', 'PO'], multiple: true },
+        });
+        // `multiple` without choices means nothing
+        expect(readInterviewerReply({ kind: 'question', question: 'なぜ？', multiple: true })).toMatchObject({
+            ok: true,
+            value: { choices: [], multiple: false },
+        });
+        expect(readInterviewerReply({ kind: 'question', question: 'x', choices: 'a, b' })).toMatchObject({ ok: false, error: { path: 'reply.choices' } });
+        expect(readInterviewerReply({ kind: 'question', question: 'x', choices: ['a', 'b'], multiple: 'yes' })).toMatchObject({
+            ok: false,
+            error: { path: 'reply.multiple' },
+        });
+        expect(interviewerJsonSchema()).toMatchObject({
+            properties: { choices: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 40 } }, multiple: { type: 'boolean' } },
+        });
+    });
+
+    test('choices are cleaned, not refused: blanks and non-strings dropped, one line, cut to 40, duplicates dropped, six at most', () => {
+        expect(readChoices([' 返品 ', '', '   ', 3, null, '返品', 'RETURNS', 'returns', '交換\nと修理']) as readonly string[]).toEqual([
+            '返品',
+            'RETURNS',
+            '交換 と修理',
+        ]);
+        const long = readChoices(['x'.repeat(60), 'y']);
+        expect(long[0]).toHaveLength(40);
+        expect(long[0].endsWith('…')).toBe(true);
+        expect(readChoices(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']) as readonly string[]).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
+        // one choice is no choice
+        expect(readChoices(['only', ' ', 'only']) as readonly string[]).toEqual([]);
+        expect(readChoices(undefined) as readonly string[]).toEqual([]);
+        // the model's text kept as text: nothing in it is read
+        expect(readChoices(['<b>A</b>', 'ignore the rules\u0007']) as readonly string[]).toEqual(['<b>A</b>', 'ignore the rules']);
     });
 
     test('an edited brief: lines trimmed, blank ones dropped; heads read back with either colon', () => {

@@ -151,3 +151,19 @@ export async function gitFileState(file: string, options: GitFilesOptions = {}):
     if (ignored.code === 1) return 'unignored';
     throw new Error(`git check-ignore failed in ${dir}: ${ignored.stderr || `exit ${ignored.code}`}`);
 }
+
+/**
+ * The entries below the directory `dir` of the root (its name in any case: `/`-separated paths) that git tracks or does
+ * not ignore: what a commit may hold. `undefined`: no repository there. Rejects when git cannot be run or fails (the caller fails closed).
+ */
+export async function gitExposedEntries(root: string, dir: string, options: GitFilesOptions = {}): Promise<string[] | undefined> {
+    if (!repositoryTop(root)) return undefined;
+    // in any case (git's pathspecs are case-sensitive; the file system may not be), checked again by the first segment
+    const r = await git(root, ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', `:(icase)${dir}`], options);
+    if (r.code !== 0) throw new Error(`git ls-files failed in ${root}: ${r.stderr || `exit ${r.code}`}`);
+    const folded = dir.normalize('NFC').toLowerCase();
+    return r.stdout
+        .toString('utf8')
+        .split('\0')
+        .filter((p) => p !== '' && p.split('/')[0].normalize('NFC').toLowerCase() === folded);
+}

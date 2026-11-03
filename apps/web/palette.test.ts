@@ -119,3 +119,16 @@ describe('a resolved hotspot', () => {
         });
     }
 });
+
+describe('the actions of the detail of a storming element', () => {
+    // an icon is held to the text's 4.5:1 (it carries the action's meaning alone, its name only in the tooltip)
+    for (const theme of ['light', 'dark'] as const) {
+        test(`${theme}: the brand icon reads on its pale wash and on the surface, and the primary's on the brand`, () => {
+            expect(wcag(resolve('--brand', theme), resolve('--brand-wash', theme))).toBeGreaterThanOrEqual(4.5);
+            expect(wcag(resolve('--brand', theme), resolve('--surface', theme))).toBeGreaterThanOrEqual(4.5);
+            expect(wcag(resolve('--on-brand', theme), resolve('--brand', theme))).toBeGreaterThanOrEqual(4.5);
+            // the wash stays a wash: nearer the surface than the brand is
+            expect(wcag(resolve('--brand-wash', theme), resolve('--surface', theme))).toBeLessThan(1.5);
+        });
+    }
+});

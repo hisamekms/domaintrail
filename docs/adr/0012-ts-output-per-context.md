@@ -2,6 +2,8 @@
 
 - Status: accepted
 - Date: 2026-10-18
+- Amended by: [ADR 0026](0026-collaboration-sessions.md#appendix-state-outside-the-workspace-amendment) (`generated.json`
+  is kept in the workspace's state directory, outside the workspace)
 
 ## Context
 

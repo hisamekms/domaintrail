@@ -86,10 +86,10 @@ problems of the model are listed at the bottom while the agent fixes them.
 ### Give feedback from the Live View
 
 Select the element you want to talk about — in the explorer on the left or in a diagram — and look at it in the
-inspector on the right: its fields and invariants (構造), the states and transitions of its aggregate (状態遷移), what a
+detail under the explorer: its fields and invariants (構造), the states and transitions of its aggregate (状態遷移), what a
 command requires, changes and emits (振る舞い), who uses it (参照) and its source (ソース). In the ソース tab, the copy
 button on the highlighted declaration copies its code. Paste it into the conversation with what should change, or name
-the element (`Reservation.confirm`; the 名前 / 両方 setting (the gear at the foot of the left pane) shows the names next to the labels):
+the element (`Reservation.confirm`; the 名前 / 両方 setting (the gear at the foot of the left column) shows the names next to the labels):
 
 > `command confirm(capacity: Headcount, at: Timestamp) "確定する"` — a reservation should also record who confirmed
 > it.
@@ -368,6 +368,12 @@ Open the printed link in the browser (it signs your browser in, once; afterwards
 - Select `confirm`, then **振る舞い**: its requirement `roomFits`, its error `RoomTooSmall` and its event.
 - Change the file and save: the view follows. Break something: the problem appears at the bottom, and the last valid
   diagram stays.
+
+The session's record — the chat, the runs, the revisions — and the diagrams' layouts are kept outside the workspace
+(by default in `~/.local/state/domaintrail/<workspace>/` and `~/.cache/domaintrail/<workspace>/`, on macOS too): nothing
+is written into the workspace, and there is nothing to add to `.gitignore`. The `.domaintrail/` of an older version is
+moved there on the first run. `dt session prune` lists what is kept for workspaces that are gone, and removes it with
+`--yes` (`dt guide config`, Where dt keeps its files).
 
 The panes, the views and the settings are described in [The Live View](live-view.md).
 

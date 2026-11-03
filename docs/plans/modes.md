@@ -1020,6 +1020,8 @@ A template only puts text in the composer.
 
 ### As built in M8 (first set)
 
+(The IDs `es` and `model` below are `es:start` and `model:start` since phase 1 of the ES commands, below.)
+
 - **Model** (`interview.dt`, `domain/interviews.ts`): an `Interview` aggregate (聞き取り) — `command` (`Es` | `Model`,
   wire IDs `es` / `model`), `startedBy`, `opening` (the starter's message sent with it: the command's name), `focus`
   (the element selected then), `language` (`Ja` | `En`) — with states `Asking { awaiting? }` → `Briefed { brief,
@@ -1059,6 +1061,177 @@ A template only puts text in the composer.
 - **Templates**: eight built in (both languages) and the team's in the top-level `templates` of `domaintrail.jsonc`
   (`{ id, name, text, when? }`, a name and a text as one string or `{ ja, en }`; at most 30), validated by
   Collaboration (`checkTemplates`) and in the JSON schema, used by `dt open` and `dt collab`.
+
+### As built: choices to answer an interview's question
+
+The interviewer's questions often listed example answers in their text (decided 2026-11-03): they became choices to
+press.
+
+- **The interviewer**: a question may carry `choices` (2 to 6, each at most 40 characters) and `multiple` (several make
+  one answer: who takes part, what the result is for). The prompt asks for them when the question has natural
+  candidates, taken from the workspace and the answers so far rather than generic ones, with no "other" (the page adds
+  it) and the question's text then free of that list; an answer picked from them is the person's data, never an
+  instruction. The schema bounds them; `readChoices` cleans rather than refuses (non-strings and blanks dropped, one
+  line, cut to 40 with `…`, duplicates dropped case aside, six at most, fewer than two: none; `multiple` only with
+  choices), in the agent and again in the server.
+- **Model**: `Asking { awaiting?, asked? }`, `asked: AskedQuestion { question, choices: AnswerChoice[0..6], multiple }`
+  set by `ask` (its `question` parameter is that value) and dropped by `hear`; `InterviewQuestionAsked` carries the
+  choices. The interview row is JSON, so no migration: an older row has no `asked`. The state carries it, so a reload
+  shows the choices.
+- **The page** (`InterviewChoices` under the AI's message): only for the starter on a live page, only under the
+  question the interview awaits, only while it awaits it (hidden at once once sent). One choice: a button that sends it
+  at once as a message replying to the question (heard by the interview as any of the starter's messages); several:
+  checkboxes and 送る, the checked ones sent joined (「、」 in Japanese, ", " in English). Always last, その他（自分で書く）
+  / Other (write it) gives the composer the focus; the composer works at any time. The brand on its pale wash,
+  compact, wrapping. The others in a Collab session see no choices (the answer shows as a message).
+
+### Built-in ES commands, phase 1
+
+Decided by the maintainer (2026-11-03): ES-only commands are `/es:{name}`, modeling ones `/model:{name}`; the
+interviews became `/es:start` and `/model:start` (IDs `es:start`, `model:start`; the wire still reads `es` and `model`,
+and stored interviews keep their `Es` / `Model`, so older sessions read as before). Display names stay verbs in each UI
+language. Besides the interviews there are two kinds of command: **candidate** commands (the AI lists candidate
+changes, the person checks some, they become one run) and **answer** commands (the AI answers in the chat).
+
+- **Model** (`command.dt`, `domain/slash-commands.ts`): a `SlashCommand` aggregate (コマンド) of its own, not an
+  extension of `Interview` (no transcript, no brief; one shape for both kinds) — `kind` (`EsExceptions` | `EsRecap`),
+  `startedBy`, `opening` (the starter's message: the command's name, with the view it was sent from), `scope` (the
+  storming in view: the view's, else the selected element's), `language` — with states `Working` → `Listed {
+  candidates[0..20], listedAt }` → `Applied { candidates, chosen: CandidateIndex[1..20], run }`, or `Working` →
+  `Answered { answer }`, or `Stopped`. A candidate is `{ label (60), targets (element references, at most 20), how
+  (one line, 300), reason? (200) }`. `start` requires the facilitator when the command is the facilitator's
+  (`FacilitatorOnly`); `apply` and `stop` its starter (`NotTheStarter`), `apply` numbers of the list
+  (`NoSuchCandidate`); one running (`Working` or `Listed`) of each kind per session (`CommandAlreadyRunning`, the use
+  case). Stored in a table of its own (migration 14, `slash_commands`). The run's input gains `candidates:
+  CandidatesInstruction { command, kind, scope?, chosen[1..20] }`.
+- **The table** (`SLASH_COMMANDS`): each command's ID, kind, type (`candidates` | `answer`), whether only the
+  facilitator starts it and whether it needs a storming in view. `/es:exceptions`: candidates, the facilitator's,
+  needs a storming. `/es:recap`: an answer, anyone's (an answer changes nothing, so a participant may ask for one).
+  Phase 2 (`/es:levels`, `/es:names`, `/es:gaps`, `/es:next`, below) adds a row, an enum entry, a prompt in
+  `COMMAND_PROMPTS` (`answer-prompt.ts`) and, for a candidate command, a clause of the runner's rule 19.
+- **Routing**: `POST /api/session/commands` (`{ command, body, language, focus?, viewedAt? }`, any participant) sends
+  the opening message without triage and starts the command; nothing in view for a command that needs a storming lists
+  no candidates at once (the AI is not asked) and the card says 「見ているストーミングがありません」. While it works the
+  answers entry point hands out a `command` job (`commandJobs`: one per `Working` command) with the command, its ID
+  and type, the opening message (its `viewedAt`), the language and the session so far; the answerer runs it in a
+  fresh read-only process with the schema of its type (`{ kind: 'candidates', candidates }` or `{ kind: 'answer',
+  answer }`), read again by the server (`readCommandReply`): candidates past twelve dropped, malformed references
+  dropped as a proposal's, text past its limit refused, the other kind refused. Candidates → `listCandidates`; an
+  answer → `answerCommand`, a message of the AI replying to the opening (as the interviewer's questions), Markdown.
+  Given up as the other answer jobs (`MAX_ATTEMPTS`, もう一度).
+- **Apply**: `POST /api/session/commands/:id/apply` (`{ chosen: number[] }`, its starter) queues one run on the
+  opening message whose input carries the chosen candidates (`queueRequests`, as a confirmed brief): a sibling of the
+  approved proposal rather than a reuse of it, since there is no triage and several are picked. `…/:id/stop` drops it.
+  The runner's **rule 19**: `chosenCandidates` (`{ command, storming, candidates: [{ label, targets, how, reason? }] }`)
+  are what to do, not the request; for `/es:exceptions` each is one `exception` in the storming (rule 17) in the stage
+  of its branch point — the branch event written again, the new events, `then <Event>` when it returns —, `level
+  design` only when `how` says so (rule 15), none the storming already has. A run of an ES command is about `.dtes`
+  only (rule 4, the storming's way of working).
+- **Prompts** (English; the output follows the UI language unless the session is written in another): both get the
+  storming-practice topic. `/es:exceptions`: for each step of the main flow in view (a stage's or timeline's when one
+  is shown, else the whole storming), plausible exceptions not modeled yet — failure, cancellation, timeout, missing
+  input, rejection —, at most two per step and twelve in all, as an `exception` to add: label the new event (a short
+  past-tense phrase), targets the branch event then the new ones then the return, how the timeline in one line.
+  `/es:recap`: from the session so far, three short bullet lists under bold lead-ins (決まったこと / 追加・変更 / 未決),
+  empty ones left out, nothing invented.
+- **The page**: `/` lists the commands the person may start now (`canStartCommand`: interviews and
+  `/es:exceptions` for the facilitator, `/es:recap` for anyone; none of a kind while one runs), grouped `es:start`,
+  the other `es:` commands, `model:start`, then the templates; `/es` filters to the ES commands, each with what it
+  does (AI が聞き取ります / AI が候補を挙げます / AI が答えます). A candidate command is a card on the AI's bubble under
+  its message (`candidates.tsx`): AI が考えています and 中止 while it works; the candidates with a checkbox each for its
+  starter, **none checked** (the person chooses deliberately; the AI's order already puts the strongest first), chips
+  for their elements, how and why, 採用したものを反映 / 中止, read-only for the others (始めた人の選択待ち); applied, the
+  chosen ones checked and the rest dimmed, with 「n 件を反映」 and a link to the run, whose card says ↳ 採用した候補 and
+  links back. An answer command's card shows only while the AI works (Collab); in Solo its message has the pending
+  slot, then the answer. Everything is server state: a reload shows the same.
+- **Session so far**: the command run (on which storming), its candidates (listed, each a line), those applied (with
+  the run) or that it was stopped; what is open (a command the AI works on, candidates awaiting a choice).
+- **Not done**: editing a candidate's how before applying.
+
+### Built-in ES commands, phase 2
+
+Decided by the maintainer (2026-11-03): four more ES commands, each a row of `SLASH_COMMANDS`, an entry of
+`SlashCommandKind`, a prompt in `COMMAND_PROMPTS` and, for a candidate command, a clause of rule 19. `/` lists them
+after `es:start` in the order of the work on a storming — the flow, then its details, then the session:
+`es:exceptions`, `es:gaps`, `es:levels`, `es:names`, `es:recap`, `es:next` —, then `model:start`, then the templates.
+(`/es:next` became `/hint`, listed first: "As built: ヒントをもらう" below.)
+
+- **`/es:gaps` 間を埋める** (candidates, the facilitator's, needs a storming): the events missing between two
+  consecutive events of the flows in view (the timelines, and the exceptions when the view shows them), one candidate
+  per gap: label the (first) new event, targets the event before, the new ones, the event after, how the flow and
+  where. Rule 19: declare the new events and insert them between the first and the last target in the timeline or
+  exception `how` names, nowhere else.
+- **`/es:levels` レベルを見直す** (candidates, the facilitator's, needs a storming): events to give `level design`
+  (details of the mechanism) or to take it from (what the people should see at Big Picture), one event per candidate
+  (its only target), how starting with 「level design を付ける」/「level design を外す」 ("Add/Remove level design").
+  Rule 19: exactly that, as the last clause of the event's body, nothing else of it.
+- **`/es:names` 名前を揃える** (candidates, the facilitator's, needs a storming): labels to rename — not in the past
+  tense, the same thing named differently (one candidate per element that changes), too long (S015), technical
+  wording —, one element per candidate, label the new label (in the storming's language), how old → new and, when
+  the old label carried a detail, 「詳細は /// へ: …」. Rule 19: the label only, never the identifier; the `///` kept,
+  the detail added to it.
+- **`/es:next` 次にやること** (an answer, anyone's, needs a storming): the answerer replies `{ kind: 'next', status,
+  steps: [{ text, reason, command? }] }` — status one line (200), one to three steps (more dropped), text (120) and
+  reason (200) one line each, `command` one of `es:start`, `es:exceptions`, `es:gaps`, `es:levels`, `es:names`,
+  `es:recap` (another is dropped, the step kept). The server writes the message from it (`nextAnswerText`: the
+  status, then a numbered list `**text** — reason`, the command's ID in code after it), so the session so far and any
+  reader see it whole, and keeps the steps on the command (`Answered.next: NextAnswer`, `SuggestedCommand` an enum of
+  its own; the stored row is JSON, no migration). The job's `type` is the reply's shape (`candidates` | `answer` |
+  `next`). Steps may be for the people (call a domain expert, stop and recap, decide X).
+- **The page**: `/es:next`'s message shows the status, the numbered steps, each reason muted and — where a step names
+  a command the person may start (a participant sees no button for a facilitator's one; one of its kind running is
+  disabled) — a brand-coloured button with the command's ID that puts `/es:gaps` in the composer and focuses it:
+  `/`'s list opens on that command, and the person sends it; nothing runs by itself. What the composer held is
+  replaced.
+- **Nothing in view**: a command that needs a storming, an answer command included, lists no candidates at once and
+  asks nothing; its card says 「見ているストーミングがありません」 until its starter closes it (an answer command's card
+  shows while it is listed).
+- **What they read**: the storming-practice topic, as phase 1. `/es:names` and `/es:next` also get `dt check`'s
+  findings on the `.dtes` files (`diagnostics`, the first forty; computed by the answerer's side with the analysis
+  `dt check` makes, `stormingDiagnostics`), in the data block: they carry the files' labels.
+- **Chips** (from the review of phase 1): a candidate's chips are only the targets that resolve now; one to be added
+  (an exception's or a gap's new event) is named by the candidate's label and how rather than by an identifier
+  nobody wrote (`#NoMyNumberCard`). Once applied, the new elements resolve and their chips appear.
+
+### As built: ヒントをもらう (`/hint`)
+
+Decided by the user (2026-11-03): `/es:next` became **`/hint` ヒントをもらう / "Get a hint"**, the AI coaching the person
+— a beginner especially — in the event storming and the modeling alike.
+
+- **The command**: ID `hint`, no prefix (it belongs to neither world); `SlashCommandKind.Hint` replaces `EsNext`. A
+  command stored as `EsNext`, and its `SlashCommandStarted`, are read as `Hint` (`legacy.ts`; nothing rewritten, no
+  migration), so an older session shows its answers with their steps as before. `POST /api/session/commands` no longer
+  takes `es:next` (400, as any unknown ID): the page and the server ship together. Anyone runs it, in Solo and Collab.
+  It needs no storming in view (`needsStorming: false`, no `scope`): it is always asked; the AI reads where the person
+  is. One at a time per session, as every command.
+- **The prompt** (`COMMAND_PROMPTS.hint`): first work out the world — doing Event Storming, modeling, moving from one
+  to the other, or not started — from `sessionSoFar` (recent messages, the AI's turns, interviews and their briefs,
+  the commands run), `viewedAt` (the view; none: nothing opened) and the files (Glob for `.dtes` and `.dt`): the
+  stormings' briefs, level, stages, exception coverage and open hotspots; the model's contexts, their `///`,
+  aggregates, states, invariants; `dt check`'s findings on **all** the files (`diagnostics`, scope `workspace`: the
+  `.dt` too, where `/es:names` reads the `.dtes` only). No files: they have not started — advise `es:start` or
+  `model:start`. Then the same shape as before: status (one line, which world and how far), one to three steps with
+  reasons, `command` one of `es:start`, `es:exceptions`, `es:gaps`, `es:levels`, `es:names`, `es:recap`,
+  `model:start` (`SuggestedCommand` gained `ModelStart`; the schema's enum is `SUGGESTED_COMMAND_IDS`, validation as
+  before: another is dropped, the step kept). An `es:` command advised from elsewhere says which storming to open.
+  Tone: a coach — short, concrete, encouraging, no unexplained jargon —, in the UI language unless the session is
+  written in another. Both ways of working (storming-practice and modeling-practice) are given; names, labels and
+  findings stay in the data block.
+- **The button**: ヒントをもらう at the left end of the composer's bar, as tall as the send button: a `Lightbulb` and the
+  label on the brand's pale wash (an action), the label dropped when the bar is narrow (a container query on
+  `.chat-composer-bar`, 18rem: the chat at its default width shows it, at its narrowest not), its tooltip and
+  aria-label always. Pressed, it starts `/hint` at once (the opening message is the command's name, with the view and
+  the selection); the composer keeps what it holds. Disabled while a
+  hint runs (or while the page starts one); hidden where commands cannot run: the composer is not shown (the session
+  not live), or no answerer is connected.
+- **The answer**: the AI's ordinary message (author AI) with a small `Lightbulb` by its name (role img, 「ヒント」); the
+  steps' command buttons put the command in the composer as before (`/model:start` too, for who may start it).
+- **`/`'s list**: `/hint` comes first, before `es:start` (decided: it is where a beginner starts; `/es` still lists
+  the ES commands alone). The commands the latest **answered** hint of the session suggests carry a small filled
+  amber `Star` (「ヒントのおすすめ」, `--chat-hint-star`) until another hint is answered (one still working, or
+  stopped, leaves them).
+- **Fixed with it**: an AI message in the history (clamped) faded its last line even when it fitted; the fade is now
+  only for a message taller than the clamp (`cut`).
 
 ## The view a message was sent from (as built)
 
@@ -1296,3 +1469,207 @@ told the view was); the canvas's controls, how it is looked at.
   trycloudflare URL, an invite made from the menu, a second browser asked to join and was let in as a participant, a
   third was denied; `dt collab link` and `dt collab invite` printed links on the public URL; Ctrl+C left no
   cloudflared.
+
+## Who may run the `/` commands in Collab (decided 2026-11-03, as built)
+
+- **Everyone may run every command**, participants included. There is still one running command of each kind per
+  session.
+- **Changing files is approved by the facilitator.**
+  - Candidate commands (`/es:exceptions`, `/es:gaps`, `/es:levels`, `/es:names`): whoever started one, only the
+    facilitator checks candidates and applies them, and applying is the approval. Everyone else sees the card
+    read-only, as with a proposal's options.
+  - Interviews (`/es:start`, `/model:start`): a participant who starts one answers its questions, choices included.
+    The brief that writes `///` waits for the facilitator: 承認, 編集して承認 or 却下. Everyone sees the questions and
+    the brief.
+- **Answer commands** (`/hint`, `/es:recap`): anyone, and the answer is an ordinary AI message everyone sees.
+- **The facilitator's own commands** go on without approval, as before.
+
+### As built
+
+- **Model**: `start` of `Interview` and `SlashCommand` lost `startedByRole` (and the command's `facilitatorOnly`, and
+  `SLASH_COMMANDS` its column): anyone starts any command; one running per kind per session stays
+  (`InterviewAlreadyRunning`, `CommandAlreadyRunning`). `SlashCommand.apply` requires the facilitator
+  (`appliedByRole`, `FacilitatorOnly`) instead of the starter, and `Applied` records `appliedBy` (optional: an older
+  row has none, its starter applied it). `Interview.confirm` requires the facilitator (`confirmedByRole`,
+  `FacilitatorOnly`), `Confirmed` records `confirmedBy` (optional likewise): not the starter, it is an approval.
+  `Interview.reject` (the facilitator, `note: Text?`) ends a briefed interview in a new state `Rejected { brief,
+  rejectedBy, note?, rejectedAt }` (`InterviewRejected`, wire `interview.rejected`). Both `stop`s take the stopper's
+  role: its starter or the facilitator (`NotTheInterviewer`, `NotTheStarter`, 403). No new error type: the refusals are
+  `FacilitatorOnly` (403) and the stop errors; the rows are JSON, so no migration. Answering stays the starter's: only
+  their messages are heard by the interview (`hearIn`), a choice being a message; anyone else's is triaged.
+- **Routes**: `POST /api/session/interviews` and `…/:id/stop` are any participant's; `…/:id/confirm`, the new
+  `…/:id/reject` (`{ note? }`, as a proposal's) and `POST /api/session/commands/:id/apply` the facilitator's (answered
+  first by the route's role, then by the use case and the command). The errors snapshot records the three refusals.
+- **Session so far**: a brief waits for the facilitator's confirmation, candidates for the facilitator's choice; 「Ada
+  approved Bob's brief of the interview /es:start」 when the confirmer is not the starter, 「Ada rejected Bob's brief …
+  : note」, and who applied candidates.
+- **The page**: `/` lists every command to everyone; one of a kind already running is listed disabled (dimmed, not
+  picked). The empty view points to `/es:start` / `/model:start` for everyone with an AI connected; `/hint`'s step
+  buttons show every command. A candidate card has checkboxes and 採用したものを反映 for the facilitator only; everyone
+  else (its starter included) reads it with one muted line, 「ファシリテーターが選んで反映します」, and its starter keeps
+  中止. The interview bar's 中止 is its starter's and the facilitator's. The brief: the facilitator's own, 確定 /
+  編集して確定 / 中止 as before; a participant's, 承認 / 編集して承認 / 却下 (a note, optional) for the facilitator, 承認待ち
+  for everyone else (its starter keeps 中止). A rejected brief tells its starter 却下されました with the note, until 閉じる.
+
+## ガイド (`/guide`): a map, what is known at once, and the next steps (decided 2026-11-03)
+
+`/hint` (ヒントをもらう) becomes **`/guide` 「ガイド」**, icon `Compass`, for event storming and modeling. The composer
+button and the answer's icon follow the new name. A guide answer is a **guide card** with three parts.
+
+1. **The map: where the person is.** A path of steps, each done (✓), here (📍) or to do, ending at the goal (🏁).
+   - Steps past the goal are faint: they can be reached, but they are not the goal.
+   - Whether a step is done comes from the files, not from the AI. A step that can't be judged mechanically (for
+     example "the BCs are split") is marked done by the person; the AI may suggest it is done.
+   - **Event storming:** brief → events → flows and stages → exceptions → questions (hotspots) → Design Level. The
+     goal is Big Picture (ending at questions) or Design Level, read from the storming brief's `レベル:` line, written
+     in fixed words by `/es:start`. ES ends within ES; when the goal is reached and the brief says the result leads
+     into modeling, the guide suggests `/model:start`.
+   - **Modeling: patterns** chosen in `/model:start` (a choice question, "where do you start?", with the option that
+     fits the workspace first) and written to the context brief as `進め方:` and `ゴール:` in fixed words:
+     - **A. 全体から (strategic):** terms → subdomains (core/supporting/generic) → BC split → context map → each BC
+       in depth → invariants. Goals: the context map, aggregates, or invariants.
+     - **B. ES から:** review the storming → BCs carved from it → aggregates → commands and events (with `ref`) →
+       invariants.
+     - **C. 1 つの BC を深掘り (tactical):** terms → aggregates → values and IDs → commands (`requires`, `emits`) →
+       invariants → policies. Goals: commands or invariants.
+     - **D. 既存モデルの見直し:** diagnostics → terms aligned → boundaries reviewed → invariants strengthened.
+   - **BCs are not known upfront; the map grows.** The path is one line until contexts exist in the `.dt` files. Each
+     context then appears as a row under "each BC in depth", with its own progress (aggregates, commands,
+     invariants). Rows follow the contexts as they are added, split or merged.
+   - **No brief:** the first step is "set the goal" (`/es:start` or `/model:start`). The map is not guessed.
+2. **What is known at once.** When the button is pressed, a mechanical check lists what the files show, with no AI.
+   Examples: a stage without exceptions, open hotspots, labels that are too long (S015), diagnostics, a context
+   without aggregates. Each row has a "go there" action (show on the canvas, open the hotspot, select the element).
+3. **The AI's advice**, arriving a few seconds later:
+   - a status line, and 1–3 next steps, each with a one-line reason;
+   - actions on a step: a command button (it puts the command in the composer), go-there buttons, and 「聞くことをメモ」
+     (it adds a hotspot; this changes files, so a participant's needs the facilitator's approval);
+   - ⭐ on the `/` list for the commands it suggests, as `/hint` does today.
+
+**Scope: 0.7.0.** The ES map, and all four modeling patterns with the growing BC map.
+
+## The journey file: briefs, goals and marks out of `///` (decided 2026-11-03)
+
+This replaces where the guide's goal is read from (above) and where the interviews' briefs are written (`/es:start`,
+`/model:start`). The guide's map, at-once checks and advice do not change.
+
+### Why
+
+- A brief in the `///` above a `storming` or `context` fits neither modeling nor change:
+  - pattern A starts before any context exists;
+  - a modeling effort spans several contexts;
+  - a context split across files has several places for `///`;
+  - each goal change took an interview, an approval and a run.
+- A brief mixes two kinds of information:
+  - **why**: purpose, scope, use and who takes part. It changes rarely and is kept as text.
+  - **how far**: the level, the pattern and the goal. It changes often, and the guide reads it.
+
+### The file
+
+- **`domaintrail.journey.json`** at the workspace root, next to `domaintrail.jsonc`, and **tracked by git**.
+  - It is a fourth kind of file: not the model, not configuration (the config is trust-hashed, and a goal change must
+    not ask for trust again), and not session state.
+  - It holds what the work in this workspace is for, how far it goes and how far it has come.
+- **Contents:**
+  - **ES: one journey per storming**, keyed by the storming's ID. It holds the why and the level (`BigPicture` |
+    `DesignLevel`).
+  - **Modeling: named journeys, several allowed.** For example 「Billing の深掘り」 (C) and 「全体の見直し」 (D) side by
+    side.
+    - Each has the why, the pattern (A–D), the goal, and the pattern's subject: the storming(s) for B, the context for
+      C.
+    - The guide shows one at a time and offers a picker when there are several. Each viewer remembers their choice.
+  - **Marks:** the steps a person marked done (those that cannot be judged from the files), per journey. Marks on BC
+    rows are keyed by the context's name.
+- **Fixed words.** Enums are in English in the file. The why is free text in the language of the interview.
+  - A JSON Schema goes in `schema/journey.schema.json`.
+  - dt writes the file with a stable key order, so diffs stay small.
+- **Who writes it.** Only explicit acts change it: a brief confirmed, a goal changed on the card (🏁), a mark set or
+  cleared.
+  - These are the facilitator's own acts; a participant's need the facilitator's approval, as for briefs today.
+  - dt writes the file itself; no AI run is involved. A new storming still needs a run to create its `storming` block.
+  - An AI working outside dt (Claude Code) may read the file; `dt guide` describes it.
+- **Checks.** `dt check` validates the file against the schema (an error). A journey naming a storming or context that
+  no longer exists is a warning, and the guide shows it as "missing".
+- **Shown where.** Selecting a storming shows its ES journey's why and level in the detail. Selecting a context shows
+  the modeling journeys that include it.
+- **No migration.** `/es:start` and `/model:start` writing `///` briefs were never released. The examples and fixtures
+  move to the new file.
+
+### `///` becomes a short description, in one place
+
+- In `.dt` and `.dtes` alike, `///` is a short description of what the element is. It is no longer a brief.
+- **A context's description is written once.** A second `///` on the same context, in another file, is **an error**
+  (a new rule, `M025`). The error names both places and says to merge them into one.
+  - Today the first one in file-name order wins silently; adding or renaming a file swaps the description.
+  - It is an error, not a warning, because the AI works until `dt check` exits 0, and a warning would not stop it.
+  - `dt guide` recommends keeping a split context's description and its context-wide types in `_context.dt`. This is
+    advice, not a rule.
+- **A storming lives in one file** (decided as the intended form, not a gap).
+  - The order in which things are written has meaning: the first timeline of a section is its trunk, and a stage with
+    no `after` follows the stages written before it.
+  - People do not look at files, and the AI reads and edits large files in parts.
+  - If size ever calls for splitting, the rules are ready:
+    - a storming body file plus one file per stage, a stage never split;
+    - `after` required on every stage but the first;
+    - no stageless timelines in a split storming.
+
+### The journey file's format and contents (decided 2026-11-03)
+
+- **Format: JSON.** The file is `domaintrail.journey.json`, with `"$schema"` and `"version": 1`.
+  - dt writes it with a stable key order and two-space indent.
+  - The why is split into short fields rather than one long text.
+- **`stormings`**: an object keyed by the storming's ID. Each journey has:
+  - `purpose`, `scope`, `participants`;
+  - `use`: `align` | `modeling`. On reaching the goal with `modeling`, the guide suggests `/model:start`;
+  - `level`: `BigPicture` | `DesignLevel`;
+  - `state`;
+  - `marks`: step IDs.
+- **`modeling`**: an array of named journeys. Each has:
+  - `id`: a stable slug, used for marks and for the viewer's remembered choice;
+  - `name`: the label shown;
+  - `purpose`, `scope`, `constraints`, `participants`;
+  - `pattern`: `Whole` | `FromStorming` | `OneContext` | `Review`;
+  - `from`: `{ stormings: [...] }` for `FromStorming`, `{ context }` for `OneContext`;
+  - `goal`: the values the pattern allows;
+  - `state`;
+  - `marks`: `{ steps: [...], contexts: { <Context>: [...] } }`.
+- **Enums are English** in the file. The UI shows them in Japanese or English. Step IDs are fixed per path.
+- **Participants are roles only** (「窓口担当」), never people's names. The interview turns names it hears into roles.
+- **`state`**: `active` | `done` | `archived`.
+  - `done` is set by a person, when the guide offers it on reaching the goal.
+  - `archived` hides the journey from the guide's picker.
+  - These are explicit acts like the others (a participant's need approval).
+- **Stale marks stay.** A mark is not recomputed when the model changes. The guide's AI may suggest reviewing a mark
+  that looks out of date.
+- **No author or time in the file.** Git's history records them.
+- **Renames.** A journey naming a missing storming or context is a warning (`dt check`) and shown as missing.
+  `dt guide` tells the AI to update the journey's keys when it renames a storming or a context.
+- **Name and place:** `domaintrail.journey.json` at the workspace root, the directory of `domaintrail.jsonc` (what
+  `dt -r` names). In a monorepo each workspace has its own. Never inside `.domaintrail/`, the older versions' state
+  directory, which is moved away and kept from the AI.
+- **The AI reads it.** It is added to the agent's read scope, next to the `.dt` and `.dtes` files and the config. Only
+  dt writes it.
+
+### The current journey, and how journeys begin (decided 2026-11-03)
+
+- **One current journey per session.** It is session state, not stored in the journey file.
+  - In Collab the facilitator sets it, and everyone sees the same journey. The guide's card draws that journey's map.
+  - In Solo the person sets it.
+  - This replaces "each viewer remembers their choice" above.
+- **Seeing it in the UI:** the current journey, its brief, its goal and where it stands are visible in Solo and Collab
+  alike. Where this goes on the page is still open; a preview will compare the candidates.
+- **How journeys begin:**
+  - **ES:** `/es:start` on a storming with no journey creates one. On a storming that has one, it revises its brief;
+    there is still one journey per storming.
+  - **Modeling:** `/model:start` first asks whether to continue an existing journey (listed) or start a new one. A
+    new one also asks for a name.
+  - **The guide and the AI only suggest.**
+    - When an ES journey reaches its goal and its `use` is `modeling`, the guide suggests `/model:start`, with
+      pattern B from that storming as the first option.
+    - With no journey at all, the guide's first step is "set the goal".
+    - The AI's advice may suggest a journey, e.g. a D review when diagnostics pile up. A person starts it with the
+      command.
+  - **Who:**
+    - The facilitator, or the person in Solo, creates journeys directly.
+    - Participants may run the commands, but their journey exists only once the facilitator approves its brief.
+  - **Outside dt** (Claude Code): read only in 0.7.0. A `dt journey` command to write it can come later.

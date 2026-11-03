@@ -14,7 +14,7 @@ import { Bubble, Clamped } from './bubble';
 import { DecidedLine } from './card';
 import { useChat } from './chat-context';
 import { useTargetNaming } from './naming';
-import { chosenIndex, editableHow, headHow, shownOptionHow, shownTargets, targetLabel } from './proposal-view';
+import { chosenIndex, editableHow, existingTargets, headHow, shownOptionHow, shownTargets, targetLabel } from './proposal-view';
 import { ReplyText } from './reply';
 import { StatusSlot } from './status-slot';
 import { targetKey, type ModelTarget } from './targets';
@@ -46,11 +46,16 @@ function TargetChip({ target }: { target: ModelTarget }) {
     );
 }
 
-/** The targets of a proposal or an option as a row of chips: the first three, then 「ほか n」 (the rest in its tooltip). */
-function TargetRow({ targets }: { targets: readonly ModelTarget[] }) {
+/**
+ * The targets of a proposal or an option as a row of chips: the first three, then 「ほか n」 (the rest in its tooltip).
+ * `existing`: only those that resolve now (a candidate's: one to be added is named by its label and how, not by an
+ * identifier the person never wrote).
+ */
+export function TargetRow({ targets: all, existing = false }: { targets: readonly ModelTarget[]; existing?: boolean }) {
     const { tx } = useChat();
     const naming = useTargetNaming();
     const t = useT();
+    const targets = existing ? existingTargets(all, naming, t) : all;
     if (targets.length === 0) return null;
     const { shown, more } = shownTargets(targets);
     const rest = targets

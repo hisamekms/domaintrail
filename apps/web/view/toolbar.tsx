@@ -4,9 +4,10 @@ import { useT } from '../i18n';
 import { useDismiss } from '../shared/layout';
 
 /**
- * The parts of the view toolbar, the same in every view, left to right: the subject (what is looked at), the level
- * (how much of it), then at the right end the 絞り込み button (what is hidden) and 書き出し (the catalog: 印刷). What
- * is shown is set here; how it is looked at (the camera, the density, the legend), in the canvas's controls.
+ * The parts of the view bar (the row above the canvas), the same in every view, left to right: the domain model's view
+ * switch, the subject (what is looked at), the level (how much of it), then at the right end the 絞り込み button (what
+ * is hidden) and 書き出し (the catalog: 印刷). What is shown is set here; how it is looked at (the camera, the density,
+ * the legend), in the canvas's controls.
  */
 
 /** Whether the element's text is cut short (so that the whole of it is shown as a tooltip). */
@@ -25,8 +26,8 @@ export function useClipped(ref: RefObject<HTMLElement | null>, text: string): bo
 }
 
 /**
- * Whether a button's text label is hidden (a narrow view toolbar shows its right end's buttons as icons: styles.css),
- * so that its name is then its tooltip.
+ * Whether a button's text label is hidden (a narrow bar shows its switches and its right end's buttons as icons:
+ * styles.css), so that its name is then its tooltip.
  */
 export function useLabelHidden(ref: RefObject<HTMLElement | null>): boolean {
     const [hidden, setHidden] = useState(false);
@@ -37,7 +38,7 @@ export function useLabelHidden(ref: RefObject<HTMLElement | null>): boolean {
         check();
         const observer = new ResizeObserver(check);
         observer.observe(el);
-        const bar = el.closest('.view-toolbar');
+        const bar = el.closest('.view-toolbar, .app-bar');
         if (bar) observer.observe(bar);
         return () => observer.disconnect();
     }, [ref]);
@@ -87,7 +88,7 @@ export interface PickerOption {
 /**
  * A dropdown that picks one thing to look at (a storming, a timeline). The button shows the choice, cut short with an
  * ellipsis when narrow (the whole of it as a tooltip); the list opens below it, moves with the arrow keys, and closes
- * on a choice, on Escape or on a click outside it. With one option it is the option's name, not a button.
+ * on a choice, on Escape or on a press outside it. With one option it is the option's name, not a button.
  */
 export function SubjectPicker(props: { label: string; value: string; options: PickerOption[]; onChange: (value: string) => void }) {
     const { label, value, options, onChange } = props;
@@ -108,12 +109,7 @@ export function SubjectPicker(props: { label: string; value: string; options: Pi
     }, [open]);
 
     if (!current) return null;
-    if (options.length === 1)
-        return (
-            <span ref={text} className="subject-picker subject-name" aria-label={label} data-tooltip={clipped ? current.label : undefined}>
-                {current.label}
-            </span>
-        );
+    if (options.length === 1) return <SubjectName label={label} text={current.label} />;
 
     const choose = (v: string): void => {
         setOpen(false);
@@ -185,14 +181,71 @@ export function SubjectPicker(props: { label: string; value: string; options: Pi
     );
 }
 
+/** A part of the subject that is not picked here (one storming, the focused contexts): its name, cut short when narrow. */
+export function SubjectName({ label, text }: { label: string; text: string }) {
+    const ref = useRef<HTMLSpanElement>(null);
+    const clipped = useClipped(ref, text);
+    return (
+        <span ref={ref} className="subject-picker subject-name" aria-label={label} data-tooltip={clipped ? text : undefined}>
+            {text}
+        </span>
+    );
+}
+
+/**
+ * A switch of a bar (the worlds in the app bar, the views in the view bar): each choice an icon and its name, the name
+ * hidden on a narrow bar (styles.css), and then its tooltip; the name stays its accessible name.
+ */
+export function NameSwitch<K extends string>(props: {
+    label: string;
+    className: string;
+    choices: readonly K[];
+    value: K;
+    icons: Record<K, LucideIcon>;
+    names: Record<K, string>;
+    onChange: (choice: K) => void;
+}) {
+    const { choices, value, onChange } = props;
+    return (
+        <div className={`segmented small name-switch ${props.className}`} role="group" aria-label={props.label}>
+            {choices.map((k) => (
+                <NameSwitchButton key={k} icon={props.icons[k]} name={props.names[k]} active={value === k} onClick={() => onChange(k)} />
+            ))}
+        </div>
+    );
+}
+
+function NameSwitchButton(props: { icon: LucideIcon; name: string; active: boolean; onClick: () => void }) {
+    const Icon = props.icon;
+    const text = useRef<HTMLSpanElement>(null);
+    const iconOnly = useLabelHidden(text);
+    return (
+        <button
+            className={props.active ? 'active' : ''}
+            aria-pressed={props.active}
+            aria-label={props.name}
+            data-tooltip={iconOnly ? props.name : undefined}
+            onClick={props.onClick}
+        >
+            <Icon size={15} aria-hidden />
+            <span ref={text} className="switch-label">
+                {props.name}
+            </span>
+        </button>
+    );
+}
+
 /** Icon buttons that pick a level (how much of the subject is drawn); each one's name is its tooltip. */
 export function LevelSwitch<L extends string>(props: {
     label: string;
     levels: readonly L[];
     value: L;
     icons: Record<L, LucideIcon>;
-    /** The level's name (for screen readers) and its tooltip (the name, with what it shows). */
-    names: (level: L) => { label: string; tooltip: string };
+    /**
+     * The level's name (for screen readers), its tooltip (the name, with what it shows) and maybe a short text beside
+     * its icon, hidden on a narrow view bar (styles.css).
+     */
+    names: (level: L) => { label: string; tooltip: string; text?: string };
     onChange: (level: L) => void;
 }) {
     const { levels, value, icons, names, onChange } = props;
@@ -211,6 +264,7 @@ export function LevelSwitch<L extends string>(props: {
                         aria-label={name.label}
                     >
                         <Icon size={15} aria-hidden />
+                        {name.text && <span className="level-label">{name.text}</span>}
                     </button>
                 );
             })}

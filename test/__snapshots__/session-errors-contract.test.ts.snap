@@ -10,6 +10,7 @@ exports[`the status of each error type every error of the collaboration model an
   "BlobMissing": 500,
   "ChangedMismatch": 409,
   "CollabSessionOpen": 409,
+  "CommandAlreadyRunning": 409,
   "ContentHashMismatch": 409,
   "DuplicateMention": 400,
   "DuplicateRequest": 409,
@@ -33,12 +34,14 @@ exports[`the status of each error type every error of the collaboration model an
   "MarkTargetNotFound": 404,
   "MentionedNotAParticipant": 400,
   "NoRequests": 400,
+  "NoSuchCandidate": 400,
   "NoSuchOption": 400,
   "NotAParticipant": 403,
   "NotFound": 404,
   "NotSolo": 409,
   "NotTheInterviewer": 403,
   "NotTheRequester": 403,
+  "NotTheStarter": 403,
   "NotYourRequest": 403,
   "PathOutsideRoot": 409,
   "PickMismatch": 400,
@@ -117,7 +120,34 @@ exports[`refused requests of a session in dev mode status and body of each refus
       },
     },
   ],
+  "POST commands/:id/apply, participant": [
+    403,
+    {
+      "error": {
+        "message": "Only the facilitator may do this.",
+        "type": "FacilitatorOnly",
+      },
+    },
+  ],
   "POST facilitator/link, participant": [
+    403,
+    {
+      "error": {
+        "message": "Only the facilitator may do this.",
+        "type": "FacilitatorOnly",
+      },
+    },
+  ],
+  "POST interviews/:id/confirm, participant": [
+    403,
+    {
+      "error": {
+        "message": "Only the facilitator may do this.",
+        "type": "FacilitatorOnly",
+      },
+    },
+  ],
+  "POST interviews/:id/reject, participant": [
     403,
     {
       "error": {

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { cliDeps, runCli } from '@domaintrail/dt';
+import { workspaceDirs } from '@domaintrail/workspace';
 import { generateTypeScript } from '@domaintrail/generation';
 import { check, linkNodeModules, tempCopyOfExamples } from './helpers.js';
 
@@ -378,7 +379,7 @@ describe('the shop example', () => {
         dirs.push(shop);
         await linkNodeModules(shop);
         expect(await runCli(['-r', shop, 'generate', 'ts'], { out: () => {}, err: () => {} }, cliDeps())).toBe(0);
-        const manifest = JSON.parse(await readFile(path.join(shop, '.domaintrail', 'generated.json'), 'utf8'));
+        const manifest = JSON.parse(await readFile(path.join(workspaceDirs(shop).state, 'generated.json'), 'utf8'));
         expect(manifest.files).toEqual(
             expect.arrayContaining(['generated/domain/tests/_register.ts', 'generated/domain/tests/Sales.ts', 'generated/domain/tests/index.ts']),
         );

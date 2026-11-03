@@ -1,6 +1,7 @@
 // The answers entry point of the agent API (ADR 0030, decision 6; the plan's "Two roles"): the answerer role's jobs —
 // stage 3 of a triage (`triage`), the answer to a 相談 (`answer`), the proposal for a participant's 依頼 (`propose`), the
-// interviewer's next turn of a `/es` or `/model` interview (`interview`: a question, or the brief) —
+// interviewer's next turn of a `/es:start` or `/model:start` interview (`interview`: a question, or the brief), a
+// candidate or answer command of the `/` list (`command`: its candidates, or its answer) —
 // handed out over an SSE stream of their own (`GET /agent/answers/events`), each to one connected answerer that has
 // none in hand, and their results taken back (`POST /agent/answers/:job`). No claim, no lease, no workspace lock: the
 // jobs never wait for the run queue nor hold it. What a job is waiting for is the collaboration's (`answerJobs`); what is
@@ -23,6 +24,10 @@ import {
     type InterviewJob,
     plainBody,
     readInterviewerReply,
+    readCommandReply,
+    slashCommandName,
+    slashCommandSpec,
+    type SlashCommandJob,
     chatWindow,
     Collaboration,
     type CollaborationUseCases,
@@ -37,6 +42,7 @@ import {
     AGENT_ANSWER_EVENT_TYPES,
     type AgentAnswerJobBody,
     type AgentAnswerStreamJob,
+    type AgentCommandJobBody,
     type AgentInterviewJobBody,
     type AgentSessionSoFar,
 } from '@domaintrail/collaboration/protocol';
@@ -91,8 +97,8 @@ export interface AnswerDispatcher {
     settled(): Promise<void>;
 }
 
-/** Any job of the answerer: about a triage, or an interview's next turn. */
-type Job = AnswerJob | InterviewJob;
+/** Any job of the answerer: about a triage, an interview's next turn, or a `/` command. */
+type Job = AnswerJob | InterviewJob | SlashCommandJob;
 
 /** An answer, a proposal or an interview's turn given up after `MAX_ATTEMPTS` (the agents' presence lists them for the page). */
 export interface GivenUpAnswer {
@@ -118,6 +124,7 @@ interface Handed {
     readonly subject: string;
     readonly triage?: Collaboration.TriageId;
     readonly interview?: Collaboration.InterviewId;
+    readonly command?: Collaboration.SlashCommandId;
     readonly request: Collaboration.RequestId;
     readonly stream: AnswerStream;
     readonly timer: ReturnType<typeof setTimeout>;
@@ -128,7 +135,12 @@ interface Handed {
 }
 
 // an interview's turn is one per message it answers: the starter writing again makes another one due
-const keyOf = (job: Job): string => (job.kind === 'interview' ? `${job.interview.id}:${job.request.id}:interview` : `${job.triage.id}:${job.kind}`);
+const keyOf = (job: Job): string =>
+    job.kind === 'interview'
+        ? `${job.interview.id}:${job.request.id}:interview`
+        : job.kind === 'command'
+          ? `${job.command.id}:command`
+          : `${job.triage.id}:${job.kind}`;
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const durationOf = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.min(v, 86_400_000) : 0);
@@ -248,6 +260,35 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
         };
     };
 
+    /** A command job's body: the command, its opening message (with its view), the session so far. */
+    const commandBodyOf = async (
+        job: SlashCommandJob,
+        state: { readonly session: Collaboration.Session; readonly revisions: readonly Collaboration.Revision[] },
+        id: string,
+    ): Promise<{ body: AgentCommandJobBody; readRevision?: Collaboration.RevisionId }> => {
+        const names = new Map<string, string>(state.session.participants.map((p) => [p.id, p.name]));
+        const full = await use.sessionSoFar({ session });
+        const readRevision = state.revisions.at(-1)?.id;
+        return {
+            body: {
+                job: id,
+                kind: 'command',
+                // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the aggregates become their JSON when encoded
+                command: job.command as unknown as AgentCommandJobBody['command'],
+                name: slashCommandName(job.command.kind),
+                type: slashCommandSpec(job.command.kind).reply,
+                // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- as above
+                request: job.request as unknown as AgentCommandJobBody['request'],
+                author: names.get(job.command.startedBy) ?? 'a participant',
+                timeoutMs: deps.timeoutMs,
+                language: job.command.language === 'En' ? 'en' : 'ja',
+                ...(full.ok && { sessionSoFar: { text: full.value.text, last: full.value.last } }),
+                ...(readRevision && { readRevision }),
+            },
+            ...(readRevision && { readRevision }),
+        };
+    };
+
     /** The job's body for the answerer. */
     const bodyOf = async (
         job: AnswerJob,
@@ -321,7 +362,11 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
                 if (stream.closed) continue;
                 const id = randomUUID();
                 const { body, soFarLast, readRevision }: { body: AgentAnswerStreamJob; soFarLast?: number; readRevision?: Collaboration.RevisionId } =
-                    job.kind === 'interview' ? await interviewBodyOf(job, state.value, id) : await bodyOf(job, state.value, stream, id);
+                    job.kind === 'interview'
+                        ? await interviewBodyOf(job, state.value, id)
+                        : job.kind === 'command'
+                          ? await commandBodyOf(job, state.value, id)
+                          : await bodyOf(job, state.value, stream, id);
                 if (stream.closed) {
                     again = true;
                     continue;
@@ -334,7 +379,9 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
                     kind: job.kind,
                     ...(job.kind === 'interview'
                         ? { subject: `interview ${job.interview.id}`, interview: job.interview.id }
-                        : { subject: `triage ${job.triage.id}`, triage: job.triage.id }),
+                        : job.kind === 'command'
+                          ? { subject: `command ${job.command.id}`, command: job.command.id }
+                          : { subject: `triage ${job.triage.id}`, triage: job.triage.id }),
                     request: job.request.id,
                     stream,
                     timer,
@@ -350,11 +397,11 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
         } while (again);
     };
 
-    /** Every job waiting: those about triages, then the interviews' turns. */
+    /** Every job waiting: those about triages, then the interviews' turns, then the `/` commands. */
     const allJobs = async (): Promise<readonly Job[] | undefined> => {
-        const [answers, interviews] = await Promise.all([use.answerJobs({ session }), use.interviewJobs({ session })]);
+        const [answers, interviews, commands] = await Promise.all([use.answerJobs({ session }), use.interviewJobs({ session }), use.commandJobs({ session })]);
         if (!answers.ok) return undefined;
-        return [...answers.value, ...(interviews.ok ? interviews.value : [])];
+        return [...answers.value, ...(interviews.ok ? interviews.value : []), ...(commands.ok ? commands.value : [])];
     };
 
     /** An interview job's result: the next question (a message of the AI) or the brief. */
@@ -384,9 +431,39 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
         if (read.value.kind === 'question') {
             const text = Collaboration.makeText(read.value.question);
             if (!text.ok) return r.fail(400, 'InvalidReply', 'Not a text.', { field: 'question' });
-            return r.done(await use.askInInterview({ interview, answered: h.request, question: text.value }));
+            const { choices, multiple } = read.value;
+            return r.done(await use.askInInterview({ interview, answered: h.request, question: text.value, choices, multiple }));
         }
         return r.done(await use.briefInterview({ interview, answered: h.request, brief: read.value.brief }));
+    };
+
+    /** A command job's result: its candidates, or its answer (a message of the AI). */
+    const takeCommand = async (
+        h: Handed,
+        raw: Record<string, unknown>,
+        r: {
+            readonly error?: string;
+            readonly fail: (status: number, type: string, message?: string, detail?: object) => void;
+            readonly done: (result: { ok: true } | { ok: false; error: { readonly type: string } }) => Promise<void>;
+        },
+    ): Promise<void> => {
+        const command = h.command;
+        if (!command) return r.fail(500, 'NoCommand');
+        if (r.error !== undefined) {
+            failedOnce(h, r.error);
+            return r.done({ ok: true });
+        }
+        const { model: _m, durationMs: _d, ...reply } = raw;
+        // the use case refuses the kind of result the command does not take
+        const read = readCommandReply(reply, reply.kind === 'answer' ? 'answer' : reply.kind === 'next' ? 'next' : 'candidates');
+        if (!read.ok) {
+            failedOnce(h, `invalid output (${read.error.path})`);
+            return r.fail(400, 'InvalidReply', read.error.message, { field: read.error.path });
+        }
+        if (read.value.kind === 'candidates') return r.done(await use.listCandidates({ command, candidates: read.value.candidates }));
+        const text = Collaboration.makeText(read.value.answer);
+        if (!text.ok) return r.fail(400, 'InvalidReply', 'Not a text.', { field: 'answer' });
+        return r.done(await use.answerCommand({ command, answer: text.value, ...(read.value.next && { next: read.value.next }) }));
     };
 
     /** A job's result as a step, a message, an override or a proposal; the HTTP answer. */
@@ -412,6 +489,7 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
             res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end('{}');
         };
         if (h.kind === 'interview') return takeInterview(h, raw, { durationMs, model, error, fail, done });
+        if (h.kind === 'command') return takeCommand(h, raw, { error, fail, done });
         const triage = h.triage;
         if (!triage) return fail(500, 'NoTriage');
         switch (h.kind) {
