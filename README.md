@@ -96,7 +96,8 @@ as `domaintrail`, its full name, for when `dt` clashes with another command.
 installed). `dt collab` shares it with several people while the AI edits the model: participants send messages about
 `.dt` and `.dtes` elements from their browsers, the facilitator bundles them into runs that the agent hands to Claude
 Code (`dt agent` runs it alone, elsewhere), and every run leaves a revision to compare or restore. See [`dt guide session`](docs/guide.md#collaboration-sessions), [a first real run](docs/session-first-run.md)
-and, behind Cloudflare Access, [the access check](docs/session-access.md).
+and, behind Cloudflare Access, [the access check](docs/session-access.md); over the internet without an account,
+[an invite link and your approval](docs/session-link.md) (`dt collab --tunnel`).
 
 ## Contributing
 
