@@ -26,6 +26,7 @@ import {
 import {
     AGENT_EVENT_TYPES,
     AGENT_FAIL_REASONS,
+    type AgentJourneysBody,
     type AgentParticipantsBody,
     type AgentSessionBody,
     type AgentSessionSoFar,
@@ -69,6 +70,8 @@ export interface AgentApiDeps {
     readonly log?: (line: string) => void;
     /** Uses a one-time pairing code: whether it was valid (`POST /agent/pair` then answers the token). Absent: no pairing. */
     readonly pair?: (code: string) => Promise<boolean>;
+    /** The journeys as the answerer is given them (absent: none given). */
+    readonly journeys?: () => Promise<AgentJourneysBody | undefined>;
 }
 
 export interface AgentApi {
@@ -116,6 +119,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         pump: deps.pump,
         ...(deps.onPresence && { onPresence: deps.onPresence }),
         token: deps.token,
+        ...(deps.journeys && { journeys: deps.journeys }),
         log: deps.log ?? (() => {}),
     });
 

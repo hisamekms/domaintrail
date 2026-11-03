@@ -514,34 +514,46 @@ describe('the interviews of `/es:start` and `/model:start`', () => {
         })();
         const second = await stream.interviewJob();
         expect(second.transcript.map((t) => t.text)).toEqual(['ES を始める', 'どの業務ですか？', '返品です']);
-        const lines = ['目的', '範囲', '使い道', 'レベル'].map((head) => ({ head, text: `${head}の答え` }));
-        const bad = await stream.post(second.job, { kind: 'brief', brief: { name: '返品', isNew: true, replaces: false, lines } });
+        const journey = { purpose: '目的の答え', scope: '範囲の答え', participants: ['窓口担当'], use: 'modeling', level: 'BigPicture' };
+        const bad = await stream.post(second.job, { kind: 'brief', brief: { name: '返品', isNew: true, journey } });
         expect(bad.status).toBe(400);
         await triaged;
         const third = await stream.interviewJob();
-        const brief = { name: 'Returns', label: '返品', isNew: true, replaces: false, lines };
+        const brief = { name: 'Returns', label: '返品', isNew: true, description: '返品の受付から返金まで', journey };
         expect((await stream.post(third.job, { kind: 'brief', brief, durationMs: 9 })).status).toBe(200);
         const briefed = (await ctx.state(ctx.bob)).interviews?.find((i) => i.id === interview.id);
         expect(briefed).toMatchObject({
             state: 'Briefed',
-            brief: { name: 'Returns', text: '目的: 目的の答え\n範囲: 範囲の答え\n使い道: 使い道の答え\nレベル: レベルの答え' },
+            brief: { name: 'Returns', text: '目的: 目的の答え\n範囲: 範囲の答え\n参加者: 窓口担当', journey: { level: 'BigPicture', use: 'Modeling' } },
         });
         expect((await ctx.api(ctx.bob, `interviews/${interview.id}/confirm`, {})).status).toBe(403);
         const confirmed = await ctx.api(ctx.ada, `interviews/${interview.id}/confirm`, { text: '目的: 返金を早める\n範囲: 返品' });
         expect(confirmed.status).toBe(201);
-        const { run } = (await confirmed.json()) as { run: { id: string } };
+        const { run, journey: key } = (await confirmed.json()) as { run: { id: string }; journey: string };
+        expect(key).toBe('es:Returns');
+        // the new storming's run creates its block only; dt wrote the journey itself
         const queued = (await ctx.state()).runs.find((r) => r.id === run.id);
         expect(queued?.input).toMatchObject({
             requests: [{ request: answer }],
-            brief: { command: 'Es', brief: { name: 'Returns', text: '目的: 返金を早める\n範囲: 返品' } },
+            brief: { command: 'Es', brief: { name: 'Returns', text: '目的: 返金を早める\n範囲: 返品', description: '返品の受付から返金まで' } },
+        });
+        expect(JSON.parse(await readFile(path.join(ctx.root, 'domaintrail.journey.json'), 'utf8')).stormings.Returns).toEqual({
+            purpose: '返金を早める',
+            scope: '返品',
+            participants: [],
+            use: 'modeling',
+            level: 'BigPicture',
+            state: 'active',
+            marks: [],
         });
         expect((await ctx.state()).interviews?.find((i) => i.id === interview.id)).toMatchObject({ state: 'Confirmed', edited: true, run: run.id });
+        expect((await ctx.state()).session.currentJourney).toBe('es:Returns');
     });
 
     test("a participant's interview: he answers, its brief waits for the facilitator, who approves it or rejects it", async () => {
         const ctx = await setup();
         const stream = answerStream(ctx);
-        const lines = ['目的', '範囲', '使い道', 'レベル'].map((head) => ({ head, text: `${head}の答え` }));
+        const journey = { purpose: '目的の答え', participants: [], use: 'align', level: 'DesignLevel' };
         /** Bob's interview, asked once, answered (his choice), briefed. */
         const briefed = async (): Promise<{ id: string; answer: string }> => {
             const started = await ctx.api(ctx.bob, 'interviews', { command: 'es:start', body: 'ES を始める', language: 'ja' });
@@ -555,7 +567,7 @@ describe('the interviews of `/es:start` and `/model:start`', () => {
             const answer = await say(ctx, ctx.bob, '返品', { replyTo: { kind: 'Message', request: question?.id } });
             expect(triageOf(await ctx.state(), answer)).toBeUndefined();
             const second = await stream.interviewJob();
-            const brief = { name: 'Returns', label: '返品', isNew: true, replaces: false, lines };
+            const brief = { name: 'Returns', label: '返品', isNew: true, journey };
             expect((await stream.post(second.job, { kind: 'brief', brief, durationMs: 1 })).status).toBe(200);
             return { id: interview.id, answer };
         };

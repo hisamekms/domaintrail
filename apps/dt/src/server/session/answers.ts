@@ -24,6 +24,7 @@ import {
     type InterviewJob,
     plainBody,
     readInterviewerReply,
+    type BriefContext,
     readCommandReply,
     slashCommandName,
     slashCommandSpec,
@@ -44,6 +45,7 @@ import {
     type AgentAnswerStreamJob,
     type AgentCommandJobBody,
     type AgentInterviewJobBody,
+    type AgentJourneysBody,
     type AgentSessionSoFar,
 } from '@domaintrail/collaboration/protocol';
 import { sendError } from '../http/json.js';
@@ -71,6 +73,8 @@ export interface AnswerDispatcherDeps {
     readonly onPresence?: () => void;
     /** The agent API's credential: a result that contains it is refused (defense in depth: no agent should be able to read it). */
     readonly token?: string;
+    /** The journeys as the answerer is given them (absent: none given). */
+    readonly journeys?: () => Promise<AgentJourneysBody | undefined>;
     readonly log: (line: string) => void;
 }
 
@@ -124,6 +128,8 @@ interface Handed {
     readonly subject: string;
     readonly triage?: Collaboration.TriageId;
     readonly interview?: Collaboration.InterviewId;
+    /** An interview job: what its brief is read for (the command, the language). */
+    readonly briefContext?: BriefContext;
     readonly command?: Collaboration.SlashCommandId;
     readonly request: Collaboration.RequestId;
     readonly stream: AnswerStream;
@@ -228,6 +234,12 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
         void after.catch((e: unknown) => log(`answer job: ${e instanceof Error ? e.message : String(e)}`)).finally(() => dispatcher.kick());
     };
 
+    /** The journeys as the answerer is given them now (none: no journey file, or a failure to read it). */
+    const journeysNow = async (): Promise<{ readonly journeys?: AgentJourneysBody }> => {
+        const now = await deps.journeys?.().catch(() => undefined);
+        return now ? { journeys: now } : {};
+    };
+
     /** An interview job's body: the interview, the message to answer, the transcript, the session so far. */
     const interviewBodyOf = async (
         job: InterviewJob,
@@ -255,6 +267,7 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
                 })),
                 ...(full.ok && { sessionSoFar: { text: full.value.text, last: full.value.last } }),
                 ...(readRevision && { readRevision }),
+                ...(await journeysNow()),
             },
             ...(readRevision && { readRevision }),
         };
@@ -284,6 +297,7 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
                 language: job.command.language === 'En' ? 'en' : 'ja',
                 ...(full.ok && { sessionSoFar: { text: full.value.text, last: full.value.last } }),
                 ...(readRevision && { readRevision }),
+                ...(await journeysNow()),
             },
             ...(readRevision && { readRevision }),
         };
@@ -339,6 +353,7 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
                 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the runs become their JSON when encoded
                 ...(replied.ok && replied.value.length > 0 && { previousRuns: replied.value as unknown as NonNullable<AgentAnswerJobBody['previousRuns']> }),
                 ...(readRevision && { readRevision }),
+                ...(await journeysNow()),
             },
             ...(full.ok && { soFarLast: full.value.last }),
             ...(readRevision && { readRevision }),
@@ -378,7 +393,11 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
                     key: keyOf(job),
                     kind: job.kind,
                     ...(job.kind === 'interview'
-                        ? { subject: `interview ${job.interview.id}`, interview: job.interview.id }
+                        ? {
+                              subject: `interview ${job.interview.id}`,
+                              interview: job.interview.id,
+                              briefContext: { command: job.interview.command, language: job.interview.language },
+                          }
                         : job.kind === 'command'
                           ? { subject: `command ${job.command.id}`, command: job.command.id }
                           : { subject: `triage ${job.triage.id}`, triage: job.triage.id }),
@@ -417,13 +436,14 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
         },
     ): Promise<void> => {
         const interview = h.interview;
-        if (!interview) return r.fail(500, 'NoInterview');
+        const briefContext = h.briefContext;
+        if (!interview || !briefContext) return r.fail(500, 'NoInterview');
         if (r.error !== undefined) {
             failedOnce(h, r.error);
             return r.done({ ok: true });
         }
         const { model: _m, durationMs: _d, ...reply } = raw;
-        const read = readInterviewerReply(reply);
+        const read = readInterviewerReply(reply, briefContext);
         if (!read.ok) {
             failedOnce(h, `invalid output (${read.error.path})`);
             return r.fail(400, 'InvalidReply', read.error.message, { field: read.error.path });
