@@ -10,7 +10,7 @@ import { changeCount, ChangesList, problemCounts, ProblemsList } from '../lists'
 import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from '../model-utils';
 import { StatesCanvas } from '../states-canvas';
 import { useSessionPage } from '../session/page';
-import { stageChoice, StormingDetails, stormingExists } from '../storming';
+import { chooseScope, StormingDetails, stormingExists } from '../storming';
 import { StormingNavigator } from '../storming-navigator';
 import { NameSwitch } from '../view/toolbar';
 import { ViewWorkspace, useViewWorkspace } from '../view/workspace';
@@ -243,20 +243,24 @@ export function App() {
                                 stormings={stormings}
                                 selected={id}
                                 render={view.kind === 'storming' && shown && id.startsWith(`es/${shown.storming.id}/`) ? stormingShown?.render : undefined}
+                                level={shown?.options.level ?? settings.stormingChoice.level}
                                 model={model}
                                 mode={mode}
                                 diagnostics={current?.diagnostics ?? []}
                                 history={history}
                                 headingAction={session.inspectorAction}
+                                session={session.stormingDetail}
                                 onSelect={(x) => select(x)}
-                                onShowStage={(stormingId, stageId) => {
-                                    const choice = settings.stormingChoice;
-                                    settings.setStormingChoice({
-                                        ...choice,
-                                        stormingId,
-                                        timelines: { ...choice.timelines, [stormingId]: stageChoice(stageId) },
-                                    });
+                                onShowScope={(stormingId, scope, then) => {
+                                    settings.setStormingChoice(chooseScope(settings.stormingChoice, stormingId, scope));
                                     setView({ kind: 'storming' });
+                                    // the element in the view just chosen, once it is drawn
+                                    if (then) requestAnimationFrame(() => requestAnimationFrame(() => select(then)));
+                                }}
+                                onLevel={(level) => {
+                                    settings.setStormingChoice({ ...settings.stormingChoice, level });
+                                    setView({ kind: 'storming' });
+                                    requestAnimationFrame(() => requestAnimationFrame(() => select(id)));
                                 }}
                             />
                         )}
