@@ -19,6 +19,11 @@ describe("the view toolbar's 絞り込み button", () => {
         expect(activeFilterCount({ view: 'catalog', contexts: ['Sales'], kinds: [] })).toBe(1);
         expect(activeFilterCount({ view: 'catalog', contexts: [], kinds: ['events'] })).toBe(2);
     });
+
+    test('the storming: one when its exceptions are hidden', () => {
+        expect(activeFilterCount({ view: 'storming', exceptions: true })).toBe(0);
+        expect(activeFilterCount({ view: 'storming', exceptions: false })).toBe(1);
+    });
 });
 
 describe("the catalog's kinds as checkboxes (checked: shown; none chosen: every kind)", () => {

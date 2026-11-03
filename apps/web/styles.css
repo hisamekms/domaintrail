@@ -2680,11 +2680,12 @@ svg.chat-launcher-mark {
 }
 /*
  * the view toolbar, its own row under the tabs and the same in every view: the subject and the level at the left, the
- * 絞り込み button and the menu ⋯ at the right end. A narrow pane cuts the subject's names short first; only when even
+ * 絞り込み button and 書き出し (the catalog: 印刷) at the right end. A narrow pane cuts the subject's names short first; only when even
  * that is not enough does the right end go onto a second row. An empty view has no controls: the row keeps the height of
  * one (a .toolbar-button and the padding: the box is border-box), so the tabs do not move.
  */
 .view-toolbar {
+    container: view-toolbar / inline-size;
     flex-basis: 100%;
     min-width: 0;
     min-height: calc(1.625rem + 8px);
@@ -2712,6 +2713,12 @@ svg.chat-launcher-mark {
     display: flex;
     align-items: center;
     gap: 6px;
+}
+/* a narrow toolbar: the right end's buttons as icons (their names as tooltips), so that the subject keeps its room */
+@container view-toolbar (max-width: 40rem) {
+    .toolbar-end-label {
+        display: none;
+    }
 }
 .toolbar-button {
     display: flex;
@@ -6865,7 +6872,14 @@ button.add-to-request.added:hover {
     background: var(--selected-bg);
     color: var(--action);
 }
-/* the 書き出し menu: above the bar, where the legend opens */
+/* the 書き出し menu: below the view toolbar's button, at its right; the inspector's, above its canvas controls */
+.export-popover {
+    position: relative;
+}
+.export-popover .export-menu {
+    right: 0;
+    min-width: 12rem;
+}
 .canvas-controls .export-menu {
     position: static;
     min-width: 12rem;

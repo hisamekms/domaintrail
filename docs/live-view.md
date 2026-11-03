@@ -46,23 +46,25 @@ it, the items added, changed and removed since then. A removed item opens in the
 Views of the whole model, in tabs. Under the tabs, every view's toolbar puts the same kinds of controls in the same
 places, leaving out what the view does not have: at the left the subject (what is looked at: the storming and its
 timeline) and then the level (how much of it is drawn: icons, named in their tooltips); at the right
-「⏷ 絞り込み」 (what is hidden: the BCs, the kinds…, in a popover; while anything is narrowed the button shows how many
-narrowings are active, e.g. 「絞り込み 2」, and the popover clears them all with すべて解除). On a narrow canvas the
-subject's names are cut short first (the whole name in a tooltip); 絞り込み stays, and goes onto a second row only when
-even that is not enough. Notices — the connection lost, a syntax error that keeps the last diagram, a revision that cannot be compared,
+「⏷ 絞り込み」 (what is hidden: the BCs, the kinds, a storming's exceptions…, in a popover; while anything is narrowed
+the button shows how many narrowings are active, e.g. 「絞り込み 2」, and the popover clears them all with すべて解除),
+then 「⤓ 書き出し」 (a menu: 印刷, PDF, PNG, SVG; see [Printing and exporting](#printing-and-exporting)) — the
+catalog has 「印刷」 there instead. The toolbar says what is shown (what an AI is told the view was); the canvas's
+controls, how it is looked at. On a narrow canvas (a toolbar under 40rem) the right end's buttons drop their text
+(icons, named in their tooltips; the count stays) and the subject's names are cut short (the whole name in a
+tooltip); the right end stays, and goes onto a second row only when even that is not enough. Notices — the connection lost, a syntax error that keeps the last diagram, a revision that cannot be compared,
 a storming that stopped parsing — are a strip over the canvas. Anything about one selected item is in the inspector.
 See [ADR 0007](adr/0007-pane-roles.md).
 
 The canvas's controls sit at its bottom-left: `− 85% +` zooms out and in around the middle (the level shows live;
 a click on it goes back to 100%), ⤢ fits everything (`Shift+1`), ◎ fits the selection (`Shift+2`; disabled while
 nothing is selected), 詰めて表示 (two inward arrows, named in its tooltip) closes up the gaps between the notes and
-boxes of every diagram, 印刷 (the printer) prints the diagram on one page and 書き出し (the download arrow) exports it
-as a file (see [Printing and exporting](#printing-and-exporting)), the book (凡例,
+boxes of every diagram, the book (凡例,
 named in its tooltip) opens the legend upward, and « at the right end collapses the bar toward the corner, leaving only
 », which brings it back (the legend's panel is hidden while collapsed and keeps its own open or closed state). `U` does the same as « and », and the choice is remembered per browser. Hovering an
 edge (its line or arrowhead) tells what it means, in the legend's words for that view (「参照（ID で別の集約へ）」…).
-The keys do nothing while typing. The inspector's 状態遷移 diagram has the same controls, without 詰めて表示 and 印刷
-(its 書き出し has PNG and SVG only).
+The keys do nothing while typing. The inspector's 状態遷移 diagram has the same controls, without 詰めて表示, and
+with its own 書き出し (the download arrow: PNG and SVG, opening upward).
 
 詰めて表示 is off by default and remembered per browser. While it is on, every diagram — the Event Storming views (the
 stages' grid included), the Context Map, the Structure View (focused views included) and the inspector's 状態遷移 —
@@ -120,8 +122,8 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   A storming with stages or exceptions (`stage`, `exception`) is drawn in time order: the stages as labelled frames
   left to right, the trunk of the main flows one straight row through them, every other timeline on a row below the
   step it branches off at (the exceptions' dashed arrows a quieter red, a dotted arrow back for `then`). The タイムライン
-  picker then also lists each stage (「…（例外を含む）」), and the toolbar has 「例外を表示」 (an icon toggle, on by
-  default, remembered per browser) to draw the integrated canvas and the stages without their exceptions.
+  picker then also lists each stage (「…（例外を含む）」), and the 絞り込み has 「例外を表示」 (on by default,
+  remembered per browser; off counts as one narrowing) to draw the integrated canvas and the stages without their exceptions.
 
 The modeling views (Context Map, Structure, Catalog, the inspector, the explorer) use the same hues for the same
 concepts, on smaller areas: the cards are neutral, and the kind is on their edge, their stereotype («集約ルート») and
@@ -154,10 +156,9 @@ view: the storming, すべて（統合）, a stage or a timeline, the level, and
 has some; the Structure View: the focused contexts, if any, and the level; the Context Map: すべてのコンテキスト when
 shared and external BCs are shown). Nothing else is printed (no date, no version).
 
-印刷 in the canvas's controls is the surer way: it gets the compact layout first (the button spins meanwhile), then opens
-the print dialog. The catalog prints as a page: its list, without the panes around it (it has no export).
-
-書き出し, next to 印刷, opens a menu upward:
+書き出し at the right end of the view's toolbar opens a menu below it. Its **印刷** is the surer way to print: it gets
+the compact layout first (the button spins meanwhile), then opens the print dialog. The catalog has 「印刷」 there
+instead: it prints as a page, its list without the panes around it (it has no export). The menu:
 
 - **PNG**: the current diagram (its stage, level and exceptions, and its spacing: compact while 詰めて表示 is on) on
   white, at twice its size (less for a diagram too large for a browser's canvas).
