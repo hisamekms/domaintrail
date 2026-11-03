@@ -30,13 +30,28 @@ import {
     X,
     type LucideIcon,
 } from 'lucide-react';
-import type { ViewLocation } from '@domaintrail/collaboration/protocol';
+import type { SendRequestBody, ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
-import { motionMs } from '../shared/motion';
+import { motionMs, useSwap } from '../shared/motion';
 import { useT } from '../i18n';
 import { useChatActions, type QuestionChoice } from './actions';
 import { ActivityLine } from './activity';
-import { AI_PARTICIPANT, aiPresence, givenUpRequests, isAiAuthor, isRecord, isSolo, messageAi, triagesByRequest, willAddress, type MessageAi } from './ai';
+import {
+    AI_PARTICIPANT,
+    aiPresence,
+    aiSlot,
+    givenUpRequests,
+    isAiAuthor,
+    isRecord,
+    isSolo,
+    messageAi,
+    settleOutgoing,
+    triagesByRequest,
+    willAddress,
+    type AiSlot,
+    type MessageAi,
+    type Outgoing,
+} from './ai';
 import { sessionApi } from './api';
 import { Bubble, Clamped, time } from './bubble';
 import { MarkdownText } from './markdown-text';
@@ -78,11 +93,13 @@ import {
     mentionsMe,
     participantAvatars,
     participantNames,
+    placeAiSlots,
     speakerName,
     streamItems,
     targetShortText,
     targetText,
     type AgentStatus,
+    type ChatEntry,
     type StreamItem,
 } from './stream';
 import { ComposerChips } from './composer-chips';
@@ -96,6 +113,25 @@ import type { ComposerDraft, SessionData } from './useSession';
 type RequestJson = SessionData['state']['requests'][number];
 /** A unit to open and reveal in AI の作業 (the header status clicked); `n` tells a click on the same unit again apart. */
 type Peek = { readonly key: string; readonly n: number };
+
+/**
+ * What the stream shows: its items by time (the messages still on their way last), its lines with the AI's cards placed
+ * (Solo), the server's messages that stand for ones this page sent (their ID → this page's key for them, kept as their
+ * rows' keys) and the messages still on their way (by that key).
+ */
+interface Shown {
+    readonly items: readonly StreamItem[];
+    readonly entries: readonly ChatEntry[];
+    readonly sent: ReadonlyMap<string, string>;
+    readonly waiting: ReadonlySet<string>;
+}
+
+/** The composer's side of the messages shown at once (Solo): one sent, the server's ID for it, one that failed. */
+interface OutgoingTools {
+    add(outgoing: Outgoing): void;
+    settle(local: string, id: string): void;
+    drop(local: string): void;
+}
 
 /** A run's answer before anything was chosen. */
 const NO_CHOICES: Readonly<Record<string, QuestionChoice>> = {};
@@ -195,6 +231,28 @@ export function SessionChat(props: {
     );
     const status = agentStatus(state.runs);
     const items = useMemo(() => streamItems(state), [state]);
+    // Solo: the messages this page sent, each shown at once with the AI's card under it, until the server's is here
+    const [outgoing, setOutgoing] = useState<readonly Outgoing[]>([]);
+    const settled = useMemo(() => settleOutgoing(outgoing, state.requests), [outgoing, state.requests]);
+    const shown = useMemo((): Shown => {
+        const waiting = settled.waiting.map((o): StreamItem => ({ kind: 'message', key: `message:${o.local}`, at: o.request.sentAt, request: o.request }));
+        const slots = new Map<string, AiSlot>();
+        for (const r of state.requests) {
+            const slot = aiSlot(solo, r, triages.get(r.id), givenUp, settled.sent.has(r.id));
+            if (slot) slots.set(r.id, slot);
+        }
+        for (const o of settled.waiting) slots.set(o.local, { kind: 'pending' });
+        const all = [...items, ...waiting];
+        return { items: all, entries: placeAiSlots(all, slots), sent: settled.sent, waiting: new Set(settled.waiting.map((o) => o.local)) };
+    }, [items, settled, state.requests, solo, triages, givenUp]);
+    const outgoingTools = useMemo(
+        (): OutgoingTools => ({
+            add: (o) => setOutgoing((all) => [...all, o]),
+            settle: (local, id) => setOutgoing((all) => all.map((o) => (o.local === local ? { ...o, id } : o))),
+            drop: (local) => setOutgoing((all) => all.filter((o) => o.local !== local)),
+        }),
+        [],
+    );
     const units = useMemo(() => changeUnits(state), [state]);
     const marks = useMemo(() => messageMarks(units), [units]);
     const unfinished = unfinishedCount(units);
@@ -435,7 +493,7 @@ export function SessionChat(props: {
                 {leaveError && <p className="session-note chat-notice session-error">{tx.error(leaveError)}</p>}
                 {/* both stay mounted, so that switching keeps the stream's scroll and the open units of AI の作業 */}
                 <div className="chat-view" role="tabpanel" hidden={view !== 'chat'} ref={chatPanel} onScrollCapture={keepStreamTop}>
-                    <Stream items={items} />
+                    <Stream shown={shown} />
                     <div className="chat-tray">
                         {revisions.node}
                         {actions.error && <p className="session-note chat-notice session-error">{tx.error(actions.error)}</p>}
@@ -454,6 +512,7 @@ export function SessionChat(props: {
                             reply={replyDraft}
                             replyFocus={replyFocus}
                             onReplyDone={() => setReplyDraft(undefined)}
+                            outgoing={solo ? outgoingTools : undefined}
                             tx={tx}
                         />
                     )}
@@ -540,7 +599,8 @@ const inViewOf = (list: HTMLElement, item: HTMLElement): boolean => {
     return b.top >= a.top - 1 && b.bottom <= a.bottom + 1;
 };
 
-function Stream({ items }: { items: StreamItem[] }) {
+function Stream({ shown }: { shown: Shown }) {
+    const { items } = shown;
     const { tx, jump, session } = useChat();
     const ref = useRef<HTMLDivElement | null>(null);
     // follows the newest item only while the reader is at the bottom (true until they scroll up)
@@ -575,7 +635,14 @@ function Stream({ items }: { items: StreamItem[] }) {
     const me = session.me.participant.id;
     const arrived = away && arrivedBelow(items, away, me, (r) => mentionsMe(r, session.state, me) || repliesToMe(r, session.state.requests, session.state, me));
     const latestLabel = tx.chat.latest(arrived?.count ?? 0, arrived?.forMe ?? 0);
-    const signature = items.map((i) => `${i.key}@${i.kind === 'card' ? i.updatedAt : i.at}`).join('|');
+    // the AI's cards too (Solo): one appearing, or turning into its answer or run card, is a change of the stream
+    const signature = shown.entries
+        .map((e) =>
+            e.kind === 'item'
+                ? `${e.item.key}@${e.item.kind === 'card' ? e.item.updatedAt : e.item.at}`
+                : `ai:${e.request}=${e.content.kind === 'item' ? e.content.item.key : e.content.kind}`,
+        )
+        .join('|');
     useLayoutEffect(toBottom, [signature]);
     // the pane shown again, resized, or a bubble grown: still at the bottom
     useEffect(() => {
@@ -611,12 +678,12 @@ function Stream({ items }: { items: StreamItem[] }) {
         if (item && inViewOf(el, item)) setPill(undefined);
     };
 
-    const rows = streamRows(items, tx);
+    const rows = streamRows(shown, tx);
     const follows = continued(rows.map((r) => r.author));
     // the items there when the stream is first shown with something in it (the page loaded, the tab switched back):
     // only those posted after come in with motion
     const [initial] = useState(() => new Set<string>());
-    if (initial.size === 0) for (const row of rows) initial.add(row.key);
+    if (initial.size === 0) for (const row of rows) initial.add(row.id);
     return (
         <div className="chat-stream-wrap">
             <div
@@ -633,13 +700,13 @@ function Stream({ items }: { items: StreamItem[] }) {
                 <ol className="chat-items">
                     {rows.map((row, i) => (
                         <li
-                            key={row.key}
-                            className={`chat-item chat-item-${row.kind}${follows[i] ? ' continued' : ''}${initial.has(row.key) ? '' : ' motion-pop motion-pop-up'}`}
+                            key={row.id}
+                            className={`chat-item chat-item-${row.kind}${follows[i] ? ' continued' : ''}${initial.has(row.id) ? '' : ' motion-pop motion-pop-up'}`}
                             data-item={row.key}
                             onAnimationEnd={(e) => {
                                 // once in, it is an item like the others: shown again (the tab switched back), it does not come in again
-                                if (e.target !== e.currentTarget || initial.has(row.key)) return;
-                                initial.add(row.key);
+                                if (e.target !== e.currentTarget || initial.has(row.id)) return;
+                                initial.add(row.id);
                                 e.currentTarget.classList.remove('motion-pop', 'motion-pop-up');
                             }}
                         >
@@ -681,18 +748,29 @@ function Stream({ items }: { items: StreamItem[] }) {
     );
 }
 
-/** A line of the stream: a divider, a card, or a message of an author that may continue the one before. */
+/**
+ * A line of the stream: a divider, a card, a message of an author that may continue the one before, or the AI's card
+ * under a message (Solo). `key` names what it shows (`message:<id>`, `card:<key>`: what `jump` and the pills look for);
+ * `id` is its row's, kept while what it shows changes (the AI's card turning into its answer, a message sent from this
+ * page becoming the server's).
+ */
 interface Row {
+    readonly id: string;
     readonly key: string;
     readonly kind: string;
     readonly author: string | undefined;
     readonly render: (continues: boolean) => ReactNode;
 }
 
-function streamRows(items: readonly StreamItem[], tx: Tx): Row[] {
-    return items.map((item, i): Row => {
-        // the item right above: an answer or a proposal right under its message needs no line naming it
-        const above = items[i - 1]?.key;
+function streamRows(shown: Shown, tx: Tx): Row[] {
+    const keyOf = (e: ChatEntry): string => (e.kind === 'item' ? e.item.key : `ai:${e.request}`);
+    const slotted = new Set(shown.entries.flatMap((e) => (e.kind === 'slot' ? [e.request] : [])));
+    // the row of a message sent from this page keeps the key it had while on its way
+    const rowId = (item: StreamItem): string => {
+        const local = item.kind === 'message' ? shown.sent.get(item.request.id) : undefined;
+        return local === undefined ? item.key : `message:${local}`;
+    };
+    const itemRow = (item: StreamItem, above: string | undefined): Omit<Row, 'id'> => {
         switch (item.kind) {
             case 'session-start':
                 return { key: item.key, kind: item.kind, author: undefined, render: () => <Divider at={item.at}>{tx.chat.started}</Divider> };
@@ -709,7 +787,9 @@ function streamRows(items: readonly StreamItem[], tx: Tx): Row[] {
                 };
             case 'message': {
                 const to = item.request.replyTo;
+                // the item right above: an answer or a proposal right under its message needs no line naming it
                 const underIt = to?.kind === 'Message' && above === `message:${to.request}`;
+                const id = item.request.id;
                 return {
                     key: item.key,
                     kind: item.kind,
@@ -718,7 +798,7 @@ function streamRows(items: readonly StreamItem[], tx: Tx): Row[] {
                         isAiAuthor(item.request.author) ? (
                             <AiMessageRow request={item.request} continues={continues} underIt={underIt} />
                         ) : (
-                            <MessageRow request={item.request} continues={continues} />
+                            <MessageRow request={item.request} continues={continues} slotted={slotted.has(id)} waiting={shown.waiting.has(id)} />
                         ),
                 };
             }
@@ -733,7 +813,75 @@ function streamRows(items: readonly StreamItem[], tx: Tx): Row[] {
             case 'card':
                 return { key: item.key, kind: item.kind, author: undefined, render: () => <RunCard unit={item.unit} /> };
         }
+    };
+    return shown.entries.map((entry, i): Row => {
+        const prev = shown.entries[i - 1];
+        const above = prev && keyOf(prev);
+        if (entry.kind === 'item') return { id: rowId(entry.item), ...itemRow(entry.item, above) };
+        const local = shown.sent.get(entry.request);
+        const id = `ai:${local ?? entry.request}`;
+        const content = entry.content;
+        if (content.kind !== 'item')
+            return { id, key: id, kind: 'ai-slot', author: AI_PARTICIPANT, render: () => <AiSlotRow request={entry.request} phase={content.kind} /> };
+        // the answer or the run card, right under its message
+        const row = itemRow(content.item, `message:${entry.request}`);
+        return { ...row, id, render: (continues) => <AiSlotRow request={entry.request} phase="item" item={row.render(continues)} /> };
     });
+}
+
+/**
+ * The AI's card under a message in Solo: 確認中 with the AI's quiet "…" while the message is triaged (or answered), what
+ * the header says when no AI is connected to do it, that it could not answer (and the facilitator's もう一度); then its
+ * answer or its run card in its place, cross-faded (`--motion-swap`): the card fades out, the answer or the run card
+ * fades in where it was.
+ */
+function AiSlotRow({ request, phase, item }: { request: string; phase: 'pending' | 'given-up' | 'item'; item?: ReactNode }) {
+    const swap = useSwap(phase);
+    return (
+        <div className={`chat-ai-slot${swap.swapping ? ' swapping' : ''}`}>
+            {swap.shown === 'item' && item !== undefined ? item : <AiPendingCard request={request} givenUp={swap.shown === 'given-up'} />}
+        </div>
+    );
+}
+
+function AiPendingCard({ request, givenUp }: { request: string; givenUp: boolean }) {
+    const { session, tx, control, actions } = useChat();
+    const presence = aiPresence(session.state.agent);
+    // the triage and the answer are the answerer's: without one, the card says so instead of 確認中
+    const missing = presence.kind === 'missing' && presence.role !== 'run' ? presence.role : undefined;
+    return (
+        <div className="chat-row">
+            <div className="chat-message chat-ai-pending">
+                <AiAvatar />
+                <div className="chat-message-main">
+                    <div className="chat-message-head">
+                        <span className="chat-who">{tx.chat.agent}</span>
+                        {!givenUp &&
+                            (missing ? (
+                                <span className="chat-ai-pending-state">{tx.chat.ai.presence(missing, 0)}</span>
+                            ) : (
+                                <span className="chat-ai-pending-state" role="status">
+                                    {tx.chat.ai.pending}
+                                    <span className="chat-ai-dots" aria-hidden>
+                                        …
+                                    </span>
+                                </span>
+                            ))}
+                    </div>
+                    {givenUp && (
+                        <p className="chat-ai-given-up">
+                            {tx.chat.ai.givenUp}
+                            {control && (
+                                <button type="button" className="chat-small ghost" disabled={actions.busy} onClick={() => void actions.retryAnswer(request)}>
+                                    {tx.chat.ai.retry}
+                                </button>
+                            )}
+                        </p>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 }
 
 /**
@@ -742,9 +890,10 @@ function streamRows(items: readonly StreamItem[], tx: Tx): Row[] {
  * while the AI reads it, then a link to what came of it — the AI's answer, the proposal, or the AI turn of its latest
  * run (the state is the turn's, so only its tooltip says it) —, nothing when it needed nothing, or that the AI could
  * not answer. Its actions float over its top right: for the facilitator, 「AI に送る」 on a message not addressed (or
- * judged to need nothing) and its … (several together; the triage's record); ↩ and ☺+.
+ * judged to need nothing) and its … (several together; the triage's record); ↩ and ☺+. In Solo, a message with the AI's
+ * card under it (`slotted`) leaves all that to the card; one still on its way to the server (`waiting`) has no actions.
  */
-function MessageRow({ request: r, continues }: { request: RequestJson; continues: boolean }) {
+function MessageRow({ request: r, continues, slotted, waiting }: { request: RequestJson; continues: boolean; slotted: boolean; waiting: boolean }) {
     const { session, tx, nameOf, avatarOf, onNavigate, control, solo, marks, selection, actions, showPerson, triages, givenUp } = useChat();
     const author = nameOf(r.author);
     const avatarUrl = avatarOf(r.author);
@@ -770,7 +919,7 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
         } else if (selection.active && !(e.target instanceof Element && e.target.closest('a, button, input'))) selection.toggle(r.id);
     };
     // at the right of the name line, the status slot: where it stands with the AI
-    const status = mark ? <TurnLink mark={mark} /> : <AiStatus ai={ai} />;
+    const status = slotted ? null : mark ? <TurnLink mark={mark} /> : <AiStatus ai={ai} />;
     const side = status && (
         <div className="chat-message-side">
             <StatusSlot>{status}</StatusSlot>
@@ -778,7 +927,7 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
     );
     const menu = control && (addressable || (triage !== undefined && isRecord(triage)));
     // the actions, floating over the row's top right: none while messages are being chosen
-    const tools = !selection.active && (
+    const tools = !selection.active && !waiting && (
         <RowActions>
             {menu && (
                 <span className="chat-apply">
@@ -837,7 +986,7 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
                         tx={tx}
                     />
                 </Clamped>
-                {ai.kind === 'given-up' && (
+                {ai.kind === 'given-up' && !slotted && (
                     <p className="chat-ai-given-up">
                         {tx.chat.ai.givenUp}
                         {control && (
@@ -1350,9 +1499,11 @@ function Composer(props: {
     reply: ReplyDraft | undefined;
     replyFocus: number;
     onReplyDone: () => void;
+    /** Solo: the message is shown at once as it is sent, the AI's card under it. */
+    outgoing: OutgoingTools | undefined;
     tx: Tx;
 }) {
-    const { session, composer, tx, reply, onReplyDone } = props;
+    const { session, composer, tx, reply, onReplyDone, outgoing } = props;
     const personName = useChat().nameOf;
     const replyingTo =
         reply?.kind === 'Message'
@@ -1448,19 +1599,43 @@ function Composer(props: {
         const revision = latestRevision(session.state);
         if (!revision || !canSend) return;
         setSending(true);
+        const body: SendRequestBody = {
+            targets: value.chips.map((c) => ({ ...c.target, sourceRevision: revision.id })),
+            body: value.text,
+            ...(reply && { replyTo: replyTargetOf(reply) }),
+            ...(value.people.length > 0 && { mentions: value.people }),
+        };
+        // Solo: shown at once, the text leaving the composer as it goes; put back if the server refuses it
+        const local = outgoing && `local-${crypto.randomUUID()}`;
+        if (outgoing && local) {
+            const request = {
+                id: local,
+                session: session.state.session.id,
+                author: session.me.participant.id,
+                targets: body.targets,
+                body: body.body,
+                sentAt: new Date().toISOString(),
+                mentions: body.mentions ?? [],
+                ...(body.replyTo && { replyTo: body.replyTo }),
+                state: 'Sent',
+            } as RequestJson;
+            outgoing.add({ local, request, known: new Set(session.state.requests.map((r) => r.id)) });
+            void composer.clear();
+            setChipsExpanded(false);
+        }
         try {
-            await sessionApi.sendRequest({
-                targets: value.chips.map((c) => ({ ...c.target, sourceRevision: revision.id })),
-                body: value.text,
-                ...(reply && { replyTo: replyTargetOf(reply) }),
-                ...(value.people.length > 0 && { mentions: value.people }),
-            });
-            await composer.clear();
+            const sent = await sessionApi.sendRequest(body);
+            if (local) outgoing?.settle(local, sent.request.id);
+            else await composer.clear();
             onReplyDone();
             setChipsExpanded(false);
             setError(undefined);
             setNotice(undefined);
         } catch (e) {
+            if (local) {
+                outgoing?.drop(local);
+                composer.setValue(value);
+            }
             setError(failure(e));
         } finally {
             setSending(false);

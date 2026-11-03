@@ -14,6 +14,7 @@ import type {
     QueueRunBody,
     RestoredBody,
     SendRequestBody,
+    SentBody,
     SessionStateBody,
     SetMarkBody,
     RevertRequestedBody,
@@ -79,7 +80,7 @@ export const sessionApi = {
     me: (): Promise<Me> => call('me'),
     state: (): Promise<SessionStateBody> => call('state'),
     targets: (): Promise<TargetStatuses> => call('targets'),
-    sendRequest: (body: SendRequestBody): Promise<unknown> => call('requests', { method: 'POST', body }),
+    sendRequest: (body: SendRequestBody): Promise<SentBody> => call('requests', { method: 'POST', body }),
     /** The facilitator's 「AI に送る」: addresses the messages to the AI (their triages open). */
     address: (requests: readonly string[]): Promise<AddressedBody> => call('requests/address', { method: 'POST', body: { requests } }),
     /** Approves open change proposals (the facilitator), each as is or edited: approved together, one run. */

@@ -92,3 +92,84 @@ export function willAddress(
 
 /** The change proposals still waiting for the facilitator, in the order they were made. */
 export const openProposals = (state: Pick<SessionStateBody, 'proposals'>): ProposalJson[] => (state.proposals ?? []).filter((p) => p.state === 'Open');
+
+/**
+ * The AI's card right under a message in Solo (`dt open`), from the moment it is sent: pending while it is triaged (or
+ * answered, the answer not written yet), given up, then the answer or the run it went to, which takes the card's place.
+ * None in Collab (the message's status slot says where it stands there), for the AI's own messages, for a message judged
+ * to need nothing, and for one that became a proposal (a card of its own).
+ */
+export type AiSlot =
+    | { readonly kind: 'pending' }
+    | { readonly kind: 'given-up' }
+    | { readonly kind: 'answer'; readonly answer: string }
+    | { readonly kind: 'run'; readonly run: string };
+
+/**
+ * The AI's card under a message (see `AiSlot`): from its triage on the server, so that it is the same after a reload;
+ * `sent`: this page has just sent it, so that the card shows at once, before the server's triage reaches the page.
+ */
+export function aiSlot(
+    solo: boolean,
+    request: Pick<RequestJson, 'id' | 'author'>,
+    triage: TriageJson | undefined,
+    givenUp: ReadonlySet<string>,
+    sent: boolean,
+): AiSlot | undefined {
+    if (!solo || isAiAuthor(request.author)) return undefined;
+    if (!triage) return sent ? { kind: 'pending' } : undefined;
+    const ai = messageAi(triage, givenUp);
+    switch (ai.kind) {
+        case 'working':
+            return { kind: 'pending' };
+        case 'given-up':
+            return { kind: 'given-up' };
+        case 'answer':
+            return { kind: 'answer', answer: ai.answer };
+        case 'run':
+            return { kind: 'run', run: ai.run };
+        case 'none':
+        case 'neither':
+        case 'proposal':
+            return undefined;
+    }
+}
+
+/** A message this page sent, shown at once (Solo) until the server's message is on the page. */
+export interface Outgoing {
+    /** This page's key for it, kept by the server's message once it is there (the row is not mounted again). */
+    readonly local: string;
+    /** The message as it will be (`id` is `local`). */
+    readonly request: RequestJson;
+    /** The IDs of the messages on the page when it was sent: the server's message is a new one. */
+    readonly known: ReadonlySet<string>;
+    /** The server's ID for it, once it answered. */
+    readonly id?: string;
+}
+
+/**
+ * The server's message for one sent from this page: by the ID the server answered with, or before its answer, the
+ * first new message of mine with the same text that no earlier outgoing message took.
+ */
+export function outgoingMatch(outgoing: Outgoing, requests: readonly RequestJson[], taken: ReadonlySet<string> = new Set()): string | undefined {
+    if (outgoing.id !== undefined) return requests.some((r) => r.id === outgoing.id) ? outgoing.id : undefined;
+    return requests.find((r) => !outgoing.known.has(r.id) && !taken.has(r.id) && r.author === outgoing.request.author && r.body === outgoing.request.body)?.id;
+}
+
+/**
+ * The messages sent from this page, sorted: those still on their way (shown as they will be), and those the server's
+ * message stands for now, by its ID (their key on the page).
+ */
+export function settleOutgoing(
+    outgoing: readonly Outgoing[],
+    requests: readonly RequestJson[],
+): { readonly waiting: readonly Outgoing[]; readonly sent: ReadonlyMap<string, string> } {
+    const sent = new Map<string, string>();
+    const waiting: Outgoing[] = [];
+    for (const o of outgoing) {
+        const id = outgoingMatch(o, requests, new Set(sent.keys()));
+        if (id === undefined) waiting.push(o);
+        else sent.set(id, o.local);
+    }
+    return { waiting, sent };
+}

@@ -2,12 +2,25 @@
 // presence, whether a draft reaches the AI, the proposals; and how the page's state takes the agents' presence.
 import { describe, expect, test } from 'bun:test';
 import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { aiPresence, givenUpRequests, isSolo, messageAi, openProposals, triagesByRequest, willAddress, type TriageJson } from './ai';
+import {
+    aiPresence,
+    aiSlot,
+    givenUpRequests,
+    isSolo,
+    messageAi,
+    openProposals,
+    settleOutgoing,
+    triagesByRequest,
+    willAddress,
+    type AiSlot,
+    type Outgoing,
+    type TriageJson,
+} from './ai';
 import { messageMarks } from './cards';
 import { collabMenuItems } from './collab';
 import { changeUnits } from './history';
 import { adopt, INITIAL_SESSION, receive } from './state';
-import { participantNames, streamItems } from './stream';
+import { participantNames, placeAiSlots, streamItems } from './stream';
 import { NO_PEERS } from './presence';
 
 type RequestJson = SessionStateBody['requests'][number];
@@ -181,5 +194,107 @@ describe('a run that answered', () => {
         } as unknown as RunJson;
         const marks = messageMarks(changeUnits({ runs: [run], revisions: [] }));
         expect(marks.get('mp')?.state).toBe('answered');
+    });
+});
+
+describe("the AI's card under a message in Solo", () => {
+    const none = new Set<string>();
+    const mine = message('m', 'f', 0);
+
+    test('pending from the sending (before the triage reaches the page), then the answer, the run, or nothing', () => {
+        // sent from this page, its triage not here yet: pending at once
+        expect(aiSlot(true, mine, undefined, none, true)).toEqual({ kind: 'pending' });
+        // not sent from this page (a revert, a message from before the triages): no card
+        expect(aiSlot(true, mine, undefined, none, false)).toBeUndefined();
+        // the server's triage: pending while it is triaged or the answer is being written, after a reload too
+        expect(aiSlot(true, mine, pending('t', 'm'), none, false)).toEqual({ kind: 'pending' });
+        expect(aiSlot(true, mine, decided('t', 'm', 'Consultation'), none, false)).toEqual({ kind: 'pending' });
+        expect(aiSlot(true, mine, decided('t', 'm', 'Consultation', { kind: 'Answer', answer: 'a' }), none, true)).toEqual({ kind: 'answer', answer: 'a' });
+        expect(aiSlot(true, mine, decided('t', 'm', 'ChangeRequest', { kind: 'Run', run: 'r' }), none, false)).toEqual({ kind: 'run', run: 'r' });
+        expect(aiSlot(true, mine, decided('t', 'm', 'NotForAi'), none, true)).toBeUndefined();
+        expect(aiSlot(true, mine, decided('t', 'm', 'Consultation'), new Set(['m']), false)).toEqual({ kind: 'given-up' });
+        // a proposal is a card of its own
+        expect(aiSlot(true, mine, decided('t', 'm', 'ChangeRequest', { kind: 'Proposal', proposal: 'x' }), none, false)).toBeUndefined();
+        // the AI's own messages have none
+        expect(aiSlot(true, message('a', 'ai', 1), undefined, none, true)).toBeUndefined();
+    });
+
+    test('Collab is unchanged: no card, the message keeps its quiet "…"', () => {
+        expect(aiSlot(false, mine, pending('t', 'm'), none, true)).toBeUndefined();
+        expect(aiSlot(false, mine, undefined, none, true)).toBeUndefined();
+        const items = streamItems(state());
+        expect(placeAiSlots(items, new Map())).toEqual(items.map((item) => ({ kind: 'item', item })));
+    });
+
+    test("a message sent from this page: on its way until the server's is here, by the ID it answered or by its text", () => {
+        const o = (local: string, body: string, extra: Partial<Outgoing> = {}): Outgoing => ({
+            local,
+            request: message(local, 'f', 5, { body }),
+            known: new Set(['m0']),
+            ...extra,
+        });
+        const requests = [message('m0', 'f', 0, { body: 'same' }), message('m1', 'f', 1, { body: 'same' }), message('m2', 'p', 2, { body: 'other' })];
+        // before the server answered: the first new message of mine with the same text, each taken once
+        const a = settleOutgoing([o('l1', 'same'), o('l2', 'same'), o('l3', 'other')], requests);
+        expect([...a.sent]).toEqual([['m1', 'l1']]);
+        expect(a.waiting.map((w) => w.local)).toEqual(['l2', 'l3']);
+        // the server answered with its ID: that one, once it is on the page
+        expect([...settleOutgoing([o('l1', 'x', { id: 'm2' })], requests).sent]).toEqual([['m2', 'l1']]);
+        expect(settleOutgoing([o('l1', 'x', { id: 'm9' })], requests).waiting.length).toBe(1);
+    });
+
+    test('the answer or the run card goes right under its message, in the place of its card', () => {
+        const run = {
+            id: 'r',
+            session: 's',
+            input: { requests: [{ request: 'm2', author: 'f', targets: [], body: 'b' }] },
+            queuedBy: 'f',
+            queuedAt: at(5),
+            state: 'Running',
+            startedAt: at(6),
+        };
+        const s = state({
+            session: { ...state().session, mode: 'Solo' },
+            requests: [
+                message('m1', 'f', 0),
+                message('m2', 'f', 1),
+                message('m3', 'f', 2),
+                message('a1', 'ai', 3, { replyTo: { kind: 'Message', request: 'm1' } }),
+            ],
+            runs: [run],
+        });
+        const items = streamItems(s);
+        const keys = (slots: ReadonlyMap<string, AiSlot>): string[] =>
+            placeAiSlots(items, slots).map((e) =>
+                e.kind === 'item' ? e.item.key : `ai:${e.request}=${e.content.kind === 'item' ? e.content.item.key : e.content.kind}`,
+            );
+        expect(items.map((i) => i.key)).toEqual(['message:m1', 'message:m2', 'message:m3', 'message:a1', 'card:r']);
+        expect(
+            keys(
+                new Map<string, AiSlot>([
+                    ['m1', { kind: 'answer', answer: 'a1' }],
+                    ['m2', { kind: 'run', run: 'r' }],
+                    ['m3', { kind: 'pending' }],
+                ]),
+            ),
+        ).toEqual(['message:m1', 'ai:m1=message:a1', 'message:m2', 'ai:m2=card:r', 'message:m3', 'ai:m3=pending']);
+        // decided, the answer not on the page yet: still pending; given up: said in the card
+        expect(
+            keys(
+                new Map<string, AiSlot>([
+                    ['m1', { kind: 'answer', answer: 'a9' }],
+                    ['m3', { kind: 'given-up' }],
+                ]),
+            ),
+        ).toEqual(['message:m1', 'ai:m1=pending', 'message:m2', 'message:m3', 'ai:m3=given-up', 'message:a1', 'card:r']);
+        // a card already under an earlier message stays there: the later one has no card of its own
+        expect(
+            keys(
+                new Map<string, AiSlot>([
+                    ['m2', { kind: 'run', run: 'r' }],
+                    ['m3', { kind: 'run', run: 'r' }],
+                ]),
+            ),
+        ).toEqual(['message:m1', 'message:m2', 'ai:m2=card:r', 'message:m3', 'message:a1']);
     });
 });
