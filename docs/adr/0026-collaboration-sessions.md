@@ -1289,3 +1289,62 @@ it was written with "undo", a name that never shipped).
   agent is connected (「AI 接続なし（n 件待ち）」) is a later amendment.
 - **Persistence.** None new: the obstacle is in the run's JSON (older rows have none), and `RevertLeftToAgent` is an
   outbox event like the others.
+
+## Appendix: state outside the workspace (amendment)
+
+*Decided by the maintainer* (2026-11-03), amending "persistence and ports (S3)" and "the session server (S4)" above,
+ADR 0012 (`generated.json`) and ADR 0001 (`layout.json`): dt writes nothing of its own into the workspace any more.
+`.domaintrail/` held the session's database with its WAL files, the blobs, `server.json`, the layouts and the record of
+`dt generate ts`, and ignored itself through its own `.gitignore`; it showed up in editors' file trees and in copies of
+the repository, was read by every tool that walks the workspace, and had to be kept away from the agents by deny rules.
+
+- **Where.** Per user, one directory per workspace named `<basename>-<8 hex digits of the SHA-256 of its real path>`
+  (`realpathSync.native`; the name keeps letters, digits, `.`, `_`, `-`, no leading dot, 48 characters at most):
+  - the **state** — `session.db` and its WAL files, `blobs/`, `server.json`, `generated.json` (the record of the files
+    written, which no run can make again: losing it leaves stale generated files behind), and the seed script's
+    `seed.json` — in `$XDG_STATE_HOME/domaintrail/<workspace>/`, by default `~/.local/state/domaintrail/<workspace>/`;
+  - the **cache** — `layout.json`, laid out again from scratch when missing — in `$XDG_CACHE_HOME/domaintrail/<workspace>/`,
+    by default `~/.cache/domaintrail/<workspace>/`.
+  - *Decided by the maintainer*: **macOS uses the XDG paths too** (as `trust.json` does, `~/.config/domaintrail/`), and
+    honours `XDG_*` when set (a relative one is ignored, as the XDG specification asks). Windows:
+    `%LOCALAPPDATA%\domaintrail\state\<workspace>\` and `…\cache\<workspace>\` (else `~\AppData\Local`).
+  - `DOMAINTRAIL_STATE_DIR` replaces the state's root (CI, containers); the workspaces' directories go below it.
+  - Runtime files: none needs `$XDG_RUNTIME_DIR`; the agents' views and the `dt` shim stay in private `mkdtemp`
+    directories of `os.tmpdir()`. The configuration stays where it is (`$XDG_CONFIG_HOME/domaintrail/trust.json`).
+- **Owner.** `@domaintrail/workspace` (`state-dirs.ts`, `legacy-state.ts`, `workspace-state.ts`) says where and makes
+  the directories; the collaboration's persistence (`openSessionDatabase`, `openSessionBlobs`, `server.json`), the
+  layout store and the generated output take the directory they are given. The app opens the directories once per
+  command (`wiring/state.ts`): `dt open`, `dt collab`, `dt open link`, `dt collab link` / `invite` / `agent-link`,
+  `dt agent` (the running server's `server.json`) and `dt generate ts`.
+- **Safety.** Directories 0700 and files 0600 whatever the umask (the existing `restrict` and `PRIVATE_*` helpers; the
+  database still made 0600 before SQLite opens it, the WAL files only looked at while the connection is open). A
+  workspace's directory and what dt writes in it are never symbolic links (refused); the roots are the user's and may be
+  links. `workspace.json` in each directory records the real path: a directory recorded for another existing workspace
+  (two names and hashes alike) is refused and says to set `DOMAINTRAIL_STATE_DIR`; one recorded for a workspace that is
+  gone says `dt session prune`; a newly made one says where a gone workspace of the same name kept its state (a moved
+  workspace: its session stays under the old hash). A state or cache root inside the workspace, or a workspace inside
+  one, is refused (links followed).
+- **The agents.** The state is outside the workspace, so the agents cannot read it; `agent.read.paths` refuses a path
+  inside or holding the state or cache root (beside `~/.ssh` and the others). The deny rules for `.domaintrail` stay:
+  other checkouts and older versions still have one.
+- **Migration** (*decided by the maintainer*: move, then delete). The first command that opens the state moves an older
+  version's `.domaintrail/`: `session/session.db` with `-wal` and `-shm`, `session/blobs/**`, `generated.json`,
+  `seed.json` into the state, `layout.json` into the cache; its `.gitignore` files, a stopped server's `server.json`
+  and the old `agent.json` are dropped. It prints `Moved .domaintrail/ to <state dir>/` once and deletes the emptied
+  directory; files that are not dt's (and links, never followed) stay with it, and that is said. While the `server.json`
+  there names a live process, it refuses (stop the older server first). When the state directory already holds files
+  (anything but its record), nothing is overwritten: `.domaintrail/` is kept, and that is said. Crash safety: the files
+  are copied into `.<workspace>.moving-<pid>-<random>/` beside the state directory, checked byte for byte, the record
+  written with `movedFrom`, and the directory renamed into place; only then is `.domaintrail/` deleted. A copy left by a
+  killed run (its process gone) is removed by the next one; a run killed after the rename leaves both copies, and the
+  next run, seeing `movedFrom` and the same bytes, deletes the old one. The WAL files move with their database while no
+  server runs, so SQLite recovers what was not checkpointed when it next opens it.
+- **`dt session prune`** (*decided by the maintainer*: manual only). Lists the state and cache directories whose
+  workspace no longer exists, and with `--older-than <days>` those not changed for that long (the latest change of the
+  directory or of what is directly in it); `--yes` removes them, else it is a dry run. A running server's state, a
+  directory without a record and another process's unfinished move are kept; a killed move's copy goes. `dt session`'s
+  other subcommands stay removed (ADR 0030).
+- **Not changed.** `dt export sources` (never archived `.domaintrail`), the deny rules, the `.domaintrail` entries of
+  this repository's `.gitignore` and lint configuration (older checkouts). dt no longer writes a `.gitignore` anywhere.
+- **Tests.** `test/preload.ts` gives every test process its own `XDG_*` and `DOMAINTRAIL_STATE_DIR` (and a test that
+  starts `dt` with `Bun.spawn` passes `process.env`: Bun gives a child the environment the process started with).
