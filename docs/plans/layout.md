@@ -82,3 +82,57 @@ Each step is a separate change, with its e2e and screenshots redone:
 2. The left column: the navigator, the detail and the drag.
 3. The right column: the chat and AI の作業 as tabs.
 4. The navigator per world, with the stormings' stages and timelines.
+
+## Step 5: the detail of a storming element, inside the whole (decided 2026-11-03)
+
+The detail is read next to the canvas. It shows what the canvas does not, and leads into the canvas. It is no longer a
+standalone description of the element.
+
+- **The order follows the use**:
+  1. during a workshop: where things are, how they connect, the open questions;
+  2. asking the AI: the talk about the element and the asking;
+  3. tidying up: the model.
+- **On the canvas.** Selecting a note keeps the notes and edges connected to it and dims the rest:
+  - the previous and next events;
+  - the command that causes it, with its actor;
+  - the policies that react to it;
+  - its hotspots.
+
+  Clicking empty canvas restores the view. These connections are not listed in the detail.
+- **In the detail**, only what the canvas does not show. A row with no content is not shown.
+  - the description (`///`, in full);
+  - **other places** (`MapPin`): occurrences outside the current view (another stage, timeline or storming, or an
+    exception hidden by the filter). Each opens that view.
+  - **hidden connections** (`EyeOff`), at Big Picture: what Design Level shows (cause and reactions), with a button to
+    see it at Design Level;
+  - **talk** (`MessageSquare`): the number of chat messages that target it, as a link, and the latest one quoted;
+  - **AI runs** (`Bot`): their number, as a link;
+  - **added or changed in this session** (`CirclePlus`, or a change icon): the request that did it, as a link;
+  - **model**: the `.dt` counterpart, only when there is one;
+  - **a resolved hotspot's conclusion** (`CircleCheck`);
+  - **problems** (`TriangleAlert`), on top, in plain words (the code only as a tooltip), with a button to have the AI
+    fix it (`Wrench`).
+- **Not shown:**
+  - the file and line, and "open file" (the AI edits the files);
+  - the DSL's words (on, issues, emits);
+  - the connections the canvas shows.
+- **Fewer words:**
+  - rows are labelled by icons, with the name as a tooltip;
+  - counts are bare numbers;
+  - buttons are icons with tooltips and `aria-label`.
+- **Colours:** the icons that describe a row are grey (muted). The icons of actions are the brand colour (indigo on a
+  pale indigo button).
+  - Actions: target in the chat (`MessageSquare`), ask the AI (`Sparkles`, filled, primary), add a question
+    (`MessageCircleQuestionMark`), tell the resolution (`CircleCheck`), have the AI fix it (`Wrench`, filled), see at
+    Design Level (`Microscope`).
+  - The same shape can be both. `Microscope` is a grey badge for "Design Level only" and an indigo button for "see at
+    Design Level".
+- **What the actions do:** each one only puts the beginning of a message, targeting the element (`#`), in the
+  composer. The person sends it.
+- **Per kind**, through what fills the rows:
+  - hotspot: its conclusion when resolved, and "tell the resolution";
+  - stage and timeline: their main flows and exceptions, branch and return points, and "open this view".
+
+## Small: counts in the model tree
+
+A group heading's count (「集約 1」) shows only while the group is collapsed, as a muted "(1)".
