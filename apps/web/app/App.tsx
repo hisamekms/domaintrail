@@ -42,7 +42,7 @@ export function App() {
     const { mode, setMode, themePreference, setThemePreference, theme, langPreference, setLangPreference, lang, textSize, setTextSize } = preferences;
     const t = MESSAGES[lang];
     const panes = usePanes(preferences.uiScale);
-    const { setExplorerOpen, setInspectorOpen, showLeft, legendOpen, setLegendOpen } = panes;
+    const { setExplorerOpen, setInspectorOpen, showLeft, legends } = panes;
     const { inspectorTab, setInspectorTab, openInspector } = panes;
     /** The button the baseline menu was opened from (it opens next to it), or null while closed. */
     const [baselineAnchor, setBaselineAnchor] = useState<HTMLElement | null>(null);
@@ -201,8 +201,7 @@ export function App() {
                         workspace={workspace}
                         current={current}
                         mode={mode}
-                        legendOpen={legendOpen}
-                        onLegendToggle={() => setLegendOpen(!legendOpen)}
+                        legends={legends}
                         overlay={session.canvasOverlay}
                         aiReady={session.aiReady}
                     />
@@ -230,8 +229,8 @@ export function App() {
                                 theme={theme}
                                 selected={selected}
                                 onSelect={(id) => select(id)}
-                                legendOpen={legendOpen}
-                                onLegendToggle={() => setLegendOpen(!legendOpen)}
+                                legendOpen={legends.isOpen('states')}
+                                onLegendToggle={() => legends.toggle('states')}
                                 compact={settings.compact}
                                 aggregate={aggregateNames(model, aggregateId)}
                                 workspaceName={current ? workspaceName(current.root) : undefined}

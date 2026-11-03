@@ -10,6 +10,7 @@ import type { LegendView } from '../legend';
 import { StormingFilter, StormingToolbar } from '../storming';
 import { applyTheme, type Theme } from '../theme';
 import { workspaceName } from '../app/health';
+import type { Legends } from '../app/legends';
 import { buildScene } from '../render';
 import { useViewCamera } from './camera';
 import { useCenterOnResize } from './center';
@@ -100,14 +101,14 @@ export function ViewWorkspace(props: {
     workspace: Workspace;
     current: ViewPayload | null;
     mode: DisplayMode;
-    legendOpen: boolean;
-    onLegendToggle: () => void;
+    /** Each view's legend, open or closed on its own. */
+    legends: Legends;
     /** Drawn over the canvas (a session's cursors of the others). */
     overlay?: ReactNode;
     /** An AI is connected to the chat: an empty view says that asking there makes it. */
     aiReady?: boolean;
 }) {
-    const { workspace, current, mode, legendOpen, onLegendToggle } = props;
+    const { workspace, current, mode, legends } = props;
     const { canvas, onMount, stormings, nav, settings, viewGraph, printer } = workspace;
     const { view, selected, select } = nav;
     const { structureLevel } = settings;
@@ -161,7 +162,7 @@ export function ViewWorkspace(props: {
                     <CanvasControls
                         canvas={canvas}
                         fitAll={fitView}
-                        legend={legendView && { view: legendView, open: legendOpen, onToggle: onLegendToggle }}
+                        legend={legendView && { view: legendView, open: legends.isOpen(legendView), onToggle: () => legends.toggle(legendView) }}
                         compact={{ on: settings.compact, onToggle: () => settings.setCompact(!settings.compact) }}
                         keys
                     />

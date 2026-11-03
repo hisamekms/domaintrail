@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useState, type RefObject } fro
 export type KeyValueStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
 /** The storage of the page, or undefined where there is none (or it cannot even be reached). */
-function pageStorage(): KeyValueStorage | undefined {
+function pageStorage(): Storage | undefined {
     try {
         return typeof localStorage === 'undefined' ? undefined : localStorage;
     } catch {
@@ -27,6 +27,15 @@ export function readStored<T>(key: string, initial: T, storage: KeyValueStorage 
 export function writeStored(key: string, value: unknown, storage: KeyValueStorage | undefined = pageStorage()): void {
     try {
         storage?.setItem(key, JSON.stringify(value));
+    } catch {
+        // storage unavailable (private mode, etc.)
+    }
+}
+
+/** Removes what is stored under `key` (a former key no longer read); a storage that throws is left as it is. */
+export function removeStored(key: string, storage: Pick<Storage, 'removeItem'> | undefined = pageStorage()): void {
+    try {
+        storage?.removeItem(key);
     } catch {
         // storage unavailable (private mode, etc.)
     }
