@@ -81,8 +81,8 @@ describe('the mode', () => {
         expect(isSolo(state())).toBe(false);
         const solo = state({ session: { ...state().session, mode: 'Solo' } });
         expect(isSolo(solo)).toBe(true);
-        expect(collabMenuItems('facilitator', true, true)).toEqual(['record', 'restore']);
-        expect(collabMenuItems('facilitator', true)).toEqual(['invite', 'record', 'restore', 'hand-over', 'end']);
+        expect(collabMenuItems('facilitator', true, true)).toEqual(['record', 'restore', 'download-sources']);
+        expect(collabMenuItems('facilitator', true)).toEqual(['invite', 'record', 'restore', 'download-sources', 'hand-over', 'end']);
         expect(collabMenuItems('facilitator', false, true)).toEqual([]);
     });
 

@@ -15,7 +15,7 @@ import {
     type ViewService,
 } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
-import { createGitRefWatcher, createWorkspaceReader, createWorkspaceWatcher } from '@domaintrail/workspace';
+import { createGitRefWatcher, createSourceArchive, createWorkspaceReader, createWorkspaceWatcher, type SourceArchive } from '@domaintrail/workspace';
 import type { WatcherGate } from './watcher-hold.js';
 
 export interface ViewServerOptions {
@@ -24,6 +24,8 @@ export interface ViewServerOptions {
     sources?: readonly string[];
     /** Whether files ignored by `.gitignore` are skipped (default true). */
     respectGitignore?: boolean;
+    /** The project's config file (absolute), if there is one: in the download of the sources (`/api/export/sources.zip`). */
+    configFile?: string;
     port?: number;
     host?: string;
     /** Debounce for bursts of file events (e.g. an AI saving several files). */
@@ -50,6 +52,8 @@ export interface LiveView {
     readonly git: GitRevisions;
     readonly engine: LayoutEngine;
     readonly assets: Assets;
+    /** The ZIP archive of the sources and the config file, made from the files on disk when called. */
+    readonly sources: () => Promise<SourceArchive>;
 }
 
 /**
@@ -74,7 +78,12 @@ export async function prepareLiveView(options: ViewServerOptions): Promise<LiveV
     });
     await view.refresh();
     const assets = await loadAssets(options.webDir ?? defaultWebDir());
-    return { view, git, engine, assets };
+    const archived = {
+        root: options.root,
+        selection: sourceSelection(sources, respectGitignore),
+        ...(options.configFile && { configFile: options.configFile }),
+    };
+    return { view, git, engine, assets, sources: () => createSourceArchive(archived) };
 }
 
 /** The watchers of a Live View, subscribed. */
@@ -174,7 +183,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     const hub = createWebSocketHub(() => view.state);
     const http = createViewHttpServer({
         host,
-        api: createApiRoutes({ view, git, publish: (payload) => hub.publish(payload), log }),
+        api: createApiRoutes({ view, git, sources: live.sources, publish: (payload) => hub.publish(payload), log }),
         assets: live.assets,
         upgrade: (req, socket, head) => hub.handleUpgrade(req, socket, head, undefined),
     });

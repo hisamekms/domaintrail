@@ -539,7 +539,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         });
         const http = createViewHttpServer({
             host: config.host,
-            api: createApiRoutes({ view, git, publish: (payload) => hub.publish(payload), log }),
+            api: createApiRoutes({ view, git, sources: live.sources, publish: (payload) => hub.publish(payload), log }),
             assets: live.assets,
             upgrade: (req, socket, head, auth) => {
                 if (auth.kind !== 'participant') return void socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');

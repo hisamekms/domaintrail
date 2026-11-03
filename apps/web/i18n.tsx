@@ -501,6 +501,7 @@ const ja = {
             inviteHint: 'このページのアドレスです。開いた人は参加者として加わります',
             inviteCopied: (link: string) => `招待リンクをコピーしました: ${link}`,
             restore: '以前の状態に復元',
+            downloadSources: 'ソース一式をダウンロード',
             restoreTitle: '以前の状態に復元',
             restoreBody:
                 'ワークスペースの .dt と .dtes をすべて、選んだ時点の内容に復元します。あとの作業の変更も消えます。ひとつの作業だけを打ち消すときは、そのカードの「この作業を打ち消す」を使ってください。',
@@ -1343,6 +1344,7 @@ const en: Messages = {
             inviteHint: "This page's address: whoever opens it joins as a participant",
             inviteCopied: (link) => `Invite link copied: ${link}`,
             restore: 'Restore an earlier state',
+            downloadSources: 'Download sources (.zip)',
             restoreTitle: 'Restore an earlier state',
             restoreBody:
                 "Every .dt and .dtes of the workspace becomes as it was at the point you choose, later work's changes included. To take back one piece of work only, use its card's “Revert this work”.",
