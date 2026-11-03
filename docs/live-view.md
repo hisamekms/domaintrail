@@ -403,8 +403,10 @@ The chat has two views:
   the composer, `/`'s list open on it, for the person to send. Then the **templates**: the beginnings of a message
   for what is open and selected (このあとを足す at Big Picture, 前後を詰める for a selected event, 不変条件を挙げる for an
   aggregate …), then the team's from `templates` in `domaintrail.jsonc`; picking one only puts its text in the composer
-  (the selected element as its `#` target), to edit and send. An empty view says 「まだありません。チャットで /es:start
-  から始められます」 while an AI is connected.
+  (the selected element as its `#` target), to edit and send. An empty view says how to start its own world while an AI is
+  connected (and the person can start it: in Collab, the facilitator): the storming view 「まだありません。チャットで
+  /es:start から始められます」, the model's views (context map, structure, catalog; also with stormings but no BC)
+  「まだありません。チャットで /model:start から始められます」; otherwise 「まだありません」.
 - **AI の作業**: everything sent to the AI, from start to end; the tab's badge counts what is not finished (running and
   queued; not what awaits an answer). Each row is one card — a run with the runs that continue it — in groups:
   答え待ち (the AI asked a question), 実行中 (a pulsing dot, how long it has run, and the line of what the AI is doing), 待ち n (numbered in the order they

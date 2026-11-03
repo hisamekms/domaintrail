@@ -171,7 +171,7 @@ export function ViewWorkspace(props: {
                 )}
                 <EdgeHint canvas={canvas} view={legendView} />
                 {nothing ? (
-                    <div className="empty">{emptyLine(t, props.aiReady === true)}</div>
+                    <div className="empty">{emptyLine(t, view.kind, props.aiReady === true)}</div>
                 ) : (
                     current &&
                     !graph &&
