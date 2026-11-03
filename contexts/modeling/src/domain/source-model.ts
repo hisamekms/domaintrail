@@ -282,6 +282,8 @@ export interface ContextFragment {
     shared: boolean;
     label?: string;
     doc?: string;
+    /** The `///` lines of `doc`; present with it. */
+    docAt?: Site;
     /** The entries of its `terms` blocks, in order. */
     terms: TermDecl[];
     at: Site;

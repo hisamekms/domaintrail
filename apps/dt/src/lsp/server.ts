@@ -313,7 +313,8 @@ class DiagnosticsPublisher {
             uriOf.set(rel, doc.uri.toString());
             sources.push({ path: rel, text: doc.textDocument.getText() });
         }
-        sources.sort((a, b) => a.path.localeCompare(b.path));
+        // in the order `dt check` reads them (by code point), so that rules that keep the first of several agree (M025)
+        sources.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
         const analysis = await analyze(sources);
         // every source gets a (possibly empty) list, so that a client sees each file checked
         const byUri = new Map<string, LspDiagnostic[]>([...uriOf.values()].map((uri) => [uri, []]));

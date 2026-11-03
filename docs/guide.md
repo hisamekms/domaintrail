@@ -162,8 +162,8 @@ stormings/order-to-cash.dtes   storming OrderToCash "注文から入金まで" {
 - `<context>/<aggregate>.dt` holds the aggregate and what only it uses: its ID, entities, events, errors, enums,
   primitives and values.
 - `<context>/context.dt` holds the context's name (表示名), description and `terms`, and the elements used by several of
-  its aggregates or by none (field sets, for example). The other files open the context without a name: `context Sales {
-  ... }`.
+  its aggregates or by none (field sets, for example). The other files open the context without a name or `///`:
+  `context Sales { ... }`. A context's description is written once, in one of its files (M025).
 - An aggregate's ID stays in the aggregate's file even when other aggregates reference it.
 - A storming goes to `stormings/<storming>.dtes`, apart from the contexts: it may span several of them.
 - Directory and file names are kebab-case: `PurchaseOrder` → `purchase-order.dt`, `OrderFulfillment` →
@@ -544,7 +544,9 @@ context Billing { // other files open the context without a name
   aggregate, state, command, invariant, event, error) take an optional string label after the name.
 - A field or parameter is named by, in order: its inline string → the context's `terms` → the name of its type
   (for `references`, the target aggregate) → the English name.
-- `///` lines directly above a declaration or term are its description.
+- `///` lines directly above a declaration or term are its description: a short statement of what the element is.
+- A context's description is written once. When a context is split across files, a `///` above `context X` in a second
+  file is an error (M025) that names the first; merge the two into one.
 - Labels appear in the Live View and as JSDoc in the generated TypeScript; identifiers and generated type names stay
   English.
 
@@ -1163,6 +1165,12 @@ of working.
 
 **Start from the brief.** The `///` description above a `context` says its purpose, scope, what the generated code is
 for and how far to go (`/model:start` in the chat writes it). Keep to that context; ask before changing another one.
+
+**`///` says what the element is, once.** A description is short: what the element is, not its history or a to-do.
+Write it once: a context split across files has its `///` in one file only (M025). Keep a split context's
+description, `terms` and context-wide types (those used by several aggregates or by none) in `<context>/context.dt`,
+and open the context without a `///` in the other files. This is advice, not a rule: `check` reports only a second
+description.
 
 **One context at a time, terms first.**
 - Agree on the words before the structure: the context's `terms` with their labels, and a `///` for any term people
@@ -2577,6 +2585,7 @@ storming](#diagnostics-of-a-storming).
 | M022 | (warning) a field of an event or error a command emits or returns, with no source of the same name and type (parameters, their fields, the aggregate's fields), while some source has its type; ID-typed, Int, Decimal and Bool fields are exempt |
 | M023 | policies: the event exists, the aggregate is one of the policy's own context, the command is one of the aggregate, the event is not of a shared context; (warning) two policies of a context state the same reaction |
 | M024 | verified types: the base and the context of `for` are value types (`for` not a verified type), no cycle; a verified type types command parameters and other verified types only, no field |
+| M025 | a context's description (`///` above `context X`) is written once across the files of the context; each later one names the first |
 | L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
 | L002 | (warning) a term is not used by any field or parameter |
 | L003 | (warning) different things in one scope share a Japanese name |

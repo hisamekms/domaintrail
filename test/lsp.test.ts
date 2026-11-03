@@ -223,6 +223,27 @@ describe('dt lsp', () => {
         expect(asCheckLines([d])).toEqual(await checkOutput(client.root, 'sales.dt'));
     });
 
+    test("M025: a context's second description is reported on its `///`, as dt check does", async () => {
+        const client = await start({
+            'common.dt': COMMON,
+            'sales.dt': `/// Selling.\n${SALES}`,
+            'sales2.dt': '/// More selling.\ncontext Sales {\n  value Note { text: String }\n}\n',
+        });
+        const second = await client.until('sales2.dt', (d) => d.length > 0);
+        expect(second).toMatchObject([
+            {
+                range: { start: { line: 0, character: 0 } },
+                severity: 1,
+                code: 'M025',
+                message:
+                    "Context 'Sales' already has a description at sales.dt:1.\nhint: merge this description into the one at sales.dt:1, and remove it here",
+                data: { hint: 'merge this description into the one at sales.dt:1, and remove it here' },
+            },
+        ]);
+        expect(asCheckLines(second)).toEqual(await checkOutput(client.root, 'sales2.dt'));
+        expect(await client.until('sales.dt', () => true)).toEqual([]);
+    });
+
     test('a rule over the whole workspace (M010) is reported, and follows unsaved edits', async () => {
         const client = await start({ 'common.dt': COMMON, 'sales.dt': SALES, 'billing.dt': BILLING });
         await client.until('sales.dt', (d) => d.length === 0);

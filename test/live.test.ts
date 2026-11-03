@@ -167,6 +167,24 @@ describe('Live View', () => {
         await nextUpdate((u) => u.status === 'ok');
     });
 
+    test("a context's second description (M025) is one of the problems, on the context", async () => {
+        const src = await readFile(order(), 'utf8');
+        await writeFile(order(), `/// Orders of the sales.\n${src}`);
+        const p = await nextUpdate((u) => u.status === 'invalid');
+        expect(p.diagnostics.filter((d) => d.code === 'M025')).toMatchObject([
+            {
+                file: 'sales/order.dt',
+                start: { line: 1, column: 1 },
+                severity: 'error',
+                message: "Context 'Sales' already has a description at sales/context.dt:1.",
+                hint: 'merge this description into the one at sales/context.dt:1, and remove it here',
+                elementId: 'Sales',
+            },
+        ]);
+        await writeFile(order(), src);
+        await nextUpdate((u) => u.status === 'ok');
+    });
+
     test('removed elements are reported, and deleting a file updates the view', async () => {
         await rm(path.join(dir, 'extra.dt'));
         const p = await nextUpdate((u) => u.diff.removed.map(String).includes('Shipping.Address'));

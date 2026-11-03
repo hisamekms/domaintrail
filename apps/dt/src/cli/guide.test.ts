@@ -86,6 +86,9 @@ describe('dt guide topics', () => {
         const m022 = await runGuide('M022');
         expect(m022.out).toContain('| M022 | (warning) a field of an event or error');
         expect(m022.out).toContain('Explained in: `dt guide requires`, `dt guide events`, `dt guide verified`.');
+        const m025 = await runGuide('M025');
+        expect(m025.out).toContain("| M025 | a context's description (`///` above `context X`) is written once");
+        expect(m025.out).toContain('Explained in: `dt guide layout`, `dt guide names`, `dt guide modeling-practice`.');
     });
 
     test('the ways of working are topics of their language: storming-practice in storming, modeling-practice in dsl', async () => {

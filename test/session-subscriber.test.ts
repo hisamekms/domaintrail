@@ -828,7 +828,7 @@ describe('reverting a run', () => {
         "mechanically, with no agent connected: only the facilitator; the run's .dtes change is reverted, a later run's .dt change stays, recorded as a run of its own",
         async () => {
             const ctx = await setup();
-            const later = { path: 'sales/order.dt', replace: ['context Sales', '/// 販売。\ncontext Sales'] as [string, string] };
+            const later = { path: 'sales/order.dt', replace: ['context Sales', '// 販売。\ncontext Sales'] as [string, string] };
             const { ids, subscriber } = await runs(ctx, [{ edits: ADD_RETURN_CANCELLED }, { edits: [later] }]);
             // no agent from here on: the server reverts by itself
             await subscriber.stop();
@@ -857,7 +857,7 @@ describe('reverting a run', () => {
 
     integration('asked while a run is running: queued behind it, then reverted mechanically by the server once that run ends', async () => {
         const ctx = await setup();
-        const later = { path: 'sales/order.dt', replace: ['context Sales', '/// 販売。\ncontext Sales'] as [string, string] };
+        const later = { path: 'sales/order.dt', replace: ['context Sales', '// 販売。\ncontext Sales'] as [string, string] };
         const { ids } = await runs(ctx, [{ edits: ADD_RETURN_CANCELLED }], [{ edits: [later], delayMs: 1500 }]);
         const busy = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Change 2.')]);
         await until(ctx, busy, ['Running']);
@@ -876,7 +876,7 @@ describe('reverting a run', () => {
         const done = await until(ctx, body.run.id, ['Reverted', 'Running', 'Completed', 'Failed']);
         expect(done).toMatchObject({ state: 'Reverted', changed: true });
         expect(await read(ctx, RETURNS)).not.toContain('ReturnCancelled');
-        expect(await read(ctx, 'sales/order.dt')).toContain('/// 販売。');
+        expect(await read(ctx, 'sales/order.dt')).toContain('// 販売。');
         // the agent never ran it: two runs played, no third
         expect(await ctx.invocations()).toHaveLength(2);
     });
