@@ -45,23 +45,47 @@ export function usePersistentState<T>(key: string, initial: T): [T, (value: T) =
     return [value, set];
 }
 
-/** Closes a dropdown on a click outside `root` or on Escape. */
-export function useDismiss(open: boolean, root: RefObject<HTMLElement | null>, close: () => void): void {
+/** What `pressedOutside` needs of a root: a DOM node, or a stand-in in the tests. */
+export type PressRoot = { contains(other: Node | null): boolean };
+
+/**
+ * Whether a press on `target` falls outside every one of `roots` (one not mounted yet does not count); a target that
+ * is not a node (none, the window) is outside.
+ */
+export function pressedOutside(target: EventTarget | null, roots: readonly (PressRoot | null | undefined)[]): boolean {
+    if (target === null || !('nodeType' in target)) return true;
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- an event target with a nodeType is a Node
+    const node = target as Node;
+    return !roots.some((root) => root?.contains(node));
+}
+
+/**
+ * Closes a popover on a press outside `roots` (its trigger among them, so that the trigger toggles it) or on Escape.
+ * The press is a `pointerdown` taken in the capture phase on the document: the canvas (React Flow's d3-zoom) stops the
+ * mouse events of a press that starts a pan, so a `mousedown` / `click` listener never hears a press there.
+ */
+export function useDismissOutside(open: boolean, roots: () => readonly (PressRoot | null | undefined)[], close: () => void): void {
     useEffect(() => {
         if (!open) return;
-        const onDown = (e: MouseEvent) => {
-            if (root.current && !(e.target instanceof Node && root.current.contains(e.target))) close();
+        const onDown = (e: PointerEvent) => {
+            if (pressedOutside(e.target, roots())) close();
         };
         const onKey = (e: KeyboardEvent) => {
             if (e.key === 'Escape') close();
         };
-        document.addEventListener('mousedown', onDown);
+        document.addEventListener('pointerdown', onDown, true);
         document.addEventListener('keydown', onKey);
         return () => {
-            document.removeEventListener('mousedown', onDown);
+            document.removeEventListener('pointerdown', onDown, true);
             document.removeEventListener('keydown', onKey);
         };
-    }, [open, root, close]);
+    }, [open, roots, close]);
+}
+
+/** Closes a dropdown on a press outside `root` (which holds its button and its menu) or on Escape. */
+export function useDismiss(open: boolean, root: RefObject<HTMLElement | null>, close: () => void): void {
+    const roots = useCallback(() => [root.current], [root]);
+    useDismissOutside(open, roots, close);
 }
 
 /**

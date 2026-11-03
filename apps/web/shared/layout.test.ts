@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { dragPane } from './layout';
+import { dragPane, pressedOutside, type PressRoot } from './layout';
 
 describe('dragging a pane edge', () => {
     test('follows the pointer within the limits', () => {
@@ -101,5 +101,40 @@ describe("the left column's split", () => {
         // a column not laid out yet, or too short for both: the detail keeps its minimum
         expect(detailSize(null, 0)).toBe(DETAIL_MIN);
         expect(detailSize(400, 200)).toBe(DETAIL_MIN);
+    });
+});
+
+describe('a press outside a popover', () => {
+    // a stand-in for the DOM: a node is inside a root when the root is the node or one of its ancestors
+    type Fake = { nodeType: number; parent?: Fake };
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- a stand-in for a DOM node
+    const node = (parent?: Fake): EventTarget & Fake => ({ nodeType: 1, parent }) as unknown as EventTarget & Fake;
+    const root = (self: Fake): PressRoot => ({
+        contains: (other) => {
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the stand-in passed as the target
+            for (let n = other as unknown as Fake | undefined; n; n = n.parent) if (n === self) return true;
+            return false;
+        },
+    });
+
+    test('a press inside the popover or on its trigger is not outside it; one elsewhere (the canvas) is', () => {
+        const menu = node();
+        const item = node(menu);
+        const trigger = node();
+        const canvas = node();
+        const roots = [root(menu), root(trigger)];
+        expect(pressedOutside(item, roots)).toBe(false);
+        expect(pressedOutside(menu, roots)).toBe(false);
+        expect(pressedOutside(trigger, roots)).toBe(false);
+        expect(pressedOutside(canvas, roots)).toBe(true);
+    });
+
+    test('a root not mounted yet does not count, and a target that is not a node is outside', () => {
+        const menu = node();
+        expect(pressedOutside(node(menu), [null, undefined, root(menu)])).toBe(false);
+        expect(pressedOutside(node(), [null])).toBe(true);
+        expect(pressedOutside(null, [root(menu)])).toBe(true);
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the window as a target
+        expect(pressedOutside({} as EventTarget, [root(menu)])).toBe(true);
     });
 });
