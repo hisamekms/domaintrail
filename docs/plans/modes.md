@@ -1547,3 +1547,68 @@ button and the answer's icon follow the new name. A guide answer is a **guide ca
    - ⭐ on the `/` list for the commands it suggests, as `/hint` does today.
 
 **Scope: 0.7.0.** The ES map, and all four modeling patterns with the growing BC map.
+
+## The journey file: briefs, goals and marks out of `///` (decided 2026-11-03)
+
+This replaces where the guide's goal is read from (above) and where the interviews' briefs are written (`/es:start`,
+`/model:start`). The guide's map, at-once checks and advice do not change.
+
+### Why
+
+- A brief in the `///` above a `storming` or `context` fits neither modeling nor change:
+  - pattern A starts before any context exists;
+  - a modeling effort spans several contexts;
+  - a context split across files has several places for `///`;
+  - each goal change took an interview, an approval and a run.
+- A brief mixes two kinds of information:
+  - **why**: purpose, scope, use and who takes part. It changes rarely and is kept as text.
+  - **how far**: the level, the pattern and the goal. It changes often, and the guide reads it.
+
+### The file
+
+- **`domaintrail.journey.json`** at the workspace root, next to `domaintrail.jsonc`, and **tracked by git**.
+  - It is a fourth kind of file: not the model, not configuration (the config is trust-hashed, and a goal change must
+    not ask for trust again), and not session state.
+  - It holds what the work in this workspace is for, how far it goes and how far it has come.
+- **Contents:**
+  - **ES: one journey per storming**, keyed by the storming's ID. It holds the why and the level (`BigPicture` |
+    `DesignLevel`).
+  - **Modeling: named journeys, several allowed.** For example 「Billing の深掘り」 (C) and 「全体の見直し」 (D) side by
+    side.
+    - Each has the why, the pattern (A–D), the goal, and the pattern's subject: the storming(s) for B, the context for
+      C.
+    - The guide shows one at a time and offers a picker when there are several. Each viewer remembers their choice.
+  - **Marks:** the steps a person marked done (those that cannot be judged from the files), per journey. Marks on BC
+    rows are keyed by the context's name.
+- **Fixed words.** Enums are in English in the file. The why is free text in the language of the interview.
+  - A JSON Schema goes in `schema/journey.schema.json`.
+  - dt writes the file with a stable key order, so diffs stay small.
+- **Who writes it.** Only explicit acts change it: a brief confirmed, a goal changed on the card (🏁), a mark set or
+  cleared.
+  - These are the facilitator's own acts; a participant's need the facilitator's approval, as for briefs today.
+  - dt writes the file itself; no AI run is involved. A new storming still needs a run to create its `storming` block.
+  - An AI working outside dt (Claude Code) may read the file; `dt guide` describes it.
+- **Checks.** `dt check` validates the file against the schema (an error). A journey naming a storming or context that
+  no longer exists is a warning, and the guide shows it as "missing".
+- **Shown where.** Selecting a storming shows its ES journey's why and level in the detail. Selecting a context shows
+  the modeling journeys that include it.
+- **No migration.** `/es:start` and `/model:start` writing `///` briefs were never released. The examples and fixtures
+  move to the new file.
+
+### `///` becomes a short description, in one place
+
+- In `.dt` and `.dtes` alike, `///` is a short description of what the element is. It is no longer a brief.
+- **A context's description is written once.** A second `///` on the same context, in another file, is **an error**
+  (a new rule, `M025`). The error names both places and says to merge them into one.
+  - Today the first one in file-name order wins silently; adding or renaming a file swaps the description.
+  - It is an error, not a warning, because the AI works until `dt check` exits 0, and a warning would not stop it.
+  - `dt guide` recommends keeping a split context's description and its context-wide types in `_context.dt`. This is
+    advice, not a rule.
+- **A storming lives in one file** (decided as the intended form, not a gap).
+  - The order in which things are written has meaning: the first timeline of a section is its trunk, and a stage with
+    no `after` follows the stages written before it.
+  - People do not look at files, and the AI reads and edits large files in parts.
+  - If size ever calls for splitting, the rules are ready:
+    - a storming body file plus one file per stage, a stage never split;
+    - `after` required on every stage but the first;
+    - no stageless timelines in a split storming.
