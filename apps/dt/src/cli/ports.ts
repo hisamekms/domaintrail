@@ -39,6 +39,11 @@ export interface CliDeps {
     startSessionServer(options: SessionServerOptions): Promise<StartedSession>;
     /** Another facilitator link for the session server running on the workspace; rejects with `SessionError` when none runs. */
     issueFacilitatorLink(root: string): Promise<{ link: string; expiresAt: Date }>;
+    /**
+     * A new invite link for the `link` session running on the workspace (the previous one stops working), or with `stop`
+     * the invite stopped; rejects with `SessionError` when no `link` session runs.
+     */
+    issueInvite(root: string, stop?: boolean): Promise<{ link: string; expiresAt: Date } | { stopped: boolean }>;
     /** A one-time agent pairing code for the session server running on the workspace; rejects with `SessionError` when none runs. */
     issueAgentLink(root: string): Promise<{ code: string; agentUrl: string; expiresAt: Date }>;
     /** Another one-time sign-in link for the `dt open` server running on the workspace; rejects with `SessionError` when none runs or it is `dt collab`'s. */
@@ -134,6 +139,10 @@ export interface StartedSession {
     opened: 'started' | 'resumed' | 'collaborated';
     /** The one-time facilitator link; in `Solo`, the one-time link that signs the launching user's browser in as its person. */
     facilitatorLink?: string;
+    /** The public origin of a `link` session (the links are made with it). */
+    publicUrl?: string;
+    /** `link`: a new invite link (the previous one stops working). */
+    issueInvite?(): Promise<{ link: string; expiresAt: string }>;
     /** Resolves when the facilitator closes the session. */
     closed: Promise<void>;
     stop(): Promise<void>;

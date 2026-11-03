@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { Duplex } from 'node:stream';
-import { checkAccess, hostAllowList, type AccessPolicy, type Authorization } from './access.js';
+import { changesState, checkAccess, hostAllowList, type AccessPolicy, type Authorization } from './access.js';
 import type { Assets } from './assets.js';
 import { sendError } from './json.js';
 import { send, type ApiRoutes } from './routes.js';
@@ -72,7 +72,7 @@ export function createViewHttpServer({ host, api, assets, upgrade, session }: Vi
             if (api.has(url.pathname) && (await checkAccess(req.headers, viewPolicy)).kind === 'forbidden') return send(res, 403, 'text/plain', 'Forbidden');
             return serveView(req, url, res);
         }
-        const auth = await checkAccess(req.headers, session.policy);
+        const auth = await checkAccess(req.headers, session.policy, changesState(req.method));
         if (auth.kind === 'forbidden') {
             return isApi(url.pathname) ? sendError(res, 403, 'Forbidden', 'Host or Origin not allowed.') : send(res, 403, 'text/plain', 'Forbidden');
         }
@@ -100,7 +100,8 @@ export function createViewHttpServer({ host, api, assets, upgrade, session }: Vi
         const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
         const refuse = (status: string): void => void socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`);
         if (pathname !== WS_PATH) return refuse('404 Not Found');
-        checkAccess(req.headers, session?.policy ?? viewPolicy).then(
+        // a WebSocket sends messages that change things: its upgrade needs an Origin where a session requires one
+        checkAccess(req.headers, session?.policy ?? viewPolicy, true).then(
             (auth) => {
                 if (auth.kind === 'forbidden') return refuse('403 Forbidden');
                 if (session && auth.kind !== 'participant') return refuse('401 Unauthorized');

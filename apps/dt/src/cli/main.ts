@@ -484,8 +484,13 @@ Examples:
         await printConfig(cfg);
         const opened = server.opened === 'collaborated' ? 'continued from dt open' : server.opened;
         io.out(`Session: ${server.session} (${opened}, identity ${settings.identity})`);
-        io.out(`Live View: ${server.url}`);
+        io.out(`Live View: ${server.publicUrl ? `${server.publicUrl}/ (on this machine: ${server.url})` : server.url}`);
         if (server.facilitatorLink) io.out(`Facilitator link (single use, expires in 10 minutes): ${server.facilitatorLink}`);
+        if (server.issueInvite) {
+            // `link`: the invite to share; each person who opens it asks to join, and you let them in from the page
+            const invite = await server.issueInvite();
+            io.out(`Invite link (anyone with it can ask to join; expires in 60 minutes; the page's 招待 makes another): ${invite.link}`);
+        }
         io.out(`Agent API: ${server.agentUrl} (another agent pairs with a code: dt collab agent-link)`);
         await serveWithAgent(cfg, opts, server);
     });
@@ -509,6 +514,31 @@ Examples:
                 throw e;
             });
             io.out(`Facilitator link (single use, expires in 10 minutes): ${link}`);
+        });
+
+    collab
+        .command('invite')
+        .description('Print a new invite link for the link-mode collaboration session running on the workspace (the previous one stops working).')
+        .option('--stop', 'stop the invite link instead: nobody can ask to join with it any more')
+        .addHelpText(
+            'after',
+            `
+In the link identity mode (\`dt collab --tunnel\`, or collab.identity "link"), people join through an invite link:
+whoever opens it gives a name and waits until the facilitator lets them in (or not) from the page. The link works for
+60 minutes, any number of times; a new one stops the previous one, and the requests made through it expire.
+
+Examples:
+  dt collab invite
+  dt collab invite --stop`,
+        )
+        .action(async (opts: { stop?: boolean }) => {
+            const cfg = await config();
+            const invite = await deps.issueInvite(cfg.root, opts.stop ?? false).catch((e: unknown) => {
+                if (e instanceof SessionError) throw new CliError(e.message);
+                throw e;
+            });
+            if ('stopped' in invite) io.out(invite.stopped ? 'Invite link stopped.' : 'No invite link was live.');
+            else io.out(`Invite link (anyone with it can ask to join; expires in 60 minutes): ${invite.link}`);
         });
 
     open.command('link')

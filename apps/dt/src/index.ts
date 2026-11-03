@@ -11,6 +11,7 @@ export {
     issueAgentLink,
     issueOpenLink,
     issueFacilitatorLink,
+    issueInvite,
     startSessionServer,
     WS_EXPIRED,
     WS_REVOKED,

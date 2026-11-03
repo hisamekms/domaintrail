@@ -93,6 +93,7 @@ export function cliDeps(): CliDeps {
         },
         issueFacilitatorLink: async (root) => (await import('./wiring/session.js')).issueFacilitatorLink(root),
         issueAgentLink: async (root) => (await import('./wiring/session.js')).issueAgentLink(root),
+        issueInvite: async (root, stop) => (await import('./wiring/session.js')).issueInvite(root, stop),
         issueOpenLink: async (root) => (await import('./wiring/session.js')).issueOpenLink(root),
         checkAgent: async () => (await import('@domaintrail/agent')).checkClaudeCode(),
         localConfigState: (file) => gitFileState(file),

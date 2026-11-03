@@ -1,7 +1,10 @@
 // Who sends a request to a session (ADR 0026, S4): the identity of the configured mode, and the participant and role
 // it stands for. `dev`: the session cookie (`dt_session`, opaque, HttpOnly, SameSite=Strict) of a sign-in made with a
 // picked name; `access`: the Cloudflare Access token (`Cf-Access-Jwt-Assertion` header, else the `CF_Authorization`
-// cookie when configured), verified by the `IdentityProvider` on every request. The facilitator is the identity that used a facilitator link.
+// cookie when configured), verified by the `IdentityProvider` on every request; `link`: a session cookie as in `dev`,
+// but of a name chosen when the server starts (`__Host-dt_link_<random>`, Secure) and given only once the facilitator
+// approved a join request (`../session/link-join.ts`), or to whoever signs in with a facilitator link. The facilitator
+// is the identity that used a facilitator link.
 import type { IncomingHttpHeaders } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import {
@@ -17,6 +20,7 @@ import {
     ok,
     participantOf,
     type Result,
+    sameIdentity,
     secretHash,
     type SessionAccess,
     type SignIn,
@@ -42,12 +46,29 @@ export interface SessionFull {
 
 export type SignInError = SessionFull | Collaboration.SessionNotFound | Collaboration.SessionAlreadyClosed | Collaboration.SoloSession;
 
+/** The participant cannot be removed: unknown, the facilitator, or not of a mode that signs in with a cookie. */
+export interface NotRemovable {
+    readonly type: 'NotRemovable';
+}
+
 export interface SessionIdentities {
     readonly mode: IdentityMode;
+    /** The name of the cookie a sign-in sets (`dev`, `link`). */
+    readonly cookieName: string;
     /** Who sent these headers, if anyone; in `access` mode an identity seen for the first time joins the session. */
     identify(headers: IncomingHttpHeaders): Promise<Identified | undefined>;
-    /** `dev`: a new identity named `name` joins the session; the cookie's secret, given once. */
+    /** `dev`, `link`: a new identity named `name` joins the session; the cookie's secret, given once. */
     signIn(name: Collaboration.DisplayName): Promise<Result<{ readonly secret: string; readonly identified: Identified }, SignInError>>;
+    /**
+     * `link`: a new identity named `name` signs in holding the facilitator role, with a facilitator link's `code` (used
+     * up): the cookie's secret, given once, and the previous holder, if any. Nothing is signed in when the code is not valid.
+     */
+    signInFacilitator(
+        name: Collaboration.DisplayName,
+        code: string,
+    ): Promise<Result<{ readonly secret: string; readonly identified: Identified; readonly previous: IdentityKey | undefined }, LinkInvalid | SignInError>>;
+    /** `link`: revokes every sign-in of a participant (removed by the facilitator): the identity it was. */
+    remove(participant: string): Promise<Result<IdentityKey, NotRemovable>>;
     /** `dev`: revokes the sign-in of these headers' cookie: the identity it was, if any. */
     signOut(headers: IncomingHttpHeaders): Promise<IdentityKey | undefined>;
     /** Uses a facilitator link: the identity holds the facilitator role from now on; the previous holder, if any. */
@@ -68,6 +89,8 @@ export interface SessionIdentitiesDeps {
     readonly access: SessionAccess;
     readonly collaboration: CollaborationUseCases;
     readonly maxParticipants: number;
+    /** The cookie of a sign-in (`dev`, `link`). Default: `DEV_COOKIE`. */
+    readonly cookieName?: string;
 }
 
 /** The cookies of a request by name (the first of a name wins). */
@@ -89,16 +112,25 @@ export function accessToken(headers: IncomingHttpHeaders, acceptCookie: boolean)
     return acceptCookie ? cookies(headers).get(ACCESS_COOKIE) || undefined : undefined;
 }
 
-/** The `dev` cookie's secret of a request, when it has the shape of one. */
-export function devSecret(headers: IncomingHttpHeaders): string | undefined {
-    const secret = cookies(headers).get(DEV_COOKIE);
+/** The sign-in cookie's secret of a request (`DEV_COOKIE` unless named), when it has the shape of one. */
+export function devSecret(headers: IncomingHttpHeaders, cookieName: string = DEV_COOKIE): string | undefined {
+    const secret = cookies(headers).get(cookieName);
     return secret && SECRET.test(secret) ? secret : undefined;
+}
+
+/** The identity a participant ID of a cookie sign-in stands for (`link:<subject>`, `dev:<subject>`), if it is one. */
+function identityOfParticipant(participant: string, provider: IdentityMode): IdentityKey | undefined {
+    const prefix = `${provider}:`;
+    const subject = participant.startsWith(prefix) ? participant.slice(prefix.length) : '';
+    return /^[0-9a-f-]{36}$/.test(subject) ? { provider, subject } : undefined;
 }
 
 const keyOf = (identity: IdentityKey): IdentityKey => ({ provider: identity.provider, subject: identity.subject });
 
 export function createSessionIdentities(deps: SessionIdentitiesDeps): SessionIdentities {
     const { session, mode, access, collaboration, maxParticipants } = deps;
+    const cookieName = deps.cookieName ?? DEV_COOKIE;
+    const withCookie = mode === 'dev' || mode === 'link';
     if (mode === 'access' && !deps.provider) throw new Error('The access identity mode needs an identity provider');
 
     /** Sign-ins by their secret's hash, as looked up (revoked ones are dropped). */
@@ -137,12 +169,13 @@ export function createSessionIdentities(deps: SessionIdentitiesDeps): SessionIde
 
     return {
         mode,
+        cookieName,
 
         async identify(headers) {
             // a closed session identifies no one: neither a cached sign-in, nor the facilitator, nor a joined identity
             if (!(await isOpen())) return undefined;
-            if (mode === 'dev') {
-                const secret = devSecret(headers);
+            if (withCookie) {
+                const secret = devSecret(headers, cookieName);
                 if (!secret) return undefined;
                 const hash = secretHash(secret);
                 const signIn = signIns.get(hash) ?? (await access.signedIn(secret));
@@ -159,9 +192,9 @@ export function createSessionIdentities(deps: SessionIdentitiesDeps): SessionIde
         },
 
         async signIn(name) {
-            if (mode !== 'dev') throw new Error('Only the dev identity mode signs in with a name');
+            if (!withCookie) throw new Error('Only the dev and link identity modes sign in with a name');
             if (!(await isOpen())) return err({ type: 'SessionAlreadyClosed' });
-            const identity: Identity = { provider: 'dev', subject: randomUUID(), displayName: name };
+            const identity: Identity = { provider: mode, subject: randomUUID(), displayName: name };
             const joinedAs = await join(identity);
             if (!joinedAs.ok) return joinedAs;
             const secret = await access.signIn({ session, identity });
@@ -169,8 +202,32 @@ export function createSessionIdentities(deps: SessionIdentitiesDeps): SessionIde
             return ok({ secret, identified: await identified(identity) });
         },
 
+        async signInFacilitator(name, code) {
+            if (mode !== 'link') throw new Error('Only the link identity mode signs the facilitator in with a link');
+            if (!(await isOpen())) return err({ type: 'SessionAlreadyClosed' });
+            const identity: Identity = { provider: mode, subject: randomUUID(), displayName: name };
+            // the code first: nothing is signed in with a code that is not valid
+            const claimed = await access.claimFacilitator({ session, code, identity: keyOf(identity) });
+            if (!claimed.ok) return claimed;
+            facilitator = Promise.resolve(keyOf(identity));
+            const secret = await access.signIn({ session, identity });
+            signIns.set(secretHash(secret), { session, identity });
+            return ok({ secret, identified: await identified(identity), previous: claimed.value.previous });
+        },
+
+        async remove(participant) {
+            if (mode !== 'link') return err({ type: 'NotRemovable' });
+            const identity = identityOfParticipant(participant, mode);
+            const holder = await facilitatorKey();
+            if (!identity || (holder && sameIdentity(holder, identity))) return err({ type: 'NotRemovable' });
+            await access.signOutIdentity({ session, identity });
+            for (const [hash, signIn] of signIns) if (sameIdentity(signIn.identity, identity)) signIns.delete(hash);
+            joined.delete(participantOf(identity));
+            return ok(identity);
+        },
+
         async signOut(headers) {
-            const secret = devSecret(headers);
+            const secret = devSecret(headers, cookieName);
             if (!secret) return undefined;
             const hash = secretHash(secret);
             const signIn = signIns.get(hash) ?? (await access.signedIn(secret));

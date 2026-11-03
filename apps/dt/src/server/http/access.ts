@@ -49,6 +49,12 @@ export interface AccessPolicy {
     readonly allowedOrigin?: (origin: URL, host: string) => boolean;
     /** A session's identities; absent in the read-only Live View, where everyone admitted is anonymous. */
     readonly identify?: Identify;
+    /**
+     * Whether a request that changes something (any method but GET and HEAD, and the WebSocket's upgrade) must carry an
+     * allowed `Origin`: a session open to the internet (`link`) refuses one without it, so that only its own pages make
+     * them (the CSRF check, with the SameSite=Strict cookie). Default: false (non-browser clients send no Origin).
+     */
+    readonly requireOrigin?: boolean;
 }
 
 const sameHost = (origin: URL, host: string): boolean => origin.host === host;
@@ -60,8 +66,9 @@ const sameHost = (origin: URL, host: string): boolean => origin.host === host;
  * no Origin. Then, in a session, who is asking. The read-only Live View has no identities: its answers are `forbidden` and
  * `anonymous`, as `'forbidden'` and `'ok'` were before.
  */
-export async function checkAccess(headers: IncomingHttpHeaders, policy: AccessPolicy): Promise<Authorization> {
+export async function checkAccess(headers: IncomingHttpHeaders, policy: AccessPolicy, changes = false): Promise<Authorization> {
     if (!hostAndOriginAllowed(headers, policy)) return { kind: 'forbidden' };
+    if (changes && policy.requireOrigin && !headers.origin) return { kind: 'forbidden' };
     if (!policy.identify) return { kind: 'anonymous' };
     const who = await policy.identify(headers);
     return who ? { kind: 'participant', participant: who.participant, role: who.role, actor: who.actor } : { kind: 'anonymous' };
@@ -82,6 +89,28 @@ function hostAndOriginAllowed(headers: IncomingHttpHeaders, policy: AccessPolicy
     } catch {
         return false;
     }
+}
+
+/** Whether a request of `method` changes something: anything but a read (the `requireOrigin` check). */
+export const changesState = (method: string | undefined): boolean => method !== 'GET' && method !== 'HEAD';
+
+/** Whether a socket's remote address is this machine (IPv4, IPv6, or IPv4 mapped into IPv6). */
+export const isLoopbackAddress = (address: string | undefined): boolean =>
+    address !== undefined && (address === '::1' || /^(::ffff:)?127\.\d+\.\d+\.\d+$/.test(address));
+
+/** The header the local `cloudflared` puts the visitor's address in. */
+const CONNECTING_IP = 'cf-connecting-ip';
+
+/**
+ * Who a request comes from, as a key for a rate limit: the socket's remote address, unless that is this machine and the
+ * request carries `CF-Connecting-IP` (the visitor's address, as the local `cloudflared` of a tunnel forwards it). A
+ * forwarded header is trusted only from loopback: from anywhere else it could say anything.
+ */
+export function clientKey(remoteAddress: string | undefined, headers: IncomingHttpHeaders): string {
+    const forwarded = headers[CONNECTING_IP];
+    if (isLoopbackAddress(remoteAddress) && typeof forwarded === 'string' && /^[0-9a-f.:]{2,45}$/i.test(forwarded.trim()))
+        return forwarded.trim().toLowerCase();
+    return remoteAddress ?? 'unknown';
 }
 
 /**

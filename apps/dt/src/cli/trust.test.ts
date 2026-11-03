@@ -46,6 +46,36 @@ describe('the security-relevant settings', () => {
         ]);
     });
 
+    test('the link identity mode, its public URL and --tunnel (the session on the internet) change them', () => {
+        const file = path.resolve('/w/domaintrail.jsonc');
+        const plain = settingsHash(securitySettings(defaultConfig('/w')));
+        const link = resolveConfig('{ "collab": { "identity": "link" } }', file);
+        expect(settingsHash(securitySettings(link))).not.toBe(plain);
+        const proxied = resolveConfig('{ "collab": { "identity": "link", "link": { "publicUrl": "https://dt.example.com" } } }', file);
+        expect(securitySettings(proxied)['collab.link']).toEqual({ publicUrl: 'https://dt.example.com' });
+        expect(settingsHash(securitySettings(proxied))).not.toBe(settingsHash(securitySettings(link)));
+        // --tunnel: the defaults of the file are no longer the defaults started with
+        expect(settingsHash(securitySettings(defaultConfig('/w'), { tunnel: true }))).not.toBe(plain);
+        expect(Object.keys(securitySettings(defaultConfig('/w'), { tunnel: true }))).toContain('collab --tunnel');
+    });
+
+    test('--tunnel asks for approval even with the default settings, and is refused without a terminal or --yes', async () => {
+        const root = await scratch();
+        const store = fileTrustStore(path.join(await scratch(), 'trust.json'));
+        const out: string[] = [];
+        const refused = await approveSettings(defaultConfig(root), { trust: store, out: (l) => out.push(l) }, false, { tunnel: true }).then(
+            () => undefined,
+            (e: unknown) => e,
+        );
+        expect(refused).toBeInstanceOf(NotApproved);
+        expect(out.some((l) => l.includes('collab --tunnel'))).toBe(true);
+        await approveSettings(defaultConfig(root), { trust: store, out: () => undefined }, true, { tunnel: true });
+        expect(await store.approved(root)).toBe(settingsHash(securitySettings(defaultConfig(root), { tunnel: true })));
+        // the same start again is not asked; without --tunnel, the defaults need no approval
+        await approveSettings(defaultConfig(root), { trust: store, out: () => undefined }, false, { tunnel: true });
+        await approveSettings(defaultConfig(root), { trust: store, out: () => undefined }, false);
+    });
+
     test('of the merge: a changed local file changes them', () => {
         const project = { text: '{}', file: path.resolve('/w/domaintrail.jsonc') };
         const local = (text: string) => resolveConfigWithLocal(project, { text, file: path.resolve('/w/domaintrail.local.jsonc') });

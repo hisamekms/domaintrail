@@ -1,6 +1,6 @@
 // The sections `collab` and `agent` of domaintrail.jsonc (ADR 0026, ADR 0030) composed from their owners (ADR 0027,
 // Project analysis and configuration): in `collab`, the app's port, host and connection guards (./server.ts) and
-// Collaboration's identity mode and its Access settings, participant limit and quick reactions; in `agent`, the app's
+// Collaboration's identity mode, its Access settings and its `link` mode's public URL, participant limit and quick reactions; in `agent`, the app's
 // `port` (the agent API), the agent's roles (`run`, `answer`, `triage`) and Collaboration's `run.maxPreviousRunDiff`.
 // Each section's unknown keys are checked here, with a hint for a key that was valid in the old `session` section.
 import {
@@ -24,6 +24,7 @@ import {
     validateAccessNeeded,
     validateCollaborationConfig,
     validateIdentityConfig,
+    validateLinkConfig,
     validatePreviousRunsConfig,
 } from '@domaintrail/collaboration';
 import {
@@ -61,6 +62,8 @@ export interface ResolvedCollabConfig {
     host: string;
     identity: ResolvedCollaborationConfig['identity'];
     access?: NonNullable<ResolvedCollaborationConfig['access']> & { allowedHosts: string[]; allowedOrigins: string[] };
+    /** The `link` identity mode: `publicUrl` (an origin), from `collab.link.publicUrl` or the quick tunnel of `--tunnel`. */
+    link?: { publicUrl?: string };
     maxParticipants: number;
     /** In the form reactions are kept (`normalizeEmoji`). */
     quickReactions: string[];
@@ -112,6 +115,8 @@ export function validateCollab(collab: unknown, keys: Readonly<Record<string, re
         for (const key of ACCESS_ORDER) (ACCESS_CHECKS[key] ?? ACCESS_GUARD_CHECKS[key])(access, fail);
     }
     validateAccessNeeded(collab, fail);
+    if (isObject(collab.link)) checkKeys(collab.link, 'collab.link', keys, fail);
+    validateLinkConfig(collab, fail);
     validateCollaborationConfig(collab, fail);
 }
 
@@ -158,6 +163,7 @@ export function resolveCollab(collab: CollabSectionFile = {}): ResolvedCollabCon
                     avatarHosts: access.avatarHosts,
                 },
             }),
+        ...(collaboration.link && { link: collaboration.link }),
         maxParticipants: collaboration.maxParticipants,
         quickReactions: collaboration.quickReactions,
     };
