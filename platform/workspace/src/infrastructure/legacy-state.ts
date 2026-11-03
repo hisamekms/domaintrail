@@ -251,7 +251,7 @@ export async function moveLegacyState(dirs: WorkspaceDirs, log: (line: string) =
         const record = await readWorkspaceRecord(dirs.state);
         if (record?.path === dirs.workspace && (await movedAsRecorded(legacy, toState, record))) {
             const gone = await removeLegacy(legacy, inv);
-            if (!gone) log(`Kept ${LEGACY_DIR}/: it holds files that are not dt's (${inv.foreign.join(', ')}).`);
+            if (!gone) log(`Kept ${LEGACY_DIR}/: it holds files that are not dt's (${[...inv.foreign].sort().join(', ')}).`);
             return 'finished';
         }
         return keep(`Kept ${LEGACY_DIR}/ as it is: ${where} already holds this workspace's files (remove one of them to choose).`);
@@ -319,6 +319,6 @@ export async function moveLegacyState(dirs: WorkspaceDirs, log: (line: string) =
     const gone = await removeLegacy(legacy, inv);
     if (toState.length || layout) log(`Moved ${LEGACY_DIR}/ to ${where}${path.sep}`);
     else if (gone) log(`Removed ${LEGACY_DIR}/ (nothing in it to keep).`);
-    if (!gone) log(`Kept ${LEGACY_DIR}/: it holds files that are not dt's (${inv.foreign.map(toPosix).join(', ')}).`);
+    if (!gone) log(`Kept ${LEGACY_DIR}/: it holds files that are not dt's (${inv.foreign.map(toPosix).sort().join(', ')}).`);
     return 'moved';
 }
