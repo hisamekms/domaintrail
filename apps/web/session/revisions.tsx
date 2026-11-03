@@ -2,16 +2,15 @@
 // model's words"): what a unit of work changed, in a dialog — the model's elements added, changed and removed, then,
 // folded, the comparison of its two revisions (each changed file's status and line diff, `.dt` and `.dtes` together,
 // and the validations when either has a finding); and, for the facilitator, recording the current state, reverting a unit
-// of work (from its card: mechanically, or by the AI) and restoring an earlier state (from the collab menu, the last
-// resort), with the two-step for external changes and the way through a run in progress. The words are the unit's: a
-// revision and its number are only in tooltips and in the source diff.
+// of work (from its card, asked first in a dialog; then the chat shows it as any request: the message and its card) and
+// restoring an earlier state (from the collab menu, the last resort), with the two-step for external changes and the way
+// through a run in progress. The words are the unit's: a revision and its number are only in tooltips and in the source diff.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
-import type { ComparedFileBody, ComparisonBody, SessionStateBody, RevertRequestedBody } from '@domaintrail/collaboration/protocol';
+import type { ComparedFileBody, ComparisonBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { useT, type Messages } from '../i18n';
 import { sessionApi, SessionApiError } from './api';
 import { ChangeChip } from './card';
-import { obstacleText, revertProgress } from './cards';
 import { changeGroups, changeKey, changeWhat, useModelChanges } from './changes';
 import { useTargetNaming } from './naming';
 import { diffLines, restoreProblem, timeline, type TimelineEntry } from './timeline';
@@ -28,13 +27,6 @@ const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hou
 
 /** What a restore goes back to: an earlier state chosen in the collab menu, or the one kept before a restore that failed midway. */
 export type RestorePoint = 'revision' | 'preRestore';
-
-/** Where a revert of a unit of work stands: asked first, then its run (queued, followed on the page as it goes). */
-type RevertFlow = { readonly run: string; readonly name: string } & (
-    | { readonly step: 'confirm' }
-    | { readonly step: 'done'; readonly requested: RevertRequestedBody }
-    | { readonly step: 'failed'; readonly message: string }
-);
 
 /** A unit of work to revert: its latest run, and its name as the chat shows it. */
 export interface RevertSubject {
@@ -64,12 +56,12 @@ export interface ChangesSubject {
 export interface RevisionTools {
     /** The restore's box, while one is under way: placed in the chat. */
     readonly node: ReactNode;
-    /** The changes' dialog, while one is open: placed outside the tabs, so that AI の作業 opens it too. */
+    /** The changes' dialog or the revert's, while one is open: placed outside the tabs, so that AI の作業 opens them too. */
     readonly dialog: ReactNode;
     showChanges(subject: ChangesSubject): void;
     /** Restores an earlier state of the workspace (asked first): the collab menu's last resort. */
     restore(revision: string): void;
-    /** Reverts a unit of work (asked first): its changes only, queued, then mechanically or by the AI. */
+    /** Reverts a unit of work (asked first): its changes only, queued like any request, then mechanically or by the AI. */
     revert(subject: RevertSubject): void;
     take(): void;
     /** A revision's number in the session (`#3`), for tooltips. */
@@ -80,12 +72,17 @@ export interface RevisionTools {
  * The facilitator's revision actions in the chat (ADR 0026, amendment): recording the current state and restoring,
  * with the two-step for external changes and the way through a run in progress, and the changes of a unit in a dialog. The server checks the role anyway.
  */
-export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools {
+export function useRevisionTools(
+    state: SessionStateBody,
+    tx: Tx,
+    /** A revert was asked: its message and its run, for the chat to go to once both are there. */
+    onRevertRequested: (asked: { readonly request: string; readonly run: string }) => void,
+): RevisionTools {
     const entries = timeline(state);
     const numberOf = new Map(entries.map((e) => [e.revision.id, e.number]));
     const [showing, setShowing] = useState<ChangesSubject | undefined>();
     const [flow, setFlow] = useState<RestoreFlow | undefined>();
-    const [reverting, setReverting] = useState<RevertFlow | undefined>();
+    const [reverting, setReverting] = useState<RevertSubject | undefined>();
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | undefined>();
     const n = (id: string): string => String(numberOf.get(id) ?? '?');
@@ -118,16 +115,13 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
             setBusy(false);
         }
     };
-    const revert = async (subject: RevertSubject): Promise<void> => {
-        setBusy(true);
-        try {
+    // the dialog closes at once; a failed call is told as the other actions' are
+    const revert = (subject: RevertSubject): void => {
+        setReverting(undefined);
+        void act(async () => {
             const requested = await sessionApi.revertRun(subject.run, tx.chat.revertBody(subject.name));
-            setReverting({ ...subject, step: 'done', requested });
-        } catch (e) {
-            setReverting({ ...subject, step: 'failed', message: failure(e) });
-        } finally {
-            setBusy(false);
-        }
+            onRevertRequested({ request: requested.request.id, run: requested.run.id });
+        });
     };
     const cancelRun = async (what: RestorePoint, revision: string, run: string): Promise<void> => {
         if (await act(() => sessionApi.cancelRun(run))) setFlow({ what, step: 'run', revision, run, cancelled: true });
@@ -135,16 +129,6 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
 
     const node = (
         <>
-            {reverting && (
-                <RevertBox
-                    flow={reverting}
-                    runs={state.runs}
-                    busy={busy}
-                    onRevert={() => void revert(reverting)}
-                    onClose={() => setReverting(undefined)}
-                    tx={tx}
-                />
-            )}
             {flow && (
                 <RestoreBox
                     flow={flow}
@@ -165,7 +149,12 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
     );
     return {
         node,
-        dialog: showing && <ChangesDialog subject={showing} n={n} entries={entries} onClose={() => setShowing(undefined)} />,
+        dialog: (
+            <>
+                {showing && <ChangesDialog subject={showing} n={n} entries={entries} onClose={() => setShowing(undefined)} />}
+                {reverting && <RevertDialog name={reverting.name} onRevert={() => revert(reverting)} onClose={() => setReverting(undefined)} tx={tx} />}
+            </>
+        ),
         showChanges: setShowing,
         restore: (revision) => {
             setReverting(undefined);
@@ -173,7 +162,7 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
         },
         revert: (subject) => {
             setFlow(undefined);
-            setReverting({ ...subject, step: 'confirm' });
+            setReverting(subject);
         },
         take: () => void act(() => sessionApi.takeRevision()),
         number: n,
@@ -181,53 +170,43 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
 }
 
 /**
- * The revert of a unit of work in the chat: asked first, then where its run stands, followed live — queued (behind how
- * many), reverted mechanically (or nothing was left to revert), left to the AI and why, with the AI, or stopped.
+ * The confirmation before a revert, over the page: 〈作業名〉の変更を打ち消しますか？, then やめる (the focus starts there; Esc
+ * too) or 打ち消す.
  */
-function RevertBox(props: { flow: RevertFlow; runs: SessionStateBody['runs']; busy: boolean; onRevert: () => void; onClose: () => void; tx: Tx }) {
-    const { flow, busy, tx } = props;
+function RevertDialog(props: { name: string; onRevert: () => void; onClose: () => void; tx: Tx }) {
+    const { name, onClose, tx } = props;
     const u = tx.revertFlow;
-    const body = ((): { text: string; error?: boolean } => {
-        switch (flow.step) {
-            case 'confirm':
-                return { text: u.confirm(flow.name) };
-            case 'done': {
-                const p = revertProgress(flow.requested.run.id, props.runs) ?? { kind: 'queued', ahead: flow.requested.ahead };
-                switch (p.kind) {
-                    case 'queued':
-                        return { text: u.queued(p.ahead) };
-                    case 'reverted':
-                        return { text: u.mechanical(flow.name) };
-                    case 'nothing':
-                        return { text: u.nothing };
-                    case 'leftToAgent':
-                        return { text: obstacleText(p.obstacle, u) };
-                    case 'agent':
-                        return { text: u.agent };
-                    case 'stopped':
-                        return { text: u.stopped };
-                }
-                break;
-            }
-            case 'failed':
-                return { text: u.failed(flow.message), error: true };
+    const dialog = useRef<HTMLDialogElement>(null);
+    const keep = useRef<HTMLButtonElement>(null);
+    useEffect(() => {
+        const el = dialog.current;
+        if (el && !el.open) {
+            el.showModal();
+            keep.current?.focus();
         }
-        return { text: '' };
-    })();
+        return () => el?.close();
+    }, []);
     return (
-        <div className={`session-note session-revert step-${flow.step}${body.error ? ' session-error' : ''}`} role="status">
-            <p>{body.text}</p>
-            <div className="session-buttons">
-                {flow.step === 'confirm' && (
-                    <button className="primary session-revert-confirm" disabled={busy} onClick={props.onRevert}>
-                        {u.revert}
-                    </button>
-                )}
-                <button className="small" onClick={props.onClose}>
-                    {flow.step === 'confirm' ? u.cancel : u.close}
+        <dialog
+            ref={dialog}
+            className="session-dialog cancel-dialog revert-dialog"
+            aria-labelledby="revert-dialog-title"
+            onClose={onClose}
+            // a click on the backdrop lands on the dialog itself
+            onClick={(e) => e.target === e.currentTarget && onClose()}
+        >
+            <h2 id="revert-dialog-title" className="cancel-dialog-title">
+                {u.confirm(name)}
+            </h2>
+            <div className="cancel-dialog-buttons">
+                <button ref={keep} type="button" className="cancel-dialog-button" onClick={onClose}>
+                    {u.cancel}
+                </button>
+                <button type="button" className="cancel-dialog-button danger revert-dialog-confirm" onClick={props.onRevert}>
+                    {u.revert}
                 </button>
             </div>
-        </div>
+        </dialog>
     );
 }
 

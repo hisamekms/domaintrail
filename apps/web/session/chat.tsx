@@ -161,7 +161,10 @@ export function SessionChat(props: {
     const now = useNow(running);
     const actions = useChatActions();
     const marking = useMarking(session);
-    const revisions = useRevisionTools(state, tx);
+    // a revert just asked: its message, gone to once the stream has it and its card below it (the server's events may
+    // come after its answer)
+    const [revertAsked, setRevertAsked] = useState<{ readonly request: string; readonly run: string } | undefined>();
+    const revisions = useRevisionTools(state, tx, setRevertAsked);
     const [leaveError, setLeaveError] = useState<string | undefined>();
     const leave = async (): Promise<void> => {
         try {
@@ -296,6 +299,15 @@ export function SessionChat(props: {
             setTimeout(() => el.classList.remove('chat-flash'), 1600);
         });
     }, []);
+
+    useEffect(() => {
+        if (revertAsked === undefined) return;
+        const key = `message:${revertAsked.request}`;
+        const card = items.some((i) => i.kind === 'card' && i.unit.runs.some((r) => r.run.id === revertAsked.run));
+        if (!card || !items.some((i) => i.key === key)) return;
+        setRevertAsked(undefined);
+        jump(key);
+    }, [revertAsked, items, jump]);
 
     // the header status clicked: AI の作業, at the unit it stands for (opened and revealed); the chat keeps its scroll
     const [peek, setPeek] = useState<Peek | undefined>();

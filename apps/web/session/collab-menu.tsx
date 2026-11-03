@@ -212,7 +212,7 @@ export function CollabMenu(props: {
 }
 
 /**
- * 以前の状態に復元… (the facilitator's last resort): the states the workspace can go back to, newest first, each named by
+ * 以前の状態に復元 (the facilitator's last resort): the states the workspace can go back to, newest first, each named by
  * what it was — the collab's start, before or after a unit of work, a record by someone, before or after a restore —
  * with its time (its revision's number in the tooltip). Choosing one closes the dialog; the chat asks before it
  * restores, and walks through external changes and a run in progress as any restore does.

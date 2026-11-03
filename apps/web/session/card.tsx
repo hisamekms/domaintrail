@@ -4,11 +4,12 @@
 // reply says of each, ✓ 対応 ◐ 一部 – 未対応 ? 確認); a click goes to the message, a hover marks it. The AI's question
 // and what it assumed sit on surfaces of their own, their options and alternatives as cards with ♡ at the right. The
 // facilitator answers a question by choosing, approves an assumption or sends the requests again with an alternative,
-// cancels a run (asked first), and through the card's menu reverts what it changed (asked first: mechanically, or by
-// the AI) or shows what it changed. A mechanical revert is a card of its own, 打ち消し, without the AI. What a run changed is a line of model elements under its text (`ChangedElements`), shared with
-// AI の作業.
+// cancels a run (asked first), and through the card's menu reverts what it changed (asked first) or shows what it
+// changed. A revert is a card like any other, the AI's turn whether the server reverted it mechanically or the AI did:
+// queued (behind how many), done, nothing left to revert, stopped or failed. What a run changed is a line of model
+// elements under its text (`ChangedElements`), shared with AI の作業.
 import { useRef, useState, type ReactNode } from 'react';
-import { Bot, Check, Circle, CircleDot, Reply, CircleX, Ellipsis, FileDiff, Hourglass, Pencil, Square, SquareCheck, Undo2 } from 'lucide-react';
+import { Bot, Check, Circle, CircleDot, Reply, CircleX, Ellipsis, FileDiff, Hourglass, Pencil, Square, SquareCheck } from 'lucide-react';
 import { revertableChanges, revertStatus } from '@domaintrail/collaboration';
 import type { ElementChange } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
@@ -16,7 +17,7 @@ import { useClipped } from '../view/toolbar';
 import { answerBody, type QuestionChoice } from './actions';
 import { ActivityLine } from './activity';
 import { OtherDialog } from './answer-other';
-import { cardMenuItems, cardRuns, obstacleText, quoteDisplay, type CardRun, type Quote, type QuoteDisplay } from './cards';
+import { cardMenuItems, cardRuns, obstacleText, queueAhead, quoteDisplay, type CardRun, type Quote, type QuoteDisplay } from './cards';
 import { changeFullName, changeKey, changeShortName, changeTarget, useModelChanges } from './changes';
 import { useChat, type Tx } from './chat-context';
 import { assumptionDecision, questionsState, type QuestionsState } from './decisions';
@@ -48,13 +49,14 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
     // the chunk's title, once the AI gave one: the quotes under it already say what the messages were
     const title = unitName(unit);
     const about = useUnitAbout(unit);
-    // a mechanical revert: no AI took part, the card says what it is
-    const reverted = first.run.state === 'Reverted';
+    // queued: how many runs it waits behind; a revert left to the AI says why in the state's tooltip
+    const ahead = queueAhead(last.run.id, session.state.runs);
+    const obstacle = last.message.kind === 'queued' ? last.message.revertObstacle : undefined;
     // an AI turn: the AI's avatar and name, the chunk's title and when it started (who queued it in the tooltip); at the
     // right end, in the status slot, the state only where nothing else shows it (queued, running with its time, declined,
     // failed, cancelled), then the facilitator's ✕ on a run not finished
     const status = state && (
-        <span className={`chat-state state-${state}`}>
+        <span className={`chat-state state-${state}`} {...(obstacle && { 'data-tooltip': obstacleText(obstacle, tx.chat.revertObstacle) })}>
             <StateLabel
                 state={state}
                 label={last.message.kind === 'running' ? runningLabel(tx.chat.marks, elapsed(last.message.since, chat.now)) : tx.chat.marks[state]}
@@ -64,11 +66,11 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
     return (
         <div className={`run-card status-${last.message.kind}${compact ? ' compact' : ''}`} data-card={unit.key}>
             <span className="session-avatar chat-agent-avatar" aria-hidden>
-                {reverted ? <Undo2 size={13} /> : <Bot size={13} />}
+                <Bot size={13} />
             </span>
             <div className="run-card-main">
                 <div className="run-card-head">
-                    <span className="chat-who">{reverted ? tx.chat.reverter : tx.chat.agent}</span>
+                    <span className="chat-who">{tx.chat.agent}</span>
                     <span className="run-card-meta">
                         {/* in AI の作業, the row above already names it */}
                         {title.kind === 'title' && !compact && (
@@ -84,6 +86,7 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                     {/* in AI の作業, the row above has the ✕ and the card only its link to the chat */}
                     {(status || (cancellable && !compact) || (compact && actions)) && (
                         <span className="run-card-tools">
+                            {ahead !== undefined && ahead > 0 && <span className="run-card-ahead">{tx.chat.ahead(ahead)}</span>}
                             <StatusSlot>{status}</StatusSlot>
                             {compact ? actions : cancellable && <CancelButton unit={unit} />}
                         </span>
@@ -199,12 +202,7 @@ function CardMenu({ last, about, name }: { last: RunJson; about: string; name: s
                 <div className="pane-menu-list" role="menu">
                     {revertable && (
                         <>
-                            <button
-                                role="menuitem"
-                                data-item="revert"
-                                onClick={pick(() => revisions.revert({ run: last.id, name }))}
-                                data-tooltip={tx.chat.revertWorkHint}
-                            >
+                            <button role="menuitem" data-item="revert" onClick={pick(() => revisions.revert({ run: last.id, name }))}>
                                 {tx.chat.revertWork}
                             </button>
                             <div className="pane-menu-separator" role="separator" />
@@ -368,8 +366,6 @@ function AgentBody({ message: m }: { message: AgentMessage }) {
     const says = tx.chat.agentSays;
     switch (m.kind) {
         case 'queued':
-            // a revert left to the AI: why, until the AI takes it
-            return m.revertObstacle ? <p className="chat-text muted">{obstacleText(m.revertObstacle, tx.revertFlow)}</p> : null;
         case 'running':
             return null;
         case 'clarification':
@@ -406,7 +402,8 @@ function AgentBody({ message: m }: { message: AgentMessage }) {
         case 'cancelled':
             return <p className="chat-text muted">{says.cancelled(nameOf(m.by))}</p>;
         case 'reverted':
-            return <p className="chat-text">{m.changed ? says.reverted : says.revertedNothing}</p>;
+            // reverted mechanically: what it changed says it, below; else that nothing was left
+            return m.changed ? null : <p className="chat-text">{says.revertedNothing}</p>;
     }
 }
 

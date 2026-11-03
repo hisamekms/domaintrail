@@ -471,10 +471,10 @@ const ja = {
             invite: '招待リンクをコピー',
             inviteHint: 'このページのアドレスです。開いた人は参加者として加わります',
             inviteCopied: (link: string) => `招待リンクをコピーしました: ${link}`,
-            restore: '以前の状態に復元…',
+            restore: '以前の状態に復元',
             restoreTitle: '以前の状態に復元',
             restoreBody:
-                'ワークスペースの .dt と .dtes をすべて、選んだ時点の内容に復元します。あとの作業の変更も消えます。ひとつの作業だけを打ち消すときは、そのカードの「この作業を打ち消す…」を使ってください。',
+                'ワークスペースの .dt と .dtes をすべて、選んだ時点の内容に復元します。あとの作業の変更も消えます。ひとつの作業だけを打ち消すときは、そのカードの「この作業を打ち消す」を使ってください。',
             restoreNone: '復元できる以前の状態はありません。',
             restorePick: (n: number) => `#${n} の状態に復元`,
             restorePoints: {
@@ -487,7 +487,7 @@ const ja = {
                 PreRestore: '復元の前',
                 Restored: '復元の後',
             },
-            end: 'コラボを終える…',
+            end: 'コラボを終える',
             endTitle: 'コラボを終えますか？',
             endBody: '全員の画面が閉じ、元に戻せません。チャットと変更の記録は、ワークスペースの .domaintrail に残ります。',
             unfinishedTitle: 'まだ終わっていないもの',
@@ -531,25 +531,11 @@ const ja = {
             done: (what: RestorePoint): string => (what === 'revision' ? '以前の状態に復元しました。' : '復元の前の状態に復元しました。'),
             failed: (m: string) => `復元できませんでした: ${m}`,
         },
-        // reverting a unit of work from its card (apps/web/session/revisions.tsx)
+        // the confirmation before reverting a unit of work from its card (apps/web/session/revisions.tsx)
         revertFlow: {
-            confirm: (name: string) =>
-                `${name}の変更を打ち消しますか？ この作業が変えたところだけを元に戻し、あとの作業の変更は残します。ほかの作業と同じく待ちに入り、順が来たら機械的に打ち消します。あとの変更と重なるなどで機械的に打ち消せないときは、AI に打ち消しを頼みます。`,
+            confirm: (name: string) => `${name}の変更を打ち消しますか？`,
             revert: '打ち消す',
             cancel: 'やめる',
-            close: '閉じる',
-            mechanical: (name: string) => `${name}の変更を打ち消しました。`,
-            conflict: (paths: string) => `あとの変更と重なるところがあり（${paths}）、機械的には打ち消せませんでした。AI に打ち消しを頼みました。`,
-            check: '機械的に打ち消すとモデルの検査が通らないため、AI に打ち消しを頼みました。',
-            unreadable: '作業の前後の内容が残っていないため、AI に打ち消しを頼みました。',
-            queued: (ahead: number) =>
-                ahead > 0
-                    ? `打ち消しを待ちに入れました（前に ${ahead} 件）。順が来たら機械的に打ち消し、できなければ AI に頼みます。`
-                    : '打ち消しを待ちに入れました。機械的に打ち消し、できなければ AI に頼みます。',
-            agent: 'AI が打ち消しています。',
-            stopped: '打ち消しを中止しました。',
-            nothing: 'この作業の変更は、もうワークスペースに残っていませんでした。打ち消すものはありません。',
-            failed: (m: string) => `打ち消せませんでした: ${m}`,
         },
         chat: {
             close: 'チャットを閉じる',
@@ -597,12 +583,18 @@ const ja = {
             cardUpdated: (name: string) => (name ? `「${name}」が更新されました` : 'AI のカードが更新されました'),
             latest: (count: number, forMe: number) => (forMe > 0 ? `最新へ（あなた宛て ${forMe} 件）` : count > 0 ? `最新へ（新着 ${count} 件）` : '最新へ'),
             cardMenu: 'カードのメニュー',
-            revertWork: 'この作業を打ち消す…',
-            revertWorkHint: 'この作業が変えたところだけを打ち消します（あとの作業の変更は残ります）',
+            revertWork: 'この作業を打ち消す',
             revertBody: (name: string) => `${name}の変更を打ち消す`,
             reverted: '打ち消し済み',
             revertedHint: '打ち消しのカードへ',
-            reverter: '打ち消し',
+            // a queued run: how many runs it waits behind, beside its state
+            ahead: (n: number) => `前に ${n} 件`,
+            // why a queued revert was left to the AI: in the tooltip on its state
+            revertObstacle: {
+                conflict: (paths: string) => `あとの変更と重なるため（${paths}）、AI が打ち消します`,
+                check: '機械的に打ち消すとモデルの検査が通らないため、AI が打ち消します',
+                unreadable: '作業の前後の内容が残っていないため、AI が打ち消します',
+            },
             showChanges: '変更を見る',
             // the revisions behind a card's menu and the stream's notices: in tooltips only
             revisionHint: (n: string) => `リビジョン #${n}`,
@@ -726,8 +718,7 @@ const ja = {
                 completedUnchanged: '完了しました。変更はありません。',
                 failedLabel: '失敗',
                 cancelled: (name: string) => `${name} が実行を中止しました。`,
-                reverted: '変更を機械的に打ち消しました（AI は使っていません）。',
-                revertedNothing: '打ち消す変更は、もう残っていませんでした（AI は使っていません）。',
+                revertedNothing: '打ち消すものはありませんでした',
             },
             reply: {
                 applied: (files: number | undefined) => (files === undefined ? 'ファイル変更あり' : `${files} ファイル変更`),
@@ -1229,10 +1220,10 @@ const en: Messages = {
             invite: 'Copy the invite link',
             inviteHint: "This page's address: whoever opens it joins as a participant",
             inviteCopied: (link) => `Invite link copied: ${link}`,
-            restore: 'Restore an earlier state…',
+            restore: 'Restore an earlier state',
             restoreTitle: 'Restore an earlier state',
             restoreBody:
-                "Every .dt and .dtes of the workspace becomes as it was at the point you choose, later work's changes included. To take back one piece of work only, use its card's “Revert this work…”.",
+                "Every .dt and .dtes of the workspace becomes as it was at the point you choose, later work's changes included. To take back one piece of work only, use its card's “Revert this work”.",
             restoreNone: 'There is no earlier state to restore.',
             restorePick: (n) => `Restore the state #${n}`,
             restorePoints: {
@@ -1245,7 +1236,7 @@ const en: Messages = {
                 PreRestore: 'Before a restore',
                 Restored: 'After a restore',
             },
-            end: 'End the collab…',
+            end: 'End the collab',
             endTitle: 'End the collab?',
             endBody: "Everyone's page closes, and it cannot be undone. The chat and the record of changes stay in the workspace's .domaintrail.",
             unfinishedTitle: 'Not finished yet',
@@ -1290,23 +1281,9 @@ const en: Messages = {
             failed: (m) => `Not restored: ${m}`,
         },
         revertFlow: {
-            confirm: (name) =>
-                `Revert the changes of ${name}? Only what this work changed is counteracted; later work's changes stay. It queues like any work and is reverted mechanically when its turn comes; when it cannot be (later changes overlap it, say), the AI is asked to revert it.`,
+            confirm: (name) => `Revert the changes of ${name}?`,
             revert: 'Revert',
             cancel: 'Cancel',
-            close: 'Close',
-            mechanical: (name) => `Reverted the changes of ${name}.`,
-            conflict: (paths) => `Later changes overlap it (${paths}): it could not be reverted mechanically. The AI is asked to revert it.`,
-            check: 'Reverted mechanically, the model would not check: the AI is asked to revert it.',
-            unreadable: 'The contents before and after the work are gone: the AI is asked to revert it.',
-            queued: (ahead) =>
-                ahead > 0
-                    ? `The revert is queued (${ahead} ahead). When its turn comes it is reverted mechanically, else the AI is asked.`
-                    : 'The revert is queued: it is reverted mechanically, else the AI is asked.',
-            agent: 'The AI is reverting it.',
-            stopped: 'The revert was stopped.',
-            nothing: "None of this work's changes were left in the workspace: there was nothing to revert.",
-            failed: (m) => `Not reverted: ${m}`,
         },
         chat: {
             close: 'Close the chat',
@@ -1353,12 +1330,16 @@ const en: Messages = {
             cardUpdated: (name) => (name ? `"${name}" was updated` : 'An AI card was updated'),
             latest: (count, forMe) => (forMe > 0 ? `Jump to latest (${forMe} for you)` : count > 0 ? `Jump to latest (${count} new)` : 'Jump to latest'),
             cardMenu: "The card's menu",
-            revertWork: 'Revert this work…',
-            revertWorkHint: "Counteracts only what this work changed (later work's changes stay)",
+            revertWork: 'Revert this work',
             revertBody: (name) => `Revert the changes of ${name}`,
             reverted: 'Reverted',
             revertedHint: 'To the card of the revert',
-            reverter: 'Revert',
+            ahead: (n) => `${n} ahead`,
+            revertObstacle: {
+                conflict: (paths) => `Later changes overlap it (${paths}): the AI reverts it`,
+                check: 'Reverted mechanically, the model would not check: the AI reverts it',
+                unreadable: 'The contents before and after the work are gone: the AI reverts it',
+            },
             showChanges: 'See the changes',
             revisionHint: (n) => `Revision #${n}`,
             revisionsHint: (a, b) => `Revisions #${a} → #${b}`,
@@ -1480,8 +1461,7 @@ const en: Messages = {
                 completedUnchanged: 'Done. Nothing changed.',
                 failedLabel: 'Failed',
                 cancelled: (name) => `Stopped by ${name}.`,
-                reverted: 'Reverted the changes mechanically (no AI involved).',
-                revertedNothing: 'None of the changes were left to revert (no AI involved).',
+                revertedNothing: 'There was nothing to revert',
             },
             reply: {
                 applied: (files) => (files === undefined ? 'files changed' : `${files} ${files === 1 ? 'file' : 'files'} changed`),

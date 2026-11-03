@@ -4084,15 +4084,13 @@ del.was.block {
     font-size: 0.75rem;
     padding: 1px 6px;
 }
-.session-restore p,
-.session-revert p {
+.session-restore p {
     margin: 0 0 6px;
 }
-.session-restore .session-buttons button.primary,
-.session-revert .session-buttons button.primary {
+.session-restore .session-buttons button.primary {
     margin-top: 0;
 }
-/* the collab menu's 以前の状態に戻す…: the earlier states, newest first, each a row to choose */
+/* the collab menu's 以前の状態に復元: the earlier states, newest first, each a row to choose */
 .collab-restore-list {
     list-style: none;
     margin: 0;
@@ -5846,6 +5844,14 @@ button.add-to-request.added:hover {
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
+}
+/* a queued run: how many it waits behind, muted, just before its state */
+.run-card-ahead {
+    color: var(--muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 .run-card .pane-menu .icon-button {
     width: 22px;

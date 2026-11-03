@@ -127,7 +127,7 @@ export type CardMenuItem = 'revert' | 'changes';
 
 /**
  * The items of a card's menu, from the unit's latest run: none unless it changed files; 変更を見る then, and first
- * この作業を打ち消す… while the collab is open (`live`) and its changes are not reverted nor being reverted.
+ * この作業を打ち消す while the collab is open (`live`) and its changes are not reverted nor being reverted.
  */
 export function cardMenuItems(last: RunJson, runs: readonly RunJson[], live: boolean): CardMenuItem[] {
     if (!revertableChanges(last)) return [];
@@ -138,36 +138,16 @@ export function cardMenuItems(last: RunJson, runs: readonly RunJson[], live: boo
 export type RevertObstacleJson = NonNullable<Extract<RunJson, { state: 'Queued' }>['revertObstacle']>;
 
 /**
- * Where a revert asked from a card stands, from its run (`run`) among the session's: waiting its turn behind `ahead`
- * runs (the one in progress and the queued ones before it), reverted mechanically, `nothing` left to revert, left to
- * the AI (why), with the AI (running, asking, done or not by it), or stopped. `undefined` while the page does not have the run yet.
+ * How many runs a queued run waits behind: the one in progress and the queued ones before it (the queue's order is the
+ * session's). `undefined` unless it is queued.
  */
-export type RevertProgress =
-    | { readonly kind: 'queued'; readonly ahead: number }
-    | { readonly kind: 'reverted' }
-    | { readonly kind: 'nothing' }
-    | { readonly kind: 'leftToAgent'; readonly obstacle: RevertObstacleJson }
-    | { readonly kind: 'agent' }
-    | { readonly kind: 'stopped' };
-
-export function revertProgress(run: string, runs: readonly RunJson[]): RevertProgress | undefined {
+export function queueAhead(run: string, runs: readonly RunJson[]): number | undefined {
     const at = runs.findIndex((r) => r.id === run);
-    const r = runs[at];
-    if (!r) return undefined;
-    switch (r.state) {
-        case 'Queued':
-            if (r.revertObstacle) return { kind: 'leftToAgent', obstacle: r.revertObstacle };
-            return { kind: 'queued', ahead: runs.filter((o, i) => o.state === 'Running' || (o.state === 'Queued' && i < at)).length };
-        case 'Reverted':
-            return { kind: r.changed ? 'reverted' : 'nothing' };
-        case 'Cancelled':
-            return { kind: 'stopped' };
-        default:
-            return { kind: 'agent' };
-    }
+    if (runs[at]?.state !== 'Queued') return undefined;
+    return runs.filter((o, i) => o.state === 'Running' || (o.state === 'Queued' && i < at)).length;
 }
 
-/** Why a revert went to the AI, in words (`tx.revertFlow`). */
+/** Why a queued revert was left to the AI, in words (the tooltip on its state, `tx.chat.revertObstacle`). */
 export function obstacleText(
     o: RevertObstacleJson,
     u: { readonly conflict: (paths: string) => string; readonly check: string; readonly unreadable: string },
