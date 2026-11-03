@@ -6,8 +6,8 @@
 //   propose → the read-only agent → the change proposal for a participant's 依頼
 //   interview → the read-only agent (the interviewer) → the next question of a `/es:start` or `/model:start`
 //               interview, or its brief
-//   command → the read-only agent → the candidates of a candidate command (`/es:exceptions`), or the answer of an
-//             answer command (`/es:recap`)
+//   command → the read-only agent → the candidates of a candidate command (`/es:exceptions`, …), or the answer of an
+//             answer command (`/es:recap`; `/es:next` its next steps)
 //
 // No claim, no lease, no revision, no `dt fmt` / `dt check`: an answer changes nothing to record, and the read-only
 // guarantee is the agent's tools (its adapter), not this code. A job withdrawn by the server (it timed out there, or is
@@ -19,6 +19,7 @@
 import {
     briefData,
     candidateData,
+    nextAnswerData,
     proposalData,
     readAnswererReply,
     readCommandReply,
@@ -27,7 +28,14 @@ import {
     TRIAGE_KINDS,
 } from '@domaintrail/collaboration';
 import type { AgentAnswerStreamJob, AgentCommandJobBody, AgentInterviewJobBody } from '@domaintrail/collaboration/protocol';
-import { buildAnswerPrompt, buildCommandPrompt, buildInterviewPrompt, buildProposePrompt, buildTriagePrompt } from './answer-prompt.js';
+import {
+    buildAnswerPrompt,
+    buildCommandPrompt,
+    buildInterviewPrompt,
+    buildProposePrompt,
+    buildTriagePrompt,
+    commandReadsDiagnostics,
+} from './answer-prompt.js';
 import { AgentApiError, type AgentApi, type AnswerAgent, type AnswerTurnResult, type Clock, type WorkspaceFiles } from './ports.js';
 import { changedPaths } from './subscriber.js';
 import type { Practice } from './prompt.js';
@@ -36,6 +44,11 @@ export interface AnswererDeps {
     readonly api: AgentApi;
     readonly agent: AnswerAgent;
     readonly workspace: Pick<WorkspaceFiles, 'scan'>;
+    /**
+     * `dt check`'s findings on the `.dtes` files now, one line each (`file:line:column severity code: message`), for
+     * the commands that read them (`/es:names`, `/es:next`); without it, those commands go without.
+     */
+    readonly diagnostics?: () => Promise<readonly string[]>;
     readonly clock: Clock;
     /** A random string per job (the prompt's block delimiter). */
     readonly nonce: () => string;
@@ -116,16 +129,20 @@ export function startAnswerer(deps: AnswererDeps, options: AnswererOptions = {})
     /** A command's turn: its candidates or its answer, as the server takes it (`AgentCommandResultBody`). */
     const commandResultOf = async (job: AgentCommandJobBody, signal: AbortSignal, started: number): Promise<Record<string, unknown>> => {
         const elapsed = (): number => Math.max(0, Math.round(now() - started));
-        const result = await deps.agent.command({ prompt: buildCommandPrompt(job, deps.nonce(), practice ?? {}), type: job.type, signal });
+        // the findings are a help, not a need: a check that fails leaves them out
+        const diagnostics = deps.diagnostics && commandReadsDiagnostics(job.name) ? await deps.diagnostics().catch(() => undefined) : undefined;
+        const prompt = buildCommandPrompt(job, deps.nonce(), { ...practice, ...(diagnostics && { diagnostics }) });
+        const result = await deps.agent.command({ prompt, type: job.type, signal });
         const meta = { ...(result.model && { model: result.model }), durationMs: elapsed() };
         if (result.error !== undefined) return { error: result.error, ...meta };
         const read = readCommandReply(outputOf(result), job.type);
         if (!read.ok) return { error: `invalid output (${read.error.path})`, ...meta };
         const reply = read.value;
-        // the candidates as read (clamped, malformed references dropped) go as the answerer sends them: the server reads them again
-        return reply.kind === 'answer'
-            ? { kind: 'answer', answer: reply.answer, ...meta }
-            : { kind: 'candidates', candidates: reply.candidates.map(candidateData), ...meta };
+        // the candidates as read (clamped, malformed references dropped) go as the answerer sends them: the server reads them
+        // again; `/es:next`'s steps too, the server writing the message from them
+        if (reply.kind === 'candidates') return { kind: 'candidates', candidates: reply.candidates.map(candidateData), ...meta };
+        if (reply.next) return { kind: 'next', ...nextAnswerData(reply.next), ...meta };
+        return { kind: 'answer', answer: reply.answer, ...meta };
     };
 
     /** The result of a job as the server takes it (`AgentTriageResultBody`, `AgentAnswerResultBody`, `AgentProposeResultBody`). */

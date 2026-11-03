@@ -18,7 +18,7 @@ import type {
     Json,
     RunActivity,
 } from '@domaintrail/collaboration/protocol';
-import type { Collaboration, ReplyData, ReplyOutcome, SlashCommandType } from '@domaintrail/collaboration';
+import type { Collaboration, CommandReplyShape, ReplyData, ReplyOutcome } from '@domaintrail/collaboration';
 
 /** An answer of the agent API other than 2xx: its HTTP status and the error's `type` (`LeaseLost`, `NothingQueued`, …). */
 export interface ApiFailure {
@@ -120,9 +120,9 @@ export interface AnswerTurn {
     readonly signal: AbortSignal;
 }
 
-/** A command's turn: what it returns (its candidates, or an answer) picks the schema. */
+/** A command's turn: what it returns (its candidates, an answer, or the next steps) picks the schema. */
 export interface CommandTurn extends AnswerTurn {
-    readonly type: SlashCommandType;
+    readonly type: CommandReplyShape;
 }
 
 /** What a turn of the read-only agent gave: its structured output (unvalidated), or why it gave none. */

@@ -19,7 +19,7 @@
 // the runner does (`warm-claude.ts`). The model that answered is read from the process's `init` event. Neither a prompt
 // nor the agent's output is logged.
 import { spawn } from 'node:child_process';
-import { answererJsonSchema, commandJsonSchema, interviewerJsonSchema, triageJsonSchema, type SlashCommandType } from '@domaintrail/collaboration';
+import { answererJsonSchema, commandJsonSchema, type CommandReplyShape, interviewerJsonSchema, triageJsonSchema } from '@domaintrail/collaboration';
 import type { AnswerAgent, AnswerTurn, AnswerTurnResult } from '../core/ports.js';
 import { type ClaudeResult, createStreamReader } from './claude-stream.js';
 import { type AgentCommand, CLAUDE, claudeArguments, type ExtraRead, KILL_GRACE_MS, killTree } from './claude-code.js';
@@ -78,8 +78,8 @@ export function interviewerArguments(options: ReadingTurnOptions = {}): string[]
     return claudeArguments(ANSWERER_TOOLS, undefined, { ...options, schema: interviewerJsonSchema() });
 }
 
-/** The arguments of a `/` command's turn: the reading tools only, the schema of its type (candidates or an answer). */
-export function commandArguments(type: SlashCommandType, options: ReadingTurnOptions = {}): string[] {
+/** The arguments of a `/` command's turn: the reading tools only, the schema of its reply (candidates, an answer or the next steps). */
+export function commandArguments(type: CommandReplyShape, options: ReadingTurnOptions = {}): string[] {
     return claudeArguments(ANSWERER_TOOLS, undefined, { ...options, schema: commandJsonSchema(type) });
 }
 

@@ -467,7 +467,14 @@ Rules:
    \`/es:exceptions\`, each is one \`exception\` in the storming \`storming\` (rule 17), in the stage of its branch
    point: it starts with that event of the flow, written again, then the new events (short past-tense labels), and
    ends with \`then <Event>\` when it returns to the flow; a new event gets \`level design\` only when \`how\` says so
-   (rule 15). Add no exception the storming already has.
+   (rule 15). Add no exception the storming already has. For \`/es:gaps\`, each fills one gap of a flow: declare its
+   new events (the targets between the first and the last: short past-tense labels, \`level design\` only when
+   \`how\` says so) and insert them, in order, between the first and the last target in the \`timeline\` or
+   \`exception\` \`how\` names — nowhere else. For \`/es:levels\`, each is one event (its target): add \`level
+   design\` as the last clause of its body, or remove it, exactly as \`how\` says, and change nothing else of it. For
+   \`/es:names\`, each renames one element (its target): change only its label (the quoted string), to the new label
+   \`label\` gives (\`how\` shows old → new), never its identifier (references use it); keep its \`///\`, and when
+   \`how\` gives a detail the old label carried, add that detail to its \`///\` as a line of its own.
 
 ${practiceSection(practice)}${replyDescription()}
 
