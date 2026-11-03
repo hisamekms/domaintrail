@@ -63,6 +63,7 @@ export async function freezeRequests(
                 body: r.body,
                 ...(replyTo && { replyTo }),
                 ...(r.reverts && { reverts: r.reverts }),
+                ...(r.viewedAt && { viewedAt: r.viewedAt }),
             });
         }
     }

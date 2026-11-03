@@ -49,6 +49,7 @@ import { createSessionHttp, meOf, stateBody } from '../server/session/routes.js'
 import { createSessionIdentities } from '../server/session/identities.js';
 import { createTriageStage } from '../server/session/triage.js';
 import { eventFor } from '../server/session/views.js';
+import { knownViewNames } from '../server/session/viewed-at.js';
 import { createViewHttpServer } from '../server/http/server.js';
 import { isLoopbackBind, sessionHostPolicy } from '../server/http/access.js';
 import { SessionError, type SessionSettings } from '../cli/ports.js';
@@ -533,6 +534,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             triaged: () => stage.kick(),
             agentPresence,
             retryAnswer: (request) => agent.answers.retry(request),
+            knownViewNames: () => knownViewNames(view.state),
             log,
         });
         const http = createViewHttpServer({

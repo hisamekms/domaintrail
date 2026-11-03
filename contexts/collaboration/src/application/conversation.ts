@@ -146,6 +146,8 @@ export interface ConversationUseCases {
         readonly body: Collaboration.Text;
         readonly replyTo?: Collaboration.ReplyTarget;
         readonly mentions?: readonly Collaboration.ParticipantId[];
+        /** Where the sender was looking (its names already checked against the workspace). */
+        readonly viewedAt?: Collaboration.ViewedAt;
     }): Promise<Result<MessageSent, SendMessageError>>;
     /**
      * The facilitator's 「AI に送る」 (one message or several): each message, not addressed yet, gets a triage addressed by
@@ -839,7 +841,7 @@ export async function sendIn(
     deps: Pick<CollaborationDeps, 'clock' | 'ids'>,
     input: Parameters<ConversationUseCases['sendMessage']>[0],
 ): Promise<Result<Collaboration.SentRequest, SendMessageError>> {
-    const { session, actor, targets, body, replyTo, mentions = [] } = input;
+    const { session, actor, targets, body, replyTo, mentions = [], viewedAt } = input;
     const author = actor.participant;
     const verify = storeVerifications(stores);
     const active = await verify.makeActiveSession(session);
@@ -867,6 +869,7 @@ export async function sendIn(
         sentAt: at,
         replyTo: replyable,
         mentions: mentioned,
+        viewedAt,
     });
     if (!sent.ok) return sent;
     const { Sent } = sent.value;

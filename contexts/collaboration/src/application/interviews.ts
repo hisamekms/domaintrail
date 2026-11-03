@@ -48,6 +48,8 @@ export interface InterviewUseCases {
         readonly body: Collaboration.Text;
         readonly language: Collaboration.UiLanguage;
         readonly focus?: Collaboration.ModelTarget;
+        /** Where the starter was looking: kept on the opening message. */
+        readonly viewedAt?: Collaboration.ViewedAt;
     }): Promise<
         Result<
             InterviewStarted,
@@ -131,12 +133,12 @@ export function createInterviews(deps: CollaborationDeps): InterviewUseCases {
     };
 
     return {
-        async startInterview({ session, actor, command, body, language, focus }) {
+        async startInterview({ session, actor, command, body, language, focus, viewedAt }) {
             // only the facilitator: asked first, so that nothing is sent for a refused start
             if (actor.role !== 'Facilitator') return err({ type: 'FacilitatorOnly' });
             return uow.transaction(async (stores) => {
                 if (runningInterview(stores.interviews.listBySession(session))) return err({ type: 'InterviewAlreadyRunning' });
-                const sent = await sendIn(stores, { clock, ids }, { session, actor, targets: [], body });
+                const sent = await sendIn(stores, { clock, ids }, { session, actor, targets: [], body, ...(viewedAt && { viewedAt }) });
                 if (!sent.ok) return sent;
                 const active = await storeVerifications(stores).makeActiveSession(session);
                 if (!active.ok) return active;

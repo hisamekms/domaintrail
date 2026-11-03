@@ -515,6 +515,58 @@ describe('the interviews of `/es` and `/model`', () => {
     });
 });
 
+describe('the view a message was sent from', () => {
+    const STORMING = `storming Orders "注文" {
+  event OrderPlaced "注文を受け付けた"
+  timeline Normal "通常" {
+    OrderPlaced
+  }
+}
+`;
+
+    test('kept with the message, its unknown names dropped; given to stage 3, the interviewer and the run', async () => {
+        const root = await scratch();
+        await writeFile(path.join(root, 'orders.dtes'), STORMING);
+        const ctx = await setup(root);
+        const send = (viewedAt: unknown, ai = false): Promise<Response> =>
+            ctx.api(ctx.ada, 'requests', { targets: [], body: ai ? '@AI[p1] ここに足して' : 'ここ', ...(ai && { mentions: ['ai'] }), viewedAt });
+        const sent = async (viewedAt: unknown): Promise<unknown> => {
+            const res = await send(viewedAt);
+            expect(res.status).toBe(201);
+            const { request } = (await res.json()) as { request: { id: string } };
+            return (await ctx.state()).requests.find((r) => r.id === request.id)?.viewedAt;
+        };
+        const storming = { kind: 'Storming', storming: 'Orders', level: 'DesignLevel', timeline: 'Normal', exceptions: true } as const;
+        expect(await sent({ view: storming, states: 'Shop.Order' })).toEqual({ view: storming, states: 'Shop.Order' });
+        // names the workspace lacks are dropped: a timeline, a context, an aggregate; a storming drops the view
+        expect(await sent({ view: { ...storming, timeline: 'Gone' }, states: 'Shop.Gone' })).toEqual({
+            view: { kind: 'Storming', storming: 'Orders', level: 'DesignLevel', exceptions: true },
+        });
+        expect(await sent({ view: { kind: 'Structure', level: 'Detail', focus: ['Shop', 'Gone'] } })).toEqual({
+            view: { kind: 'Structure', level: 'Detail', focus: ['Shop'] },
+        });
+        expect(await sent({ view: { ...storming, storming: 'Gone' } })).toBeUndefined();
+        const bad = await send({ view: { ...storming, level: 'Design' } });
+        expect(bad.status).toBe(400);
+        expect(await bad.json()).toMatchObject({ error: { type: 'InvalidInput', field: 'viewedAt.view.level' } });
+
+        // stage 3 gets the message with it; a 依頼 of the facilitator is queued with it frozen in the run
+        const stream = answerStream(ctx);
+        const res = await send({ view: storming }, true);
+        const { request } = (await res.json()) as { request: { id: string } };
+        const triage = await stream.job('triage');
+        expect(triage.request.viewedAt).toEqual({ view: storming });
+        expect((await stream.post(triage.job, { kind: 'change_request', confidence: 0.95, reason: '追加の依頼', durationMs: 1 })).status).toBe(200);
+        const run = await until('the run', async () => (await ctx.state()).runs.find((r) => r.input.requests.some((q) => q.request === request.id)));
+        expect(run.input.requests[0]?.viewedAt).toEqual({ view: storming });
+
+        // a command started from a view: its opening message keeps it, and the interviewer's job carries it
+        const started = await ctx.api(ctx.ada, 'interviews', { command: 'es', body: 'ES を始める', language: 'ja', viewedAt: { view: storming } });
+        expect(started.status).toBe(201);
+        expect((await stream.interviewJob()).request.viewedAt).toEqual({ view: storming });
+    });
+});
+
 describe('end to end with the two roles and a fake Claude Code', () => {
     /** A plan file for the fake agent: one step per invocation. */
     const plan = async (steps: Record<string, unknown>[]): Promise<string> => {
