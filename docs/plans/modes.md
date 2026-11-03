@@ -1736,3 +1736,63 @@ This replaces where the guide's goal is read from (above) and where the intervie
     - The facilitator, or the person in Solo, creates journeys directly.
     - Participants may run the commands, but their journey exists only once the facilitator approves its brief.
   - **Outside dt** (Claude Code): read only in 0.7.0. A `dt journey` command to write it can come later.
+
+### As built: the journey file, the current journey, the chip and the panel
+
+- **The file.** `domaintrail.journey.json` at the root (`JOURNEY_FILE`); `contexts/collaboration/src/domain/journey.ts`
+  reads it against its shape (what is valid kept, each problem with a JSON path and, through a small position-keeping
+  JSON reader, a line and column), writes it (`writeJourney`: `$schema`, `version`, `stormings` in the order written,
+  `modeling` likewise, each journey's keys in the schema's order, two-space indent, a final line break), and applies
+  the acts (`applyJourneyAct`: goal, state, mark) and a confirmed brief (`applyBrief`). The vocabulary moved to
+  `domain/guide-paths.ts`, shared by the engine, the file and the page: `GuidePattern` is `Whole | FromStorming |
+  OneContext | Review` (`Strategic` renamed, unreleased). The ES steps `exceptions` and `questions` became markable
+  (a stage that needs none, a storming that raised no question). `schema/journey.schema.json` is hand-written; a test
+  compares its enums, goals and marks per pattern with the code's. Not in the trust hash (the config files only).
+- **Writing.** `platform/workspace`'s `createGuardedTextFile`: atomic (a temporary file renamed over it), serialized in
+  the process, and only over the text read (`updateJourneys` tries once more from the file as it is; else
+  `JourneyFileChanged`); a file that does not read is never written over (`JourneyFileInvalid`).
+- **Seams.** `readGuideGoal` reads `GuideWorkspace.journey` (archived journeys left out). The marks are the file's
+  (`journeyMarks`, `journeyFileMarks`, the page's `pageGuideMarks` in `journey-view.ts`); `sessionGuideMarks` is gone.
+  **Decision: the session's old `Done` marks are ignored, not migrated** (never released; the `Mark` aggregate still
+  reads them, the guide does not; `POST /api/session/marks` refuses a `GuideStep` target, 400).
+- **Who.** The facilitator's acts are done at once (`actOnJourney`, `chooseJourney`: `FacilitatorOnly` otherwise).
+  **Decision: a participant's choose, goal, done, archive and mark become requests**, kept by the server in memory as
+  the `link` mode's join requests are (no existing flow fits: proposals and interview briefs both end in an AI run),
+  sent to every page with the file (`journey` message, `GET /api/session/journey`), approved (done as the
+  facilitator's), denied, or withdrawn by their requester (`POST /api/session/journey/{acts,current}`, 202 for a
+  request; `…/journey/requests/:id/{approve,deny,withdraw}`). A restart drops them. A participant's brief still waits
+  for the facilitator's confirmation, as before.
+- **Interviews.** `InterviewBrief` gained `journey: JourneyBrief?` (why: purpose, scope, constraints, participants as
+  roles; how far: `use` and `level`, or `pattern`, `goal`, `stormings`, `context`, `journeyName`, `continues`) and
+  `description` (a new storming's `///`). The interviewer writes `{ name?, label?, isNew, description?, journey }`; the
+  text is the why under the language's heads (目的 / 範囲 / 制約 / 参加者), and an edit reads them back
+  (`withEditedText`; an unknown head is refused). A new modeling journey's ID is derived from its name (its ASCII words,
+  else its subject in kebab case: `convenience-store-issuance`), `-2`… when taken. Confirming writes the journey (dt,
+  no AI run) and makes it the session's current journey; only a new storming queues a run, whose rule 16 creates the
+  `storming` block with its short description. `Confirmed.run` became optional. The interviewer is given the journeys
+  (`journeys` in the job) and asks 「どこまで進めますか」 as a choice, the use, the roles; `/model:start` asks continue or
+  new first, then the pattern (the fitting one first), the goal and the subject, then the why.
+- **Current journey.** `Session.currentJourney` with `chooseJourney` (`JourneyChosen`, wire `session.journey_chosen`).
+  The default (`currentJourney` in the engine, `defaultJourney` in the file module): the last active modeling journey,
+  else the last active storming's — the file's order stands for "most recently created". The guide snapshot puts the
+  current journey's map first; the latest card draws it live from the file; the `localStorage` picker is gone.
+- **Page.** `journey-view.ts` (the overview computed by the engine from the view payload and the file),
+  `journey-panel.tsx` (the chip, portalled into a new `app-bar-journey` slot after the world switch; the panel; the
+  goal menu, also on the card's 🏁), `journey-detail.tsx` (a storming's ES journey, a context's modeling journeys). An
+  ES journey is named by its storming's label. The chip narrows at `@container app-bar` 72rem (🧭 and the name) and
+  48rem (🧭).
+- **Watching.** The file is watched on its own (`watchFile`): a change from git or another tool is read again and sent
+  to the pages; the guide's workspace gets the file and its findings.
+- **Checks.** J001 (error: against the schema), J002 / J003 (warnings: a storming or context named but missing). A new
+  family J, as M, L and S are per kind of file; `schema/diagnostics.schema.json` allows `[MLSJ]`. `dt check` adds them
+  (exit 1 on J001); `generate ts` is not blocked by them. A missing subject marks the map `missing`.
+- **Agent.** The file is in the answerer's view and the runner's workspace like any file git does not ignore; it joins
+  the edit-denied names (`DT_WRITTEN_FILE_NAMES`). The answer, command and interview jobs carry `journeys` (the current
+  one's brief, every journey in a line); the prompts keep the AI within the current journey, and `/guide` suggests
+  `/model:start` from a storming whose ES journey reached its goal with `use: modeling`. `dt guide` describes the file
+  and asks the AI to rename journey keys with a storming or context.
+- **Real run** (2026-11-04, the real `claude`): an empty workspace — `/es:start`, Big Picture, use modeling, the file
+  written by dt and the storming created by the run with a one-line `///`; a ✓ on 問い and 🏁 → デザインレベル on the
+  card changed the file's `level` and `marks`. The shop with the convenience-store stages — `/model:start` B from the
+  storming to invariants, then C on Billing, switched in the panel; in Collab a participant's goal change approved by
+  the facilitator.

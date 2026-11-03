@@ -26,6 +26,19 @@ number of errors, else warnings, as a badge; a click opens the problems in the l
 a session the collab menu, the AI's state and, in Solo, ⋯ (see below). On a narrow window the world switch shows its
 icons only, each named in its tooltip.
 
+In a session, after the world switch, the **current journey's chip** (the session has one current journey: the
+facilitator chooses it, the one person in Solo; with none chosen, the most recently created active one): 🧭 the journey
+· 📍 the step here → 🏁 the goal (✓ 到達 once it is reached). A narrower bar shows 🧭 and the journey's name, then 🧭
+alone. With no journey it reads 🧭 ゴールを決める. A dashed chip names a storming or context that is gone. The
+facilitator's chip counts the participants' requests waiting. Pressing it opens the **journeys panel** (everyone reads
+it): the requests waiting (承認 / 却下 for the facilitator; the requester's own, 承認待ち and 取り下げ); the current
+journey — its brief (目的, 範囲, 制約, 参加者, 使い道, もと), its map as the guide draws it, and ガイドを見る, ゴールを変える
+(the ES levels, or the goals of its pattern), ブリーフを見直す (`/es:start` or `/model:start` into the composer),
+完了にする, しまう; the other journeys with where each stands (この旅にする makes one current); 新しい旅 (`/es:start`,
+`/model:start`); and the archived ones, counted, opened on demand (戻す). A participant's choice, goal, done, archive
+or mark becomes a request the facilitator approves in the panel. Everything comes from `domaintrail.journey.json`
+(see [`dt guide`](guide.md#the-journey-file)): a change to it from git or another tool shows at once.
+
 ## Left column
 
 A column of icons at its left edge, the activity bar, picks the list the navigator shows — 木 and 差分, with the
@@ -230,6 +243,9 @@ the bottom of the left column. Sub-tabs (on a second row when the column is narr
 to its kind, as it does in an aggregate's 発生させる Event list; persistent events have a database icon in the
 explorer.
 
+- In a session, a selected storming shows its event storming journey in brief (its purpose, where it stands, its
+  goal), and a selected context the modeling journeys over it (those that name it, and those over the whole model);
+  a row opens the journeys panel.
 - **状態遷移**: states and command transitions of the aggregate (`new` marks factory commands), for the aggregate and
   its states and commands; it pans and zooms like the main canvas and shows the selected state or command.
 - **振る舞い**: what a command takes, requires, changes, emits and returns, and the policies that trigger it.
@@ -408,10 +424,12 @@ The chat has two views:
   event storming (brief, events, flows and stages, exceptions, questions, Design Level) or of a modeling journey (its
   pattern's steps, with a row per context: aggregates, commands, invariants), each done (✓), here (📍) or to do, up
   to the goal (🏁), the steps past it faint; whether a step is done comes from the files, and a step the files cannot
-  tell (the BCs are split, the terms aligned) is marked done by the facilitator with a small ✓ on the latest card —,
+  tell (the BCs are split, the terms aligned, a stage that needs no exception) is marked done with a small ✓ on the
+  latest card (kept in the journey file; a participant's ✓ is a request to the facilitator) —,
   then what is known at once (a stage without exceptions, open questions, long labels, a context without aggregates,
   errors…), each with a button that shows it. Until a goal is set, the map is one step, ゴールを決める, with
-  `/es:start` or `/model:start`. With several modeling journeys, a picker chooses the map (remembered per viewer). A few
+  `/es:start` or `/model:start`. The card draws the session's current journey: its 🏁 changes the goal, its name opens
+the journeys panel; the latest card follows the journey file as it is now. A few
   seconds later the AI's advice fills the card: where the person stands and why the step here is next, then one to
   three steps, each with its reason, the command that does it (a button that puts it in the composer), the places to
   show, and 聞くことをメモ for a question to the people (a message asking the AI to add it as a hotspot: a

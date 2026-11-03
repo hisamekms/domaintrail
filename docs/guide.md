@@ -1197,8 +1197,9 @@ not. Then add `ref`s in the `.dtes` to the new `.dt` symbols that resolve. Open 
 gaps to fill by guessing.
 
 **Small steps.** Change a little, run `dt fmt` and `dt check` until it exits 0, and keep the model valid between
-steps. Do not rename or remove what the people did not ask to change: other files, generated code and the chat refer
-to the IDs. Unsure what to do next? `/guide` (the composer's ガイド button) shows where you are on the way to your goal and
+steps. Do not rename or remove what the people did not ask to change: other files, generated code, the chat and the
+[journey file](#the-journey-file) refer to the IDs (a rename asked for: update the journey's keys too). The journey the
+session works on says why and how far: keep to it. Unsure what to do next? `/guide` (the composer's ガイド button) shows where you are on the way to your goal and
 what the files show at once, then has the AI coach you, in the modeling as in the storming.
 
 <!-- topic: generated -->
@@ -2510,9 +2511,10 @@ storming Errands {
 How to run a storming in `.dtes` files, for people and AI agents. The rules of the language are in [Event
 Storming](#event-storming-dtes); this is the way of working.
 
-**Start from the brief.** The `///` description above a `storming` says its purpose, scope, what the result is for
-and how far to go (`/es:start` in the chat writes it). Keep to that scope; ask before going beyond it. With no brief, ask
-for the purpose and the first and last events before writing much.
+**Start from the brief.** The storming's journey in [the journey file](#the-journey-file) says its purpose, scope, who
+takes part, what the result is for and how far to go (`/es:start` in the chat writes it). Keep to that scope; ask
+before going beyond it. With no journey, ask for the purpose and the first and last events before writing much. The
+`///` above `storming` is only a short description of what the storming is, never the brief.
 
 **Big Picture first.**
 - Events first, and mostly events: what happened in the business, in the past tense, in the words the business uses
@@ -2612,6 +2614,32 @@ storming](#diagnostics-of-a-storming).
 | S020 | `.dtes`: in a storming with stages, every timeline and exception is in a stage |
 | S021 | (warning) `.dtes`: only the first stage comes after no stage |
 | S022 | (warning) `.dtes`: a stage has a main flow (a `timeline`) |
+| J001 | `domaintrail.journey.json` reads against its schema (`schema/journey.schema.json`): JSON, the keys and enums it allows, the goals and marks of each pattern, unique journey IDs |
+| J002 | (warning) a journey names a storming that does not exist (an ES journey's key, a `FromStorming` journey's `from.stormings`) |
+| J003 | (warning) a journey names a context that does not exist (a `OneContext` journey's `from.context`) |
+
+<!-- topic: journey -->
+## The journey file
+
+`domaintrail.journey.json`, at the workspace root next to `domaintrail.jsonc` (the directory `dt -r` names), says
+what the work in the workspace is for, how far it goes and how far it has come. It is tracked by git. It is neither the
+model nor configuration: a change to it never asks for trust again. Its schema is `schema/journey.schema.json` in the
+package.
+
+- `stormings`: one event storming journey per storming, keyed by the storming's ID: `purpose`, `scope`,
+  `participants` (roles, never names), `use` (`align` | `modeling`), `level` (`BigPicture` | `DesignLevel`), `state`
+  (`active` | `done` | `archived`), `marks` (the steps people marked done: `exceptions`, `questions`).
+- `modeling`: named journeys, several allowed: `id` (a slug), `name`, `purpose`, `scope`, `constraints`,
+  `participants`, `pattern` (`Whole` | `FromStorming` | `OneContext` | `Review`), `from` (`{ stormings }` for
+  `FromStorming`, `{ context }` for `OneContext`), `goal` (a step the pattern ends at), `state`, `marks`
+  (`{ steps, contexts: { <Context>: [<rows step>] } }`).
+
+Only dt writes it, with a stable key order and two-space indent: a brief confirmed in `/es:start` or `/model:start`, a
+goal changed, a journey marked done or archived, a step marked done in the session (a participant's acts are requests
+the facilitator approves). An AI agent reads it and never edits it. **When you rename a storming or a context, rename
+it in the journey file too** (an ES journey's key, a journey's `from`): `dt check` warns of a journey naming one that
+does not exist (J002, J003), and the guide shows that journey as missing. A file that does not read is an error (J001),
+and dt writes nothing over it until it is fixed.
 
 <!-- topic: show -->
 ## Looking up one element
