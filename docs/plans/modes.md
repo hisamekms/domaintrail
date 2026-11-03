@@ -1058,3 +1058,74 @@ A template only puts text in the composer.
 - **Templates**: eight built in (both languages) and the team's in the top-level `templates` of `domaintrail.jsonc`
   (`{ id, name, text, when? }`, a name and a text as one string or `{ ja, en }`; at most 30), validated by
   Collaboration (`checkTemplates`) and in the JSON schema, used by `dt open` and `dt collab`.
+
+## The view a message was sent from (as built)
+
+The AI roles did not know what the requester was looking at: the page's `ViewLocation` served presence and cursors
+only. Each message now carries the sender's view, and every role gets it as data.
+
+- **Model** (`view.dt`): `ViewedAt { view: ViewShown, states? }`, `ViewShown` one of `ContextMap { all }`,
+  `Structure { level: Detail | Overview | Aggregates, focus: ContextName[] }`, `Catalog { query?, sections[],
+  contexts[] }`, `Storming { storming, level: BigPicture | DesignLevel, timeline? | stage?, exceptions }`; `states` the
+  aggregate whose state diagram the inspector shows. The element selected is not part of it: it is a target (`#`).
+  `Request.viewedAt?` (and `RequestSent`, `FrozenRequest`), set by `send` only: a revert and the AI's answer have none,
+  nor do messages sent before. No migration: requests are JSON rows, an absent field is an older row.
+- **Capture** (`views.ts` `sentView`, `outgoing.ts`): the page sends `viewedAt` with every message of the composer
+  (a template's text included: it is sent as a message) and with a `/` command started (`StartInterviewBody.viewedAt`,
+  kept on the opening message). The 「AI に送る」 rescue sends nothing new: the message keeps the view it was sent
+  from. The catalog's filter moved into the view workspace so that the session's part of the page can read it.
+- **Server**: `readViewedAt` checks the shape and limits (400 `InvalidInput` naming the field); `resolveViewedAt`
+  checks the names against the view the server shows now (`knownViewNames` from `view.state`) and **drops** what the
+  workspace lacks — a timeline or stage (the storming's integrated canvas stays), contexts, the aggregate — and the
+  whole view when its storming is gone. Decided over "kept but marked unresolved": the page only offers what the server
+  showed it, so an unknown name is a stale or hostile page, and the prompts stay free of names that point nowhere.
+- **Run**: frozen with the request (`freezeRequests`), so a run, warm or cold, gets it as its input says.
+- **Prompts** (`viewedAtData`): in the data block, per request, e.g. `viewedAt: { view: 'storming', storming:
+  '@{es:OrderToCash}', level: 'design', stage: 'Payment', exceptions: true }`. The runner's rule 18 says what
+  "here" / 「ここ」 means and that a request sent from a stage adds within it; rule 15 says an event added for a request
+  sent at Design Level that is a detail of the mechanism gets `level design`, and none is added at Big Picture unless
+  asked (which events are mechanism details stays the practice's). The answerer's read-only rules say the same for its
+  answers and proposals; stage 3 reads `message.viewedAt` (「ここに…を足して」 asks for a change there); the
+  interviewer takes it as a hint for `focus`, never a reason to skip a question.
+- **Not done**: the triage record (仕分けの記録) does not show the view (it would need the view's name, which only the
+  participant list builds); the session so far does not mention views.
+
+### As built: 詰めて表示 and printing
+
+A user asked to close up the gaps between sticky notes when printing (decided 2026-11-03):
+
+- **Layout**: a layout option `spacing` (`normal` | `compact`) reaches ELK (`SPACING_OPTIONS`: between layers 60 → 20,
+  nodes 40 → 12, edge–node 24 → 8, edge–edge 16 → 6, edge label 6 → 3; a container's sides 20 → 10) and the stages'
+  grid (`GRID_SPACING`: columns 72 → 32, stages 64 → 24, rows 72 → 52, before the loose notes 72 → 24, a frame's sides
+  40 → 12 and heading 46 → 40). Layout runs on the server; the page asks for a compact layout on demand
+  (`/api/compact?graph=<id>` for a pushed graph, `spacing=compact` on `/api/focus`), and the view service caches and
+  saves it under `<graph id>#compact` beside the normal one (a compact layout is canonical: no incremental hints).
+- **The page**: 詰めて表示 in the canvas's controls (remembered per browser, off by default) for every diagram,
+  the inspector's state diagrams included; its own camera, no ghosts, its own cursor location (`layoutKey` `~compact`).
+- **Printing**: a print sheet drawn into `<body>` while printing only: the scene in an `<svg>` whose viewBox is the
+  diagram's bounds (HTML boxes in a `foreignObject`, edges as SVG), so the browser fits it to any page; `@page { size:
+  landscape }` while it is drawn, the app hidden by `@media print`, the light theme from `beforeprint` to `afterprint`.
+  Ctrl+P draws the sheet synchronously in `beforeprint` (`flushSync`) with the compact layout if the page has it; the
+  印刷 action waits for the compact layout (at most 5 s) and the fonts, then calls `window.print()`. The catalog prints
+  as a page.
+
+### As built: actors, read models and aggregates once per use (Event Storming views)
+
+- **Decided by the user**: at Design Level an actor drawn once and linked to every command that used it ran lines across
+  the diagram. An actor or external system (a command's issuer), a read model (what it `reads`) and an aggregate (its
+  `target`) are now drawn once per command of the view that uses them, beside that command. View only: the `.dtes`
+  and the semantic graph do not change. Big Picture, policies, hotspots, the legend and the catalog are unchanged.
+- **Projection** (`core/storming/uses.ts`, `render.ts`, `stage-view.ts`): a copy is a render node
+  `n:<element>@<command>` with `use: <command>` and the element's ID; an element no command of the view uses keeps the
+  one note `n:<element>` where it was drawn. Each use's edge joins the copy and its command only, so each copy has one
+  short edge. The ELK drawings (the integrated canvas and a timeline) place the copy by that edge: the issuer and the
+  read model on the command's left, the aggregate on its right. The stage grid stacks it in its command's column,
+  above the command (aggregate, read model, actor, external, nearest first).
+- **The page**: everything resolves by element — the inspector (the element once, with all its relations), change marks
+  (every copy), references, presence and hotspot targets. Selecting a copy draws the selection on it and a fainter
+  dashed ring (`dn-same`) on the element's other notes (`sameElementNodes`); a jump to the element (the chat, the
+  catalog, a reference) picks the copy nearest the middle of the view, else the first in reading order
+  (`itemForElement`). Hovering does not mark the siblings (a hover does not redraw the canvas).
+- **Payload**: `examples/shop`'s OrderToCash at Design Level has 8 more notes on its integrated canvas (顧客 and 注文 ×4,
+  カート and 請求書 ×2), the same edges; its Normal and PaymentRetry timelines keep their counts, the copies renamed
+  (`n:Invoice` → `n:Invoice@IssueInvoice`).

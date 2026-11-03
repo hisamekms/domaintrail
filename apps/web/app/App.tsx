@@ -8,7 +8,7 @@ import { changeCount, ChangesList, problemCounts, ProblemsList } from '../lists'
 import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from '../model-utils';
 import { StatesCanvas } from '../states-canvas';
 import { useSessionPage } from '../session/page';
-import { StormingDetails } from '../storming';
+import { stageChoice, StormingDetails } from '../storming';
 import { ViewWorkspace, useViewWorkspace } from '../view/workspace';
 import { usePanes } from './panes';
 import { SettingsDialog } from '../settings-dialog';
@@ -194,6 +194,7 @@ export function App() {
                                 onSelect={(id) => select(id)}
                                 legendOpen={legendOpen}
                                 onLegendToggle={() => setLegendOpen(!legendOpen)}
+                                compact={settings.compact}
                             />
                         )}
                         stormingView={(id, history) => (
@@ -207,6 +208,15 @@ export function App() {
                                 history={history}
                                 headingAction={session.inspectorAction}
                                 onSelect={(x) => select(x)}
+                                onShowStage={(stormingId, stageId) => {
+                                    const choice = settings.stormingChoice;
+                                    settings.setStormingChoice({
+                                        ...choice,
+                                        stormingId,
+                                        timelines: { ...choice.timelines, [stormingId]: stageChoice(stageId) },
+                                    });
+                                    setView({ kind: 'storming' });
+                                }}
                             />
                         )}
                         headingAction={session.inspectorAction}

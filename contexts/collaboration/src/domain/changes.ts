@@ -91,8 +91,9 @@ function withoutRanges(value: unknown): unknown {
     );
 }
 
-/** A declaration's fingerprint: a timeline names its groups (whose own changes are theirs). */
+/** A declaration's fingerprint: a timeline names its groups, a stage its timelines (whose own changes are theirs). */
 function fingerprint(d: AnyDeclaration): string {
+    if (d.kind === 'stage') return JSON.stringify(withoutRanges({ ...d, timelines: d.timelines.map((t) => t.id) }));
     if (d.kind !== 'timeline') return JSON.stringify(withoutRanges(d));
     const steps = d.steps.map((s) => (s.type === 'group' ? { type: 'group', id: s.id } : s));
     return JSON.stringify(withoutRanges({ ...d, steps }));

@@ -14,9 +14,12 @@ import {
     type NodeElementKind,
     type RelationKeyword,
     type SourceRange,
+    type Stage,
     type Storming,
+    type Timeline,
 } from './ir.js';
 import { labelOverflowsNote } from './sticky-note.js';
+import { branchPoints, drawnInSections, onCycle, rejoinPoint, topLevel, trunk, type Section } from './stages.js';
 
 /** How an element kind is named in messages. */
 const KIND_NAMES: Record<ElementKind, string> = {
@@ -30,6 +33,7 @@ const KIND_NAMES: Record<ElementKind, string> = {
     hotspot: 'hotspot',
     timeline: 'timeline',
     group: 'group',
+    stage: 'stage',
 };
 
 const NODE_KINDS: readonly NodeElementKind[] = ['event', 'actor', 'external', 'command', 'policy', 'aggregate', 'readmodel', 'hotspot'];
@@ -42,7 +46,7 @@ const kindList = (kinds: readonly ElementKind[]): string => kinds.map((k) => art
 const line = (range: SourceRange): number => range.start.line;
 
 /**
- * The checks of a `.dtes` storming that need no `.dt` model (spec §11, ADR 0024: S001–S009 and S014–S016), on the storming
+ * The checks of a `.dtes` storming that need no `.dt` model (spec §11, ADR 0024: S001–S009 and S014–S022), on the storming
  * IR only:
  *   - S001: a local ID declared twice in a storming (across kinds, timelines and groups included), a storming ID twice
  *   - S002: a relation target or timeline step that names no declaration of its storming
@@ -56,6 +60,13 @@ const line = (range: SourceRange): number => range.start.line;
  *   - S014 (warning): a type-level cycle policy → command → event → policy
  *   - S015 (warning): a label too long for its sticky note even at its smallest font (`STICKY_NOTE`)
  *   - S016: a `level` other than `design` (`big-picture` included: no `level` already means both levels)
+ *   - S017: a stage `after` itself, or stages whose `after`s form a cycle (S002/S003 name no stage, S004 a second `after`)
+ *   - S018: a `then` on a main flow (a `timeline`, not an `exception`), or naming an event in no main flow
+ *   - S019 (warning): a timeline of a stage (or, in a storming with exceptions, a top-level one) other than its trunk
+ *     whose first step is in neither the trunk nor another timeline that branches off
+ *   - S020: timelines outside the stages of a storming that has stages
+ *   - S021 (warning): a second stage without `after` (the first one without is where the flow starts)
+ *   - S022 (warning): a stage without a main flow (a `timeline`)
  * Not diagnosed (spec §11): timeline order against causality, completeness (unreferenced events, missing `emits`,
  * events in no timeline) and the optional Info rule on policies with several `on` and `issues`.
  */
@@ -137,18 +148,160 @@ function validateStorming(storming: Storming): Diagnostic[] {
         return undefined;
     };
 
+    const stages = storming.elements.filter((el): el is Stage => el.kind === 'stage');
+    const top = topLevel(storming);
     for (const el of storming.elements) {
         if (el.kind === 'timeline') {
-            for (const step of el.steps) {
-                if (step.type === 'event') {
-                    resolve(step.eventId, step.range, ['event'], `A step of timeline '${el.id}'`, el.id);
-                    continue;
-                }
-                checkGroup(step.id, step.events, el.id);
+            checkTimeline(el, top);
+            if (stages.length) {
+                out.push(
+                    esDiagnostic(
+                        'error',
+                        'S020',
+                        `${el.exception ? 'Exception' : 'Timeline'} '${el.id}' is outside the stages of storming '${storming.id}'; once a storming has stages, every timeline is in one.`,
+                        el.nameRange,
+                        {
+                            hint: `move it into the stage it happens in`,
+                            elementId: elementId(el.id),
+                        },
+                    ),
+                );
             }
             continue;
         }
+        if (el.kind === 'stage') {
+            checkStage(el);
+            continue;
+        }
         checkClauses(el);
+    }
+
+    function checkTimeline(t: Timeline, section: Section): void {
+        const what = t.exception ? 'exception' : 'timeline';
+        for (const step of t.steps) {
+            if (step.type === 'event') {
+                resolve(step.eventId, step.range, ['event'], `A step of ${what} '${t.id}'`, t.id);
+                continue;
+            }
+            checkGroup(step.id, step.events, t.id);
+        }
+        if (!t.rejoin) return;
+        const target = resolve(t.rejoin.eventId, t.rejoin.range, ['event'], `\`then\` of ${what} '${t.id}'`, t.id);
+        if (!target) return;
+        const report = (message: string, hint: string): void => {
+            out.push(esDiagnostic('error', 'S018', message, t.rejoin!.range, { hint, elementId: elementId(t.id) }));
+        };
+        if (!t.exception) {
+            report(
+                `Timeline '${t.id}' is a main flow; only an exception returns to a main flow with \`then\`.`,
+                `write it \`exception ${t.id}\` if it is one, or remove \`then ${t.rejoin.eventId}\``,
+            );
+        } else if (!rejoinPoint(storming, section, t.rejoin.eventId)) {
+            report(
+                `\`then ${t.rejoin.eventId}\` of exception '${t.id}' names an event in no main flow; an exception returns to a step of a main flow (a \`timeline\`).`,
+                `name an event of a \`timeline\`${section.id ? ` of stage '${section.id}' or of another stage` : ''}, or remove \`then\``,
+            );
+        }
+    }
+
+    /** S019: the timelines of a section, but its trunk, that branch off nowhere. */
+    function checkBranches(section: Section, where: string): void {
+        const points = branchPoints(section);
+        const main = trunk(section);
+        for (const t of section.timelines) {
+            if (!points.has(t.id) || points.get(t.id) || byId.get(t.id) !== t) continue;
+            const first = t.steps[0]!;
+            const event = first.type === 'event' ? `'${first.eventId}'` : `group ${first.id}`;
+            out.push(
+                esDiagnostic(
+                    'warning',
+                    'S019',
+                    `${t.exception ? 'Exception' : 'Timeline'} '${t.id}' of ${where} starts with ${event}, which is in neither ${main ? `the main flow '${main.id}'` : 'a main flow'} nor another timeline branching off it; it is drawn apart, not branching off.`,
+                    first.range,
+                    {
+                        hint: main
+                            ? `start it with the event of '${main.id}' (or of another timeline) it branches off at, as the shared first step`
+                            : `add the main flow it branches off from, a \`timeline\``,
+                        elementId: elementId(t.id),
+                    },
+                ),
+            );
+        }
+    }
+    if (!stages.length && drawnInSections(storming)) checkBranches(top, `storming '${storming.id}'`);
+
+    function checkStage(stage: Stage): void {
+        const what = `Stage '${stage.id}'`;
+        stage.afters.forEach((after, i) => {
+            if (i > 0) {
+                out.push(
+                    esDiagnostic('error', 'S004', `${what} has more than one \`after\`; it takes at most one.`, after.range, {
+                        hint: `keep the \`after\` of the stage it comes right after, and remove the others`,
+                        elementId: elementId(stage.id),
+                    }),
+                );
+                return;
+            }
+            if (after.stageId === stage.id) {
+                out.push(
+                    esDiagnostic('error', 'S017', `${what} comes \`after\` itself.`, after.range, {
+                        hint: `name the stage it comes after, or remove \`after\` if it is the first stage`,
+                        elementId: elementId(stage.id),
+                    }),
+                );
+                return;
+            }
+            resolve(after.stageId, after.range, ['stage'], `\`after\` of stage '${stage.id}'`, stage.id);
+        });
+        const starts = stages.filter((s) => !s.afters.length);
+        if (!stage.afters.length && starts[0] !== stage) {
+            out.push(
+                esDiagnostic(
+                    'warning',
+                    'S021',
+                    `${what} comes after no stage, and neither does stage '${starts[0]!.id}'; it is drawn as a separate start, after the stages written before it, without an arrow from them.`,
+                    stage.nameRange,
+                    {
+                        hint: `add \`after <Stage>\` naming the stage it follows (e.g. \`after ${stages[stages.indexOf(stage) - 1]!.id}\`)`,
+                        elementId: elementId(stage.id),
+                    },
+                ),
+            );
+        }
+        if (!trunk(stage)) {
+            out.push(
+                esDiagnostic('warning', 'S022', `${what} has no main flow: a \`timeline\` (an \`exception\` is not one).`, stage.nameRange, {
+                    hint: `add its main flow, \`timeline Main "通常" { … }\` with the events of this stage, or remove the stage`,
+                    elementId: elementId(stage.id),
+                }),
+            );
+        }
+        for (const t of stage.timelines) checkTimeline(t, stage);
+        checkBranches(stage, `stage '${stage.id}'`);
+    }
+
+    // S017: a cycle of `after`s, reported at the `after` of each of its stages
+    const after = new Map<string, string>();
+    for (const s of stages) {
+        const a = s.afters[0]?.stageId;
+        if (a !== undefined && a !== s.id && byId.get(a)?.kind === 'stage' && byId.get(s.id) === s) after.set(s.id, a);
+    }
+    for (const s of stages) {
+        if (!after.has(s.id) || !onCycle(s.id, after)) continue;
+        const cycle = [s.id];
+        for (let at = after.get(s.id)!; at !== s.id; at = after.get(at)!) cycle.push(at);
+        out.push(
+            esDiagnostic(
+                'error',
+                'S017',
+                `Stage '${s.id}' is on a cycle of \`after\`: ${[...cycle, s.id].join(' after ')}. Stages are in time order, so none comes after a later one.`,
+                s.afters[0]!.range,
+                {
+                    hint: `remove the \`after\` of the stage that comes first`,
+                    elementId: elementId(s.id),
+                },
+            ),
+        );
     }
 
     function checkGroup(groupId: string, events: readonly EventStepRef[], timelineId: string): void {
@@ -380,7 +533,7 @@ function cycles(storming: Storming, byId: ReadonlyMap<string, AnyDeclaration>): 
     const isKind = (id: string, kind: ElementKind) => byId.get(id)?.kind === kind;
     const policies: NodeElement[] = [];
     for (const el of storming.elements) {
-        if (el.kind === 'timeline' || byId.get(el.id) !== el) continue;
+        if (el.kind === 'timeline' || el.kind === 'stage' || byId.get(el.id) !== el) continue;
         for (const c of el.clauses) {
             if (c.type !== 'relation') continue;
             if (el.kind === 'policy' && c.keyword === 'issues' && isKind(c.target, 'command')) add(el.id, c.target);

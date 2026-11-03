@@ -47,6 +47,8 @@ context Collaboration {
     /// 作業の打ち消しの依頼なら、変更を打ち消す実行。ファシリテーターだけが送る（`requestRevert`）。本文は何を打ち消すかを
     /// 皆に伝える（「〈作業名〉の変更を打ち消す」）。ほかの依頼と同じく実行として待ちに入り、順が来るとサーバーが機械的に打ち消すか、できなければ AI に任せる。
     references reverts: AgentRunId? -> AgentRun "打ち消す実行"
+    /// 送ったときに依頼者が見ていたビュー。以前のメッセージ、AI の回答、打ち消しの依頼にはない。
+    viewedAt: ViewedAt? "送ったときのビュー"
 
     invariant atMostTwentyTargets "対象は20件まで" { count(targets) <= 20 }
     invariant distinctTargets "同じ対象は1回" { unique(targets, t => t.target) }
@@ -65,7 +67,7 @@ context Collaboration {
       dismissedAt: Timestamp "見送り日時"
     }
 
-    create command send(id: RequestId, session: ActiveSession, author: ParticipantId, targets: TargetSnapshot[0..20], body: Text, sentAt: Timestamp, replyTo: ReplyableTarget?, mentions: MentionableParticipant[0..20]) "依頼を送る"
+    create command send(id: RequestId, session: ActiveSession, author: ParticipantId, targets: TargetSnapshot[0..20], body: Text, sentAt: Timestamp, replyTo: ReplyableTarget?, mentions: MentionableParticipant[0..20], viewedAt: ViewedAt?) "依頼を送る"
       -> Sent
       requires atMostTwentyTargets "対象は20件まで" { count(targets) <= 20 } else TooManyTargets
       requires distinctTargets "同じ対象は1回" { unique(targets, t => t.target) } else DuplicateTarget
@@ -101,6 +103,7 @@ context Collaboration {
     mentions: ParticipantId[0..20] "言及した人"
     /// 打ち消しの依頼なら、打ち消す実行。
     reverts: AgentRunId? "打ち消す実行"
+    viewedAt: ViewedAt? "送ったときのビュー"
   }
 
   /// 以前のセッションのアウトボックスに残る見送り。いまは発行しないが、読み直し（再生）のために残す。

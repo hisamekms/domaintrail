@@ -13,6 +13,7 @@ import {
     isEsReadModel,
     isEsRefClause,
     isEsRelationClause,
+    isEsStage,
     isEsStatusClause,
     isEsTimeline,
     type EsClause,
@@ -20,13 +21,14 @@ import {
     type EsFile,
     type EsGroup,
     type EsNode,
+    type EsStage,
     type EsStorming,
     type EsTimeline,
 } from './generated/ast.js';
 import type { SourceFile } from '@domaintrail/kernel';
 import { compareDiagnostics, type Diagnostic } from '@domaintrail/kernel';
 import { docComment } from './doc-comment.js';
-import type { Clause, EventStepRef, Group, NodeElement, NodeElementKind, SourceRange, Storming, Timeline } from '../../domain/ir.js';
+import type { Clause, EventStepRef, Group, NodeElement, NodeElementKind, SourceRange, Stage, Storming, Timeline } from '../../domain/ir.js';
 import { createStormingServices } from './module.js';
 
 /**
@@ -116,13 +118,21 @@ export function toStormingIr(file: EsFile, path: string): Storming[] {
     const timeline = (t: EsTimeline): Timeline => ({
         ...declaration(t),
         kind: 'timeline',
+        ...(t.exception ? { exception: true as const } : {}),
         steps: t.steps.map((s) => (isEsGroup(s) ? { type: 'group', ...group(s) } : { type: 'event', ...step(s) })),
+        ...(t.rejoin ? { rejoin: { eventId: t.rejoin.event.$refText, range: propertyRange(t.rejoin, 'event') } } : {}),
+    });
+    const stage = (s: EsStage): Stage => ({
+        ...declaration(s),
+        kind: 'stage',
+        afters: s.afters.map((a) => ({ stageId: a.stage.$refText, range: propertyRange(a, 'stage') })),
+        timelines: s.timelines.map(timeline),
     });
     const node = (n: EsNode): NodeElement => ({ ...declaration(n), kind: nodeKind(n), clauses: n.clauses.map(clause) });
 
     return file.stormings.map((s: EsStorming) => ({
         ...declaration(s),
-        elements: s.elements.map((el) => (isEsTimeline(el) ? timeline(el) : node(el))),
+        elements: s.elements.map((el) => (isEsTimeline(el) ? timeline(el) : isEsStage(el) ? stage(el) : node(el))),
     }));
 }
 

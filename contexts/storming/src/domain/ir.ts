@@ -21,10 +21,10 @@ export interface SourceRange {
 }
 
 /** The kinds of declarations; they share one namespace per storming (spec §2, §14). */
-export type ElementKind = 'event' | 'actor' | 'external' | 'command' | 'policy' | 'aggregate' | 'readmodel' | 'hotspot' | 'timeline' | 'group';
+export type ElementKind = 'event' | 'actor' | 'external' | 'command' | 'policy' | 'aggregate' | 'readmodel' | 'hotspot' | 'timeline' | 'group' | 'stage';
 
-/** The declarations drawn as nodes of their own (a timeline and a group are drawn through their events). */
-export type NodeElementKind = Exclude<ElementKind, 'timeline' | 'group'>;
+/** The declarations drawn as nodes of their own (a timeline, a group and a stage are drawn through their events). */
+export type NodeElementKind = Exclude<ElementKind, 'timeline' | 'group' | 'stage'>;
 
 /** The keywords of a relation clause inside an element's body (spec §3.2). */
 export type RelationKeyword = 'actor' | 'reads' | 'target' | 'emits' | 'on' | 'issues';
@@ -70,7 +70,7 @@ export interface EventStepRef {
     range: SourceRange;
 }
 
-/** `group Id "label" { A B }`: events of one stage, without an order among them (spec §3.4). */
+/** `group Id "label" { A B }`: events of one step, without an order among them (spec §3.4). */
 export interface Group extends Declaration {
     kind: 'group';
     events: EventStepRef[];
@@ -81,17 +81,38 @@ export type TimelineStep = ({ type: 'event' } & EventStepRef) | ({ type: 'group'
 /** A partial time order of events: event references and groups only (spec §3.4). */
 export interface Timeline extends Declaration {
     kind: 'timeline';
+    /** Written `exception`: an exception from the main flows (spec §3.7); `timeline` is a main flow. */
+    exception?: true;
     steps: TimelineStep[];
+    /** `then <Event>`: the event of a main flow an exception returns to after its last step (spec §3.7). */
+    rejoin?: EventStepRef;
 }
 
-export type StormingElement = NodeElement | Timeline;
+/** `after <Stage>` of a stage, by ID (it should name another stage). */
+export interface StageRef {
+    stageId: string;
+    range: SourceRange;
+}
 
-/** Any declaration of a storming, groups included. */
-export type AnyDeclaration = NodeElement | Timeline | Group;
+/**
+ * `stage Id "label" after Prev { timeline … exception … }`: a time section of the flow (spec §3.7): its main flows
+ * (`timeline`; the first is its trunk) and its exceptions (`exception`); `after` puts it after another stage (at most
+ * one is valid).
+ */
+export interface Stage extends Declaration {
+    kind: 'stage';
+    afters: StageRef[];
+    timelines: Timeline[];
+}
+
+export type StormingElement = NodeElement | Timeline | Stage;
+
+/** Any declaration of a storming, stages, their timelines and groups included. */
+export type AnyDeclaration = NodeElement | Timeline | Group | Stage;
 
 /** `storming Id "label" { ... }`: the unit of Event Storming. */
 export interface Storming extends Declaration {
-    /** Top-level declarations in source order (groups are inside their timelines). */
+    /** Top-level declarations in source order (groups are inside their timelines, the timelines of a stage inside it). */
     elements: StormingElement[];
 }
 
@@ -107,11 +128,22 @@ export interface StormingAnalysis {
     syntaxOk: boolean;
 }
 
-/** Every declaration of a storming, groups included, in source order. */
+/** Every declaration of a storming, stages, their timelines and groups included, in source order. */
 export function declarations(storming: Storming): AnyDeclaration[] {
+    const timeline = (t: Timeline): AnyDeclaration[] => [t, ...t.steps.filter((s): s is { type: 'group' } & Group => s.type === 'group')];
     return storming.elements.flatMap((el): AnyDeclaration[] =>
-        el.kind === 'timeline' ? [el, ...el.steps.filter((s): s is { type: 'group' } & Group => s.type === 'group')] : [el],
+        el.kind === 'timeline' ? timeline(el) : el.kind === 'stage' ? [el, ...el.timelines.flatMap(timeline)] : [el],
     );
+}
+
+/** Every timeline of a storming in source order: the top-level ones and those of its stages. */
+export function allTimelines(storming: Storming): Timeline[] {
+    return storming.elements.flatMap((el): Timeline[] => (el.kind === 'timeline' ? [el] : el.kind === 'stage' ? el.timelines : []));
+}
+
+/** The node elements of a storming (not its timelines, groups or stages), in source order. */
+export function nodeElements(storming: Storming): NodeElement[] {
+    return storming.elements.filter((el): el is NodeElement => el.kind !== 'timeline' && el.kind !== 'stage');
 }
 
 // ---- Rules shared by the validator and the projection ----

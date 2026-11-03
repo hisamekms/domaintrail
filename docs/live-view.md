@@ -55,11 +55,21 @@ See [ADR 0007](adr/0007-pane-roles.md).
 
 The canvas's controls sit at its bottom-left: `− 85% +` zooms out and in around the middle (the level shows live;
 a click on it goes back to 100%), ⤢ fits everything (`Shift+1`), ◎ fits the selection (`Shift+2`; disabled while
-nothing is selected), the book (凡例, named in its tooltip) opens the legend upward, and « at the right end collapses the
-bar toward the corner, leaving only », which brings it back (the legend's panel is hidden while collapsed and keeps
-its own open or closed state). `U` does the same as « and », and the choice is remembered per browser. Hovering an
+nothing is selected), 詰めて表示 (two inward arrows, named in its tooltip) closes up the gaps between the notes and
+boxes of every diagram, 印刷 (the printer) prints the diagram on one page (see [Printing](#printing)), the book (凡例,
+named in its tooltip) opens the legend upward, and « at the right end collapses the bar toward the corner, leaving only
+», which brings it back (the legend's panel is hidden while collapsed and keeps its own open or closed state). `U` does the same as « and », and the choice is remembered per browser. Hovering an
 edge (its line or arrowhead) tells what it means, in the legend's words for that view (「参照（ID で別の集約へ）」…).
-The keys do nothing while typing. The inspector's 状態遷移 diagram has the same controls.
+The keys do nothing while typing. The inspector's 状態遷移 diagram has the same controls, without 詰めて表示 and 印刷.
+
+詰めて表示 is off by default and remembered per browser. While it is on, every diagram — the Event Storming views (the
+stages' grid included), the Context Map, the Structure View (focused views included) and the inspector's 状態遷移 —
+is laid out again with narrower gaps between notes, boxes, layers and frames (arrowheads, edge labels, the exceptions'
+captions and the frames' titles keep their room). The page asks for a diagram's compact layout the first time it shows
+it and shows the normal one until it comes; both are kept (in `.domaintrail/layout.json`, under their own keys), so
+switching back and forth lays out nothing again. Each spacing keeps its own camera. A compact diagram draws no ghosts
+of removed elements (they are where the baseline's normal layout had them), and the others' cursors are drawn only
+between viewers who see the same spacing.
 
 The canvas is read-only and moves the same way everywhere: a drag pans (on the background or over an item; there is
 no hand tool, so `H` does nothing), the wheel or a trackpad's two fingers pan, and Ctrl / ⌘ + wheel or a pinch zoom
@@ -102,6 +112,11 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   and a group a dashed frame tinted with the event's orange. Every note also names its kind above its label
   («イベント»), so the colour is never the only cue. Light: soft pastel paper, a coloured edge and dark text; dark:
   muted deep paper of the same hue, a coloured edge and pale text. A storming whose file stops parsing stays as it last parsed, with a banner.
+  A storming with stages or exceptions (`stage`, `exception`) is drawn in time order: the stages as labelled frames
+  left to right, the trunk of the main flows one straight row through them, every other timeline on a row below the
+  step it branches off at (the exceptions' dashed arrows a quieter red, a dotted arrow back for `then`). The タイムライン
+  picker then also lists each stage (「…（例外を含む）」), and the toolbar has 「例外を表示」 (an icon toggle, on by
+  default, remembered per browser) to draw the integrated canvas and the stages without their exceptions.
 
 The modeling views (Context Map, Structure, Catalog, the inspector, the explorer) use the same hues for the same
 concepts, on smaller areas: the cards are neutral, and the kind is on their edge, their stereotype («集約ルート») and
@@ -118,6 +133,16 @@ indigo ring outside the node; a change from the baseline is a green (added) or y
 badge, and a removed element a faded, dashed ghost with its name struck through and a 削除 badge; a diagnostic is a ✕
 or ! mark on the node's corner, with its text in the inspector and the problems list (a state view's transitions keep
 their command's blue). The others' cursors and names have a light halo, so that they read over any sticky note.
+
+## Printing
+
+The browser's print (Ctrl+P / ⌘P) prints the current diagram alone — without the panes, the chat, the toolbars, the
+canvas's controls or the legend — fitted whole to one landscape page, in the light colours whatever the theme. The
+paper size is chosen in the browser's print dialog; the diagram is scaled to it. The diagram is printed in its compact
+layout when the page has it (詰めて表示 on, or printed before), else in the layout shown.
+
+印刷 in the canvas's controls is the surer way: it gets the compact layout first (the button spins meanwhile), then opens
+the print dialog. The catalog prints as a page: its list, without the panes around it.
 
 ## Inspector (right or below)
 
@@ -177,7 +202,8 @@ neither baseline: their views are not marked.
   larger text does not wrap everywhere; a width you dragged is kept.
 - Names follow the 名前の表示 setting: ラベル (the default; the string after a declaration's name, falling back to
   the name when there is none or it is blank), 名前 or 両方 (the label and the name; the name alone without a label).
-  Layouts are cached in `<root>/.domaintrail/layout.json`. The canvas is read-only.
+  Layouts are cached in `<root>/.domaintrail/layout.json` (the compact ones of 詰めて表示 beside the normal ones). The
+  canvas is read-only.
 
 See [ADR 0001](adr/0001-mvp-implementation-decisions.md) for the design decisions.
 

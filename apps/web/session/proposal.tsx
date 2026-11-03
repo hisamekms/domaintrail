@@ -162,7 +162,7 @@ export function ProposalCard({ proposal: p, continues }: { proposal: ProposalJso
                     <p className="proposal-label">{t.label}</p>
                     {!hasOptions && <TargetRow targets={p.content.targets} />}
                     {!(mode === 'edit' && !hasOptions) && (
-                        <Clamped tx={tx}>
+                        <Clamped tx={tx} revealKey={`proposal:${p.id}`}>
                             <ReplyText text={headHow(p)} onNavigate={onNavigate} />
                         </Clamped>
                     )}

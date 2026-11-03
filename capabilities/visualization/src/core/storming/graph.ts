@@ -8,11 +8,21 @@ import { mapTexts, perLang, type EdgeKind, type Graph, type GraphEdge, type Grap
 import { esElementId, firstDeclarations, STICKY_NOTE, type NodeElementKind, type Storming } from '@domaintrail/storming';
 import { isCausal, type RenderEdge, type RenderGraph, type RenderNode, type ViewOptions } from './ir.js';
 
-/** Graph ID of a view: `storming:<StormingId>:<level>:<timelineId or *>` (the `storming` prefix lays it out left to right). */
-export const stormingGraphId = (stormingId: string, options: ViewOptions): string => `storming:${stormingId}:${options.level}:${options.timelineId ?? '*'}`;
+/**
+ * What a view is of: a timeline's ID, `@<stage ID>` for a stage, nothing for the integrated canvas; `-exceptions` after
+ * it without the exceptions.
+ */
+const scopeOf = (options: ViewOptions): string =>
+    (options.timelineId ?? (options.stageId !== undefined ? `@${options.stageId}` : '')) + (options.hideExceptions ? '-exceptions' : '');
 
-/** The key of a view among a storming's views in the Live View's payload. */
-export const stormingViewKey = (options: ViewOptions): string => `${options.level}|${options.timelineId ?? ''}`;
+/**
+ * Graph ID of a view: `storming:<StormingId>:<level>:<timelineId, @stageId or *>` (the `storming` prefix lays it out left
+ * to right).
+ */
+export const stormingGraphId = (stormingId: string, options: ViewOptions): string => `storming:${stormingId}:${options.level}:${scopeOf(options) || '*'}`;
+
+/** The key of a view among a storming's views in the Live View's payload: `<level>|<timelineId, @stageId or empty>`. */
+export const stormingViewKey = (options: ViewOptions): string => `${options.level}|${scopeOf(options)}`;
 
 const NODE_KINDS: Record<NodeElementKind, NodeKind> = {
     event: 'esEvent',
@@ -43,6 +53,10 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
     const parentOf = new Map(render.nodes.flatMap((n) => (n.type === 'group' ? n.members.map((m) => [m, n.id] as const) : [])));
 
     const node = (n: RenderNode): GraphNode => {
+        if (n.type === 'stage') {
+            // sized by the layout around its cells
+            return { id: n.id, kind: 'esStage', label: label(n.stageId), lines: [], elementId: esElementId(storming.id, n.stageId), width: 0, height: 0 };
+        }
         if (n.type === 'group') {
             // the groups a shared step stands for may have other IDs and labels in each timeline
             const ids = [...new Set(n.groups.map((g) => g.groupId))];
@@ -76,6 +90,23 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
         const texts = ids.map(label);
         return mapTexts(texts[0], (_, lang, mode) => texts.map((t) => t[lang][mode]).join(' / '));
     };
+    if (render.grid) {
+        // a view of stages: every render node is drawn, in its cell; the edge into an exception's lane names it
+        const { cells, frames, looseRow, captions } = render.grid;
+        const edge = (e: RenderEdge): GraphEdge => ({
+            id: e.id,
+            kind: edgeKind(e),
+            source: e.source,
+            target: e.target,
+            ...(captions[e.id] && { label: timelinesOf(captions[e.id]) }),
+        });
+        return {
+            id: stormingGraphId(storming.id, render.options),
+            nodes: render.nodes.map(node),
+            edges: render.edges.map(edge),
+            grid: { cells, frames, ...(looseRow !== undefined && { looseRow }) },
+        };
+    }
     if (render.options.timelineId !== undefined) {
         const edge = (e: RenderEdge): GraphEdge => ({ id: e.id, kind: edgeKind(e), source: e.source, target: e.target });
         return { id: stormingGraphId(storming.id, render.options), nodes: render.nodes.map(node), edges: render.edges.map(edge) };
@@ -106,7 +137,7 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
                     const s = sequences.get(id) ?? { source, target, timelineIds: new Set<string>() };
                     for (const t of e.timelineIds) s.timelineIds.add(t);
                     sequences.set(id, s);
-                } else {
+                } else if (e.type === 'semantic') {
                     const id = `${e.semantic}@${source}->${target}`;
                     edges.set(id, { id, kind: edgeKind(e), source, target });
                 }
@@ -122,4 +153,14 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
 
 /** §9.4: causal edges solid and directed, the time order dashed, other relations dotted; a hotspot's `on` has no direction. */
 const edgeKind = (e: RenderEdge): EdgeKind =>
-    e.type === 'sequence' ? 'esSequence' : isCausal(e.kind) ? 'esCausal' : e.kind === 'hotspot-on' ? 'esHotspot' : 'esRelated';
+    e.type === 'rejoin'
+        ? 'esRejoin'
+        : e.type === 'sequence' && e.exception
+          ? 'esException'
+          : e.type !== 'semantic'
+            ? 'esSequence'
+            : isCausal(e.kind)
+              ? 'esCausal'
+              : e.kind === 'hotspot-on'
+                ? 'esHotspot'
+                : 'esRelated';

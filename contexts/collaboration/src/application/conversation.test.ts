@@ -388,3 +388,25 @@ describe('the session so far', () => {
         expect(error(await use.sessionSoFar({ session: '00000000-0000-4000-8000-0000000000ff' as C.SessionId }))).toMatchObject({ type: 'NotFound' });
     });
 });
+
+describe('the view a message was sent from', () => {
+    const viewedAt: C.ViewedAt = {
+        view: { kind: 'Storming', storming: value(C.makeStormingName('OrderToCash')), level: 'DesignLevel', exceptions: true },
+    };
+
+    test('kept on the message and frozen into the run that carries it out; a message without one has none', async () => {
+        const { use } = collaboration();
+        const session = value(await use.openSession({ mode: 'Solo', facilitator: facilitatorId, name })).session.id;
+        const sent = value(await use.sendMessage({ session, actor: facilitator, targets: [], body: text('ここに与信の失敗を足して'), viewedAt }));
+        expect(sent.request.viewedAt).toEqual(viewedAt);
+        const stored = value(await use.sessionState({ session })).requests.find((r) => r.id === sent.request.id);
+        expect(stored?.viewedAt).toEqual(viewedAt);
+        const queued = await triaged(use, sent.triage?.id ?? ('' as C.TriageId), 'ChangeRequest');
+        expect(queued.run?.input.requests[0]?.viewedAt).toEqual(viewedAt);
+
+        const plain = value(await say(use, session, facilitator, 'ID を足して'));
+        expect(plain.request.viewedAt).toBeUndefined();
+        const run = (await triaged(use, plain.triage?.id ?? ('' as C.TriageId), 'ChangeRequest')).run;
+        expect(run && 'viewedAt' in (run.input.requests[0] ?? {})).toBe(false);
+    });
+});

@@ -1,4 +1,4 @@
-import type { Graph, LaidOutGraph, Point } from '../core/graph/ir.js';
+import type { Graph, LaidOutGraph, LayoutSpacing, Point } from '../core/graph/ir.js';
 
 export interface LayoutOptions {
     /**
@@ -6,6 +6,8 @@ export interface LayoutOptions {
      * existing nodes as little as it can. Without them, the layout is canonical (the same graph, the same layout).
      */
     positions?: Readonly<Record<string, Point>>;
+    /** How far apart things are placed (default `normal`); a compact layout is marked as such (`LaidOutGraph.spacing`). */
+    spacing?: LayoutSpacing;
 }
 
 /**

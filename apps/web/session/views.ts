@@ -1,10 +1,10 @@
 // Where the others are, as the session's participant list shows it (ADR 0026, Presence), without React: each
-// participant's whereabouts seen from this page, the view a location stands for (to name it and to open it), and the
-// small rules of the chat's layout (consecutive bubbles of one author, the send shortcut's name).
-import type { Me, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
+// participant's whereabouts seen from this page, the view a location stands for (to name it, to open it, and to send
+// it with a message), and the small rules of the chat's layout (consecutive bubbles of one author, the send shortcut's name).
+import type { Me, SendRequestBody, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
 import { type DisplayMode, STRUCTURE_LEVELS, type StructureLevel, VIEW_LEVELS, type ViewLevel } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
-import { nameIn } from '../model-utils';
+import { type CatalogFilter, nameIn } from '../model-utils';
 import { sameLocation } from './location';
 import { listedParticipants, type Peers, type Whereabouts } from './presence';
 import { participantNames } from './stream';
@@ -52,6 +52,60 @@ export function viewTargetOf(location: ViewLocation): ViewTarget | undefined {
         return isStructureLevel(level) ? { kind: 'structure', level } : undefined;
     }
     return undefined;
+}
+
+/** Longest catalog filter a message carries (the server's `VIEWED_AT_LIMITS.query`). */
+const VIEWED_AT_QUERY = 200;
+
+/** Where the page was looking, as a message carries it (`SendRequestBody.viewedAt`). */
+export type SentView = NonNullable<SendRequestBody['viewedAt']>;
+
+const STRUCTURE_DETAIL = { detail: 'Detail', overview: 'Overview', aggregates: 'Aggregates' } as const;
+
+/**
+ * The view a message is sent from: the location's view (`viewTargetOf`), with what the location does not tell — a
+ * storming's stage and whether its exceptions are shown, the catalog's filter — and the aggregate whose state diagram
+ * the inspector shows. Undefined for a view this page cannot name (one still loading).
+ */
+export function sentView(input: {
+    readonly location: ViewLocation;
+    /** The storming view's stage and exceptions (`ViewOptions`). */
+    readonly storming?: { readonly stageId?: string; readonly hideExceptions?: true };
+    /** The catalog's filter. */
+    readonly catalog?: CatalogFilter;
+    /** The aggregate whose state diagram the inspector shows. */
+    readonly states?: string;
+}): SentView | undefined {
+    const target = viewTargetOf(input.location);
+    if (!target) return undefined;
+    const states = input.states === undefined ? {} : { states: input.states };
+    switch (target.kind) {
+        case 'contextMap':
+            return { view: { kind: 'ContextMap', all: target.all }, ...states };
+        case 'structure':
+            return { view: { kind: 'Structure', level: STRUCTURE_DETAIL[target.level], focus: target.focus?.contexts ?? [] }, ...states };
+        case 'catalog': {
+            const f = input.catalog;
+            const query = f?.query.trim();
+            return {
+                view: { kind: 'Catalog', ...(query && { query: query.slice(0, VIEWED_AT_QUERY) }), sections: f?.sections ?? [], contexts: f?.contexts ?? [] },
+                ...states,
+            };
+        }
+        case 'storming': {
+            const stage = input.storming?.stageId;
+            return {
+                view: {
+                    kind: 'Storming',
+                    storming: target.stormingId,
+                    level: target.level === 'design-level' ? 'DesignLevel' : 'BigPicture',
+                    ...(target.timelineId !== undefined ? { timeline: target.timelineId } : stage !== undefined && { stage }),
+                    exceptions: !input.storming?.hideExceptions,
+                },
+                ...states,
+            };
+        }
+    }
 }
 
 /** The words a view's name is made of, in the page's language. */

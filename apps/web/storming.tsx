@@ -1,4 +1,4 @@
-import { ChevronRight, Microscope, Telescope, type LucideIcon } from 'lucide-react';
+import { ChevronRight, Microscope, Telescope, TriangleAlert, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { commandsOf, elementOf, type DomainModel } from '@domaintrail/modeling';
 import {
@@ -9,6 +9,7 @@ import {
     firstDeclarations,
     isDesignLevelOnly,
     type NodeElement,
+    type Stage,
     type Storming,
     stormingTimelines,
     timelineOccurrences,
@@ -33,17 +34,29 @@ import { LevelSwitch, SubjectPicker, ToolbarSubject } from './view/toolbar';
 export interface StormingChoice {
     stormingId: string | undefined;
     level: ViewLevel;
-    /** By storming ID: the selected timeline (none: the integrated canvas). */
+    /** By storming ID: the selected timeline, or `@<stage ID>` for a stage (none: the integrated canvas). */
     timelines: Record<string, string>;
+    /** 「例外を表示」: false hides the exceptions on the integrated canvas and a stage (absent: shown). */
+    exceptions?: boolean;
 }
+
+/** Whether a storming has exceptions (the toolbar's 「例外を表示」 is then shown). */
+export const hasExceptionTimelines = (storming: StormingView): boolean => storming.timelines.some((t) => t.exception);
+
+/** The picker's value of a stage's view (a timeline's is its ID: an ID never starts with `@`). */
+export const stageChoice = (stageId: string): string => `@${stageId}`;
 
 /** The storming shown (the chosen one, or the first) and the view of it, as the payload keys it. */
 export function shownStorming(stormings: readonly StormingView[], choice: StormingChoice): { storming: StormingView; options: ViewOptions } | undefined {
     const storming = stormings.find((s) => s.id === choice.stormingId) ?? stormings[0];
     if (!storming) return undefined;
     const level = VIEW_LEVELS.includes(choice.level) ? choice.level : 'big-picture';
-    const timelineId = choice.timelines[storming.id];
-    return { storming, options: timelineId !== undefined && storming.timelines.some((t) => t.id === timelineId) ? { level, timelineId } : { level } };
+    const scope = choice.timelines[storming.id];
+    const stage = scope?.startsWith('@') ? storming.stages?.find((st) => stageChoice(st.id) === scope) : undefined;
+    // an exception's own timeline is shown as it is; the integrated canvas and a stage, without the exceptions if asked
+    const hide = choice.exceptions === false && hasExceptionTimelines(storming) ? { hideExceptions: true as const } : {};
+    if (stage) return { storming, options: { level, stageId: stage.id, ...hide } };
+    return { storming, options: scope !== undefined && storming.timelines.some((t) => t.id === scope) ? { level, timelineId: scope } : { level, ...hide } };
 }
 
 /** The drawing and the render graph of the shown view. */
@@ -97,9 +110,9 @@ function dtTarget(model: DomainModel | null, kind: string, path: string): string
 const LEVEL_ICONS: Record<ViewLevel, LucideIcon> = { 'big-picture': Telescope, 'design-level': Microscope };
 
 /**
- * The Event Storming view's toolbar: its subject, the storming then the timeline (すべて（統合） or one timeline) as a
- * breadcrumb of pickers, and its level. The timeline is what is looked at, not a filter: the integrated canvas and a
- * timeline draw different things.
+ * The Event Storming view's toolbar: its subject, the storming then the timeline (すべて（統合）, a stage with its
+ * exceptions, or one timeline) as a breadcrumb of pickers, and its level. The timeline is what is looked at, not a
+ * filter: the integrated canvas, a stage and a timeline draw different things.
  */
 export function StormingToolbar({
     stormings,
@@ -116,6 +129,7 @@ export function StormingToolbar({
     const shown = shownStorming(stormings, choice);
     if (!shown) return null;
     const { storming, options } = shown;
+    const stageName = (id: string): string => nameIn(mode, id, storming.stages?.find((st) => st.id === id)?.label);
     return (
         <ToolbarSubject>
             <nav className="subject-crumbs" aria-label={t.views.storming}>
@@ -130,10 +144,14 @@ export function StormingToolbar({
                         <ChevronRight className="subject-sep" size={14} aria-hidden />
                         <SubjectPicker
                             label={t.timelineFilter}
-                            value={options.timelineId ?? ''}
+                            value={options.timelineId ?? (options.stageId !== undefined ? stageChoice(options.stageId) : '')}
                             options={[
                                 { value: '', label: t.allTimelines },
-                                ...storming.timelines.map((tl) => ({ value: tl.id, label: nameIn(mode, tl.id, tl.label) })),
+                                ...(storming.stages ?? []).map((st) => ({ value: stageChoice(st.id), label: t.stageView(stageName(st.id)) })),
+                                ...storming.timelines.map((tl) => {
+                                    const name = tl.exception ? t.exceptionTimeline(nameIn(mode, tl.id, tl.label)) : nameIn(mode, tl.id, tl.label);
+                                    return { value: tl.id, label: tl.stageId !== undefined ? t.stageTimeline(stageName(tl.stageId), name) : name };
+                                }),
                             ]}
                             onChange={(id) => {
                                 const { [storming.id]: _, ...others } = choice.timelines;
@@ -143,6 +161,19 @@ export function StormingToolbar({
                     </>
                 )}
             </nav>
+            {hasExceptionTimelines(storming) && options.timelineId === undefined && (
+                <div className="segmented small icons level-switch" role="group" aria-label={t.showExceptions}>
+                    <button
+                        className={choice.exceptions !== false ? 'active' : ''}
+                        aria-pressed={choice.exceptions !== false}
+                        aria-label={t.showExceptions}
+                        data-tooltip={t.showExceptions}
+                        onClick={() => onChange({ ...choice, exceptions: choice.exceptions === false })}
+                    >
+                        <TriangleAlert size={15} aria-hidden />
+                    </button>
+                </div>
+            )}
             <LevelSwitch
                 label={t.stormingLevel}
                 levels={VIEW_LEVELS}
@@ -169,6 +200,7 @@ export function StormingDetails({
     history,
     headingAction,
     onSelect,
+    onShowStage,
 }: {
     stormings: readonly StormingView[];
     selected: string;
@@ -182,6 +214,8 @@ export function StormingDetails({
     /** Placed next to the element's name (in a session, the 💬 that adds it as a request's target). */
     headingAction?: ReactNode;
     onSelect: Select;
+    /** Shows a stage's view (its main flow and its exceptions). */
+    onShowStage?: (stormingId: string, stageId: string) => void;
 }) {
     const t = useT();
     const found = lookup(stormings, selected);
@@ -207,7 +241,9 @@ export function StormingDetails({
             <div className="inspector-head">
                 {history}
                 <div className="inspector-row">
-                    <span className={`kind kind-es-${item.kind ?? 'storming'}`}>{item.kind ? t.esKinds[item.kind] : t.inStorming}</span>
+                    <span className={`kind kind-es-${item.kind ?? 'storming'}`}>
+                        {item.kind === 'timeline' && item.exception ? t.esException : item.kind ? t.esKinds[item.kind] : t.inStorming}
+                    </span>
                     {declaration?.kind === 'event' && isDesignLevelOnly(declaration) && <span className="level-badge">{t.designLevelOnly}</span>}
                 </div>
                 <div className="inspector-title">
@@ -233,7 +269,7 @@ export function StormingDetails({
                 )}
             </div>
             <div className="inspector-body">
-                {declaration && declaration.kind !== 'timeline' && declaration.kind !== 'group' && (
+                {declaration && declaration.kind !== 'timeline' && declaration.kind !== 'group' && declaration.kind !== 'stage' && (
                     <>
                         {(declaration.kind === 'event' || declaration.kind === 'command' || declaration.kind === 'aggregate') && (
                             <RefSection declaration={declaration} model={model} onSelect={onSelect} />
@@ -253,6 +289,9 @@ export function StormingDetails({
                             ))}
                         </ul>
                     </Section>
+                )}
+                {declaration?.kind === 'stage' && (
+                    <StageSection stage={declaration} link={link} onShow={onShowStage && (() => onShowStage(storming.id, declaration.id))} />
                 )}
                 {declaration?.kind === 'timeline' && (
                     <Section title={t.esKinds.timeline}>
@@ -279,6 +318,43 @@ export function StormingDetails({
                     </Section>
                 )}
             </div>
+        </>
+    );
+}
+
+/** A stage: its main flow, its exceptions and the stage it comes after, and the way to its view. */
+function StageSection({ stage, link, onShow }: { stage: Stage; link: (id: string) => ReactNode; onShow: (() => void) | undefined }) {
+    const t = useT();
+    const mains = stage.timelines.filter((tl) => !tl.exception);
+    const exceptions = stage.timelines.filter((tl) => tl.exception);
+    return (
+        <>
+            {onShow && (
+                <div className="reveal">
+                    <button onClick={onShow}>{t.showStage}</button>
+                </div>
+            )}
+            {stage.afters[0] && (
+                <Section title={t.stageAfter}>
+                    <div>{link(stage.afters[0].stageId)}</div>
+                </Section>
+            )}
+            {mains.length > 0 && (
+                <Section title={t.stageMain}>
+                    <ul className="es-list">
+                        {mains.map((tl) => (
+                            <li key={tl.id}>{link(tl.id)}</li>
+                        ))}
+                    </ul>
+                </Section>
+            )}
+            <Section title={t.stageExceptions(exceptions.length)}>
+                <ul className="es-list">
+                    {exceptions.map((tl) => (
+                        <li key={tl.id}>{link(tl.id)}</li>
+                    ))}
+                </ul>
+            </Section>
         </>
     );
 }

@@ -264,6 +264,11 @@ export interface SendRequestBody {
     readonly body: string;
     readonly replyTo?: Json<Collaboration.ReplyTarget>;
     readonly mentions?: readonly string[];
+    /**
+     * Where the sender was looking (`readViewedAt`): kept on the message, its names the workspace does not have dropped
+     * (`resolveViewedAt`), and given to the AI with it.
+     */
+    readonly viewedAt?: Json<Collaboration.ViewedAt>;
 }
 
 /** `POST /api/session/requests` → 201: the message, and its triage when it is addressed to the AI (as the sender's role sees it). */
@@ -343,6 +348,8 @@ export interface StartInterviewBody {
     readonly body: string;
     readonly language: 'ja' | 'en';
     readonly focus?: Json<Collaboration.ModelTarget>;
+    /** Where the starter was looking, kept on the opening message (as `SendRequestBody.viewedAt`). */
+    readonly viewedAt?: Json<Collaboration.ViewedAt>;
 }
 
 /**

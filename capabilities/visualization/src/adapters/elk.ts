@@ -12,6 +12,7 @@ import {
     type Graph,
     type GraphEdge,
     type LaidOutGraph,
+    type LayoutSpacing,
     type NodeLayout,
     type Point,
     type Texts,
@@ -41,16 +42,38 @@ const BASE_OPTIONS: Record<string, string> = {
     'elk.algorithm': 'layered',
     'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
     'elk.edgeRouting': 'ORTHOGONAL',
-    'elk.layered.spacing.nodeNodeBetweenLayers': '60',
-    'elk.spacing.nodeNode': '40',
-    'elk.spacing.edgeNode': '24',
-    'elk.spacing.edgeEdge': '16',
-    'elk.spacing.edgeLabel': '6',
     // Prefer the declaration order of the source; keeps layouts stable for small edits.
     'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
     'elk.layered.crossingMinimization.forceNodeModelOrder': 'false',
     'elk.randomSeed': '1',
     'elk.edgeLabels.placement': 'CENTER',
+};
+
+/**
+ * The gaps between things, by spacing. The compact ones close up the gaps between notes and containers while leaving
+ * room for an arrowhead between layers, for an edge's label beside its line and between parallel edges.
+ */
+export const SPACING_OPTIONS: Record<LayoutSpacing, Record<string, string>> = {
+    normal: {
+        'elk.layered.spacing.nodeNodeBetweenLayers': '60',
+        'elk.spacing.nodeNode': '40',
+        'elk.spacing.edgeNode': '24',
+        'elk.spacing.edgeEdge': '16',
+        'elk.spacing.edgeLabel': '6',
+    },
+    compact: {
+        'elk.layered.spacing.nodeNodeBetweenLayers': '20',
+        'elk.spacing.nodeNode': '12',
+        'elk.spacing.edgeNode': '8',
+        'elk.spacing.edgeEdge': '6',
+        'elk.spacing.edgeLabel': '3',
+    },
+};
+
+/** A container's padding beside and below its children, by spacing (its top holds its label and description). */
+const CONTAINER_SIDES: Record<LayoutSpacing, { left: number; bottom: number; right: number }> = {
+    normal: CONTAINER_PADDING,
+    compact: { left: 10, bottom: 10, right: 10 },
 };
 
 const DIRECTION: Record<string, string> = {
@@ -92,6 +115,8 @@ export class ElkLayoutEngine implements LayoutEngine {
 
     async layout(graph: Graph, options: LayoutOptions = {}): Promise<LaidOutGraph> {
         const scale = graph.textScale ?? 1;
+        const spacing = options.spacing ?? 'normal';
+        const sides = CONTAINER_SIDES[spacing];
         const children = new Map<string, ElkNode[]>();
         const elkNodes = new Map<string, ElkNode>();
         const containers = new Set(graph.nodes.map((n) => n.parent).filter((p): p is string => !!p));
@@ -105,7 +130,7 @@ export class ElkLayoutEngine implements LayoutEngine {
                 // a context's description is drawn under its label
                 const top = Math.round(CONTAINER_PADDING.top * scale) + n.lines.length * LINE_HEIGHT;
                 node.layoutOptions = {
-                    'elk.padding': `[top=${top},left=${CONTAINER_PADDING.left},bottom=${CONTAINER_PADDING.bottom},right=${CONTAINER_PADDING.right}]`,
+                    'elk.padding': `[top=${top},left=${sides.left},bottom=${sides.bottom},right=${sides.right}]`,
                     'elk.nodeSize.constraints': 'MINIMUM_SIZE',
                     'elk.nodeSize.minimum': minimum(Math.ceil(Math.max(160, maxUnits(n.label) * 10.5 * scale + 40, n.width)), Math.max(60, n.height)),
                 };
@@ -137,6 +162,7 @@ export class ElkLayoutEngine implements LayoutEngine {
             id: ROOT,
             layoutOptions: {
                 ...BASE_OPTIONS,
+                ...SPACING_OPTIONS[spacing],
                 'elk.direction': direction,
                 // An incremental layout orders the nodes within each layer by their previous positions instead of the model
                 // order. It never changes their layers, so the order along edges (a timeline's) is the canonical one's.
@@ -176,6 +202,6 @@ export class ElkLayoutEngine implements LayoutEngine {
         };
         collect(result);
 
-        return { ...graph, nodeLayout, edgeLayout, signature: graphSignature(graph) };
+        return { ...graph, nodeLayout, edgeLayout, signature: graphSignature(graph), ...(spacing === 'compact' && { spacing }) };
     }
 }

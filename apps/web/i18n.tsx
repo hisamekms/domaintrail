@@ -104,6 +104,10 @@ const ja = {
         fitSelectionNone: '選択した要素に合わせる（何も選択していません）',
         collapse: 'キャンバスの操作を畳む（U）',
         expand: 'キャンバスの操作を表示（U）',
+        compact: '詰めて表示',
+        compactOff: '詰めて表示をやめる',
+        print: '印刷（1 ページに収める）',
+        printing: '印刷の準備中…',
     },
     transitionLabels: '遷移のラベル',
     transitionLabelModes: {
@@ -128,6 +132,14 @@ const ja = {
     } as Record<ViewLevel, { label: string; hint: string }>,
     timelineFilter: 'タイムライン',
     allTimelines: 'すべて（統合）',
+    /** A stage's view in the timeline picker: its main flow and its exceptions. */
+    stageView: (stage: string) => `${stage}（例外を含む）`,
+    /** A timeline of a stage in the timeline picker. */
+    stageTimeline: (stage: string, timeline: string) => `${stage} / ${timeline}`,
+    /** An exception in the timeline picker. */
+    exceptionTimeline: (name: string) => `例外：${name}`,
+    /** The toolbar's toggle of the exceptions (on the integrated canvas and a stage). */
+    showExceptions: '例外を表示',
     staleStorming: (file: string) => `${file} に構文エラーがあるため、最後に解析できた内容を表示しています`,
 
     // the toolbar's 絞り込み (what each view hides)
@@ -165,6 +177,8 @@ const ja = {
         transition: 'コマンドによる遷移（⇒ 発生させるドメインイベント）',
         esCausal: '型レベルの因果（起こりうる関係。実際に起きたとは限らない）',
         esSequence: 'タイムラインの時間順',
+        esException: '例外の時間順',
+        esRejoin: '例外から本流へ戻る',
         esRelated: '関連（アクター・リードモデル・対象の集約）',
         esHotspot: 'ホットスポットの対象（向きを持たない）',
     },
@@ -186,6 +200,7 @@ const ja = {
         hotspot: 'ホットスポット',
         timeline: 'タイムライン',
         group: 'グループ',
+        stage: '段階',
     } as Record<EsElementKind, string>,
     notInStorming: (id: string) => `${id} はストーミングにありません`,
     inStorming: 'ストーミング',
@@ -215,6 +230,11 @@ const ja = {
     drawnAs: (n: number) => `この図での付箋（${n} 枚）`,
     sharedNote: '複数のタイムラインで先頭から同じ流れの部分は 1 枚にまとめて描きますが、同じ出来事であるとは限りません',
     groupEvents: 'グループのイベント（順序なし）',
+    stageMain: '本流',
+    esException: '例外',
+    stageExceptions: (n: number) => `例外（${n} 件）`,
+    stageAfter: 'この前の段階',
+    showStage: 'この段階を表示',
     openFile: 'ファイルを開く',
 
     // explorer
@@ -724,6 +744,8 @@ const ja = {
                 pending: '確認中',
                 toAnswer: 'AI の回答へ',
                 toProposal: '変更案へ',
+                // an answer that arrived while the reader was scrolled up: the pill that goes to its head
+                answerArrived: 'AI が回答しました',
                 givenUp: 'AI が答えられませんでした',
                 retry: 'もう一度',
                 willRead: 'AI に届きます',
@@ -948,6 +970,10 @@ const en: Messages = {
         fitSelectionNone: 'Fit the selection (nothing selected)',
         collapse: 'Collapse the canvas controls (U)',
         expand: 'Show the canvas controls (U)',
+        compact: 'Close up the gaps',
+        compactOff: 'Back to normal spacing',
+        print: 'Print (fitted to one page)',
+        printing: 'Preparing to print…',
     },
     transitionLabels: 'Transition labels',
     transitionLabelModes: {
@@ -970,6 +996,10 @@ const en: Messages = {
     },
     timelineFilter: 'Timeline',
     allTimelines: 'All (integrated)',
+    stageView: (stage) => `${stage} (with its exceptions)`,
+    stageTimeline: (stage, timeline) => `${stage} / ${timeline}`,
+    exceptionTimeline: (name) => `Exception: ${name}`,
+    showExceptions: 'Show exceptions',
     staleStorming: (file) => `${file} has syntax errors: showing what it was when it last parsed`,
 
     filters: {
@@ -1005,6 +1035,8 @@ const en: Messages = {
         transition: 'Transition by a command (⇒ events it raises)',
         esCausal: 'Type-level cause (a possibility, not something that happened)',
         esSequence: 'Time order of a timeline',
+        esException: 'Time order of an exception',
+        esRejoin: 'An exception returning to the main flow (then)',
         esRelated: 'Related (actor, read model, target aggregate)',
         esHotspot: 'A hotspot’s subject (no direction)',
     },
@@ -1025,6 +1057,7 @@ const en: Messages = {
         hotspot: 'Hotspot',
         timeline: 'Timeline',
         group: 'Group',
+        stage: 'Stage',
     },
     notInStorming: (id) => `${id} is not in the storming`,
     inStorming: 'Storming',
@@ -1053,6 +1086,11 @@ const en: Messages = {
     drawnAs: (n) => `Notes in this view (${n})`,
     sharedNote: 'Steps that timelines share from their start are drawn once; they are not necessarily the same happening',
     groupEvents: 'Events of the group (no order)',
+    stageMain: 'Main flows',
+    esException: 'Exception',
+    stageExceptions: (n) => `Exceptions (${n})`,
+    stageAfter: 'Comes after',
+    showStage: 'Show this stage',
     openFile: 'Open the file',
 
     model: 'Model',
@@ -1540,6 +1578,7 @@ const en: Messages = {
                 pending: 'Checking',
                 toAnswer: "To the AI's answer",
                 toProposal: 'To the proposal',
+                answerArrived: 'The AI answered',
                 givenUp: 'The AI could not answer',
                 retry: 'Try again',
                 willRead: 'The AI reads this',

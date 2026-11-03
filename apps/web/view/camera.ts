@@ -12,7 +12,9 @@ import type { ViewSettings } from './settings';
 /**
  * Draws the current view's graph on the canvas. Each view keeps its camera (by `ViewGraph.cameraKey`): a redraw of the
  * shown graph (a live reload) keeps it, a view shown again gets it back, and a view shown the first time is fitted
- * (a storming view: each time it is shown). An empty view (`empty`) clears the canvas.
+ * (a storming view: each time it is shown). An empty view (`empty`) clears the canvas. A view's compact layout
+ * (「詰めて表示」) is another graph, with a camera of its own; it draws no ghosts of removed elements (they are where the
+ * baseline's normal layout had them).
  */
 export function useViewCamera(
     canvas: DiagramCanvas | null,
@@ -25,7 +27,7 @@ export function useViewCamera(
 ): void {
     const base = current?.base ?? null;
     const { structureLevel, mapAll } = settings;
-    const { graph, graphFor, cameraKey, focusKey, focusGraph, noneChecked, stormingShown } = viewGraph;
+    const { graph, graphFor, cameraKey, focusKey, noneChecked, stormingShown } = viewGraph;
     const { mode, lang } = display;
     const cameras = useRef(new Map<string, Camera>());
     const shownView = useRef<string | null>(null);
@@ -34,7 +36,8 @@ export function useViewCamera(
         if (!canvas || !current) return;
         const shows = canvasShows(view.kind, empty, !!graph);
         if (shows === 'covered') return;
-        const key = isCanvas(view) ? cameraKey(view) : null;
+        const compact = graph?.spacing === 'compact';
+        const key = isCanvas(view) ? `${cameraKey(view)}${compact ? ':compact' : ''}` : null;
         if (key && shownView.current && shownView.current !== key) cameras.current.set(shownView.current, canvas.getCamera());
         const switched = shownView.current !== key;
         if (shows === 'nothing' || !key || !graph) {
@@ -45,7 +48,7 @@ export function useViewCamera(
             return;
         }
         // ghosts of removed elements need the baseline's version of the same graph; focused graphs are not kept
-        const before = focusKey && view.kind === 'structure' ? undefined : (graphFor(base, view) ?? undefined);
+        const before = compact || (focusKey && view.kind === 'structure') ? undefined : (graphFor(base, view) ?? undefined);
         canvas.show(buildScene(graph, { diff: current.diff, diagnostics: current.diagnostics, previous: before, mode, lang }));
         const saved = cameras.current.get(key);
         const move = cameraMove({ switched, storming: view.kind === 'storming', saved: !!saved });
@@ -55,5 +58,5 @@ export function useViewCamera(
         else if (move === 'fitReadable') fitReadable(canvas, graph.textScale ?? 1);
         shownView.current = key;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [canvas, current, base, view, mode, structureLevel, focusKey, focusGraph, mapAll, noneChecked, lang, stormingShown, empty]);
+    }, [canvas, current, base, view, mode, structureLevel, focusKey, graph, mapAll, noneChecked, lang, stormingShown, empty]);
 }

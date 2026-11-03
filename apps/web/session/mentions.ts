@@ -202,7 +202,7 @@ export interface MentionCandidate {
 }
 
 /** The kinds of storming declarations that are not notes. */
-const NOT_NOTES = new Set(['timeline', 'group']);
+const NOT_NOTES = new Set(['timeline', 'group', 'stage']);
 
 /**
  * Everything `#` offers: the model's elements with their states and commands, and each storming as a whole then its

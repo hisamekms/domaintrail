@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { Diagnostic } from '@domaintrail/kernel';
+import type { ModelDiff } from '@domaintrail/modeling';
 import type { LaidOutGraph } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { buildScene, type RenderOptions } from './render';
-import { graphNodeOf, itemForElement, sceneItems, type Scene } from './scene';
+import { graphNodeOf, itemForElement, sameElementNodes, sceneItems, type Scene } from './scene';
 import { viewPayloads } from './test-helpers';
 
 const file = (body: string) => ({ path: 'a.dt', text: `context A {\n${body}\n}\n` });
@@ -164,5 +165,71 @@ describe('scene items', () => {
         expect(itemForElement(items, 'A.Order:annotate')?.type).toBe('internal');
         expect(itemForElement(items, 'A.Order:close')?.type).toBe('edge');
         expect(itemForElement(items, 'A.Missing')).toBeUndefined();
+    });
+});
+
+describe('an element of a storming drawn once per use (Design Level)', () => {
+    const dtes = (clerk: string, boss: string): { path: string; text: string } => ({
+        path: 'es.dtes',
+        text: `storming S {
+  event Opened event Approved event Closed
+  actor Clerk ${clerk}
+  ${boss}
+  command Open { actor Clerk emits Opened }
+  command Approve { emits Approved }
+  command Close { actor Clerk ${boss ? 'actor Boss ' : ''}emits Closed }
+  policy P1 { on Opened issues Approve }
+  policy P2 { on Approved issues Close }
+  timeline T { Opened Approved Closed }
+}
+`,
+    });
+    const payload = async (): Promise<ViewPayload> => (await viewPayloads([dtes('"窓口係"', 'actor Boss')]))[0]!;
+    const graph = async (): Promise<LaidOutGraph> => (await payload()).stormings[0]!.views['design-level|']!.graph;
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- element IDs as a diff lists them
+    const ids = (...list: string[]): ModelDiff['added'] => list as unknown as ModelDiff['added'];
+    const scene = async (diff: ModelDiff = { added: [], changed: [], removed: [] }, previous?: LaidOutGraph): Promise<Scene> =>
+        buildScene(await graph(), { diff, diagnostics: [], ...(previous && { previous }), mode: 'label', lang: 'en' });
+
+    test('every note of a changed, added or removed element carries its change mark', async () => {
+        const nodes = (await scene({ added: ids('es/S/Boss'), changed: ids('es/S/Clerk'), removed: [] })).nodes;
+        const change = (id: string) => nodes.find((n) => n.id === id)?.props.change;
+        expect(nodes.filter((n) => n.elementId === 'es/S/Clerk').map((n) => n.id)).toEqual(['n:n:Clerk@Close', 'n:n:Clerk@Open']);
+        expect([change('n:n:Clerk@Open'), change('n:n:Clerk@Close')]).toEqual(['changed', 'changed']);
+        expect(change('n:n:Boss@Close')).toBe('added');
+        expect(change('n:n:Open')).toBe('none');
+        // removed since the previous graph: a ghost where each of its notes was
+        const before = await graph();
+        const without = dtes('', 'actor Boss');
+        const [after] = await viewPayloads([{ ...without, text: without.text.replace(/ {2}actor Clerk \n/, '').replaceAll('actor Clerk ', '') }]);
+        const ghosts = buildScene(after!.stormings[0]!.views['design-level|']!.graph, {
+            diff: { added: [], changed: [], removed: ids('es/S/Clerk') },
+            diagnostics: [],
+            previous: before,
+            mode: 'label',
+            lang: 'en',
+        }).ghosts;
+        expect(ghosts.map((g) => g.id).sort()).toEqual(['ghost:n:Clerk@Close', 'ghost:n:Clerk@Open']);
+    });
+
+    test('a jump to the element finds the note nearest the viewport’s centre, else the first in reading order', async () => {
+        const items = sceneItems(await scene());
+        const at = (id: string) => items.find((s) => s.id === id)!;
+        const [open, close] = [at('n:n:Clerk@Open'), at('n:n:Clerk@Close')];
+        expect(open.x).toBeLessThan(close.x);
+        expect(itemForElement(items, 'es/S/Clerk', { x: close.x + 1, y: close.y + 1 })?.id).toBe(close.id);
+        expect(itemForElement(items, 'es/S/Clerk', { x: open.x, y: open.y })?.id).toBe(open.id);
+        const first = [open, close].sort((a, b) => a.y - b.y || a.x - b.x)[0]!;
+        expect(itemForElement(items, 'es/S/Clerk')?.id).toBe(first.id);
+    });
+
+    test('selecting one note marks the element’s other notes, not the note itself nor other elements', async () => {
+        const items = sceneItems(await scene());
+        expect([...sameElementNodes(items, new Set(['n:n:Clerk@Open']))]).toEqual(['n:n:Clerk@Close']);
+        expect([...sameElementNodes(items, new Set(['n:n:Clerk@Open', 'n:n:Clerk@Close']))]).toEqual([]);
+        expect([...sameElementNodes(items, new Set(['n:n:Open']))]).toEqual([]);
+        // an edge selected marks nothing
+        const edge = items.find((s) => s.type === 'edge' && s.elementId === 'es/S/Clerk')!;
+        expect([...sameElementNodes(items, new Set([edge.id]))]).toEqual([]);
     });
 });

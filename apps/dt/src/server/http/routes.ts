@@ -1,5 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { type GitRevisions, STRUCTURE_LEVELS, type StructureLevel, UnknownRevisionError, type ViewService } from '@domaintrail/visualization';
+import {
+    type GitRevisions,
+    type LayoutSpacing,
+    STRUCTURE_LEVELS,
+    type StructureLevel,
+    UnknownRevisionError,
+    type ViewService,
+} from '@domaintrail/visualization';
 import type { BaselineSpec, ViewPayload } from '@domaintrail/visualization/protocol';
 
 /** Answers one API request; the access check has been passed already (see `createViewHttpServer`). */
@@ -66,17 +73,32 @@ function stateRoute({ view }: ApiDeps): ApiRoute {
     return (_req, _url, res) => send(res, 200, 'application/json', JSON.stringify(view.state));
 }
 
+/** `spacing=compact` asks for the compact layout (「詰めて表示」, printing); anything else, the normal one. */
+const spacingOf = (params: URLSearchParams): LayoutSpacing => (params.get('spacing') === 'compact' ? 'compact' : 'normal');
+
 /**
  * `?contexts=A,B&level=overview&hide=C`: Structure View of those bounded contexts with their dependencies as stubs,
- * except those on and from C (`overview=1` is still accepted for `level=overview`)
+ * except those on and from C (`overview=1` is still accepted for `level=overview`); `&spacing=compact`, laid out compactly
  */
 function focusRoute({ view }: ApiDeps): ApiRoute {
     return async (_req, url, res) => {
         const contexts = (url.searchParams.get('contexts') ?? '').split(',').filter(Boolean);
         try {
             const hidden = (url.searchParams.get('hide') ?? '').split(',').filter(Boolean);
-            const graph = await view.focusGraph(contexts, structureLevel(url.searchParams), hidden);
+            const graph = await view.focusGraph(contexts, structureLevel(url.searchParams), hidden, spacingOf(url.searchParams));
             return graph ? send(res, 200, 'application/json', JSON.stringify(graph)) : send(res, 404, 'text/plain', 'No such contexts');
+        } catch {
+            return send(res, 500, 'text/plain', 'Layout failed');
+        }
+    };
+}
+
+/** `?graph=<ID>`: a graph of the current view (as pushed) laid out with the compact spacing, laid out on request. */
+function compactRoute({ view }: ApiDeps): ApiRoute {
+    return async (_req, url, res) => {
+        try {
+            const graph = await view.compactGraph(url.searchParams.get('graph') ?? '');
+            return graph ? send(res, 200, 'application/json', JSON.stringify(graph)) : send(res, 404, 'text/plain', 'No such graph');
         } catch {
             return send(res, 500, 'text/plain', 'Layout failed');
         }
@@ -106,11 +128,12 @@ function baselineRoute({ view, publish, log }: ApiDeps): ApiRoute {
     };
 }
 
-/** The Live View's API: `/api/state`, `/api/focus`, `/api/git/refs` and `/api/baseline`. */
+/** The Live View's API: `/api/state`, `/api/focus`, `/api/compact`, `/api/git/refs` and `/api/baseline`. */
 export function createApiRoutes(deps: ApiDeps): ApiRoutes {
     return new Map([
         ['/api/state', stateRoute(deps)],
         ['/api/focus', focusRoute(deps)],
+        ['/api/compact', compactRoute(deps)],
         ['/api/git/refs', gitRefsRoute(deps)],
         ['/api/baseline', baselineRoute(deps)],
     ]);

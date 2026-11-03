@@ -27,13 +27,27 @@ export type NodeKind =
     | 'esReadModel'
     | 'esHotspot'
     /** A group step of a timeline: a container of its event notes, without an order among them. */
-    | 'esGroup';
+    | 'esGroup'
+    /** A stage of a storming: a frame around its main flow and its exceptions. */
+    | 'esStage';
 
 /**
  * `dependsOn`: a context dependency that borrows types, not only IDs (Context Map). Event Storming: `esCausal` (a policy's
- * `on`, `issues`, `emits`), `esRelated` (`actor`, `reads`, `target`), `esHotspot` (a hotspot's `on`, undirected) and `esSequence` (timeline order).
+ * `on`, `issues`, `emits`), `esRelated` (`actor`, `reads`, `target`), `esHotspot` (a hotspot's `on`, undirected), `esSequence` (timeline order,
+ * and a stage's `after`) `esException` (the time order of exceptions only) and `esRejoin` (an exception's `then`, back to a main flow).
  */
-export type EdgeKind = 'owns' | 'value' | 'references' | 'transition' | 'dependsOn' | 'esCausal' | 'esRelated' | 'esHotspot' | 'esSequence';
+export type EdgeKind =
+    | 'owns'
+    | 'value'
+    | 'references'
+    | 'transition'
+    | 'dependsOn'
+    | 'esCausal'
+    | 'esRelated'
+    | 'esHotspot'
+    | 'esSequence'
+    | 'esException'
+    | 'esRejoin';
 
 /** How names are shown in the Live View: the label (the string after a declaration's name), the name, or both. */
 export type DisplayMode = 'label' | 'name' | 'both';
@@ -148,10 +162,23 @@ export const INTERNAL_PADDING = 5;
 export const compartmentHeight = (n: Pick<GraphNode, 'internal'>, labels: TransitionLabels): number =>
     n.internal?.length ? 2 * INTERNAL_PADDING + n.internal.reduce((h, t) => h + internalRowHeight(t, labels), 0) : 0;
 
+/**
+ * Where a graph's nodes go when they are placed on a grid rather than laid out by the engine (an Event Storming's view of
+ * stages): a cell per node (a container's members are inside it), the columns of each frame, the first row of the
+ * nodes outside every frame. See `layoutGrid`.
+ */
+export interface GridPlan {
+    cells: Record<string, { col: number; row: number }>;
+    frames: Record<string, { from: number; to: number }>;
+    looseRow?: number;
+}
+
 export interface Graph {
     id: string;
     nodes: GraphNode[];
     edges: GraphEdge[];
+    /** Placed on a grid (`layoutGrid`), not by the layout engine. */
+    grid?: GridPlan;
     /** Text size relative to the normal views (the Structure overview uses larger text). */
     textScale?: number;
     /** State View: the transition texts the nodes and edge labels are sized for (default `both`). */
@@ -186,12 +213,21 @@ export interface EdgeLayout {
     label?: NodeLayout;
 }
 
+/**
+ * How far apart a layout places things: the normal spacing, or a compact one (「詰めて表示」, and printing), with the
+ * gaps between notes closed up as far as arrowheads, edge labels and frame titles stay readable.
+ */
+export type LayoutSpacing = 'normal' | 'compact';
+export const LAYOUT_SPACINGS: LayoutSpacing[] = ['normal', 'compact'];
+
 /** A graph together with absolute coordinates for every node and edge. */
 export interface LaidOutGraph extends Graph {
     nodeLayout: Record<string, NodeLayout>;
     edgeLayout: Record<string, EdgeLayout>;
     /** Changes whenever nodes, sizes, nesting or edges change; used to reuse cached layouts. */
     signature: string;
+    /** Laid out with the compact spacing (absent: the normal one). */
+    spacing?: 'compact';
 }
 
 export const CHAR_WIDTH = 8.6;
@@ -214,5 +250,12 @@ export const CONTAINER_PADDING = { top: 46, left: 20, bottom: 20, right: 20 };
 export function graphSignature(g: Graph): string {
     const nodes = g.nodes.map((n) => `${n.id}|${n.parent ?? ''}|${n.width}x${n.height}|${maxUnits(n.label)}`).sort();
     const edges = g.edges.map((e) => `${e.id}|${e.source}|${e.target}|${e.label ? maxUnits(e.label) : ''}|${e.events ? maxUnits(e.events) : ''}`).sort();
-    return `${nodes.join(';')}#${edges.join(';')}`;
+    const grid = g.grid ? `#grid${GRID_VERSION}:${JSON.stringify([byKey(g.grid.cells), byKey(g.grid.frames), g.grid.looseRow])}` : '';
+    return `${nodes.join(';')}#${edges.join(';')}${grid}`;
 }
+
+/** A record's entries in key order. */
+const byKey = <T>(r: Record<string, T>): [string, T][] => Object.entries(r).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+
+/** Bump when `layoutGrid` places or routes differently, so that the grid layouts kept from a previous run are redone. */
+export const GRID_VERSION = 1;

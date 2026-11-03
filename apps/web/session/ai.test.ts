@@ -219,6 +219,14 @@ describe("the AI's card under a message in Solo", () => {
         expect(aiSlot(true, message('a', 'ai', 1), undefined, none, true)).toBeUndefined();
     });
 
+    test("the AI's reply on the page before the triage naming it the answer: the answer at once, not pending", () => {
+        expect(aiSlot(true, mine, decided('t', 'm', 'Consultation'), none, true, 'a')).toEqual({ kind: 'answer', answer: 'a' });
+        expect(aiSlot(true, mine, undefined, none, true, 'a')).toEqual({ kind: 'answer', answer: 'a' });
+        // what the triage says once it is there stands
+        expect(aiSlot(true, mine, decided('t', 'm', 'ChangeRequest', { kind: 'Run', run: 'r' }), none, false, 'a')).toEqual({ kind: 'run', run: 'r' });
+        expect(aiSlot(true, mine, decided('t', 'm', 'Consultation'), new Set(['m']), false, 'a')).toEqual({ kind: 'given-up' });
+    });
+
     test('Collab is unchanged: no card, the message keeps its quiet "…"', () => {
         expect(aiSlot(false, mine, pending('t', 'm'), none, true)).toBeUndefined();
         expect(aiSlot(false, mine, undefined, none, true)).toBeUndefined();

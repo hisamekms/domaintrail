@@ -17,6 +17,7 @@ import {
     readAnswer,
     readEmoji,
     readReply,
+    readViewedAt,
     REPLY_LIMITS,
     type ReplyOutcome,
     type Result,
@@ -229,6 +230,12 @@ export function requestTargets(raw: Raw): Result<Collaboration.TargetSnapshot[],
         targets.push(t.value);
     }
     return ok(targets);
+}
+
+/** Where the sender was looking (`{ view, states? }`): its shape and limits; whether its names exist is the route's. */
+export function viewedAt(v: unknown, field = 'viewedAt'): Result<Collaboration.ViewedAt, InvalidInput> {
+    const read = readViewedAt(v, field);
+    return read.ok ? read : invalid(read.error.path, read.error.message);
 }
 
 /** What a message replies to: `{ kind: 'Run', run }` or `{ kind: 'Message', request }` (whether it can be replied to: the use case checks). */

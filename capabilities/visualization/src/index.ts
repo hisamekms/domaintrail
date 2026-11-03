@@ -7,6 +7,7 @@ export {
     DISPLAY_MODES,
     INTERNAL_PADDING,
     internalRowHeight,
+    LAYOUT_SPACINGS,
     STRUCTURE_LEVELS,
     TRANSITION_LABELS,
     TRANSITION_LINE_HEIGHT,
@@ -20,6 +21,7 @@ export {
     type GraphNode,
     type LaidOutGraph,
     type Lang,
+    type LayoutSpacing,
     type NodeLayout,
     type StructureLevel,
     type Texts,
@@ -29,7 +31,7 @@ export { PRIMITIVE_LABELS, typeText } from './core/graph/build.js';
 export { dependencyCounts } from './core/graph/context-map.js';
 
 // ---- core: the storming views ----------------------------------------------------------------------------------
-export { LEVEL_KINDS, VIEW_LEVELS, type RenderGraph, type ViewLevel, type ViewOptions } from './core/storming/ir.js';
+export { LEVEL_KINDS, VIEW_LEVELS, type GridCell, type RenderGraph, type StageGrid, type ViewLevel, type ViewOptions } from './core/storming/ir.js';
 export { stormingViewKey } from './core/storming/graph.js';
 
 // ---- application: the view service and its ports ---------------------------------------------------------------

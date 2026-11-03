@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createViewService, ElkLayoutEngine, type ViewService } from '@domaintrail/visualization';
 import { I18nProvider } from './i18n';
-import { StormingDetails } from './storming';
+import { shownStorming, stageChoice, StormingDetails, StormingToolbar, type StormingChoice } from './storming';
 
 const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 
@@ -89,5 +89,66 @@ describe('the inspector of a storming element', () => {
         expect(html('BikeReleased', 'en')).not.toContain('level-badge');
         // hidden at Big Picture
         expect(stormings[0].views['big-picture|'].render.nodes.some((n) => n.type === 'event' && n.eventId === 'SlotReleased')).toBe(false);
+    });
+});
+
+describe('a storming with stages', () => {
+    const STAGED = readFile(path.join(import.meta.dir, '..', '..', 'test', 'fixtures', 'stages', 'convenience-store-stages.dtes'), 'utf8');
+
+    test('a stage is chosen as `@<stage ID>` in the timeline picker; an unknown one is the integrated canvas', async () => {
+        const { stormings } = await viewService(await STAGED).refresh();
+        const choice = (scope: string) => ({ stormingId: undefined, level: 'big-picture' as const, timelines: { ConvenienceStoreIssuance: scope } });
+        expect(shownStorming(stormings, choice(stageChoice('Issuance')))?.options).toEqual({ level: 'big-picture', stageId: 'Issuance' });
+        expect(shownStorming(stormings, choice('PinLockedBranch'))?.options).toEqual({ level: 'big-picture', timelineId: 'PinLockedBranch' });
+        expect(shownStorming(stormings, choice('@Nowhere'))?.options).toEqual({ level: 'big-picture' });
+    });
+
+    test('「例外を表示」 off hides the exceptions of the integrated canvas and a stage, never of a timeline’s view; the toggle is there only with exceptions', async () => {
+        const staged = (await viewService(await STAGED).refresh()).stormings;
+        const plain = (await viewService().refresh()).stormings;
+        const off = (scope?: string): StormingChoice => ({
+            stormingId: undefined,
+            level: 'big-picture',
+            timelines: scope ? { ConvenienceStoreIssuance: scope } : {},
+            exceptions: false,
+        });
+        expect(shownStorming(staged, off())?.options).toEqual({ level: 'big-picture', hideExceptions: true });
+        expect(shownStorming(staged, off(stageChoice('Issuance')))?.options).toEqual({ level: 'big-picture', stageId: 'Issuance', hideExceptions: true });
+        expect(shownStorming(staged, off('PinLockedBranch'))?.options).toEqual({ level: 'big-picture', timelineId: 'PinLockedBranch' });
+        expect(shownStorming(plain, off())?.options).toEqual({ level: 'big-picture' });
+        const toolbar = (stormings: typeof staged) =>
+            renderToStaticMarkup(
+                <I18nProvider lang="ja">
+                    <StormingToolbar stormings={stormings} choice={off()} mode="label" onChange={() => {}} />
+                </I18nProvider>,
+            );
+        expect(toolbar(staged)).toContain('aria-label="例外を表示"');
+        expect(toolbar(staged)).toContain('aria-pressed="false"');
+        expect(toolbar(plain)).not.toContain('例外を表示');
+    });
+
+    test('the inspector of a stage: the stage it comes after, its main flow, its exceptions, and the way to its view', async () => {
+        const { stormings, diagnostics } = await viewService(await STAGED).refresh();
+        const shown: string[] = [];
+        const html = renderToStaticMarkup(
+            <I18nProvider lang="en">
+                <StormingDetails
+                    stormings={stormings}
+                    selected="es/ConvenienceStoreIssuance/Issuance"
+                    render={undefined}
+                    model={null}
+                    mode="name"
+                    diagnostics={diagnostics}
+                    history={null}
+                    onSelect={() => {}}
+                    onShowStage={(storming, stage) => shown.push(`${storming}/${stage}`)}
+                />
+            </I18nProvider>,
+        );
+        expect(html).toContain('>Stage<');
+        expect(html).toContain('Show this stage');
+        expect(html).toContain('<h3>Comes after</h3><div><a>Preparation</a></div>');
+        expect(html).toContain('<h3>Main flows</h3><ul class="es-list"><li><a>IssuanceFlow</a></li></ul>');
+        expect(html).toContain('<h3>Exceptions (8)</h3>');
     });
 });

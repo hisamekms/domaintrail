@@ -163,3 +163,17 @@ describe('interviews', () => {
         expect(value(await say(use, session, facilitator, '注文は取り消せる？')).triage).toBeDefined();
     });
 });
+
+describe('the view an interview was started from', () => {
+    test('kept on its opening message, which the interviewer’s job carries', async () => {
+        const { use, session } = await solo();
+        const viewedAt: C.ViewedAt = { view: { kind: 'Structure', level: 'Detail', focus: [value(C.makeContextName('Sales'))] } };
+        const started = value(
+            await use.startInterview({ session, actor: facilitator, command: 'Model', body: text('モデリングを始める'), language: 'Ja', viewedAt }),
+        );
+        expect(started.request.viewedAt).toEqual(viewedAt);
+        expect(value(await use.interviewJobs({ session }))[0]?.request.viewedAt).toEqual(viewedAt);
+        const other = await solo();
+        expect(value(await start(other.use, other.session)).request.viewedAt).toBeUndefined();
+    });
+});

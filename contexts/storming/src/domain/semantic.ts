@@ -8,7 +8,17 @@
  *
  * How the Live View draws them (the prefix trie, the render graph) is visualization's.
  */
-import { type AnyDeclaration, declarations, type NodeElement, RELATION_RULES, type Storming, type Timeline } from './ir.js';
+import {
+    allTimelines,
+    type AnyDeclaration,
+    declarations,
+    nodeElements,
+    type NodeElement,
+    RELATION_RULES,
+    type Stage,
+    type Storming,
+    type Timeline,
+} from './ir.js';
 
 // ---- Semantic graph (spec §7.1, §9.1) ----
 
@@ -44,15 +54,21 @@ export function firstDeclarations(storming: Storming): Map<string, AnyDeclaratio
     return byId;
 }
 
-/** The timelines that own their ID, in source order. */
+/** The timelines that own their ID, in source order: the top-level ones and those of the stages. */
 export function stormingTimelines(storming: Storming): Timeline[] {
     const byId = firstDeclarations(storming);
-    return storming.elements.filter((el): el is Timeline => el.kind === 'timeline' && byId.get(el.id) === el);
+    return allTimelines(storming).filter((t) => byId.get(t.id) === t);
+}
+
+/** The stages that own their ID, in source order (spec §3.7). */
+export function stormingStages(storming: Storming): Stage[] {
+    const byId = firstDeclarations(storming);
+    return storming.elements.filter((el): el is Stage => el.kind === 'stage' && byId.get(el.id) === el);
 }
 
 export function buildSemanticGraph(storming: Storming): SemanticGraph {
     const byId = firstDeclarations(storming);
-    const nodes = storming.elements.filter((el): el is NodeElement => el.kind !== 'timeline' && byId.get(el.id) === el);
+    const nodes = nodeElements(storming).filter((el) => byId.get(el.id) === el);
     const edges: SemanticEdge[] = [];
     const seen = new Set<string>();
     for (const owner of nodes) {
@@ -61,7 +77,8 @@ export function buildSemanticGraph(storming: Storming): SemanticGraph {
             if (clause.type !== 'relation') continue;
             const allowed = rules[clause.keyword];
             const target = byId.get(clause.target);
-            if (!allowed || !target || target.kind === 'timeline' || target.kind === 'group' || !allowed.includes(target.kind)) continue;
+            if (!allowed || !target || target.kind === 'timeline' || target.kind === 'group' || target.kind === 'stage' || !allowed.includes(target.kind))
+                continue;
             const kind: SemanticEdgeKind = owner.kind === 'hotspot' ? 'hotspot-on' : clause.keyword;
             // §9.1: Event → Policy, Actor → Command and Read Model → Command; every other relation from its owner
             const toOwner = clause.keyword === 'actor' || clause.keyword === 'reads' || kind === 'on';

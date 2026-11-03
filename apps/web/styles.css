@@ -259,6 +259,9 @@
        from the red of an error, and dashed) */
     --es-sequence: var(--p-orange-600);
     --es-sequence-text: var(--p-orange-800);
+    /* an exception's time order: the hotspot's pink-red, a little quieter than the timeline's orange */
+    --es-exception: var(--es-hotspot-border);
+    --es-exception-text: var(--es-hotspot-text);
     /* Domain Modeling concepts (issue #33 §3.3): neutral cards; the concept's hue on a stripe, label or border
        (accent), and the faint background of a chip (tint). The aggregate root takes the brand's indigo, by design. */
     --model-context: var(--p-slate-500);
@@ -837,6 +840,11 @@ code.block {
     border: 1px dashed var(--es-group-border);
     color: var(--es-group-text);
 }
+.kind-es-stage {
+    background: var(--context-bg);
+    border: 1px solid var(--model-context);
+    color: var(--text-secondary);
+}
 .kind-es-timeline {
     border: 1px dashed var(--es-sequence);
 }
@@ -1215,6 +1223,11 @@ a.field-origin {
     outline: 2px solid var(--selected-ring);
     outline-offset: 5px;
 }
+/* the other notes of the selected element (an actor beside each command it issues): the same ring, dashed and fainter */
+.dn.dn-same {
+    outline: 2px dashed color-mix(in srgb, var(--selected-ring) 60%, transparent);
+    outline-offset: 5px;
+}
 /* on the top edge, where the selection outline goes around them (see `nodeOutlinePath`) */
 .dn-badge {
     position: absolute;
@@ -1303,6 +1316,15 @@ a.field-origin {
     font-size: calc(13px * var(--s, 1));
     color: var(--es-group-text);
 }
+/* a stage of a storming: a frame around its main flow and its exceptions, neutral like a context's (a section of
+   time, not a concept's hue) */
+.dg-esStage {
+    border: 1.5px solid var(--model-context);
+    background: var(--context-bg);
+}
+.dg-esStage .dg-label {
+    color: var(--text-secondary);
+}
 .dg-aggregateBoundary .dg-label {
     font-size: calc(13px * var(--s, 1));
     color: var(--model-aggregate);
@@ -1367,6 +1389,28 @@ a.field-origin {
 .de-esSequence .de-label {
     fill: var(--es-sequence-text);
     font-weight: 600;
+}
+/* the time order of exceptions only: the timeline's dashes, in the hotspot's red (an exception, not an error) */
+.de-esException .de-line {
+    stroke: var(--es-exception);
+    stroke-width: 1.6;
+    stroke-dasharray: 7 5;
+}
+.de-esException .de-head {
+    fill: var(--es-exception);
+}
+.de-esException .de-label {
+    fill: var(--es-exception-text);
+    font-weight: 600;
+}
+/* an exception's `then`: back to the main flow, in the timeline's hue, dotted to tell it from the time order */
+.de-esRejoin .de-line {
+    stroke: var(--es-sequence);
+    stroke-width: 1.6;
+    stroke-dasharray: 2 4;
+}
+.de-esRejoin .de-head {
+    fill: var(--es-sequence);
 }
 .de-esRelated .de-line,
 .de-esHotspot .de-line {
@@ -3292,6 +3336,8 @@ svg.chat-launcher-mark {
     --motion-dialog-out: 100ms;
     /* small changes in place: the legend folding, the tree's branches */
     --motion-medium: 180ms;
+    /* a chat row growing to its new content (the AI's card turning into its answer), the content fading in */
+    --motion-grow: 250ms;
     --motion-ease-enter: cubic-bezier(0, 0, 0.2, 1);
     --motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
     --motion-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
@@ -3305,6 +3351,7 @@ svg.chat-launcher-mark {
         --motion-dialog-in: 0ms;
         --motion-dialog-out: 0ms;
         --motion-medium: 0ms;
+        --motion-grow: 0ms;
     }
 }
 
@@ -7623,4 +7670,90 @@ label.proposal-option {
 }
 .chat-brief-waiting {
     margin: var(--space-2) 0 0;
+}
+
+/* ---------- printing (view/print.tsx) ---------- */
+
+/* the diagram as printed: drawn beside the app while printing, never seen on the screen (its notes' labels are still
+   laid out, to be fitted) */
+.print-sheet {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+    visibility: hidden;
+    pointer-events: none;
+    z-index: -1;
+    overflow: hidden;
+}
+.print-sheet-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+.print-sheet-boxes {
+    position: relative;
+}
+
+@media print {
+    /* light colours on white paper, the sticky notes' colours kept */
+    html,
+    body,
+    #root {
+        height: auto;
+        background: #fff;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+    }
+    .tooltip,
+    .edge-hint {
+        display: none !important;
+    }
+
+    /* a diagram: its sheet alone, the whole of one page */
+    body:has(> .print-sheet) > :not(.print-sheet) {
+        display: none !important;
+    }
+    .print-sheet {
+        position: static;
+        visibility: visible;
+        width: 100%;
+        /* a hair less than the page, so that rounding never pushes it onto a second one */
+        height: calc(100vh - 2px);
+        z-index: auto;
+        overflow: hidden;
+        break-inside: avoid;
+    }
+
+    /* the catalog: its list as a page, without the panes, the tabs and the canvas around it */
+    .app {
+        display: block;
+        height: auto;
+    }
+    .left,
+    .resizer,
+    .dock,
+    .conversation,
+    .launcher-slot,
+    .banners,
+    .view-tabs,
+    .diagram-canvas,
+    .canvas-controls {
+        display: none !important;
+    }
+    .main,
+    .canvas-pane,
+    .center,
+    .view-area {
+        display: block;
+        height: auto;
+        overflow: visible;
+    }
+    .catalog {
+        position: static;
+        overflow: visible;
+        padding: 0;
+    }
 }

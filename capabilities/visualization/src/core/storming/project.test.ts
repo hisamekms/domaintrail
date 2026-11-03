@@ -261,7 +261,13 @@ describe('views (spec §6, §9.3)', () => {
         expect(elementIds(bp)).toEqual(['Late', 'Open', 'Refund']);
         expect(semanticEdges(bp)).toEqual(['hotspot-on:n:Late->t:e:Placed>e:Paid', 'hotspot-on:n:Refund->t:e:Placed>e:Cancelled']);
         expect(elementIds(dl)).toEqual(['AfterPaid', 'AfterPlaced', 'Cancel', 'Cart', 'Customer', 'Late', 'Open', 'Order', 'Pay', 'Psp', 'Refund', 'Ship']);
-        expect(dl.nodes.find((n) => n.id === 'n:Psp')).toEqual({ type: 'element', id: 'n:Psp', elementId: 'Psp', kind: 'external' });
+        expect(dl.nodes.find((n) => n.type === 'element' && n.elementId === 'Psp')).toEqual({
+            type: 'element',
+            id: 'n:Psp@Pay',
+            elementId: 'Psp',
+            kind: 'external',
+            use: 'Pay',
+        });
         expect(sequences(bp)).toEqual(sequences(dl));
     });
 
@@ -272,15 +278,15 @@ describe('views (spec §6, §9.3)', () => {
 
     test('R16: a timeline filter projects only the 1-hop paths with both events in the timeline', () => {
         const happy = projectView(shop, { level: 'design-level', timelineId: 'Happy' });
-        expect(nodeIds(happy)).toEqual(['n:AfterPlaced', 'n:Cart', 'n:Late', 'n:Order', 'n:Pay', 'n:Psp', 't:e:Placed', 't:e:Placed>e:Paid']);
+        expect(nodeIds(happy)).toEqual(['n:AfterPlaced', 'n:Cart@Pay', 'n:Late', 'n:Order@Pay', 'n:Pay', 'n:Psp@Pay', 't:e:Placed', 't:e:Placed>e:Paid']);
         expect(semanticEdges(happy)).toEqual([
-            'actor:n:Psp->n:Pay',
+            'actor:n:Psp@Pay->n:Pay',
             'emits:n:Pay->t:e:Placed>e:Paid',
             'hotspot-on:n:Late->t:e:Placed>e:Paid',
             'issues:n:AfterPlaced->n:Pay',
             'on:t:e:Placed->n:AfterPlaced',
-            'reads:n:Cart->n:Pay',
-            'target:n:Pay->n:Order',
+            'reads:n:Cart@Pay->n:Pay',
+            'target:n:Pay->n:Order@Pay',
         ]);
         expect(sequences(happy)).toEqual(['t:e:Placed -> t:e:Placed>e:Paid']);
         // only this timeline's occurrences
@@ -333,6 +339,80 @@ describe('views (spec §6, §9.3)', () => {
         const g = projectView(storming(...events('A', 'B', 'C'), tl('T', 'A', ['B', 'C'], 'A')), DL);
         expect(g.edges.map((e) => e.type)).toEqual(['sequence', 'sequence']);
         expect(sequences(g)).toEqual(['t:e:A -> t:e:A>g:B,C', 't:e:A>g:B,C -> t:e:A>g:B,C>e:A']);
+    });
+});
+
+describe('actors, external systems, read models and aggregates drawn once per use (Design Level)', () => {
+    const uses = (...extra: StormingElement[]): Storming =>
+        storming(
+            ...events('E1', 'E2', 'E3'),
+            el('actor', 'Clerk'),
+            el('external', 'Bank'),
+            el('readmodel', 'Stock'),
+            el('aggregate', 'Order'),
+            el('actor', 'Idle'),
+            el('aggregate', 'Unused'),
+            el('command', 'C1', ['actor', 'Clerk'], ['actor', 'Bank'], ['reads', 'Stock'], ['target', 'Order'], ['emits', 'E1']),
+            el('command', 'C2', ['actor', 'Clerk'], ['reads', 'Stock'], ['target', 'Order'], ['emits', 'E2']),
+            el('policy', 'P', ['on', 'E1'], ['issues', 'C2']),
+            tl('T', 'E1', 'E2'),
+            ...extra,
+        );
+    const copies = (g: RenderGraph) =>
+        g.nodes.flatMap((n) => (n.type === 'element' && n.use !== undefined ? [`${n.id} ${n.kind} ${n.elementId}@${n.use}`] : []));
+
+    test('a note beside each command that uses the element, with the element’s ID; an unused one once', () => {
+        const g = projectView(uses(), DL);
+        expect(copies(g)).toEqual([
+            'n:Bank@C1 external Bank@C1',
+            'n:Clerk@C1 actor Clerk@C1',
+            'n:Clerk@C2 actor Clerk@C2',
+            'n:Order@C1 aggregate Order@C1',
+            'n:Order@C2 aggregate Order@C2',
+            'n:Stock@C1 readmodel Stock@C1',
+            'n:Stock@C2 readmodel Stock@C2',
+        ]);
+        // no note of the element itself once it has copies
+        for (const id of ['Bank', 'Clerk', 'Order', 'Stock']) expect(nodeIds(g)).not.toContain(`n:${id}`);
+        // a timeline: the copies beside the commands of its 1-hop paths (E1 → P → C2 → E2)
+        expect(copies(projectView(uses(), { level: 'design-level', timelineId: 'T' }))).toEqual([
+            'n:Clerk@C2 actor Clerk@C2',
+            'n:Order@C2 aggregate Order@C2',
+            'n:Stock@C2 readmodel Stock@C2',
+        ]);
+        // declared but used by no command: drawn once, where it was (the integrated canvas; a timeline draws only what it uses)
+        expect(g.nodes.filter((n) => n.type === 'element' && ['Idle', 'Unused'].includes(n.elementId))).toEqual([
+            { type: 'element', id: 'n:Idle', elementId: 'Idle', kind: 'actor' },
+            { type: 'element', id: 'n:Unused', elementId: 'Unused', kind: 'aggregate' },
+        ]);
+        expect(elementIds(projectView(uses(), BP))).toEqual([]);
+    });
+
+    test('one short edge per copy, between it and its command only', () => {
+        const g = projectView(uses(), DL);
+        const related = semanticEdges(g).filter((e) => /^(actor|reads|target):/.test(e));
+        expect(related).toEqual([
+            'actor:n:Bank@C1->n:C1',
+            'actor:n:Clerk@C1->n:C1',
+            'actor:n:Clerk@C2->n:C2',
+            'reads:n:Stock@C1->n:C1',
+            'reads:n:Stock@C2->n:C2',
+            'target:n:C1->n:Order@C1',
+            'target:n:C2->n:Order@C2',
+        ]);
+        // every copy has exactly one edge
+        for (const n of g.nodes)
+            if (n.type === 'element' && n.use !== undefined) expect(g.edges.filter((e) => e.source === n.id || e.target === n.id)).toHaveLength(1);
+    });
+
+    test('copy IDs are stable: the declaration order changes nothing, another use adds a copy and keeps the others', () => {
+        const g = projectView(uses(), DL);
+        const reversed = uses();
+        reversed.elements.reverse();
+        expect(projectView(reversed, DL)).toEqual(g);
+        const more = projectView(uses(el('command', 'C3', ['actor', 'Clerk'], ['emits', 'E3'])), DL);
+        expect(nodeIds(more)).toEqual(expect.arrayContaining([...nodeIds(g), 'n:Clerk@C3']));
+        expect(matchRenderNodes(g, more).get('n:Clerk@C1')).toBe('n:Clerk@C1');
     });
 });
 
@@ -532,7 +612,7 @@ describe('§12.3 properties', () => {
                         return n?.type === 'event' ? n.eventId : n?.type === 'element' ? n.elementId : undefined;
                     };
                     for (const e of g.edges) {
-                        if (e.type === 'sequence') continue;
+                        if (e.type !== 'semantic') continue;
                         const edge = keys.get(e.semantic);
                         expect(edge).toBeDefined();
                         expect([e.kind, elementOf(e.source), elementOf(e.target)]).toEqual([edge!.kind, edge!.sourceId, edge!.targetId]);
