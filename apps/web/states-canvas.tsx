@@ -10,6 +10,8 @@ import { applyTheme, type Theme } from './theme';
 import { CanvasControls, EdgeHint } from './view/canvas-controls';
 import { useCenterOnResize } from './view/center';
 import { useCompactGraph } from './view/compact';
+import type { ExportOptions, ExportTarget } from './view/export';
+import { exportFileName, sheetHeading, type SheetSubject } from './view/sheet';
 import { useCanvasValue, type Camera, type DiagramCanvas } from './view/diagram';
 import { FlowCanvas } from './view/flow-canvas';
 import { selectedElement } from './view/navigation';
@@ -41,6 +43,11 @@ export function StatesCanvas(props: {
     onLegendToggle: () => void;
     /** 「詰めて表示」: the compact layout, once the page has it (without ghosts of removed states). */
     compact: boolean;
+    /** The aggregate's name and label, and the workspace's name: what an exported diagram says it is. */
+    aggregate: { name: string; label?: string | undefined };
+    workspaceName: string | undefined;
+    /** 書き出し's options (the workspace's). */
+    exportOptions: { options: ExportOptions; setOptions: (options: ExportOptions) => void };
 }) {
     const { aggregateId } = props;
     const t = useT();
@@ -108,6 +115,18 @@ export function StatesCanvas(props: {
     }, [selectedOnCanvas]);
 
     const onMount = useCallback((c: DiagramCanvas) => setCanvas(c), []);
+    const exportTarget = (): ExportTarget | null => {
+        if (!graph) return null;
+        const subject: SheetSubject = { view: 'states', aggregate: { id: aggregateId, ...props.aggregate } };
+        return {
+            graph,
+            // as drawn, without the ghosts of removed states
+            scene: () => buildScene(graph, { diff: props.diff, diagnostics: props.diagnostics, mode: props.mode, lang: props.lang, transitionLabels: labels }),
+            heading: sheetHeading(props.workspaceName, subject, t, props.mode),
+            legend: 'states',
+            fileName: (ext) => exportFileName(props.workspaceName, subject, ext),
+        };
+    };
 
     return (
         <div className="states-canvas">
@@ -133,6 +152,7 @@ export function StatesCanvas(props: {
                         canvas={canvas}
                         fitAll={() => canvas && fitAll(canvas, graph, true)}
                         legend={{ view: 'states', open: props.legendOpen, onToggle: props.onLegendToggle }}
+                        exporting={{ target: exportTarget, ...props.exportOptions }}
                     />
                     <EdgeHint canvas={canvas} view="states" />
                 </>

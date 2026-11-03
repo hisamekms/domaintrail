@@ -108,6 +108,12 @@ const ja = {
         compactOff: '詰めて表示をやめる',
         print: '印刷（1 ページに収める）',
         printing: '印刷の準備中…',
+        export: '書き出し',
+        exportPng: 'PNG',
+        exportSvg: 'SVG',
+        exportPdf: 'PDF（印刷画面から保存）',
+        withHeading: '見出しを含める',
+        withLegend: '凡例を含める',
     },
     /** The line above a printed or exported diagram: what it is and how it is shown. */
     sheet: {
@@ -981,6 +987,12 @@ const en: Messages = {
         compactOff: 'Back to normal spacing',
         print: 'Print (fitted to one page)',
         printing: 'Preparing to print…',
+        export: 'Export',
+        exportPng: 'PNG',
+        exportSvg: 'SVG',
+        exportPdf: 'PDF (save from the print dialog)',
+        withHeading: 'Include the heading',
+        withLegend: 'Include the legend',
     },
     sheet: {
         structureLevels: { detail: 'Detail', overview: 'Overview', aggregates: 'Aggregates' },

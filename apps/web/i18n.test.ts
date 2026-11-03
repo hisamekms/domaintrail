@@ -58,6 +58,10 @@ const LATIN_IN_JA = new Set([
     // the `/es` command, and its name 「ES を始める」 (Event Storming, as it is called in Japanese too)
     'es',
     'ES',
+    // the formats of 書き出し
+    'PNG',
+    'SVG',
+    'PDF',
 ]);
 
 describe('i18n', () => {

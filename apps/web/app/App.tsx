@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import type { Diagnostic } from '@domaintrail/kernel';
+import type { DomainModel } from '@domaintrail/modeling';
 import { BaselineButton, BaselineMenu, baselineName } from '../baseline-picker';
 import { Explorer } from '../explorer';
 import { I18nProvider, MESSAGES } from '../i18n';
@@ -17,6 +18,12 @@ import { AppShell } from './shell';
 import { workspaceName } from './health';
 import { HealthButton } from './status';
 import { useViewSocket } from './useViewSocket';
+
+/** An aggregate's name and label (its ID while the model does not have it). */
+function aggregateNames(model: DomainModel | null, id: string): { name: string; label?: string | undefined } {
+    const r = model ? resolve(model, id) : undefined;
+    return r?.kind === 'element' ? { name: r.el.name, label: r.el.label } : { name: id };
+}
 
 /** The Live View page: composes the shell with the left pane's lists, the view workspace, the inspector and, in a session, the chat. */
 export function App() {
@@ -195,6 +202,9 @@ export function App() {
                                 legendOpen={legendOpen}
                                 onLegendToggle={() => setLegendOpen(!legendOpen)}
                                 compact={settings.compact}
+                                aggregate={aggregateNames(model, aggregateId)}
+                                workspaceName={current ? workspaceName(current.root) : undefined}
+                                exportOptions={workspace.exportOptions}
                             />
                         )}
                         stormingView={(id, history) => (
