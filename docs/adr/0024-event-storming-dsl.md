@@ -360,8 +360,10 @@ attach an exception that does not share the whole prefix, and its left-to-right 
   shows the stage it comes after, its main flows and exceptions and 「この段階を表示」. The timeline picker lists the
   stages (「コンビニでの発行（例外を含む）」) between すべて（統合） and the timelines (「段階 / タイムライン」, an
   exception as 「例外：…」). The toolbar's 「例外を表示」 toggle (only for a storming with exceptions, not on a
-  timeline's view) is the page's state like the level, saved per browser. The legend gains the exceptions' order and
-  `then`.
+  timeline's view) is the page's state like the level, saved per browser. Off, it also hides at Design Level the
+  elements that relate only to the events only exceptions have: the commands that emit only those, the policies `on`
+  only those with the commands they alone issue, and those commands' copies of actors, read models and aggregates.
+  The legend gains the exceptions' order and `then`.
 - **Agent**: the runner's rule 16: phases as `stage`s with `after`, the normal flow a `timeline` first, exceptions as
   `exception`s starting at their branch event, `then` to rejoin, another normal path another `timeline`.
 
