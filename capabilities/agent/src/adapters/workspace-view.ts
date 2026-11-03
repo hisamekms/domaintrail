@@ -21,6 +21,7 @@ import { constants } from 'node:fs';
 import { chmod, lstat, mkdir, mkdtemp, open, readdir, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
+import { ReadScopeTooLarge } from '../core/ports.js';
 
 /** Names never in the view, at any depth: as a directory or as a file (a submodule's `.git` is one). */
 const NEVER = new Set(['.domaintrail', '.git', 'node_modules']);
@@ -203,8 +204,11 @@ async function readRegular(file: string, maxBytes: number): Promise<Buffer | und
 /** Most entries `ignoredEntries` gives (deny rules of the runner's process); more is refused, never truncated. */
 export const MAX_IGNORED_ENTRIES = 500;
 
-/** The runner's deny list would exceed `MAX_IGNORED_ENTRIES`: its run is refused rather than given a partial list. */
-export class TooManyDeniedEntries extends Error {
+/**
+ * The runner's deny list would exceed `MAX_IGNORED_ENTRIES`: its run is refused rather than given a partial list (the
+ * run fails as `ReadScopeTooLarge`).
+ */
+export class TooManyDeniedEntries extends ReadScopeTooLarge {
     constructor() {
         super(
             `The workspace has more than ${MAX_IGNORED_ENTRIES} ignored files, ignored directories and nested repositories for the agent's deny list: ` +

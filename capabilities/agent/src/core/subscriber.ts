@@ -8,7 +8,8 @@
 //
 // or, instead of finish, a clarification (the agent asked questions), a decline (the agent will not do the requests,
 // and says why) or a failure (`AgentError`: the agent could not
-// run or changed other files; `Interrupted`: the subscriber was stopped). A cancel of the run (`run.cancel_requested`)
+// run or changed other files; `Interrupted`: the subscriber was stopped; `ReadScopeTooLarge`:
+// the runner refused the run, its deny list of what git ignores being too long). A cancel of the run (`run.cancel_requested`)
 // or a lost lease stops the agent and ends the run's work: the server has already ended it. After a run, the next
 // queued one is claimed without waiting for anyone. While the agent runs, what it is doing (as the runner maps it) is
 // reported on change, at most once a second, never holding it up. An agent that keeps its conversation across runs
@@ -20,6 +21,7 @@ import { mapRequests } from '@domaintrail/collaboration';
 import { AGENT_CAPABILITIES, AGENT_EVENT_TYPES, type AgentClaimed, type ToolOutcomeBody } from '@domaintrail/collaboration/protocol';
 import {
     AgentApiError,
+    ReadScopeTooLarge,
     type AgentApi,
     type AgentOutcome,
     type AgentRunner,
@@ -317,6 +319,8 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                 if (cancelled.aborted) return log(`run ${id}: cancelled; the agent was stopped`);
                 if (stopping.signal.aborted) return complete('failed (Interrupted)', id, () => api.fail(id, token, 'Interrupted'));
                 log(`run ${id}: the agent could not run: ${message(e)}`);
+                // the read scope could not be kept whole: said as such, so that the page tells what to do
+                if (e instanceof ReadScopeTooLarge) return complete('failed (ReadScopeTooLarge)', id, () => api.fail(id, token, 'ReadScopeTooLarge'));
                 return complete('failed (AgentError)', id, () => api.fail(id, token, 'AgentError'));
             }
             activity.stop();

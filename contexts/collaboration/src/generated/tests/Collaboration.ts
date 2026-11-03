@@ -227,7 +227,7 @@ export function arbitraries(options: Options = {}): Arbitraries {
     const scalar = testing.scalars(options.seed ?? testing.DEFAULT_SEED);
     const a: Arbitraries = testing.lazy<Arbitraries>({
         AgentRunId: () => testing.valid(given.AgentRunId ?? testing.collide(testing.cast<Collaboration.AgentRunId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkAgentRunId(v).length === 0, 'Collaboration.AgentRunId'),
-        FailureReason: () => given.FailureReason ?? fc.constantFrom<Collaboration.FailureReason>('RuleNotMet', 'AgentError', 'LeaseExpired', 'Interrupted'),
+        FailureReason: () => given.FailureReason ?? fc.constantFrom<Collaboration.FailureReason>('RuleNotMet', 'AgentError', 'LeaseExpired', 'Interrupted', 'ReadScopeTooLarge'),
         ToolOutcome: () => given.ToolOutcome ?? fc.constantFrom<Collaboration.ToolOutcome>('Ran', 'Failed', 'Skipped'),
         RunReport: () => given.RunReport ?? testing.cast<Collaboration.RunReport>(fc.record({ exitCode: testing.cast<number>(scalar.Int), formatted: a.ToolOutcome, checked: a.ToolOutcome, newDtErrors: a.Tally, unparsedDtes: a.Tally })),
         FrozenRequest: () => given.FrozenRequest ?? testing.cast<Collaboration.FrozenRequest>(fc.record({ request: a.RequestId, author: a.ParticipantId, targets: testing.many(a.TargetSnapshot, 0, 20), body: a.Text, replyTo: a.FrozenReplyTarget, reverts: a.AgentRunId }, { requiredKeys: ['request', 'author', 'targets', 'body'] })),

@@ -599,6 +599,20 @@ describe('the pipeline', () => {
         expect(log.some((l) => l.includes('changed files other than .dt/.dtes sources: "src/notes.txt"'))).toBe(true);
     });
 
+    integration('a workspace with more than 500 ignored entries: the run is refused before the agent and fails as ReadScopeTooLarge', async () => {
+        const ctx = await setup();
+        await writeFile(path.join(ctx.root, '.gitignore'), '*.tmp\n', { flag: 'a' });
+        await mkdir(path.join(ctx.root, 'scratch'));
+        for (let i = 0; i <= 500; i++) await writeFile(path.join(ctx.root, 'scratch', `f${i}.tmp`), '');
+        const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
+        const { log } = await subscribe(ctx, await ctx.plan([{}]));
+        const failed = await until(ctx, run, ['Completed', 'Failed']);
+        expect(failed.state === 'Failed' && failed.reason).toBe('ReadScopeTooLarge');
+        expect(log.some((l) => l.includes('ignore whole directories'))).toBe(true);
+        // the agent never ran
+        expect(await ctx.invocations()).toHaveLength(0);
+    });
+
     integration('an agent that writes the workspace’s .claude/ settings: its run fails, and no further run is claimed until a restart', async () => {
         const ctx = await setup();
         const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);

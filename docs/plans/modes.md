@@ -522,8 +522,10 @@ M4 landed the triage and the answers end to end on the server and in `capabiliti
   hand per stream, a timeout of 120 s (`ANSWER_TIMEOUT_MS`; `agent.answer.timeout` is the agent's own bound) plus 5 s
   for the answerer to report a failure, then `answer.job_withdrawn`. Stage 3 that fails, times out or gives an invalid
   output is recorded as a `Model` step `Unknown` with the error (so the triage is a 相談); an answer or a proposal that
-  fails is handed out again, at most twice (`MAX_ATTEMPTS`), then given up until the server starts again (logged; how
-  the page shows it is M6's). An answerer that disconnects has its job handed to another. The stream also carries
+  fails is handed out again, at most twice (`MAX_ATTEMPTS`), then given up (logged) until an answer stream connects
+  (each new one gives the given-up jobs another round) or the facilitator retries it (`POST
+  /api/session/requests/:id/retry-answer`); the given-up jobs are listed in the agents' presence (`givenUp`; how the
+  page shows it is M6's). An answerer that disconnects has its job handed to another. The stream also carries
   `revision.restored` (the warm answerer forgets). Answer and propose jobs carry the session so far whole and, for a
   stream that answered before, since the last entry its previous job was given (`sessionSoFarSince`), the run the
   message replies to (`repliedRuns`) and the latest revision (`readRevision`). `changedSinceYourLastAnswer` is the

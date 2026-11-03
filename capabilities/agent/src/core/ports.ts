@@ -5,6 +5,7 @@
 import type {
     AgentAnswerJobBody,
     AgentClaimed,
+    AgentFailReason,
     AgentReplyBody,
     AgentFinishBody,
     AgentLease,
@@ -33,6 +34,17 @@ export class AgentApiError extends Error {
         readonly type: string,
     ) {
         super(`The agent API answered ${status} ${type}`);
+    }
+}
+
+/**
+ * A runner refuses a run because the deny list that keeps what git ignores from the agent would be too long: the run
+ * fails as `ReadScopeTooLarge` (the page says why), never runs with part of the list.
+ */
+export class ReadScopeTooLarge extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'ReadScopeTooLarge';
     }
 }
 
@@ -79,7 +91,7 @@ export interface AgentApi {
     finish(run: string, token: string, facts: Omit<AgentFinishBody, 'token'>): Promise<ApiResult<unknown>>;
     clarification(run: string, token: string, question: string, reply?: AgentReplyBody): Promise<ApiResult<unknown>>;
     decline(run: string, token: string, reply: AgentReplyBody): Promise<ApiResult<unknown>>;
-    fail(run: string, token: string, reason: 'AgentError' | 'Interrupted'): Promise<ApiResult<unknown>>;
+    fail(run: string, token: string, reason: AgentFailReason): Promise<ApiResult<unknown>>;
     release(run: string, token: string): Promise<ApiResult<unknown>>;
     /**
      * The answerer role's SSE stream (`GET /agent/answers/events`): `open` first, then the jobs handed to this answerer,

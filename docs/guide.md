@@ -3009,9 +3009,9 @@ stormings, and lets it answer instead (status `answered`) a request that turns o
   rules for `.domaintrail/`, `.git/` and the ignored files and directories present when its run starts. "Ignored" is
   git's own answer (your global excludes file and `.git/info/exclude` included). A nested repository or a submodule
   is left out as a whole: the answerer never sees its files and the runner is denied its directory. More than 500
-  ignored entries and nested repositories make a run fail (the agent's log says so): ignore whole directories (e.g.
-  `dist/` rather than its files) or move nested repositories out. As defense in depth, the server refuses an answer, a
-  proposal or a run's reply that contains the agent API's credential.
+  ignored entries and nested repositories make a run fail (`ReadScopeTooLarge`, shown on the page): ignore whole
+  directories (e.g. `dist/` rather than its files) or move nested repositories out. As defense in depth, the server
+  refuses an answer, a proposal or a run's reply that contains the agent API's credential.
 - **A change outside the DSL stops the subscriber.** The workspace is scanned before and after the agent; if any file
   other than a `.dt` or `.dtes` source was added, changed or removed (`.claude/` included, and files that `.gitignore`
   ignores), the run fails (`AgentError`) and the subscriber claims no further run. Its log names the files (`not

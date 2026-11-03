@@ -401,9 +401,13 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         // the agents connected per role and the work waiting for one: on connect (with the state), then on each change
         let presenceShown = '';
         const agentPresence = async (): Promise<AgentPresence> => {
-            const [state, answersWaiting] = await Promise.all([collaboration.sessionState({ session }), agent.answers.waiting()]);
+            const [state, answersWaiting, givenUp] = await Promise.all([
+                collaboration.sessionState({ session }),
+                agent.answers.waiting(),
+                agent.answers.givenUp(),
+            ]);
             const queued = state.ok ? state.value.runs.filter((r) => r.state === 'Queued').length : 0;
-            return { connected: agent.connected(), waiting: answersWaiting + queued };
+            return { connected: agent.connected(), waiting: answersWaiting + queued, ...(givenUp.length > 0 && { givenUp }) };
         };
         let presenceTail: Promise<void> = Promise.resolve();
         const presenceChanged = (): void => {
@@ -527,6 +531,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             quickReactions: config.quickReactions,
             triaged: () => stage.kick(),
             agentPresence,
+            retryAnswer: (request) => agent.answers.retry(request),
             log,
         });
         const http = createViewHttpServer({

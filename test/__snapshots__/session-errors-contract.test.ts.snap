@@ -4,6 +4,7 @@ exports[`the status of each error type every error of the collaboration model an
 {
   "AlreadyJoined": 409,
   "AlternativeNotFound": 400,
+  "AnswerNotGivenUp": 409,
   "AssumptionClosed": 409,
   "AssumptionNotFound": 400,
   "BlobMissing": 500,

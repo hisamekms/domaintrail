@@ -8,6 +8,7 @@ context Collaboration {
     AgentError "エージェントの異常終了"
     LeaseExpired "応答の途絶"
     Interrupted "中断"
+    ReadScopeTooLarge "読み取り範囲の除外が多すぎる"
   }
 
   /// 実行のあとの `dt fmt` / `dt check` の結果。ファイルが変わらなかった実行は省く。
@@ -364,7 +365,7 @@ context Collaboration {
       } else InvalidReply
       emits RunDeclined
 
-    /// 報告の得られない失敗（エージェントの異常終了、応答の途絶、再起動による中断）。
+    /// 報告の得られない失敗（エージェントの異常終了、応答の途絶、再起動による中断、除外が多すぎて読み取り範囲を守れない）。
     command fail(reason: FailureReason, finishedAt: Timestamp) "実行を失敗にする"
       Running -> Failed
       requires abnormal "報告のない失敗" { reason != FailureReason.RuleNotMet } else ReportRequired

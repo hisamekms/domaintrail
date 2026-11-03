@@ -93,6 +93,8 @@ export interface SessionHttpDeps {
     readonly triaged: () => void;
     /** The agents connected per role and the work waiting for one, sent with the state. */
     readonly agentPresence: () => Promise<AgentPresence>;
+    /** The facilitator retries the AI's given-up answer or proposal for a message: whether one was given up. */
+    readonly retryAnswer: (request: Collaboration.RequestId) => Promise<boolean>;
     readonly log: (line: string) => void;
 }
 
@@ -421,6 +423,20 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 const addressed = await use.addressMessages({ session, actor: who(auth).actor, requests: [knownRequestId(id)] });
                 if (addressed.ok) deps.triaged();
                 await answer(res, addressed, 201, (triages) => ({ triages }));
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/requests\/([^/]+)\/retry-answer$/,
+            role: 'facilitator',
+            handle: async ({ req, res, params }) => {
+                // the AI's answer or proposal given up after failing twice: handed out again (ADR 0030, as built in M4)
+                const id = checked(res, uuid(params[0], 'id'));
+                if (!id) return;
+                if (!(await input(req, res, []))) return;
+                if (!(await deps.retryAnswer(knownRequestId(id))))
+                    return fail(res, { type: 'AnswerNotGivenUp', message: 'No answer or proposal of the AI for this message is given up.' });
+                sendJson(res, 200, {});
             },
         },
         {

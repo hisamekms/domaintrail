@@ -16,6 +16,7 @@ export {
     type AnswerStreamItem,
     type AnswerTurn,
     type AnswerTurnResult,
+    ReadScopeTooLarge,
     type StreamItem,
     type WorkspaceFiles,
 } from './core/ports.js';
