@@ -1051,3 +1051,19 @@ A user asked to close up the gaps between sticky notes when printing (decided 20
 - **Payload**: `examples/shop`'s OrderToCash at Design Level has 8 more notes on its integrated canvas (顧客 and 注文 ×4,
   カート and 請求書 ×2), the same edges; its Normal and PaymentRetry timelines keep their counts, the copies renamed
   (`n:Invoice` → `n:Invoice@IssueInvoice`).
+
+### As built: the neutrals tinted to the brand's hue
+
+- **Decided by the user**: the Live View's neutrals read cold blue-grey beside the indigo brand. Every neutral primitive
+  but white (`--p-slate-*`, `--p-night-*` in `apps/web/styles.css`) keeps its OKLCH lightness and takes the hue of
+  `--p-brand-indigo` (277°) with 1.25× its chroma (e.g. slate-900 `#0f172a` → `#12152e`, night-900 `#191d2b` →
+  `#1a1c2e`). The names stay (a tinted slate is still a slate). The slate-based literals follow as `color-mix` of the
+  primitives (`--row-hover`, `--shadow`, `--backdrop`, the dark `--legend-bg`). The Event Storming notes, the status,
+  diff, brand, participant and avatar hues are unchanged; the canvas background has too little chroma to change.
+- **Dark muted text raised**: `--muted` in dark was slate-400 (APCA Lc ≈ 50 on the surfaces); it is now a new
+  `--p-slate-350` (`#b5b9d1`, the OKLCH midpoint of slate-300 and slate-400, tinted the same way): Lc −64.5 on `--bg`,
+  −63.4 on `--surface`, −61.1 on `--surface-muted` (WCAG 9.6 / 8.7 / 7.3:1), still about Lc 15 below
+  `--text-secondary`. Light muted is unchanged in lightness (Lc 77.3, 5.46:1 on the surface).
+- **Pinned** by `apps/web/palette.test.ts`: the text, secondary and muted tokens, resolved from `styles.css`, against
+  bg, surface and surface-muted in both themes (APCA 0.0.98G-4g and WCAG 4.5:1), and dark muted at least Lc 10 below
+  the secondary text.
