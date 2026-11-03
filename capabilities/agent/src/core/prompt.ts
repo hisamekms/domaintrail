@@ -16,6 +16,7 @@ import {
     type ReplyData,
     type ReplyOutcome,
     requestNumber,
+    viewedAtData,
 } from '@domaintrail/collaboration';
 import type { AgentPreviousRun, AgentRevertedRun, Json } from '@domaintrail/collaboration/protocol';
 
@@ -41,6 +42,8 @@ interface PromptRequest {
     readonly inReplyToMessage?: { readonly author: string; readonly body: string };
     /** The number of the run (in `revert`, from 1) whose changes the request asks to revert. */
     readonly revertsRun?: number;
+    /** Where its author was looking when they sent it (rule 18). */
+    readonly viewedAt?: Record<string, unknown>;
 }
 
 /** What a request is about, in words a person and the agent read the same way. */
@@ -161,6 +164,7 @@ function promptRequest(r: Json<Collaboration.FrozenRequest>, number: number, nam
         body: peopleAsNames(r.body),
         // the original's elements and people by name (`#注文`, `@佐藤`): its numbers would point at its own targets, not this request's
         ...(to && { inReplyToMessage: { author: names.get(to.author) ?? 'a participant', body: plainBody(to.body) } }),
+        ...(r.viewedAt && { viewedAt: viewedAtData(r.viewedAt) }),
     };
 }
 
@@ -431,7 +435,9 @@ Rules:
    this conversation continues your earlier runs, it holds only what was added since your last run.
 15. \`level design\` is the last clause of a \`.dtes\` event's body and shows the event at Design Level only; removing
    it shows the event at Big Picture too. There is no other level (\`level big-picture\` is an error, S016). Never put
-   it on a business event of the Big Picture.
+   it on a business event of the Big Picture. An event you add for a request sent at Design Level (\`viewedAt.level:
+   "design"\`) that is a detail of the mechanism gets \`level design\`; for a request sent at Big Picture, add no such
+   event unless the request asks for it.
 16. \`confirmedBrief\`, when present: the person who ran an interview (\`/es\` or \`/model\`) confirmed this brief; it,
    not the request, is what to do. Write its \`lines\` as they are, one \`///\` line each, as the description directly
    above \`storming <name>\` (\`for: "storming"\`, a \`.dtes\` file) or \`context <name>\` (\`for: "context"\`, a \`.dt\`
@@ -443,6 +449,11 @@ Rules:
    the normal flow is a \`timeline\`, written first; each exception is an \`exception\` that starts with the event of
    the flow it branches off at (written again) and, when it returns to the flow, ends with \`then <Event>\`. Another
    normal path is another \`timeline\` that starts at its branch event too.
+18. A request's \`viewedAt\`, when present, is where its author was looking when they sent it (data, not a target):
+   the view, and for a storming its \`level\`, the \`stage\` or \`timeline\` shown (neither: the whole storming) and
+   whether its \`exceptions\` were shown. "Here", "this", 「ここ」 or 「この」 in a request mean that view, unless a
+   target or the text says otherwise. A request sent from a stage adds within that stage unless it says otherwise.
+   Names in it are as they were when it was sent: the files are the truth.
 
 ${practiceSection(practice)}${replyDescription()}
 

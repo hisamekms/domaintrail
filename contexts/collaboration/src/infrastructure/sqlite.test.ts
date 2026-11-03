@@ -406,6 +406,40 @@ describe('rows written before requests had several targets', () => {
         // written before people could be mentioned: they mention no one, the event too
         expect(requests.map((r) => r.mentions)).toEqual([[], []]);
         expect(events.map((e) => (e.event.type === 'RequestSent' ? e.event.mentions : undefined))).toEqual([[], []]);
+        // written before messages carried the view they were sent from: none, in the request, the run and the event
+        expect(requests.map((r) => r.viewedAt)).toEqual([undefined, undefined]);
+        expect(runs[0].input.requests.map((r) => r.viewedAt)).toEqual([undefined, undefined]);
+        expect(events.map((e) => (e.event.type === 'RequestSent' ? e.event.viewedAt : undefined))).toEqual([undefined, undefined]);
+    });
+
+    test('a request with the view it was sent from keeps it through the store', async () => {
+        const uow = createUnitOfWork(openDatabase(':memory:'));
+        const viewedAt: C.ViewedAt = {
+            view: {
+                kind: 'Storming',
+                storming: value(C.makeStormingName('OrderToCash')),
+                level: 'DesignLevel',
+                stage: value(C.makeStageName('Payment')),
+                exceptions: false,
+            },
+            states: value(C.makeElementName('Sales.Order')),
+        };
+        const loaded = await uow.transaction((st) => {
+            openSession(st, sessionId);
+            st.requests.save({
+                state: 'Sent',
+                id: request,
+                session: sessionId,
+                author: facilitator,
+                targets: [],
+                body: value(C.makeText('x')),
+                sentAt: at,
+                mentions: [],
+                viewedAt,
+            });
+            return st.requests.load(request);
+        });
+        expect(loaded?.viewedAt).toEqual(viewedAt);
     });
 });
 

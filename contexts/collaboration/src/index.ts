@@ -148,6 +148,16 @@ export {
     type InterviewProblem,
 } from './domain/interviews.js';
 export { checkTemplates, TEMPLATE_CONTEXTS, TEMPLATE_LIMITS, type MessageTemplateConfig, type TemplateContext } from './domain/templates.js';
+// where the requester was looking when they sent a message
+export {
+    type InvalidViewedAt,
+    type KnownViewNames,
+    readViewedAt,
+    resolveViewedAt,
+    VIEWED_AT_LIMITS,
+    viewedAtData,
+    type ViewedAtLike,
+} from './domain/viewed-at.js';
 export { readToolOutcome, succeeded } from './domain/validation.js';
 // the IDs from values known to be UUIDs (the ID generator's, input already checked); the generated constructors check
 export {

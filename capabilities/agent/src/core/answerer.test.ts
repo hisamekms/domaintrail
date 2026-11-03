@@ -4,7 +4,7 @@
 // stopped without a result, a job past its timeout reported as failed, and the session's end.
 import { describe, expect, test } from 'bun:test';
 import type { AgentAnswerJobBody, AgentInterviewJobBody } from '@domaintrail/collaboration/protocol';
-import { buildAnswerPrompt, buildInterviewPrompt, buildProposePrompt } from './answer-prompt.js';
+import { buildAnswerPrompt, buildInterviewPrompt, buildProposePrompt, buildTriagePrompt } from './answer-prompt.js';
 import { startAnswerer } from './answerer.js';
 import type { AgentApi, AnswerAgent, AnswerStreamItem, AnswerTurn, AnswerTurnResult } from './ports.js';
 import type { Practice } from './prompt.js';
@@ -364,5 +364,44 @@ describe('the answerer role', () => {
         const model = buildInterviewPrompt(j('model'), 'n', { practice });
         expect([model.includes('STORMING'), model.includes('MODELING')]).toEqual([false, true]);
         expect(buildInterviewPrompt(j('es'), 'n')).not.toContain('How the people work');
+    });
+});
+
+describe('where the requester was looking', () => {
+    const viewedAt = { view: { kind: 'Storming', storming: 'OrderToCash', level: 'DesignLevel', exceptions: false } } as const;
+    const shown = { view: 'storming', storming: '@{es:OrderToCash}', level: 'design', exceptions: false };
+    /** The JSON of a prompt's block. */
+    const data = (prompt: string, tag: string): Record<string, unknown> =>
+        JSON.parse(prompt.slice(prompt.indexOf(`<${tag}-n>`) + `<${tag}-n>`.length, prompt.indexOf(`</${tag}-n>`))) as Record<string, unknown>;
+    const viewed = job('answer', 1, { request: { ...job('answer', 1).request, viewedAt } } as Partial<AgentAnswerJobBody>);
+
+    test('stage 3, the answer and the proposal get the message with its view, and say what "here" is', () => {
+        for (const build of [buildTriagePrompt, buildAnswerPrompt, buildProposePrompt]) {
+            const prompt = build(viewed, 'n');
+            expect((data(prompt, 'message').message as Record<string, unknown>).viewedAt).toEqual(shown);
+            expect(prompt).toContain('`message.viewedAt`');
+            expect((data(build(job('answer', 1), 'n'), 'message').message as Record<string, unknown>).viewedAt).toBeUndefined();
+        }
+        expect(buildTriagePrompt(viewed, 'n')).toContain('(「ここに…を足して」 asks\nfor a change there)');
+        const answer = buildAnswerPrompt(viewed, 'n');
+        expect(answer).toContain('"here", "this", 「ここ」「この」 without a target mean that view');
+        expect(answer).toContain('A proposal for a request sent from a stage adds within that stage');
+    });
+
+    test("the interviewer gets the starter's view as a hint", () => {
+        const interview = {
+            job: 'j',
+            kind: 'interview',
+            interview: { id: 'i' },
+            request: { id: REQUEST, viewedAt },
+            author: 'Ada',
+            timeoutMs: 1,
+            command: 'es',
+            language: 'ja',
+            transcript: [],
+        } as unknown as AgentInterviewJobBody;
+        const prompt = buildInterviewPrompt(interview, 'n');
+        expect(data(prompt, 'interview').viewedAt).toEqual(shown);
+        expect(prompt).toContain('`viewedAt`, when present, is where the person is looking');
     });
 });

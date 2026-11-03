@@ -1,0 +1,56 @@
+context Collaboration {
+  /// `.dt` モデルのコンテキストの名前。
+  primitive ContextName "コンテキスト名": String { length(value) >= 1 }
+
+  /// ストーミングの段階の名前。
+  primitive StageName "段階名": String { length(value) >= 1 }
+
+  /// カタログの絞り込みの文字列。
+  primitive CatalogQuery "カタログの絞り込み": String { length(value) >= 1 and length(value) <= 200 }
+
+  /// カタログの区分（`aggregates`、`events` など）。
+  primitive CatalogSection "カタログの区分": String { matches(value, "^[A-Za-z]+$") and length(value) <= 40 }
+
+  /// 構造図の詳細度。
+  enum StructureDetail "構造図の詳細度" { Detail "詳細" Overview "概要" Aggregates "集約だけ" }
+
+  /// ストーミングのレベル。
+  enum StormingLevel "ストーミングのレベル" { BigPicture "ビッグピクチャー" DesignLevel "デザインレベル" }
+
+  /// ページが見せていたビュー（カメラの位置は含まない）。
+  union ViewShown "見ていたビュー" {
+    /// コンテキストマップ。
+    ContextMap "コンテキストマップ" {
+      all: Bool "すべてのコンテキスト"
+    }
+    /// 構造図。絞ったコンテキストがなければ、絞っていない。
+    Structure "構造図" {
+      level: StructureDetail "詳細度"
+      focus: ContextName[0..50] "絞ったコンテキスト"
+    }
+    /// カタログ。区分やコンテキストがなければ、その絞り込みはない。
+    Catalog "カタログ" {
+      query: CatalogQuery? "絞り込みの文字列"
+      sections: CatalogSection[0..20] "絞った区分"
+      contexts: ContextName[0..50] "絞ったコンテキスト"
+    }
+    /// ストーミング。タイムラインも段階もなければ統合キャンバス。
+    Storming "ストーミング" {
+      storming: StormingName
+      level: StormingLevel "レベル"
+      timeline: TimelineName? "タイムライン"
+      stage: StageName? "段階"
+      /// 例外を表示していた（「例外を表示」）。
+      exceptions: Bool "例外の表示"
+    }
+  }
+
+  /// 依頼者がメッセージを送ったときに見ていたところ。AI の役（仕分け・回答・実行・聞き取り）に、「ここ」が何かを伝える。
+  /// 選んでいた要素は対象（`#`）が担うので、ここには持たない。名前は送ったときにサーバーがワークスペースと照らし、
+  /// 見つからないものは落とす（ストーミングが見つからなければ、ビューごと落とす）。
+  value ViewedAt "送ったときのビュー" {
+    view: ViewShown "ビュー"
+    /// インスペクターで状態図を見ていた集約（`Sales.Order`）。
+    states: ElementName? "状態図の集約"
+  }
+}

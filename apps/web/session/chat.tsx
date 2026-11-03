@@ -31,7 +31,7 @@ import {
     X,
     type LucideIcon,
 } from 'lucide-react';
-import type { SendRequestBody, ViewLocation } from '@domaintrail/collaboration/protocol';
+import type { ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
 import { motionMs, useGrow, useSwap } from '../shared/motion';
 import { useLang, useT } from '../i18n';
@@ -84,7 +84,7 @@ import { parseReplyText, referenceText } from './references';
 import { TriageRecordPanel } from './triage-record';
 import { InterviewPanel, interviewSlot } from './interview';
 import { runningInterview, selectedOf, slashItems, slashQuery, templateValue, type SlashItem, type SlashScope } from './slash';
-import { isReplyable, messageReference, messageReplyTargets, repliesToMe, replyReference, replyTargetOf, replyTargets, type ReplyDraft } from './replies';
+import { isReplyable, messageReference, messageReplyTargets, repliesToMe, replyReference, replyTargets, type ReplyDraft } from './replies';
 import { useRevisionTools } from './revisions';
 import { CancelButton, CancelDialog, RowActions, StatusSizer, StatusSlot, TurnLink } from './status-slot';
 import { latestRevision } from './state';
@@ -110,8 +110,9 @@ import { ComposerChips } from './composer-chips';
 import { ComposerEditor, type ComposerEditorApi, type EditorQuery, type MentionLook } from './composer-editor';
 import { mentionFits, type ComposerMention } from './composer-text';
 import type { ModelTarget, TargetDraft } from './targets';
+import { interviewBody, messageBody } from './outgoing';
 import { continued, isMac } from './views';
-import type { ViewScope, ViewTarget } from './views';
+import type { SentView, ViewScope, ViewTarget } from './views';
 import type { ComposerDraft, SessionData } from './useSession';
 
 type RequestJson = SessionData['state']['requests'][number];
@@ -192,6 +193,8 @@ export function SessionChat(props: {
     viewScope: ViewScope;
     /** What is open and selected, for what `/` lists. */
     slash: { readonly view: SlashScope['view']; readonly selected: TargetDraft | undefined };
+    /** Where this page is looking: sent with each message. */
+    viewedAt: SentView | undefined;
     onClose: () => void;
 }) {
     const { session, composer, focusPending } = props;
@@ -538,6 +541,7 @@ export function SessionChat(props: {
                             onReplyDone={() => setReplyDraft(undefined)}
                             outgoing={solo ? outgoingTools : undefined}
                             slash={props.slash}
+                            viewedAt={props.viewedAt}
                             tx={tx}
                         />
                     )}
@@ -1608,9 +1612,11 @@ function Composer(props: {
     outgoing: OutgoingTools | undefined;
     /** What is open and selected, for what `/` lists. */
     slash: { readonly view: SlashScope['view']; readonly selected: TargetDraft | undefined };
+    /** Where this page is looking: sent with each message and each command started. */
+    viewedAt: SentView | undefined;
     tx: Tx;
 }) {
-    const { session, composer, tx, reply, onReplyDone, outgoing } = props;
+    const { session, composer, tx, reply, onReplyDone, outgoing, viewedAt } = props;
     const personName = useChat().nameOf;
     const replyingTo =
         reply?.kind === 'Message'
@@ -1735,7 +1741,7 @@ function Composer(props: {
         setSending(true);
         try {
             const focus = scope.selected?.target.target;
-            await sessionApi.startInterview({ command: item.id, body: tx.chat.slash.commands[item.id], language: lang, ...(focus && { focus }) });
+            await sessionApi.startInterview(interviewBody({ command: item.id, body: tx.chat.slash.commands[item.id], language: lang, focus, viewedAt }));
             await composer.clear();
             setError(undefined);
         } catch (e) {
@@ -1749,12 +1755,7 @@ function Composer(props: {
         const revision = latestRevision(session.state);
         if (!revision || !canSend) return;
         setSending(true);
-        const body: SendRequestBody = {
-            targets: value.chips.map((c) => ({ ...c.target, sourceRevision: revision.id })),
-            body: value.text,
-            ...(reply && { replyTo: replyTargetOf(reply) }),
-            ...(value.people.length > 0 && { mentions: value.people }),
-        };
+        const body = messageBody({ value, revision: revision.id, ...(reply && { reply }), ...(viewedAt && { viewedAt }) });
         // Solo: shown at once, the text leaving the composer as it goes; put back if the server refuses it
         const local = outgoing && `local-${crypto.randomUUID()}`;
         if (outgoing && local) {

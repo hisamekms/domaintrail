@@ -20,7 +20,9 @@ import {
     knownInterviewId,
     knownRequestId,
     INTERVIEW_COMMANDS,
+    type KnownViewNames,
     readBriefText,
+    resolveViewedAt,
     type PickData,
     PROPOSAL_LIMITS,
     readProposalText,
@@ -49,6 +51,7 @@ import {
     requestTargets,
     text,
     uuid,
+    viewedAt as viewedAtInput,
     type InvalidInput,
 } from './input.js';
 import { joinPage, messagePage, nameCookie, pageLanguage, rememberedName, safeNext } from './pages.js';
@@ -101,6 +104,11 @@ export interface SessionHttpDeps {
     readonly agentPresence: () => Promise<AgentPresence>;
     /** The facilitator retries the AI's given-up answer or proposal for a message: whether one was given up. */
     readonly retryAnswer: (request: Collaboration.RequestId) => Promise<boolean>;
+    /**
+     * The names of the workspace as it is now, to check a sent view's against (undefined: none known yet, the view kept
+     * as sent). Absent: views are kept as sent.
+     */
+    readonly knownViewNames?: () => KnownViewNames | undefined;
     readonly log: (line: string) => void;
 }
 
@@ -296,6 +304,18 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
         sendJson(res, status, body(result.value));
     };
 
+    /**
+     * The view a message was sent from, its names checked against the workspace (what it lacks is dropped; a storming
+     * it lacks drops the view): undefined when none was sent or none is left, `false` once a bad one was answered 400.
+     */
+    const sentView = (res: ServerResponse, raw: unknown): Collaboration.ViewedAt | undefined | false => {
+        if (raw === undefined) return undefined;
+        const read = checked(res, viewedAtInput(raw));
+        if (!read) return false;
+        const known = deps.knownViewNames?.();
+        return known ? resolveViewedAt(read, known) : read;
+    };
+
     /** Whether the proposal is one of this session's (answered with `NotFound` otherwise). */
     const proposalOfSession = async (res: ServerResponse, id: string): Promise<boolean> => {
         if ((await state()).proposals.some((p) => p.id === id)) return true;
@@ -400,7 +420,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             role: 'participant',
             handle: async ({ req, res, auth }) => {
                 // `target` (one) is the former body, still taken; the former `apply` is gone (addressing, ADR 0030)
-                const raw = await input(req, res, ['targets', 'target', 'body', 'replyTo', 'mentions']);
+                const raw = await input(req, res, ['targets', 'target', 'body', 'replyTo', 'mentions', 'viewedAt']);
                 if (!raw) return;
                 const me = who(auth);
                 const targets = checked(res, requestTargets(raw));
@@ -416,6 +436,8 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 // the people `@name[pN]` mentions: participants of the session, each once (the use case checks who)
                 const mentions = checked(res, mentionIds(raw.mentions));
                 if (!mentions) return;
+                const viewed = sentView(res, raw.viewedAt);
+                if (viewed === false) return;
                 const revisions = (await state()).revisions;
                 const unknown = targets.findIndex((target) => !revisions.some((r) => r.id === target.sourceRevision));
                 if (unknown >= 0)
@@ -425,7 +447,15 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                         message: 'Not a revision of this session.',
                     });
                 // addressed to the AI (a mention of it, a reply to it, a Solo session): its triage opens with stage 1
-                const sent = await use.sendMessage({ session, actor: me.actor, targets, body: t, ...(replyTo && { replyTo }), mentions });
+                const sent = await use.sendMessage({
+                    session,
+                    actor: me.actor,
+                    targets,
+                    body: t,
+                    ...(replyTo && { replyTo }),
+                    mentions,
+                    ...(viewed && { viewedAt: viewed }),
+                });
                 if (sent.ok && sent.value.triage) deps.triaged();
                 await answer(res, sent, 201, (v) => ({
                     request: v.request,
@@ -557,7 +587,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             handle: async ({ req, res, auth }) => {
                 // `/es` or `/model` (the plan's round 5): the opening message and the interview, the interviewer's first
                 // question due; the facilitator only (in Solo, the person)
-                const raw = await input(req, res, ['command', 'body', 'language', 'focus']);
+                const raw = await input(req, res, ['command', 'body', 'language', 'focus', 'viewedAt']);
                 if (!raw) return;
                 const command = Object.entries(INTERVIEW_COMMANDS).find(([id]) => id === raw.command)?.[1];
                 if (!command)
@@ -571,6 +601,8 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                     focus = checked(res, modelTarget(raw.focus, 'focus'));
                     if (!focus) return;
                 }
+                const viewed = sentView(res, raw.viewedAt);
+                if (viewed === false) return;
                 const started = await use.startInterview({
                     session,
                     actor: who(auth).actor,
@@ -578,6 +610,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                     body: t,
                     language: raw.language === 'en' ? 'En' : 'Ja',
                     ...(focus && { focus }),
+                    ...(viewed && { viewedAt: viewed }),
                 });
                 await answer(res, started, 201, (v) => ({ interview: v.interview, request: v.request }));
             },

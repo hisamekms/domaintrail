@@ -5,7 +5,7 @@ import type { StormingView, ViewPayload } from '@domaintrail/visualization/proto
 import { Catalog, CatalogFilters, CatalogSearch, useCatalogFilter } from '../catalog';
 import { ContextList } from '../context-picker';
 import { useT } from '../i18n';
-import { contextLabels } from '../model-utils';
+import { type CatalogFilter, contextLabels } from '../model-utils';
 import type { LegendView } from '../legend';
 import { StormingToolbar } from '../storming';
 import { applyTheme, type Theme } from '../theme';
@@ -32,6 +32,8 @@ export interface Workspace {
     nav: Navigation;
     settings: ViewSettings;
     viewGraph: ViewGraph;
+    /** The catalog's filter (a session's message carries it as where it was sent from). */
+    catalog: { filter: CatalogFilter; setFilter: (filter: CatalogFilter) => void };
 }
 
 /**
@@ -45,6 +47,7 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
     const nav = useNavigation(canvas, current, stormings);
     const settings = useViewSettings();
     const viewGraph = useViewGraph(current, nav.view, settings, stormings);
+    const catalog = useCatalogFilter();
     useOpenOnStormings(current, nav.setView);
     useViewCamera(canvas, current, nav.view, settings, viewGraph, { mode, lang }, current !== null && isEmptyView(nav.view.kind, current));
 
@@ -57,7 +60,7 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
 
     const onMount = useCallback((c: DiagramCanvas) => setCanvas(c), []);
 
-    return { canvas, onMount, stormings, nav, settings, viewGraph };
+    return { canvas, onMount, stormings, nav, settings, viewGraph, catalog };
 }
 
 /** The center of the page: the view tabs, the current view's toolbar, and the canvas (or the catalog). */
@@ -79,7 +82,7 @@ export function ViewWorkspace(props: {
     const { checked, hidden, focusKey, noneChecked, graph } = viewGraph;
     const model = current?.model ?? null;
     const focusContexts = current?.focusContexts ?? [];
-    const { filter: catalogFilter, setFilter: setCatalogFilter } = useCatalogFilter();
+    const { filter: catalogFilter, setFilter: setCatalogFilter } = workspace.catalog;
     const t = useT();
     const empty = { added: [], changed: [], removed: [] };
     /** The view has nothing yet: it shows one line, and no control that would have nothing to act on. */

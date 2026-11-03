@@ -980,3 +980,34 @@ A template only puts text in the composer.
 - **Templates**: eight built in (both languages) and the team's in the top-level `templates` of `domaintrail.jsonc`
   (`{ id, name, text, when? }`, a name and a text as one string or `{ ja, en }`; at most 30), validated by
   Collaboration (`checkTemplates`) and in the JSON schema, used by `dt open` and `dt collab`.
+
+## The view a message was sent from (as built)
+
+The AI roles did not know what the requester was looking at: the page's `ViewLocation` served presence and cursors
+only. Each message now carries the sender's view, and every role gets it as data.
+
+- **Model** (`view.dt`): `ViewedAt { view: ViewShown, states? }`, `ViewShown` one of `ContextMap { all }`,
+  `Structure { level: Detail | Overview | Aggregates, focus: ContextName[] }`, `Catalog { query?, sections[],
+  contexts[] }`, `Storming { storming, level: BigPicture | DesignLevel, timeline? | stage?, exceptions }`; `states` the
+  aggregate whose state diagram the inspector shows. The element selected is not part of it: it is a target (`#`).
+  `Request.viewedAt?` (and `RequestSent`, `FrozenRequest`), set by `send` only: a revert and the AI's answer have none,
+  nor do messages sent before. No migration: requests are JSON rows, an absent field is an older row.
+- **Capture** (`views.ts` `sentView`, `outgoing.ts`): the page sends `viewedAt` with every message of the composer
+  (a template's text included: it is sent as a message) and with a `/` command started (`StartInterviewBody.viewedAt`,
+  kept on the opening message). The 「AI に送る」 rescue sends nothing new: the message keeps the view it was sent
+  from. The catalog's filter moved into the view workspace so that the session's part of the page can read it.
+- **Server**: `readViewedAt` checks the shape and limits (400 `InvalidInput` naming the field); `resolveViewedAt`
+  checks the names against the view the server shows now (`knownViewNames` from `view.state`) and **drops** what the
+  workspace lacks — a timeline or stage (the storming's integrated canvas stays), contexts, the aggregate — and the
+  whole view when its storming is gone. Decided over "kept but marked unresolved": the page only offers what the server
+  showed it, so an unknown name is a stale or hostile page, and the prompts stay free of names that point nowhere.
+- **Run**: frozen with the request (`freezeRequests`), so a run, warm or cold, gets it as its input says.
+- **Prompts** (`viewedAtData`): in the data block, per request, e.g. `viewedAt: { view: 'storming', storming:
+  '@{es:OrderToCash}', level: 'design', stage: 'Payment', exceptions: true }`. The runner's rule 18 says what
+  "here" / 「ここ」 means and that a request sent from a stage adds within it; rule 15 says an event added for a request
+  sent at Design Level that is a detail of the mechanism gets `level design`, and none is added at Big Picture unless
+  asked (which events are mechanism details stays the practice's). The answerer's read-only rules say the same for its
+  answers and proposals; stage 3 reads `message.viewedAt` (「ここに…を足して」 asks for a change there); the
+  interviewer takes it as a hint for `focus`, never a reason to skip a question.
+- **Not done**: the triage record (仕分けの記録) does not show the view (it would need the view's name, which only the
+  participant list builds); the session so far does not mention views.

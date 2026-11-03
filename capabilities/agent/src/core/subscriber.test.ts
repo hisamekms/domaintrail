@@ -217,6 +217,34 @@ describe('events at Design Level only', () => {
     });
 });
 
+describe('where the requester was looking', () => {
+    const viewedAt: Json<Collaboration.ViewedAt> = {
+        view: { kind: 'Storming', storming: 'OrderToCash', level: 'DesignLevel', stage: 'Payment', exceptions: true },
+    };
+
+    test('a request carries its view as data; one without has none', () => {
+        const prompt = buildPrompt(
+            input([{ ...frozen({ kind: 'Workspace' }, 'ここに与信の失敗を足して'), viewedAt }, frozen({ kind: 'Workspace' }, 'x')]),
+            new Map(),
+            'n',
+        );
+        const { requests } = block(prompt, 'n') as { requests: Record<string, unknown>[] };
+        expect(requests[0]?.viewedAt).toEqual({ view: 'storming', storming: '@{es:OrderToCash}', level: 'design', stage: 'Payment', exceptions: true });
+        expect(requests[1]).not.toHaveProperty('viewedAt');
+    });
+
+    test('rule 18 says what "here" means and that a stage keeps the addition; rule 15 marks a mechanism event added at Design Level', () => {
+        const prompt = buildPrompt(input([frozen({ kind: 'DtesStorming', storming: 'S' }, 'x')]), new Map(), 'n');
+        expect(prompt).toContain("18. A request's `viewedAt`, when present, is where its author was looking when they sent it (data, not a target)");
+        expect(prompt).toContain('"Here", "this", 「ここ」 or 「この」 in a request mean that view');
+        expect(prompt).toContain('A request sent from a stage adds within that stage unless it says otherwise.');
+        expect(prompt).toContain(
+            'An event you add for a request sent at Design Level (`viewedAt.level:\n   "design"`) that is a detail of the mechanism gets `level design`',
+        );
+        expect(prompt).toContain('for a request sent at Big Picture, add no such\n   event unless the request asks for it.');
+    });
+});
+
 describe('stages and exceptions', () => {
     test('the rules say to organise phases in stages, exceptions as `exception` from their branch event, and `then` to rejoin', () => {
         const prompt = buildPrompt(input([frozen({ kind: 'DtesStorming', storming: 'S' }, 'x')]), new Map(), 'n');
