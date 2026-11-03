@@ -1510,3 +1510,40 @@ told the view was); the canvas's controls, how it is looked at.
   中止. The interview bar's 中止 is its starter's and the facilitator's. The brief: the facilitator's own, 確定 /
   編集して確定 / 中止 as before; a participant's, 承認 / 編集して承認 / 却下 (a note, optional) for the facilitator, 承認待ち
   for everyone else (its starter keeps 中止). A rejected brief tells its starter 却下されました with the note, until 閉じる.
+
+## ガイド (`/guide`): a map, what is known at once, and the next steps (decided 2026-11-03)
+
+`/hint` (ヒントをもらう) becomes **`/guide` 「ガイド」**, icon `Compass`, for event storming and modeling. The composer
+button and the answer's icon follow the new name. A guide answer is a **guide card** with three parts.
+
+1. **The map: where the person is.** A path of steps, each done (✓), here (📍) or to do, ending at the goal (🏁).
+   - Steps past the goal are faint: they can be reached, but they are not the goal.
+   - Whether a step is done comes from the files, not from the AI. A step that can't be judged mechanically (for
+     example "the BCs are split") is marked done by the person; the AI may suggest it is done.
+   - **Event storming:** brief → events → flows and stages → exceptions → questions (hotspots) → Design Level. The
+     goal is Big Picture (ending at questions) or Design Level, read from the storming brief's `レベル:` line, written
+     in fixed words by `/es:start`. ES ends within ES; when the goal is reached and the brief says the result leads
+     into modeling, the guide suggests `/model:start`.
+   - **Modeling: patterns** chosen in `/model:start` (a choice question, "where do you start?", with the option that
+     fits the workspace first) and written to the context brief as `進め方:` and `ゴール:` in fixed words:
+     - **A. 全体から (strategic):** terms → subdomains (core/supporting/generic) → BC split → context map → each BC
+       in depth → invariants. Goals: the context map, aggregates, or invariants.
+     - **B. ES から:** review the storming → BCs carved from it → aggregates → commands and events (with `ref`) →
+       invariants.
+     - **C. 1 つの BC を深掘り (tactical):** terms → aggregates → values and IDs → commands (`requires`, `emits`) →
+       invariants → policies. Goals: commands or invariants.
+     - **D. 既存モデルの見直し:** diagnostics → terms aligned → boundaries reviewed → invariants strengthened.
+   - **BCs are not known upfront; the map grows.** The path is one line until contexts exist in the `.dt` files. Each
+     context then appears as a row under "each BC in depth", with its own progress (aggregates, commands,
+     invariants). Rows follow the contexts as they are added, split or merged.
+   - **No brief:** the first step is "set the goal" (`/es:start` or `/model:start`). The map is not guessed.
+2. **What is known at once.** When the button is pressed, a mechanical check lists what the files show, with no AI.
+   Examples: a stage without exceptions, open hotspots, labels that are too long (S015), diagnostics, a context
+   without aggregates. Each row has a "go there" action (show on the canvas, open the hotspot, select the element).
+3. **The AI's advice**, arriving a few seconds later:
+   - a status line, and 1–3 next steps, each with a one-line reason;
+   - actions on a step: a command button (it puts the command in the composer), go-there buttons, and 「聞くことをメモ」
+     (it adds a hotspot; this changes files, so a participant's needs the facilitator's approval);
+   - ⭐ on the `/` list for the commands it suggests, as `/hint` does today.
+
+**Scope: 0.7.0.** The ES map, and all four modeling patterns with the growing BC map.
