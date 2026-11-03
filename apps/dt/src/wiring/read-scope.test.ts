@@ -5,7 +5,7 @@
 // excludes file. A nested repository or a submodule is out of the view and denied to the runner as a whole.
 import { afterEach, describe, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { claudeArguments, MAX_IGNORED_ENTRIES, readTargets, TooManyDeniedEntries, UnexpressiblePath } from '@domaintrail/agent';
@@ -283,7 +283,9 @@ describe('what the agents read outside the workspace (agent.read.paths), as wire
         if (!views) throw new Error('no views');
         try {
             await views.refresh();
-            await rm(path.join(base, 'loose'), { recursive: true });
+            // moved aside rather than removed: a removed directory's inode may be reused at once (ext4), and then the
+            // replacement is the same directory as far as its device and inode tell
+            await rename(path.join(base, 'loose'), path.join(base, 'loose-before'));
             await put(path.join(base, 'loose'), { 'other.md': 'OTHER' });
             const failure = (p: Promise<unknown>): Promise<string> =>
                 p.then(
