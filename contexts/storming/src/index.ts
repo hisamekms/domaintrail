@@ -7,7 +7,9 @@
 // ---- published language: the IR of a storming, its semantic graph and timeline occurrences, its rule IDs, its files
 export {
     declarations,
+    DESIGN_LEVEL,
     esElementId,
+    isDesignLevelOnly,
     RELATION_RULES,
     type AnyDeclaration,
     type Clause,

@@ -1,7 +1,7 @@
 // The Event Storming DSL `.dtes` (docs/dtes-v0.1.md, ADR 0024). Every rule and type starts with `Es`, so the AST types
 // generated next to the `.dt` ones never collide. The grammar is permissive where the validator gives better messages:
 // every element may have a body and every body takes every clause; which clauses an element may have, how many, and the
-// kinds of their targets are rules S003–S009 (domain/validate.ts), not syntax errors.
+// kinds of their targets are rules S003–S009 and S015 (domain/validate.ts), not syntax errors.
 grammar EventStorming
 
 entry EsFile:
@@ -48,7 +48,7 @@ fragment EsNodeBody:
     name=ID label=STRING? ('{' clauses+=EsClause* '}')?;
 
 EsClause:
-    EsRefClause | EsRelationClause | EsStatusClause | EsResolutionClause;
+    EsRefClause | EsRelationClause | EsStatusClause | EsResolutionClause | EsLevelClause;
 
 // `ref Delivery.Shipment.cancel`: a fully qualified `.dt` symbol, resolved against the Typed Model (not linked here).
 EsRefClause:
@@ -67,6 +67,14 @@ EsStatusClause:
 
 EsResolutionClause:
     'resolution' text=STRING;
+
+// `level design`: an event shown at Design Level only. Any word, hyphens included: only `design` is valid (S015), and
+// `big-picture` gets a message of its own rather than a syntax error.
+EsLevelClause:
+    'level' value=EsLevelValue;
+
+EsLevelValue returns string:
+    EsName ('-' EsName)*;
 
 // A partial time order: event references and groups only.
 EsTimeline:
@@ -88,7 +96,7 @@ EsPath returns string:
 
 EsName returns string:
     ID | 'storming' | 'event' | 'actor' | 'external' | 'command' | 'policy' | 'aggregate' | 'readmodel' | 'hotspot' |
-    'timeline' | 'group' | 'ref' | 'reads' | 'target' | 'emits' | 'on' | 'issues' | 'status' | 'resolution';
+    'timeline' | 'group' | 'ref' | 'reads' | 'target' | 'emits' | 'on' | 'issues' | 'status' | 'resolution' | 'level';
 
 // The terminals of Modeling's grammar (contexts/modeling/src/infrastructure/syntax/domain.langium), copied verbatim
 // (test/grammars.test.ts keeps them equal); INT and DECIMAL are unused.

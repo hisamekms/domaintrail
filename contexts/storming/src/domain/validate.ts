@@ -1,6 +1,7 @@
 import { compareDiagnostics, type Diagnostic, didYouMean } from '@domaintrail/kernel';
 import {
     declarations,
+    DESIGN_LEVEL,
     esDiagnostic,
     esElementId,
     RELATION_RULES,
@@ -40,18 +41,19 @@ const kindList = (kinds: readonly ElementKind[]): string => kinds.map((k) => art
 const line = (range: SourceRange): number => range.start.line;
 
 /**
- * The checks of a `.dtes` storming that need no `.dt` model (spec §11, ADR 0024: S001–S009 and S014), on the storming
+ * The checks of a `.dtes` storming that need no `.dt` model (spec §11, ADR 0024: S001–S009, S014 and S015), on the storming
  * IR only:
  *   - S001: a local ID declared twice in a storming (across kinds, timelines and groups included), a storming ID twice
  *   - S002: a relation target or timeline step that names no declaration of its storming
  *   - S003: a reference to a declaration of the wrong kind (`RELATION_RULES`; timeline and group steps name events)
- *   - S004: more than one `target`, `ref`, hotspot `on`, `status` or `resolution`
+ *   - S004: more than one `target`, `ref`, hotspot `on`, `status`, `resolution` or `level`
  *   - S005: a `ref` on an element other than an event, aggregate or command
  *   - S006: a clause the element kind does not take
  *   - S007: an event twice in one group
  *   - S008: a policy without `on` or without `issues`
  *   - S009: a hotspot `status` other than `open`/`resolved`, `resolved` without `resolution`, `resolution` when open
  *   - S014 (warning): a type-level cycle policy → command → event → policy
+ *   - S015: a `level` other than `design` (`big-picture` included: no `level` already means both levels)
  * Not diagnosed (spec §11): timeline order against causality, completeness (unreferenced events, missing `emits`,
  * events in no timeline) and the optional Info rule on policies with several `on` and `issues`.
  */
@@ -175,7 +177,7 @@ function validateStorming(storming: Storming): Diagnostic[] {
         const kind = KIND_NAMES[el.kind];
         const rules = RELATION_RULES[el.kind] ?? {};
         const what = `${capitalize(kind)} '${el.id}'`;
-        const report = (code: 'S004' | 'S005' | 'S006', message: string, range: SourceRange, hint: string) =>
+        const report = (code: 'S004' | 'S005' | 'S006' | 'S015', message: string, range: SourceRange, hint: string) =>
             out.push(esDiagnostic('error', code, message, range, { hint, elementId: elementId(el.id) }));
         /** S004 on every clause after the first of a kind that is allowed at most once. */
         const counts = new Map<string, number>();
@@ -217,6 +219,33 @@ function validateStorming(storming: Storming): Diagnostic[] {
                         );
                     } else {
                         once(clause.type, clause);
+                    }
+                    break;
+                case 'level':
+                    if (el.kind !== 'event') {
+                        report(
+                            'S006',
+                            `${what} has a \`level\` clause, which only an event takes.`,
+                            clause.range,
+                            `remove the \`level\` clause; its kind already decides the levels it is shown at`,
+                        );
+                        break;
+                    }
+                    once('level', clause);
+                    if (clause.value === 'big-picture') {
+                        report(
+                            'S015',
+                            `${what} has \`level big-picture\`, but an event without \`level\` is already shown at both levels; the only level to write is \`design\`.`,
+                            clause.range,
+                            `remove \`level big-picture\``,
+                        );
+                    } else if (clause.value !== DESIGN_LEVEL) {
+                        report(
+                            'S015',
+                            `${what} has level '${clause.value}'; the only level is \`design\` (shown at Design Level only).`,
+                            clause.range,
+                            didYouMean(clause.value, [DESIGN_LEVEL]) ?? `write \`level design\`, or remove the clause to show the event at both levels`,
+                        );
                     }
                     break;
                 case 'relation': {
