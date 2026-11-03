@@ -71,7 +71,11 @@ export interface Arbitraries {
     readonly MarkRemoved: fc.Arbitrary<Collaboration.MarkRemoved>;
     readonly ChangeProposalId: fc.Arbitrary<Collaboration.ChangeProposalId>;
     readonly ProposalText: fc.Arbitrary<Collaboration.ProposalText>;
+    readonly ProposalLabel: fc.Arbitrary<Collaboration.ProposalLabel>;
+    readonly ProposalOptionIndex: fc.Arbitrary<Collaboration.ProposalOptionIndex>;
+    readonly ProposalOption: fc.Arbitrary<Collaboration.ProposalOption>;
     readonly ProposalContent: fc.Arbitrary<Collaboration.ProposalContent>;
+    readonly ProposalInstruction: fc.Arbitrary<Collaboration.ProposalInstruction>;
     readonly ApprovedProposal: fc.Arbitrary<Collaboration.ApprovedProposal>;
     readonly ApprovedProposals: fc.Arbitrary<Collaboration.ApprovedProposals>;
     readonly OpenChangeProposal: fc.Arbitrary<Collaboration.OpenChangeProposal>;
@@ -151,6 +155,7 @@ export interface Arbitraries {
 export interface DeclaredChecks {
     readonly AgentRun?: Partial<Collaboration.AgentRunDeclaredChecks>;
     readonly Emoji?: Partial<Collaboration.EmojiDeclaredChecks>;
+    readonly ProposalContent?: Partial<Collaboration.ProposalContentDeclaredChecks>;
     readonly Revision?: Partial<Collaboration.RevisionDeclaredChecks>;
     readonly TakeRevision?: Partial<Collaboration.TakeRevisionDeclaredRequires>;
     readonly RestoreRevision?: Partial<Collaboration.RestoreRevisionDeclaredRequires>;
@@ -208,7 +213,7 @@ export interface Options extends Generation {
 
 /** What `contract` tests: the constructors of domain primitives and the commands of aggregates, each optional. */
 export interface Implementation {
-    readonly make?: { readonly AgentRunId?: Collaboration.MakeAgentRunId; readonly ReplyKey?: Collaboration.MakeReplyKey; readonly AssumptionApprovalId?: Collaboration.MakeAssumptionApprovalId; readonly Text?: Collaboration.MakeText; readonly LineNumber?: Collaboration.MakeLineNumber; readonly ColumnNumber?: Collaboration.MakeColumnNumber; readonly Tally?: Collaboration.MakeTally; readonly ContentHash?: Collaboration.MakeContentHash; readonly WorkspacePath?: Collaboration.MakeWorkspacePath; readonly MarkId?: Collaboration.MakeMarkId; readonly Emoji?: Collaboration.MakeEmoji; readonly ChangeProposalId?: Collaboration.MakeChangeProposalId; readonly ProposalText?: Collaboration.MakeProposalText; readonly RequestId?: Collaboration.MakeRequestId; readonly RevisionId?: Collaboration.MakeRevisionId; readonly SessionId?: Collaboration.MakeSessionId; readonly ParticipantId?: Collaboration.MakeParticipantId; readonly DisplayName?: Collaboration.MakeDisplayName; readonly ElementName?: Collaboration.MakeElementName; readonly StormingName?: Collaboration.MakeStormingName; readonly StormingLocalName?: Collaboration.MakeStormingLocalName; readonly TimelineName?: Collaboration.MakeTimelineName; readonly StormingEventName?: Collaboration.MakeStormingEventName; readonly OccurrencePath?: Collaboration.MakeOccurrencePath; readonly TriageId?: Collaboration.MakeTriageId; readonly Confidence?: Collaboration.MakeConfidence; readonly Milliseconds?: Collaboration.MakeMilliseconds };
+    readonly make?: { readonly AgentRunId?: Collaboration.MakeAgentRunId; readonly ReplyKey?: Collaboration.MakeReplyKey; readonly AssumptionApprovalId?: Collaboration.MakeAssumptionApprovalId; readonly Text?: Collaboration.MakeText; readonly LineNumber?: Collaboration.MakeLineNumber; readonly ColumnNumber?: Collaboration.MakeColumnNumber; readonly Tally?: Collaboration.MakeTally; readonly ContentHash?: Collaboration.MakeContentHash; readonly WorkspacePath?: Collaboration.MakeWorkspacePath; readonly MarkId?: Collaboration.MakeMarkId; readonly Emoji?: Collaboration.MakeEmoji; readonly ChangeProposalId?: Collaboration.MakeChangeProposalId; readonly ProposalText?: Collaboration.MakeProposalText; readonly ProposalLabel?: Collaboration.MakeProposalLabel; readonly ProposalOptionIndex?: Collaboration.MakeProposalOptionIndex; readonly RequestId?: Collaboration.MakeRequestId; readonly RevisionId?: Collaboration.MakeRevisionId; readonly SessionId?: Collaboration.MakeSessionId; readonly ParticipantId?: Collaboration.MakeParticipantId; readonly DisplayName?: Collaboration.MakeDisplayName; readonly ElementName?: Collaboration.MakeElementName; readonly StormingName?: Collaboration.MakeStormingName; readonly StormingLocalName?: Collaboration.MakeStormingLocalName; readonly TimelineName?: Collaboration.MakeTimelineName; readonly StormingEventName?: Collaboration.MakeStormingEventName; readonly OccurrencePath?: Collaboration.MakeOccurrencePath; readonly TriageId?: Collaboration.MakeTriageId; readonly Confidence?: Collaboration.MakeConfidence; readonly Milliseconds?: Collaboration.MakeMilliseconds };
     readonly AgentRun?: Collaboration.AgentRunCommands;
     readonly AssumptionApproval?: Collaboration.AssumptionApprovalCommands;
     readonly Mark?: Collaboration.MarkCommands;
@@ -288,16 +293,20 @@ export function arbitraries(options: Options = {}): Arbitraries {
         MarkRemoved: () => given.MarkRemoved ?? testing.cast<Collaboration.MarkRemoved>(fc.record({ type: fc.constant('MarkRemoved' as const), markId: a.MarkId, participant: a.ParticipantId, target: a.MarkTarget, sign: a.MarkSign, removedAt: testing.cast<Date>(scalar.Timestamp) })),
         ChangeProposalId: () => testing.valid(given.ChangeProposalId ?? testing.collide(testing.cast<Collaboration.ChangeProposalId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkChangeProposalId(v).length === 0, 'Collaboration.ChangeProposalId'),
         ProposalText: () => testing.valid(given.ProposalText ?? testing.collide(testing.cast<Collaboration.ProposalText>(testing.base('String', { minLength: 1, maxLength: 2000 })), seed), (v) => Collaboration.checkProposalText(v).length === 0, 'Collaboration.ProposalText'),
-        ProposalContent: () => given.ProposalContent ?? testing.cast<Collaboration.ProposalContent>(fc.record({ what: a.ProposalText, where: a.ProposalText, how: a.ProposalText })),
-        ApprovedProposal: () => given.ApprovedProposal ?? testing.cast<Collaboration.ApprovedProposal>(fc.record({ proposal: a.ChangeProposalId, request: a.RequestId, content: a.ProposalContent })),
+        ProposalLabel: () => testing.valid(given.ProposalLabel ?? testing.collide(testing.cast<Collaboration.ProposalLabel>(testing.base('String', { minLength: 1, maxLength: 200 })), seed), (v) => Collaboration.checkProposalLabel(v).length === 0, 'Collaboration.ProposalLabel'),
+        ProposalOptionIndex: () => testing.valid(given.ProposalOptionIndex ?? testing.collide(testing.cast<Collaboration.ProposalOptionIndex>(testing.base('Int', { ge: 0, le: 2 })), seed), (v) => Collaboration.checkProposalOptionIndex(v).length === 0, 'Collaboration.ProposalOptionIndex'),
+        ProposalOption: () => given.ProposalOption ?? testing.cast<Collaboration.ProposalOption>(fc.record({ label: a.ProposalLabel, targets: testing.many(a.ModelTarget, 0, 50), how: a.ProposalText, recommended: testing.cast<boolean>(scalar.Bool) }, { requiredKeys: ['label', 'targets', 'recommended'] })),
+        ProposalContent: () => testing.valid(given.ProposalContent ?? testing.cast<Collaboration.ProposalContent>(fc.record({ targets: testing.many(a.ModelTarget, 0, 50), how: a.ProposalText, options: testing.many(a.ProposalOption, 0, 3) })), (v) => Collaboration.checkProposalContentWith(testing.declared<Collaboration.ProposalContentDeclaredChecks>(['oneRecommended'], declared.ProposalContent))(v).length === 0, 'Collaboration.ProposalContent'),
+        ProposalInstruction: () => given.ProposalInstruction ?? testing.cast<Collaboration.ProposalInstruction>(fc.record({ label: a.ProposalLabel, targets: testing.many(a.ModelTarget, 0, 50), how: a.ProposalText }, { requiredKeys: ['targets', 'how'] })),
+        ApprovedProposal: () => given.ApprovedProposal ?? testing.cast<Collaboration.ApprovedProposal>(fc.record({ proposal: a.ChangeProposalId, request: a.RequestId, instruction: a.ProposalInstruction })),
         ApprovedProposals: () => testing.valid(given.ApprovedProposals ?? testing.cast<Collaboration.ApprovedProposals>(fc.record({ approved: testing.many(a.ApprovedProposal, 1) })), (v) => Collaboration.checkApprovedProposals(v).length === 0, 'Collaboration.ApprovedProposals'),
         OpenChangeProposal: () => testing.withExamples(given.OpenChangeProposal ?? testing.cast<Collaboration.OpenChangeProposal>(fc.record({ state: fc.constant('Open' as const), id: a.ChangeProposalId, session: a.SessionId, triage: a.TriageId, request: a.RequestId, requestedBy: a.ParticipantId, content: a.ProposalContent, proposedAt: testing.cast<Date>(scalar.Timestamp) })), options.examples?.ChangeProposal?.states?.Open, () => [], 'Collaboration.OpenChangeProposal'),
-        ApprovedChangeProposal: () => testing.withExamples(given.ApprovedChangeProposal ?? testing.cast<Collaboration.ApprovedChangeProposal>(fc.record({ state: fc.constant('Approved' as const), id: a.ChangeProposalId, session: a.SessionId, triage: a.TriageId, request: a.RequestId, requestedBy: a.ParticipantId, content: a.ProposalContent, proposedAt: testing.cast<Date>(scalar.Timestamp), approvedBy: a.ParticipantId, approvedAt: testing.cast<Date>(scalar.Timestamp), edited: a.ProposalContent, run: a.AgentRunId }, { requiredKeys: ['state', 'id', 'session', 'triage', 'request', 'requestedBy', 'content', 'proposedAt', 'approvedBy', 'approvedAt', 'run'] })), options.examples?.ChangeProposal?.states?.Approved, () => [], 'Collaboration.ApprovedChangeProposal'),
+        ApprovedChangeProposal: () => testing.withExamples(given.ApprovedChangeProposal ?? testing.cast<Collaboration.ApprovedChangeProposal>(fc.record({ state: fc.constant('Approved' as const), id: a.ChangeProposalId, session: a.SessionId, triage: a.TriageId, request: a.RequestId, requestedBy: a.ParticipantId, content: a.ProposalContent, proposedAt: testing.cast<Date>(scalar.Timestamp), approvedBy: a.ParticipantId, approvedAt: testing.cast<Date>(scalar.Timestamp), option: a.ProposalOptionIndex, editedHow: a.ProposalText, run: a.AgentRunId }, { requiredKeys: ['state', 'id', 'session', 'triage', 'request', 'requestedBy', 'content', 'proposedAt', 'approvedBy', 'approvedAt', 'run'] })), options.examples?.ChangeProposal?.states?.Approved, () => [], 'Collaboration.ApprovedChangeProposal'),
         RejectedChangeProposal: () => testing.withExamples(given.RejectedChangeProposal ?? testing.cast<Collaboration.RejectedChangeProposal>(fc.record({ state: fc.constant('Rejected' as const), id: a.ChangeProposalId, session: a.SessionId, triage: a.TriageId, request: a.RequestId, requestedBy: a.ParticipantId, content: a.ProposalContent, proposedAt: testing.cast<Date>(scalar.Timestamp), rejectedBy: a.ParticipantId, rejectedAt: testing.cast<Date>(scalar.Timestamp), note: a.Text }, { requiredKeys: ['state', 'id', 'session', 'triage', 'request', 'requestedBy', 'content', 'proposedAt', 'rejectedBy', 'rejectedAt'] })), options.examples?.ChangeProposal?.states?.Rejected, () => [], 'Collaboration.RejectedChangeProposal'),
         WithdrawnChangeProposal: () => testing.withExamples(given.WithdrawnChangeProposal ?? testing.cast<Collaboration.WithdrawnChangeProposal>(fc.record({ state: fc.constant('Withdrawn' as const), id: a.ChangeProposalId, session: a.SessionId, triage: a.TriageId, request: a.RequestId, requestedBy: a.ParticipantId, content: a.ProposalContent, proposedAt: testing.cast<Date>(scalar.Timestamp), withdrawnAt: testing.cast<Date>(scalar.Timestamp) })), options.examples?.ChangeProposal?.states?.Withdrawn, () => [], 'Collaboration.WithdrawnChangeProposal'),
         ChangeProposal: () => given.ChangeProposal ?? fc.oneof(a.OpenChangeProposal, a.ApprovedChangeProposal, a.RejectedChangeProposal, a.WithdrawnChangeProposal),
         ChangeProposed: () => given.ChangeProposed ?? testing.cast<Collaboration.ChangeProposed>(fc.record({ type: fc.constant('ChangeProposed' as const), proposalId: a.ChangeProposalId, session: a.SessionId, triage: a.TriageId, request: a.RequestId, requestedBy: a.ParticipantId, content: a.ProposalContent, proposedAt: testing.cast<Date>(scalar.Timestamp) })),
-        ProposalApproved: () => given.ProposalApproved ?? testing.cast<Collaboration.ProposalApproved>(fc.record({ type: fc.constant('ProposalApproved' as const), proposalId: a.ChangeProposalId, approvedBy: a.ParticipantId, edited: a.ProposalContent, run: a.AgentRunId, approvedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'proposalId', 'approvedBy', 'run', 'approvedAt'] })),
+        ProposalApproved: () => given.ProposalApproved ?? testing.cast<Collaboration.ProposalApproved>(fc.record({ type: fc.constant('ProposalApproved' as const), proposalId: a.ChangeProposalId, approvedBy: a.ParticipantId, option: a.ProposalOptionIndex, editedHow: a.ProposalText, run: a.AgentRunId, approvedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'proposalId', 'approvedBy', 'run', 'approvedAt'] })),
         ProposalRejected: () => given.ProposalRejected ?? testing.cast<Collaboration.ProposalRejected>(fc.record({ type: fc.constant('ProposalRejected' as const), proposalId: a.ChangeProposalId, rejectedBy: a.ParticipantId, note: a.Text, rejectedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'proposalId', 'rejectedBy', 'rejectedAt'] })),
         ProposalWithdrawn: () => given.ProposalWithdrawn ?? testing.cast<Collaboration.ProposalWithdrawn>(fc.record({ type: fc.constant('ProposalWithdrawn' as const), proposalId: a.ChangeProposalId, withdrawnBy: a.ParticipantId, withdrawnAt: testing.cast<Date>(scalar.Timestamp) })),
         RequestId: () => testing.valid(given.RequestId ?? testing.collide(testing.cast<Collaboration.RequestId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkRequestId(v).length === 0, 'Collaboration.RequestId'),
@@ -496,6 +505,24 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 declared: [],
                 check: () => Collaboration.checkProposalText,
                 make: impl.make.ProposalText,
+            }, options) : []),
+            ...(impl.make.ProposalLabel ? testing.primitiveCases({
+                type: 'Collaboration.ProposalLabel',
+                base: 'String',
+                hints: { minLength: 1, maxLength: 200 },
+                invariants: ['valid'],
+                declared: [],
+                check: () => Collaboration.checkProposalLabel,
+                make: impl.make.ProposalLabel,
+            }, options) : []),
+            ...(impl.make.ProposalOptionIndex ? testing.primitiveCases({
+                type: 'Collaboration.ProposalOptionIndex',
+                base: 'Int',
+                hints: { ge: 0, le: 2 },
+                invariants: ['valid'],
+                declared: [],
+                check: () => Collaboration.checkProposalOptionIndex,
+                make: impl.make.ProposalOptionIndex,
             }, options) : []),
             ...(impl.make.RequestId ? testing.primitiveCases({
                 type: 'Collaboration.RequestId',
@@ -820,10 +847,10 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'ChangeProposal.approve',
                 run: impl.ChangeProposal.approve,
-                input: () => fc.tuple(fc.oneof(a.OpenChangeProposal), fc.record({ approvedBy: a.ParticipantId, approvedByRole: a.ParticipantRole, edited: a.ProposalContent, run: a.AgentRunId, approvedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['approvedBy', 'approvedByRole', 'run', 'approvedAt'] })),
+                input: () => fc.tuple(fc.oneof(a.OpenChangeProposal), fc.record({ approvedBy: a.ParticipantId, approvedByRole: a.ParticipantRole, option: a.ProposalOptionIndex, editedHow: a.ProposalText, run: a.AgentRunId, approvedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['approvedBy', 'approvedByRole', 'run', 'approvedAt'] })),
                 examples: options.examples?.ChangeProposal?.commands?.approve ?? [],
                 factory: false,
-                requires: [{ name: 'facilitatorApproves', error: 'FacilitatorOnly' }],
+                requires: [{ name: 'facilitatorApproves', error: 'FacilitatorOnly' }, { name: 'optionOfProposal', error: 'NoSuchOption' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkApproveChangeProposalRequires,
                 declaredInvariants: [],

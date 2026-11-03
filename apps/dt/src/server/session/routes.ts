@@ -20,7 +20,7 @@ import {
     knownRequestId,
     type PickData,
     PROPOSAL_LIMITS,
-    readProposal,
+    readProposalText,
     type SessionState,
 } from '@domaintrail/collaboration';
 import type { AgentPresence, Me, ModelChangesBody, Role, SessionStateBody } from '@domaintrail/collaboration/protocol';
@@ -124,6 +124,7 @@ export function statusOf(type: string): number {
         case 'InvalidTriageInput':
         case 'AnswerTooLong':
         case 'InvalidProposal':
+        case 'NoSuchOption':
             return 400;
         case 'Unauthenticated':
             return 401;
@@ -216,10 +217,16 @@ interface Route {
     readonly handle: (ctx: { req: IncomingMessage; res: ServerResponse; auth: Admitted; params: string[] }) => Promise<void>;
 }
 
-/** A change proposal's text as the facilitator edits it (`{ what, where, how }`, `PROPOSAL_LIMITS`). */
-function proposalInput(raw: unknown, field: string): { ok: true; value: Collaboration.ProposalContent } | { ok: false; error: InvalidInput } {
-    const read = readProposal(raw, field);
+/** A change proposal's how as the facilitator edits it (`PROPOSAL_LIMITS.editedHow`). */
+function editedHowInput(raw: unknown, field: string): { ok: true; value: Collaboration.ProposalText } | { ok: false; error: InvalidInput } {
+    const read = readProposalText(raw, field, PROPOSAL_LIMITS.editedHow);
     return read.ok ? read : { ok: false, error: { type: 'InvalidInput', field: read.error.path, message: read.error.message } };
+}
+
+/** A proposal's option as the facilitator chose it: its index (whether the proposal has it is the use case's). */
+function optionInput(raw: unknown, field: string): { ok: true; value: Collaboration.ProposalOptionIndex } | { ok: false; error: InvalidInput } {
+    const made = typeof raw === 'number' ? Collaboration.makeProposalOptionIndex(raw) : undefined;
+    return made?.ok ? made : { ok: false, error: { type: 'InvalidInput', field, message: 'Expected an option index (0 to 2).' } };
 }
 
 /** The participant of a route that needs one (checked before the route is called). */
@@ -444,23 +451,33 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             path: /^\/api\/session\/proposals\/approve$/,
             role: 'facilitator',
             handle: async ({ req, res, auth }) => {
-                // open proposals, each as is or edited; approved together, one run (plan Q2)
+                // open proposals, each with its chosen option (the recommended one when not given) and as is or with its
+                // how edited; approved together, one run (plan Q2)
                 const raw = await input(req, res, ['proposals', 'note']);
                 if (!raw) return;
                 if (!Array.isArray(raw.proposals) || raw.proposals.length === 0 || raw.proposals.length > MAX_RUN_REQUESTS)
                     return fail(res, { type: 'InvalidInput', field: 'proposals', message: `Expected 1 to ${MAX_RUN_REQUESTS} proposals.` });
-                const proposals: { proposal: Collaboration.ChangeProposalId; edited?: Collaboration.ProposalContent }[] = [];
+                const proposals: {
+                    proposal: Collaboration.ChangeProposalId;
+                    option?: Collaboration.ProposalOptionIndex;
+                    editedHow?: Collaboration.ProposalText;
+                }[] = [];
                 for (const [i, p] of raw.proposals.entries()) {
-                    const one = checked(res, body(p, ['proposal', 'edited']));
+                    const one = checked(res, body(p, ['proposal', 'option', 'how']));
                     if (!one) return;
                     const id = checked(res, uuid(one.proposal, `proposals[${i}].proposal`));
                     if (!id) return;
-                    let edited: Collaboration.ProposalContent | undefined;
-                    if (one.edited !== undefined) {
-                        edited = checked(res, proposalInput(one.edited, `proposals[${i}].edited`));
-                        if (!edited) return;
+                    let option: Collaboration.ProposalOptionIndex | undefined;
+                    if (one.option !== undefined) {
+                        option = checked(res, optionInput(one.option, `proposals[${i}].option`));
+                        if (option === undefined) return;
                     }
-                    proposals.push({ proposal: knownChangeProposalId(id), ...(edited && { edited }) });
+                    let editedHow: Collaboration.ProposalText | undefined;
+                    if (one.how !== undefined) {
+                        editedHow = checked(res, editedHowInput(one.how, `proposals[${i}].how`));
+                        if (!editedHow) return;
+                    }
+                    proposals.push({ proposal: knownChangeProposalId(id), ...(option !== undefined && { option }), ...(editedHow && { editedHow }) });
                 }
                 let note: Collaboration.Text | undefined;
                 if (raw.note !== undefined) {

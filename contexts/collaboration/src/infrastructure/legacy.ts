@@ -7,6 +7,10 @@
 // `{ kind: 'Run', run }` in a request, the frozen copy of a request in a run's input, and the `RequestSent` event.
 // Since ADR 0030, a session and its `SessionStarted` written before sessions had a mode are read as Collab, and a run's
 // report written when `formatted` / `checked` were booleans is read with `Ran` (true) or `Failed` (false: did not run).
+// A change proposal written when it was three texts (`{ what, where, how }`) is read as a proposal with no targets
+// and no options whose how is the three joined (a line each, cut at the type's limit); likewise its `ChangeProposed`
+// event, an approval's edit (`edited` → `editedHow`) in the proposal and its `ProposalApproved`, and an approved
+// proposal frozen in a run's input (`content` → `instruction`).
 
 type Raw = Record<string, unknown>;
 
@@ -46,12 +50,58 @@ function withOutcomes(v: Raw): Raw {
     return { ...v, report: { ...report, formatted: outcome(report.formatted), checked: outcome(report.checked) } };
 }
 
-/** A run: the frozen requests of its input, and its report's outcomes. */
+/** The most characters of a proposal's text (`ProposalText`): the joined former fields are cut there. */
+const PROPOSAL_TEXT_MAX = 2000;
+
+/** Whether a proposal's content is of the former shape (three texts). */
+const isFormerContent = (v: unknown): v is Raw => isObject(v) && !('targets' in v) && typeof v.how === 'string';
+
+/** The former three texts as one: a line each, the blank ones left out, cut at the type's limit. */
+function joined(c: Raw): string {
+    const text = [c.what, c.where, c.how]
+        .filter((x): x is string => typeof x === 'string' && x.trim() !== '')
+        .map((x) => x.trim())
+        .join('\n');
+    return text.length > PROPOSAL_TEXT_MAX ? `${text.slice(0, PROPOSAL_TEXT_MAX - 1)}…` : text;
+}
+
+/** A proposal's content of the former shape as one with no targets and no options; any other value as it is. */
+const upgradeContent = (v: unknown): unknown => (isFormerContent(v) ? { targets: [], how: joined(v), options: [] } : v);
+
+/** An approval's former `edited` (a whole content) as the how it edited (`editedHow`); any other value as it is. */
+function withEditedHow(v: unknown): unknown {
+    if (!isObject(v) || !('edited' in v)) return v;
+    const { edited, ...rest } = v;
+    return isFormerContent(edited) ? { ...rest, editedHow: joined(edited) } : rest;
+}
+
+/** A change proposal as stored: its content, and its approval's edit. */
+export function upgradeProposal(v: unknown): unknown {
+    if (!isObject(v)) return v;
+    return withEditedHow({ ...v, content: upgradeContent(v.content) });
+}
+
+/** An approved proposal frozen in a run's input, of the former shape (`content`), as its instruction. */
+function withInstruction(v: unknown): unknown {
+    if (!isObject(v) || !('content' in v) || 'instruction' in v) return v;
+    const { content, ...rest } = v;
+    return { ...rest, instruction: isFormerContent(content) ? { targets: [], how: joined(content) } : content };
+}
+
+/** A run: the frozen requests and approved proposals of its input, and its report's outcomes. */
 export function upgradeRun(v: unknown): unknown {
     if (!isObject(v)) return v;
     const run = withOutcomes(v);
     if (!isObject(run.input) || !Array.isArray(run.input.requests)) return run;
-    return { ...run, input: { ...run.input, requests: run.input.requests.map((r) => withReplyTarget(withTargets(r))) } };
+    const proposals = run.input.proposals;
+    return {
+        ...run,
+        input: {
+            ...run.input,
+            requests: run.input.requests.map((r) => withReplyTarget(withTargets(r))),
+            ...(isObject(proposals) && Array.isArray(proposals.approved) && { proposals: { ...proposals, approved: proposals.approved.map(withInstruction) } }),
+        },
+    };
 }
 
 /** An object without `mode` (a session, or its `SessionStarted`, written before modes) as a Collab one. */
@@ -60,8 +110,10 @@ const withMode = (v: unknown): unknown => (isObject(v) && !('mode' in v) ? { ...
 /** A session as stored. */
 export const upgradeSession = withMode;
 
-/** An event of the outbox: a `RequestSent`, a `SessionStarted`. */
+/** An event of the outbox: a `RequestSent`, a `SessionStarted`, a `ChangeProposed`, a `ProposalApproved`. */
 export function upgradeEvent(v: unknown): unknown {
     if (isObject(v) && v.type === 'SessionStarted') return withMode(v);
+    if (isObject(v) && v.type === 'ChangeProposed') return { ...v, content: upgradeContent(v.content) };
+    if (isObject(v) && v.type === 'ProposalApproved') return withEditedHow(v);
     return isObject(v) && v.type === 'RequestSent' ? withReplyTarget(withMentions(withTargets(v))) : v;
 }

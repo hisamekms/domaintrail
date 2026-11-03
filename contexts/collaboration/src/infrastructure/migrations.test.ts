@@ -646,10 +646,10 @@ describe('triages and change proposals (migration 11)', () => {
             );
         expect(second).toBe('refused');
 
-        const content = {
-            what: value(C.makeProposalText('a cancel command')),
-            where: value(C.makeProposalText('#Order')),
-            how: value(C.makeProposalText('add it')),
+        const content: C.ProposalContent = {
+            targets: [{ kind: 'DtElement', element: value(C.makeElementName('Sales.Order')) }],
+            how: value(C.makeProposalText('add a cancel command')),
+            options: [],
         };
         const proposal: C.ChangeProposal = {
             state: 'Open',

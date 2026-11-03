@@ -26,10 +26,17 @@ const bobId = value(C.makeParticipantId('dev:bob'));
 const facilitator: Actor = { kind: 'participant', participant: facilitatorId, role: 'Facilitator' };
 const bob: Actor = { kind: 'participant', participant: bobId, role: 'Participant' };
 const name = value(C.makeDisplayName('Ada'));
-const content = (what: string): C.ProposalContent => ({
-    what: value(C.makeProposalText(what)),
-    where: value(C.makeProposalText('#Order')),
-    how: value(C.makeProposalText('as said')),
+const order: C.ModelTarget = { kind: 'DtElement', element: value(C.makeElementName('Sales.Order')) };
+const content = (how: string): C.ProposalContent => ({ targets: [order], how: value(C.makeProposalText(how)), options: [] });
+const sticky: C.ModelTarget = { kind: 'DtesElement', storming: value(C.makeStormingName('Orders')), local: value(C.makeStormingLocalName('Order')) };
+/** A proposal with two options, the first recommended. */
+const withOptions = (how: string): C.ProposalContent => ({
+    ...content(how),
+    targets: [],
+    options: [
+        { label: value(C.makeProposalLabel('集約だけ')), targets: [order], recommended: true },
+        { label: value(C.makeProposalLabel('付箋も')), targets: [order, sticky], how: value(C.makeProposalText('付箋も揃える')), recommended: false },
+    ],
 });
 
 function collaboration(): { use: CollaborationUseCases; db: ReturnType<typeof openDatabase> } {
@@ -174,34 +181,66 @@ describe('the triage and where it goes', () => {
             const progress = await triaged(use, triage, 'ChangeRequest');
             expect([progress.route, progress.run]).toEqual(['propose', undefined]);
             expect(value(await use.answerJobs({ session })).map((j) => j.kind)).toEqual(['propose']);
-            const proposed = value(await use.proposeChange({ triage, content: content(body) }));
+            const proposed = value(await use.proposeChange({ triage, content: ids.length === 0 ? content(body) : withOptions(body) }));
             expect(proposed.proposal).toMatchObject({ state: 'Open', request: sent.request.id, requestedBy: bobId });
             expect(proposed.triage.outcome).toEqual({ kind: 'Proposal', proposal: proposed.proposal.id });
             expect(error(await use.proposeChange({ triage, content: content(body) }))).toEqual({ type: 'TriageNotProposable', triage });
             ids.push(proposed.proposal.id);
         }
+        const [plain = '' as C.ChangeProposalId, choice = '' as C.ChangeProposalId] = ids;
         expect(error(await use.approveProposals({ session, actor: bob, proposals: ids.map((proposal) => ({ proposal })) }))).toEqual({
             type: 'FacilitatorOnly',
         });
-        const edited = content('取り消しだけ');
+        // an option the proposal does not have, or one chosen of a proposal without options: refused, nothing approved
+        const third = value(C.makeProposalOptionIndex(2));
+        expect(error(await use.approveProposals({ session, actor: facilitator, proposals: [{ proposal: choice, option: third }] }))).toEqual({
+            type: 'NoSuchOption',
+        });
+        const first = value(C.makeProposalOptionIndex(0));
+        expect(error(await use.approveProposals({ session, actor: facilitator, proposals: [{ proposal: plain, option: first }] }))).toEqual({
+            type: 'NoSuchOption',
+        });
+        const editedHow = value(C.makeProposalText('取り消しだけ'));
         const approved = value(
             await use.approveProposals({
                 session,
                 actor: facilitator,
-                proposals: [{ proposal: ids[0] ?? ids[1] ?? ('' as C.ChangeProposalId), edited }, { proposal: ids[1] ?? ('' as C.ChangeProposalId) }],
+                proposals: [
+                    { proposal: plain, editedHow },
+                    { proposal: choice, option: value(C.makeProposalOptionIndex(1)) },
+                ],
             }),
         );
         expect(approved.run.input.requests).toHaveLength(2);
-        expect(approved.run.input.proposals?.approved.map((p) => p.content.what)).toEqual([edited.what, content('@AI[p1] 返品も足して').what]);
-        expect(approved.run.queuedBy).toBe(facilitatorId);
-        expect(approved.proposals.map((p) => [p.state, p.run])).toEqual([
-            ['Approved', approved.run.id],
-            ['Approved', approved.run.id],
+        // the run follows the edited how, and the chosen option's label, targets and how
+        expect(approved.run.input.proposals?.approved.map((p): unknown => p.instruction)).toEqual([
+            { targets: [order], how: editedHow },
+            { label: '付箋も', targets: [order, sticky], how: '付箋も揃える' },
         ]);
-        expect(error(await use.approveProposals({ session, actor: facilitator, proposals: [{ proposal: ids[0] ?? ('' as C.ChangeProposalId) }] }))).toEqual({
+        expect(approved.run.queuedBy).toBe(facilitatorId);
+        expect(approved.proposals.map((p): unknown[] => [p.state, p.run, p.option, p.editedHow])).toEqual([
+            ['Approved', approved.run.id, undefined, editedHow],
+            ['Approved', approved.run.id, 1, undefined],
+        ]);
+        expect(error(await use.approveProposals({ session, actor: facilitator, proposals: [{ proposal: plain }] }))).toEqual({
             type: 'NotAllowed',
             command: 'approve',
             state: 'Approved',
+        });
+    });
+
+    test('a proposal with options approved without one goes with the option the AI recommends', async () => {
+        const { use, session } = await collab();
+        const sent = value(await say(use, session, bob, '@AI[p1] 注文を受注に', { mentions: [AI_PARTICIPANT_ID] }));
+        const triage = sent.triage?.id ?? ('' as C.TriageId);
+        await triaged(use, triage, 'ChangeRequest');
+        const proposal = value(await use.proposeChange({ triage, content: withOptions('ラベルを「受注」に変える') })).proposal.id;
+        const approved = value(await use.approveProposals({ session, actor: facilitator, proposals: [{ proposal }] }));
+        expect(approved.proposals[0]?.option).toBe(0 as C.ProposalOptionIndex);
+        expect(approved.run.input.proposals?.approved[0]?.instruction as unknown).toEqual({
+            label: '集約だけ',
+            targets: [order],
+            how: 'ラベルを「受注」に変える',
         });
     });
 

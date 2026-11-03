@@ -94,7 +94,21 @@ export {
     type ModelAnswer,
     type TriageRoute,
 } from './domain/triage.js';
-export { approvedContent, PROPOSAL_LIMITS, proposalJsonSchema, readProposal, type ProposalData, type ProposalProblem } from './domain/proposals.js';
+export {
+    approvedInstruction,
+    elementReference,
+    instructionOf,
+    parseElementReference,
+    PROPOSAL_LIMITS,
+    proposalData,
+    proposalJsonSchema,
+    readProposal,
+    readProposalText,
+    recommendedOption,
+    type ProposalData,
+    type ProposalOptionData,
+    type ProposalProblem,
+} from './domain/proposals.js';
 export {
     answererJsonSchema,
     proposeJsonSchema,

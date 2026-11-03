@@ -105,10 +105,22 @@ const proposal: C.ApprovedChangeProposal = {
     triage: knownTriageId(id(50)),
     request: wish.id,
     requestedBy: bob,
-    content: { what: value(C.makeProposalText('取り消し')), where: value(C.makeProposalText('#Order')), how: value(C.makeProposalText('cancel を足す')) },
+    content: {
+        targets: [],
+        how: value(C.makeProposalText('cancel を足す')),
+        options: [
+            {
+                label: value(C.makeProposalLabel('集約だけ')),
+                targets: [{ kind: 'DtElement', element: value(C.makeElementName('Sales.Order')) }],
+                recommended: true,
+            },
+            { label: value(C.makeProposalLabel('付箋も')), targets: [], recommended: false },
+        ],
+    },
     proposedAt: minute(4),
     approvedBy: ada,
     approvedAt: minute(10),
+    option: value(C.makeProposalOptionIndex(0)),
     run: queued.id,
 };
 const records: TimelineRecords = {
@@ -166,7 +178,15 @@ describe('the session so far', () => {
         const full = entries.map((e) => e.full);
         expect(full[0]).toBe('[#1 2026-11-03 09:01] Bob:\n    @AI 注文を取り消せる？');
         expect(full[1]).toBe('[#2 2026-11-03 09:02] AI answered (replying to #1):\n    確定前だけです。');
-        expect(full[3]).toContain('AI proposed a change for #3 (by Bob):\n    what: 取り消し\n    where: #Order\n    how: cancel を足す');
+        expect(full[3]).toBe(
+            [
+                '[#4 2026-11-03 09:04] AI proposed a change for #3 (by Bob):',
+                '    targets: none',
+                '    how: cancel を足す',
+                '    option 1 (recommended): 集約だけ — targets: @{Sales.Order}',
+                '    option 2: 付箋も — targets: none',
+            ].join('\n'),
+        );
         expect(full[4]).toBe('[#5 2026-11-03 09:05] Ada about 注文:\n    #注文 に ID を足して');
         expect(full[5]).toBe(
             [
@@ -180,7 +200,7 @@ describe('the session so far', () => {
         );
         expect(full[6]).toBe('[#7 2026-11-03 09:08] Files changed outside the session: sales/note.dt (added)');
         expect(full[7]).toContain('Bob (replying to #6):');
-        expect(full[8]).toBe('[#9 2026-11-03 09:10] The proposal #4 was approved by Ada (its run is in the queue)');
+        expect(full[8]).toBe('[#9 2026-11-03 09:10] The proposal #4 was approved by Ada with the option "集約だけ" (its run is in the queue)');
     });
 
     test('the elements a turn changed, when measured, rather than its files', () => {
