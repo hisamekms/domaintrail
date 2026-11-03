@@ -1,0 +1,54 @@
+---
+title: このガイドについて
+description: DomainTrail で Event Storming のワークショップを回すファシリテーターのためのガイド。準備からモデリングへ渡すところまで。
+hero:
+  title: DomainTrail で<br>Event Storming をする
+  tagline: 人が話し、AI が付箋を書き、全員が同じ画面で見る。ファイルは意識しなくてよい。ワークショップの準備から、モデリングへ渡すところまで。
+  actions:
+    - text: 準備から始める →
+      link: workshop/prepare/
+    - text: 参加者向けの1枚
+      link: appendix/participants/
+---
+
+import JourneyPath from '../../components/JourneyPath.astro';
+
+## ワークショップの道のり
+
+アプリのガイド（🧭）と同じ地図です。いま地図のどこにいるかで、読む章が決まります。
+
+<JourneyPath />
+
+ゴールはブリーフで決めます。**Big Picture** なら「問い」まで、**Design Level** ならその先まで。
+
+## 読み方
+
+- 各章は、道のりの1つの段階です。どの章も同じ形をしています。
+  - 道のりの地図（📍 がいまの段階）
+  - 4つのカード：目的、人がすること、dt ですること、終わったと言える状態
+  - この章の前と後の図
+  - 進め方、コツ、よくあるつまずき
+- 「終わったと言える状態」は、アプリのガイドの地図が ✓ を付ける条件と同じです。
+- 次に何をするか迷ったら、[迷ったら](lost/)へ。
+
+## このガイドの例
+
+全章を通して、**住民票のコンビニ交付**を例にします。図と画面の写しは、この例のワークスペース（`site/examples/`）から自動で作っています。手で描いた図はありません。
+
+| 段階 | ワークスペース | 中身 |
+|---|---|---|
+| 出来事 | `examples/events` | 出来事だけ |
+| 流れ・段階 | `examples/flows` | 段階と本流 |
+| 例外 | `examples/exceptions` | 段階ごとの例外 |
+| 問い | `examples/questions` | 問い（ホットスポット） |
+| デザインレベル | `examples/design` | コマンド・ポリシー・集約・リードモデル |
+
+## 用意するもの
+
+- `dt`（DomainTrail の CLI）と、ワークスペース（`domaintrail.jsonc` のあるフォルダ）
+- Claude Code（`claude` が使えること）。AI はファシリテーターの PC で動きます
+- リモートの参加者がいるなら `cloudflared`（[準備](workshop/prepare/)）
+
+## Event Storming そのものについて
+
+Event Storming の考え方は、このガイドでは短く触れるだけです。方法そのものは、考案者 Alberto Brandolini による [eventstorming.com](https://www.eventstorming.com/) から辿ってください。

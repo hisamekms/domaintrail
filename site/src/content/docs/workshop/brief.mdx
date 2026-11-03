@@ -1,0 +1,89 @@
+---
+title: ブリーフ
+description: /es:start の聞き取りで、目的・範囲・使い道・ゴール・参加者を決める。
+---
+
+import Chapter from '../../../components/Chapter.astro';
+import FourCards from '../../../components/FourCards.astro';
+import BeforeAfter from '../../../components/BeforeAfter.astro';
+import StepsBeside from '../../../components/StepsBeside.astro';
+
+<Chapter here="brief" />
+
+<p class="lead">何のためのストーミングか、どこまで行くかを最初に決めます。AI が1つずつ聞くので、答えるだけで決まります。</p>
+
+## この章の4つ
+
+<FourCards map="ガイドの地図で「ブリーフ」に ✓ が付き、ゴール（🏁）が地図に出ます。">
+  <Fragment slot="goal">
+    目的・範囲・使い道・ゴール・参加者を決め、全員が同じ前提で始める。
+  </Fragment>
+  <Fragment slot="people">
+    <ul>
+      <li>聞き取りの質問に答える</li>
+      <li>ブリーフを読み合わせ、直すところを言う</li>
+    </ul>
+  </Fragment>
+  <Fragment slot="dt">
+    <ul>
+      <li><code>/es:start</code> で聞き取りを始める</li>
+      <li>選択肢を押して答える</li>
+      <li>ブリーフを確定する（ファシリテーター）</li>
+    </ul>
+  </Fragment>
+  <Fragment slot="done">
+    <ul>
+      <li>ストーミングにブリーフ（ジャーニー）がある</li>
+      <li>ゴールが Big Picture か Design Level に決まっている</li>
+    </ul>
+  </Fragment>
+</FourCards>
+
+## ゴールのない地図から、ゴールのある旅へ
+
+<BeforeAfter
+  before="guide-nogoal"
+  beforeKind="shot"
+  beforeLabel="いま：ガイドの地図は「ゴールを決める」だけ"
+  after="journey-chip"
+  afterKind="shot"
+  afterLabel="この章のあと：アプリバーにいまの旅が出る"
+/>
+
+## 進め方
+
+<StepsBeside shot="interview-choice" alt="聞き取りの質問と、答えの選択肢" caption="/es:start の質問。選択肢を押すとそのまま答えになる">
+
+1. **`/es:start` を送る**　チャットで `/` を打ち、「ES を始める」を選ぶ。参加者が始めてもよい。
+2. **質問に答える**　AI が1つずつ聞く。選択肢が出たら押す。複数選べる質問はチェックして「送る」。合わないときは「その他（自分で書く）」。
+3. **あいまいさを詰める**　答えがあいまいだと、AI がさらに聞く。
+4. **ブリーフを確かめる**　最後に AI がブリーフをまとめる。ファシリテーターが **確定** か **編集して確定**。参加者が始めたものは、ファシリテーターが **承認**・**編集して承認**・**却下**。
+
+</StepsBeside>
+
+## ブリーフに入るもの
+
+| 項目 | 例 |
+|---|---|
+| 目的 | いまの流れを知る／良くする／新しく設計する |
+| 範囲 | 住民票を頼まれてから、提出先に出すまで |
+| 使い道 | 認識をそろえる（`align`）／モデリングにつなぐ（`modeling`） |
+| ゴール | Big Picture（問いまで）／Design Level（その先まで） |
+| 参加者 | 窓口担当、申請者 — **役割で書く**。人の名前は書かない |
+
+ブリーフはワークスペースの `domaintrail.journey.json`（git で管理するファイル）に、ストーミングごとの**ジャーニー**として残ります。ゴールを変えるのも、ブリーフを見直すのも、聞き取りなしでできます。ストーミングの `///` は短い説明だけです。
+
+## いまの旅を見る
+
+アプリバーの右に、いまの旅のチップが出ます：`🧭 住民票のコンビニ交付 · 📍 出来事 → 🏁 Big Picture`。押すと旅のパネルが開き、ブリーフ、地図、「ガイドを見る」「ゴールを変える」「ブリーフを見直す」「完了にする」が並びます。旅がないときは「🧭 ゴールを決める」と出て、`/es:start` に進めます。
+
+- コラボでは、いまの旅はファシリテーターが決め、全員が同じ旅を見ます。
+- 参加者がゴールを変えようとすると、ファシリテーターへの依頼になります。
+
+:::tip[コツ]
+「最初の出来事」と「最後の出来事」が答えられれば、範囲は決まります。聞き取りでも必ず聞かれます。
+:::
+
+:::caution[よくあるつまずき]
+ゴールを欲張らない。初回は Big Picture で十分です。Design Level は、流れに合意できてから別の回で行います。
+:::

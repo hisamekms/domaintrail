@@ -1,0 +1,80 @@
+---
+title: 例外を出す
+description: 本流がそろったら、うまくいかなかった場合を段階ごとに出す。
+---
+
+import Chapter from '../../../components/Chapter.astro';
+import FourCards from '../../../components/FourCards.astro';
+import BeforeAfter from '../../../components/BeforeAfter.astro';
+import StepsBeside from '../../../components/StepsBeside.astro';
+import Figure from '../../../components/Figure.astro';
+
+<Chapter here="exceptions" />
+
+<p class="lead">本流がそろったら、うまくいかなかった場合を段階ごとに出します。例外は失敗ではなく、業務の大事な一部です。</p>
+
+## この章の4つ
+
+<FourCards map="ガイドの地図で「例外」に ✓ が付きます。">
+  <Fragment slot="goal">
+    段階ごとに「うまくいかなかったら？」を出し、どこへ戻るか・どこで終わるかをはっきりさせる。
+  </Fragment>
+  <Fragment slot="people">
+    <ul>
+      <li>現場で実際に起きた困りごとを話す</li>
+      <li>そのあとどうしたか（戻る・やめる）を話す</li>
+    </ul>
+  </Fragment>
+  <Fragment slot="dt">
+    <ul>
+      <li><code>/es:exceptions</code> で例外の候補を出す</li>
+      <li>候補を選んで反映する（ファシリテーター）</li>
+      <li>段階のビューで確かめる</li>
+    </ul>
+  </Fragment>
+  <Fragment slot="done">
+    <ul>
+      <li>どの段階にも例外が1つ以上ある</li>
+      <li>段階がないなら、例外が1つ以上ある</li>
+    </ul>
+  </Fragment>
+</FourCards>
+
+## 本流から、例外のある段階へ
+
+<BeforeAfter
+  before="atstore-mainflow"
+  beforeLabel="いま：「コンビニでの発行」の本流"
+  after="atstore-exceptions"
+  afterLabel="この章のあと：例外がそろった段階"
+  caption="下へ分かれるのが例外。点線の矢印は本流へ戻るところ"
+/>
+
+## 進め方
+
+<StepsBeside shot="exceptions-candidates" alt="/es:exceptions の候補のカード" caption="/es:exceptions の候補（ファシリテーターの画面）">
+
+1. **段階を開く**　左のナビゲーターで「コンビニでの発行」を選ぶ。ビューがその段階になる。
+2. **`/es:exceptions` を送る**　チャットで `/` を打って選ぶ。参加者が送ってもよい。
+3. **候補を読み合わせる**　AI が段階の例外を、1つの出来事につき2つまで挙げる。最初はどれにもチェックが付いていない。現場で本当に起きるものだけにチェックを付ける。
+4. **反映する**　ファシリテーターが「採用したものを反映」を押すと、AI がストーミングを書き換え、図に例外が増える。
+5. **足りないものを話す**　候補にない困りごとは、そのまま話せば AI が足す。
+
+</StepsBeside>
+
+:::tip[コツ]
+「〜できなかった」「〜が切れていた」のように、例外も過去形の出来事で書きます。例外の終わりは、本流へ戻る（`then`）か、そこで手続きが終わるかのどちらかです。
+:::
+
+:::caution[よくあるつまずき]
+システムの障害やエラーコードの一覧にしない。業務として「そのあと人がどうしたか」が分かる例外を選びます。細かすぎるものはデザインレベルに回します。
+:::
+
+## 例外を見せる・隠す
+
+全体を眺めるときは、ビューバーの **絞り込み** で「例外を表示」を外すと、本流だけが一直線に並びます。印刷や書き出しも、画面と同じ見え方になります。
+
+<Figure name="exceptions-hidden" alt="例外を隠したストーミングの全体" caption="例外を隠した全体：段階ごとの本流が一直線に並ぶ" />
+
+- 例外だけのビュー（ナビゲーターで例外を選んだとき）は、絞り込みに関係なくそのまま見えます。
+- 段階の枠をクリックすると、その段階の本流と例外、「この段階を表示」が選べます。

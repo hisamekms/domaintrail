@@ -1,0 +1,86 @@
+---
+title: 終わりと次へ
+description: /es:recap でふり返り、印刷・書き出しで残し、/model:start（ES から）でモデリングへ渡す。
+---
+
+import Chapter from '../../../components/Chapter.astro';
+import FourCards from '../../../components/FourCards.astro';
+import BeforeAfter from '../../../components/BeforeAfter.astro';
+import StepsBeside from '../../../components/StepsBeside.astro';
+
+<Chapter here="next" />
+
+<p class="lead">ゴールに着いたら、決まったことと未決を確かめ、結果を残して、次へ渡します。</p>
+
+## この章の4つ
+
+<FourCards map="この段階はガイドの地図にはありません。ゴールに ✓ が付いたら、旅を「完了にする」ことができます。">
+  <Fragment slot="goal">
+    決まったこと・変わったこと・未決を全員で確かめ、結果を持ち帰れる形にする。
+  </Fragment>
+  <Fragment slot="people">
+    <ul>
+      <li>ふり返りを読み、違うところを言う</li>
+      <li>未決の問いを、だれに聞くか決める</li>
+    </ul>
+  </Fragment>
+  <Fragment slot="dt">
+    <ul>
+      <li><code>/es:recap</code> でふり返る</li>
+      <li>書き出しで印刷・PDF・PNG・SVG にする</li>
+      <li>モデリングへ進むなら <code>/model:start</code></li>
+    </ul>
+  </Fragment>
+  <Fragment slot="done">
+    <ul>
+      <li>ゴールの段階に ✓ が付いている</li>
+      <li>旅を「完了にする」にした</li>
+      <li>コラボを終えた</li>
+    </ul>
+  </Fragment>
+</FourCards>
+
+## 画面の図から、持ち帰る図へ
+
+<BeforeAfter
+  before="design-overall"
+  beforeLabel="いま：ワークショップで作ったストーミングの全体"
+  after="export-menu"
+  afterKind="shot"
+  afterLabel="この章のあと：書き出しのメニューから、見ているビューを残す"
+/>
+
+## 進め方
+
+<StepsBeside shot="export-menu" alt="ビューバーの書き出しメニュー" caption="ビューバーの右端の「書き出し」">
+
+1. **ふり返る**　`/es:recap` を送る（だれでもよい）。AI がセッションから「決まったこと」「追加・変更」「未決」をまとめる。
+2. **残す**　ビューバーの **書き出し** から、印刷、PDF（印刷画面から保存）、PNG、SVG。「見出しを含める」「凡例を含める」も選べる。画面と同じビュー・同じ絞り込みで出る。
+3. **ソースを渡す**　リポジトリのない人には、メニューの「ソース一式をダウンロード」か `dt export sources`（ZIP）。
+4. **旅を完了にする**　ゴールに着くとガイドが「完了にする」を勧める。アプリバーの旅のパネルからも押せる。
+5. **コラボを終える**　メニューの **コラボを終える**。終わっていない作業があれば一覧が出る。終えると、変更・参加者・時間のまとめが全員の画面に出る。
+
+</StepsBeside>
+
+## モデリングへ渡す
+
+ブリーフの使い道が「モデリングにつなぐ」なら、ゴールに着いたときガイドが `/model:start` を勧めます。最初の選択肢は **B. ES から**（このストーミングから）です。
+
+| B. ES から の道のり | すること |
+|---|---|
+| ストーミングを見直す | 流れ・例外・問いを読み直す |
+| 境界づけられたコンテキストを切り出す | ストーミングから BC を分ける |
+| 集約 | デザインレベルの集約を `.dt` の集約にする |
+| コマンドとイベント | `.dt` に書き、ストーミングに `ref` を付ける |
+| 不変条件 | 守るべき決まりを書く |
+
+- `/model:start` は、続ける旅を選ぶか、新しい旅を名前を付けて始めるかを最初に聞きます。
+- ストーミングから `.dt` のモデルへ進むのはモデリングです。ストーミングは `.dt` ファイルを変えません。
+
+:::tip[コツ]
+印刷は横向き1枚に収まります。壁に貼るなら、絞り込みで例外を隠した全体と、段階ごとのビューを1枚ずつ。
+:::
+
+:::caution[よくあるつまずき]
+ストーミングを清書しない。疑問や開いた問いも、見つけたことの記録です。きれいに見せるために問いや出来事を消さないでください。
+:::

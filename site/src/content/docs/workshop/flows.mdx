@@ -1,0 +1,78 @@
+---
+title: 流れ・段階
+description: 出来事を時間の順に並べ、段階に分ける。本流、別の通常の流れ、ビューの切り替え。
+---
+
+import Chapter from '../../../components/Chapter.astro';
+import FourCards from '../../../components/FourCards.astro';
+import BeforeAfter from '../../../components/BeforeAfter.astro';
+import StepsBeside from '../../../components/StepsBeside.astro';
+
+<Chapter here="flows" />
+
+<p class="lead">出来事を時間の順に並べ、準備・本番・あと始末のような段階に分けます。いつもの流れ（本流）が一直線に読めれば十分です。</p>
+
+## この章の4つ
+
+<FourCards map="ガイドの地図で「流れ・段階」に ✓ が付きます（本流が1つ以上）。">
+  <Fragment slot="goal">
+    いつもの流れを最初から最後まで一直線に並べ、段階に分ける。
+  </Fragment>
+  <Fragment slot="people">
+    <ul>
+      <li>いつもの流れを順に話す</li>
+      <li>段階の切れ目に名前を付ける</li>
+    </ul>
+  </Fragment>
+  <Fragment slot="dt">
+    <ul>
+      <li>AI が流れ（timeline）と段階（stage）を書く</li>
+      <li>ビューを段階・流れに切り替えて確かめる</li>
+      <li><code>/es:gaps</code> で間の抜けを探す</li>
+    </ul>
+  </Fragment>
+  <Fragment slot="done">
+    <ul>
+      <li>本流が1つ以上ある</li>
+      <li>本流が範囲の最初から最後まで通っている</li>
+    </ul>
+  </Fragment>
+</FourCards>
+
+## ばらばらの出来事から、段階に分かれた流れへ
+
+<BeforeAfter
+  before="events-loose"
+  beforeLabel="いま：出来事がばらばらに並んでいる"
+  after="flows-stages"
+  afterLabel="この章のあと：3つの段階と、それぞれの本流"
+  caption="段階は左から右へ。各段階の最初の流れが、一直線の本流になる"
+/>
+
+## 言葉
+
+| 言葉 | 意味 | 例 |
+|---|---|---|
+| 段階（stage） | 流れの時間の区切り。前の段階のあと（`after`）に続く | 依頼・準備 → コンビニでの発行 → 提出 |
+| 本流 | 段階の最初の流れ。一直線に描かれる | コンビニに行った → … → カードを回収した |
+| 別の通常の流れ | 本流から分かれる、もう1つのいつもの道 | 調べてから行く |
+| グループ | 同時に起きる、順番のない出来事 | — |
+
+## 進め方
+
+<StepsBeside shot="view-switch" alt="ナビゲーターとビューバー：ストーミング › 段階 › 流れ" caption="ナビゲーターとビューバーは、いつも同じ選択を指す">
+
+1. **いつもの流れを話す**　「まず〜して、次に〜」と最初から最後まで。AI が流れにする。
+2. **段階に分ける**　流れが長いときは、切れ目を話す。AI が段階を作り、順に `after` でつなぐ。
+3. **ビューを切り替えて確かめる**　左のナビゲーターでストーミング › 段階 › 流れを選ぶ。ビューバーのパンくずも同じ選択を指す。「すべて（統合）」は全体、段階を選ぶとその段階だけ。
+4. **間を埋める**　`/es:gaps` を送る。隣り合う出来事の間に抜けている出来事が候補に出る。
+
+</StepsBeside>
+
+:::tip[コツ]
+「調べてから行く」のような別のいつもの道は、例外ではなく別の流れです。分かれる出来事から書き始めると、本流から枝分かれして描かれます。
+:::
+
+:::caution[よくあるつまずき]
+流れは「この順に起きることがある」という並びで、原因と結果ではありません。失敗や寄り道を本流に混ぜると、一直線に読めなくなります。それは次の章で例外として出します。
+:::
