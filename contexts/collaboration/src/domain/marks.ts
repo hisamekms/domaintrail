@@ -17,6 +17,7 @@
 //
 // Pure, and over the plain shapes of the runs and requests, so that the server (the generated types) and the page
 // (their JSON) decide the same way.
+import { revertStatus } from './revert.js';
 import { isNormalEmoji } from './emoji.js';
 import { Collaboration, decide, err, ok } from '../generated/index.js';
 
@@ -51,6 +52,8 @@ export interface MarkRun {
         readonly requests: readonly {
             readonly request: string;
             readonly replyTo?: { readonly kind: 'Run'; readonly run: string } | { readonly kind: 'Message' };
+            /** The run a revert request reverts (`revert.ts`): a reverted run's assumptions are closed. */
+            readonly reverts?: string;
         }[];
         readonly answer?: { readonly answerTo: string };
         readonly pick?: { readonly pickOf: string };
@@ -101,7 +104,7 @@ export function reactionRoom(placed: readonly { readonly sign: MarkSignData }[],
 }
 
 /** Whether a run was cancelled before it started: as if it had never been queued. */
-const undone = (run: MarkRun): boolean => run.state === 'Cancelled' && run.baseRevision === undefined;
+const reverted = (run: MarkRun): boolean => run.state === 'Cancelled' && run.baseRevision === undefined;
 
 /**
  * The first run after `run` (in queue order) that answers it, picks one of its alternatives, bundles one of its requests
@@ -116,7 +119,7 @@ export function laterRunOf(run: MarkRun, runs: readonly MarkRun[]): MarkRun | un
         .slice(at + 1)
         .find(
             (r) =>
-                !undone(r) &&
+                !reverted(r) &&
                 (r.input.answer?.answerTo === run.id ||
                     r.input.pick?.pickOf === run.id ||
                     r.input.requests.some((q) => mine.has(q.request) || (q.replyTo?.kind === 'Run' && q.replyTo.run === run.id))),
@@ -144,7 +147,10 @@ export function markTargetStatus(target: MarkTargetData, scope: MarkScope): Mark
             if (!assumption) return 'missing';
             if (target.alternative !== undefined && !assumption.alternatives.some((a) => a.id === target.alternative)) return 'missing';
             const approved = (scope.approvals ?? []).some((a) => a.assumption.run === run.id && a.assumption.assumption === target.assumption);
-            return run.state === 'Completed' && !approved && !laterRunOf(run, scope.runs) ? 'open' : 'closed';
+            // closed once decided: approved, taken over by a later run, or its run reverted
+            return run.state === 'Completed' && !approved && !laterRunOf(run, scope.runs) && revertStatus(run, scope.runs).kind !== 'reverted'
+                ? 'open'
+                : 'closed';
         }
     }
 }

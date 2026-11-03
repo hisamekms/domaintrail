@@ -4,18 +4,20 @@
 // reply says of each, ✓ 対応 ◐ 一部 – 未対応 ? 確認); a click goes to the message, a hover marks it. The AI's question
 // and what it assumed sit on surfaces of their own, their options and alternatives as cards with ♡ at the right. The
 // facilitator answers a question by choosing, approves an assumption or sends the requests again with an alternative,
-// cancels a run (asked first), and through the card's menu confirms its result, restores the workspace as it was before it or
-// shows what it changed. What a run changed is a line of model elements under its text (`ChangedElements`), shared with
-// AI の作業.
+// cancels a run (asked first), and through the card's menu reverts what it changed (asked first) or shows what it
+// changed. A revert is a card like any other, the AI's turn whether the server reverted it mechanically or the AI did:
+// queued (behind how many), done, nothing left to revert, stopped or failed. What a run changed is a line of model
+// elements under its text (`ChangedElements`), shared with AI の作業.
 import { useRef, useState, type ReactNode } from 'react';
 import { Bot, Check, Circle, CircleDot, Reply, CircleX, Ellipsis, FileDiff, Hourglass, Pencil, Square, SquareCheck } from 'lucide-react';
+import { revertableChanges, revertStatus } from '@domaintrail/collaboration';
 import type { ElementChange } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
 import { useClipped } from '../view/toolbar';
 import { answerBody, type QuestionChoice } from './actions';
 import { ActivityLine } from './activity';
 import { OtherDialog } from './answer-other';
-import { cardRuns, quoteDisplay, type CardRun, type Quote, type QuoteDisplay } from './cards';
+import { cardMenuItems, cardRuns, obstacleText, queueAhead, quoteDisplay, type CardRun, type Quote, type QuoteDisplay } from './cards';
 import { changeFullName, changeKey, changeShortName, changeTarget, useModelChanges } from './changes';
 import { useChat, type Tx } from './chat-context';
 import { assumptionDecision, questionsState, type QuestionsState } from './decisions';
@@ -47,11 +49,14 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
     // the chunk's title, once the AI gave one: the quotes under it already say what the messages were
     const title = unitName(unit);
     const about = useUnitAbout(unit);
+    // queued: how many runs it waits behind; a revert left to the AI says why in the state's tooltip
+    const ahead = queueAhead(last.run.id, session.state.runs);
+    const obstacle = last.message.kind === 'queued' ? last.message.revertObstacle : undefined;
     // an AI turn: the AI's avatar and name, the chunk's title and when it started (who queued it in the tooltip); at the
     // right end, in the status slot, the state only where nothing else shows it (queued, running with its time, declined,
     // failed, cancelled), then the facilitator's ✕ on a run not finished
     const status = state && (
-        <span className={`chat-state state-${state}`}>
+        <span className={`chat-state state-${state}`} {...(obstacle && { 'data-tooltip': obstacleText(obstacle, tx.chat.revertObstacle) })}>
             <StateLabel
                 state={state}
                 label={last.message.kind === 'running' ? runningLabel(tx.chat.marks, elapsed(last.message.since, chat.now)) : tx.chat.marks[state]}
@@ -81,6 +86,7 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                     {/* in AI の作業, the row above has the ✕ and the card only its link to the chat */}
                     {(status || (cancellable && !compact) || (compact && actions)) && (
                         <span className="run-card-tools">
+                            {ahead !== undefined && ahead > 0 && <span className="run-card-ahead">{tx.chat.ahead(ahead)}</span>}
                             <StatusSlot>{status}</StatusSlot>
                             {compact ? actions : cancellable && <CancelButton unit={unit} />}
                         </span>
@@ -88,7 +94,7 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                 </div>
                 {!compact && (
                     <RowActions>
-                        {control && <CardMenu last={last.run} about={about} />}
+                        {control && <CardMenu last={last.run} about={about} name={title.text} />}
                         <ReplyButton to={{ kind: 'Run', run: last.run }} />
                         {/* last: ☺+ at the right end of every row, messages and turns alike */}
                         <AddReaction target={{ kind: 'Turn', run: last.run.id }} />
@@ -161,18 +167,21 @@ export function useUnitAbout(unit: ChangeUnit): string {
 }
 
 /**
- * The card's menu (the facilitator's), worded by the unit of work: its result confirmed, the workspace restored as
- * before it, its changes shown. The revisions behind each are in the tooltips.
+ * The card's menu (the facilitator's), worded by the unit of work: its changes reverted (asked first; only while it has
+ * changes not reverted yet, nor being reverted), its changes shown. Only for a unit whose latest run changed files. The
+ * revisions behind each are in the tooltips. Restoring an earlier state of the whole workspace is the collab menu's.
  */
-function CardMenu({ last, about }: { last: RunJson; about: string }) {
-    const { tx, revisions } = useChat();
+function CardMenu({ last, about, name }: { last: RunJson; about: string; name: string }) {
+    const { tx, revisions, session } = useChat();
     const [open, setOpen] = useState(false);
     const root = useRef<HTMLDivElement>(null);
     useDismiss(open, root, () => setOpen(false));
-    const ended = last.state === 'Completed' || last.state === 'NeedsClarification' || last.state === 'Declined';
-    if (!ended) return null;
-    const base = last.baseRevision;
-    const result = last.resultRevision;
+    const live = session.status === 'live' && session.state.session.state === 'Open';
+    const items = cardMenuItems(last, session.state.runs, live);
+    const changes = revertableChanges(last);
+    if (!changes || items.length === 0) return null;
+    const revertable = items.includes('revert');
+    const { base, result } = changes;
     const pick = (f: () => void) => (): void => {
         f();
         setOpen(false);
@@ -191,26 +200,22 @@ function CardMenu({ last, about }: { last: RunJson; about: string }) {
             </button>
             {open && (
                 <div className="pane-menu-list" role="menu">
-                    {result !== base && (
-                        <button role="menuitem" onClick={pick(() => revisions.confirm(result))} data-tooltip={tx.chat.revisionHint(revisions.number(result))}>
-                            {tx.chat.confirmResult}
-                        </button>
-                    )}
-                    <button role="menuitem" onClick={pick(() => revisions.restore(base))} data-tooltip={tx.chat.revisionHint(revisions.number(base))}>
-                        {tx.chat.restoreBefore}
-                    </button>
-                    {result !== base && (
+                    {revertable && (
                         <>
-                            <div className="pane-menu-separator" role="separator" />
-                            <button
-                                role="menuitem"
-                                onClick={pick(() => revisions.showChanges({ base, result, about }))}
-                                data-tooltip={tx.chat.revisionsHint(revisions.number(base), revisions.number(result))}
-                            >
-                                {tx.chat.showChanges}
+                            <button role="menuitem" data-item="revert" onClick={pick(() => revisions.revert({ run: last.id, name }))}>
+                                {tx.chat.revertWork}
                             </button>
+                            <div className="pane-menu-separator" role="separator" />
                         </>
                     )}
+                    <button
+                        role="menuitem"
+                        data-item="changes"
+                        onClick={pick(() => revisions.showChanges({ base, result, about }))}
+                        data-tooltip={tx.chat.revisionsHint(revisions.number(base), revisions.number(result))}
+                    >
+                        {tx.chat.showChanges}
+                    </button>
                 </div>
             )}
         </div>
@@ -247,6 +252,8 @@ function RunSection({
     const asked = run.answer && runs.find((r) => r.id === run.answer?.answerTo);
     const answerShown = asked !== undefined && answeredBy(asked, runs) === run.run.id;
     const done = run.message.kind === 'completed' ? run.message.reply : undefined;
+    // its changes reverted since: by which revert, who asked and when (the time a link to that revert's card)
+    const revert = revertStatus(run.run, runs);
     return (
         <div className={`run-section${first ? '' : ' chained'}`} data-item={`run:${run.run.id}`}>
             {/* a run that continues the card: its time, quietly (its number, for precision, in the tooltip) */}
@@ -276,6 +283,9 @@ function RunSection({
                 <AgentBody message={run.message} />
                 {/* in AI の作業, the unit's own line above already lists what it changed */}
                 {!compact && <RunFiles run={run.run} about={about} />}
+                {revert.kind === 'reverted' && (
+                    <DecidedLine label={tx.chat.reverted} by={revert.by.queuedBy} at={revert.by.queuedAt} run={revert.by.id} hint={tx.chat.revertedHint} />
+                )}
                 {(asking || voting || decided) && reply && questions && (
                     <ReplySection kind="ask">
                         {asking && <AnswerForm run={run.run} reply={reply} />}
@@ -391,6 +401,9 @@ function AgentBody({ message: m }: { message: AgentMessage }) {
             );
         case 'cancelled':
             return <p className="chat-text muted">{says.cancelled(nameOf(m.by))}</p>;
+        case 'reverted':
+            // reverted mechanically: what it changed says it, below; else that nothing was left
+            return m.changed ? null : <p className="chat-text">{says.revertedNothing}</p>;
     }
 }
 
@@ -400,7 +413,7 @@ function AgentBody({ message: m }: { message: AgentMessage }) {
  */
 function RunFiles({ run, about }: { run: RunJson; about: string }) {
     const { session, tx } = useChat();
-    if (run.state !== 'Completed' && run.state !== 'NeedsClarification' && run.state !== 'Declined') return null;
+    if (run.state !== 'Completed' && run.state !== 'NeedsClarification' && run.state !== 'Declined' && run.state !== 'Reverted') return null;
     const lookup = revisionLookup(session.state);
     const paths = changedPaths(lookup.revision(run.baseRevision), lookup.revision(run.resultRevision));
     // the revisions not known (yet): that it changed files, without which
@@ -684,6 +697,8 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
                 const votes = !compact || decision.kind !== 'open';
                 const approved = decision.kind === 'approved';
                 const picked = decision.kind === 'picked' ? decision.alternative : undefined;
+                // closed as reverted: muted, nothing chosen, who reverted the run under it
+                const reverted = decision.kind === 'reverted';
                 const keptVote = votes && <VoteMark target={{ kind: 'AssumptionChoice', run: run.id, assumption: i }} />;
                 // not decided yet: 承認待ち at the start of its row (a human decision, apart from the run's state), for
                 // those who cannot decide it; the facilitator sees the 承認 button there instead
@@ -696,7 +711,7 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
                 const chosen = approved ? 'chosen' : picked !== undefined ? 'unchosen' : undefined;
                 // the text takes the whole width, ◉ / ○ at its start once decided; ♡ on a row of its own under it
                 const text = (
-                    <p className={`reply-assumption-text${chosen ? ` ${chosen}` : ''}`}>
+                    <p className={`reply-assumption-text${chosen ? ` ${chosen}` : ''}${reverted ? ' reverted' : ''}`}>
                         {chosen && <ChoiceMark state={chosen} />}
                         <ReplyText text={a.text} onNavigate={onNavigate} />
                     </p>
@@ -733,7 +748,8 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
                                 <p className="reply-sublabel">{r.otherOptions}</p>
                                 <ul className="reply-cards">
                                     {a.alternatives.map((alt) => {
-                                        const state = approved ? 'unchosen' : picked === undefined ? undefined : picked === alt.id ? 'chosen' : 'unchosen';
+                                        const state =
+                                            approved || reverted ? 'unchosen' : picked === undefined ? undefined : picked === alt.id ? 'chosen' : 'unchosen';
                                         const vote = votes && (
                                             <VoteMark target={{ kind: 'AssumptionChoice', run: run.id, assumption: i, alternative: alt.id }} />
                                         );
@@ -771,6 +787,9 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
                         )}
                         {decision.kind === 'approved' && <DecidedLine label={tx.chat.approved} by={decision.by} at={decision.at} />}
                         {decision.kind === 'picked' && <DecidedLine label={tx.chat.picked} by={decision.by.by} at={decision.by.at} run={decision.by.run} />}
+                        {decision.kind === 'reverted' && (
+                            <DecidedLine label={tx.chat.reverted} by={decision.by.by} at={decision.by.at} run={decision.by.run} hint={tx.chat.revertedHint} />
+                        )}
                     </div>
                 );
             })}
@@ -782,13 +801,13 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
  * Who decided and when, small and muted under what was decided (`回答 ooyama_F · 23:47`); when the decision queued a
  * run (a pick), its time is a link to that run (it continues the same card, so it has no number to show).
  */
-function DecidedLine({ label, by, at, run }: { label: string; by: string; at: string; run?: string }) {
+function DecidedLine({ label, by, at, run, hint }: { label: string; by: string; at: string; run?: string; hint?: string }) {
     const { tx, nameOf, jump } = useChat();
     return (
         <p className="decided-line">
             {label} {nameOf(by)} ·{' '}
             {run !== undefined ? (
-                <button type="button" className="decided-run" onClick={() => jump(`run:${run}`)} data-tooltip={tx.chat.goToRun}>
+                <button type="button" className="decided-run" onClick={() => jump(`run:${run}`)} data-tooltip={hint ?? tx.chat.goToRun}>
                     <time dateTime={at}>{time(at)}</time>
                 </button>
             ) : (

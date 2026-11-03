@@ -64,7 +64,7 @@ describe('the main stream', () => {
     const revisions = [
         rev('r1', 0, { kind: 'SessionStart', session: 's' }),
         rev('r2', 5, { kind: 'RunBase', run: 'run1' }),
-        rev('r3', 7, { kind: 'RunResult', run: 'run1' }, { state: 'Confirmed', confirmedBy: 'local:facilitator', confirmedAt: at(9) }),
+        rev('r3', 7, { kind: 'RunResult', run: 'run1' }),
         rev('r4', 20, { kind: 'PreRestore', restoring: 'r1' }),
         rev('r5', 21, { kind: 'Restored', restoredFrom: 'r1', preRestore: 'r4' }),
     ];
@@ -84,7 +84,7 @@ describe('the main stream', () => {
         'The first one.',
     );
 
-    test('the session start, every message, one card per run and the runs continuing it, and the revisions confirmed or restored, oldest first', () => {
+    test('the session start, every message, one card per run and the runs continuing it, and the revisions restored, oldest first', () => {
         const items = streamItems({ revisions, runs: [run2, run1], requests: [q1, q2, q3] });
         expect(items.map((i) => [i.kind, i.at])).toEqual([
             ['session-start', at(0)],
@@ -92,14 +92,12 @@ describe('the main stream', () => {
             ['message', at(2)],
             ['message', at(3)],
             ['card', at(5)],
-            ['confirmed', at(9)],
             ['restored', at(21)],
         ]);
         // run 2 queued the requests of run 1 again after its question: one card, where run 1 was queued, updated since
         const card = items[4];
         expect(card.kind === 'card' && [card.unit.runs.map((r) => r.number), card.updatedAt]).toEqual([[1, 2], at(12)]);
-        expect(items[5]).toMatchObject({ kind: 'confirmed', revision: 3, by: 'local:facilitator' });
-        expect(items[6]).toMatchObject({ kind: 'restored', revision: 5, from: 1, work: true });
+        expect(items[5]).toMatchObject({ kind: 'restored', revision: 5, from: 1, work: true });
         // every message is in the stream, applied or not
         expect(items.filter((i) => i.kind === 'message').map((i) => i.kind === 'message' && i.request.id)).toEqual(['q1', 'q2', 'q3']);
     });

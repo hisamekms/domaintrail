@@ -5,11 +5,12 @@
 import type { ElementChange, ElementChanges } from './domain/changes.js';
 import type { FileComparison, FileStatus, LineDiff } from './domain/compare.js';
 import type { PreviousRunChanges } from './domain/previous-runs.js';
+import type { RevertChanges, RevertFile } from './domain/revert.js';
 import type { Collaboration } from './generated/index.js';
 import type { Classification } from './application/classifier.js';
 import type { RunActivity, RunActivityPhase } from './domain/activity.js';
 
-export type { Classification, RunActivity, RunActivityPhase };
+export type { Classification, RunActivity, RunActivityPhase, RevertChanges, RevertFile };
 
 /** A branded string or number of the generated code as plain JSON: the brand is a promise checked on the server. */
 type Unbranded<T> = T extends string & { readonly __domain: string } ? string : T extends number & { readonly __domain: string } ? number : T;
@@ -103,9 +104,10 @@ export const EVENT_MESSAGE_TYPES = {
     RunDeclined: 'run.declined',
     RunFailed: 'run.failed',
     RunCancelled: 'run.cancelled',
+    RunReverted: 'run.reverted',
+    RevertLeftToAgent: 'run.revert_left_to_agent',
     RevisionRecorded: 'revision.recorded',
     RevisionRestored: 'revision.restored',
-    RevisionConfirmed: 'revision.confirmed',
     MarkPlaced: 'mark.placed',
     MarkRemoved: 'mark.removed',
     AssumptionApproved: 'assumption.approved',
@@ -266,6 +268,31 @@ export interface ManualRecoveryNeededBody {
     readonly error: { readonly type: 'ManualRecoveryNeeded'; readonly preRestore: string; readonly cause: string; readonly message: string };
 }
 
+/**
+ * `POST /api/session/runs/:id/revert` (the facilitator): revert the changes of the run `:id` of the session (one that
+ * changed files, not reverted yet nor being reverted). `body` is the message everyone sees in the chat, sent as the
+ * revert request (「〈作業名〉の変更を打ち消す」). The revert is queued behind the other work like any change, never
+ * refused for a run in progress; when it reaches the head of the queue, the server reverts it mechanically when the
+ * run's changes reverse cleanly onto the workspace then and the result checks, else leaves it queued for the AI, with
+ * why (`revertObstacle`). Refused with `FacilitatorOnly` (403), `RunNotFound` / `RunOfAnotherSession` (404),
+ * `RunNotRevertable` (409: it changed no file, or it is reverted, or a revert of it is queued or under way).
+ */
+export interface RevertRunBody {
+    readonly body: string;
+}
+
+/**
+ * `POST /api/session/runs/:id/revert` → 201: the revert request, and its run as it is once the server had its turn:
+ * `Reverted` when it was at the head and went through at once (`changed` false: nothing was left to revert), `Queued`
+ * with `revertObstacle` when it was left to the AI, `Queued` without one while it waits its turn behind `ahead` runs
+ * (the run in progress and the queued ones before it).
+ */
+export interface RevertRequestedBody {
+    readonly request: Json<Collaboration.SentRequest>;
+    readonly run: Json<Collaboration.AgentRun>;
+    readonly ahead: number;
+}
+
 /** A file of a comparison: its status by path and DSL, and the line diff of its texts unless it is unchanged. */
 export interface ComparedFileBody extends Json<FileComparison> {
     /** Absent for an unchanged file, and for the files after the comparison's diffs reached their limit (`diffsOmitted`). */
@@ -295,10 +322,13 @@ export type { ElementChange };
 /**
  * The SSE stream `GET /agent/events`: `id:` is the outbox position (resume with `Last-Event-ID`), `event:` one of these
  * types, `data:` the `EventMessage` as JSON. `run.cancel_requested` is the `RunCancelled` event (stop the agent if it
- * is that run's).
+ * is that run's). A queued revert is first tried by the server: `run.reverted` when it went through (the queue moved
+ * on), `run.revert_left_to_agent` when it is left to the agent — both mean a run may now be claimed.
  */
 export const AGENT_EVENT_TYPES = {
     RunQueued: 'run.queued',
+    RunReverted: 'run.reverted',
+    RevertLeftToAgent: 'run.revert_left_to_agent',
     RunStarted: 'run.started',
     RunCompleted: 'run.completed',
     RunNeedsClarification: 'run.needs_clarification',
@@ -323,10 +353,19 @@ export interface AgentParticipantsBody {
     readonly participants: readonly { readonly id: string; readonly name: string }[];
 }
 
+/**
+ * What a subscriber of this version can run, named when it claims: `revert`, a run whose request reverts another run
+ * (it gets that run's changes when it starts, `AgentStartedBody.revert`). A subscriber that does not name it is never
+ * given such a run: its claim is refused with `SubscriberOutdated` (409) and the run stays queued.
+ */
+export const AGENT_CAPABILITIES = ['revert'] as const;
+
 /** `POST /agent/runs/claim`. */
 export interface AgentClaimBody {
     /** Who claims (shown to the facilitator): e.g. `claude@host`. */
     readonly owner: string;
+    /** What it can run (`AGENT_CAPABILITIES`); none when left out. */
+    readonly capabilities?: readonly string[];
 }
 
 /** The lease of a claimed run: its token goes with every later call about the run. */
@@ -356,11 +395,24 @@ export interface AgentPreviousRun {
     readonly changes: PreviousRunChanges;
 }
 
-/** `POST /agent/runs/:id/start` → 200: the running run, its base revision, and the runs it continues, in its input's order. */
+/**
+ * A run the started run reverts (a revert request of its input names it), with what it changed from its base to its
+ * result revision, file by file: each file's unified diff while they fit `MAX_REVERT_DIFF` characters, else its line counts.
+ */
+export interface AgentRevertedRun {
+    readonly run: Json<Collaboration.AgentRun>;
+    readonly changes: RevertChanges;
+}
+
+/**
+ * `POST /agent/runs/:id/start` → 200: the running run, its base revision, the runs it continues, in its input's order,
+ * and the runs it reverts (`revert`, for a revert: absent from a server before reverting runs).
+ */
 export interface AgentStartedBody {
     readonly run: Json<Collaboration.RunningAgentRun>;
     readonly baseRevision: Json<Collaboration.Revision>;
     readonly previousRuns: readonly AgentPreviousRun[];
+    readonly revert?: readonly AgentRevertedRun[];
 }
 
 /**

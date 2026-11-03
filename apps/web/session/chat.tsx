@@ -1,7 +1,7 @@
 // The session's chat in the conversation pillar (ADR 0026, amendment: messages and apply), the same for everyone: who
 // is here and what the agent is doing at a glance, then two views. チャット: one stream of every message (each is chat;
 // the facilitator applies some: a run), one card per run with the runs that continue it (`card.tsx`), the revisions
-// confirmed or restored, and the composer of a message about the selection. AI の作業: everything sent to the AI, from
+// restored, and the composer of a message about the selection. AI の作業: everything sent to the AI, from
 // start to end (awaiting an answer, running, queued, finished), with the same cards. The facilitator's controls are in the stream itself: send a message to the AI (the Bot button; … for sending
 // it again, with a comment, or several together, also chosen with Shift/⌘), answer or pick an alternative on a card,
 // cancel, and the menus of the cards and of the head.
@@ -161,7 +161,10 @@ export function SessionChat(props: {
     const now = useNow(running);
     const actions = useChatActions();
     const marking = useMarking(session);
-    const revisions = useRevisionTools(state, tx);
+    // a revert just asked: its message, gone to once the stream has it and its card below it (the server's events may
+    // come after its answer)
+    const [revertAsked, setRevertAsked] = useState<{ readonly request: string; readonly run: string } | undefined>();
+    const revisions = useRevisionTools(state, tx, setRevertAsked);
     const [leaveError, setLeaveError] = useState<string | undefined>();
     const leave = async (): Promise<void> => {
         try {
@@ -296,6 +299,15 @@ export function SessionChat(props: {
             setTimeout(() => el.classList.remove('chat-flash'), 1600);
         });
     }, []);
+
+    useEffect(() => {
+        if (revertAsked === undefined) return;
+        const key = `message:${revertAsked.request}`;
+        const card = items.some((i) => i.kind === 'card' && i.unit.runs.some((r) => r.run.id === revertAsked.run));
+        if (!card || !items.some((i) => i.key === key)) return;
+        setRevertAsked(undefined);
+        jump(key);
+    }, [revertAsked, items, jump]);
 
     // the header status clicked: AI の作業, at the unit it stands for (opened and revealed); the chat keeps its scroll
     const [peek, setPeek] = useState<Peek | undefined>();
@@ -626,8 +638,6 @@ function streamRows(items: readonly StreamItem[], tx: Tx): Row[] {
         switch (item.kind) {
             case 'session-start':
                 return { key: item.key, kind: item.kind, author: undefined, render: () => <Divider at={item.at}>{tx.chat.started}</Divider> };
-            case 'confirmed':
-                return { key: item.key, kind: item.kind, author: undefined, render: () => <ConfirmedDivider item={item} /> };
             case 'restored':
                 return {
                     key: item.key,
@@ -650,15 +660,6 @@ function streamRows(items: readonly StreamItem[], tx: Tx): Row[] {
                 return { key: item.key, kind: item.kind, author: undefined, render: () => <RunCard unit={item.unit} /> };
         }
     });
-}
-
-function ConfirmedDivider({ item }: { item: Extract<StreamItem, { kind: 'confirmed' }> }) {
-    const { tx, nameOf } = useChat();
-    return (
-        <Divider at={item.at} hint={tx.chat.revisionHint(String(item.revision))}>
-            {tx.chat.confirmed(nameOf(item.by))}
-        </Divider>
-    );
 }
 
 /**
@@ -918,7 +919,7 @@ function SelectionBar() {
     );
 }
 
-/** Right after sending to the AI: 取り消す, while the run is still queued. */
+/** Right after sending to the AI: 実行を中止, while the run is still queued. */
 function UndoBar() {
     const { tx, actions, session } = useChat();
     const run = session.state.runs.find((r) => r.id === actions.undo?.run);
@@ -1168,7 +1169,7 @@ export function ChatLauncher(props: { status: AgentStatus; unread: number; menti
     );
 }
 
-/** A line of the stream about the session (its start, a result confirmed, a restore); `hint`: its tooltip. */
+/** A line of the stream about the session (its start, a restore); `hint`: its tooltip. */
 function Divider({ at, hint, children }: { at: string; hint?: string; children: ReactNode }) {
     return (
         <div className="chat-system">

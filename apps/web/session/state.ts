@@ -115,6 +115,30 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
                 state: runs((r) => (r.state === 'Queued' ? { ...r, state: 'Running', baseRevision: e.baseRevision, startedAt: e.startedAt } : r), e.runId),
                 refetch: false,
             };
+        case 'RunReverted': {
+            // a queued revert the server reverted (or found nothing left to revert)
+            const run = state.runs.find((r) => r.id === e.runId);
+            if (run?.state !== 'Queued') return { state: at, refetch: run === undefined };
+            const reverted: RunJson = {
+                id: run.id,
+                session: run.session,
+                input: run.input,
+                queuedBy: run.queuedBy,
+                queuedAt: run.queuedAt,
+                state: 'Reverted',
+                baseRevision: e.baseRevision,
+                resultRevision: e.resultRevision,
+                changed: e.changed,
+                finishedAt: e.finishedAt,
+            };
+            return { state: runs(() => reverted, e.runId), refetch: false };
+        }
+        case 'RevertLeftToAgent':
+            // still queued, now for the agent, with why
+            return {
+                state: runs((r) => (r.state === 'Queued' ? { ...r, revertObstacle: e.obstacle } : r), e.runId),
+                refetch: !state.runs.some((r) => r.id === e.runId),
+            };
         case 'RunCompleted':
             // the report is not in the event
             return { state: at, refetch: state.runs.find((r) => r.id === e.runId)?.state !== 'Completed' };
@@ -197,16 +221,6 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
             };
             return { state: { ...at, approvals: [...approvals, approval] }, refetch: false };
         }
-        case 'RevisionConfirmed':
-            return {
-                state: {
-                    ...at,
-                    revisions: replaceById(state.revisions, e.revisionId, (r: RevisionJson) =>
-                        r.state === 'Recorded' ? { ...r, state: 'Confirmed', confirmedBy: e.confirmedBy, confirmedAt: e.confirmedAt } : r,
-                    ),
-                },
-                refetch: false,
-            };
     }
 }
 

@@ -94,8 +94,7 @@ as `domaintrail`, its full name, for when `dt` clashes with another command.
 
 `dt session start` shares the Live View with several people while an AI agent edits the model: participants send
 requests about `.dt` and `.dtes` elements from their browsers, the facilitator bundles them into runs that
-`dt session subscribe --agent claude` hands to Claude Code, and every run leaves a revision to compare, confirm or
-restore. See [`dt guide session`](docs/guide.md#collaboration-sessions), [a first real run](docs/session-first-run.md)
+`dt session subscribe --agent claude` hands to Claude Code, and every run leaves a revision to compare or restore. See [`dt guide session`](docs/guide.md#collaboration-sessions), [a first real run](docs/session-first-run.md)
 and, behind Cloudflare Access, [the access check](docs/session-access.md).
 
 ## Contributing

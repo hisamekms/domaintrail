@@ -1,7 +1,7 @@
 // The session seed (scripts/session-seed.ts) against the built CLI: one small scenario on a free port fills the
 // session through its APIs, and leaves no run to the seed's agent.
 import { afterAll, describe, expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
@@ -29,7 +29,7 @@ const freePort = (): Promise<number> =>
 describe('the session seed', () => {
     test('scenario names: a comma list, repeated, and all', () => {
         expect(scenariosOf(['chat,runs', 'chat'])).toEqual(['chat', 'runs']);
-        expect(scenariosOf(['all'])).toHaveLength(7);
+        expect(scenariosOf(['all'])).toHaveLength(8);
         expect(() => scenariosOf(['nope'])).toThrow('Unknown scenario nope');
     });
 
@@ -67,6 +67,26 @@ describe('the session seed', () => {
             await seeded.stop();
         }
         expect(await refusal(dir)).toContain('already has a session');
+    }, 90_000);
+    test("revert: a unit reverted mechanically, a later one's change kept; another reverted by the agent after a conflict", async () => {
+        const dir = path.join(await mkdtemp(path.join(tmpdir(), 'dt-seed-test-')), 'ws');
+        dirs.push(path.dirname(dir));
+        const seeded = await seed({ ...seededOptions(dir), scenarios: ['revert'], port: await freePort(), classifier: true });
+        try {
+            const { state } = seeded;
+            expect(state.runs.map((r) => r.state)).toEqual(['Completed', 'Completed', 'Reverted', 'Completed', 'Completed', 'Completed']);
+            const reverts = state.requests.flatMap((r) => (r.reverts ? [[r.reverts, r.body]] : []));
+            expect(reverts).toEqual([
+                [state.runs[0].id, '再請求のイベントの変更を打ち消す'],
+                [state.runs[3].id, '支払の督促の変更を打ち消す'],
+            ]);
+            const file = await readFile(path.join(dir, 'stormings', 'order-to-cash.dtes'), 'utf8');
+            expect(file).toContain('readmodel Favorites');
+            expect(file).not.toContain('PaymentRetried');
+            expect(file).not.toContain('InvoiceReminded');
+        } finally {
+            await seeded.stop();
+        }
     }, 90_000);
 });
 

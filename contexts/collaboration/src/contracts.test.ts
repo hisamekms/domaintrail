@@ -164,7 +164,6 @@ register(
                     CompletedAgentRun,
                     OpenSession,
                     RecordedRevision: hashed(base.RecordedRevision),
-                    ConfirmedRevision: hashed(base.ConfirmedRevision),
                 },
             },
             examples: {

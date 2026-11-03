@@ -21,7 +21,7 @@ import {
     type ReplyData,
     toAgentReply,
 } from '@domaintrail/collaboration';
-import { createModelValidator } from '@domaintrail/dt';
+import { createModelValidator, createSourceFormatter } from '@domaintrail/dt';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 import { sourceSelection } from '@domaintrail/analysis';
 
@@ -94,6 +94,7 @@ async function session(root?: string, database: 'memory' | 'file' = 'memory', cl
         workspace: createWorkspaceSnapshot(dir, sourceSelection()),
         blobs: await openSessionBlobs(dir),
         validator: createModelValidator(),
+        formatter: createSourceFormatter(),
         clock: { now: () => new Date(clock.t) },
         ids: { newId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}` },
     };
@@ -647,14 +648,6 @@ describe('revisions', () => {
     test('restore writes a past revision back after a pre-restore snapshot, and records it', async () => {
         const s = await session();
         const { id, start } = await started(s);
-        const confirmed = value(await s.use.confirmRevision({ revision: start.id, actor: actor(facilitator) }));
-        expect(confirmed.state).toBe('Confirmed');
-        expect(error(await s.use.confirmRevision({ revision: start.id, actor: actor(facilitator) }))).toEqual({
-            type: 'NotAllowed',
-            command: 'confirm',
-            state: 'Confirmed',
-        });
-
         await s.write('sales/sales.dt', SALES.replace('state Confirmed', 'state Confirmed\n    state Cancelled'));
         await mkdir(path.join(s.root, 'extra'), { recursive: true });
         await s.write('extra/new.dt', 'context Extra {}\n');
@@ -1055,10 +1048,318 @@ describe('revisions', () => {
     });
 });
 
+describe('reverting a run', () => {
+    const CANCEL = '    command cancel() Draft -> Draft\n\n';
+    const withCancel = (t: string): string => t.replace('    command confirm()', `${CANCEL}    command confirm()`);
+    const withShipped = (t: string): string => t.replace('    state Confirmed\n', '    state Confirmed\n    state Shipped\n');
+    const revertBody = text('「取り消しの付け足し」の変更を取り消す');
+    /** The model as `dt fmt` formats it: what a mechanical revert writes is formatted, as a run's edits are. */
+    const SALES_F = createSourceFormatter().format('sales/sales.dt', SALES);
+    /** A session on the formatted model. */
+    const formattedSession = async (): Promise<Session> => session(await workspace({ 'sales/sales.dt': SALES_F, 'stormings/returns.dtes': RETURNS }));
+
+    /** A run of the session that edits the workspace with `edit` and completes, with the assumptions given. */
+    async function completed(
+        s: Session,
+        id: C.SessionId,
+        edit: () => Promise<void>,
+        assumptions: { text: string; alternatives: { id: string; label: string }[] }[] = [],
+    ): Promise<C.CompletedAgentRun> {
+        const latest = value(await s.use.sessionState({ session: id })).revisions.at(-1);
+        if (!latest) throw new Error('no revision');
+        const run = await queuedRun(s, id, latest);
+        const { lease } = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000, capabilities: ['revert'] }));
+        value(await s.use.startRun({ run: run.id, token: lease.token }));
+        await edit();
+        const request = run.input.requests[0].request;
+        const reply = toAgentReply({
+            outcome: 'done',
+            summary: 'Done.',
+            requests: [{ request, status: 'done' }],
+            questions: [],
+            assumptions: assumptions.map((a) => ({ ...a, requests: [request] })),
+        });
+        const finished = value(await s.use.finishRun({ run: run.id, token: lease.token, facts, reply }));
+        if (finished.run.state !== 'Completed') throw new Error(`run ${finished.run.state}`);
+        return finished.run;
+    }
+
+    /** The facilitator asks for the revert of `run`: queued. */
+    const request = async (s: Session, id: C.SessionId, run: C.AgentRunId, body = revertBody) =>
+        value(await s.use.requestRevert({ session: id, actor: actor(facilitator), run, body }));
+    /** The server's turn at the head of the queue. */
+    const serverTurn = (s: Session, id: C.SessionId) => s.use.revertNext({ session: id, leaseMs: 30_000 });
+    /** Asks for the revert of `run` with nothing ahead of it, then lets the server take it. */
+    const revertNow = async (s: Session, id: C.SessionId, run: C.AgentRunId, body = revertBody) => {
+        const requested = await request(s, id, run, body);
+        return { requested, outcome: value(await serverTurn(s, id)) };
+    };
+
+    test("mechanically: the run's changes are reversed onto the workspace, a later run's kept, and recorded as a run of their own", async () => {
+        const s = await formattedSession();
+        const { id } = await started(s);
+        const first = await completed(s, id, () => s.write('sales/sales.dt', withCancel(SALES_F)), [
+            { text: 'Cancel keeps the order.', alternatives: [{ id: 'delete', label: 'Delete it' }] },
+        ]);
+        await completed(s, id, async () => s.write('sales/sales.dt', withShipped(await s.read('sales/sales.dt'))));
+        const before = value(await s.use.sessionState({ session: id }));
+
+        // the facilitator's only: nothing is sent, queued or recorded for anyone else
+        expect(error(await s.use.requestRevert({ session: id, actor: actor(guest), run: first.id, body: revertBody }))).toEqual({ type: 'FacilitatorOnly' });
+        expect(value(await s.use.sessionState({ session: id }))).toEqual(before);
+
+        // asked: a request and a run queued like any other, nothing written yet
+        const requested = await request(s, id, first.id);
+        expect(requested.request).toMatchObject({ state: 'Sent', author: facilitator, body: revertBody, reverts: first.id, targets: [], mentions: [] });
+        expect(requested.run).toMatchObject({
+            state: 'Queued',
+            queuedBy: facilitator,
+            input: { requests: [{ request: requested.request.id, reverts: first.id, body: revertBody }] },
+        });
+        expect(await s.read('sales/sales.dt')).toBe(withShipped(withCancel(SALES_F)));
+
+        // its turn: the server reverts it mechanically
+        const outcome = value(await serverTurn(s, id));
+        if (outcome.kind !== 'reverted') throw new Error(`not reverted mechanically: ${outcome.kind}`);
+        const run = outcome.run;
+        expect(run).toMatchObject({ id: requested.run.id, state: 'Reverted', changed: true });
+        // the later run's state stays, the first run's command is gone
+        expect(await s.read('sales/sales.dt')).toBe(withShipped(SALES_F));
+        const after = value(await s.use.sessionState({ session: id }));
+        const revision = (rid: C.RevisionId) => after.revisions.find((r) => r.id === rid);
+        expect(revision(run.baseRevision)?.origin).toEqual({ kind: 'RunBase', run: run.id });
+        expect(revision(run.resultRevision)?.origin).toEqual({ kind: 'RunResult', run: run.id });
+        expect(after.runs.at(-1)).toEqual(run);
+        const events = (await s.use.eventsAfter({ session: id, cursor: 0, limit: 1000 })).map((e) => e.event.type);
+        expect(events.slice(-5)).toEqual(['RequestSent', 'RunQueued', 'RevisionRecorded', 'RevisionRecorded', 'RunReverted']);
+        // what it changed is the first run's change backwards
+        const compared = value(await s.use.compareRevisions({ session: id, before: run.baseRevision, after: run.resultRevision }));
+        expect(compared.files.find((f) => f.path === 'sales/sales.dt')?.diff).toMatchObject({ kind: 'diff', added: 0, removed: 2 });
+        // the lease is the server's no more: the queue is free
+        expect(error(await serverTurn(s, id))).toEqual({ type: 'NothingQueued' });
+
+        // reverted once: the assumptions of the run are closed, its votes too, and it is not reverted again
+        const tally = (n: number): C.Tally => value(C.makeTally(n));
+        expect(error(await s.use.approveAssumption({ session: id, actor: actor(facilitator), assumption: { run: first.id, assumption: tally(0) } }))).toEqual({
+            type: 'AssumptionClosed',
+            run: first.id,
+        });
+        expect(
+            error(
+                await s.use.setMark({
+                    session: id,
+                    actor: actor(guest),
+                    target: { kind: 'AssumptionChoice', run: first.id, assumption: tally(0) },
+                    sign: { kind: 'Vote' },
+                    placed: true,
+                }),
+            ),
+        ).toEqual({ type: 'MarkTargetClosed' });
+        expect(error(await s.use.requestRevert({ session: id, actor: actor(facilitator), run: first.id, body: revertBody }))).toEqual({
+            type: 'RunNotRevertable',
+            run: first.id,
+        });
+        // the revert is a unit of work of its own: reverted in turn, the run's changes are back
+        await revertNow(s, id, run.id, text('打ち消しを打ち消す'));
+        expect(await s.read('sales/sales.dt')).toBe(withShipped(withCancel(SALES_F)));
+    });
+
+    test('a file the run added is removed, one it removed comes back', async () => {
+        const s = await formattedSession();
+        const { id } = await started(s);
+        const run = await completed(s, id, async () => {
+            await s.write('sales/billing.dt', 'context Billing {\n  id InvoiceId: UUID\n}\n');
+            await rm(path.join(s.root, 'stormings/returns.dtes'));
+        });
+        expect((await revertNow(s, id, run.id)).outcome.kind).toBe('reverted');
+        expect(await s.read('stormings/returns.dtes')).toBe(RETURNS);
+        expect(await s.read('sales/billing.dt').catch(() => 'gone')).toBe('gone');
+    });
+
+    test('a later change of the same lines: left queued for the AI with the conflict; the workspace is left as it is', async () => {
+        const s = await formattedSession();
+        const { id } = await started(s);
+        const first = await completed(s, id, () => s.write('sales/sales.dt', withCancel(SALES_F)));
+        const renamed = withCancel(SALES_F).replace('command cancel()', 'command cancelOrder()');
+        await completed(s, id, () => s.write('sales/sales.dt', renamed));
+
+        const requested = await request(s, id, first.id);
+        // not tried yet: no agent gets it, whatever it can run (the server's turn first)
+        expect(error(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000, capabilities: ['revert'] }))).toEqual({
+            type: 'RunInProgress',
+            run: requested.run.id,
+        });
+        const outcome = value(await serverTurn(s, id));
+        expect(outcome).toMatchObject({ kind: 'leftToAgent', obstacle: { kind: 'Conflict', paths: ['sales/sales.dt'] } });
+        expect(await s.read('sales/sales.dt')).toBe(renamed);
+        expect(outcome.run).toMatchObject({
+            id: requested.run.id,
+            state: 'Queued',
+            revertObstacle: { kind: 'Conflict', paths: ['sales/sales.dt'] },
+            input: { requests: [{ request: requested.request.id, reverts: first.id }] },
+        });
+        expect((await s.use.eventsAfter({ session: id, cursor: 0, limit: 1000 })).at(-1)?.event).toMatchObject({
+            type: 'RevertLeftToAgent',
+            runId: requested.run.id,
+        });
+        // tried once: the server leaves it to the agent from now on
+        expect(error(await serverTurn(s, id))).toEqual({ type: 'NothingQueued' });
+        // under way: not asked twice
+        expect(error(await s.use.requestRevert({ session: id, actor: actor(facilitator), run: first.id, body: revertBody }))).toEqual({
+            type: 'RunNotRevertable',
+            run: first.id,
+        });
+
+        // a subscriber that cannot run a revert is not given it: the run stays queued
+        expect(error(await s.use.claimNextRun({ session: id, owner: 'old', leaseMs: 30_000 }))).toMatchObject({
+            type: 'SubscriberOutdated',
+            run: requested.run.id,
+            needs: 'revert',
+        });
+        const { lease } = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000, capabilities: ['revert'] }));
+        value(await s.use.startRun({ run: requested.run.id, token: lease.token }));
+        // the agent is told the run it reverts, with its diff file by file
+        const told = value(await s.use.revertedRuns({ run: requested.run.id }));
+        expect(told).toHaveLength(1);
+        expect(told[0].run.id).toBe(first.id);
+        expect(told[0].changes.diffsOmitted).toBe(false);
+        expect(told[0].changes.files[0]).toMatchObject({ path: 'sales/sales.dt', status: 'changed' });
+        expect(told[0].changes.files[0].diff).toContain('+    command cancel()');
+
+        // the AI reverted it: the run counts as reverted once its revert completed
+        await s.write('sales/sales.dt', SALES_F);
+        const req = requested.request.id;
+        const reply = toAgentReply({ outcome: 'done', summary: 'Reverted.', requests: [{ request: req, status: 'done' }], questions: [], assumptions: [] });
+        expect(value(await s.use.finishRun({ run: requested.run.id, token: lease.token, facts, reply })).run.state).toBe('Completed');
+        expect(error(await s.use.requestRevert({ session: id, actor: actor(facilitator), run: first.id, body: revertBody }))).toEqual({
+            type: 'RunNotRevertable',
+            run: first.id,
+        });
+    });
+
+    test('a revert that would not check (a later change needs what the run added) goes to the AI; nothing is written', async () => {
+        const s = await formattedSession();
+        const { id } = await started(s);
+        const first = await completed(s, id, () =>
+            s.write('sales/sales.dt', SALES_F.replace('    state Confirmed\n', '    state Confirmed\n    state Cancelled\n')),
+        );
+        const later = (await s.read('sales/sales.dt')).replace('    command confirm()', '    command cancel() Draft -> Cancelled\n\n    command confirm()');
+        await completed(s, id, () => s.write('sales/sales.dt', later));
+        const { outcome } = await revertNow(s, id, first.id);
+        expect(outcome).toMatchObject({ kind: 'leftToAgent', obstacle: { kind: 'Check', unparsedDtes: [] } });
+        if (outcome.kind === 'leftToAgent' && outcome.obstacle.kind === 'Check') expect(outcome.obstacle.newDtErrors).toBeGreaterThan(0);
+        expect(await s.read('sales/sales.dt')).toBe(later);
+    });
+
+    test('asked while a run is running: queued behind it, then reverted mechanically when its turn comes', async () => {
+        const s = await formattedSession();
+        const { id } = await started(s);
+        const first = await completed(s, id, () => s.write('sales/sales.dt', withCancel(SALES_F)));
+        const latest = value(await s.use.sessionState({ session: id })).revisions.at(-1);
+        if (!latest) throw new Error('no revision');
+        const busy = await queuedRun(s, id, latest);
+        const { lease } = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000, capabilities: ['revert'] }));
+        value(await s.use.startRun({ run: busy.id, token: lease.token }));
+
+        // not refused: queued behind the running run, and the server leaves it while that runs
+        const requested = await request(s, id, first.id);
+        expect(requested.run.state).toBe('Queued');
+        expect(error(await serverTurn(s, id))).toEqual({ type: 'RunInProgress', run: busy.id });
+        expect(await s.read('sales/sales.dt')).toBe(withCancel(SALES_F));
+
+        // the running run changes the model elsewhere, and ends
+        await s.write('sales/sales.dt', withShipped(withCancel(SALES_F)));
+        const reply = toAgentReply({
+            outcome: 'done',
+            summary: 'Done.',
+            requests: [{ request: busy.input.requests[0].request, status: 'done' }],
+            questions: [],
+            assumptions: [],
+        });
+        value(await s.use.finishRun({ run: busy.id, token: lease.token, facts, reply }));
+
+        // its turn: reverted against the workspace as it is then, the later change kept
+        const outcome = value(await serverTurn(s, id));
+        expect(outcome).toMatchObject({ kind: 'reverted', run: { id: requested.run.id, state: 'Reverted', changed: true } });
+        expect(await s.read('sales/sales.dt')).toBe(withShipped(SALES_F));
+    });
+
+    test('nothing of the run left when its turn comes: completed as nothing to revert, nothing written', async () => {
+        const s = await formattedSession();
+        const { id } = await started(s);
+        const first = await completed(s, id, () => s.write('sales/sales.dt', withCancel(SALES_F)));
+        await s.write('sales/sales.dt', SALES_F);
+        const { requested, outcome } = await revertNow(s, id, first.id);
+        if (outcome.kind !== 'reverted') throw new Error(`not reverted: ${outcome.kind}`);
+        expect(outcome.run).toMatchObject({ id: requested.run.id, state: 'Reverted', changed: false });
+        expect(outcome.run.resultRevision).toBe(outcome.run.baseRevision);
+        expect(await s.read('sales/sales.dt')).toBe(SALES_F);
+        // the run counts as reverted (its changes are gone): its assumptions are closed, it is not asked again
+        expect(error(await s.use.requestRevert({ session: id, actor: actor(facilitator), run: first.id, body: revertBody }))).toEqual({
+            type: 'RunNotRevertable',
+            run: first.id,
+        });
+        // a run without changes is not reverted
+        const unchanged = await completed(s, id, async () => {});
+        expect(error(await s.use.requestRevert({ session: id, actor: actor(facilitator), run: unchanged.id, body: revertBody }))).toEqual({
+            type: 'RunNotRevertable',
+            run: unchanged.id,
+        });
+    });
+
+    test('a queued revert can be stopped; stopped, it is never tried, and can be asked again', async () => {
+        const s = await formattedSession();
+        const { id } = await started(s);
+        const first = await completed(s, id, () => s.write('sales/sales.dt', withCancel(SALES_F)));
+        const latest = value(await s.use.sessionState({ session: id })).revisions.at(-1);
+        if (!latest) throw new Error('no revision');
+        const busy = await queuedRun(s, id, latest);
+        const { lease } = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000, capabilities: ['revert'] }));
+        const requested = await request(s, id, first.id);
+        expect(value(await s.use.cancelRun({ run: requested.run.id, actor: actor(facilitator) })).state).toBe('Cancelled');
+        value(await s.use.releaseRun({ run: busy.id, token: lease.token }));
+        value(await s.use.cancelRun({ run: busy.id, actor: actor(facilitator) }));
+        expect(error(await serverTurn(s, id))).toEqual({ type: 'NothingQueued' });
+        expect(await s.read('sales/sales.dt')).toBe(withCancel(SALES_F));
+        // stopped is not reverted: it may be asked again
+        expect((await revertNow(s, id, first.id)).outcome.kind).toBe('reverted');
+    });
+
+    test('never processed twice: the server holds its own lease while it tries; a revert stopped meanwhile writes nothing', async () => {
+        const s = await formattedSession();
+        const { id } = await started(s);
+        const first = await completed(s, id, () => s.write('sales/sales.dt', withCancel(SALES_F)));
+        const requested = await request(s, id, first.id);
+
+        // while the server tries it (its workspace read held up), an agent cannot claim anything, and the server
+        // itself does not take it twice; the facilitator stops it meanwhile
+        let release: () => void = () => {};
+        const held = new Promise<void>((resolve) => (release = resolve));
+        const read = s.deps.workspace.read.bind(s.deps.workspace);
+        let reads = 0;
+        s.deps.workspace.read = async () => {
+            if (reads++ === 0) await held;
+            return read();
+        };
+        const trying = serverTurn(s, id);
+        await Bun.sleep(20);
+        expect(error(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000, capabilities: ['revert'] }))).toEqual({
+            type: 'RunInProgress',
+            run: requested.run.id,
+        });
+        expect(error(await serverTurn(s, id))).toEqual({ type: 'RunInProgress', run: requested.run.id });
+        expect(value(await s.use.cancelRun({ run: requested.run.id, actor: actor(facilitator) })).state).toBe('Cancelled');
+        release();
+        expect(error(await trying)).toEqual({ type: 'LeaseLost', run: requested.run.id });
+        expect(await s.read('sales/sales.dt')).toBe(withCancel(SALES_F));
+        expect(value(await s.use.sessionState({ session: id })).runs.at(-1)?.state).toBe('Cancelled');
+    });
+});
+
 describe('who may do what (ADR 0027): the actor of every use case, the rules in the commands', () => {
     const FACILITATOR_ONLY: C.FacilitatorOnly = { type: 'FacilitatorOnly' };
 
-    test('only the facilitator queues, cancels, takes, confirms, restores and closes; nothing changes on a refusal', async () => {
+    test('only the facilitator queues, cancels, takes, restores and closes; nothing changes on a refusal', async () => {
         const s = await session();
         const { id, start } = await started(s);
         const run = await queuedRun(s, id, start);
@@ -1068,7 +1369,6 @@ describe('who may do what (ADR 0027): the actor of every use case, the rules in 
         expect(error(await s.use.queueRun({ session: id, requests: [request], actor: actor(guest) }))).toEqual(FACILITATOR_ONLY);
         expect(error(await s.use.cancelRun({ run: run.id, actor: actor(guest) }))).toEqual(FACILITATOR_ONLY);
         expect(error(await s.use.takeRevision({ session: id, actor: actor(guest) }))).toEqual(FACILITATOR_ONLY);
-        expect(error(await s.use.confirmRevision({ revision: start.id, actor: actor(guest) }))).toEqual(FACILITATOR_ONLY);
         await s.write('sales/sales.dt', SALES.replace('state Confirmed', 'state Confirmed\n    state Cancelled'));
         expect(error(await s.use.restoreRevision({ session: id, revision: start.id, actor: actor(guest), recordExternalChanges: true }))).toEqual(
             FACILITATOR_ONLY,
@@ -1087,7 +1387,6 @@ describe('who may do what (ADR 0027): the actor of every use case, the rules in 
         ]);
 
         expect(value(await s.use.cancelRun({ run: run.id, actor: actor(facilitator) })).state).toBe('Cancelled');
-        expect(value(await s.use.confirmRevision({ revision: start.id, actor: actor(facilitator) })).state).toBe('Confirmed');
         expect(value(await s.use.closeSession({ session: id, actor: actor(facilitator) })).state).toBe('Closed');
     });
 

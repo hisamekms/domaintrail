@@ -27,6 +27,9 @@ export type Person = keyof typeof PEOPLE;
 export const alternativeNote = (assumption: string, alternative: string): string =>
     `前提「${assumption}」は採らず、「${alternative}」としてやり直してください。`;
 
+/** The facilitator's message of a revert, as the page writes it (`revertBody` of apps/web/i18n.tsx, ja). */
+export const revertBody = (name: string): string => `${name}の変更を打ち消す`;
+
 /** The run states a run does not leave. */
 const ENDED = new Set(['Completed', 'NeedsClarification', 'Declined', 'Failed', 'Cancelled']);
 /** How long a run of the seed's agent may take (it runs `dt fmt` and `dt check`). */
@@ -56,6 +59,12 @@ export interface Ctx {
     answer(run: RunJson, answer: AnswerBody, step: Step): Promise<RunJson>;
     /** The facilitator picks another alternative of an assumption of a completed run, played as `step`. */
     pickAlternative(run: RunJson, assumption: number, alternative: string, step: Step): Promise<RunJson>;
+    /**
+     * The facilitator reverts the unit of work of `run`, named `name` (the chat's 「〈name〉の変更を打ち消す」): queued, and
+     * — the queue being empty — done mechanically by the server at once, or — when `step` is given, which the revert
+     * must then need — left to the agent and played as `step`.
+     */
+    revert(run: RunJson, name: string, step?: Step): Promise<RunJson>;
     /** The facilitator approves an assumption of a completed run as it is: recorded, nothing queued. */
     approveAssumption(run: RunJson, assumption: number): Promise<void>;
     /** The facilitator applies messages as a run the agent works on until the facilitator cancels it. */
@@ -354,6 +363,20 @@ function makeCtx(deps: {
                 },
                 step,
             );
+        },
+        async revert(run, name, step) {
+            if (step) agent.expect(step);
+            // the queue is empty here: the server takes the revert at once, before it answers
+            const { run: reverted } = await api.revert(f, run.id, revertBody(name));
+            if (reverted.state === 'Reverted') {
+                if (step) throw new Error(`The revert of run ${run.id} was mechanical, not the agent's`);
+                deps.log(`  run ${reverted.id.slice(0, 8)}: ${reverted.state} (reverted mechanically${reverted.changed ? '' : ', nothing left'})`);
+                return reverted;
+            }
+            const why = reverted.state === 'Queued' ? (reverted.revertObstacle?.kind ?? 'not tried yet') : reverted.state;
+            if (!step) throw new Error(`The revert of run ${run.id} went to the agent (${why}), not mechanical`);
+            deps.log(`  the revert of run ${run.id.slice(0, 8)} went to the agent (${why})`);
+            return played(reverted, step);
         },
         async approveAssumption(run, assumption) {
             await api.approve(f, { run: run.id, assumption });

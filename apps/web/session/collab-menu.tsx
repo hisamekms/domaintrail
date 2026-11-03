@@ -1,6 +1,7 @@
 // The chat's collab menu (ADR 0026): one button in the chat's head — the avatars and how many are online — opening
 // who is in the collab (`participants.tsx`) and what one can do with it: copy the invite link; the facilitator records
-// the workspace, hands the role over and ends the collab (asked first, with what is unfinished); a participant leaves.
+// the workspace, restores an earlier state of it (the last resort, chosen in a dialog, then the restore's own flow in
+// the chat), hands the role over and ends the collab (asked first, with what is unfinished); a participant leaves.
 // Once it ended, everyone sees its summary (`CollabSummaryDialog`). What the menu offers to whom is in `collab.ts`.
 //
 // Only the collab state exists today (`dt session start`). A solo state — 「👤 1 人 ▾」 with 「コラボを始める」 under
@@ -12,7 +13,8 @@ import { useDismiss } from '../shared/layout';
 import { sessionApi } from './api';
 import { useChat, type Tx } from './chat-context';
 import { collabMenuItems, collabSummary, hasUnfinished, hoursMinutes, inviteLink, unfinishedWork, type CollabMenuItem, type CollabSummary } from './collab';
-import type { ChangeUnit } from './history';
+import { unitName, type ChangeUnit } from './history';
+import { restorePoints, type RestorePointEntry } from './timeline';
 import { Avatar, failure } from './parts';
 import { ParticipantsList, type PeopleFocus } from './participants';
 import type { SessionData } from './useSession';
@@ -51,6 +53,7 @@ export function CollabMenu(props: {
     const [focus, setFocus] = useState<PeopleFocus | undefined>();
     const [note, setNote] = useState<string | undefined>();
     const [ending, setEnding] = useState(false);
+    const [restoring, setRestoring] = useState(false);
     const root = useRef<HTMLDivElement>(null);
     const button = useRef<HTMLButtonElement>(null);
     const popover = useRef<HTMLDivElement>(null);
@@ -92,6 +95,7 @@ export function CollabMenu(props: {
             setNote(tx.collab.inviteCopied(link));
         },
         record: () => revisions.take(),
+        restore: () => setRestoring(true),
         'hand-over': async () => {
             try {
                 const { link } = await sessionApi.facilitatorLink();
@@ -107,6 +111,7 @@ export function CollabMenu(props: {
     const itemLabel: Record<CollabMenuItem, string> = {
         invite: tx.collab.invite,
         record: tx.takeRevision,
+        restore: tx.collab.restore,
         'hand-over': tx.chat.handOver,
         end: tx.collab.end,
         leave: tx.leave,
@@ -191,7 +196,98 @@ export function CollabMenu(props: {
                 </div>
             )}
             {ending && <EndDialog session={session} units={props.units} onClose={() => setEnding(false)} tx={tx} />}
+            {restoring && (
+                <RestoreDialog
+                    session={session}
+                    units={props.units}
+                    onPick={(revision) => {
+                        setRestoring(false);
+                        revisions.restore(revision);
+                    }}
+                    onClose={() => setRestoring(false)}
+                />
+            )}
         </div>
+    );
+}
+
+/**
+ * 以前の状態に復元 (the facilitator's last resort): the states the workspace can go back to, newest first, each named by
+ * what it was — the collab's start, before or after a unit of work, a record by someone, before or after a restore —
+ * with its time (its revision's number in the tooltip). Choosing one closes the dialog; the chat asks before it
+ * restores, and walks through external changes and a run in progress as any restore does.
+ */
+function RestoreDialog(props: { session: SessionData; units: readonly ChangeUnit[]; onPick: (revision: string) => void; onClose: () => void }) {
+    const { tx, nameOf } = useChat();
+    const c = tx.collab;
+    const dialog = useRef<HTMLDialogElement>(null);
+    useEffect(() => {
+        const d = dialog.current;
+        if (d && !d.open) d.showModal();
+        return () => d?.close();
+    }, []);
+    const points = restorePoints(props.session.state);
+    const unitOf = (run: string | undefined): string => {
+        const unit = props.units.find((u) => u.runs.some((r) => r.run.id === run));
+        return unit ? unitName(unit).text : '';
+    };
+    // a revert is named by the work it reverts (「〈作業名〉の打ち消しの前」), not by its own request's text
+    const revertedBy = (run: string | undefined): string | undefined =>
+        props.session.state.runs.find((r) => r.id === run)?.input.requests.find((q) => q.reverts !== undefined)?.reverts;
+    const label = (p: RestorePointEntry): string => {
+        const r = c.restorePoints;
+        const reverted = revertedBy(p.run);
+        switch (p.kind) {
+            case 'RunBase':
+                return reverted ? r.RevertBase(unitOf(reverted)) : r.RunBase(unitOf(p.run));
+            case 'RunResult':
+                return reverted ? r.RevertResult(unitOf(reverted)) : r.RunResult(unitOf(p.run));
+            case 'Manual':
+                return r.Manual(nameOf(p.by ?? ''));
+            default:
+                return r[p.kind];
+        }
+    };
+    const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return (
+        <dialog
+            ref={dialog}
+            className="session-dialog collab-dialog collab-restore"
+            aria-labelledby="collab-restore-title"
+            onClose={props.onClose}
+            onClick={(e) => e.target === e.currentTarget && props.onClose()}
+        >
+            <div className="settings-dialog-header">
+                <h2 id="collab-restore-title">{c.restoreTitle}</h2>
+                <button className="icon-button" aria-label={c.close} data-tooltip={c.close} onClick={props.onClose}>
+                    <X size={18} aria-hidden />
+                </button>
+            </div>
+            <div className="settings-dialog-body collab-dialog-body">
+                <p className="muted">{c.restoreBody}</p>
+                {points.length === 0 ? (
+                    <p className="muted">{c.restoreNone}</p>
+                ) : (
+                    <ul className="collab-restore-list">
+                        {points.map((p) => (
+                            <li key={p.revision}>
+                                <button
+                                    className="small"
+                                    data-revision={p.revision}
+                                    data-tooltip={c.restorePick(p.number)}
+                                    onClick={() => props.onPick(p.revision)}
+                                >
+                                    <time className="collab-restore-number" dateTime={p.takenAt}>
+                                        {time(p.takenAt)}
+                                    </time>
+                                    <span>{label(p)}</span>
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+        </dialog>
     );
 }
 
@@ -218,7 +314,7 @@ function EndDialog(props: { session: SessionData; units: readonly ChangeUnit[]; 
             setBusy(false);
         }
     };
-    const lines = (['queued', 'running', 'clarification', 'unconfirmed'] as const).filter((k) => unfinished[k] > 0);
+    const lines = (['queued', 'running', 'clarification'] as const).filter((k) => unfinished[k] > 0);
     return (
         <dialog
             ref={dialog}

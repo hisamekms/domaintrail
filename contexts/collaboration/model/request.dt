@@ -17,10 +17,14 @@ context Collaboration {
     }
   }
 
-  /// 返信できると、依頼を送るときに確かめた相手。実行なら、そのセッションの終わった実行（完了・失敗・辞退・取消）。
+  /// 返信できると、依頼を送るときに確かめた相手。実行なら、そのセッションの終わった実行（完了・失敗・辞退・中止・打ち消し）。
   /// 確認待ちには返信しない（問いに答える欄がある）。待機中・実行中にも返信しない。
   /// メッセージなら、そのセッションのメッセージ（自分のものも、見送られたものも）。
   verified ReplyableTarget "返信できる相手" of ReplyTarget for SessionId errors RunNotFound, RunOfAnotherSession, RunNotReplyable, RequestNotFound, RequestOfAnotherSession
+
+  /// 打ち消せると、打ち消しの依頼を送るときに確かめた実行: そのセッションの、ファイルの変更を記録した実行（基準と結果の
+  /// リビジョンが違う）で、まだ打ち消されておらず、打ち消しの待ちや最中でもない。
+  verified RevertableRun "打ち消せる実行" of AgentRunId for SessionId errors RunNotFound, RunOfAnotherSession, RunNotRevertable
 
   /// 本文で言及できると、依頼を送るときに確かめた人。そのセッションの参加者（オフラインの人も）。
   verified MentionableParticipant "言及できる参加者" of ParticipantId for SessionId errors MentionedNotAParticipant
@@ -39,6 +43,9 @@ context Collaboration {
     replyTo: ReplyTarget? "返信先"
     /// 本文で言及した人（`@佐藤[p1]` の p1 が1件目）。言及された人のチャットで目立つだけで、ほかに通知はしない。
     mentions: ParticipantId[0..20] "言及した人"
+    /// 作業の打ち消しの依頼なら、変更を打ち消す実行。ファシリテーターだけが送る（`requestRevert`）。本文は何を打ち消すかを
+    /// 皆に伝える（「〈作業名〉の変更を打ち消す」）。ほかの依頼と同じく実行として待ちに入り、順が来るとサーバーが機械的に打ち消すか、できなければ AI に任せる。
+    references reverts: AgentRunId? -> AgentRun "打ち消す実行"
 
     invariant atMostTwentyTargets "対象は20件まで" { count(targets) <= 20 }
     invariant distinctTargets "同じ対象は1回" { unique(targets, t => t.target) }
@@ -67,6 +74,14 @@ context Collaboration {
       requires atMostTwentyMentions "言及する人は20人まで" { count(mentions) <= 20 } else TooManyMentions
       requires distinctMentions "同じ人の言及は1回" { unique(mentions) } else DuplicateMention
       emits RequestSent
+
+    /// ファシリテーターが、ある作業（実行）の変更の打ち消しを頼む。対象も言及もない、ワークスペース全体についての依頼。
+    create command requestRevert(id: RequestId, session: ActiveSession, author: ParticipantId, authorRole: ParticipantRole, body: Text, sentAt: Timestamp, reverts: RevertableRun) "打ち消しを頼む"
+      -> Sent
+      requires facilitatorReverts "ファシリテーターが打ち消す" {
+        authorRole == ParticipantRole.Facilitator
+      } else FacilitatorOnly
+      emits RequestSent
   }
 
   persistent event RequestSent "依頼送信" {
@@ -78,6 +93,8 @@ context Collaboration {
     sentAt: Timestamp
     replyTo: ReplyTarget?
     mentions: ParticipantId[0..20] "言及した人"
+    /// 打ち消しの依頼なら、打ち消す実行。
+    reverts: AgentRunId? "打ち消す実行"
   }
 
   /// 以前のセッションのアウトボックスに残る見送り。いまは発行しないが、読み直し（再生）のために残す。
@@ -117,8 +134,13 @@ context Collaboration {
     run: AgentRunId
   }
 
-  /// 返信先の実行は、まだ終わっていないか確認待ち（返信できるのは完了・失敗・辞退・取消の実行）。
+  /// 返信先の実行は、まだ終わっていないか確認待ち（返信できるのは完了・失敗・辞退・中止・打ち消しの実行）。
   error RunNotReplyable "返信できない実行" {
+    run: AgentRunId
+  }
+
+  /// 打ち消す実行は、ファイルの変更を記録していない（変更のない実行、結果のない実行）か、もう打ち消された・打ち消しの待ちや最中。
+  error RunNotRevertable "打ち消せない実行" {
     run: AgentRunId
   }
 
