@@ -4832,10 +4832,13 @@ del.was.block {
     overflow: hidden;
 }
 /* an answer of the AI as Markdown (`markdown.ts`): blocks --space-2 apart; clamped by its height (four lines), since
-   line clamping does not reach into its lists and tables, its last line fading out where it may be cut */
+   line clamping does not reach into its lists and tables, its last line fading out only when it is cut (`cut`: taller
+   than the clamp); one that fits is shown whole, unfaded */
 .chat-text.chat-markdown.clamped {
     display: block;
     max-height: calc(4em * var(--lh-body));
+}
+.chat-text.chat-markdown.clamped.cut {
     mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5em), transparent);
 }
 .chat-markdown > * {
