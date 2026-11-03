@@ -44,7 +44,7 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
     const stormings = useMemo(() => current?.stormings ?? [], [current?.stormings]);
     const nav = useNavigation(canvas, current, stormings);
     const settings = useViewSettings();
-    const viewGraph = useViewGraph(current, nav.view, settings, stormings);
+    const viewGraph = useViewGraph(current, nav.view, settings, stormings, settings.compact);
     useOpenOnStormings(current, nav.setView);
     useViewCamera(canvas, current, nav.view, settings, viewGraph, { mode, lang }, current !== null && isEmptyView(nav.view.kind, current));
 
@@ -192,6 +192,7 @@ export function ViewWorkspace(props: {
                         canvas={canvas}
                         fitAll={fitView}
                         legend={legendView && { view: legendView, open: legendOpen, onToggle: onLegendToggle }}
+                        compact={{ on: settings.compact, onToggle: () => settings.setCompact(!settings.compact) }}
                         keys
                     />
                 )}

@@ -2,6 +2,9 @@ import { STRUCTURE_LEVELS, type StructureLevel } from '@domaintrail/visualizatio
 import { usePersistentState } from '../shared/layout';
 import type { StormingChoice } from '../storming';
 
+/** localStorage key of 「詰めて表示」. */
+export const COMPACT_KEY = 'domaintrail.compact';
+
 /** What each view draws (remembered per browser). */
 export interface ViewSettings {
     /** Structure View: all fields (detail), names only in larger text (overview), or aggregates only (aggregates). */
@@ -19,6 +22,9 @@ export interface ViewSettings {
     /** Event Storming: the storming, its level and its timeline filter (the page's state, never written to a .dtes file). */
     stormingChoice: StormingChoice;
     setStormingChoice: (choice: StormingChoice) => void;
+    /** Every diagram laid out with the compact spacing (「詰めて表示」); off: the normal spacing. */
+    compact: boolean;
+    setCompact: (compact: boolean) => void;
 }
 
 export function useViewSettings(): ViewSettings {
@@ -32,6 +38,7 @@ export function useViewSettings(): ViewSettings {
         level: 'big-picture',
         timelines: {},
     });
+    const [compact, setCompact] = usePersistentState(COMPACT_KEY, false);
     return {
         structureLevel,
         setStructureLevel,
@@ -43,5 +50,7 @@ export function useViewSettings(): ViewSettings {
         setMapAll,
         stormingChoice,
         setStormingChoice,
+        compact: compact === true,
+        setCompact,
     };
 }

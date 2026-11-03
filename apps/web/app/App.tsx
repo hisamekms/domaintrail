@@ -194,6 +194,7 @@ export function App() {
                                 onSelect={(id) => select(id)}
                                 legendOpen={legendOpen}
                                 onLegendToggle={() => setLegendOpen(!legendOpen)}
+                                compact={settings.compact}
                             />
                         )}
                         stormingView={(id, history) => (
