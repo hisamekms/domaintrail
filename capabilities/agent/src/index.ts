@@ -26,7 +26,7 @@ export { createClaudeCodeRunner, type AgentCommand } from './adapters/claude-cod
 export { createWarmClaudeRunner, type WarmRunnerOptions } from './adapters/claude-warm.js';
 export { checkClaudeCode, type ClaudeUsability } from './adapters/claude-usable.js';
 export { userClaudeDefaults } from './adapters/claude-settings.js';
-export { createWorkspaceView, ignoredEntries, type WorkspaceView, type WorkspaceViewOptions } from './adapters/workspace-view.js';
+export { createWorkspaceView, ignoredEntries, type IgnoredSource, type WorkspaceView, type WorkspaceViewOptions } from './adapters/workspace-view.js';
 // the answerer role's Claude Code: stage 3 with no tools, answers and proposals with the reading tools only
 export { ANSWERER_TOOLS, answererArguments, createClaudeAnswerer, triageArguments, type ClaudeAnswererOptions } from './adapters/claude-answer.js';
 // the warm process itself, for a role other than the runs (its own tools, prompt and schema)

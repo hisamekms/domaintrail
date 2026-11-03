@@ -177,6 +177,23 @@ in it) and capped at 500 entries; Claude Code's rule matching is best effort for
 these paths); a secret the user keeps in a file git does not ignore is readable by design; and the user's hooks and
 `apiKeyHelper` no longer run for the agents.
 
+*As built in M4b* (a second security review): which files are readable is asked of **git itself** where it speaks for
+the root — the view is built from the allowlist `git ls-files -co --exclude-standard` and the runner's deny list from
+`git ls-files -o -i --exclude-standard --directory` — so every source of ignores applies as in git, the user's
+`core.excludesFile` (by default `~/.config/git/ignore`) and `.git/info/exclude` included; a failing git inside a
+repository is an error, never a fallback. Where git does not speak for the root (no repository, or a root its
+repository ignores: to git all of it is ignored), the tree is walked with `GitIgnore` plus the user's excludes file.
+`.git` (a directory, or a submodule's or worktree's file) and `.domaintrail` are kept out at any depth: never in the
+view, and denied by `Read`/`Edit` rules of `**/.git/**`, `**/.git`, `**/.domaintrail/**` and `**/.domaintrail`
+(measured with Claude Code 2.1.317: refused for nested paths, and only because of these rules). A file is copied into
+the view only when no directory above it is a link, and is opened without following one. Checked once with Claude Code
+2.1.317: a globally ignored file, a `.git/info/exclude` entry, a nested `.git/config`, a submodule's `.git` file and a
+nested `.domaintrail/` are unreadable for the answerer and the runner; a README is readable. *Residual risk* besides
+the above: the runner's deny list stays capped at 500 entries (no sound uncapped form: a deny rule cannot be negated
+by an allow rule, so "deny all but git's list" cannot be said); the files of an untracked nested repository or a
+submodule are left out of the view, but the runner can read them, and their own ignores are not applied; Claude Code's
+own `git status` at a session's start shows the runner the names (not the contents) of untracked files.
+
 ## Alternatives considered
 
 - **The user marks 相談 or 依頼** (a choice at send time, or a prefix). The kind would be known for certain, but it is a

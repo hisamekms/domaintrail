@@ -37,11 +37,12 @@ import {
     userClaudeDefaults,
     createWorkspaceView,
     ignoredEntries,
+    type WorkspaceView,
 } from '@domaintrail/agent';
 import { AGENT_FILE, type AgentCredential, readAgentCredential, SESSION_DIR } from '@domaintrail/collaboration';
 import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/analysis';
 import { SessionError } from '../cli/ports.js';
-import { findDomainFiles, GitIgnore } from '@domaintrail/workspace';
+import { findDomainFiles, GitIgnore, gitIgnoredEntries, gitReadableFiles } from '@domaintrail/workspace';
 import { processAlive } from './process.js';
 
 export type { SubscriberEnd };
@@ -136,11 +137,9 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     const answerConfig = options.answer ?? resolveAnswerConfig();
     const triageConfig = options.triage ?? resolveTriageConfig();
     // the answerer reads a view of the workspace: the files git does not ignore, without .domaintrail/ and .git/
-    let gitignore = new GitIgnore(root);
-    const view = roles.has('answer') ? createWorkspaceView({ root, ignores: (p, directory) => gitignore.ignores(p, directory) }) : undefined;
+    const view = roles.has('answer') ? answererView(root) : undefined;
     const viewDir = await view?.refresh();
     const prepare = async (): Promise<void> => {
-        gitignore = new GitIgnore(root);
         await view?.refresh();
     };
     // the answerer: read-only, no lease, beside the runs (it never waits for them, nor they for it)
@@ -188,10 +187,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             command: options.agentCommand,
             dt,
             // what git ignores, kept from the runner (it works in the workspace itself; ADR 0030 as built in M4)
-            deniedPaths: () => {
-                const now = new GitIgnore(root);
-                return ignoredEntries(root, (p, d) => now.ignores(p, d));
-            },
+            deniedPaths: () => runnerDeniedPaths(root),
             ...((run?.model ?? user.model) !== undefined && { model: run?.model ?? user.model }),
             ...((run?.effort ?? user.effort) !== undefined && { effort: run?.effort ?? user.effort }),
         };
@@ -245,4 +241,35 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             return why;
         },
     };
+}
+
+/**
+ * The answerer's view of the workspace (ADR 0030, as built in M4b): the files git does not ignore — git's own list
+ * (`git ls-files -co --exclude-standard`: `core.excludesFile` and `.git/info/exclude` apply) where git speaks for the
+ * root, else (no repository, or a root its repository ignores) a walk with `GitIgnore` and the user's excludes file —
+ * without `.domaintrail` and `.git` at any depth.
+ */
+export function answererView(root: string, env?: NodeJS.ProcessEnv): WorkspaceView {
+    let gitignore: GitIgnore | undefined;
+    return createWorkspaceView({
+        root,
+        list: async () => {
+            gitignore = undefined;
+            return gitReadableFiles(root, { env });
+        },
+        ignores: (p, directory) => (gitignore ??= new GitIgnore(root, { userExcludes: true, env })).ignores(p, directory),
+    });
+}
+
+/**
+ * What git ignores, kept from the runner (it works in the workspace itself) as deny rules, asked at each run's start:
+ * git's list (`git ls-files -o -i --exclude-standard --directory`) where it speaks for the root, else a walk with
+ * `GitIgnore` and the user's excludes file; at most `MAX_IGNORED_ENTRIES` (the ADR's residual risk).
+ */
+export function runnerDeniedPaths(root: string, env?: NodeJS.ProcessEnv): Promise<string[]> {
+    let gitignore: GitIgnore | undefined;
+    return ignoredEntries(root, {
+        list: () => gitIgnoredEntries(root, { env }),
+        ignores: (p, d) => (gitignore ??= new GitIgnore(root, { userExcludes: true, env })).ignores(p, d),
+    });
 }
