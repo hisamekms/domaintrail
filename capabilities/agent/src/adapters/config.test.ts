@@ -2,7 +2,8 @@
 // apps/dt/src/config/config.test.ts; that `dt` lies outside the workspace: ./dt-shim.test.ts).
 import { describe, expect, test } from 'bun:test';
 import * as path from 'node:path';
-import { DEFAULT_AGENT_TOOLS, resolveAgentConfig, resolveCommand, validateAgentConfig } from './config.js';
+import { homedir } from 'node:os';
+import { DEFAULT_AGENT_TOOLS, resolveAgentConfig, resolveCommand, resolveReadPath, resolveReadPaths, validateAgentConfig } from './config.js';
 
 const refusal = (agent: Record<string, unknown>): string | undefined => {
     try {
@@ -28,6 +29,7 @@ describe("the agent's settings", () => {
             run: RUN_DEFAULTS,
             answer: { warm: true, restartAfter: 50, idleTimeout: 30, timeout: 120 },
             triage: { model: 'haiku', warm: false },
+            read: { answer: [], run: [] },
         });
         expect(resolveAgentConfig().run.allowedTools).not.toBe(DEFAULT_AGENT_TOOLS);
         expect(resolveAgentConfig({ run: { allowedTools: ['Read'] } }).run.allowedTools).toEqual(['Read']);
@@ -100,7 +102,30 @@ describe("the agent's settings", () => {
         [{ triage: 1 }, "'agent.triage' must be an object"],
         [{ triage: { model: '' } }, "'agent.triage.model' must be a Claude Code model name or alias"],
         [{ triage: { warm: 1 } }, "'agent.triage.warm' must be true or false"],
+        [{ read: [] }, "'agent.read' must be an object"],
+        [{ read: { paths: '../specs' } }, "'agent.read.paths' must be an array of paths"],
+        [{ read: { paths: [''] } }, "'agent.read.paths' must be an array of paths"],
+        [{ answer: { read: { paths: ['a\nb'] } } }, "'agent.answer.read.paths' must be an array of paths"],
+        [{ run: { read: 1 } }, "'agent.run.read' must be an object"],
     ])('%j is refused', (agent, message) => {
         expect(refusal(agent)).toContain(message);
+    });
+});
+
+describe('what the AI reads outside the workspace', () => {
+    const dir = path.resolve('/work/project');
+    test('agent.read.paths for both roles, then each role its own; absolute, ~/… or relative to the config file; each once', () => {
+        expect(refusal({ read: { paths: ['../specs'] }, answer: { read: { paths: ['~/notes'] } }, run: { read: {} } })).toBeUndefined();
+        const read = resolveReadPaths(
+            { read: { paths: ['../specs', '/abs/glossary.md'] }, answer: { read: { paths: ['~/notes', '../specs/'] } }, run: { read: { paths: ['~'] } } },
+            dir,
+        );
+        expect(read).toEqual({
+            answer: [path.resolve('/work/specs'), path.resolve('/abs/glossary.md'), path.join(homedir(), 'notes')],
+            run: [path.resolve('/work/specs'), path.resolve('/abs/glossary.md'), homedir()],
+        });
+        expect(resolveAgentConfig({ read: { paths: ['x'] } }, dir).read).toEqual({ answer: [path.join(dir, 'x')], run: [path.join(dir, 'x')] });
+        expect(resolveReadPath('~user/x', dir, '/home/me')).toBe(path.join(dir, '~user/x'));
+        expect(resolveReadPath('~/x', dir, '/home/me')).toBe(path.resolve('/home/me/x'));
     });
 });

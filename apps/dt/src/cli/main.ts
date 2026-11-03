@@ -1,4 +1,5 @@
 import { readFile, stat, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { contextNames, formatDomain } from '@domaintrail/modeling';
@@ -366,7 +367,7 @@ Examples:
             const server = await deps
                 .startViewServer({ root: cfg.root, sources: cfg.sources, respectGitignore: cfg.respectGitignore, port, host, base: opts.base, log: io.out })
                 .catch(base);
-            await printConfig(cfg);
+            await printConfig(cfg, []);
             io.out(`Live View (read-only: ${host} is not a loopback address; the chat and the agent are on loopback only): ${server.url}`);
             await new Promise<void>(() => {}); // run until interrupted
             return;
@@ -552,7 +553,7 @@ Examples:
         )
         .action(async (opts: { agent: 'claude'; role?: AgentRole; once?: boolean; code: string; url?: string }) => {
             const cfg = await config();
-            await printConfig(cfg);
+            await printConfig(cfg, opts.role ? [opts.role] : AGENT_ROLES);
             const connect = { code: opts.code, ...(opts.url !== undefined && { url: opts.url }) };
             const agent = await deps
                 .startAgent({ ...agentOptions(cfg, opts.agent), connect, roles: opts.role ? [opts.role] : AGENT_ROLES, once: opts.once ?? false, log: io.out })
@@ -694,6 +695,7 @@ Examples:
             run: cfg.agent.run,
             answer: cfg.agent.answer,
             triage: cfg.agent.triage,
+            read: cfg.agent.read,
             practice: practiceOf(parseGuide(guide)),
         };
     };
@@ -746,9 +748,10 @@ Examples:
 
     /**
      * The startup lines of a server or an agent: the config files (`Config: domaintrail.jsonc + domaintrail.local.jsonc`),
-     * and a warning when git would commit the local override (with the line for `.gitignore`).
+     * a warning when git would commit the local override (with the line for `.gitignore`), and, when the AI reads
+     * anything outside the workspace, what each role of `roles` reads there (one line each).
      */
-    const printConfig = async (cfg: ResolvedConfig): Promise<void> => {
+    const printConfig = async (cfg: ResolvedConfig, roles: readonly AgentRole[] = AGENT_ROLES): Promise<void> => {
         const shown = (file: string): string => path.relative(process.cwd(), file) || file;
         const files = [cfg.file, cfg.localFile].filter((f): f is string => f !== undefined);
         if (files.length) io.out(`Config: ${files.map(shown).join(' + ')}`);
@@ -763,6 +766,7 @@ Examples:
             else if (state === 'unignored')
                 io.err(`Warning: ${shown(cfg.localFile)} is not ignored by git, and it is your own: add this line to ${ignoreFile}: ${name}`);
         }
+        for (const line of readScopeLines(cfg, roles)) io.out(line);
     };
 
     const config = async () => {
@@ -828,6 +832,23 @@ function sessionSettings(cfg: ResolvedConfig, server: { port: number; host: stri
         classifier: cfg.classifier,
         templates: cfg.templates,
     };
+}
+
+/**
+ * What each of `roles` reads outside the workspace (`agent.read.paths` and its own), one line each, when any role
+ * reads anything there: none, nothing to say.
+ */
+export function readScopeLines(cfg: ResolvedConfig, roles: readonly AgentRole[], home: string = homedir()): string[] {
+    const { read } = cfg.agent;
+    if (!roles.some((r) => read[r].length)) return [];
+    const shown = (p: string): string => {
+        const rel = path.relative(home, p);
+        return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? `~/${toPosix(rel)}` : p;
+    };
+    return roles.map((role) => {
+        const who = role === 'answer' ? 'AI answers read' : 'AI runs read (never write)';
+        return read[role].length ? `${who} outside the workspace: ${read[role].map(shown).join(', ')}` : `${who} the workspace only`;
+    });
 }
 
 /** The roles an agent took on, as the CLI prints them. */

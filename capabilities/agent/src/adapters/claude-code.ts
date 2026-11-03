@@ -7,6 +7,7 @@
 // its PATH (`dt-shim.ts`).
 import { spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
+import * as path from 'node:path';
 import type { AgentInvocation, AgentOutcome, AgentRunner } from '../core/ports.js';
 import { replyJsonSchema } from '@domaintrail/collaboration';
 import { parseReply } from '../core/prompt.js';
@@ -36,6 +37,28 @@ export interface ClaudeRunOptions {
     readonly schema?: Readonly<Record<string, unknown>>;
     /** Paths of the working directory (relative, `/`-separated) the agent may neither read nor edit: e.g. those git ignores. */
     readonly deniedPaths?: readonly string[];
+    /** What the agent may read outside its working directory, never edit (`agent.read.paths`). */
+    readonly extraRead?: ExtraRead;
+}
+
+/**
+ * What an agent may read outside its working directory (`agent.read.paths`), read-only, as real absolute paths: the
+ * directories are added to its working directories (`--add-dir`) and the files allowed one by one (`Read(//…)`); none
+ * of them may be edited (`Edit(//…)` denied), `.git` and `.domaintrail` are denied below each directory at any depth,
+ * and `denied` (what git ignores there, nested repositories, links) is denied as a whole. `note` is appended to the
+ * system prompt (`--append-system-prompt`): where these are and what they stand for.
+ */
+export interface ExtraRead {
+    readonly dirs: readonly string[];
+    readonly files: readonly string[];
+    readonly denied: readonly string[];
+    readonly note?: string;
+}
+
+/** What the runner may read, asked before each run: the workspace's denied paths and what it reads outside it. */
+export interface RunnerReadScope {
+    readonly deniedPaths: readonly string[];
+    readonly extra?: ExtraRead;
 }
 
 /**
@@ -70,6 +93,33 @@ export function deniedRules(paths: readonly string[]): string[] {
         const r = `./${rulePath(p)}`;
         return [`Read(${r})`, `Edit(${r})`, `Read(${r}/**)`, `Edit(${r}/**)`];
     });
+}
+
+/** An absolute path as a permission rule's (`//` + the path, its special characters escaped); none for a relative one. */
+const absoluteRulePath = (p: string): string | undefined =>
+    path.isAbsolute(p) && !/[\0\r\n]/.test(p) ? `/${rulePath(p.split(path.sep).join('/'))}` : undefined;
+
+/**
+ * The permission rules of `extra`: its files allowed for reading; nothing of it edited; `.git` and `.domaintrail`
+ * denied below each directory at any depth (the static `READ_DENIED` are relative to the working directory); each of
+ * `denied` neither read nor edited, nor anything below it. Not absolute (refused): no rule.
+ */
+export function extraReadRules(extra: ExtraRead): { readonly allowed: string[]; readonly denied: string[] } {
+    const abs = (paths: readonly string[]): string[] => paths.map(absoluteRulePath).filter((r): r is string => r !== undefined);
+    const dirs = abs(extra.dirs);
+    const files = abs(extra.files);
+    return {
+        allowed: files.map((f) => `Read(${f})`),
+        denied: [
+            ...dirs.flatMap((d) => [
+                `Edit(${d})`,
+                `Edit(${d}/**)`,
+                ...['.git', '.domaintrail'].flatMap((own) => [`Read(${d}/**/${own}/**)`, `Read(${d}/**/${own})`]),
+            ]),
+            ...files.map((f) => `Edit(${f})`),
+            ...abs(extra.denied).flatMap((x) => [`Read(${x})`, `Read(${x}/**)`]),
+        ],
+    };
 }
 
 /** The tools that read files: inside the working directory Claude Code lets them read without a rule. */
@@ -122,7 +172,9 @@ export function toolNames(rules: readonly string[]): string[] {
 export function claudeArguments(allowedTools: readonly string[], requests?: number, options: ClaudeRunOptions = {}): string[] {
     for (const rule of allowedTools) checkValue('a tool rule', rule);
     const tools = toolNames(allowedTools);
-    const allowed = scopedRules(allowedTools);
+    const extra = options.extraRead && extraReadRules(options.extraRead);
+    const allowed = [...scopedRules(allowedTools), ...(extra?.allowed ?? [])];
+    const addDirs = (options.extraRead?.dirs ?? []).filter((d) => path.isAbsolute(d) && !/[\0\r\n]/.test(d));
     return [
         '--print',
         ...(options.streamInput ? ['--input-format', 'stream-json'] : []),
@@ -136,6 +188,9 @@ export function claudeArguments(allowedTools: readonly string[], requests?: numb
         '',
         '--permission-mode',
         'dontAsk',
+        // what it reads outside the working directory: each flag with its one directory (the option takes several)
+        ...addDirs.flatMap((d) => ['--add-dir', d]),
+        ...(options.extraRead?.note ? ['--append-system-prompt', options.extraRead.note] : []),
         '--tools',
         tools.length ? tools.join(',') : '',
         ...(options.model === undefined ? [] : ['--model', checkValue('a model', options.model)]),
@@ -148,16 +203,17 @@ export function claudeArguments(allowedTools: readonly string[], requests?: numb
         '--disallowedTools',
         ...READ_DENIED,
         ...deniedRules(options.deniedPaths ?? []),
+        ...(extra?.denied ?? []),
         ...(allowed.length ? ['--allowedTools', ...allowed] : []),
     ];
 }
 
 export interface ClaudeCodeOptions {
     /**
-     * The paths of the workspace the agent may neither read nor edit besides `READ_DENIED` (those git ignores), asked
-     * before each run.
+     * What the agent may read, asked before each run: the paths of the workspace it may neither read nor edit besides
+     * `READ_DENIED` (those git ignores), and what it may read outside the workspace (never edit).
      */
-    readonly deniedPaths?: () => Promise<readonly string[]>;
+    readonly readScope?: () => Promise<RunnerReadScope>;
     /** The workspace root: the agent's working directory. */
     readonly root: string;
     /** The program (default `claude` on the PATH); the tests start a fake agent. */
@@ -231,8 +287,11 @@ export async function createClaudeCodeRunner(options: ClaudeCodeOptions): Promis
         run(invocation: AgentInvocation): Promise<AgentOutcome> {
             const { signal } = invocation;
             if (signal.aborted) return Promise.resolve({ exitCode: -1, outcome: 'done', summary: '' });
-            return (options.deniedPaths?.() ?? Promise.resolve([])).then((deniedPaths) => {
-                const args = [...command.args, ...claudeArguments(invocation.allowedTools, invocation.requests, { ...flags, deniedPaths })];
+            return (options.readScope?.() ?? Promise.resolve<RunnerReadScope>({ deniedPaths: [] })).then(({ deniedPaths, extra }) => {
+                const args = [
+                    ...command.args,
+                    ...claudeArguments(invocation.allowedTools, invocation.requests, { ...flags, deniedPaths, ...(extra && { extraRead: extra }) }),
+                ];
                 return shimFor().then((shim) => spawnWithShim(shim, args));
             });
             function spawnWithShim(shim: DtShim | undefined, args: string[]): Promise<AgentOutcome> {

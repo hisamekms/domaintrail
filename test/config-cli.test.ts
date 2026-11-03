@@ -396,3 +396,34 @@ describe('CLI with a local override (domaintrail.local.jsonc)', () => {
         );
     });
 });
+
+describe('CLI with paths the AI reads outside the workspace (agent.read.paths)', () => {
+    test('the startup lines say what each role reads there; a path inside the workspace is an error of the file declaring it', async () => {
+        const base = await project({
+            'ws/domaintrail.jsonc': '{ "agent": { "read": { "paths": ["../specs"] }, "run": { "read": { "paths": ["../tools.md"] } } } }',
+        });
+        const ws = path.join(base, 'ws');
+        await writeFile(path.join(ws, 'domaintrail.local.jsonc'), '{ "agent": { "answer": { "read": { "paths": ["~/nowhere-domaintrail"] } } } }');
+        const both = await run('-r', ws, 'agent', '--code', 'x');
+        expect(both.out.slice(1)).toEqual([
+            `AI answers read outside the workspace: ${path.join(base, 'specs')}, ~/nowhere-domaintrail`,
+            `AI runs read (never write) outside the workspace: ${path.join(base, 'specs')}, ${path.join(base, 'tools.md')}`,
+        ]);
+        const runs = await run('-r', ws, 'agent', '--code', 'x', '--role', 'run');
+        expect(runs.out.slice(1)).toEqual([`AI runs read (never write) outside the workspace: ${path.join(base, 'specs')}, ${path.join(base, 'tools.md')}`]);
+        // a role with nothing outside
+        await writeFile(path.join(ws, 'domaintrail.local.jsonc'), '{ "agent": { "read": { "paths": [] } } }');
+        expect((await run('-r', ws, 'agent', '--code', 'x')).out.slice(1)).toEqual([
+            'AI answers read the workspace only',
+            `AI runs read (never write) outside the workspace: ${path.join(base, 'tools.md')}`,
+        ]);
+        await writeFile(path.join(ws, 'domaintrail.local.jsonc'), '{ "agent": { "read": { "paths": ["docs"] } } }');
+        const inside = await run('-r', ws, 'check');
+        expect(inside.code).toBe(2);
+        expect(inside.err.join('\n')).toContain(`${path.join(ws, 'domaintrail.local.jsonc')}: 'agent.read.paths' names "docs": it is inside the workspace`);
+        // nothing outside: no line
+        await rm(path.join(ws, 'domaintrail.local.jsonc'));
+        await writeFile(path.join(ws, 'domaintrail.jsonc'), '{}');
+        expect((await run('-r', ws, 'agent', '--code', 'x')).out).toHaveLength(1);
+    });
+});

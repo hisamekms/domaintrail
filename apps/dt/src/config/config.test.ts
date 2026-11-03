@@ -59,6 +59,7 @@ const AGENT_DEFAULTS: ResolvedAgentSection = {
     },
     answer: { warm: true, restartAfter: 50, idleTimeout: 30, timeout: 120 },
     triage: { model: 'haiku', warm: false },
+    read: { answer: [], run: [] },
 };
 
 const CLASSIFIER_DEFAULTS = { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.9 } as const;
@@ -152,12 +153,13 @@ describe('config file', () => {
                 },
                 answer: { warm: true, restartAfter: 50, idleTimeout: 30, timeout: 60, model: 'haiku' },
                 triage: { model: 'sonnet', warm: true },
+                read: { answer: [], run: [] },
             },
             classifier: { ...CLASSIFIER_DEFAULTS, enabled: true, accountId: '0123456789abcdef0123456789abcdef' },
             templates: [],
         });
         expect(Object.keys(c.collab)).toEqual(['port', 'host', 'identity', 'access', 'maxParticipants', 'quickReactions']);
-        expect(Object.keys(c.agent)).toEqual(['port', 'run', 'answer', 'triage']);
+        expect(Object.keys(c.agent)).toEqual(['port', 'run', 'answer', 'triage', 'read']);
     });
 
     test.each([

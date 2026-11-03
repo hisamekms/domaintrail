@@ -96,6 +96,24 @@ describe("the answerer role's Claude Code", () => {
         expect(JSON.parse(valueOf(a.args, '--json-schema') ?? '{}')).toEqual(answererJsonSchema());
     });
 
+    test('what it reads outside the workspace: its views added as working directories, the note appended; never for the triage', async () => {
+        const answer = { kind: 'answer', answer: 'ok' };
+        const verdict = { kind: 'consultation', confidence: 0.9, reason: 'a question' };
+        const extraRead = { dirs: ['/tmp/views/specs', '/tmp/views/notes'], files: [], denied: [], note: 'copies of ../specs and ~/notes/a.md' };
+        const { agent, logged } = await setup([{ reply: verdict }, { reply: answer }], { extraRead });
+        await agent.triage(turn('t'));
+        await agent.answer(turn('a'));
+        const [t, a] = logged();
+        expect(t.args).not.toContain('--add-dir');
+        expect(t.args).not.toContain('--append-system-prompt');
+        expect(a.args.filter((_, i) => a.args[i - 1] === '--add-dir')).toEqual(['/tmp/views/specs', '/tmp/views/notes']);
+        expect(valueOf(a.args, '--append-system-prompt')).toBe('copies of ../specs and ~/notes/a.md');
+        // still no allow rule: reading in a working directory needs none, and nothing of them may be edited
+        expect(a.args).not.toContain('--allowedTools');
+        expect(a.args).toContain('Edit(//tmp/views/specs/**)');
+        expect(valueOf(a.args, '--tools')).toBe('Read,Grep,Glob');
+    });
+
     test('not warm: a process per answer; a warm triage when asked; an error result is an error, the process stays', async () => {
         const answer = { kind: 'neither' };
         const cold = await setup([{ reply: answer }, { reply: answer }], { answer: { warm: false } });

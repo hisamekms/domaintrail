@@ -138,6 +138,8 @@ export interface AgentOptions {
     triage?: TriageConfig;
     /** The ways of working the agent's prompts give: the guide's `storming-practice` and `modeling-practice`. */
     practice?: Practice;
+    /** What each role may read outside the workspace, read-only (`agent.read.paths` and its own; absolute paths). */
+    read?: { readonly answer: readonly string[]; readonly run: readonly string[] };
     log: (line: string) => void;
 }
 

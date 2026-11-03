@@ -1,0 +1,99 @@
+// What the AI may read outside the workspace (`agent.read.paths` for both roles, `agent.answer.read.paths` and
+// `agent.run.read.paths` for one; the maintainer's decision of 2026-11-03): directories or files, read-only. The
+// configuration's check (`checkReadPaths`, after the pure validation): a path inside the workspace, one holding it, or
+// one in a `.git` or `.domaintrail` directory is an error, symbolic links followed (an extra path never re-admits what
+// the workspace's rules keep out). When the agent starts (`readTargets`), each path is taken by its real path and
+// checked again; one that is missing (or became one of the above) is skipped and said. What is readable inside them
+// (the files git does not ignore there, else every file; never `.git` nor `.domaintrail`) is the wiring's: views for
+// the answerer, deny rules for the runner (`ExtraRead`, ./claude-code.ts).
+import { realpathSync, statSync } from 'node:fs';
+import * as path from 'node:path';
+import { type AgentConfigFile, resolveReadPath } from './config.js';
+import { inside } from './dt-shim.js';
+import { foldedName } from './workspace-view.js';
+
+/** A path the AI reads outside the workspace, as it really is when the agent starts. */
+export interface ReadTarget {
+    /** As configured (resolved: absolute). */
+    readonly configured: string;
+    /** Its real path (symbolic links followed). */
+    readonly real: string;
+    readonly directory: boolean;
+}
+
+/** Whether a part of `p` is `.git` or `.domaintrail`, in any case or Unicode form. */
+const ownPart = (p: string): boolean => p.split(/[\\/]/).some((s) => foldedName(s) === '.git' || foldedName(s) === '.domaintrail');
+
+/** The real path of `p`, or `p` when it does not exist. */
+const realOr = (p: string): string => {
+    try {
+        return realpathSync(p);
+    } catch {
+        return p;
+    }
+};
+
+/** Why the AI may not read `p` (absolute) beside the workspace `workspace`, if it may not; links followed. */
+export function readPathError(p: string, workspace: string): string | undefined {
+    if (inside(workspace, p)) return 'it is inside the workspace, which the AI reads already (what git ignores there stays out)';
+    if (inside(p, workspace)) return 'it holds the workspace: name the directories or files beside it instead';
+    if (ownPart(p) || ownPart(realOr(p))) return 'it is in a .git or .domaintrail directory, which the AI never reads';
+    return undefined;
+}
+
+/** The `read` parts of `agent`, by where they sit. */
+const readParts = (agent: AgentConfigFile | undefined): [string, readonly string[] | undefined][] => [
+    ['agent.read.paths', agent?.read?.paths],
+    ['agent.answer.read.paths', agent?.answer?.read?.paths],
+    ['agent.run.read.paths', agent?.run?.read?.paths],
+];
+
+/**
+ * Refuses a configured read path (as written, `dir` the config file's directory: the workspace) that lies inside the
+ * workspace, holds it, or is in a `.git` or `.domaintrail` directory. A path that does not exist is not refused here:
+ * the agent skips it when it starts, and says so.
+ */
+export function checkReadPaths(agent: AgentConfigFile | undefined, dir: string, fail: (msg: string) => never): void {
+    for (const [at, paths] of readParts(agent)) {
+        for (const p of paths ?? []) {
+            const why = readPathError(resolveReadPath(p, dir), dir);
+            if (why) fail(`'${at}' names ${JSON.stringify(p)}: ${why}`);
+        }
+    }
+}
+
+/**
+ * The paths (resolved) as the agent reads them when it starts: by their real paths, each once, a directory or a
+ * regular file; `skipped` says why the others are not read (missing, or refused by `readPathError` since the check).
+ */
+export function readTargets(paths: readonly string[], workspace: string): { readonly targets: ReadTarget[]; readonly skipped: string[] } {
+    const targets: ReadTarget[] = [];
+    const skipped: string[] = [];
+    for (const configured of paths) {
+        let real: string;
+        try {
+            real = realpathSync(configured);
+        } catch {
+            skipped.push(`${configured} (not found)`);
+            continue;
+        }
+        const why = readPathError(real, workspace);
+        if (why) {
+            skipped.push(`${configured} (${why})`);
+            continue;
+        }
+        const s = statSync(real, { throwIfNoEntry: false });
+        if (!s?.isDirectory() && !s?.isFile()) {
+            skipped.push(`${configured} (not a directory or a regular file)`);
+            continue;
+        }
+        if (!targets.some((t) => t.real === real)) targets.push({ configured, real, directory: s.isDirectory() });
+    }
+    return { targets, skipped };
+}
+
+/** A path for people: `~/…` below the home directory `home`. */
+export function shownReadPath(p: string, home: string): string {
+    const rel = path.relative(home, p);
+    return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? `~/${rel.split(path.sep).join('/')}` : p;
+}

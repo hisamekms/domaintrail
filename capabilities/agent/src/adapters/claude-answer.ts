@@ -13,14 +13,15 @@
 //   `idleTimeoutMs` without a turn.
 //
 // The working directory (`root`) is the answerer's view of the workspace (`workspace-view.ts`: the files git does not
-// ignore, without `.domaintrail/` and `.git/`), brought up to date before each turn (`prepare`). A warm process that misbehaves falls back to a fresh process for the turn, and for good after repeated failures, as
+// ignore, without `.domaintrail/` and `.git/`), brought up to date before each turn (`prepare`); what it reads outside
+// the workspace (`agent.read.paths`) are views of their own, added to its working directories (`extraRead`). A warm process that misbehaves falls back to a fresh process for the turn, and for good after repeated failures, as
 // the runner does (`warm-claude.ts`). The model that answered is read from the process's `init` event. Neither a prompt
 // nor the agent's output is logged.
 import { spawn } from 'node:child_process';
 import { answererJsonSchema, interviewerJsonSchema, triageJsonSchema } from '@domaintrail/collaboration';
 import type { AnswerAgent, AnswerTurn, AnswerTurnResult } from '../core/ports.js';
 import { type ClaudeResult, createStreamReader } from './claude-stream.js';
-import { type AgentCommand, CLAUDE, claudeArguments, KILL_GRACE_MS, killTree } from './claude-code.js';
+import { type AgentCommand, CLAUDE, claudeArguments, type ExtraRead, KILL_GRACE_MS, killTree } from './claude-code.js';
 import { DEFAULT_ANSWER_RESTART_AFTER, DEFAULT_TRIAGE_MODEL } from './config.js';
 import { createWarmClaude, type WarmClaude, type WarmClaudeOptions } from './warm-claude.js';
 
@@ -33,6 +34,8 @@ export interface ClaudeAnswererOptions extends Pick<
 > {
     /** The agent's working directory: the answerer's view of the workspace (all it can read). */
     readonly root: string;
+    /** The views of what it may read outside the workspace (`--add-dir`), for answers, proposals and interviews. */
+    readonly extraRead?: ExtraRead;
     /** Called before each turn: brings the view up to date. A failure fails the turn. */
     readonly prepare?: () => Promise<void>;
     /** The program (default `claude` on the PATH); the tests start a fake agent. */
@@ -56,13 +59,21 @@ export interface ClaudeAnswererOptions extends Pick<
     };
 }
 
+/** The settings of an answer, proposal or interview turn. */
+interface ReadingTurnOptions {
+    readonly model?: string;
+    readonly effort?: string;
+    readonly streamInput?: boolean;
+    readonly extraRead?: ExtraRead;
+}
+
 /** The arguments of an answer or proposal turn: the reading tools only, the answerer's schema. */
-export function answererArguments(options: { readonly model?: string; readonly effort?: string; readonly streamInput?: boolean } = {}): string[] {
+export function answererArguments(options: ReadingTurnOptions = {}): string[] {
     return claudeArguments(ANSWERER_TOOLS, undefined, { ...options, schema: answererJsonSchema() });
 }
 
 /** The arguments of an interview's turn: the reading tools only, the interviewer's schema. */
-export function interviewerArguments(options: { readonly model?: string; readonly effort?: string; readonly streamInput?: boolean } = {}): string[] {
+export function interviewerArguments(options: ReadingTurnOptions = {}): string[] {
     return claudeArguments(ANSWERER_TOOLS, undefined, { ...options, schema: interviewerJsonSchema() });
 }
 
@@ -137,7 +148,11 @@ export function createClaudeAnswerer(options: ClaudeAnswererOptions): AnswerAgen
     const command = options.command ?? CLAUDE;
     const answer = options.answer ?? {};
     const triage = options.triage ?? {};
-    const answerFlags = { ...(answer.model !== undefined && { model: answer.model }), ...(answer.effort !== undefined && { effort: answer.effort }) };
+    const answerFlags = {
+        ...(answer.model !== undefined && { model: answer.model }),
+        ...(answer.effort !== undefined && { effort: answer.effort }),
+        ...(options.extraRead && { extraRead: options.extraRead }),
+    };
     const triageModel = triage.model ?? DEFAULT_TRIAGE_MODEL;
     const shared = {
         root: options.root,

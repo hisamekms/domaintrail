@@ -1,0 +1,129 @@
+// What the AI reads outside the workspace (`agent.read.paths`): the configuration's check (inside the workspace, holding
+// it, in `.git` or `.domaintrail`: links followed), the paths as the agent takes them when it starts, and the arguments
+// of `claude` that enforce them (the directories added, the files allowed one by one, nothing of them edited, `.git` and
+// `.domaintrail` denied below them, what is denied there denied as a whole). As wired with git:
+// apps/dt/src/wiring/read-scope.test.ts.
+import { afterEach, describe, expect, test } from 'bun:test';
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
+import { claudeArguments, extraReadRules, READ_DENIED } from './claude-code.js';
+import { checkReadPaths, readTargets, shownReadPath } from './read-paths.js';
+
+const dirs: string[] = [];
+afterEach(async () => {
+    for (const d of dirs.splice(0)) await rm(d, { recursive: true, force: true });
+});
+
+/** A scratch directory holding `ws/` (the workspace), `specs/notes.md` and `glossary.md` beside it, by its real path. */
+async function scratch(): Promise<string> {
+    const d = await realpath(await mkdtemp(path.join(tmpdir(), 'domaintrail-read-paths-')));
+    dirs.push(d);
+    await mkdir(path.join(d, 'ws', 'docs'), { recursive: true });
+    await mkdir(path.join(d, 'specs'), { recursive: true });
+    await writeFile(path.join(d, 'specs', 'notes.md'), 'n');
+    await writeFile(path.join(d, 'glossary.md'), 'g');
+    return d;
+}
+
+const refusal = (agent: Parameters<typeof checkReadPaths>[0], dir: string): string | undefined => {
+    try {
+        checkReadPaths(agent, dir, (msg) => {
+            throw new Error(msg);
+        });
+        return undefined;
+    } catch (e) {
+        return e instanceof Error ? e.message : String(e);
+    }
+};
+
+describe('the configuration: what may be read outside the workspace', () => {
+    test('beside the workspace, a directory or a file, existing or not: accepted', async () => {
+        const d = await scratch();
+        const ws = path.join(d, 'ws');
+        expect(
+            refusal({ read: { paths: ['../specs', '../glossary.md', '../missing'] }, run: { read: { paths: [path.join(d, 'specs')] } } }, ws),
+        ).toBeUndefined();
+    });
+
+    test('inside the workspace, holding it, or in .git / .domaintrail (any case), links followed: refused, naming the key', async () => {
+        const d = await scratch();
+        const ws = path.join(d, 'ws');
+        await mkdir(path.join(d, 'other', '.Git'), { recursive: true });
+        await symlink(path.join(ws, 'docs'), path.join(d, 'docs-link'));
+        await symlink(d, path.join(d, 'up-link'));
+        expect(refusal({ read: { paths: ['docs'] } }, ws)).toBe(
+            `'agent.read.paths' names "docs": it is inside the workspace, which the AI reads already (what git ignores there stays out)`,
+        );
+        expect(refusal({ answer: { read: { paths: ['.'] } } }, ws)).toStartWith(`'agent.answer.read.paths' names ".": it is inside the workspace`);
+        expect(refusal({ run: { read: { paths: ['..'] } } }, ws)).toBe(
+            `'agent.run.read.paths' names "..": it holds the workspace: name the directories or files beside it instead`,
+        );
+        // a link: by what it is
+        expect(refusal({ read: { paths: ['../docs-link'] } }, ws)).toContain('inside the workspace');
+        expect(refusal({ read: { paths: ['../up-link'] } }, ws)).toContain('holds the workspace');
+        expect(refusal({ read: { paths: ['../other/.Git'] } }, ws)).toContain('in a .git or .domaintrail directory');
+        expect(refusal({ read: { paths: ['../other/.domaintrail/x'] } }, ws)).toContain('in a .git or .domaintrail directory');
+    });
+});
+
+describe('the paths when the agent starts', () => {
+    test('by their real paths, each once; a missing one, or one now inside the workspace, skipped and said', async () => {
+        const d = await scratch();
+        const ws = path.join(d, 'ws');
+        await symlink(path.join(d, 'specs'), path.join(d, 'specs-link'));
+        await symlink(path.join(ws, 'docs'), path.join(d, 'docs-link'));
+        const { targets, skipped } = readTargets(
+            [path.join(d, 'specs'), path.join(d, 'specs-link'), path.join(d, 'glossary.md'), path.join(d, 'missing'), path.join(d, 'docs-link')],
+            ws,
+        );
+        expect(targets).toEqual([
+            { configured: path.join(d, 'specs'), real: path.join(d, 'specs'), directory: true },
+            { configured: path.join(d, 'glossary.md'), real: path.join(d, 'glossary.md'), directory: false },
+        ]);
+        expect(skipped).toEqual([
+            `${path.join(d, 'missing')} (not found)`,
+            `${path.join(d, 'docs-link')} (it is inside the workspace, which the AI reads already (what git ignores there stays out))`,
+        ]);
+        expect(shownReadPath('/home/me/notes/a.md', '/home/me')).toBe('~/notes/a.md');
+        expect(shownReadPath('/srv/specs', '/home/me')).toBe('/srv/specs');
+    });
+});
+
+describe('the arguments of claude for what it reads outside its working directory', () => {
+    const extra = { dirs: ['/srv/specs'], files: ['/home/me/glossary.md'], denied: ['/srv/specs/.env', '/srv/specs/vendor[1]'], note: 'read-only' };
+
+    test('the directories added, the files allowed one by one, nothing of them edited, .git / .domaintrail and the denied entries denied', () => {
+        expect(extraReadRules(extra)).toEqual({
+            allowed: ['Read(//home/me/glossary.md)'],
+            denied: [
+                'Edit(//srv/specs)',
+                'Edit(//srv/specs/**)',
+                'Read(//srv/specs/**/.git/**)',
+                'Read(//srv/specs/**/.git)',
+                'Read(//srv/specs/**/.domaintrail/**)',
+                'Read(//srv/specs/**/.domaintrail)',
+                'Edit(//home/me/glossary.md)',
+                'Read(//srv/specs/.env)',
+                'Read(//srv/specs/.env/**)',
+                'Read(//srv/specs/vendor\\[1\\])',
+                'Read(//srv/specs/vendor\\[1\\]/**)',
+            ],
+        });
+        // a relative path is no rule
+        expect(extraReadRules({ dirs: ['specs'], files: ['a.md'], denied: ['x'] })).toEqual({ allowed: [], denied: [] });
+    });
+
+    test("the runner's: its own tools and rules kept, edits scoped to the working directory, the extra rules after", () => {
+        const args = claudeArguments(['Read', 'Edit', 'Bash(dt fmt:*)'], 1, { deniedPaths: ['dist'], extraRead: extra });
+        expect(args.filter((_, i) => args[i - 1] === '--add-dir')).toEqual(['/srv/specs']);
+        expect(args[args.indexOf('--append-system-prompt') + 1]).toBe('read-only');
+        const denied = args.slice(args.indexOf('--disallowedTools') + 1, args.indexOf('--allowedTools'));
+        expect(denied).toEqual([...READ_DENIED, 'Read(./dist)', 'Edit(./dist)', 'Read(./dist/**)', 'Edit(./dist/**)', ...extraReadRules(extra).denied]);
+        expect(args.slice(args.indexOf('--allowedTools') + 1)).toEqual(['Edit(./**)', 'Bash(dt fmt:*)', 'Read(//home/me/glossary.md)']);
+        // without: no flag of it
+        const none = claudeArguments(['Read'], 1, {});
+        expect(none).not.toContain('--add-dir');
+        expect(none).not.toContain('--append-system-prompt');
+    });
+});
