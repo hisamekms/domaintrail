@@ -646,6 +646,38 @@ The merge of M4 (the triage and the answers) and M5 (the commands and the config
   alternative still use the runs route (as the page does until M6). A participant's reply the classifier reads as a
   request gets a proposal job the seed's answerer does not make: the server gives it up after two attempts.
 
+### As built: proposals as targets and options
+
+The maintainer's second design of the change proposal (2026-11-03; it replaces M2's `{ what, where, how }`):
+
+- **Shape** (`proposal.dt`, `domain/proposals.ts`): `ProposalContent { targets: ModelTarget[0..50], how, options:
+  ProposalOption[0..3] }` — the targets are model elements (`.dt` or `.dtes`), the how one or two lines
+  (`PROPOSAL_LIMITS.how` 300; the facilitator's edit up to 2000); an option is `{ label (60), targets, how?,
+  recommended }`, none or two to three of them, exactly one recommended. No file names or paths anywhere.
+- **The AI's output** (`ProposalData`, `readProposal`): targets as element references (`@{Sales.Order}`,
+  `@{es:Returns/ReturnRequested}`). Clamped rather than refused: a malformed reference (a path, a file, whitespace)
+  is dropped, a well-formed one that names nothing is kept (a proposal may add it; the page shows it unlinked),
+  duplicates and those past 50 dropped; past three options the recommended one and the first others are kept; none
+  recommended → the first, several → the first marked; a single option is no choice and becomes the proposal. Text
+  past its limit is still refused. The answerer sends the proposal as it read it, and the server reads it again.
+- **Approval**: `approve(option?, editedHow?)` (`NoSuchOption` unless an option of a proposal with options, none of
+  one without); the route takes `{ proposal, option?, how? }` and the recommended option when none is given. The run's
+  input freezes `ApprovedProposal { proposal, request, instruction: { label?, targets, how } }` — the chosen option's
+  label, its targets (the proposal's when it has none) and the edited how, else the option's, else the proposal's; the
+  runner's prompt shows it as `{ request, chosenOption?, targets, how }` (rule 12). The run card and the facilitator's
+  仕分けの記録 show the chosen option (選んだ案).
+- **Prompts**: the answerer is told to name the elements as references, write how in one or two short lines, never a
+  file, never alternatives in prose, and give options only when genuinely unsure (two or three, one recommended).
+- **Former proposals** (`legacy.ts`): a proposal, its `ChangeProposed`, an approval's `edited` (→ `editedHow`) and an
+  approved proposal in a run's input (`content` → `instruction`) written as three texts are read with no targets, no
+  options and the three texts joined, a line each, as the how.
+- **The card** (`proposal.tsx`, `proposal-view.ts`): the targets as chips (`#注文` 集約・販売, a link; the first three,
+  then 「ほか n」), then the how, no field labels. With options: the how, then one row per option (label, AI の勧め on
+  the recommended one, its chips, its own how); the facilitator picks with a radio (the recommendation chosen first)
+  and has one 承認 / 編集 (the chosen option's how) / 却下; everyone else sees the options read-only with
+  「ファシリテーターの承認待ち」, and the requester 取り下げ. Approving several together takes each card's pick. Solo is
+  unchanged (no proposals).
+
 ## The page
 
 - **Mode**: in solo the collab menu, invite, hand-over, leave, participants and reactions-of-others are hidden; the chat
@@ -656,7 +688,8 @@ The merge of M4 (the triage and the answers) and M5 (the commands and the config
 - **Messages**: an addressed message shows its triage's progress (仕分け中 → 回答中 / 承認待ち / 待機中 / —); the
   facilitator has 「AI に送る」 on every message not yet addressed, and 「仕分けの記録」 on addressed ones.
 - **Answers**: the AI's reply bubble under the message, its text with element links; replying to it addresses the AI.
-- **Proposals**: a card under the message (what / where / how); for the facilitator 承認, 編集して承認, 却下, and
+- **Proposals**: a card under the message (the target elements, how in a line or two, and options when the AI was
+  unsure: see "As built: proposals as targets and options"); for the facilitator 承認, 編集して承認, 却下, and
   selection for 「まとめて承認」; for the author 取り下げ.
 - **Runs**: the cards of `feat/collab-card` (its names 中止 / 打ち消し / 復元); a run that answered instead of editing
   is a reply bubble; a run whose request is `answered` but which changed files is flagged
