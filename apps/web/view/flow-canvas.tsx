@@ -92,7 +92,8 @@ const LAYER = { context: 0, boundary: 1, node: 2, ghost: 3, internal: 4, edge: 5
 
 function layerOf(item: SceneItem): number {
     if (item.ghost) return LAYER.ghost;
-    if (item.type === 'group') return item.props.kind === 'aggregateBoundary' ? LAYER.boundary : LAYER.context;
+    // an aggregate's boundary in its context's frame, a timeline's group in its stage's frame: above the frame
+    if (item.type === 'group') return item.props.kind === 'aggregateBoundary' || item.props.kind === 'esGroup' ? LAYER.boundary : LAYER.context;
     return LAYER[item.type];
 }
 

@@ -42,6 +42,8 @@ export function legendRows(view: LegendView, words: Messages['legendRows']): rea
             return [
                 { kind: 'esCausal', text: words.esCausal },
                 { kind: 'esSequence', text: words.esSequence },
+                { kind: 'esException', text: words.esException },
+                { kind: 'esRejoin', text: words.esRejoin },
                 { kind: 'esRelated', text: words.esRelated },
                 { kind: 'esHotspot', text: words.esHotspot },
             ];
@@ -52,8 +54,8 @@ export function legendRows(view: LegendView, words: Messages['legendRows']): rea
 
 /**
  * The storming's kinds in the legend's key, in the convention's order: the core notes (event orange, command blue,
- * policy purple, aggregate yellow, read model green, hotspot red), then the actor, the external system and a
- * timeline's group. A timeline itself is its arrows (the rows above).
+ * policy purple, aggregate yellow, read model green, hotspot red), then the actor, the external system, a
+ * timeline's group and a stage's frame. A timeline itself is its arrows (the rows above).
  */
 export const STORMING_LEGEND_KINDS: readonly StormingElementKind[] = [
     'event',
@@ -65,6 +67,7 @@ export const STORMING_LEGEND_KINDS: readonly StormingElementKind[] = [
     'actor',
     'external',
     'group',
+    'stage',
 ];
 
 /**
