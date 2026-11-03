@@ -124,12 +124,37 @@ export {
 } from './domain/answers.js';
 export { chatWindow, sessionSoFar, TIMELINE_LIMITS, timelineEntries, type SessionSoFar, type TimelineEntry, type TimelineRecords } from './domain/timeline.js';
 export { sessionOpening, type SessionOpening } from './domain/modes.js';
+// the `/` commands' interviews and the message templates (the plan's round 4 and round 5)
+export {
+    awaitedMessage,
+    briefData,
+    briefLines,
+    briefText,
+    commandId,
+    interviewerJsonSchema,
+    interviewMessages,
+    INTERVIEW_COMMANDS,
+    INTERVIEW_LIMITS,
+    isRunning,
+    readBrief,
+    readBriefText,
+    readInterviewerReply,
+    runningInterview,
+    UI_LANGUAGES,
+    type BriefData,
+    type BriefLine,
+    type InterviewCommandId,
+    type InterviewerReply,
+    type InterviewProblem,
+} from './domain/interviews.js';
+export { checkTemplates, TEMPLATE_CONTEXTS, TEMPLATE_LIMITS, type MessageTemplateConfig, type TemplateContext } from './domain/templates.js';
 export { readToolOutcome, succeeded } from './domain/validation.js';
 // the IDs from values known to be UUIDs (the ID generator's, input already checked); the generated constructors check
 export {
     knownAgentRunId,
     knownAssumptionApprovalId,
     knownChangeProposalId,
+    knownInterviewId,
     knownMarkId,
     knownRequestId,
     knownRevisionId,
@@ -163,6 +188,7 @@ export {
     type TriageProgress,
     type TriageStepInput,
 } from './application/conversation.js';
+export { type InterviewJob, type InterviewStarted as InterviewStartedResult, type InterviewUseCases } from './application/interviews.js';
 export { actorOf, type Actor } from './application/actor.js';
 export { createSessionAccess, secretHash, type LinkInvalid, type SessionAccess } from './application/access.js';
 export {
@@ -188,6 +214,7 @@ export {
     validateCollaborationConfig,
     validateIdentityConfig,
     validatePreviousRunsConfig,
+    validateTemplatesConfig,
     type ClassifierConfigFile,
     type ClefModel,
     type CollabConfigFile,

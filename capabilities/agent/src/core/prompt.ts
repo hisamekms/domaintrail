@@ -361,6 +361,7 @@ export function buildPrompt(
         ...(previousRuns.length > 0 && { previousRuns: previousRuns.map((p, i) => previousRunOf(p, i + 1, names)) }),
         ...(revert.length > 0 && { revert: revert.map((u, i) => revertedRunOf(u, i + 1, names)) }),
         ...(input.proposals && { approvedProposals: approvedProposalsOf(input, input.proposals) }),
+        ...(input.brief && { confirmedBrief: confirmedBriefOf(input.brief) }),
         ...(context.changedSinceYourLastRun && { changedSinceYourLastRun: changedList(context.changedSinceYourLastRun) }),
         ...(context.sessionSoFar !== undefined && { sessionSoFar: context.sessionSoFar }),
     };
@@ -431,6 +432,12 @@ Rules:
 15. \`level design\` is the last clause of a \`.dtes\` event's body and shows the event at Design Level only; removing
    it shows the event at Big Picture too. There is no other level (\`level big-picture\` is an error, S016). Never put
    it on a business event of the Big Picture.
+16. \`confirmedBrief\`, when present: the person who ran an interview (\`/es\` or \`/model\`) confirmed this brief; it,
+   not the request, is what to do. Write its \`lines\` as they are, one \`///\` line each, as the description directly
+   above \`storming <name>\` (\`for: "storming"\`, a \`.dtes\` file) or \`context <name>\` (\`for: "context"\`, a \`.dt\`
+   file). When \`create\` is true it does not exist yet: create it with the brief and its \`label\` and nothing else (a
+   new file named after it, beside the other stormings or contexts). Replace an existing description only when
+   \`replaceExistingDescription\` is true; else keep it and add the brief's lines below it. Change nothing else.
 
 ${practiceSection(practice)}${replyDescription()}
 
@@ -438,6 +445,18 @@ ${practiceSection(practice)}${replyDescription()}
 ${blockJson(data)}
 </requests-${nonce}>
 `;
+}
+
+/** A confirmed brief as the run's data shows it (rule 16). */
+function confirmedBriefOf(b: Json<Collaboration.BriefInstruction>): Record<string, unknown> {
+    return {
+        for: b.command === 'Es' ? 'storming' : 'context',
+        name: b.brief.name,
+        ...(b.brief.label !== undefined && { label: b.brief.label }),
+        create: b.brief.isNew,
+        replaceExistingDescription: b.brief.replaces,
+        lines: b.brief.text.split('\n').filter((l) => l.trim() !== ''),
+    };
 }
 
 /** What the agent replied, as far as it could be read. */

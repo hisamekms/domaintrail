@@ -4,6 +4,7 @@
 //   triage  → stage 3: the light model with no tools → { kind, confidence, reason } (or why it failed)
 //   answer  → the read-only agent → an answer, or "a request after all" with a proposal, or "neither"
 //   propose → the read-only agent → the change proposal for a participant's 依頼
+//   interview → the read-only agent (the interviewer) → the next question of a `/es` or `/model` interview, or its brief
 //
 // No claim, no lease, no revision, no `dt fmt` / `dt check`: an answer changes nothing to record, and the read-only
 // guarantee is the agent's tools (its adapter), not this code. A job withdrawn by the server (it timed out there, or is
@@ -12,9 +13,9 @@
 // since its previous job ended (`changedSinceYourLastAnswer`). A restored revision makes the agent forget. The output is
 // validated here before it is sent (the server validates it again). Functions over the ports only; the log has job
 // kinds and IDs, never a message's text or an answer.
-import { proposalData, readAnswererReply, readTriageAnswer, TRIAGE_KINDS } from '@domaintrail/collaboration';
-import type { AgentAnswerJobBody } from '@domaintrail/collaboration/protocol';
-import { buildAnswerPrompt, buildProposePrompt, buildTriagePrompt } from './answer-prompt.js';
+import { briefData, proposalData, readAnswererReply, readInterviewerReply, readTriageAnswer, TRIAGE_KINDS } from '@domaintrail/collaboration';
+import type { AgentAnswerStreamJob, AgentInterviewJobBody } from '@domaintrail/collaboration/protocol';
+import { buildAnswerPrompt, buildInterviewPrompt, buildProposePrompt, buildTriagePrompt } from './answer-prompt.js';
 import { AgentApiError, type AgentApi, type AnswerAgent, type AnswerTurnResult, type Clock, type WorkspaceFiles } from './ports.js';
 import { changedPaths } from './subscriber.js';
 import type { Practice } from './prompt.js';
@@ -75,7 +76,7 @@ export function startAnswerer(deps: AnswererDeps, options: AnswererOptions = {})
     let end: AnswererEnd | undefined;
     let resolveDone: (end: AnswererEnd) => void = () => {};
     const done = new Promise<AnswererEnd>((resolve) => (resolveDone = resolve));
-    const queue: AgentAnswerJobBody[] = [];
+    const queue: AgentAnswerStreamJob[] = [];
     let current: { readonly job: string; readonly withdrawn: AbortController } | undefined;
     let wakeWorker: () => void = () => {};
     /** The workspace as the read-only agent's previous answer or proposal left it. */
@@ -88,9 +89,22 @@ export function startAnswerer(deps: AnswererDeps, options: AnswererOptions = {})
         wakeWorker();
     };
 
+    /** An interview's turn: the interviewer's question or brief, as the server takes it (`AgentInterviewResultBody`). */
+    const interviewResultOf = async (job: AgentInterviewJobBody, signal: AbortSignal, started: number): Promise<Record<string, unknown>> => {
+        const elapsed = (): number => Math.max(0, Math.round(now() - started));
+        const result = await deps.agent.interview({ prompt: buildInterviewPrompt(job, deps.nonce(), practice ?? {}), signal });
+        const meta = { ...(result.model && { model: result.model }), durationMs: elapsed() };
+        if (result.error !== undefined) return { error: result.error, ...meta };
+        const read = readInterviewerReply(outputOf(result));
+        if (!read.ok) return { error: `invalid output (${read.error.path})`, ...meta };
+        const reply = read.value;
+        return reply.kind === 'question' ? { kind: 'question', question: reply.question, ...meta } : { kind: 'brief', brief: briefData(reply.brief), ...meta };
+    };
+
     /** The result of a job as the server takes it (`AgentTriageResultBody`, `AgentAnswerResultBody`, `AgentProposeResultBody`). */
-    const resultOf = async (job: AgentAnswerJobBody, signal: AbortSignal): Promise<Record<string, unknown>> => {
+    const resultOf = async (job: AgentAnswerStreamJob, signal: AbortSignal): Promise<Record<string, unknown>> => {
         const started = now();
+        if (job.kind === 'interview') return interviewResultOf(job, signal, started);
         const elapsed = (): number => Math.max(0, Math.round(now() - started));
         const failed = (error: string, model?: string): Record<string, unknown> => ({ error, durationMs: elapsed(), ...(model && { model }) });
         if (job.kind === 'triage') {
@@ -134,13 +148,13 @@ export function startAnswerer(deps: AnswererDeps, options: AnswererOptions = {})
         return { ...reply, ...(reply.kind === 'answer' && job.readRevision && { readRevision: job.readRevision }), ...meta };
     };
 
-    const handle = async (job: AgentAnswerJobBody): Promise<void> => {
+    const handle = async (job: AgentAnswerStreamJob): Promise<void> => {
         const withdrawn = new AbortController();
         current = { job: job.job, withdrawn };
         const limit = Math.max(1, Math.min(job.timeoutMs, options.timeoutMs ?? Number.POSITIVE_INFINITY));
         const timeout = AbortSignal.timeout(limit);
         const signal = AbortSignal.any([withdrawn.signal, stopping.signal, timeout]);
-        log(`answer job ${job.job}: ${job.kind} of triage ${job.triage.id}`);
+        log(`answer job ${job.job}: ${job.kind} of ${job.kind === 'interview' ? `interview ${job.interview.id}` : `triage ${job.triage.id}`}`);
         try {
             let result: Record<string, unknown>;
             try {

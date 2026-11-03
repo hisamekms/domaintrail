@@ -4,7 +4,7 @@
 // and never logged.
 import {
     AGENT_ANSWER_EVENT_TYPES,
-    type AgentAnswerJobBody,
+    type AgentAnswerStreamJob,
     type AgentClaimed,
     type AgentLease,
     type AgentParticipantsBody,
@@ -147,7 +147,7 @@ export function createHttpAgentApi(options: HttpAgentApiOptions): AgentApi {
                     case AGENT_ANSWER_EVENT_TYPES.job:
                         if (!isObject(data) || typeof data.job !== 'string' || typeof data.kind !== 'string') throw new Error('An answer job without its ID');
                         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- a job as the server encodes it (protocol.ts), checked for its ID and kind above
-                        yield { kind: 'job', job: data as unknown as AgentAnswerJobBody };
+                        yield { kind: 'job', job: data as unknown as AgentAnswerStreamJob };
                         break;
                     case AGENT_ANSWER_EVENT_TYPES.withdrawn:
                         if (isObject(data) && typeof data.job === 'string') yield { kind: 'withdrawn', job: data.job };

@@ -65,8 +65,9 @@ describe('a view with nothing yet', () => {
         expect(canvasShows('catalog', false, false)).toBe('covered');
     });
 
-    test('its one line says the chat can make it only while an AI is connected', () => {
-        expect(emptyLine(MESSAGES.ja, true)).toBe('まだありません。チャットで頼むと AI が作ります');
+    test('its one line points to /es in the chat only while an AI is connected', () => {
+        expect(emptyLine(MESSAGES.ja, true)).toBe('まだありません。チャットで /es から始められます');
+        expect(emptyLine(MESSAGES.en, true)).toBe('Nothing yet. Start with /es in the chat');
         expect(emptyLine(MESSAGES.ja, false)).toBe('まだありません');
     });
 });

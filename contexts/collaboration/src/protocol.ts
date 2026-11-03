@@ -8,8 +8,9 @@ import type { PreviousRunChanges } from './domain/previous-runs.js';
 import type { RevertChanges, RevertFile } from './domain/revert.js';
 import type { Collaboration } from './generated/index.js';
 import type { RunActivity, RunActivityPhase } from './domain/activity.js';
+import type { TemplateContext } from './domain/templates.js';
 
-export type { RunActivity, RunActivityPhase, RevertChanges, RevertFile };
+export type { RunActivity, RunActivityPhase, RevertChanges, RevertFile, TemplateContext };
 
 /** A branded string or number of the generated code as plain JSON: the brand is a promise checked on the server. */
 type Unbranded<T> = T extends string & { readonly __domain: string } ? string : T extends number & { readonly __domain: string } ? number : T;
@@ -52,6 +53,10 @@ export interface SessionStateBody {
     readonly triages?: readonly TriageBody[];
     /** The change proposals, in the order they were made (absent from a server before them). */
     readonly proposals?: Json<readonly Collaboration.ChangeProposal[]>;
+    /** The interviews of the `/` commands, in the order they were started (absent from a server before them). */
+    readonly interviews?: Json<readonly Collaboration.Interview[]>;
+    /** The team's message templates (`templates` in domaintrail.jsonc), shown after the built-in ones (absent: none). */
+    readonly templates?: readonly MessageTemplateBody[];
     /** Whether an agent is connected, per role, and how many triages, answers and runs wait for one. */
     readonly agent?: AgentPresence;
     /** The emoji the add-reaction popover offers first (`session.quickReactions`), in the form reactions are kept. */
@@ -151,6 +156,12 @@ export const EVENT_MESSAGE_TYPES = {
     ProposalApproved: 'proposal.approved',
     ProposalRejected: 'proposal.rejected',
     ProposalWithdrawn: 'proposal.withdrawn',
+    InterviewStarted: 'interview.started',
+    InterviewAnswered: 'interview.answered',
+    InterviewQuestionAsked: 'interview.question_asked',
+    InterviewBriefed: 'interview.briefed',
+    InterviewConfirmed: 'interview.confirmed',
+    InterviewStopped: 'interview.stopped',
 } as const satisfies Record<Collaboration.PersistentEvent['type'], string>;
 
 type EventType = Collaboration.PersistentEvent['type'];
@@ -209,13 +220,13 @@ export interface AgentPresence {
     readonly givenUp?: readonly AgentGivenUpAnswer[];
 }
 
-/** An answer (to a 相談) or a proposal (for a 依頼) of the AI that was given up: the message it is for. */
+/** An answer (to a 相談), a proposal (for a 依頼) or an interview's turn of the AI that was given up: the message it is for. */
 export interface AgentGivenUpAnswer {
     readonly request: string;
-    readonly kind: 'answer' | 'propose';
+    readonly kind: 'answer' | 'propose' | 'interview';
 }
 
-/** The message type of a session message (`session.*`, `request.*`, `run.*`, `revision.*`, `mark.*`, `assumption.*`, `triage.*`, `proposal.*`, `agent.*`, `presence.*`). */
+/** The message type of a session message (`session.*`, `request.*`, `run.*`, `revision.*`, `mark.*`, `assumption.*`, `triage.*`, `proposal.*`, `interview.*`, `agent.*`, `presence.*`). */
 export type SessionMessageType = SessionServerMessage['type'];
 
 /** An error of the session APIs: `{ "error": { "type": …, … } }` with an HTTP status. */
@@ -318,6 +329,40 @@ export interface ProposalsApprovedBody {
  */
 export interface RejectProposalBody {
     readonly note?: string;
+}
+
+/**
+ * `POST /api/session/interviews` (the facilitator; in Solo, the person): starts the `/es` or `/model` interview
+ * (`command`: its stable ID). `body` is the opening message the starter sends with it (the command's name in the UI
+ * language, `ja` or `en`, which the interviewer follows unless the person writes in another); `focus` the element
+ * selected then (a storming for `/es`, an element of a context for `/model`). → 201 `{ interview, request }`;
+ * `InterviewAlreadyRunning` (409) while one runs, `FacilitatorOnly` (403) for a participant of a Collab session.
+ */
+export interface StartInterviewBody {
+    readonly command: 'es' | 'model';
+    readonly body: string;
+    readonly language: 'ja' | 'en';
+    readonly focus?: Json<Collaboration.ModelTarget>;
+}
+
+/**
+ * `POST /api/session/interviews/:id/confirm` (its starter): the brief confirmed, as is or with its text edited
+ * (`text`); a run is queued that writes it. → 201 `{ interview, run }`. `POST /api/session/interviews/:id/stop` (its
+ * starter, an empty body) → 200 `{ interview }`.
+ */
+export interface ConfirmInterviewBody {
+    readonly text?: string;
+}
+
+/**
+ * A team's message template (`templates` in domaintrail.jsonc, `domain/templates.ts`): its ID, its name and text — one
+ * text for every language, or one per language (`ja`, `en`) — and where it is offered (`when`; absent: everywhere).
+ */
+export interface MessageTemplateBody {
+    readonly id: string;
+    readonly name: string | { readonly ja?: string; readonly en?: string };
+    readonly text: string | { readonly ja?: string; readonly en?: string };
+    readonly when?: readonly TemplateContext[];
 }
 
 /**
@@ -686,10 +731,37 @@ export const AGENT_ANSWER_EVENT_TYPES = {
 
 export type AgentAnswerEventType = (typeof AGENT_ANSWER_EVENT_TYPES)[keyof typeof AGENT_ANSWER_EVENT_TYPES];
 
-/** The kinds of answer jobs: stage 3 of the triage, an answer to a 相談, a proposal for a participant's 依頼. */
+/** The kinds of answer jobs about a triage: stage 3 of the triage, an answer to a 相談, a proposal for a participant's 依頼. */
 export type AgentAnswerJobKind = 'triage' | 'answer' | 'propose';
 
-/** An answer job as the answerer gets it. */
+/** Any job of the answer stream: a job about a triage, or the interviewer's next turn of an interview. */
+export type AgentAnswerStreamJob = AgentAnswerJobBody | AgentInterviewJobBody;
+
+/**
+ * An interview job (the `/` commands, `/es` and `/model`): the interviewer's next turn — a question, or the brief —
+ * answering the starter's latest message (`request`). `transcript` is the interview so far (its opening, the starter's
+ * answers and the AI's questions, the message to answer last); `focus` the element selected when it started.
+ */
+export interface AgentInterviewJobBody {
+    readonly job: string;
+    readonly kind: 'interview';
+    readonly interview: Json<Collaboration.Interview>;
+    /** The starter's message to answer. */
+    readonly request: Json<Collaboration.Request>;
+    /** The starter's display name. */
+    readonly author: string;
+    readonly timeoutMs: number;
+    /** The command's stable ID. */
+    readonly command: 'es' | 'model';
+    /** The UI language the interview started in: the questions and the brief follow it, or the person's own language. */
+    readonly language: 'ja' | 'en';
+    readonly transcript: readonly { readonly from: 'ai' | 'person'; readonly text: string }[];
+    /** The session so far, whole. */
+    readonly sessionSoFar?: AgentSessionSoFar;
+    readonly readRevision?: string;
+}
+
+/** An answer job about a triage as the answerer gets it. */
 export interface AgentAnswerJobBody {
     /** The job's ID: `POST /agent/answers/:job` returns its result. */
     readonly job: string;
@@ -743,6 +815,21 @@ export type AgentAnswerResultBody = (
 export interface AgentProposeResultBody {
     readonly proposal: ProposalBody;
     readonly durationMs: number;
+}
+
+/** `POST /agent/answers/:job` for an interview job: the next question, or the brief (`readInterviewerReply`). */
+export type AgentInterviewResultBody = ({ readonly kind: 'question'; readonly question: string } | { readonly kind: 'brief'; readonly brief: BriefBody }) & {
+    readonly model?: string;
+    readonly durationMs: number;
+};
+
+/** A brief as the interviewer writes it (`BriefData` of `domain/interviews.ts`). */
+export interface BriefBody {
+    readonly name: string;
+    readonly label?: string;
+    readonly isNew: boolean;
+    readonly replaces: boolean;
+    readonly lines: readonly { readonly head: string; readonly text: string }[];
 }
 
 /** `POST /agent/answers/:job` for any job that failed (the process crashed, timed out, gave no valid output). */

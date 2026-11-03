@@ -256,6 +256,21 @@ The chat has two views:
   reactions, votes, `@` and AI に送る are gone: every message goes to the AI as it is sent. How long a run takes is
   mostly the model and effort it runs with: `agent.run.model` / `agent.run.effort` (and `agent.answer.*` for answers)
   are the biggest lever.
+- **`/` in the composer** (the plan's rounds 4 and 5): `/` alone opens a list like `@`'s (↑↓, Enter or Tab, Esc; the
+  text after `/` filters by an item's English ID or its name in the page's language). First the **commands**, for the
+  facilitator (under `dt open`, the person) while none runs: `/es` (ES を始める) and `/model` (モデリングを始める). A
+  command starts an **interview**: the AI asks one question at a time (digging into a vague answer, skipping what the
+  stormings and the model already say) and every message of the person who started it answers it — no triage —
+  while the others' messages go to the AI as usual. A bar above the composer says it runs (AI が考えています while the
+  AI writes) with 中止. It ends with a **brief** in that bar: where it goes (a new storming or context, or that it
+  replaces the current description), four or five lines with heads (目的 / 範囲 / 使い道 / レベル for `/es`), and 確定 /
+  編集して確定 / 中止. A message instead of confirming takes it back to the questions. Confirmed, a run writes the brief as
+  the `///` description right above the `storming` (or the `context`), creating it when new; the inspector shows it
+  when the storming is selected. The interview survives a reload. Then the **templates**: the beginnings of a message
+  for what is open and selected (このあとを足す at Big Picture, 前後を詰める for a selected event, 不変条件を挙げる for an
+  aggregate …), then the team's from `templates` in `domaintrail.jsonc`; picking one only puts its text in the composer
+  (the selected element as its `#` target), to edit and send. An empty view says 「まだありません。チャットで /es から
+  始められます」 while an AI is connected.
 - **AI の作業**: everything sent to the AI, from start to end; the tab's badge counts what is not finished (running and
   queued; not what awaits an answer). Each row is one card — a run with the runs that continue it — in groups:
   答え待ち (the AI asked a question), 実行中 (a pulsing dot, how long it has run, and the line of what the AI is doing), 待ち n (numbered in the order they

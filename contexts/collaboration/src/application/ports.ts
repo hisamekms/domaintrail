@@ -70,6 +70,15 @@ export interface TriageRepository {
     listBySession(session: SessionId): Collaboration.Triage[];
 }
 
+/** The interviews of the `/` commands. */
+export interface InterviewRepository {
+    load(id: Collaboration.InterviewId): Collaboration.Interview | undefined;
+    /** Inserts or replaces it. */
+    save(interview: Collaboration.Interview): void;
+    /** The interviews of a session, in the order they were started. */
+    listBySession(session: SessionId): Collaboration.Interview[];
+}
+
 /** The change proposals of the sessions. */
 export interface ProposalRepository {
     load(id: Collaboration.ChangeProposalId): Collaboration.ChangeProposal | undefined;
@@ -225,6 +234,7 @@ export interface Stores {
     readonly approvals: ApprovalRepository;
     readonly triages: TriageRepository;
     readonly proposals: ProposalRepository;
+    readonly interviews: InterviewRepository;
     readonly outbox: EventOutbox;
     readonly access: AccessStore;
     readonly operations: OperationLog;

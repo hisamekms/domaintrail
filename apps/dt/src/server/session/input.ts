@@ -99,7 +99,7 @@ function made<T>(v: unknown, field: string, make: (s: string) => Result<T, unkno
     return m.ok ? ok(m.value) : invalid(field, 'Not a valid name.');
 }
 
-function modelTarget(v: unknown, field: string): Result<Collaboration.ModelTarget, InvalidInput> {
+export function modelTarget(v: unknown, field: string): Result<Collaboration.ModelTarget, InvalidInput> {
     if (!isObject(v)) return invalid(field, 'Expected a target.');
     const f = (name: string): string => `${field}.${name}`;
     switch (v.kind) {

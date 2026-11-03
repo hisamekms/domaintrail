@@ -55,6 +55,9 @@ const LATIN_IN_JA = new Set([
     'Shift',
     'U',
     'domaintrail',
+    // the `/es` command, and its name 「ES を始める」 (Event Storming, as it is called in Japanese too)
+    'es',
+    'ES',
 ]);
 
 describe('i18n', () => {

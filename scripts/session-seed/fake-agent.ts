@@ -151,6 +151,7 @@ function scriptedAnswerer(forRun: Set<string>): AnswerAgent {
             return structured({ kind: 'neither', confidence: 0.95, reason: 'シードの台本にないメッセージ' });
         },
         answer: async () => structured({ kind: 'neither', reason: 'シードの台本にないメッセージ' }),
+        interview: async () => ({ text: '', error: 'the seed runs no interview' }),
     };
 }
 
