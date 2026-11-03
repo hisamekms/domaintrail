@@ -18,19 +18,22 @@ dt collab --tunnel
 
 1. Because the session is going on the internet, `dt collab` lists the security-relevant settings (with
    `collab --tunnel` among them) and asks before starting the first time; in a script, pass `--yes`.
-2. `cloudflared tunnel --url http://127.0.0.1:<port> --no-autoupdate` starts, and its address,
-   `https://<words>.trycloudflare.com`, becomes the session's public URL. The server still listens on 127.0.0.1 only:
-   the tunnel connects to it there.
+2. The server binds its port on 127.0.0.1, then `cloudflared tunnel --url http://127.0.0.1:<port> --no-autoupdate`
+   starts (so nothing else can take the port in between), and its address, `https://<words>.trycloudflare.com`,
+   becomes the session's public URL. The server still listens on 127.0.0.1 only: the tunnel connects to it there.
 3. `dt collab` prints the **facilitator link** and an **invite link**, both on the public URL. Open the facilitator
-   link in your browser, give your name: you are the facilitator.
+   link in your browser, give your name: you are the facilitator. **The facilitator link works from anywhere on the
+   internet** until it is used (10 minutes): do not show or share your terminal while it is on screen.
 4. Share the invite link (a chat message, e-mail…). The collab menu's **招待** (Invite) makes a new one and copies it
    (the previous one stops working); **招待を止める** (Stop inviting) stops it. `dt collab invite` prints a new one from
    another terminal, `dt collab invite --stop` stops it.
-5. Each person who asks shows in the chat's head of your page: their name, **許可** (Let in) and **拒否** (Deny).
+5. Each person who asks shows in the chat's head of your page: their name, when they asked, **許可** (Let in) and
+   **拒否** (Deny). A name that is another person's or another request's is marked (a person icon): look twice. Once an
+   invite took as many requests as it may, the head says so; make a new one.
 6. When the session ends (the collab menu's コラボを終える, or Ctrl+C), cloudflared stops with it.
 
-`--tunnel` switches the identity mode to `link` (it is refused with `identity: "access"`, with `--port 0` and with a
-non-loopback `--host`). Ports, the agent and everything else are as for any `dt collab`.
+`--tunnel` switches the identity mode to `link` (it is refused with `identity: "access"` and with a non-loopback
+`--host`; `--port 0` is fine: the tunnel follows the port bound). Ports, the agent and everything else are as for any `dt collab`.
 
 ### Your own tunnel or reverse proxy
 
@@ -71,9 +74,13 @@ the role.
   with the server. It never appears in the server's log, and leaves the address bar after the form (a POST, then a
   redirect).
 - **Join requests** are kept in the server's memory only: at most 20 pending at once, 100 through one invite, five per
-  client per 10 minutes; each expires after 10 minutes or with its invite. The client is the socket's address; with
-  `--tunnel` only, `CF-Connecting-IP` (set by the cloudflared this `dt` started; never trusted from anyone else).
-  Names follow the join form's rules (one line, at most 60 characters) and are escaped wherever shown.
+  client per 10 minutes (IPv6 counted by its /64); each expires after 10 minutes or with its invite, and stopping the
+  invite also turns away those approved but not yet in. The client is known with `--tunnel` only, by
+  `CF-Connecting-IP` (set by the cloudflared this `dt` started; never trusted from anyone else). Behind a tunnel or
+  proxy of your own every request comes from loopback, so clients cannot be told apart: only the pending and the
+  per-invite caps hold. A new invite starts every count afresh. Names follow the join form's rules (one line, at most
+  60 characters, no control or format characters such as bidi overrides or zero-width spaces) and are escaped
+  wherever shown.
 - **Cookies** are `__Host-` prefixed, `HttpOnly`, `Secure`, `SameSite=Strict`, named anew by each server; the session
   cookie lasts as long as the browser session, the waiting page's as long as the invite. Every sign-in of the session
   ends when a link server starts and when it stops (people are let in again; the facilitator opens the new facilitator
@@ -83,6 +90,8 @@ the role.
   SameSite=Strict cookie, that is the protection against cross-site requests.
 - **Facilitator only, on the server**: making and stopping the invite, listing, approving and denying requests,
   removing participants.
+- **The page** of a session (the Live View and its API) is never framed (`frame-ancestors 'none'`) and never cached
+  (`no-store`), but for the page's code files whose names carry their content's hash.
 - **The approval at start**: `collab.identity`, `collab.link` and `--tunnel` are among the security-relevant settings,
   so switching to an internet-facing mode is asked for (`--yes` without a terminal).
 
@@ -91,6 +100,11 @@ the role.
 - A quick tunnel is **public and temporary**: anyone who learns its address reaches the session's sign-in pages (not
   the model: everything else needs a sign-in). Cloudflare gives no uptime guarantee for quick tunnels; the address
   changes with every start.
+- **TLS ends at Cloudflare**: the browser's https connection is to Cloudflare's edge, which forwards the traffic to
+  cloudflared over its own encrypted connection; Cloudflare sees the session's traffic in the clear, as for any site it
+  proxies. Use your own tunnel (or the `access` mode) if that matters.
+- The invite link (its code included) stays in the **browser history** of everyone who opened it, until it expires or
+  you stop it.
 - The invite link is as safe as where it is shared. A forwarded link lets a stranger ask; they get in only if the
   facilitator approves a name they did not expect.
 - Nobody's identity is verified: a name is what the person typed. For verified identities, use the `access` mode.

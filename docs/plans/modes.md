@@ -1269,6 +1269,14 @@ Decided by the user (2026-11-03), after printing:
 - **Page**: the facilitator's collab menu has 招待 (makes the link and copies it) and 招待を止める while one is live; a
   participant has no invite to copy. Each person waiting is one row in the chat's head (name, 許可, 拒否). The
   participant list offers removing someone who joined through the invite.
+- **After the review of this branch** (2026-11-03): behind a proxy of one's own (no `--tunnel`) no per-client limit
+  (clients cannot be told apart), only the pending and per-invite caps; IPv6 counted by its /64; a new invite resets
+  the counts; the facilitator's page says when the invite is used up (`join.requests.inviteUsedUp`). The waiting page
+  clears only its own cookie, and only when sent; stopping the invite turns away the approved not yet in. A session's
+  Live View and API are `frame-ancestors 'none'` and `no-store`, but for the content-hashed files of the page. Names
+  refuse format characters (Cf; an emoji's ZWJ allowed); a request whose name is a participant's (or a connected
+  page's) or another request's is marked, and each shows when it was made. The quick tunnel starts once the server
+  holds the port (`publicUrlAfterListen`), so `--port 0` works with `--tunnel`.
 - **Checked for real** (2026-11-03, macOS, cloudflared from Homebrew, system Chrome through Playwright): `dt collab
   --tunnel --port 4530 --yes --no-agent` on a scratch copy of `examples/shop`; the facilitator link opened at the
   trycloudflare URL, an invite made from the menu, a second browser asked to join and was let in as a participant, a
