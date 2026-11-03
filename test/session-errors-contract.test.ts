@@ -57,6 +57,7 @@ const ROUTE_ERRORS = [
     'ManualRecoveryNeeded',
     'RunInProgress',
     'SubscriberOutdated',
+    'AnswerNotGivenUp',
 ];
 
 describe('the status of each error type', () => {
@@ -96,7 +97,11 @@ describe('refused requests of a session in dev mode', () => {
                 port: 0,
                 host: '127.0.0.1',
                 identity: 'dev',
-                agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS], maxPreviousRunDiff: 20 * 1024 },
+                agent: {
+                    port: 0,
+                    allowedTools: [...DEFAULT_AGENT_TOOLS],
+                    maxPreviousRunDiff: 20 * 1024,
+                },
                 maxParticipants: 50,
                 quickReactions: ['👍'],
                 classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
@@ -142,7 +147,8 @@ describe('refused requests of a session in dev mode', () => {
             'POST facilitator/link, participant': await call(bob, 'facilitator/link', {}),
             'POST close, participant': await call(bob, 'close', {}),
             // rules the handlers hold
-            'POST requests apply, participant': await call(bob, 'requests', { targets: [], body: 'Do it now.', apply: true }),
+            'POST requests apply (gone), participant': await call(bob, 'requests', { targets: [], body: 'Do it now.', apply: true }),
+            'POST requests/address, participant': await call(bob, 'requests/address', { requests: [request] }),
             'POST marks Vote, facilitator': await call(ada, 'marks', { target: { kind: 'Message', request }, sign: { kind: 'Vote' }, placed: true }),
             // what the use cases refuse
             'POST marks Vote on a message, participant': await call(bob, 'marks', {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { cardMenuItems, obstacleText, queueAhead } from './cards';
+import { cardMenuItems, obstacleText, queueAhead, quoteDisplay, type CardRun } from './cards';
 import { MESSAGES } from '../i18n';
 
 type RunJson = SessionStateBody['runs'][number];
@@ -69,5 +69,32 @@ describe('a queued run and why a revert waits for the AI', () => {
         expect(obstacleText({ kind: 'Conflict', paths: ['a.dt', 'b.dtes'] }, ja)).toBe(ja.conflict('a.dt, b.dtes'));
         expect(obstacleText({ kind: 'Check', newDtErrors: 1, unparsedDtes: [] } as never, ja)).toBe(ja.check);
         expect(obstacleText({ kind: 'Unreadable' }, ja)).toBe(ja.unreadable);
+    });
+});
+
+describe('the quotes of the messages a run applied', () => {
+    const cardRun = (r: RunJson, progress?: 'Done'): CardRun =>
+        ({
+            run: r,
+            number: 1,
+            quotes: r.input.requests.map((request) => ({ request, ...(progress && { progress }) })),
+            message: { kind: 'queued' },
+            at: r.queuedAt,
+        }) as unknown as CardRun;
+
+    test('quoted on the first run, and on a later one that says what it did of them', () => {
+        const first = cardRun(run('a', { state: 'Queued' }));
+        expect(quoteDisplay([first], 0)).toEqual({ quotes: true, perRequest: false });
+        const again = cardRun({ ...run('b', { state: 'Completed' }), input: first.run.input } as RunJson);
+        expect(quoteDisplay([first, again], 1)).toEqual({ quotes: false, perRequest: false });
+        const done = cardRun({ ...run('b', { state: 'Completed' }), input: first.run.input } as RunJson, 'Done');
+        expect(quoteDisplay([first, done], 1)).toEqual({ quotes: true, perRequest: false });
+    });
+
+    test('never in Solo: the only person asked them all', () => {
+        const first = cardRun(run('a', { state: 'Queued' }));
+        const done = cardRun({ ...run('b', { state: 'Completed' }), input: first.run.input } as RunJson, 'Done');
+        expect(quoteDisplay([first], 0, true)).toEqual({ quotes: false, perRequest: false });
+        expect(quoteDisplay([first, done], 1, true)).toEqual({ quotes: false, perRequest: false });
     });
 });

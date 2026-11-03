@@ -11,7 +11,7 @@ export interface PageMessageText {
 }
 
 /** Why the join form is shown again. */
-export type JoinError = 'invalidName' | 'sessionFull' | 'sessionNotOpen';
+export type JoinError = 'invalidName' | 'sessionFull' | 'sessionNotOpen' | 'tooManyPending' | 'rateLimited';
 
 export type PageMessage =
     | 'signInRequired'
@@ -22,7 +22,13 @@ export type PageMessage =
     | 'linkMethod'
     | 'linkIncomplete'
     | 'linkNotValid'
-    | 'notFound';
+    | 'notFound'
+    | 'useInvite'
+    | 'inviteNotValid'
+    | 'denied'
+    | 'requestExpired'
+    | 'sessionFull'
+    | 'sessionClosed';
 
 export interface PageTexts {
     readonly join: {
@@ -33,6 +39,8 @@ export interface PageTexts {
         readonly errors: Readonly<Record<JoinError, string>>;
     };
     readonly backToSession: string;
+    /** The waiting page of a join request (`link`): its title, also its only words. */
+    readonly waiting: string;
     readonly messages: Readonly<Record<PageMessage, PageMessageText>>;
 }
 
@@ -46,9 +54,12 @@ const en: PageTexts = {
             invalidName: `A name of 1 to ${MAX_NAME} characters on one line.`,
             sessionFull: 'The session is full.',
             sessionNotOpen: 'The session is not open.',
+            tooManyPending: 'Too many people are waiting to join. Try again in a moment.',
+            rateLimited: 'Too many requests. Try again later.',
         },
     },
     backToSession: 'Back to the session',
+    waiting: 'Waiting to be let in',
     messages: {
         signInRequired: { title: 'Sign in required', message: 'Open this session through its Cloudflare Access URL to sign in.' },
         signInThroughAccess: { title: 'Not found', message: 'Participants of this session sign in through Cloudflare Access.' },
@@ -57,8 +68,14 @@ const en: PageTexts = {
         formTooLarge: { title: 'Form too large', message: 'The form is larger than this session accepts.' },
         linkMethod: { title: 'Method not allowed', message: 'Open the link.' },
         linkIncomplete: { title: 'Not a facilitator link', message: 'The link is incomplete.' },
-        linkNotValid: { title: 'Link not valid', message: 'This facilitator link was used already or has expired. Ask for a new one (dt session link).' },
+        linkNotValid: { title: 'Link not valid', message: 'This facilitator link was used already or has expired. Ask for a new one (dt collab link).' },
         notFound: { title: 'Not found', message: 'No such page.' },
+        useInvite: { title: 'Invite needed', message: 'Join through the invite link the facilitator shared.' },
+        inviteNotValid: { title: 'Invite not valid', message: 'This invite link has expired or was stopped. Ask for a new one.' },
+        denied: { title: 'Not let in', message: 'The facilitator did not let you in.' },
+        requestExpired: { title: 'Request expired', message: 'Nobody let you in in time. Open the invite link again.' },
+        sessionFull: { title: 'Session full', message: 'The session is full.' },
+        sessionClosed: { title: 'Session not open', message: 'The session is not open.' },
     },
 };
 
@@ -72,9 +89,12 @@ const ja: PageTexts = {
             invalidName: `名前は1行・${MAX_NAME}文字以内で入力してください。`,
             sessionFull: 'セッションの参加者が上限に達しています。',
             sessionNotOpen: 'セッションは開かれていません。',
+            tooManyPending: '参加を待っている人が多すぎます。少し待ってから試してください。',
+            rateLimited: 'リクエストが多すぎます。しばらくしてから試してください。',
         },
     },
     backToSession: 'セッションに戻る',
+    waiting: '参加の許可を待っています',
     messages: {
         signInRequired: { title: 'サインインが必要です', message: 'Cloudflare Access の URL からこのセッションを開いてサインインしてください。' },
         signInThroughAccess: { title: 'ページがありません', message: 'このセッションには Cloudflare Access でサインインします。' },
@@ -85,9 +105,15 @@ const ja: PageTexts = {
         linkIncomplete: { title: 'ファシリテーターのリンクではありません', message: 'リンクが途中で切れています。' },
         linkNotValid: {
             title: 'リンクが無効です',
-            message: 'このファシリテーターのリンクは使用済みか、期限が切れています。新しいリンクをもらってください（dt session link）。',
+            message: 'このファシリテーターのリンクは使用済みか、期限が切れています。新しいリンクをもらってください（dt collab link）。',
         },
         notFound: { title: 'ページがありません', message: 'このページはありません。' },
+        useInvite: { title: '招待が必要です', message: 'ファシリテーターが共有した招待リンクから参加してください。' },
+        inviteNotValid: { title: '招待リンクが無効です', message: 'この招待リンクは期限切れか、止められています。新しいリンクをもらってください。' },
+        denied: { title: '参加できませんでした', message: 'ファシリテーターが参加を許可しませんでした。' },
+        requestExpired: { title: '期限が切れました', message: '時間内に許可されませんでした。招待リンクをもう一度開いてください。' },
+        sessionFull: { title: '参加できませんでした', message: 'セッションの参加者が上限に達しています。' },
+        sessionClosed: { title: 'セッションは開かれていません', message: 'セッションは開かれていません。' },
     },
 };
 

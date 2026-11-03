@@ -3,19 +3,36 @@
 //
 //   claim (naming what it can run: a revert) → start (the server takes the base revision, and gives the runs it continues
 //   and the runs it reverts) → prompt → the agent, with heartbeats → the changed files are
-//   only DSL sources? → `dt fmt`, `dt check` → finish {exitCode, formatted, checked, reply} (the server decides the rest)
+//   only DSL sources? → `dt fmt`, `dt check` when it changed files (else both skipped) → finish {exitCode, formatted,
+//   checked, reply} (the server decides the rest)
 //
 // or, instead of finish, a clarification (the agent asked questions), a decline (the agent will not do the requests,
 // and says why) or a failure (`AgentError`: the agent could not
-// run or changed other files; `Interrupted`: the subscriber was stopped). A cancel of the run (`run.cancel_requested`)
+// run or changed other files; `Interrupted`: the subscriber was stopped; `ReadScopeTooLarge`:
+// the runner refused the run, its deny list of what git ignores being too long). A cancel of the run (`run.cancel_requested`)
 // or a lost lease stops the agent and ends the run's work: the server has already ended it. After a run, the next
 // queued one is claimed without waiting for anyone. While the agent runs, what it is doing (as the runner maps it) is
-// reported on change, at most once a second, never holding it up. Functions over the ports only: no I/O of its own.
+// reported on change, at most once a second, never holding it up. An agent that keeps its conversation across runs
+// (a warm one) is also given the prompt that says which files changed since its previous run (the scan after it
+// against the scan before this one) and only the session so far since its previous run, is told to forget when a
+// revision is restored, and is closed when the subscriber ends. Every prompt carries the session so far (ADR 0030,
+// round 3): whole for a fresh agent. Functions over the ports only: no I/O of its own.
 import { mapRequests } from '@domaintrail/collaboration';
-import { AGENT_CAPABILITIES, AGENT_EVENT_TYPES, type AgentClaimed, type AgentPreviousRun, type AgentRevertedRun } from '@domaintrail/collaboration/protocol';
-import { AgentApiError, type AgentApi, type AgentOutcome, type AgentRunner, type ApiResult, type Clock, type DslTools, type WorkspaceFiles } from './ports.js';
+import { AGENT_CAPABILITIES, AGENT_EVENT_TYPES, type AgentClaimed, type ToolOutcomeBody } from '@domaintrail/collaboration/protocol';
+import {
+    AgentApiError,
+    ReadScopeTooLarge,
+    type AgentApi,
+    type AgentOutcome,
+    type AgentRunner,
+    type ApiResult,
+    type Clock,
+    type DslTools,
+    type Started,
+    type WorkspaceFiles,
+} from './ports.js';
 import { createActivityReporter } from './activity.js';
-import { buildPrompt } from './prompt.js';
+import { buildPrompt, type Practice } from './prompt.js';
 
 export interface SubscriberDeps {
     readonly api: AgentApi;
@@ -43,6 +60,8 @@ export interface SubscriberOptions {
     readonly activityGapMs?: number;
     /** Reconnection delays of the stream: from `minMs`, doubling up to `maxMs`; ends when none opens for `giveUpMs`. */
     readonly reconnect?: { readonly minMs: number; readonly maxMs: number; readonly giveUpMs: number };
+    /** The ways of working the prompts give for the DSLs a run is about (the guide's); none without it. */
+    readonly practice?: Practice;
 }
 
 /** Why a subscriber ended. */
@@ -117,6 +136,7 @@ export function showPaths(paths: readonly string[]): string {
 export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions): Subscriber {
     const { api, clock, log } = deps;
     const reconnect = options.reconnect ?? DEFAULT_RECONNECT;
+    const practice = options.practice && { practice: options.practice };
     const heartbeatMs = options.heartbeatMs ?? Math.max(50, Math.floor(options.leaseMs / 4));
     const stopping = new AbortController();
     let end: SubscriberEnd | undefined;
@@ -129,6 +149,10 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
      * claims no more runs (a person reviews them and restarts it).
      */
     let halted: string | undefined;
+    /** The workspace as the agent left it at the end of its previous run (scanned after it): what it last saw. */
+    let lastAgentScan: ReadonlyMap<string, string> | undefined;
+    /** The last entry of the session so far the agent's previous run was given. */
+    let lastSoFar: number | undefined;
 
     /** Stops claiming because of what the run `id` left (`shown`: escaped paths, or why they are unknown). */
     const halt = (id: string, shown: string): void => {
@@ -178,7 +202,7 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                 await complete('released', id, () => api.release(id, token));
                 return;
             }
-            const started = await api.start(id, token);
+            const started = await api.start(id, token, lastSoFar);
             if (!started.ok) {
                 if (isFinal(started)) return log(`run ${id}: not started (${started.type})`);
                 log(`run ${id}: not started (${started.status} ${started.type}); releasing it`);
@@ -200,7 +224,7 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                 );
             });
             try {
-                await runPipeline(id, token, run.input, started.value.previousRuns ?? [], started.value.revert ?? [], cancel.signal);
+                await runPipeline(id, token, run.input, started.value, cancel.signal);
             } catch (e) {
                 // the workspace could not be scanned, the participants not read…: the run fails, the next one is taken
                 log(`run ${id}: ${message(e)}`);
@@ -213,14 +237,9 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
         }
     };
 
-    const runPipeline = async (
-        id: string,
-        token: string,
-        input: AgentClaimed['run']['input'],
-        previousRuns: readonly AgentPreviousRun[],
-        revert: readonly AgentRevertedRun[],
-        cancelled: AbortSignal,
-    ): Promise<void> => {
+    const runPipeline = async (id: string, token: string, input: AgentClaimed['run']['input'], started: Started, cancelled: AbortSignal): Promise<void> => {
+        const previousRuns = started.previousRuns ?? [];
+        const revert = started.revert ?? [];
         // a revert is never run without the changes it reverts: the agent would take it for a request of its own
         const reverts = input.requests.flatMap((r) => (r.reverts === undefined ? [] : [r.reverts]));
         if (reverts.some((u) => !revert.some((d) => d.run.id === u))) {
@@ -245,7 +264,9 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
         const inspect = async (): Promise<{ changed: number; outside: boolean }> => {
             if (inspected) return inspected;
             try {
-                const changed = changedPaths(before, await deps.workspace.scan());
+                const after = await deps.workspace.scan();
+                lastAgentScan = after;
+                const changed = changedPaths(before, after);
                 const sources = new Set([...sourcesBefore, ...(await deps.workspace.sources())]);
                 const outside = changesOutsideSources(changed, sources);
                 if (outside.length) {
@@ -274,9 +295,23 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                 ...(options.activityGapMs !== undefined && { gapMs: options.activityGapMs }),
             });
             let outcome: AgentOutcome;
+            const nonce = deps.nonce();
+            // for an agent that remembers its previous run: what changed since (people, another agent, dt fmt, a restore),
+            // and the session so far since then
+            const sinceLast = lastAgentScan && changedPaths(lastAgentScan, before);
+            const soFar = started.sessionSoFar;
+            const soFarSince = started.sessionSoFarSince ?? soFar;
+            if (soFar) lastSoFar = soFar.last;
             try {
                 outcome = await deps.runner.run({
-                    prompt: buildPrompt(input, names, deps.nonce(), previousRuns, revert),
+                    prompt: buildPrompt(input, names, nonce, previousRuns, revert, { ...(soFar && { sessionSoFar: soFar.text }), ...practice }),
+                    ...(sinceLast && {
+                        continuedPrompt: buildPrompt(input, names, nonce, previousRuns, revert, {
+                            ...practice,
+                            changedSinceYourLastRun: sinceLast,
+                            ...(soFarSince && { sessionSoFar: soFarSince.text }),
+                        }),
+                    }),
                     allowedTools: options.allowedTools,
                     requests: input.requests.length,
                     signal,
@@ -288,6 +323,8 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                 if (cancelled.aborted) return log(`run ${id}: cancelled; the agent was stopped`);
                 if (stopping.signal.aborted) return complete('failed (Interrupted)', id, () => api.fail(id, token, 'Interrupted'));
                 log(`run ${id}: the agent could not run: ${message(e)}`);
+                // the read scope could not be kept whole: said as such, so that the page tells what to do
+                if (e instanceof ReadScopeTooLarge) return complete('failed (ReadScopeTooLarge)', id, () => api.fail(id, token, 'ReadScopeTooLarge'));
                 return complete('failed (AgentError)', id, () => api.fail(id, token, 'AgentError'));
             }
             activity.stop();
@@ -305,11 +342,13 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
             if (outcome.exitCode === 0 && outcome.outcome === 'declined' && reply) {
                 return complete(`declined (${changed} file(s) changed)`, id, () => api.decline(id, token, reply));
             }
-            const formatted = await deps.tools.format();
-            const checked = await deps.tools.check();
+            // nothing changed (an answer, a run that found nothing to do): no dt fmt nor dt check (ADR 0030)
+            const outcomeOf = (ran: boolean): ToolOutcomeBody => (ran ? 'ran' : 'failed');
+            const formatted: ToolOutcomeBody = changed === 0 ? 'skipped' : outcomeOf(await deps.tools.format());
+            const checked: ToolOutcomeBody = changed === 0 ? 'skipped' : outcomeOf(await deps.tools.check());
             if (cancelled.aborted) return log(`run ${id}: cancelled`);
             await complete(
-                `finished (${changed} file(s) changed; dt fmt ${formatted ? 'ran' : 'did not run'}, dt check ${checked ? 'ran' : 'did not run'})`,
+                `finished (${changed} file(s) changed; dt fmt ${formatted}, dt check ${checked})`,
                 id,
                 // the reply of a done run only: a question or a decline that did not end the run is dropped
                 () => api.finish(id, token, { exitCode: outcome.exitCode, formatted, checked, ...(outcome.outcome === 'done' && reply && { reply }) }),
@@ -373,6 +412,7 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                     // a run queued, or the queue moved past a revert the server took first: something may be claimable
                     if (CLAIMABLE.has(item.type)) wake();
                     else if (item.type === 'session.closed') finish('closed');
+                    else if (item.type === 'revision.restored') deps.runner.reset?.('a revision was restored');
                     else if (item.type === 'run.cancel_requested' && item.message.type === 'run.cancelled' && item.message.event.runId === current?.run) {
                         log(`run ${current.run}: cancel requested`);
                         current.cancel.abort();
@@ -405,7 +445,10 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
     };
     const worker = work().catch(fail('the subscriber'));
     const stream = follow().catch(fail('the event stream'));
-    void Promise.all([worker, stream]).then(() => resolveDone(end ?? 'stopped'));
+    void Promise.all([worker, stream])
+        .then(() => deps.runner.close?.())
+        .catch((e: unknown) => log(`the agent could not be closed: ${message(e)}`))
+        .then(() => resolveDone(end ?? 'stopped'));
 
     return {
         done,

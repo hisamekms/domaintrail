@@ -72,8 +72,105 @@ export {
     type RunActivityPhase,
 } from './domain/activity.js';
 export { MAX_REQUEST_TARGETS, type TargetStatus } from './domain/targets.js';
+// who talks to the AI (ADR 0030): the AI as a participant, addressing, the triage's stages, proposals, the answerer's
+// output, the session so far, the modes
+export { AI_NAME, AI_PARTICIPANT, AI_PARTICIPANT_ID, isAi } from './domain/ai.js';
+export {
+    ACKNOWLEDGEMENTS,
+    addressing,
+    answerJobOf,
+    CASCADE,
+    clefVerdict,
+    decisionOf,
+    inCascadeOrder,
+    mechanicalVerdict,
+    modelVerdict,
+    nextStage,
+    triageRoute,
+    TRIAGE_THRESHOLDS,
+    type AddressingFacts,
+    type ClefProbabilities,
+    type MechanicalRule,
+    type ModelAnswer,
+    type TriageRoute,
+} from './domain/triage.js';
+export {
+    approvedInstruction,
+    elementReference,
+    instructionOf,
+    parseElementReference,
+    PROPOSAL_LIMITS,
+    proposalData,
+    proposalJsonSchema,
+    readProposal,
+    readProposalText,
+    recommendedOption,
+    type ProposalData,
+    type ProposalOptionData,
+    type ProposalProblem,
+} from './domain/proposals.js';
+export {
+    answererJsonSchema,
+    proposeJsonSchema,
+    readAnswererReply,
+    readProposeReply,
+    readTriageAnswer,
+    TRIAGE_KINDS,
+    TRIAGE_REASON_LIMIT,
+    triageJsonSchema,
+    type AnswererReply,
+    type TriageAnswer,
+    type TriageKindData,
+} from './domain/answers.js';
+export { chatWindow, sessionSoFar, TIMELINE_LIMITS, timelineEntries, type SessionSoFar, type TimelineEntry, type TimelineRecords } from './domain/timeline.js';
+export { sessionOpening, type SessionOpening } from './domain/modes.js';
+// the `/` commands' interviews and the message templates (the plan's round 4 and round 5)
+export {
+    awaitedMessage,
+    briefData,
+    briefLines,
+    briefText,
+    commandId,
+    interviewerJsonSchema,
+    interviewMessages,
+    INTERVIEW_COMMANDS,
+    INTERVIEW_LIMITS,
+    isRunning,
+    readBrief,
+    readBriefText,
+    readInterviewerReply,
+    runningInterview,
+    UI_LANGUAGES,
+    type BriefData,
+    type BriefLine,
+    type InterviewCommandId,
+    type InterviewerReply,
+    type InterviewProblem,
+} from './domain/interviews.js';
+export { checkTemplates, TEMPLATE_CONTEXTS, TEMPLATE_LIMITS, type MessageTemplateConfig, type TemplateContext } from './domain/templates.js';
+// where the requester was looking when they sent a message
+export {
+    type InvalidViewedAt,
+    type KnownViewNames,
+    readViewedAt,
+    resolveViewedAt,
+    VIEWED_AT_LIMITS,
+    viewedAtData,
+    type ViewedAtLike,
+} from './domain/viewed-at.js';
+export { readToolOutcome, succeeded } from './domain/validation.js';
 // the IDs from values known to be UUIDs (the ID generator's, input already checked); the generated constructors check
-export { knownAgentRunId, knownAssumptionApprovalId, knownMarkId, knownRequestId, knownRevisionId, knownSessionId } from './domain/ids.js';
+export {
+    knownAgentRunId,
+    knownAssumptionApprovalId,
+    knownChangeProposalId,
+    knownInterviewId,
+    knownMarkId,
+    knownRequestId,
+    knownRevisionId,
+    knownSessionId,
+    knownTriageId,
+} from './domain/ids.js';
 // the rule of the `Emoji` primitive: what counts as one emoji and the form it is kept in (the page decides alike)
 export { DEFAULT_QUICK_REACTIONS, MAX_EMOJI_BYTES, readEmoji } from './domain/emoji.js';
 
@@ -89,8 +186,38 @@ export {
     type RevertOutcome,
     type RevertRequested,
 } from './application/use-cases.js';
+export {
+    MAX_TRIAGE_REASON,
+    type AnswerJob,
+    type AnswerTooLong,
+    type ConversationUseCases,
+    type InvalidTriageInput,
+    type MessageSent,
+    type ProposalsApproved,
+    type SessionOpened,
+    type TriageProgress,
+    type TriageStepInput,
+} from './application/conversation.js';
+export { type InterviewJob, type InterviewStarted as InterviewStartedResult, type InterviewUseCases } from './application/interviews.js';
 export { actorOf, type Actor } from './application/actor.js';
-export { createSessionAccess, secretHash, type LinkInvalid, type SessionAccess } from './application/access.js';
+export { createSessionAccess, secretHash, type LinkInvalid, type SessionAccess, type SessionNotOpen } from './application/access.js';
+// the join requests of the `link` identity mode: made through the invite link, decided by the facilitator
+export {
+    createJoinRequests,
+    JOIN_REQUEST_TTL_MS,
+    JOIN_REQUEST_WINDOW_MS,
+    JOIN_REQUESTS_PER_INVITE,
+    JOIN_REQUESTS_PER_KEY,
+    MAX_PENDING_JOIN_REQUESTS,
+    type InviteExhausted,
+    type JoinRequest,
+    type JoinRequestNotFound,
+    type JoinRequests,
+    type JoinRequestState,
+    type JoinRequestStatus,
+    type RateLimited,
+    type TooManyPending,
+} from './application/join-requests.js';
 export {
     FACILITATOR_NAME,
     FACILITATOR_PARTICIPANT,
@@ -101,18 +228,25 @@ export {
     type IdentityMode,
     type IdentityProvider,
 } from './application/identity.js';
-export { createClassifications, type Classifications, type MessageClassifier } from './application/classifier.js';
+// stage 2 of the triage (ADR 0030): Clef's step for a message addressed to the AI
+export { CLEF_NOT_CONFIGURED, clefStep, type MessageClassifier } from './application/classifier.js';
 export { createRunActivities, RUN_ENDING_EVENTS, type RunActivities } from './application/activities.js';
-// its settings in the `session` section of domaintrail.jsonc (T6), composed by the app
+// its settings in domaintrail.jsonc (`collab`, `classifier`, `agent.run.maxPreviousRunDiff`), composed by the app
 export {
     ACCESS_CHECKS,
     COLLABORATION_CONFIG_KEYS,
+    isHttpsOrigin,
     resolveCollaborationConfig,
     validateAccessNeeded,
+    validateClassifierConfig,
     validateCollaborationConfig,
     validateIdentityConfig,
+    validateLinkConfig,
     validatePreviousRunsConfig,
+    validateTemplatesConfig,
+    type ClassifierConfigFile,
     type ClefModel,
+    type CollabConfigFile,
     type CollaborationConfigFile,
     type ResolvedCollaborationConfig,
 } from './application/config.js';
@@ -132,13 +266,13 @@ export { createClefClassifier } from './infrastructure/clef.js';
 export { createCloudflareAccess, type AccessAdapterOptions, type AccessClaims, type AccessTokenVerifier } from './infrastructure/identity.js';
 export { SESSION_DIR } from './infrastructure/session-dir.js';
 export {
-    AGENT_FILE,
-    readAgentCredential,
+    LEGACY_AGENT_FILE,
     readServerAddress,
+    removeLegacyAgentFile,
     removeSessionFiles,
-    writeAgentCredential,
     writeServerAddress,
     type AgentCredential,
+    type ServerAddress,
 } from './infrastructure/session-files.js';
 export { createUnitOfWork, openSessionDatabase } from './infrastructure/sqlite.js';
 export { randomIds, randomSecrets, systemClock } from './infrastructure/system.js';

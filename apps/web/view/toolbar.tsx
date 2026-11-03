@@ -5,7 +5,8 @@ import { useDismiss } from '../shared/layout';
 
 /**
  * The parts of the view toolbar, the same in every view, left to right: the subject (what is looked at), the level
- * (how much of it), then at the right end the 絞り込み button (what is hidden) and the canvas's menu ⋯.
+ * (how much of it), then at the right end the 絞り込み button (what is hidden) and 書き出し (the catalog: 印刷). What
+ * is shown is set here; how it is looked at (the camera, the density, the legend), in the canvas's controls.
  */
 
 /** Whether the element's text is cut short (so that the whole of it is shown as a tooltip). */
@@ -21,6 +22,26 @@ export function useClipped(ref: RefObject<HTMLElement | null>, text: string): bo
         return () => observer.disconnect();
     }, [ref, text]);
     return clipped;
+}
+
+/**
+ * Whether a button's text label is hidden (a narrow view toolbar shows its right end's buttons as icons: styles.css),
+ * so that its name is then its tooltip.
+ */
+export function useLabelHidden(ref: RefObject<HTMLElement | null>): boolean {
+    const [hidden, setHidden] = useState(false);
+    useLayoutEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        const check = (): void => setHidden(el.getClientRects().length === 0);
+        check();
+        const observer = new ResizeObserver(check);
+        observer.observe(el);
+        const bar = el.closest('.view-toolbar');
+        if (bar) observer.observe(bar);
+        return () => observer.disconnect();
+    }, [ref]);
+    return hidden;
 }
 
 /**
@@ -53,7 +74,7 @@ export function ToolbarSubject({ children }: { children: ReactNode }) {
     return <div className="toolbar-subject">{children}</div>;
 }
 
-/** The toolbar's right part: the 絞り込み button and the menu ⋯, never shrunk. */
+/** The toolbar's right part: the 絞り込み button and 書き出し (or 印刷), never shrunk. */
 export function ToolbarEnd({ children }: { children: ReactNode }) {
     return <div className="toolbar-end">{children}</div>;
 }
@@ -213,17 +234,23 @@ export function FilterPopover(props: { count: number; onClear: () => void; child
         useCallback(() => setOpen(false), []),
     );
     useMenuInside(open, menu);
+    const text = useRef<HTMLSpanElement>(null);
+    const iconOnly = useLabelHidden(text);
+    const label = count ? t.filters.active(count) : t.filters.label;
     return (
         <div className="filter-popover" ref={root}>
             <button
                 className={`toolbar-button filter-button${count ? ' active' : ''}`}
                 aria-haspopup="dialog"
                 aria-expanded={open}
-                aria-label={count ? t.filters.active(count) : t.filters.label}
+                aria-label={label}
+                data-tooltip={iconOnly && !open ? label : undefined}
                 onClick={() => setOpen(!open)}
             >
                 <Funnel size={13} aria-hidden />
-                <span className="filter-button-text">{t.filters.label}</span>
+                <span ref={text} className="filter-button-text toolbar-end-label">
+                    {t.filters.label}
+                </span>
                 {count > 0 && <span className="filter-count">{count}</span>}
             </button>
             {open && (

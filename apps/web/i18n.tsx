@@ -1,11 +1,11 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import type { DisplayMode, Lang, ViewLevel } from '@domaintrail/visualization';
+import type { DisplayMode, Lang, StructureLevel, ViewLevel } from '@domaintrail/visualization';
 import type { ElementKind } from '@domaintrail/modeling';
 import type { SemanticEdgeKind, StormingElementKind as EsElementKind } from '@domaintrail/storming';
 import type { Connection } from './app/useViewSocket';
 import type { CatalogSectionKey } from './model-utils';
 import type { ElementChange, Role } from '@domaintrail/collaboration/protocol';
-import type { Collaboration, TargetStatus } from '@domaintrail/collaboration';
+import type { Collaboration, InterviewCommandId, TargetStatus } from '@domaintrail/collaboration';
 import type { Whereabouts } from './session/presence';
 import type { RestorePoint } from './session/revisions';
 
@@ -24,6 +24,10 @@ type RunState = Collaboration.AgentRun['state'];
 type FailureReason = Collaboration.FailureReason;
 type RequestProgress = Collaboration.RequestProgress;
 type RevisionOriginKind = Collaboration.RevisionOrigin['kind'];
+type AddressedBy = Collaboration.AddressedBy;
+type TriageStage = Collaboration.TriageStage;
+type TriageVerdict = Collaboration.TriageVerdict;
+type ProposalState = Collaboration.ChangeProposal['state'];
 
 const ja = {
     added: '追加',
@@ -100,6 +104,26 @@ const ja = {
         fitSelectionNone: '選択した要素に合わせる（何も選択していません）',
         collapse: 'キャンバスの操作を畳む（U）',
         expand: 'キャンバスの操作を表示（U）',
+        compact: '詰めて表示',
+        compactOff: '詰めて表示をやめる',
+    },
+    /** The view toolbar's 書き出し menu (and the inspector's state diagram's), and the catalog's 印刷. */
+    exportMenu: {
+        label: '書き出し',
+        print: '印刷',
+        printing: '印刷の準備中…',
+        pdf: 'PDF（印刷画面から保存）',
+        png: 'PNG',
+        svg: 'SVG',
+        withHeading: '見出しを含める',
+        withLegend: '凡例を含める',
+    },
+    /** The line above a printed or exported diagram: what it is and how it is shown. */
+    sheet: {
+        structureLevels: { detail: '詳細', overview: '概観', aggregates: '集約' } as Record<StructureLevel, string>,
+        allContexts: 'すべてのコンテキスト',
+        withExceptions: '例外を含む',
+        withoutExceptions: '例外を除く',
     },
     transitionLabels: '遷移のラベル',
     transitionLabelModes: {
@@ -110,6 +134,9 @@ const ja = {
     pickContexts: '表示する BC を選んでください',
     loading: '読み込み中…',
     noDiagram: '表示できる図がありません',
+    // a view with nothing yet (no BC, or no storming): one line, and with an AI in the chat, that it can make it
+    emptyView: 'まだありません',
+    emptyViewAskAi: 'まだありません。チャットで /es から始められます',
 
     // Event Storming view (its level and timeline are the page's state: they never change a .dtes file)
     noStormings: 'ストーミングがありません（.dtes ファイルに storming を書くと表示されます）',
@@ -121,6 +148,14 @@ const ja = {
     } as Record<ViewLevel, { label: string; hint: string }>,
     timelineFilter: 'タイムライン',
     allTimelines: 'すべて（統合）',
+    /** A stage's view in the timeline picker: its main flow and its exceptions. */
+    stageView: (stage: string) => `${stage}（例外を含む）`,
+    /** A timeline of a stage in the timeline picker. */
+    stageTimeline: (stage: string, timeline: string) => `${stage} / ${timeline}`,
+    /** An exception in the timeline picker. */
+    exceptionTimeline: (name: string) => `例外：${name}`,
+    /** The storming's 絞り込み of the exceptions (on the integrated canvas and a stage). */
+    showExceptions: '例外を表示',
     staleStorming: (file: string) => `${file} に構文エラーがあるため、最後に解析できた内容を表示しています`,
 
     // the toolbar's 絞り込み (what each view hides)
@@ -131,6 +166,7 @@ const ja = {
         contexts: 'BC',
         kinds: '種類',
         allKinds: 'すべての種類',
+        shown: '表示',
     },
     contextsToShow: '表示する BC',
     allContexts: 'すべての BC',
@@ -158,6 +194,8 @@ const ja = {
         transition: 'コマンドによる遷移（⇒ 発生させるドメインイベント）',
         esCausal: '型レベルの因果（起こりうる関係。実際に起きたとは限らない）',
         esSequence: 'タイムラインの時間順',
+        esException: '例外の時間順',
+        esRejoin: '例外から本流へ戻る',
         esRelated: '関連（アクター・リードモデル・対象の集約）',
         esHotspot: 'ホットスポットの対象（向きを持たない）',
     },
@@ -179,9 +217,12 @@ const ja = {
         hotspot: 'ホットスポット',
         timeline: 'タイムライン',
         group: 'グループ',
+        stage: '段階',
     } as Record<EsElementKind, string>,
     notInStorming: (id: string) => `${id} はストーミングにありません`,
     inStorming: 'ストーミング',
+    /** An event marked `level design`: hidden at Big Picture. */
+    designLevelOnly: 'デザインレベルのみ',
     dtRef: '.dt との対応',
     noDtRef: 'なし（.dt との対応はまだ書かれていません）',
     unresolvedRef: '.dt にありません',
@@ -199,6 +240,9 @@ const ja = {
     hotspotStatus: '状態',
     hotspotStatuses: { open: '未解決', resolved: '解決済み' } as Record<string, string>,
     resolution: '結論',
+    /** A resolved hotspot: its chip in the storming legend's key, and its note's tooltip (what was agreed). */
+    resolvedHotspot: '解決済みのホットスポット',
+    resolvedHotspotTip: (resolution: string): string => (resolution ? `解決済み: ${resolution}` : '解決済み'),
     occurrences: 'タイムラインでの出現',
     noOccurrences: 'どのタイムラインにも属していません',
     stepOf: (n: number) => `${n} 番目`,
@@ -206,6 +250,11 @@ const ja = {
     drawnAs: (n: number) => `この図での付箋（${n} 枚）`,
     sharedNote: '複数のタイムラインで先頭から同じ流れの部分は 1 枚にまとめて描きますが、同じ出来事であるとは限りません',
     groupEvents: 'グループのイベント（順序なし）',
+    stageMain: '本流',
+    esException: '例外',
+    stageExceptions: (n: number) => `例外（${n} 件）`,
+    stageAfter: 'この前の段階',
+    showStage: 'この段階を表示',
     openFile: 'ファイルを開く',
 
     // explorer
@@ -398,7 +447,6 @@ const ja = {
             stale: 'もうソースで見つかりません（付け替えません）',
             unknown: '対象のあるソースが解析できません',
         } as Record<TargetStatus, string>,
-        runNote: 'コメント',
         queueRun: (n: number) => `選んだ依頼で実行を登録（${n}件）`,
         runs: (n: number) => `実行（${n}）`,
         noRuns: '実行はまだありません。',
@@ -417,6 +465,7 @@ const ja = {
             AgentError: 'エージェントの異常終了',
             LeaseExpired: '応答の途絶',
             Interrupted: '中断',
+            ReadScopeTooLarge: 'エージェントから除外するファイルが多すぎる（ディレクトリごと無視してください）',
         } as Record<FailureReason, string>,
         queuedBy: (name: string) => `登録: ${name}`,
         note: 'コメント',
@@ -471,7 +520,14 @@ const ja = {
             invite: '招待リンクをコピー',
             inviteHint: 'このページのアドレスです。開いた人は参加者として加わります',
             inviteCopied: (link: string) => `招待リンクをコピーしました: ${link}`,
+            makeInvite: '招待',
+            makeInviteHint:
+                '招待リンクを作ってコピーします。開いた人は参加をリクエストし、あなたが許可すると加わります（60分有効、作り直すと前のリンクは無効）',
+            inviteMade: (link: string) => `招待リンクをコピーしました（60分有効）: ${link}`,
+            stopInvite: '招待を止める',
+            inviteStopped: '招待を止めました',
             restore: '以前の状態に復元',
+            downloadSources: 'ソース一式をダウンロード',
             restoreTitle: '以前の状態に復元',
             restoreBody:
                 'ワークスペースの .dt と .dtes をすべて、選んだ時点の内容に復元します。あとの作業の変更も消えます。ひとつの作業だけを打ち消すときは、そのカードの「この作業を打ち消す」を使ってください。',
@@ -544,15 +600,10 @@ const ja = {
                 mentions > 0 ? `チャットを開く（あなた宛て ${mentions} 件）` : unread > 0 ? `チャットを開く（新着 ${unread} 件）` : 'チャットを開く',
             apply: 'AI に送る',
             mentionsYou: 'あなた宛て',
-            applyNow: '送る',
-            applyWithNote: 'コメントをつけて送る',
-            applyAgain: 'もう一度送る',
-            applyAnyway: 'AI に送る',
             selectMany: 'まとめて送る',
             select: '選ぶ',
             messageMenu: 'その他の操作',
             selected: (n: number) => `${n} 件を選択中`,
-            addNote: 'コメント…',
             applySelected: 'まとめて送る',
             clearSelection: '選択をやめる（Esc）',
             appliedAs: 'AI に送りました',
@@ -577,6 +628,7 @@ const ja = {
                 declined: '辞退',
                 failed: '失敗',
                 cancelled: '中止',
+                answered: '回答',
             },
             toTurn: (state: string) => `AI の作業へ（${state}）`,
             quoteHint: '元のメッセージへ',
@@ -627,7 +679,7 @@ const ja = {
             },
             replies: {
                 reply: '返信',
-                replyHint: 'この AI のターンに返信する（AI に送るかはファシリテーターが決めます）',
+                replyHint: 'この AI のターンに返信する（AI に届きます）',
                 replyingTo: (name: string) => (name ? `「${name}」への返信` : 'AI への返信'),
                 messageReplyHint: 'このメッセージに返信する',
                 replyingToMessage: (who: string) => `${who}への返信`,
@@ -649,6 +701,14 @@ const ja = {
             alternativeNote: (assumption: string, alternative: string) => `前提「${assumption}」は採らず、「${alternative}」としてやり直してください。`,
             handOver: 'ファシリテーターを引き継ぐ',
             linkIssued: (link: string) => `引き継ぐリンク（10分・1回だけ有効、コピーしました）: ${link}`,
+            // `link`: the join requests in the chat's head, and removing someone from the list
+            joinRequests: '参加リクエスト',
+            sameName: '同じ名前の人がいます',
+            inviteUsedUp: '招待リンクの上限に達しました',
+            inviteUsedUpHint: 'メニューの「招待」で新しいリンクを作れます',
+            joinApprove: '許可',
+            joinDeny: '拒否',
+            remove: (name: string) => `${name} を外す`,
             tabs: { chat: 'チャット', history: 'AI の作業' },
             tabsLabel: 'チャットと AI の作業',
             history: {
@@ -712,6 +772,83 @@ const ja = {
             facilitatorShort: 'ファシリ',
             you: 'あなた',
             listSeparator: '、',
+            // the AI as a participant (ADR 0030): where an addressed message stands, the header's presence, the composer's mark
+            ai: {
+                working: 'AI が読んでいます',
+                // the AI's card under a message in Solo, while it is triaged or answered
+                pending: '確認中',
+                toAnswer: 'AI の回答へ',
+                toProposal: '変更案へ',
+                // an answer that arrived while the reader was scrolled up: the pill that goes to its head
+                answerArrived: 'AI が回答しました',
+                givenUp: 'AI が答えられませんでした',
+                retry: 'もう一度',
+                willRead: 'AI に届きます',
+                presence: (role: 'all' | 'answer' | 'run', waiting: number) =>
+                    `${role === 'all' ? 'AI' : role === 'answer' ? 'AI（回答）' : 'AI（実行）'} 接続なし${waiting > 0 ? `（${waiting} 件待ち）` : ''}`,
+                answeredChanged: '質問への回答ですが、ファイルを変更しました',
+            },
+            // what `/` lists in the composer: the commands (an interview) and the templates (text to edit)
+            slash: {
+                commands: { es: 'ES を始める', model: 'モデリングを始める' } as Record<InterviewCommandId, string>,
+                command: 'AI が聞き取ります',
+                team: 'チーム',
+                noMatch: '一致するものがありません',
+                hint: '↑↓ で選び、Enter か Tab で決める（Esc で閉じる）',
+            },
+            // a `/es` or `/model` interview: the bar above the composer, and its brief
+            interview: {
+                running: '聞き取り中',
+                thinking: 'AI が考えています',
+                stop: '中止',
+                brief: '要約',
+                newStorming: '新しいストーミング',
+                newContext: '新しいコンテキスト',
+                replaces: '今の説明を置き換えます',
+                confirm: '確定',
+                editConfirm: '編集して確定',
+                cancel: 'やめる',
+                text: '要約の本文',
+                waiting: '始めた人の確定待ち',
+            },
+            // the facilitator's record of a message's triage (仕分けの記録)
+            triage: {
+                open: '仕分けの記録',
+                close: '仕分けの記録を閉じる',
+                addressedBy: { Mention: '@AI', Reply: 'AI への返信', Solo: 'ひとり', Facilitator: 'ファシリテーター' } as Record<AddressedBy, string>,
+                stages: {
+                    Mechanical: '機械的な判定',
+                    Clef: 'Clef',
+                    Model: '軽いモデル',
+                    Answerer: '回答役',
+                    Runner: '実行役',
+                    Facilitator: 'ファシリテーター',
+                } as Record<TriageStage, string>,
+                verdicts: { Consultation: '相談', ChangeRequest: '依頼', NotForAi: 'AI 宛てでない', Unknown: 'わからない' } as Record<TriageVerdict, string>,
+                pending: '仕分け中',
+                ms: (n: number) => `${n} ミリ秒`,
+            },
+            // a change proposal the AI wrote for a participant's 依頼 (変更案)
+            proposal: {
+                label: '変更案',
+                how: 'どう',
+                options: '選択肢',
+                recommended: 'AI の勧め',
+                more: (n: number) => `ほか ${n}`,
+                waiting: 'ファシリテーターの承認待ち',
+                chosen: '選んだ案',
+                approve: '承認',
+                edit: '編集',
+                reject: '却下',
+                withdraw: '取り下げ',
+                cancel: 'やめる',
+                note: 'ひとこと（任意）',
+                select: 'まとめて承認に入れる',
+                approveSelected: (n: number) => `${n} 件を承認`,
+                selected: (n: number) => `変更案 ${n} 件を選択中`,
+                states: { Open: '承認待ち', Approved: '承認', Rejected: '却下', Withdrawn: '取り下げ' } as Record<ProposalState, string>,
+                approvedEdited: '承認（編集あり）',
+            },
             agentSays: {
                 clarification: '確認したいこと',
                 completedChanged: '完了しました。モデルを変更しました。',
@@ -724,7 +861,7 @@ const ja = {
                 applied: (files: number | undefined) => (files === undefined ? 'ファイル変更あり' : `${files} ファイル変更`),
                 unchanged: '変更なし',
                 declined: '辞退しました',
-                status: { Done: '対応', Partial: '一部', Skipped: '未対応', Question: '確認' } as Record<RequestProgress, string>,
+                status: { Done: '対応', Partial: '一部', Skipped: '未対応', Question: '確認', Answered: '回答' } as Record<RequestProgress, string>,
                 request: (n: number) => `依頼 ${n}`,
                 assumption: '前提',
                 alternatives: '別案',
@@ -763,7 +900,8 @@ const ja = {
             mentionNoMatch: '一致する要素がありません',
             personNoMatch: '一致する参加者がいません',
             mentionsLimit: (max: number) => `言及できるのは ${max} 人までです`,
-            placeholder: '依頼の内容（# で対象、@ で人）',
+            placeholder: 'メッセージ（# で対象、@ で人や AI）',
+            placeholderSolo: 'AI へのメッセージ（# で対象）',
             sendHint: (keys: string) => `送る (${keys})`,
             participantsTitle: '参加者',
             offline: (n: number) => `オフライン (${n})`,
@@ -867,6 +1005,24 @@ const en: Messages = {
         fitSelectionNone: 'Fit the selection (nothing selected)',
         collapse: 'Collapse the canvas controls (U)',
         expand: 'Show the canvas controls (U)',
+        compact: 'Close up the gaps',
+        compactOff: 'Back to normal spacing',
+    },
+    exportMenu: {
+        label: 'Export',
+        print: 'Print',
+        printing: 'Preparing to print…',
+        pdf: 'PDF (save from the print dialog)',
+        png: 'PNG',
+        svg: 'SVG',
+        withHeading: 'Include the heading',
+        withLegend: 'Include the legend',
+    },
+    sheet: {
+        structureLevels: { detail: 'Detail', overview: 'Overview', aggregates: 'Aggregates' },
+        allContexts: 'All contexts',
+        withExceptions: 'with exceptions',
+        withoutExceptions: 'without exceptions',
     },
     transitionLabels: 'Transition labels',
     transitionLabelModes: {
@@ -877,6 +1033,8 @@ const en: Messages = {
     pickContexts: 'Pick the BCs to show',
     loading: 'Loading…',
     noDiagram: 'Nothing to draw',
+    emptyView: 'Nothing yet',
+    emptyViewAskAi: 'Nothing yet. Start with /es in the chat',
 
     noStormings: 'No stormings (write a storming in a .dtes file to see it here)',
     stormingPicker: 'Storming to show',
@@ -887,6 +1045,10 @@ const en: Messages = {
     },
     timelineFilter: 'Timeline',
     allTimelines: 'All (integrated)',
+    stageView: (stage) => `${stage} (with its exceptions)`,
+    stageTimeline: (stage, timeline) => `${stage} / ${timeline}`,
+    exceptionTimeline: (name) => `Exception: ${name}`,
+    showExceptions: 'Show exceptions',
     staleStorming: (file) => `${file} has syntax errors: showing what it was when it last parsed`,
 
     filters: {
@@ -896,6 +1058,7 @@ const en: Messages = {
         contexts: 'BCs',
         kinds: 'Kinds',
         allKinds: 'All kinds',
+        shown: 'Show',
     },
     contextsToShow: 'BCs to show',
     allContexts: 'All BCs',
@@ -922,6 +1085,8 @@ const en: Messages = {
         transition: 'Transition by a command (⇒ events it raises)',
         esCausal: 'Type-level cause (a possibility, not something that happened)',
         esSequence: 'Time order of a timeline',
+        esException: 'Time order of an exception',
+        esRejoin: 'An exception returning to the main flow (then)',
         esRelated: 'Related (actor, read model, target aggregate)',
         esHotspot: 'A hotspot’s subject (no direction)',
     },
@@ -942,9 +1107,11 @@ const en: Messages = {
         hotspot: 'Hotspot',
         timeline: 'Timeline',
         group: 'Group',
+        stage: 'Stage',
     },
     notInStorming: (id) => `${id} is not in the storming`,
     inStorming: 'Storming',
+    designLevelOnly: 'Design Level only',
     dtRef: 'In .dt',
     noDtRef: 'None (no ref to .dt yet)',
     unresolvedRef: 'not in .dt',
@@ -962,6 +1129,8 @@ const en: Messages = {
     hotspotStatus: 'Status',
     hotspotStatuses: { open: 'open', resolved: 'resolved' },
     resolution: 'Resolution',
+    resolvedHotspot: 'Resolved hotspot',
+    resolvedHotspotTip: (resolution) => (resolution ? `Resolved: ${resolution}` : 'Resolved'),
     occurrences: 'In timelines',
     noOccurrences: 'In no timeline',
     stepOf: (n) => `step ${n}`,
@@ -969,6 +1138,11 @@ const en: Messages = {
     drawnAs: (n) => `Notes in this view (${n})`,
     sharedNote: 'Steps that timelines share from their start are drawn once; they are not necessarily the same happening',
     groupEvents: 'Events of the group (no order)',
+    stageMain: 'Main flows',
+    esException: 'Exception',
+    stageExceptions: (n) => `Exceptions (${n})`,
+    stageAfter: 'Comes after',
+    showStage: 'Show this stage',
     openFile: 'Open the file',
 
     model: 'Model',
@@ -1148,7 +1322,6 @@ const en: Messages = {
             stale: 'No longer found in the sources (never re-bound)',
             unknown: 'The sources it would be in do not parse',
         },
-        runNote: 'Comment',
         queueRun: (n) => `Queue a run of the selected requests (${n})`,
         runs: (n) => `Runs (${n})`,
         noRuns: 'No run yet.',
@@ -1167,6 +1340,7 @@ const en: Messages = {
             AgentError: 'The agent failed',
             LeaseExpired: 'The agent stopped answering',
             Interrupted: 'Interrupted',
+            ReadScopeTooLarge: 'Too many ignored files to keep from the agent (ignore whole directories)',
         },
         queuedBy: (name) => `Queued by ${name}`,
         note: 'Comment',
@@ -1220,7 +1394,14 @@ const en: Messages = {
             invite: 'Copy the invite link',
             inviteHint: "This page's address: whoever opens it joins as a participant",
             inviteCopied: (link) => `Invite link copied: ${link}`,
+            makeInvite: 'Invite',
+            makeInviteHint:
+                'Makes an invite link and copies it. Whoever opens it asks to join, and comes in once you let them (60 minutes; a new link stops the previous one)',
+            inviteMade: (link) => `Invite link copied (60 minutes): ${link}`,
+            stopInvite: 'Stop inviting',
+            inviteStopped: 'Invite link stopped',
             restore: 'Restore an earlier state',
+            downloadSources: 'Download sources (.zip)',
             restoreTitle: 'Restore an earlier state',
             restoreBody:
                 "Every .dt and .dtes of the workspace becomes as it was at the point you choose, later work's changes included. To take back one piece of work only, use its card's “Revert this work”.",
@@ -1292,15 +1473,10 @@ const en: Messages = {
                 mentions > 0 ? `Open the chat (${mentions} for you)` : unread > 0 ? `Open the chat (${unread} new)` : 'Open the chat',
             apply: 'Send to the AI',
             mentionsYou: 'For you',
-            applyNow: 'Send',
-            applyWithNote: 'Send with a comment',
-            applyAgain: 'Send again',
-            applyAnyway: 'Send to the AI',
             selectMany: 'Send together',
             select: 'Select',
             messageMenu: 'More actions',
             selected: (n) => `${n} selected`,
-            addNote: 'Comment…',
             applySelected: 'Send together',
             clearSelection: 'Stop selecting (Esc)',
             appliedAs: 'Sent to the AI',
@@ -1324,6 +1500,7 @@ const en: Messages = {
                 declined: 'declined',
                 failed: 'failed',
                 cancelled: 'stopped',
+                answered: 'answered',
             },
             toTurn: (state) => `To the AI's work (${state})`,
             quoteHint: 'Go to the message',
@@ -1371,7 +1548,7 @@ const en: Messages = {
             },
             replies: {
                 reply: 'Reply',
-                replyHint: 'Reply to this AI turn (the facilitator decides whether to send it to the AI)',
+                replyHint: 'Reply to this AI turn (the AI reads it)',
                 replyingTo: (name: string) => (name ? `Replying to "${name}"` : 'Replying to the AI'),
                 messageReplyHint: 'Reply to this message',
                 replyingToMessage: (who: string) => `Replying to ${who}`,
@@ -1393,6 +1570,13 @@ const en: Messages = {
             alternativeNote: (assumption, alternative) => `Do not assume "${assumption}": redo it with "${alternative}".`,
             handOver: 'Hand the facilitator role over',
             linkIssued: (link) => `Hand-over link (10 minutes, once; copied): ${link}`,
+            joinRequests: 'Join requests',
+            sameName: 'Someone has the same name',
+            inviteUsedUp: 'The invite link is used up',
+            inviteUsedUpHint: 'Make a new one with Invite in the menu',
+            joinApprove: 'Let in',
+            joinDeny: 'Deny',
+            remove: (name) => `Remove ${name}`,
             tabs: { chat: 'Chat', history: "AI's work" },
             tabsLabel: "The chat and the AI's work",
             history: {
@@ -1455,6 +1639,76 @@ const en: Messages = {
             facilitatorShort: 'facilitator',
             you: 'You',
             listSeparator: ', ',
+            ai: {
+                working: 'The AI is reading it',
+                pending: 'Checking',
+                toAnswer: "To the AI's answer",
+                toProposal: 'To the proposal',
+                answerArrived: 'The AI answered',
+                givenUp: 'The AI could not answer',
+                retry: 'Try again',
+                willRead: 'The AI reads this',
+                presence: (role, waiting) =>
+                    `${role === 'all' ? 'AI' : role === 'answer' ? 'AI (answers)' : 'AI (runs)'} not connected${waiting > 0 ? ` (${waiting} waiting)` : ''}`,
+                answeredChanged: 'Answered as a question, yet changed files',
+            },
+            slash: {
+                commands: { es: 'Start event storming', model: 'Start modeling' },
+                command: 'The AI interviews you',
+                team: 'Team',
+                noMatch: 'Nothing matches',
+                hint: 'Choose with ↑↓, pick with Enter or Tab (Esc closes)',
+            },
+            interview: {
+                running: 'Interview',
+                thinking: 'The AI is thinking',
+                stop: 'Stop',
+                brief: 'Brief',
+                newStorming: 'New storming',
+                newContext: 'New context',
+                replaces: 'Replaces the current description',
+                confirm: 'Confirm',
+                editConfirm: 'Edit and confirm',
+                cancel: 'Cancel',
+                text: 'The brief',
+                waiting: 'Waiting for its starter to confirm',
+            },
+            triage: {
+                open: 'Triage record',
+                close: 'Close the triage record',
+                addressedBy: { Mention: '@AI', Reply: 'A reply to the AI', Solo: 'Solo', Facilitator: 'The facilitator' },
+                stages: {
+                    Mechanical: 'Mechanical',
+                    Clef: 'Clef',
+                    Model: 'Light model',
+                    Answerer: 'Answerer',
+                    Runner: 'Runner',
+                    Facilitator: 'Facilitator',
+                },
+                verdicts: { Consultation: 'Consultation', ChangeRequest: 'Change request', NotForAi: 'Not for the AI', Unknown: 'Unknown' },
+                pending: 'Triaging',
+                ms: (n) => `${n} ms`,
+            },
+            proposal: {
+                label: 'Proposed change',
+                how: 'How',
+                options: 'Options',
+                recommended: 'AI recommends',
+                more: (n) => `${n} more`,
+                waiting: 'Waiting for the facilitator',
+                chosen: 'Chosen',
+                approve: 'Approve',
+                edit: 'Edit',
+                reject: 'Reject',
+                withdraw: 'Withdraw',
+                cancel: 'Cancel',
+                note: 'A note (optional)',
+                select: 'Approve together',
+                approveSelected: (n) => `Approve ${n}`,
+                selected: (n) => `${n} proposals selected`,
+                states: { Open: 'Awaiting approval', Approved: 'Approved', Rejected: 'Rejected', Withdrawn: 'Withdrawn' },
+                approvedEdited: 'Approved, edited',
+            },
             agentSays: {
                 clarification: 'A question',
                 completedChanged: 'Done. I changed the model.',
@@ -1467,7 +1721,7 @@ const en: Messages = {
                 applied: (files) => (files === undefined ? 'files changed' : `${files} ${files === 1 ? 'file' : 'files'} changed`),
                 unchanged: 'No changes',
                 declined: 'Declined',
-                status: { Done: 'Done', Partial: 'Partly', Skipped: 'Not done', Question: 'Question' },
+                status: { Done: 'Done', Partial: 'Partly', Skipped: 'Not done', Question: 'Question', Answered: 'Answered' },
                 request: (n) => `Request ${n}`,
                 assumption: 'Assumption',
                 alternatives: 'Alternatives',
@@ -1506,7 +1760,8 @@ const en: Messages = {
             mentionNoMatch: 'No matching element',
             personNoMatch: 'No matching participant',
             mentionsLimit: (max) => `At most ${max} people`,
-            placeholder: 'What should change (# a target, @ a person)',
+            placeholder: 'A message (# a target, @ a person or the AI)',
+            placeholderSolo: 'A message to the AI (# a target)',
             sendHint: (keys) => `Send (${keys})`,
             participantsTitle: 'Participants',
             offline: (n) => `Offline (${n})`,

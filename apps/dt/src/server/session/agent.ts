@@ -1,11 +1,16 @@
 // The agent API of a session (ADR 0026, S4): a listener of its own, bound to 127.0.0.1 only, never routed through the
-// public listener, and requiring the bearer token of `.domaintrail/session/agent.json` on every request. Browsers are
-// refused (any `Origin`). The subscriber (S6) follows an SSE stream of the outbox (`id:` = outbox position, resumed
-// with `Last-Event-ID`), reads the participants' display names (for the prompt), claims the next run with a lease,
-// starts it (and gets the runs it continues, with what they changed, and the runs it reverts), heartbeats, and ends it (finish with its facts and the agent's reply, ask for clarification, decline,
-// fail) or releases it. The server computes the rest (S3's use cases); the reply is validated and kept, never a fact.
-// While a run runs, its holder also reports what it is doing (an activity, ADR 0026, amendment): held in memory and
-// sent to the pages, never stored.
+// public listener, and requiring its bearer token on every request but the pairing (ADR 0030, M5): the token is held in
+// memory only, handed to the agent in process, or exchanged once for a one-time pairing code (`POST /agent/pair`, the
+// code printed by `dt collab agent-link`) by a standalone `dt agent`. Browsers are refused (any `Origin`). The
+// subscriber (S6) follows an SSE stream of the outbox (`id:` = outbox position, resumed with `Last-Event-ID`), reads the
+// participants' display names (for the prompt), claims the next run with a lease, starts it (and gets the runs it
+// continues, with what they changed, and the runs it reverts), heartbeats, and ends it (finish with its facts and the
+// agent's reply, ask for clarification, decline, fail) or releases it. The server computes the rest (S3's use cases);
+// the reply is validated and kept, never a fact. While a run runs, its holder also reports what it is doing (an
+// activity, ADR 0026, amendment): held in memory and sent to the pages, never stored. Since ADR 0030 (decision 6) these
+// are the runner role's; the answerer role has an entry point of its own beside them, behind the same token
+// (`/agent/answers/events`, `POST /agent/answers/:job`: `answers.ts`). Each stream open is an agent of its role
+// connected (the page's AI status).
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import {
@@ -15,11 +20,19 @@ import {
     knownAgentRunId,
     type OutboxEntry,
     readActivity,
+    readToolOutcome,
     type RunActivity,
 } from '@domaintrail/collaboration';
-import { AGENT_EVENT_TYPES, type AgentParticipantsBody, type AgentSessionBody } from '@domaintrail/collaboration/protocol';
+import {
+    AGENT_EVENT_TYPES,
+    AGENT_FAIL_REASONS,
+    type AgentParticipantsBody,
+    type AgentSessionBody,
+    type AgentSessionSoFar,
+} from '@domaintrail/collaboration/protocol';
 import { isLoopbackHost } from '../http/access.js';
 import { BodyError, readJson, sendError, sendJson } from '../http/json.js';
+import { type AnswerDispatcher, createAnswerDispatcher } from './answers.js';
 import { agentReply, body, text, uuid, MAX_NOTE } from './input.js';
 import { eventMessage } from './relay.js';
 import { statusOf } from './routes.js';
@@ -39,7 +52,7 @@ export interface AgentApiDeps {
     readonly allowedTools: readonly string[];
     /** How long a claim or a heartbeat holds the lease. */
     readonly leaseMs: number;
-    /** The most characters of diff a started run is given of the runs it continues, together (`session.agent.maxPreviousRunDiff`). */
+    /** The most characters of diff a started run is given of the runs it continues, together (`agent.run.maxPreviousRunDiff`). */
     readonly maxPreviousRunDiff: number;
     /** Most SSE streams open at once. */
     readonly maxStreams: number;
@@ -49,6 +62,13 @@ export interface AgentApiDeps {
     readonly activity: (run: Collaboration.AgentRunId, activity: RunActivity) => void;
     /** Lets the server take a revert at the head of the queue (a claim found one it has not tried yet). */
     readonly reverts?: () => void;
+    /** The most milliseconds an answer job may take (`agent.answer.timeout`). */
+    readonly answerTimeoutMs: number;
+    /** The agents connected changed (a stream of either role opened or closed). */
+    readonly onPresence?: () => void;
+    readonly log?: (line: string) => void;
+    /** Uses a one-time pairing code: whether it was valid (`POST /agent/pair` then answers the token). Absent: no pairing. */
+    readonly pair?: (code: string) => Promise<boolean>;
 }
 
 export interface AgentApi {
@@ -58,6 +78,10 @@ export interface AgentApi {
     wake(): void;
     /** Ends every stream (the server stops). */
     close(): void;
+    /** The answerer role's entry point: its jobs handed out, its streams. */
+    readonly answers: AnswerDispatcher;
+    /** How many agents of each role are connected: answer streams, and run streams (`/agent/events`). */
+    connected(): { readonly answer: number; readonly run: number };
 }
 
 /** The SSE event name of an outbox event for the agent, if the agent is told about it. */
@@ -83,6 +107,17 @@ interface Stream {
 export function createAgentApi(deps: AgentApiDeps): AgentApi {
     const { session, collaboration: use } = deps;
     const streams = new Set<Stream>();
+    const answers = createAnswerDispatcher({
+        session,
+        collaboration: use,
+        timeoutMs: deps.answerTimeoutMs,
+        maxPreviousRunDiff: deps.maxPreviousRunDiff,
+        maxStreams: deps.maxStreams,
+        pump: deps.pump,
+        ...(deps.onPresence && { onPresence: deps.onPresence }),
+        token: deps.token,
+        log: deps.log ?? (() => {}),
+    });
 
     const endStream = (stream: Stream): void => {
         if (stream.closed) return;
@@ -148,9 +183,11 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         res.write(': stream\n\n');
         const stream: Stream = { cursor: Number(resumeFrom), res, running: false, again: false, closed: false };
         streams.add(stream);
+        deps.onPresence?.();
         res.on('close', () => {
             stream.closed = true;
             streams.delete(stream);
+            deps.onPresence?.();
         });
         void drain(stream).catch((e: unknown) => {
             console.error(`Agent stream failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -190,14 +227,24 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         sendJson(res, 200, body(result.value));
     };
 
+    /** Whether a reply of the agent carries the agent's own credential (it would reach the pages). */
+    const leaks = (v: unknown): boolean => v !== undefined && JSON.stringify(v).includes(deps.token);
+    const refuseLeak = (res: ServerResponse, run: Collaboration.AgentRunId): void => {
+        deps.log?.(`run ${run}: refused a reply that contains the agent credential`);
+        sendError(res, 400, 'CredentialInOutput', 'The reply contains the agent credential.');
+    };
+
     const runRoute = async (req: IncomingMessage, res: ServerResponse, rawId: string, action: string): Promise<void> => {
         const id = uuid(rawId, 'id');
         if (!id.ok) return sendError(res, 400, 'InvalidInput', id.error.message, { field: 'id' });
         const run = knownAgentRunId(id.value);
         switch (action) {
             case 'start': {
-                const b = await input(req, res, ['token']);
+                const b = await input(req, res, ['token', 'since']);
                 if (!b) return;
+                if (b.since !== undefined && !(typeof b.since === 'number' && Number.isInteger(b.since) && b.since >= 0))
+                    return sendError(res, 400, 'InvalidInput', 'Expected the last entry of the session so far seen.', { field: 'since' });
+                const since = b.since;
                 const started = await use.startRun({ run, token: String(b.token) });
                 if (!started.ok) return answer(res, started, (v) => v);
                 // the runs it continues (replies, an answer) and what they changed, measured now (ADR 0026, "replies to runs")
@@ -206,7 +253,21 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
                 // the runs it reverts and what they changed, file by file (ADR 0026, amendment "revert a run")
                 const reverted = await use.revertedRuns({ run });
                 const revert = reverted.ok ? reverted.value : [];
-                return answer(res, started, (v) => ({ run: v.run, baseRevision: v.base, previousRuns, ...(revert.length > 0 && { revert }) }));
+                // the session so far (ADR 0030, round 3): whole, and since what the runner's warm process saw
+                const soFar = async (from?: number): Promise<AgentSessionSoFar | undefined> => {
+                    const s = await use.sessionSoFar({ session, ...(from !== undefined && { since: from }) });
+                    return s.ok ? { text: s.value.text, last: s.value.last, ...(from !== undefined && { since: from }) } : undefined;
+                };
+                const sessionSoFar = await soFar();
+                const sessionSoFarSince = typeof since === 'number' ? await soFar(since) : undefined;
+                return answer(res, started, (v) => ({
+                    run: v.run,
+                    baseRevision: v.base,
+                    previousRuns,
+                    ...(revert.length > 0 && { revert }),
+                    ...(sessionSoFar && { sessionSoFar }),
+                    ...(sessionSoFarSince && { sessionSoFarSince }),
+                }));
             }
             case 'heartbeat': {
                 const b = await input(req, res, ['token']);
@@ -240,22 +301,32 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
             case 'finish': {
                 const b = await input(req, res, ['token', 'exitCode', 'formatted', 'checked', 'reply']);
                 if (!b) return;
+                if (leaks(b.reply)) return refuseLeak(res, run);
                 const { exitCode, formatted, checked } = b;
                 if (typeof exitCode !== 'number' || !Number.isInteger(exitCode) || exitCode < -1024 || exitCode > 1024)
                     return sendError(res, 400, 'InvalidInput', 'Expected the exit code.', { field: 'exitCode' });
-                if (typeof formatted !== 'boolean') return sendError(res, 400, 'InvalidInput', 'Expected true or false.', { field: 'formatted' });
-                if (typeof checked !== 'boolean') return sendError(res, 400, 'InvalidInput', 'Expected true or false.', { field: 'checked' });
+                // ran, failed or skipped (ADR 0030); a boolean from a subscriber before skipping existed (true: ran)
+                const fmt = readToolOutcome(formatted);
+                const check = readToolOutcome(checked);
+                if (!fmt) return sendError(res, 400, 'InvalidInput', "Expected 'ran', 'failed' or 'skipped'.", { field: 'formatted' });
+                if (!check) return sendError(res, 400, 'InvalidInput', "Expected 'ran', 'failed' or 'skipped'.", { field: 'checked' });
                 const reply = b.reply === undefined ? undefined : agentReply(b.reply, 'done');
                 if (reply && !reply.ok) return sendError(res, 400, 'InvalidInput', reply.error.message, { field: reply.error.field });
                 return answer(
                     res,
-                    await use.finishRun({ run, token: String(b.token), facts: { exitCode, formatted, checked }, ...(reply && { reply: reply.value }) }),
+                    await use.finishRun({
+                        run,
+                        token: String(b.token),
+                        facts: { exitCode, formatted: fmt, checked: check },
+                        ...(reply && { reply: reply.value }),
+                    }),
                     (v) => v,
                 );
             }
             case 'clarification': {
                 const b = await input(req, res, ['token', 'question', 'reply']);
                 if (!b) return;
+                if (leaks(b.question) || leaks(b.reply)) return refuseLeak(res, run);
                 const question = text(b.question, 'question', MAX_NOTE);
                 if (!question.ok) return sendError(res, 400, 'InvalidInput', question.error.message, { field: 'question' });
                 const reply = b.reply === undefined ? undefined : agentReply(b.reply, 'clarification');
@@ -269,6 +340,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
             case 'decline': {
                 const b = await input(req, res, ['token', 'reply']);
                 if (!b) return;
+                if (leaks(b.reply)) return refuseLeak(res, run);
                 const reply = agentReply(b.reply, 'declined');
                 if (!reply.ok) return sendError(res, 400, 'InvalidInput', reply.error.message, { field: reply.error.field });
                 return answer(res, await use.declineRun({ run, token: String(b.token), reply: reply.value }), (v) => v);
@@ -276,9 +348,10 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
             case 'fail': {
                 const b = await input(req, res, ['token', 'reason']);
                 if (!b) return;
-                if (b.reason !== 'AgentError' && b.reason !== 'Interrupted')
-                    return sendError(res, 400, 'InvalidInput', "Expected 'AgentError' or 'Interrupted'.", { field: 'reason' });
-                return answer(res, await use.failRun({ run, token: String(b.token), reason: b.reason }), (v) => v);
+                const reason = AGENT_FAIL_REASONS.find((r) => r === b.reason);
+                if (!reason)
+                    return sendError(res, 400, 'InvalidInput', `Expected one of ${AGENT_FAIL_REASONS.map((r) => `'${r}'`).join(', ')}.`, { field: 'reason' });
+                return answer(res, await use.failRun({ run, token: String(b.token), reason }), (v) => v);
             }
             case 'release': {
                 const b = await input(req, res, ['token']);
@@ -300,11 +373,20 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         }
         if (!hostname || !isLoopbackHost(hostname) || req.headers.origin !== undefined)
             return sendError(res, 403, 'Forbidden', 'The agent API is for local processes only.');
+        // the pairing: a one-time code (single use, short-lived, an agent code: never a facilitator link) for the token
+        if (new URL(req.url ?? '/', 'http://localhost').pathname === '/agent/pair' && req.method === 'POST' && deps.pair) {
+            const b = await input(req, res, ['code']);
+            if (!b) return;
+            const code = typeof b.code === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(b.code) ? b.code : undefined;
+            if (!code || !(await deps.pair(code)))
+                return sendError(res, 401, 'PairingInvalid', 'The pairing code is unknown, used or expired: print another with `dt collab agent-link`.');
+            return sendJson(res, 200, { session, token: deps.token });
+        }
         const auth = req.headers.authorization ?? '';
         const given = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : '';
         if (!given || !sameSecret(given, deps.token)) {
             res.setHeader('www-authenticate', 'Bearer realm="dt-session-agent"');
-            return sendError(res, 401, 'Unauthenticated', 'The agent credential (.domaintrail/session/agent.json) is required.');
+            return sendError(res, 401, 'Unauthenticated', 'The agent credential is required (pair with `dt agent --code`).');
         }
         const url = new URL(req.url ?? '/', 'http://localhost');
         const path = url.pathname;
@@ -321,6 +403,21 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
             return sendJson(res, 200, answer);
         }
         if (path === '/agent/events' && req.method === 'GET') return events(req, url, res);
+        if (path === '/agent/answers/events' && req.method === 'GET') return answers.events(req, res);
+        const job = /^\/agent\/answers\/([^/]+)$/.exec(path);
+        if (job && job[1] !== 'events') {
+            if (req.method !== 'POST') return sendError(res, 405, 'MethodNotAllowed', 'Use POST.');
+            const id = uuid(job[1], 'job');
+            if (!id.ok) return sendError(res, 400, 'InvalidInput', id.error.message, { field: 'job' });
+            let raw: unknown;
+            try {
+                raw = await readJson(req, MAX_AGENT_BODY);
+            } catch (e) {
+                if (!(e instanceof BodyError)) throw e;
+                return sendError(res, e.status, e.type, e.message);
+            }
+            return answers.result(res, id.value, raw);
+        }
         if (path === '/agent/runs/claim' && req.method === 'POST') {
             const b = await input(req, res, ['owner', 'capabilities']);
             if (!b) return;
@@ -365,6 +462,9 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         close() {
             clearInterval(keepalive);
             for (const stream of streams) endStream(stream);
+            answers.close(false);
         },
+        answers,
+        connected: () => ({ answer: answers.connected(), run: [...streams].filter((s) => !s.closed).length }),
     };
 }

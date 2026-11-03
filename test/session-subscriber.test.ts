@@ -1,13 +1,15 @@
 /**
- * `dt session subscribe` (ADR 0026, S6) against a real session server (dev identity) on a copy of examples/shop, with
+ * `dt agent` (ADR 0026, S6; was `dt session subscribe`) against a real session server (dev identity) on a copy of examples/shop, with
  * a fake agent instead of Claude Code (`test/fixtures/agent/fake-claude.mjs`): requests about `.dtes` and `.dt`
  * elements → a run → the agent's edits → the Live View's Big Picture, Design Level and Domain views, and a completed
  * run with its result revision; serial runs without confirmation; cancel; heartbeats and lease expiry; the stream's
  * reconnection with `Last-Event-ID`; idempotent completion; a change outside the DSL sources; the CLI on Bun and Node.
+ * The pipeline's tests run the agent cold (one process per run); the warm agent (one process across runs, each run a
+ * turn) has its own, and the CLI runs warm, as its config's default.
  */
 import { afterAll, afterEach, describe, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import {
@@ -23,17 +25,9 @@ import {
     type WorkspaceFiles,
 } from '@domaintrail/agent';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import {
-    readCredential,
-    type RunningSubscriber,
-    type SessionServer,
-    startSessionServer,
-    startSubscriber,
-    type SubscriberOptions,
-    SessionError,
-} from '@domaintrail/dt';
+import { issueAgentLink, type RunningSubscriber, type SessionServer, startSessionServer, startSubscriber, type SubscriberOptions } from '@domaintrail/dt';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
-import type { ResolvedSessionConfig } from '@domaintrail/dt';
+import type { SessionSettings } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { findDomainFiles } from '@domaintrail/workspace';
 import { tempCopyOfExamples } from './helpers';
@@ -84,7 +78,7 @@ afterAll(async () => {
     for (const dir of dirs) await rm(dir, { recursive: true, force: true });
 });
 
-const sessionConfig = (): ResolvedSessionConfig => ({
+const sessionConfig = (): SessionSettings => ({
     port: 0,
     host: '127.0.0.1',
     identity: 'dev',
@@ -223,14 +217,25 @@ async function waitFor<T>(what: string, probe: () => Promise<T | undefined> | T 
     }
 }
 
-/** The app's subscriber (`startSubscriber`) on the context's workspace, with the fake agent following `plan`. */
+/** The agent API's credential of the context's server, in memory (as the agent in process gets it). */
+const credentialOf = (ctx: Context): { url: string; token: string; session: string } => ({
+    url: ctx.server.agentUrl,
+    token: ctx.server.agentToken,
+    session: ctx.server.session,
+});
+
+/** The app's subscriber (`startSubscriber`) on the context's workspace, with the fake agent following `plan` (cold, unless `extra` says). */
 async function subscribe(ctx: Context, planFile: string, extra: Partial<SubscriberOptions> = {}): Promise<{ subscriber: RunningSubscriber; log: string[] }> {
     const log: string[] = [];
     const subscriber = await startSubscriber({
         root: ctx.root,
         agent: 'claude',
+        connect: { credential: credentialOf(ctx) },
         dt: DT,
         agentCommand: { command: process.execPath, args: [FAKE, planFile] },
+        run: { warm: false, restartAfter: 20, idleTimeout: 30 },
+        // the runner only: the answerer role (its own fake plan) has its tests in session-triage.test.ts
+        roles: ['run'],
         log: (l) => log.push(l),
         reconnect: { minMs: 100, maxMs: 500, giveUpMs: 5_000 },
         ...extra,
@@ -312,7 +317,7 @@ describe('a run from the browser to the Live View (the plan’s acceptance, with
             if (done.state !== 'Completed') return;
             expect(done.changed).toBe(true);
             expect(done.resultRevision).not.toBe(done.baseRevision);
-            expect(done.report).toEqual({ exitCode: 0, formatted: true, checked: true, newDtErrors: 0, unparsedDtes: 0 });
+            expect(done.report).toEqual({ exitCode: 0, formatted: 'Ran', checked: 'Ran', newDtErrors: 0, unparsedDtes: 0 });
             const revisions = (await state(ctx)).revisions;
             expect(revisions.find((r) => r.id === done.resultRevision)?.origin).toEqual({ kind: 'RunResult', run });
 
@@ -338,11 +343,17 @@ describe('a run from the browser to the Live View (the plan’s acceptance, with
                 '--no-session-persistence',
                 '--strict-mcp-config',
                 '--setting-sources',
-                'user',
+                '',
                 '--permission-mode',
                 'dontAsk',
             ]);
-            expect(invocation.args.slice(invocation.args.indexOf('--allowedTools') + 1)).toEqual([...DEFAULT_AGENT_TOOLS]);
+            expect(invocation.args.slice(invocation.args.indexOf('--allowedTools') + 1)).toEqual([
+                'Edit(./**)',
+                'Bash(dt fmt:*)',
+                'Bash(dt check:*)',
+                'Bash(dt guide:*)',
+            ]);
+            expect(invocation.args).toContain('Read(./.domaintrail/**)');
             expect(invocation.args[invocation.args.indexOf('--tools') + 1]).toBe('Read,Edit,Write,Glob,Grep,Bash');
             const prompt = invocation.prompt;
             const nonce = /<requests-([0-9a-f]{32})>/.exec(prompt)?.[1];
@@ -475,7 +486,7 @@ describe('the pipeline', () => {
         expect(failed.state).toBe('Failed');
         if (failed.state !== 'Failed') return;
         expect(failed.reason).toBe('RuleNotMet');
-        expect(failed.report).toEqual({ exitCode: 3, formatted: true, checked: true, newDtErrors: 0, unparsedDtes: 0 });
+        expect(failed.report).toEqual({ exitCode: 3, formatted: 'Ran', checked: 'Ran', newDtErrors: 0, unparsedDtes: 0 });
     });
 
     integration('a .dtes the agent leaves broken: dt fmt skips it, the run fails with an unparsed .dtes', async () => {
@@ -485,7 +496,7 @@ describe('the pipeline', () => {
         const failed = await until(ctx, run, ['Completed', 'Failed']);
         expect(failed.state === 'Failed' && [failed.reason, failed.report]).toEqual([
             'RuleNotMet',
-            { exitCode: 0, formatted: true, checked: true, newDtErrors: 0, unparsedDtes: 1 },
+            { exitCode: 0, formatted: 'Ran', checked: 'Ran', newDtErrors: 0, unparsedDtes: 1 },
         ]);
     });
 
@@ -593,6 +604,56 @@ describe('the pipeline', () => {
         expect(log.some((l) => l.includes('changed files other than .dt/.dtes sources: "src/notes.txt"'))).toBe(true);
     });
 
+    integration('a workspace with more than 500 ignored entries: the run is refused before the agent and fails as ReadScopeTooLarge', async () => {
+        const ctx = await setup();
+        await writeFile(path.join(ctx.root, '.gitignore'), '*.tmp\n', { flag: 'a' });
+        await mkdir(path.join(ctx.root, 'scratch'));
+        for (let i = 0; i <= 500; i++) await writeFile(path.join(ctx.root, 'scratch', `f${i}.tmp`), '');
+        const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
+        const { log } = await subscribe(ctx, await ctx.plan([{}]));
+        const failed = await until(ctx, run, ['Completed', 'Failed']);
+        expect(failed.state === 'Failed' && failed.reason).toBe('ReadScopeTooLarge');
+        expect(log.some((l) => l.includes('ignore whole directories'))).toBe(true);
+        // the agent never ran
+        expect(await ctx.invocations()).toHaveLength(0);
+    });
+
+    integration('what the runner reads outside the workspace: agent.read.paths and its own, added read-only; the answerer’s own are not its', async () => {
+        const ctx = await setup();
+        const outside = await realpath(await scratch('domaintrail-read-outside-'));
+        for (const name of ['common', 'runs', 'answers']) await mkdir(path.join(outside, name));
+        await writeFile(path.join(outside, 'glossary.md'), 'g');
+        const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
+        const common = [path.join(outside, 'common'), path.join(outside, 'missing')];
+        const { log } = await subscribe(ctx, await ctx.plan([{}]), {
+            read: { answer: [...common, path.join(outside, 'answers')], run: [...common, path.join(outside, 'runs'), path.join(outside, 'glossary.md')] },
+        });
+        expect((await until(ctx, run, ['Completed', 'Failed'])).state).toBe('Completed');
+        const [invocation] = await ctx.invocations();
+        expect(invocation.args.filter((_, i) => invocation.args[i - 1] === '--add-dir')).toEqual([path.join(outside, 'common'), path.join(outside, 'runs')]);
+        expect(invocation.args).toContain(`Edit(/${path.join(outside, 'runs')}/**)`);
+        expect(invocation.args).toContain(`Read(/${path.join(outside, 'glossary.md')})`);
+        expect(invocation.args).toContain(`Edit(/${path.join(outside, 'glossary.md')})`);
+        expect(invocation.args.join('\n')).not.toContain('answers');
+        expect(log).toContain(`runner: not reading ${path.join(outside, 'missing')} (not found)`);
+    });
+
+    integration('an agent that writes a configuration file in any case beside a -c file outside the workspace: its run fails', async () => {
+        const ctx = await setup();
+        const conf = await scratch('domaintrail-conf-');
+        await writeFile(path.join(conf, 'team.jsonc'), '{}');
+        const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
+        const variant = path.relative(ctx.root, path.join(conf, 'Team.Local.JSONC'));
+        const { log } = await subscribe(ctx, await ctx.plan([{ edits: [{ path: variant, write: '{"agent":{}}' }] }]), {
+            configPath: path.join(conf, 'team.jsonc'),
+        });
+        const failed = await until(ctx, run, ['Completed', 'Failed']);
+        expect(failed.state === 'Failed' && failed.reason).toBe('AgentError');
+        expect(log.some((l) => l.includes('changed files other than .dt/.dtes sources') && l.includes('Team.Local.JSONC'))).toBe(true);
+        const [invocation] = await ctx.invocations();
+        expect(invocation.args).toContain(`Edit(/${path.join(conf, 'team.local.jsonc')})`);
+    });
+
     integration('an agent that writes the workspace’s .claude/ settings: its run fails, and no further run is claimed until a restart', async () => {
         const ctx = await setup();
         const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
@@ -611,7 +672,7 @@ describe('the pipeline', () => {
         await subscribe(ctx, await ctx.plan([{ edits: [{ path: '.claude/settings.local.json', write: settings }] }, {}]));
         expect((await until(ctx, next, ['Completed', 'Failed'])).state).toBe('Completed');
         const args = (await ctx.invocations()).at(-1)?.args ?? [];
-        expect(args[args.indexOf('--setting-sources') + 1]).toBe('user');
+        expect(args[args.indexOf('--setting-sources') + 1]).toBe('');
     });
 
     integration('an agent that writes .claude/ settings and is cancelled: the run is cancelled, and no further run is claimed', async () => {
@@ -682,6 +743,69 @@ describe('the pipeline', () => {
         const waiting = await subscribe(ctx, await ctx.plan([{}]));
         expect((await api(ctx.server, ctx.ada, 'close', {})).status).toBe(200);
         expect(await waiting.subscriber.done).toBe('closed');
+    });
+});
+
+describe('the warm agent', () => {
+    const WARM = { run: { warm: true, restartAfter: 20, idleTimeout: 30 } };
+
+    integration('one process takes the runs one turn each; the next prompt names what changed since; a restore starts a fresh one', async () => {
+        const ctx = await setup();
+        const first = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'One.')]);
+        const { log } = await subscribe(ctx, await ctx.plan([{ edits: ADD_RETURN_CANCELLED }, {}, {}]), WARM);
+        const one = await until(ctx, first, ['Completed', 'Failed']);
+        expect(one.state === 'Completed' && one.changed).toBe(true);
+        // a person edits a file between the runs
+        await writeFile(path.join(ctx.root, 'README.md'), 'edited by a person\n');
+        const second = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Two.')]);
+        expect((await until(ctx, second, ['Completed', 'Failed'])).state).toBe('Completed');
+        const [a, b] = await ctx.invocations();
+        expect(b.pid).toBe(a.pid);
+        expect(a.args).toContain('--input-format');
+        expect(a.prompt).not.toContain('"changedSinceYourLastRun"');
+        const nonce = /<requests-([0-9a-f]{32})>/.exec(b.prompt)![1];
+        const data = JSON.parse(b.prompt.slice(b.prompt.indexOf(`<requests-${nonce}>`) + nonce.length + 11, b.prompt.indexOf(`</requests-${nonce}>`)));
+        // the person's edit, not the agent's own
+        expect(data.changedSinceYourLastRun).toEqual(['README.md']);
+        // the hook's notification of every turn: logged once, never failing a run
+        expect(log.filter((l) => l.includes('notified "stop-hook-error"'))).toHaveLength(1);
+
+        // the facilitator restores the first run's base: the process goes, the next run starts a fresh one
+        const base = one.state === 'Completed' ? one.baseRevision : '';
+        expect((await api(ctx.server, ctx.ada, `revisions/${base}/restore`, { recordExternalChanges: true })).status).toBe(200);
+        await waitFor('the reset', () => (log.some((l) => l.includes('ends (a revision was restored)')) ? true : undefined));
+        const third = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Three.')]);
+        expect((await until(ctx, third, ['Completed', 'Failed'])).state).toBe('Completed');
+        const c = (await ctx.invocations())[2];
+        expect(c.pid).not.toBe(a.pid);
+        expect(c.prompt).not.toContain('"changedSinceYourLastRun"');
+    });
+
+    integration('a cancel interrupts the turn: its tool processes stop, the agent stays and takes the next run', async () => {
+        const ctx = await setup();
+        const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Long.')]);
+        const { log } = await subscribe(ctx, await ctx.plan([{ hang: true }, {}]), WARM);
+        const [invocation] = await waitFor('the agent', async () => (await ctx.invocations())[0] && ctx.invocations());
+        expect((await until(ctx, run, ['Running'])).state).toBe('Running');
+        expect((await api(ctx.server, ctx.ada, `runs/${run}/cancel`, {})).status).toBe(200);
+        expect((await until(ctx, run, ['Cancelled'])).state).toBe('Cancelled');
+        await waitFor('the tool to stop', () => (!alive(invocation.childPid ?? invocation.pid) ? true : undefined));
+        expect(alive(invocation.pid)).toBe(true);
+        const next = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Next.')]);
+        expect((await until(ctx, next, ['Completed', 'Failed'])).state).toBe('Completed');
+        expect((await ctx.invocations())[1].pid).toBe(invocation.pid);
+        expect(log.some((l) => l.includes('failed'))).toBe(false);
+    });
+
+    integration('stop (Ctrl+C) interrupts the turn, fails the run as Interrupted and ends the process', async () => {
+        const ctx = await setup();
+        const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Long.')]);
+        const { subscriber } = await subscribe(ctx, await ctx.plan([{ hang: true }]), WARM);
+        const [invocation] = await waitFor('the agent', async () => (await ctx.invocations())[0] && ctx.invocations());
+        expect(await subscriber.stop()).toBe('stopped');
+        const failed = await until(ctx, run, ['Failed']);
+        expect(failed.state === 'Failed' && failed.reason).toBe('Interrupted');
+        await waitFor('the agent to stop', () => (!alive(invocation.pid) && !alive(invocation.childPid ?? invocation.pid) ? true : undefined));
     });
 });
 
@@ -790,7 +914,7 @@ describe('reverting a run', () => {
         expect(await read(ctx, RETURNS)).toBe(before);
 
         // an older subscriber names no capability: the revert is not given to it, and stays queued
-        const credential = await readCredential(ctx.root);
+        const credential = credentialOf(ctx);
         const claim = (b: unknown): Promise<Response> =>
             fetch(`${credential.url}agent/runs/claim`, {
                 method: 'POST',
@@ -821,7 +945,7 @@ describe('the stream and the completions', () => {
         wrap: (api: AgentApi) => AgentApi,
         wrapWorkspace: (workspace: WorkspaceFiles) => WorkspaceFiles = (w) => w,
     ): Promise<{ done: Promise<SubscriberEnd>; log: string[] }> {
-        const credential = await readCredential(ctx.root);
+        const credential = credentialOf(ctx);
         const real = createHttpAgentApi({ url: credential.url, token: credential.token });
         const log: string[] = [];
         const subscriber = startApplicationSubscriber(
@@ -937,9 +1061,15 @@ async function fakeClaudeOnPath(planFile: string): Promise<string> {
     return bin;
 }
 
-/** Runs `dt session subscribe --agent claude` in a child process with the fake `claude` first on the PATH. */
-function cli(runtime: string[], root: string, bin: string, extra: string[] = []): { child: ChildProcess; output: () => string; exit: Promise<number | null> } {
-    const child = spawn(runtime[0], [...runtime.slice(1), '-r', root, 'session', 'subscribe', '--agent', 'claude', ...extra], {
+/** Runs `dt agent --code <a fresh pairing code>` in a child process with the fake `claude` first on the PATH. */
+async function cli(
+    runtime: string[],
+    root: string,
+    bin: string,
+    extra: string[] = [],
+): Promise<{ child: ChildProcess; output: () => string; exit: Promise<number | null> }> {
+    const { code } = await issueAgentLink(root);
+    const child = spawn(runtime[0], [...runtime.slice(1), '-r', root, 'agent', '--code', code, ...extra], {
         env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ''}` },
         stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -954,29 +1084,19 @@ function cli(runtime: string[], root: string, bin: string, extra: string[] = [])
     return { child, output: () => output, exit };
 }
 
-/** The error `readCredential` refuses with (fails when it accepts). */
-async function refusal(root: string): Promise<Error> {
-    const e = await readCredential(root).then(
-        () => undefined,
-        (x: unknown) => x,
-    );
-    if (!(e instanceof Error)) throw new Error('expected readCredential to refuse');
-    return e;
-}
-
 describe('the CLI', () => {
     integration('on Node (dist/dt.js): --once runs the queued run with `claude` from the PATH, and dt fmt / dt check with itself', async () => {
         const ctx = await setup();
         const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Node.')]);
         const bin = await fakeClaudeOnPath(await ctx.plan([{ edits: ADD_RETURN_CANCELLED }]));
-        const { output, exit } = cli(['node', path.join(ROOT, 'dist', 'dt.js')], ctx.root, bin, ['--once']);
+        const { output, exit } = await cli(['node', path.join(ROOT, 'dist', 'dt.js')], ctx.root, bin, ['--once']);
         expect(await exit).toBe(0);
-        expect(output()).toContain(`Subscribed to session ${ctx.server.session} with claude (one run)`);
+        expect(output()).toContain(`Agent on session ${ctx.server.session} with claude (roles answer, run) (one run); waiting.`);
         expect(output()).toContain('Done.');
         const done = await until(ctx, run, ['Completed', 'Failed']);
         expect(done.state === 'Completed' && [done.changed, done.report]).toEqual([
             true,
-            { exitCode: 0, formatted: true, checked: true, newDtErrors: 0, unparsedDtes: 0 },
+            { exitCode: 0, formatted: 'Ran', checked: 'Ran', newDtErrors: 0, unparsedDtes: 0 },
         ]);
     });
 
@@ -984,7 +1104,7 @@ describe('the CLI', () => {
         const ctx = await setup();
         const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Long.')]);
         const planFile = await ctx.plan([{ hang: true }]);
-        const { child, exit } = cli([process.execPath, path.join(ROOT, 'bin', 'dt.ts')], ctx.root, await fakeClaudeOnPath(planFile));
+        const { child, exit } = await cli([process.execPath, path.join(ROOT, 'bin', 'dt.ts')], ctx.root, await fakeClaudeOnPath(planFile));
         const [invocation] = await waitFor('the agent', async () => (await ctx.invocations())[0] && ctx.invocations());
         child.kill('SIGINT');
         expect(await exit).toBe(130);
@@ -997,7 +1117,7 @@ describe('the CLI', () => {
         const ctx = await setup();
         const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Long.')]);
         const planFile = await ctx.plan([{ hang: true }]);
-        const { child, exit } = cli([process.execPath, path.join(ROOT, 'bin', 'dt.ts')], ctx.root, await fakeClaudeOnPath(planFile));
+        const { child, exit } = await cli([process.execPath, path.join(ROOT, 'bin', 'dt.ts')], ctx.root, await fakeClaudeOnPath(planFile));
         const [invocation] = await waitFor('the agent', async () => (await ctx.invocations())[0] && ctx.invocations());
         expect((await until(ctx, run, ['Running'])).state).toBe('Running');
         // the subscriber dies without a word, its agent with it
@@ -1011,28 +1131,5 @@ describe('the CLI', () => {
         const found = await restarted.collaboration.sessionState({ session: restarted.session });
         const failed = found.ok ? found.value.runs.find((r) => r.id === run) : undefined;
         expect(failed?.state === 'Failed' && failed.reason).toBe('LeaseExpired');
-    });
-
-    integration('refuses a missing, linked, shared or orphaned agent.json', async () => {
-        const root = await scratch('domaintrail-agent-cred-');
-        expect(await refusal(root)).toBeInstanceOf(SessionError);
-        const dir = path.join(root, '.domaintrail', 'session');
-        await mkdir(dir, { recursive: true });
-        const file = path.join(dir, 'agent.json');
-        const target = path.join(root, 'elsewhere.json');
-        const credential = { url: 'http://127.0.0.1:1/', token: 't', session: 's', pid: process.pid };
-        await writeFile(target, JSON.stringify(credential), { mode: 0o600 });
-        await symlink(target, file);
-        expect((await refusal(root)).message).toContain('not a plain file');
-        await rm(file);
-        await writeFile(file, JSON.stringify(credential), { mode: 0o644 });
-        await chmod(file, 0o644);
-        expect((await refusal(root)).message).toContain('mode 600');
-        await chmod(file, 0o600);
-        expect(await readCredential(root)).toEqual(credential);
-        const gone = spawn(process.execPath, ['-e', '0']);
-        await new Promise((resolve) => gone.once('close', resolve));
-        await writeFile(file, JSON.stringify({ ...credential, pid: gone.pid }));
-        expect((await refusal(root)).message).toContain('no longer running');
     });
 });

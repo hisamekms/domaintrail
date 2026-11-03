@@ -8,14 +8,14 @@
 
 DomainTrail はドメインモデルを書くための言語（`.dt` ファイル）と、その CLI `dt` です。モデルにはドメインの**構造と
 契約**——境界づけられたコンテキスト、集約とその状態、要件とイベントを持つコマンド、不変条件——を書き、モデルがそれらの
-唯一の正となります。`dt check` がモデルを検査し、`dt view` がブラウザにライブで表示し、`dt generate ts` が
+唯一の正となります。`dt check` がモデルを検査し、`dt open` がブラウザにライブで表示し、`dt generate ts` が
 TypeScript の型・コマンドの契約・不変条件のチェック・実装のための契約テストを生成します。ビジネスロジックは生成しません。
 ロジックは生成された型に対して人（またはエージェント）が書き、コンパイラとテストがそれをモデルに沿わせます。
 
 ## AI エージェントと進める
 
 DomainTrail はこの使い方を前提にしています。とにかく始めたいなら、インストールし（`npm i -D domaintrail`、
-[インストール](#インストール)を参照）、下のブロックをエージェントの指示ファイルに加え、`npx dt view` を起動して、
+[インストール](#インストール)を参照）、下のブロックをエージェントの指示ファイルに加え、`npx dt open` を起動して、
 エージェントに何かをモデリングするよう頼んでください。このページの残りは、エージェントがすることを手で追っていくので、
 エージェントの作業を理解しながら見守れるようになります。
 
@@ -53,7 +53,7 @@ structure and contracts; `generated/domain` is generated from it.
 - Never cast to a domain type (`as X`): make values with `make<Name>`, `parseDecimal` or a verified type's factory.
 - To look up one element, run `npx dt show <name>` (e.g. `npx dt show Booking.Reservation.confirm`) instead of reading
   the `.dt` files. Use `--format json` with `check`, `generate ts` and `show` when you parse the output.
-- People watch the model in the Live View (`npx dt view`). Do not wait for it: it runs until stopped.
+- People watch the model in the Live View (`npx dt open`). Do not wait for it: it runs until stopped.
 - After upgrading domaintrail, read the Upgrading steps in `node_modules/domaintrail/CHANGELOG.md` of every version
   since the previous one, and follow them.
 ```
@@ -66,7 +66,7 @@ structure and contracts; `generated/domain` is generated from it.
 自分のターミナルで Live View を起動し、ブラウザで開きます。
 
 ```bash
-npx dt view
+npx dt open
 ```
 
 そのうえで、ドメインの言葉で一歩ずつ頼みます。コードに進む前、`.dt` ファイルを書いたところで止めてもらうと、
@@ -131,6 +131,10 @@ npm i -D domaintrail
   "sources": ["domain/**/*.dt"]
 }
 ```
+
+自分だけの設定（ポート、AI のモデル、AI に読ませるプロジェクト外のフォルダなど）は、隣に置く
+`domaintrail.local.jsonc` に書き、git には含めません。`domaintrail.jsonc` にキーごとに重ねて読まれます（`dt guide config`）。
+AI にできることを広げる設定が変わると、`dt open` は一度だけ承認を求めます。
 
 推奨の構成は、境界づけられたコンテキストごとに 1 ディレクトリ、集約ごとに 1 ファイルです。
 
@@ -337,15 +341,18 @@ domain/booking/reservation.dt
 ### Live View で見る
 
 ```bash
-npx dt view
+npx dt open
 ```
 
 ```text
 Config: domaintrail.jsonc
-Live View: http://127.0.0.1:4321/
+Live View: http://127.0.0.1:4321/session/open?code=…
+  (a link for you only: opened once within 60 minutes, it signs that browser in; then http://127.0.0.1:4321/)
+Session: … (started, solo)
+AI: started in this process (claude …; role run)
 ```
 
-表示されたアドレスをブラウザで開きます。Ctrl+C まで動き続けます（ポートは `--port` で変更）。このモデルで見るところ:
+表示されたリンクをブラウザで開きます（一度だけ使えるリンクで、そのブラウザをサインインさせます。以後は素のアドレスで開けます）。Ctrl+C まで動き続けます（ポートは `--port` で変更）。このモデルで見るところ:
 
 - **Structure**（メインのビュー）: コンテキスト `Booking` と `Reservation`、それが持つ値 `Slot`、参照している ID。
 - `Reservation` を選び、インスペクターの **状態遷移** へ。`request` が `Requested` の予約を作り、`confirm` が
@@ -711,7 +718,7 @@ VS Code の拡張はまだありませんが、汎用の LSP クライアント�
 
 - `dt guide` と [guide.md](guide.md)（英語）: 言語と CLI のリファレンス。トピックごとに読めます。
 - [examples/shop](../examples/shop/README.md)（英語）: 実装まで含めた完全な例。
-- [Live View](live-view.md)（英語）: `dt view` のすべてのペインとビュー。
+- [Live View](live-view.md)（英語）: `dt open` のすべてのペインとビュー。
 - [CHANGELOG.ja.md](../CHANGELOG.ja.md): バージョンごとの変更点と、モデルとコードを更新する手順（アップグレード手順）。パッケージにも
   含まれ、エージェントは更新後にそれを読みます（指示のブロックの最後の項目）。
 - [docs/adr](adr): 言語の背後にある設計判断。

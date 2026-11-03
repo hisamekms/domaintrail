@@ -13,3 +13,6 @@ export const knownRequestId = (v: string): Collaboration.RequestId => known(Coll
 export const knownMarkId = (v: string): Collaboration.MarkId => known(Collaboration.makeMarkId(v));
 export const knownAssumptionApprovalId = (v: string): Collaboration.AssumptionApprovalId => known(Collaboration.makeAssumptionApprovalId(v));
 export const knownAgentRunId = (v: string): Collaboration.AgentRunId => known(Collaboration.makeAgentRunId(v));
+export const knownTriageId = (v: string): Collaboration.TriageId => known(Collaboration.makeTriageId(v));
+export const knownChangeProposalId = (v: string): Collaboration.ChangeProposalId => known(Collaboration.makeChangeProposalId(v));
+export const knownInterviewId = (v: string): Collaboration.InterviewId => known(Collaboration.makeInterviewId(v));

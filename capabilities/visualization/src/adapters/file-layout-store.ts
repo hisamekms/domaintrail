@@ -1,4 +1,4 @@
-import { lstat, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { LaidOutGraph } from '../core/graph/ir.js';
 import type { LayoutCache, LayoutStore } from '../application/ports.js';
@@ -45,10 +45,13 @@ export function createFileLayoutStore(root: string): LayoutStore {
                 warnedUnsafeLayoutDir = true;
                 return;
             }
-            await mkdir(dir, { recursive: true });
+            // `.domaintrail` is the user's alone (0700) and so is the layout file (0600), whatever the umask
+            await mkdir(dir, { recursive: true, mode: 0o700 });
+            await chmod(dir, 0o700);
             // write a new file and rename it into place: rename replaces a symlinked layout.json instead of following it
             const temp = path.join(dir, `.layout-${process.pid}-${Date.now()}.tmp`);
-            await writeFile(temp, `${JSON.stringify(file, null, 2)}\n`, { flag: 'wx' });
+            await writeFile(temp, `${JSON.stringify(file, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+            await chmod(temp, 0o600);
             await rename(temp, target);
         },
     };

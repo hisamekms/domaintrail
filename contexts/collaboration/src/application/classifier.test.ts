@@ -1,80 +1,77 @@
 import { describe, expect, test } from 'bun:test';
-import { applicable, classificationOf, createClassifications, type MessageClassifier } from './classifier.js';
-import { clefProbability, clefRequest, createClefClassifier } from '../infrastructure/clef.js';
+import { CLEF_NOT_CONFIGURED, clefStep, type MessageClassifier } from './classifier.js';
+import { clefProbabilities, clefRequest, createClefClassifier } from '../infrastructure/clef.js';
 
-describe('classifying the chat’s messages', () => {
-    test('a request from the threshold on, talk below it; unsure near it (applicable), unknown without a probability', () => {
-        expect(classificationOf(0.9, 0.5)).toEqual({ kind: 'request', probability: 0.9 });
-        expect(classificationOf(0.1, 0.5)).toEqual({ kind: 'chat', probability: 0.1 });
-        expect(classificationOf(0.55, 0.5)).toEqual({ kind: 'unknown', probability: 0.55 });
-        expect(classificationOf(0.45, 0.5)).toEqual({ kind: 'unknown', probability: 0.45 });
-        expect(classificationOf(undefined, 0.5)).toEqual({ kind: 'unknown' });
-        expect(classificationOf(Number.NaN, 0.5)).toEqual({ kind: 'unknown' });
-        expect([applicable({ kind: 'chat' }), applicable({ kind: 'request' }), applicable({ kind: 'unknown' }), applicable(undefined)]).toEqual([
-            false,
-            true,
-            true,
-            true,
-        ]);
+const answers = (consultation: number, change_request: number, neither: number): Record<string, unknown> => ({
+    consultation: { type: 'noul', noul: consultation },
+    change_request: { type: 'noul', noul: change_request },
+    neither: { type: 'noul', noul: neither },
+});
+
+describe('stage 2: Clef', () => {
+    const options = { threshold: 0.9, timeoutMs: 50 };
+
+    test('one answer at or above the threshold decides, with the probabilities as the reason and the model', async () => {
+        const classifier: MessageClassifier = { model: 'clef-flash', classify: async () => ({ consultation: 0.95, changeRequest: 0.1, neither: 0.02 }) };
+        expect(await clefStep(classifier, 'なぜ？', options)).toMatchObject({
+            stage: 'Clef',
+            verdict: 'Consultation',
+            confidence: 0.95,
+            reason: '相談 0.95 / 依頼 0.10 / 不要 0.02',
+            model: 'clef-flash',
+        });
+        const change: MessageClassifier = { classify: async () => ({ consultation: 0.1, changeRequest: 0.92, neither: 0.01 }) };
+        expect((await clefStep(change, 'x', options)).verdict).toBe('ChangeRequest');
     });
 
-    test('in the background, once per message; a failure or a timeout leaves it applicable, and the text is never logged', async () => {
-        const told: [string, string][] = [];
-        const log: string[] = [];
-        const classifier: MessageClassifier = {
-            classify: async (text, signal) => {
-                if (text === 'boom secret') throw new Error('500');
-                if (text === 'slow') await new Promise((_, reject) => signal.addEventListener('abort', () => reject(new Error('aborted'))));
-                return text.startsWith('Add') ? 0.95 : 0.05;
+    test('none or several sure: unknown; no classifier: unknown with that reason; a failure or a timeout: unknown with why, never the text', async () => {
+        const unsure: MessageClassifier = { classify: async () => ({ consultation: 0.6, changeRequest: 0.5, neither: 0.1 }) };
+        expect(await clefStep(unsure, 'x', options)).toMatchObject({ verdict: 'Unknown' });
+        const both: MessageClassifier = { classify: async () => ({ consultation: 0.95, changeRequest: 0.95, neither: 0 }) };
+        expect((await clefStep(both, 'x', options)).verdict).toBe('Unknown');
+        expect(await clefStep(undefined, 'x', options)).toEqual({ stage: 'Clef', verdict: 'Unknown', reason: CLEF_NOT_CONFIGURED, durationMs: 0 });
+        const failing: MessageClassifier = {
+            classify: async () => {
+                throw new Error('500');
             },
         };
-        const c = createClassifications({
-            classifier,
-            threshold: 0.5,
-            timeoutMs: 50,
-            log: (l) => log.push(l),
-            onClassified: (id, x) => told.push([id, x.kind]),
-        });
-        c.classify('a', 'Add a cancel command.');
-        c.classify('b', 'lol');
-        c.classify('c', 'boom secret');
-        c.classify('d', 'slow');
-        c.classify('a', 'Add it again.');
-        await c.settled();
-        expect(told.sort((x, y) => x[0].localeCompare(y[0]))).toEqual([
-            ['a', 'request'],
-            ['b', 'chat'],
-            ['c', 'unknown'],
-            ['d', 'unknown'],
-        ]);
-        expect(c.all()).toMatchObject({ a: { kind: 'request' }, b: { kind: 'chat' }, c: { kind: 'unknown' }, d: { kind: 'unknown' } });
-        expect(log.join('\n')).toContain('timed out');
-        expect(log.join('\n')).not.toContain('secret');
+        const failed = await clefStep(failing, 'secret text', options);
+        expect(failed).toMatchObject({ verdict: 'Unknown', error: '500' });
+        expect(JSON.stringify(failed)).not.toContain('secret');
+        const slow: MessageClassifier = {
+            classify: (_text, signal) => new Promise((_, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')))),
+        };
+        expect(await clefStep(slow, 'x', options)).toMatchObject({ verdict: 'Unknown', error: 'timed out' });
     });
 });
 
 describe('the Clef adapter (Workers AI)', () => {
-    test('one yes/no ("noul") question per message to the account’s model, the token as a bearer', async () => {
+    test('three yes/no ("noul") questions per message to the account’s model, the token as a bearer', async () => {
         const calls: { url: string; init: RequestInit }[] = [];
         const fakeFetch = (async (url: string, init: RequestInit) => {
             calls.push({ url, init });
             return Response.json({
-                result: { model: 'clef-flash', answers: { request: { type: 'noul', noul: 0.82 } }, usage: { input_tokens: 9, output_tokens: 1 } },
+                result: { model: 'clef-flash', answers: answers(0.82, 0.1, 0.05), usage: { input_tokens: 9, output_tokens: 1 } },
                 success: true,
             });
         }) as unknown as typeof fetch;
         const clef = createClefClassifier({ accountId: 'acc', model: 'clef-flash', token: 'tok', fetch: fakeFetch });
-        expect(await clef.classify('Rename Order to Purchase.', new AbortController().signal)).toBe(0.82);
+        expect(await clef.classify('Order とは？', new AbortController().signal)).toEqual({ consultation: 0.82, changeRequest: 0.1, neither: 0.05 });
+        expect(clef.model).toBe('clef-flash');
         expect(calls[0].url).toBe('https://api.cloudflare.com/client/v4/accounts/acc/ai/run/@cf/cloudflare/clef-flash');
         expect(calls[0].init.headers).toEqual({ authorization: 'Bearer tok', 'content-type': 'application/json' });
-        expect(JSON.parse(calls[0].init.body as string)).toEqual(clefRequest('clef-flash', 'Rename Order to Purchase.'));
-        expect(clefRequest('clef', 'x')).toMatchObject({ model: 'clef', state: 'x', questions: { request: { type: 'noul' } } });
+        expect(JSON.parse(calls[0].init.body as string)).toEqual(clefRequest('clef-flash', 'Order とは？'));
+        expect(clefRequest('clef', 'x')).toMatchObject({
+            model: 'clef',
+            state: 'x',
+            questions: { consultation: { type: 'noul' }, change_request: { type: 'noul' }, neither: { type: 'noul' } },
+        });
     });
 
-    test('the probability bare or in Cloudflare’s result; an error or an answer without one throws', async () => {
-        expect(clefProbability({ answers: { request: { type: 'noul', noul: 0.3 } } })).toBe(0.3);
-        expect(() => clefProbability({ result: { answers: {} } })).toThrow();
-        expect(() => clefProbability({ answers: { request: { type: 'noul', noul: 2 } } })).toThrow();
+    test('the probabilities bare or in Cloudflare’s result; an error or an answer without one of them throws', async () => {
+        expect(clefProbabilities({ answers: answers(0.3, 0.6, 0.1) })).toEqual({ consultation: 0.3, changeRequest: 0.6, neither: 0.1 });
+        expect(() => clefProbabilities({ result: { answers: { consultation: { type: 'noul', noul: 0.3 } } } })).toThrow();
+        expect(() => clefProbabilities({ answers: answers(2, 0, 0) })).toThrow();
         const failing = createClefClassifier({
             accountId: 'acc',
             model: 'clef',

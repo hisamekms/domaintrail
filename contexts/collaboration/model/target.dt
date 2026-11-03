@@ -32,6 +32,10 @@ context Collaboration {
       storming: StormingName
       local: StormingLocalName
     }
+    /// `.dtes` ストーミング全体（`@{es:Returns}`）。
+    DtesStorming "ストーミング全体" {
+      storming: StormingName
+    }
     /// タイムラインでのイベントの出現。タイムラインのビューからだけ指せる。
     DtesOccurrence "イベントの出現" {
       storming: StormingName

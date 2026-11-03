@@ -2,15 +2,37 @@
  * The render graph of one view of a storming (spec §6, §7.3, §9.2, §9.3): the prefix trie of its timelines, the events
  * of none, and the other elements of the level with their semantic edges. Sharing an event node between occurrences is
  * a drawing optimization only: every render edge is either the drawing of a semantic edge or a timeline `sequence` edge.
+ *
+ * At Big Picture, the events marked `level design` are left out as if their timeline steps were not written: the trie is
+ * built over the visible steps only, so the order edges join the neighbours of a hidden event, a group of hidden events
+ * only disappears, and timelines that differ only in hidden events share their prefix (§8 on the visible sequence).
+ * Hotspots stay, without their `on` edge to a hidden event.
  */
-import { buildSemanticGraph, type NodeElementKind, semanticEdgeKey, type SemanticEdge, type Storming, stormingTimelines } from '@domaintrail/storming';
+import {
+    buildSemanticGraph,
+    isDesignLevelOnly,
+    type NodeElement,
+    type NodeElementKind,
+    semanticEdgeKey,
+    type SemanticEdge,
+    type Storming,
+    stormingTimelines,
+    timelineOccurrences,
+} from '@domaintrail/storming';
 import { LEVEL_KINDS, type RenderEdge, type RenderEventNode, type RenderGraph, type RenderNode, type ViewOptions } from './ir.js';
 import { buildTrie, compare, memberId, type TrieNode } from './trie.js';
+import { filterEdges } from './filter.js';
+import { hasStages, projectStageView } from './stage-view.js';
+import { useEnds, useNodeId, usesOf } from './uses.js';
 
 export function projectView(storming: Storming, options: ViewOptions): RenderGraph {
+    // a storming with stages: its integrated canvas and its stages are views of stages (a timeline's view is as ever)
+    if (options.stageId !== undefined || (options.timelineId === undefined && hasStages(storming))) return projectStageView(storming, options);
     const semantic = buildSemanticGraph(storming);
     const kinds = new Map<string, NodeElementKind>(semantic.nodes.map((n) => [n.id, n.kind]));
-    const trie = buildTrie(stormingTimelines(storming), (id) => kinds.get(id) === 'event');
+    const hidden = new Set(options.level === 'big-picture' ? semantic.nodes.filter(isDesignLevelOnly).map((n) => n.id) : []);
+    const timelines = stormingTimelines(storming);
+    const trie = buildTrie(timelines, (id) => kinds.get(id) === 'event' && !hidden.has(id));
     const timelineId = options.timelineId !== undefined && trie.paths.has(options.timelineId) ? options.timelineId : undefined;
     const shown = new Set(LEVEL_KINDS[options.level]);
 
@@ -52,25 +74,35 @@ export function projectView(storming: Storming, options: ViewOptions): RenderGra
         for (const [id, path] of trie.paths) addSequence(id, path);
         // R15: the events of no timeline
         for (const n of semantic.nodes)
-            if (n.kind === 'event' && !eventNodes.has(n.id)) addEvent({ type: 'event', id: `e:${n.id}`, eventId: n.id, occurrences: [] });
+            if (n.kind === 'event' && !eventNodes.has(n.id) && !hidden.has(n.id)) addEvent({ type: 'event', id: `e:${n.id}`, eventId: n.id, occurrences: [] });
         drawn = semantic.edges;
     } else {
         const path = trie.paths.get(timelineId) ?? [];
         for (const node of path) addStep(node);
         addSequence(timelineId, path);
-        drawn = filterEdges(semantic.edges, new Set(eventNodes.keys()));
+        // the timeline's events, hidden ones included: a hotspot on one is still shown (its edge has nothing to end at)
+        const events = timelineOccurrences(timelines.find((t) => t.id === timelineId)!).map((o) => o.eventId);
+        drawn = filterEdges(semantic.edges, new Set(events.filter((id) => kinds.get(id) === 'event')));
     }
 
-    for (const n of semantic.nodes) {
-        if (n.kind === 'event' || !shown.has(n.kind)) continue;
-        if (timelineId !== undefined && !drawn.some((e) => e.sourceId === n.id || e.targetId === n.id)) continue;
-        nodes.set(`n:${n.id}`, { type: 'element', id: `n:${n.id}`, elementId: n.id, kind: n.kind });
+    const elements = semantic.nodes.filter(
+        (n): n is NodeElement & { kind: Exclude<NodeElementKind, 'event'> } =>
+            n.kind !== 'event' && shown.has(n.kind) && (timelineId === undefined || drawn.some((e) => e.sourceId === n.id || e.targetId === n.id)),
+    );
+    // an actor, external system, read model or aggregate beside each command that uses it; once when none does
+    const commands = new Set(elements.filter((n) => n.kind === 'command').map((n) => n.id));
+    const uses = usesOf(drawn, (id) => commands.has(id));
+    for (const n of elements) {
+        const users = uses.get(n.id);
+        if (!users) nodes.set(`n:${n.id}`, { type: 'element', id: `n:${n.id}`, elementId: n.id, kind: n.kind });
+        for (const use of users ?? []) nodes.set(useNodeId(n.id, use), { type: 'element', id: useNodeId(n.id, use), elementId: n.id, kind: n.kind, use });
     }
     const renderNodesOf = (id: string): string[] => (kinds.get(id) === 'event' ? (eventNodes.get(id) ?? []) : nodes.has(`n:${id}`) ? [`n:${id}`] : []);
+    const ends = (e: SemanticEdge, end: 'sourceId' | 'targetId'): string[] => useEnds(e, end, (id) => nodes.has(id), renderNodesOf);
     for (const e of drawn) {
         const key = semanticEdgeKey(e);
-        for (const source of renderNodesOf(e.sourceId)) {
-            for (const target of renderNodesOf(e.targetId)) {
+        for (const source of ends(e, 'sourceId')) {
+            for (const target of ends(e, 'targetId')) {
                 const id = `${key}@${source}->${target}`;
                 edges.set(id, { type: 'semantic', id, kind: e.kind, source, target, semantic: key });
             }
@@ -84,28 +116,6 @@ export function projectView(storming: Storming, options: ViewOptions): RenderGra
         nodes: [...nodes.values()].sort((a, b) => compare(a.id, b.id)),
         edges: [...edges.values()].sort((a, b) => compare(a.id, b.id)),
     };
-}
-
-/**
- * The semantic edges of a timeline filter (§9.3): each 1-hop path Event → Policy → Command → Event whose two events are
- * in the timeline (`events`), the actors, read models and target of its command, and the hotspots on an event of the
- * timeline. No path is followed further, so a cycle is no different from any other path (R10, R16).
- */
-function filterEdges(edges: readonly SemanticEdge[], events: ReadonlySet<string>): SemanticEdge[] {
-    const from = (id: string, kind: SemanticEdge['kind']) => edges.filter((e) => e.sourceId === id && e.kind === kind);
-    const kept = new Set<SemanticEdge>();
-    for (const on of edges) {
-        if (on.kind !== 'on' || !events.has(on.sourceId)) continue;
-        for (const issues of from(on.targetId, 'issues')) {
-            const emits = from(issues.targetId, 'emits').filter((e) => events.has(e.targetId));
-            if (emits.length === 0) continue;
-            const command = issues.targetId;
-            const related = edges.filter((e) => (e.kind === 'actor' || e.kind === 'reads') && e.targetId === command);
-            for (const e of [on, issues, ...emits, ...related, ...from(command, 'target')]) kept.add(e);
-        }
-    }
-    for (const e of edges) if (e.kind === 'hotspot-on' && events.has(e.targetId)) kept.add(e);
-    return edges.filter((e) => kept.has(e));
 }
 
 /**

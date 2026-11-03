@@ -21,29 +21,32 @@
     --p-brand-indigo: #4338ca;
     --p-brand-indigo-dark: #a5b4fc;
     --p-brand-amber: #fbbf24;
-    /* slate, and the blue-black neutrals of the dark theme */
+    /* the neutrals: slate, and the blue-black night of the dark theme, both tinted to the brand's hue: each keeps the
+       OKLCH lightness of Tailwind's slate (and of the earlier night steps) with the hue of --p-brand-indigo (277°)
+       and 1.25× the chroma; slate-350 is the OKLCH midpoint of slate-300 and slate-400, tinted the same way */
     --p-white: #ffffff;
-    --p-slate-50: #f8fafc;
-    --p-slate-100: #f1f5f9;
-    --p-slate-200: #e2e8f0;
-    --p-slate-300: #cbd5e1;
-    --p-slate-400: #94a3b8;
-    --p-slate-450: #8492a6;
-    --p-slate-500: #64748b;
-    --p-slate-550: #5e6b7f;
-    --p-slate-600: #475569;
-    --p-slate-700: #334155;
-    --p-slate-800: #1e293b;
-    --p-slate-900: #0f172a;
-    --p-night-500: #64708a;
-    --p-night-600: #465066;
-    --p-night-650: #343b4f;
-    --p-night-700: #2e3547;
-    --p-night-750: #2a3042;
-    --p-night-800: #252b3b;
-    --p-night-850: #242a3b;
-    --p-night-900: #191d2b;
-    --p-night-950: #10131d;
+    --p-slate-50: #f9fafd;
+    --p-slate-100: #f3f4fa;
+    --p-slate-200: #e4e7f2;
+    --p-slate-300: #cfd3e5;
+    --p-slate-350: #b5b9d1;
+    --p-slate-400: #9aa0be;
+    --p-slate-450: #8a8fab;
+    --p-slate-500: #6b7091;
+    --p-slate-550: #636884;
+    --p-slate-600: #4d526e;
+    --p-slate-700: #393e5a;
+    --p-slate-800: #23263f;
+    --p-slate-900: #12152e;
+    --p-night-500: #686e90;
+    --p-night-600: #494e6b;
+    --p-night-650: #363a53;
+    --p-night-700: #30344b;
+    --p-night-750: #2b2f46;
+    --p-night-800: #272a3e;
+    --p-night-850: #25293f;
+    --p-night-900: #1a1c2e;
+    --p-night-950: #10121f;
     /* indigo */
     --p-indigo-50: #eef2ff;
     --p-indigo-100: #e0e7ff;
@@ -153,6 +156,13 @@
     --p-note-cream-night-edge: #e0c050;
     --p-note-lilac-night: #44204c;
     --p-note-lilac-night-edge: #d65fe0;
+    /* a resolved hotspot's paper, edge and text: the hotspot's pink, paler and greyer (its text still AA on its paper) */
+    --p-note-pink-faded: #fbf1f5;
+    --p-note-pink-faded-edge: #e3a1b9;
+    --p-note-pink-faded-ink: #8f3a5e;
+    --p-note-pink-faded-night: #2e2229;
+    --p-note-pink-faded-night-edge: #9a5b76;
+    --p-note-pink-faded-night-ink: #d9bfcc;
     /* the participants' identity hues (issue #33 §4.3), the same in both themes */
     --p-person-teal: #0f766e;
     --p-person-violet: #7c3aed;
@@ -199,13 +209,13 @@
     --disabled-border: var(--p-slate-200);
     /* hovers: a colourless tint that only says "this one" (indigo is for what is chosen) */
     --hover: var(--p-slate-100);
-    --row-hover: rgba(15, 23, 42, 0.045);
+    --row-hover: color-mix(in srgb, var(--p-slate-900) 4.5%, transparent);
     /* the hover of toolbar buttons: a grey that shows on the panel and on the canvas */
     --hover-strong: var(--p-slate-200);
     --neutral-tint: var(--p-slate-200);
-    --shadow: rgba(15, 23, 42, 0.12);
+    --shadow: color-mix(in srgb, var(--p-slate-900) 12%, transparent);
     /* behind a modal dialog (the same in both themes) */
-    --backdrop: rgba(15, 23, 42, 0.35);
+    --backdrop: color-mix(in srgb, var(--p-slate-900) 35%, transparent);
     --legend-bg: rgba(255, 255, 255, 0.92);
     --resizer: color-mix(in srgb, var(--action) 35%, transparent);
     /* the source view's syntax colours (AA on the surface and on the error, warning and selected rows) */
@@ -245,6 +255,14 @@
     --es-hotspot: var(--p-note-pink);
     --es-hotspot-border: var(--p-note-pink-edge);
     --es-hotspot-text: var(--p-pink-900);
+    /* a resolved hotspot (`status resolved`): toned down, so that the open ones stand out; its `on` quieter too, and a
+       green check in its corner (white on emerald, 5.5:1) */
+    --es-hotspot-resolved: var(--p-note-pink-faded);
+    --es-hotspot-resolved-border: var(--p-note-pink-faded-edge);
+    --es-hotspot-resolved-text: var(--p-note-pink-faded-ink);
+    --es-hotspot-resolved-edge: var(--p-slate-350);
+    --es-resolved-mark: var(--p-emerald-700);
+    --es-resolved-mark-ink: var(--p-white);
     --es-actor: var(--p-note-cream);
     --es-actor-border: var(--p-note-cream-edge);
     --es-actor-text: var(--p-yellow-900);
@@ -259,6 +277,9 @@
        from the red of an error, and dashed) */
     --es-sequence: var(--p-orange-600);
     --es-sequence-text: var(--p-orange-800);
+    /* an exception's time order: the hotspot's pink-red, a little quieter than the timeline's orange */
+    --es-exception: var(--es-hotspot-border);
+    --es-exception-text: var(--es-hotspot-text);
     /* Domain Modeling concepts (issue #33 §3.3): neutral cards; the concept's hue on a stripe, label or border
        (accent), and the faint background of a chip (tint). The aggregate root takes the brand's indigo, by design. */
     --model-context: var(--p-slate-500);
@@ -398,7 +419,8 @@
     --surface-muted: var(--p-night-800);
     --text: var(--p-slate-100);
     --text-secondary: var(--p-slate-300);
-    --muted: var(--p-slate-400);
+    /* a step lighter than slate-400 (APCA Lc 50 on the surfaces) for Lc 60 on bg, surface and surface-muted */
+    --muted: var(--p-slate-350);
     --border: var(--p-night-700);
     --border-strong: var(--p-night-500);
     --action: var(--p-indigo-300);
@@ -410,11 +432,11 @@
     --disabled-text: var(--p-night-500);
     --disabled-border: var(--p-night-650);
     --hover: var(--p-night-750);
-    --row-hover: rgba(241, 245, 249, 0.05);
+    --row-hover: color-mix(in srgb, var(--p-slate-100) 5%, transparent);
     --hover-strong: var(--p-night-650);
     --neutral-tint: var(--p-night-700);
     --shadow: rgba(0, 0, 0, 0.5);
-    --legend-bg: rgba(25, 29, 43, 0.92);
+    --legend-bg: color-mix(in srgb, var(--p-night-900) 92%, transparent);
     --syntax-keyword: var(--p-violet-300);
     --syntax-type: var(--p-blue-300);
     --syntax-primitive: var(--p-teal-300);
@@ -442,6 +464,12 @@
     --es-hotspot: var(--p-note-pink-night);
     --es-hotspot-border: var(--p-note-pink-night-edge);
     --es-hotspot-text: var(--p-pink-100);
+    --es-hotspot-resolved: var(--p-note-pink-faded-night);
+    --es-hotspot-resolved-border: var(--p-note-pink-faded-night-edge);
+    --es-hotspot-resolved-text: var(--p-note-pink-faded-night-ink);
+    --es-hotspot-resolved-edge: var(--p-night-600);
+    --es-resolved-mark: var(--p-emerald-300);
+    --es-resolved-mark-ink: var(--p-night-950);
     --es-actor: var(--p-note-cream-night);
     --es-actor-border: var(--p-note-cream-night-edge);
     --es-actor-text: var(--p-yellow-100);
@@ -821,6 +849,17 @@ code.block {
     border: 1px solid var(--es-hotspot-border);
     color: var(--es-hotspot-text);
 }
+.kind-es-resolvedHotspot {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--es-hotspot-resolved);
+    border: 1px solid var(--es-hotspot-resolved-border);
+    color: var(--es-hotspot-resolved-text);
+}
+.dn-resolved-mark-chip .dn-resolved-check {
+    stroke-width: 1.6;
+}
 .kind-es-actor {
     background: var(--es-actor);
     border: 1px solid var(--es-actor-border);
@@ -836,6 +875,11 @@ code.block {
     background: var(--es-group-bg);
     border: 1px dashed var(--es-group-border);
     color: var(--es-group-text);
+}
+.kind-es-stage {
+    background: var(--context-bg);
+    border: 1px solid var(--model-context);
+    color: var(--text-secondary);
 }
 .kind-es-timeline {
     border: 1px dashed var(--es-sequence);
@@ -1147,6 +1191,28 @@ a.field-origin {
     background: var(--es-hotspot);
     color: var(--es-hotspot-text);
 }
+.dn-esHotspot.dn-resolved {
+    border-color: var(--es-hotspot-resolved-border);
+    background: var(--es-hotspot-resolved);
+    color: var(--es-hotspot-resolved-text);
+}
+/* a resolved hotspot's check, inside its top-right corner (RESOLVED_MARK), under the diagnostic mark if any */
+.dn-resolved-mark {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    pointer-events: none;
+}
+.dn-resolved-disc {
+    fill: var(--es-resolved-mark);
+}
+.dn-resolved-check {
+    fill: none;
+    stroke: var(--es-resolved-mark-ink);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
 .dn-esActor {
     border-color: var(--es-actor-border);
     background: var(--es-actor);
@@ -1159,7 +1225,7 @@ a.field-origin {
     color: var(--es-external-text);
     border-style: dashed;
 }
-/* the notes are squares with no body: the label wraps and sits in the middle */
+/* the notes are squares of one size with no body: the label wraps, sits in the middle and shrinks to fit (note-fit.ts) */
 .dn-esEvent .dn-head,
 .dn-esCommand .dn-head,
 .dn-esPolicy .dn-head,
@@ -1187,6 +1253,12 @@ a.field-origin {
 .dn-esHotspot .dn-stereo {
     color: inherit;
 }
+/* a label too long for its note even at the floor size: the lines that fit, the last ending with «…» */
+.dn-label-clamped {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
 .dn-change-added {
     box-shadow: 0 0 0 3px var(--added);
 }
@@ -1207,6 +1279,11 @@ a.field-origin {
 .dn.dn-selected,
 .dg.dn-selected {
     outline: 2px solid var(--selected-ring);
+    outline-offset: 5px;
+}
+/* the other notes of the selected element (an actor beside each command it issues): the same ring, dashed and fainter */
+.dn.dn-same {
+    outline: 2px dashed color-mix(in srgb, var(--selected-ring) 60%, transparent);
     outline-offset: 5px;
 }
 /* on the top edge, where the selection outline goes around them (see `nodeOutlinePath`) */
@@ -1297,6 +1374,15 @@ a.field-origin {
     font-size: calc(13px * var(--s, 1));
     color: var(--es-group-text);
 }
+/* a stage of a storming: a frame around its main flow and its exceptions, neutral like a context's (a section of
+   time, not a concept's hue) */
+.dg-esStage {
+    border: 1.5px solid var(--model-context);
+    background: var(--context-bg);
+}
+.dg-esStage .dg-label {
+    color: var(--text-secondary);
+}
 .dg-aggregateBoundary .dg-label {
     font-size: calc(13px * var(--s, 1));
     color: var(--model-aggregate);
@@ -1362,6 +1448,28 @@ a.field-origin {
     fill: var(--es-sequence-text);
     font-weight: 600;
 }
+/* the time order of exceptions only: the timeline's dashes, in the hotspot's red (an exception, not an error) */
+.de-esException .de-line {
+    stroke: var(--es-exception);
+    stroke-width: 1.6;
+    stroke-dasharray: 7 5;
+}
+.de-esException .de-head {
+    fill: var(--es-exception);
+}
+.de-esException .de-label {
+    fill: var(--es-exception-text);
+    font-weight: 600;
+}
+/* an exception's `then`: back to the main flow, in the timeline's hue, dotted to tell it from the time order */
+.de-esRejoin .de-line {
+    stroke: var(--es-sequence);
+    stroke-width: 1.6;
+    stroke-dasharray: 2 4;
+}
+.de-esRejoin .de-head {
+    fill: var(--es-sequence);
+}
 .de-esRelated .de-line,
 .de-esHotspot .de-line {
     stroke: var(--model-edge-quiet);
@@ -1370,6 +1478,9 @@ a.field-origin {
 }
 .de-esRelated .de-head {
     fill: var(--model-edge-quiet);
+}
+.de-esHotspot.de-resolved .de-line {
+    stroke: var(--es-hotspot-resolved-edge);
 }
 .de-label {
     font: 13px var(--sans);
@@ -1593,7 +1704,8 @@ select,
     color: var(--text-secondary);
     background: var(--neutral-tint);
 }
-.persistence-badge {
+.persistence-badge,
+.level-badge {
     margin-left: 6px;
     padding: 1px 7px;
     border-radius: 999px;
@@ -1602,7 +1714,8 @@ select,
     color: var(--muted);
     border: 1px solid var(--border);
 }
-.inspector-row .persistence-badge {
+.inspector-row .persistence-badge,
+.inspector-row .level-badge {
     margin-left: 0;
     padding: 2px 8px;
     font-size: 0.75rem;
@@ -2567,12 +2680,15 @@ svg.chat-launcher-mark {
 }
 /*
  * the view toolbar, its own row under the tabs and the same in every view: the subject and the level at the left, the
- * 絞り込み button and the menu ⋯ at the right end. A narrow pane cuts the subject's names short first; only when even
- * that is not enough does the right end go onto a second row.
+ * 絞り込み button and 書き出し (the catalog: 印刷) at the right end. A narrow pane cuts the subject's names short first; only when even
+ * that is not enough does the right end go onto a second row. An empty view has no controls: the row keeps the height of
+ * one (a .toolbar-button and the padding: the box is border-box), so the tabs do not move.
  */
 .view-toolbar {
+    container: view-toolbar / inline-size;
     flex-basis: 100%;
     min-width: 0;
+    min-height: calc(1.625rem + 8px);
     padding: 4px 0;
     display: flex;
     flex-wrap: wrap;
@@ -2597,6 +2713,12 @@ svg.chat-launcher-mark {
     display: flex;
     align-items: center;
     gap: 6px;
+}
+/* a narrow toolbar: the right end's buttons as icons (their names as tooltips), so that the subject keeps its room */
+@container view-toolbar (max-width: 40rem) {
+    .toolbar-end-label {
+        display: none;
+    }
 }
 .toolbar-button {
     display: flex;
@@ -3282,6 +3404,8 @@ svg.chat-launcher-mark {
     --motion-dialog-out: 100ms;
     /* small changes in place: the legend folding, the tree's branches */
     --motion-medium: 180ms;
+    /* a chat row growing to its new content (the AI's card turning into its answer), the content fading in */
+    --motion-grow: 250ms;
     --motion-ease-enter: cubic-bezier(0, 0, 0.2, 1);
     --motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
     --motion-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
@@ -3295,6 +3419,7 @@ svg.chat-launcher-mark {
         --motion-dialog-in: 0ms;
         --motion-dialog-out: 0ms;
         --motion-medium: 0ms;
+        --motion-grow: 0ms;
     }
 }
 
@@ -4527,6 +4652,73 @@ del.was.block {
     line-clamp: 4;
     overflow: hidden;
 }
+/* an answer of the AI as Markdown (`markdown.ts`): blocks --space-2 apart; clamped by its height (four lines), since
+   line clamping does not reach into its lists and tables, its last line fading out where it may be cut */
+.chat-text.chat-markdown.clamped {
+    display: block;
+    max-height: calc(4em * var(--lh-body));
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5em), transparent);
+}
+.chat-markdown > * {
+    margin: 0;
+}
+.chat-markdown > * + * {
+    margin-top: var(--space-2);
+}
+.chat-markdown :is(ul, ol) {
+    margin: 0;
+    padding-left: 1.5em;
+}
+/* every heading level alike: a bold line, a little larger than the body */
+.chat-markdown .chat-md-heading {
+    font-size: 1.0625em;
+    font-weight: var(--fw-strong);
+}
+.chat-markdown strong {
+    font-weight: var(--fw-strong);
+}
+.chat-markdown code {
+    font-size: 0.9em;
+    padding: 0 3px;
+    border-radius: 4px;
+    background: var(--surface-muted);
+}
+/* a code block and a table: wider than the column, they scroll inside it, never widen the chat */
+.chat-markdown .chat-md-code {
+    max-width: 100%;
+    padding: var(--space-2);
+    overflow-x: auto;
+    border-radius: 6px;
+    background: var(--surface-muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+    white-space: pre;
+}
+.chat-md-code code {
+    padding: 0;
+    background: none;
+    font-size: inherit;
+}
+.chat-markdown .chat-md-table {
+    max-width: 100%;
+    overflow-x: auto;
+}
+.chat-md-table table {
+    border-collapse: collapse;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.chat-md-table :is(th, td) {
+    padding: 2px var(--space-2);
+    border: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+    white-space: nowrap;
+}
+.chat-md-table th {
+    font-weight: var(--fw-strong);
+    background: var(--surface-muted);
+}
 .chat-more {
     margin-top: calc(-1 * var(--space-1));
     font-size: var(--fs-small);
@@ -5131,6 +5323,36 @@ button.add-to-request.added:hover {
 .collab-menu-note {
     left: 0;
     right: auto;
+}
+/* `link`: the people waiting to join, in the chat's head of the facilitator's page */
+.join-requests {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-muted);
+}
+.join-request {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+.join-request-same {
+    display: inline-flex;
+    color: var(--warning, var(--muted));
+}
+.join-requests-used-up {
+    margin: 0;
+}
+.join-request-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
 }
 .collab-ended {
     display: flex;
@@ -6650,6 +6872,46 @@ button.add-to-request.added:hover {
     background: var(--selected-bg);
     color: var(--action);
 }
+/* the 書き出し menu: below the view toolbar's button, at its right; the inspector's, above its canvas controls */
+.export-popover {
+    position: relative;
+}
+.export-popover .export-menu {
+    right: 0;
+    min-width: 12rem;
+}
+.canvas-controls .export-menu {
+    position: static;
+    min-width: 12rem;
+    pointer-events: auto;
+}
+.export-menu > button {
+    padding: 5px 10px;
+    font: inherit;
+    text-align: left;
+    color: inherit;
+    background: none;
+    border: none;
+    border-radius: 5px;
+}
+.export-menu > button:hover:not(:disabled),
+.export-menu > button:focus-visible {
+    background: var(--hover);
+    outline: none;
+}
+.export-menu > button:disabled {
+    color: var(--disabled-text);
+    cursor: default;
+}
+.export-menu-options {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+    padding: 6px 10px 2px;
+    border-top: 1px solid var(--border);
+    color: var(--text-secondary);
+}
 /*
  * « collapses the bar toward the bottom-left corner, leaving a » there (the legend's panel goes with it).
  * It opens and closes at the panes' paces (the motion tokens).
@@ -7191,4 +7453,466 @@ button.add-to-request.added:hover {
 .chat-latest:hover {
     border-color: var(--border-strong);
     color: var(--text);
+}
+
+/* ---- the AI as a participant (ADR 0030) ---- */
+/* an addressed message the AI is reading: its mark in small and a quiet "…" breathing, in the status slot */
+.chat-ai-working {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.chat-ai-working > .session-avatar,
+.chat-composer-ai > .session-avatar {
+    --avatar-size: calc(var(--fs-small) * 4 / 3);
+}
+.chat-ai-working > .session-avatar > svg,
+.chat-composer-ai > .session-avatar > svg {
+    width: calc(var(--avatar-size) * 0.62);
+    height: calc(var(--avatar-size) * 0.62);
+}
+.chat-ai-dots {
+    animation: chat-blink 1.2s ease-in-out infinite;
+}
+/* Solo: the AI's card right under a message, from its sending: its name line with a muted 確認中 and the quiet "…",
+   until its answer or its run card takes its place, cross-fading (`--motion-swap`) as the activity line does */
+.chat-ai-slot {
+    transition: opacity var(--motion-swap) var(--motion-ease-standard);
+}
+.chat-ai-slot.swapping {
+    opacity: 0;
+}
+.chat-ai-pending-state {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--space-1);
+    color: var(--muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.chat-ai-pending .chat-ai-given-up {
+    margin-top: var(--space-2);
+}
+/* the AI gave up answering: one small line in the danger's ink under the text */
+.chat-ai-given-up {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    color: var(--status-danger-ink);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+/* the composer: the AI's mark beside 送る while the message will reach it */
+.chat-composer-ai {
+    display: inline-flex;
+    opacity: 0.85;
+}
+/* the header: the AI not connected, in the warning (nothing while it is) */
+.chat-status.status-ai-missing {
+    background: var(--status-warning-bg);
+    color: var(--status-warning-ink);
+}
+/* a run that answered a question but changed files: flagged in the warning */
+.reply-answered-changed {
+    color: var(--status-warning-ink);
+    font-size: var(--fs-small);
+}
+/* a change proposal: the AI's bubble holding a faint surface, headed small and strong; its targets as chips, then how
+   (no field labels) */
+.proposal {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border-radius: 10px;
+    background: var(--surface-muted);
+}
+.proposal-label {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+    font-weight: var(--fw-strong);
+}
+/* a target: `#注文` and, after it, what it is and where (集約・販売) muted; one that does not resolve, plain */
+.proposal-target {
+    background: var(--surface);
+}
+/* the name stays whole; what it is and where gives way first */
+.proposal-target > .chat-chip-name {
+    flex: none;
+    max-width: 100%;
+}
+.proposal-target-detail {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+}
+.proposal-target.unresolved {
+    color: var(--text-secondary);
+}
+.proposal-more {
+    color: var(--muted);
+    background: var(--surface);
+}
+/* the options: a bordered row each, the chosen one in the selection's tint; the AI's recommendation said small */
+.proposal-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+.proposal-option {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+label.proposal-option {
+    cursor: pointer;
+}
+.proposal-option.chosen {
+    border-color: var(--selected-ring);
+    background: var(--selected-bg);
+}
+.proposal-option input[type='radio'] {
+    flex: none;
+    width: 13px;
+    height: 13px;
+    margin: calc((1.5em - 13px) / 2) 0 0;
+}
+.proposal-option-mark {
+    flex: none;
+    display: inline-flex;
+    margin-top: calc((1.5em - 12px) / 2);
+    color: var(--accent);
+}
+.proposal-option-body {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.proposal-option-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2);
+}
+.proposal-recommended {
+    color: var(--muted);
+    font-size: var(--fs-small);
+}
+.proposal-option-how {
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+/* the others' line while it waits: the facilitator decides */
+.proposal-waiting {
+    margin: 0;
+    color: var(--status-warning-ink);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.proposal-edit {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+.proposal-edit textarea {
+    width: 100%;
+    margin: 0;
+    font: inherit;
+    resize: vertical;
+}
+.proposal .chat-apply-note {
+    margin: 0;
+}
+.chat-state.proposal-state-Open {
+    color: var(--status-warning-ink);
+}
+/* withdrawn: muted as a whole */
+.proposal-row.state-Withdrawn .proposal {
+    opacity: 0.6;
+}
+/* the facilitator's record of a triage: small muted lines under the message, the stage that decided strong */
+.triage-record {
+    margin-top: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: 8px;
+    background: var(--surface-muted);
+    color: var(--muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.triage-record-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    margin: 0 0 var(--space-1);
+}
+.triage-steps {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.triage-step-line {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: var(--space-2);
+    font-variant-numeric: tabular-nums;
+}
+.triage-stage {
+    color: var(--text-secondary);
+}
+.triage-step.decided .triage-stage,
+.triage-step.decided .triage-verdict {
+    color: var(--text);
+    font-weight: var(--fw-strong);
+}
+.triage-reason {
+    display: block;
+    white-space: pre-wrap;
+}
+
+/* `/` in the composer: the commands (an interview, marked with the AI's spark) first, then the templates; the ID muted */
+.chat-slash-option {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+}
+.chat-slash-option.template {
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+.chat-slash-option .chat-mention-where {
+    grid-column: auto;
+    font-family: var(--mono);
+}
+.chat-slash-option.command .chat-slash-what {
+    grid-column: 2 / -1;
+    grid-row: 2;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.chat-slash-icon {
+    color: var(--accent);
+}
+
+/* a running interview (`/es`, `/model`): its bar above the composer and, once written, its brief */
+.chat-interview {
+    margin: var(--space-1) 0;
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    border-radius: 8px;
+    background: var(--selected-bg);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.chat-interview-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+}
+.chat-interview-name {
+    font-weight: var(--fw-strong);
+    color: var(--accent);
+    white-space: nowrap;
+}
+.chat-interview-state {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+}
+.chat-brief {
+    padding: var(--space-2) var(--space-3) var(--space-2);
+    border-top: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+    background: var(--surface-raised);
+    border-radius: 0 0 8px 8px;
+}
+.chat-brief-target {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+    margin-bottom: var(--space-1);
+}
+.chat-brief-name {
+    font-weight: var(--fw-strong);
+}
+.chat-brief-flag {
+    padding: 0 var(--space-1);
+    border-radius: 4px;
+    background: var(--model-event-tint);
+    color: var(--model-event);
+}
+.chat-brief-flag.warn {
+    background: var(--neutral-tint);
+    color: var(--text);
+}
+.chat-brief-lines {
+    margin: 0;
+    font-size: var(--fs-body, inherit);
+    line-height: 1.5;
+}
+.chat-brief-line {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: var(--space-2);
+}
+.chat-brief-line dt {
+    font-weight: var(--fw-strong);
+    white-space: nowrap;
+}
+.chat-brief-line dd {
+    margin: 0;
+    grid-column: 2;
+}
+.chat-brief-line dd:only-child {
+    grid-column: 1 / -1;
+}
+.chat-brief-edit {
+    width: 100%;
+    box-sizing: border-box;
+    resize: vertical;
+    font: inherit;
+    font-size: var(--fs-body, inherit);
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+}
+.chat-brief-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+}
+.chat-brief-waiting {
+    margin: var(--space-2) 0 0;
+}
+
+/* ---------- printing (view/print.tsx) ---------- */
+
+/* the diagram as printed: drawn beside the app while printing, never seen on the screen (its notes' labels are still
+   laid out, to be fitted) */
+.print-sheet {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+    /* the page's margin (the @page has none, so that the browser adds no header or footer of its own) */
+    padding: 10mm;
+    display: flex;
+    flex-direction: column;
+    visibility: hidden;
+    pointer-events: none;
+    z-index: -1;
+    overflow: hidden;
+}
+.print-sheet-svg {
+    display: block;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    overflow: visible;
+}
+/* the line above the diagram: where it is and how it is shown (the page has no header of the browser's) */
+.print-heading {
+    flex: none;
+    margin-bottom: 4mm;
+    overflow: hidden;
+    font-size: 10pt;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--text-secondary);
+}
+/* the view's legend, under the diagram at the left */
+.print-legend {
+    flex: none;
+    align-self: flex-start;
+    margin-top: 4mm;
+}
+.print-sheet-boxes {
+    position: relative;
+}
+
+@media print {
+    /* light colours on white paper, the sticky notes' colours kept */
+    html,
+    body,
+    #root {
+        height: auto;
+        background: #fff;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+    }
+    .tooltip,
+    .edge-hint {
+        display: none !important;
+    }
+
+    /* a diagram: its sheet alone, the whole of one page */
+    body:has(> .print-sheet) > :not(.print-sheet) {
+        display: none !important;
+    }
+    .print-sheet {
+        position: static;
+        visibility: visible;
+        width: 100%;
+        /* a hair less than the page, so that rounding never pushes it onto a second one */
+        height: calc(100vh - 2px);
+        z-index: auto;
+        overflow: hidden;
+        break-inside: avoid;
+    }
+
+    /* the catalog: its list as a page, without the panes, the tabs and the canvas around it */
+    .app {
+        display: block;
+        height: auto;
+    }
+    .left,
+    .resizer,
+    .dock,
+    .conversation,
+    .launcher-slot,
+    .banners,
+    .view-tabs,
+    .diagram-canvas,
+    .canvas-controls {
+        display: none !important;
+    }
+    .main,
+    .canvas-pane,
+    .center,
+    .view-area {
+        display: block;
+        height: auto;
+        overflow: visible;
+    }
+    .catalog {
+        position: static;
+        overflow: visible;
+        padding: 0;
+    }
 }

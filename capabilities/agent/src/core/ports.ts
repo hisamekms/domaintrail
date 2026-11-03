@@ -1,8 +1,11 @@
-// The ports of the subscriber (`dt session subscribe`, ADR 0026, S6), defined here on its side: the session server's
-// agent API, the agent that edits the workspace, the DSL tools run after it, the workspace's files, and time. The
-// adapters are in `../adapters`, wired by the app (`startSubscriber`).
+// The ports of the agent's two roles (ADR 0026, S6; ADR 0030, decision 6), defined here on their side: the session
+// server's agent API (the runner's entry point and the answerer's), the agent that edits the workspace (the runner),
+// the read-only agent that triages and answers (the answerer), the DSL tools run after a run, the workspace's files, and
+// time. The adapters are in `../adapters`, wired by the app (`startSubscriber`, `startAnswerer`).
 import type {
+    AgentAnswerStreamJob,
     AgentClaimed,
+    AgentFailReason,
     AgentReplyBody,
     AgentFinishBody,
     AgentLease,
@@ -10,6 +13,7 @@ import type {
     AgentParticipantsBody,
     AgentRevertedRun,
     AgentSessionBody,
+    AgentSessionSoFar,
     EventMessage,
     Json,
     RunActivity,
@@ -33,6 +37,17 @@ export class AgentApiError extends Error {
     }
 }
 
+/**
+ * A runner refuses a run because the deny list that keeps what git ignores from the agent would be too long: the run
+ * fails as `ReadScopeTooLarge` (the page says why), never runs with part of the list.
+ */
+export class ReadScopeTooLarge extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'ReadScopeTooLarge';
+    }
+}
+
 /** What a call of the agent API answered; a transport failure (refused, reset, timed out) rejects instead. */
 export type ApiResult<T> = { readonly ok: true; readonly value: T } | ApiFailure;
 
@@ -50,6 +65,10 @@ export interface Started {
     readonly baseRevision: Json<Collaboration.Revision>;
     readonly previousRuns?: readonly AgentPreviousRun[];
     readonly revert?: readonly AgentRevertedRun[];
+    /** The session so far, whole (absent from an older server). */
+    readonly sessionSoFar?: AgentSessionSoFar;
+    /** The session so far after the `since` the start was given. */
+    readonly sessionSoFarSince?: AgentSessionSoFar;
 }
 
 /** The agent API of the session server (loopback, bearer token). */
@@ -64,21 +83,83 @@ export interface AgentApi {
     events(lastEventId: string | undefined, signal: AbortSignal): AsyncIterable<StreamItem>;
     /** Claims the next run; `capabilities`: what this subscriber can run (`AGENT_CAPABILITIES`), so that it is given no run it cannot. */
     claim(owner: string, capabilities: readonly string[]): Promise<ApiResult<AgentClaimed>>;
-    start(run: string, token: string): Promise<ApiResult<Started>>;
+    /** `since`: the last entry of the session so far the runner's warm process was given (for `sessionSoFarSince`). */
+    start(run: string, token: string, since?: number): Promise<ApiResult<Started>>;
     heartbeat(run: string, token: string): Promise<ApiResult<{ readonly lease: AgentLease }>>;
     /** What the running run is doing now (the server keeps the latest for the pages; the lease is not extended). */
     activity(run: string, token: string, activity: RunActivity): Promise<ApiResult<unknown>>;
     finish(run: string, token: string, facts: Omit<AgentFinishBody, 'token'>): Promise<ApiResult<unknown>>;
     clarification(run: string, token: string, question: string, reply?: AgentReplyBody): Promise<ApiResult<unknown>>;
     decline(run: string, token: string, reply: AgentReplyBody): Promise<ApiResult<unknown>>;
-    fail(run: string, token: string, reason: 'AgentError' | 'Interrupted'): Promise<ApiResult<unknown>>;
+    fail(run: string, token: string, reason: AgentFailReason): Promise<ApiResult<unknown>>;
     release(run: string, token: string): Promise<ApiResult<unknown>>;
+    /**
+     * The answerer role's SSE stream (`GET /agent/answers/events`): `open` first, then the jobs handed to this answerer,
+     * their withdrawals, a restored revision and the session's end, until the server ends it or `signal` aborts. Rejects
+     * as `events` does.
+     */
+    answerEvents(signal: AbortSignal): AsyncIterable<AnswerStreamItem>;
+    /** `POST /agent/answers/:job`: a job's result (or why it failed). */
+    answerResult(job: string, result: Readonly<Record<string, unknown>>): Promise<ApiResult<unknown>>;
+}
+
+/** What the answerer role's stream carries. */
+export type AnswerStreamItem =
+    | { readonly kind: 'open' }
+    | { readonly kind: 'job'; readonly job: AgentAnswerStreamJob }
+    | { readonly kind: 'withdrawn'; readonly job: string }
+    | { readonly kind: 'restored' }
+    | { readonly kind: 'closed' };
+
+/** One turn of the read-only agent: its prompt (and the one for a process that continues), and how to stop it. */
+export interface AnswerTurn {
+    readonly prompt: string;
+    /** The prompt for a process that took turns before (a warm answerer): the session so far since then, the files changed. */
+    readonly continuedPrompt?: string;
+    /** Aborted to stop the turn (withdrawn, timed out, the answerer stops). */
+    readonly signal: AbortSignal;
+}
+
+/** What a turn of the read-only agent gave: its structured output (unvalidated), or why it gave none. */
+export interface AnswerTurnResult {
+    /** The structured output (`--json-schema`), else undefined. */
+    readonly structured?: unknown;
+    /** The final text (the output as JSON when structured). */
+    readonly text: string;
+    /** The model that answered, when the agent said. */
+    readonly model?: string;
+    /** Why there is no output: the process failed, exited, or the turn was stopped. */
+    readonly error?: string;
+}
+
+/**
+ * The read-only agent of the answerer role (Claude Code): stage 3 of the triage with no tools at all, answers and
+ * proposals with the reading tools only (`Read`, `Grep`, `Glob`), enforced by the process's own tools, never by the
+ * prompt. One turn of each at a time.
+ */
+export interface AnswerAgent {
+    /** Stage 3: the light model, no tools. */
+    triage(turn: AnswerTurn): Promise<AnswerTurnResult>;
+    /** An answer or a proposal: the reading tools only. */
+    answer(turn: AnswerTurn): Promise<AnswerTurnResult>;
+    /** An interview's turn (`/es`, `/model`): the reading tools only, the interviewer's schema. */
+    interview(turn: AnswerTurn): Promise<AnswerTurnResult>;
+    /** Forget the conversation (a warm process): the files it read were replaced. */
+    reset?(reason: string): void;
+    /** Ends the processes it keeps; resolves once they are gone. */
+    close?(): Promise<void>;
 }
 
 /** One invocation of the agent on the workspace. */
 export interface AgentInvocation {
     /** The whole prompt (`buildPrompt`); passed to the agent as data, never through a shell. */
     readonly prompt: string;
+    /**
+     * The prompt for an agent that continues the conversation of its previous run (a warm agent, which remembers the
+     * files it read): the same, with the files changed since that run (`changedSinceYourLastRun`). Absent for the first
+     * run; an agent that starts afresh takes `prompt`.
+     */
+    readonly continuedPrompt?: string;
     /** The tools the facilitator allows (`GET /agent/session`). */
     readonly allowedTools: readonly string[];
     /** How many requests the prompt numbers (the reply names them by number, 1 to this). */
@@ -109,9 +190,19 @@ export interface AgentOutcome {
 /** Runs the agent (Claude Code) in the workspace root, one invocation at a time. */
 export interface AgentRunner {
     run(invocation: AgentInvocation): Promise<AgentOutcome>;
+    /**
+     * Forget the conversation (a warm agent): the next run starts afresh, e.g. after a revision was restored. Says
+     * why, for the log. A runner that keeps nothing between runs has none.
+     */
+    reset?(reason: string): void;
+    /** Ends what the runner keeps running between runs (a warm agent's process); resolves once it is gone. */
+    close?(): Promise<void>;
 }
 
-/** `dt fmt` and `dt check` on the workspace: each resolves whether it ran (exit 0 or 1), not whether it found nothing. */
+/**
+ * `dt fmt` and `dt check` on the workspace: each resolves whether it ran (exit 0 or 1), not whether it found nothing.
+ * The subscriber runs them only when the run changed files (else they are `skipped`).
+ */
 export interface DslTools {
     format(): Promise<boolean>;
     check(): Promise<boolean>;

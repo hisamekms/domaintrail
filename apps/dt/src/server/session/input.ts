@@ -17,6 +17,7 @@ import {
     readAnswer,
     readEmoji,
     readReply,
+    readViewedAt,
     REPLY_LIMITS,
     type ReplyOutcome,
     type Result,
@@ -77,10 +78,18 @@ export function text(v: unknown, field: string, max: number): Result<Collaborati
 }
 
 /** A display name picked in `dev` mode: trimmed, 1–60 characters, on one line. */
+/**
+ * Whether `name` holds a Unicode format character (category Cf: bidi controls, zero-width spaces and joiners, …) that
+ * could make it read as another; a zero-width joiner inside an emoji sequence (👩‍💻) is the emoji's, and allowed.
+ */
+export const hasFormatCharacter = (name: string): boolean =>
+    /\p{Cf}/u.test(name.replace(/(?<=\p{Extended_Pictographic}\p{M}*)\u200d(?=\p{Extended_Pictographic})/gu, ''));
+
 export function displayName(v: unknown, field = 'name'): Result<Collaboration.DisplayName, InvalidInput> {
     if (typeof v !== 'string') return invalid(field, 'Expected a name.');
     const name = v.trim();
-    if (!name || name.length > MAX_NAME || /[\r\n]/.test(name) || hasControl(name)) return invalid(field, `A name of 1 to ${MAX_NAME} characters on one line.`);
+    if (!name || name.length > MAX_NAME || /[\r\n]/.test(name) || hasControl(name) || hasFormatCharacter(name))
+        return invalid(field, `A name of 1 to ${MAX_NAME} characters on one line.`);
     const n = Collaboration.makeDisplayName(name);
     return n.ok ? n : invalid(field, 'Not a name.');
 }
@@ -99,7 +108,7 @@ function made<T>(v: unknown, field: string, make: (s: string) => Result<T, unkno
     return m.ok ? ok(m.value) : invalid(field, 'Not a valid name.');
 }
 
-function modelTarget(v: unknown, field: string): Result<Collaboration.ModelTarget, InvalidInput> {
+export function modelTarget(v: unknown, field: string): Result<Collaboration.ModelTarget, InvalidInput> {
     if (!isObject(v)) return invalid(field, 'Expected a target.');
     const f = (name: string): string => `${field}.${name}`;
     switch (v.kind) {
@@ -114,6 +123,12 @@ function modelTarget(v: unknown, field: string): Result<Collaboration.ModelTarge
             if (!b.ok) return invalid(f(b.error.field), b.error.message);
             const element = made(v.element, f('element'), Collaboration.makeElementName);
             return element.ok ? ok({ kind: 'DtElement', element: element.value }) : element;
+        }
+        case 'DtesStorming': {
+            const b = body(v, ['kind', 'storming']);
+            if (!b.ok) return invalid(f(b.error.field), b.error.message);
+            const storming = made(v.storming, f('storming'), Collaboration.makeStormingName);
+            return storming.ok ? ok({ kind: 'DtesStorming', storming: storming.value }) : storming;
         }
         case 'DtesElement': {
             const b = body(v, ['kind', 'storming', 'local']);
@@ -140,7 +155,7 @@ function modelTarget(v: unknown, field: string): Result<Collaboration.ModelTarge
             return ok({ kind: 'DtesOccurrence', storming: storming.value, timeline: timeline.value, eventName: eventName.value, occurrence: occurrence.value });
         }
         default:
-            return invalid(f('kind'), "Expected 'Workspace', 'DtElement', 'DtesElement' or 'DtesOccurrence'.");
+            return invalid(f('kind'), "Expected 'Workspace', 'DtElement', 'DtesStorming', 'DtesElement' or 'DtesOccurrence'.");
     }
 }
 
@@ -223,6 +238,12 @@ export function requestTargets(raw: Raw): Result<Collaboration.TargetSnapshot[],
         targets.push(t.value);
     }
     return ok(targets);
+}
+
+/** Where the sender was looking (`{ view, states? }`): its shape and limits; whether its names exist is the route's. */
+export function viewedAt(v: unknown, field = 'viewedAt'): Result<Collaboration.ViewedAt, InvalidInput> {
+    const read = readViewedAt(v, field);
+    return read.ok ? read : invalid(read.error.path, read.error.message);
 }
 
 /** What a message replies to: `{ kind: 'Run', run }` or `{ kind: 'Message', request }` (whether it can be replied to: the use case checks). */

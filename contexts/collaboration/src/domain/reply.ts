@@ -39,17 +39,22 @@ export const REPLY_LIMITS = {
     key: 40,
     /** Characters of the facilitator's own words in an answer. */
     answerText: 500,
+    /**
+     * Characters of the AI's answer: a run's (`answer`, when it judged a request a question and changed nothing) and the
+     * read-only answerer's (a message of the AI).
+     */
+    answer: 2000,
 } as const;
 
 export const REPLY_OUTCOMES = ['done', 'clarification', 'declined'] as const;
 /** How a run ended in the agent's words: carried out, asks first, or will not do it. */
 export type ReplyOutcome = (typeof REPLY_OUTCOMES)[number];
 
-export const REQUEST_STATUSES = ['done', 'partial', 'skipped', 'question'] as const;
+export const REQUEST_STATUSES = ['done', 'partial', 'skipped', 'question', 'answered'] as const;
 /** What the agent says it did about one request. */
 export type RequestStatus = (typeof REQUEST_STATUSES)[number];
 
-const PROGRESS = { done: 'Done', partial: 'Partial', skipped: 'Skipped', question: 'Question' } as const satisfies Record<
+const PROGRESS = { done: 'Done', partial: 'Partial', skipped: 'Skipped', question: 'Question', answered: 'Answered' } as const satisfies Record<
     RequestStatus,
     Collaboration.RequestProgress
 >;
@@ -76,6 +81,8 @@ export interface ReplyData<R> {
         readonly requests: readonly R[];
         readonly alternatives: readonly { readonly id: string; readonly label: string }[];
     }[];
+    /** The answer, when the agent judged a request a question and answered it without editing (its status `answered`). */
+    readonly answer?: string;
 }
 
 /** Why a reply (or an answer) was refused: where in it, and what is wrong. */
@@ -172,7 +179,7 @@ export function readReply<R>(raw: unknown, request: RequestReader<R>, maxRequest
 
 function readOrThrow<R>(raw: unknown, request: RequestReader<R>, maxRequests: number): ReplyData<R> {
     const L = REPLY_LIMITS;
-    const v = object(raw, 'reply', ['outcome', 'title', 'summary', 'requests', 'questions', 'assumptions']);
+    const v = object(raw, 'reply', ['outcome', 'title', 'summary', 'requests', 'questions', 'assumptions', 'answer']);
     const outcome = REPLY_OUTCOMES.find((o) => o === v.outcome);
     if (!outcome) throw new Refused('reply.outcome', `Expected one of ${REPLY_OUTCOMES.join(', ')}.`);
     const title = v.title === undefined ? undefined : text(v.title, 'reply.title', L.title, false);
@@ -238,7 +245,11 @@ function readOrThrow<R>(raw: unknown, request: RequestReader<R>, maxRequests: nu
         );
         return { text: text(o.text, `${p}.text`, L.assumptionText), requests: requestList(o.requests, `${p}.requests`, request, maxRequests), alternatives };
     });
-    return { outcome, ...(title !== undefined && { title }), summary, requests, questions, assumptions };
+    const answer = v.answer === undefined ? undefined : text(v.answer, 'reply.answer', L.answer);
+    if (answer !== undefined && outcome !== 'done') throw new Refused('reply.answer', `Only a done reply answers, not ${outcome}.`);
+    if (answer === undefined && requests.some((r) => r.status === 'answered'))
+        throw new Refused('reply.answer', 'An answer is required when a request is answered.');
+    return { outcome, ...(title !== undefined && { title }), summary, requests, questions, assumptions, ...(answer !== undefined && { answer }) };
 }
 
 /** A reader of request numbers as the prompt numbers them: 1 to `count`. */
@@ -282,6 +293,7 @@ export function replyJsonSchema(requests: number): Record<string, unknown> {
             outcome: { type: 'string', enum: REPLY_OUTCOMES },
             title: str(L.title),
             summary: str(L.summary),
+            answer: str(L.answer),
             requests: {
                 type: 'array',
                 maxItems: requests,
@@ -352,6 +364,7 @@ export function toAgentReply(reply: ReplyData<Collaboration.RequestId>): Collabo
             requests: a.requests,
             alternatives: a.alternatives.map((x) => ({ id: k(x.id), label: t(x.label) })),
         })),
+        ...(reply.answer !== undefined && { answer: t(reply.answer) }),
     };
 }
 

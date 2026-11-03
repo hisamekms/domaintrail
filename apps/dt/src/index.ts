@@ -7,7 +7,11 @@
 export { cliDeps, runDt } from './main.js';
 export { startViewServer, type ViewServer, type ViewServerOptions } from './wiring/view.js';
 export {
+    AGENT_CODE_TTL_MS,
+    issueAgentLink,
+    issueOpenLink,
     issueFacilitatorLink,
+    issueInvite,
     startSessionServer,
     WS_EXPIRED,
     WS_REVOKED,
@@ -15,13 +19,14 @@ export {
     type SessionServer,
     type SessionServerOptions,
 } from './wiring/session.js';
-export { readCredential, startSubscriber, type RunningSubscriber, type SubscriberOptions } from './wiring/subscriber.js';
+export { pairAgent, startSubscriber, type RunningSubscriber, type SubscriberOptions } from './wiring/subscriber.js';
 export { createWatcherHold, ECHO_MS, type WatcherHold } from './wiring/watcher-hold.js';
 export { createModelValidator, createSourceFormatter } from './wiring/validator.js';
 
 // ---- the CLI ---------------------------------------------------------------------------------------------------
 export { consoleIO, runCli, type CliIO } from './cli/main.js';
-export { SessionError, type CliDeps } from './cli/ports.js';
+export { SessionError, TunnelError, type CliDeps, type SessionSettings, type StartedTunnel } from './cli/ports.js';
+export { fileTrustStore } from './cli/trust.js';
 
 // ---- the configuration: domaintrail.jsonc composed from its sections' owners (T6) -------------------------------
 export {
@@ -30,9 +35,15 @@ export {
     CONFIG_FILES,
     ConfigError,
     defaultConfig,
+    LOCAL_CONFIG_FILES,
+    localConfigFiles,
+    mergeConfig,
     resolveConfig,
+    resolveConfigWithLocal,
+    type ResolvedAgentSection,
+    type ResolvedClassifierConfig,
+    type ResolvedCollabConfig,
     type ResolvedConfig,
-    type ResolvedSessionConfig,
 } from './config/config.js';
 
 // ---- the language server (loaded only by `dt lsp`) -------------------------------------------------------------

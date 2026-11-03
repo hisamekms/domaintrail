@@ -75,7 +75,7 @@ const facilitator = value(C.makeParticipantId('facilitator'));
 const ann = value(C.makeParticipantId('ann'));
 const name = value(C.makeDisplayName('Ada'));
 const text = (t: string): C.Text => value(C.makeText(t));
-const facts = { exitCode: 0, formatted: true, checked: true };
+const facts = { exitCode: 0, formatted: 'Ran', checked: 'Ran' } as const;
 
 interface Fixture {
     readonly root: string;
@@ -348,7 +348,11 @@ describe('the requests route and the agent API with replies', () => {
                 port: 0,
                 host: '127.0.0.1',
                 identity: 'dev',
-                agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS], maxPreviousRunDiff: 20 * 1024 },
+                agent: {
+                    port: 0,
+                    allowedTools: [...DEFAULT_AGENT_TOOLS],
+                    maxPreviousRunDiff: 20 * 1024,
+                },
                 maxParticipants: 50,
                 quickReactions: ['👍', '👀', '🤔', '🎉', '❤️', '🙏'],
                 classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
@@ -358,7 +362,7 @@ describe('the requests route and the agent API with replies', () => {
         ada = await join('Ada');
         bob = await join('Bob');
         expect((await fetch(server.facilitatorLink, { headers: { cookie: ada }, redirect: 'manual' })).status).toBe(303);
-        cred = JSON.parse(await Bun.file(path.join(root, '.domaintrail', 'session', 'agent.json')).text());
+        cred = { url: server.agentUrl, token: server.agentToken };
     });
     afterAll(() => server?.stop());
 
@@ -397,10 +401,17 @@ describe('the requests route and the agent API with replies', () => {
         expect(sent.status).toBe(201);
         const reply = ((await sent.json()) as { request: { id: string; replyTo: unknown } }).request;
         expect(reply.replyTo).toEqual(toRun);
-        // the facilitator's own reply, applied at once, is a run like any other
-        const own = (await (await api(ada, 'requests', { targets: [], body: 'And confirmed ones.', replyTo: toRun, apply: true })).json()) as {
+        // the facilitator's own reply, queued at once, is a run like any other
+        const ownSent = (await (await api(ada, 'requests', { targets: [], body: 'And confirmed ones.', replyTo: toRun })).json()) as {
             request: { id: string; replyTo: unknown };
-            run: { id: string; input: { requests: { replyTo?: unknown }[] } };
+        };
+        const own = {
+            request: ownSent.request,
+            run: (
+                (await (await api(ada, 'runs', { requests: [ownSent.request.id] })).json()) as {
+                    run: { id: string; input: { requests: { replyTo?: unknown }[] } };
+                }
+            ).run,
         };
         expect(own.request.replyTo).toEqual(toRun);
         expect(own.run.input.requests.map((r) => r.replyTo)).toEqual([toRun]);
@@ -429,9 +440,16 @@ describe('the requests route and the agent API with replies', () => {
         expect(await bad({ targets: [], body: 'x', replyTo: { kind: 'Message', request: original, run: original } })).toEqual([400, 'replyTo.run']);
         expect(await bad({ targets: [], body: 'x', replyTo: { kind: 'Message', request: crypto.randomUUID() } })).toEqual([404, 'RequestNotFound']);
         const toMessage = { kind: 'Message', request: original };
-        const sent = (await (await api(ada, 'requests', { targets: [], body: 'Draft and confirmed.', replyTo: toMessage, apply: true })).json()) as {
+        const sentMessage = (await (await api(ada, 'requests', { targets: [], body: 'Draft and confirmed.', replyTo: toMessage })).json()) as {
             request: { id: string; replyTo: unknown };
-            run: { id: string; input: { requests: { replyTo?: unknown }[] } };
+        };
+        const sent = {
+            request: sentMessage.request,
+            run: (
+                (await (await api(ada, 'runs', { requests: [sentMessage.request.id] })).json()) as {
+                    run: { id: string; input: { requests: { replyTo?: unknown }[] } };
+                }
+            ).run,
         };
         expect(sent.request.replyTo).toEqual(toMessage);
         const bobId = ((await (await api(bob, 'me')).json()) as { participant: { id: string } }).participant.id;

@@ -1,5 +1,19 @@
 import { describe, expect, test } from 'bun:test';
-import { BADGE, badgeWidth, DIAG_RADIUS, edgeOutlinePath, nodeOutlinePath, roundRectPath } from './diagram-items';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import {
+    BADGE,
+    badgeWidth,
+    DIAG_RADIUS,
+    edgeClassName,
+    EdgeMarks,
+    edgeOutlinePath,
+    NodeContent,
+    nodeClassName,
+    nodeOutlinePath,
+    roundRectPath,
+} from './diagram-items';
+import type { EdgeProps, NodeProps } from './scene';
 
 /** The corners of a path's straight segments (`L x,y`). */
 const corners = (d: string): [number, number][] => [...d.matchAll(/L(-?[\d.]+),(-?[\d.]+)/g)].map((m) => [Number(m[1]), Number(m[2])]);
@@ -49,5 +63,64 @@ describe('the outline of a hovered or selected item', () => {
                 { x: 30, y: 40 },
             ]),
         ).toBe('M0,0 L0,40 L30,40');
+    });
+});
+
+describe('the classes of a node', () => {
+    const p: NodeProps = {
+        w: 10,
+        h: 10,
+        kind: 'esActor',
+        label: '',
+        stereotype: '',
+        scale: 1,
+        rows: [],
+        compartment: 0,
+        change: 'none',
+        badge: '',
+        diag: 'none',
+    };
+
+    test('ring the selected note, and dash the other notes of its element', () => {
+        expect(nodeClassName(p, true)).toContain(' dn-selected');
+        expect(nodeClassName(p, false, true)).toContain(' dn-same');
+        expect(nodeClassName(p, true, true)).not.toContain('dn-same');
+        expect(nodeClassName(p, false)).not.toMatch(/dn-(selected|same)/);
+    });
+});
+
+describe('a resolved hotspot', () => {
+    const hotspot: NodeProps = {
+        w: 150,
+        h: 150,
+        kind: 'esHotspot',
+        label: '通貨は混在する？',
+        stereotype: '«ホットスポット»',
+        scale: 1,
+        rows: [],
+        compartment: 0,
+        change: 'none',
+        badge: '',
+        diag: 'none',
+    };
+    const resolved: NodeProps = { ...hotspot, resolution: '一つの注文は一つの通貨' };
+    const html = (p: NodeProps): string =>
+        renderToStaticMarkup(createElement(NodeContent, { p, Marks: ({ badge, diag }) => createElement(EdgeMarks, { badge, diag, scale: 1 }) }));
+
+    test('is toned down and checked, and tells its resolution on hover; an open one is neither', () => {
+        expect(nodeClassName(resolved, false)).toContain(' dn-resolved');
+        expect(nodeClassName(hotspot, false)).not.toContain('dn-resolved');
+        expect(html(resolved)).toContain('class="dn-resolved-mark"');
+        expect(html(resolved)).toContain('data-tooltip="解決済み: 一つの注文は一つの通貨"');
+        expect(html(hotspot)).not.toContain('dn-resolved-mark');
+        expect(html(hotspot)).not.toContain('data-tooltip');
+        // resolved without a resolution (an S009 error): still checked
+        expect(html({ ...hotspot, resolution: '' })).toContain('data-tooltip="解決済み"');
+    });
+
+    test('has its `on` drawn quieter', () => {
+        const edge: EdgeProps = { points: [], kind: 'esHotspot', label: '', sub: '', faded: false, scale: 1, lx: 0, ly: 0, lw: 0, lh: 0, tone: 'normal' };
+        expect(edgeClassName({ ...edge, resolved: true })).toContain(' de-resolved');
+        expect(edgeClassName(edge)).not.toContain('de-resolved');
     });
 });

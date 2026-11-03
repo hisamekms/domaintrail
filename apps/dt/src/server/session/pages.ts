@@ -1,5 +1,6 @@
 // The few pages of a session that are not the Live View: the join form of the `dev` identity mode (a name, posted to
-// `/session/join`) and the answers of the facilitator link. Self-contained HTML (no script, inline style), served with
+// `/session/join`), the `link` mode's invite form (a name, posted to `/session/invite`) and its waiting page (reloaded
+// every few seconds by itself: no script), and the answers of the facilitator link. Self-contained HTML (no script, inline style), served with
 // a restrictive Content-Security-Policy, in the browser's language (English or Japanese; the texts are `page-texts.ts`).
 import type { IncomingHttpHeaders, ServerResponse } from 'node:http';
 import type { Collaboration } from '@domaintrail/collaboration';
@@ -19,7 +20,7 @@ const escape = (s: string): string => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp
 const STYLE = `:root{color-scheme:light dark}body{font:15px/1.5 system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#f6f7f9;color:#1f2328}
 main{background:#fff;border:1px solid #d0d7de;border-radius:8px;padding:24px 28px;max-width:360px;width:100%}
 h1{font-size:18px;margin:0 0 12px}label{display:block;margin-bottom:6px}input{width:100%;box-sizing:border-box;padding:6px 8px;font:inherit}
-button{margin-top:12px;padding:6px 14px;font:inherit}.error{color:#cf222e}a{color:#0969da}
+button{margin-top:12px;padding:6px 14px;font:inherit}.error{color:#cf222e}.muted{opacity:.7}a{color:#0969da}
 @media (prefers-color-scheme:dark){body{background:#0d1117;color:#e6edf3}main{background:#161b22;border-color:#30363d}a{color:#4493f8}.error{color:#ff7b72}}`;
 
 /**
@@ -114,6 +115,50 @@ export function joinPage(
 ${options.error ? `<p class="error">${escape(t.errors[options.error])}</p>` : ''}
 <button type="submit">${escape(t.submit)}</button>
 </form>`,
+    );
+}
+
+/** The join form of an invite link (`link`): a name (the remembered one, if any), posted with the invite's code. */
+export function invitePage(
+    res: ServerResponse,
+    language: PageLanguage,
+    status: number,
+    code: string,
+    options: { readonly name?: string; readonly error?: JoinError } = {},
+): void {
+    const t = PAGE_TEXTS[language].join;
+    sendPage(
+        res,
+        language,
+        status,
+        t.title,
+        `<h1>${escape(t.heading)}</h1>
+<form method="post" action="/session/invite">
+<label for="name">${escape(t.name)}</label>
+<input id="name" name="name" maxlength="60" required autofocus autocomplete="nickname"${options.name ? ` value="${escape(options.name)}"` : ''}>
+<input type="hidden" name="code" value="${escape(code)}">
+${options.error ? `<p class="error">${escape(t.errors[options.error])}</p>` : ''}
+<button type="submit">${escape(t.submit)}</button>
+</form>`,
+    );
+}
+
+/** How often the waiting page reloads itself, in seconds. */
+export const WAITING_REFRESH_S = 3;
+
+/** The waiting page of a join request (`link`): its one line, and a reload every `WAITING_REFRESH_S` seconds. */
+export function waitingPage(res: ServerResponse, language: PageLanguage, name: string): void {
+    const title = PAGE_TEXTS[language].waiting;
+    res.writeHead(200, {
+        'content-type': 'text/html;charset=utf-8',
+        'x-content-type-options': 'nosniff',
+        'cache-control': 'no-store',
+        vary: 'Accept-Language',
+        'referrer-policy': 'same-origin',
+        'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'",
+    });
+    res.end(
+        `<!doctype html><html lang="${language}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="${WAITING_REFRESH_S}"><title>${escape(title)}</title><style>${STYLE}</style></head><body><main><h1>${escape(title)}</h1><p class="muted">${escape(name)}</p></main></body></html>`,
     );
 }
 

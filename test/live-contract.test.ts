@@ -1,5 +1,5 @@
 /**
- * The contracts of `dt view` and `dt generate ts` the M0 refactoring keeps (ADR 0025, T1): what the other tests of the
+ * The contracts of the Live View and `dt generate ts` the M0 refactoring keeps (ADR 0025, T1): what the other tests of the
  * Live View do not pin down yet. A deliberate change to one of them updates the snapshots with `bun test -u`.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';

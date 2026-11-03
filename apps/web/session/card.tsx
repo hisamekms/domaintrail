@@ -1,6 +1,6 @@
 // A card of the chat (ADR 0026, amendment): one change unit as an AI turn, updated in place — queued → running → done,
 // a question, declined, failed or cancelled — with the runs that continue it one under the other (the question, the
-// facilitator's answer or note, the result). Its state sits in the chat's status slot, at its header's right end; its actions float over its top right. At the top of each run, a quote of each message it applied (with what the
+// facilitator's answer or note, the result). Its state sits in the chat's status slot, at its header's right end; its actions float over its top right. At the top of each run (not in Solo), a quote of each message it applied (with what the
 // reply says of each, ✓ 対応 ◐ 一部 – 未対応 ? 確認); a click goes to the message, a hover marks it. The AI's question
 // and what it assumed sit on surfaces of their own, their options and alternatives as cards with ♡ at the right. The
 // facilitator answers a question by choosing, approves an assumption or sends the requests again with an alternative,
@@ -15,6 +15,7 @@ import type { ElementChange } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
 import { useClipped } from '../view/toolbar';
 import { answerBody, type QuestionChoice } from './actions';
+import { Clamped } from './bubble';
 import { ActivityLine } from './activity';
 import { OtherDialog } from './answer-other';
 import { cardMenuItems, cardRuns, obstacleText, queueAhead, quoteDisplay, type CardRun, type Quote, type QuoteDisplay } from './cards';
@@ -34,8 +35,8 @@ import { elapsed, oneLine, revisionLookup, type AgentMessage, type ReplyView, ty
 type RunJson = CardRun['run'];
 
 const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-/** The mark of a request's status: ✓ done, ◐ partly, – not done, ? a question. */
-export const PROGRESS_MARK: Record<RequestProgress, string> = { Done: '✓', Partial: '◐', Skipped: '–', Question: '?' };
+/** The mark of a request's status: ✓ done, ◐ partly, – not done, ? a question, ↩ answered as a question. */
+export const PROGRESS_MARK: Record<RequestProgress, string> = { Done: '✓', Partial: '◐', Skipped: '–', Question: '?', Answered: '↩' };
 
 export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; compact?: boolean; actions?: ReactNode }) {
     const chat = useChat();
@@ -96,15 +97,15 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                     <RowActions>
                         {control && <CardMenu last={last.run} about={about} name={title.text} />}
                         <ReplyButton to={{ kind: 'Run', run: last.run }} />
-                        {/* last: ☺+ at the right end of every row, messages and turns alike */}
-                        <AddReaction target={{ kind: 'Turn', run: last.run.id }} />
+                        {/* last: ☺+ at the right end of every row, messages and turns alike; alone in Solo, no one else reacts */}
+                        {!chat.solo && <AddReaction target={{ kind: 'Turn', run: last.run.id }} />}
                     </RowActions>
                 )}
                 {runs.map((r, i) => (
                     <RunSection
                         key={r.run.id}
                         run={r}
-                        display={quoteDisplay(runs, i)}
+                        display={quoteDisplay(runs, i, chat.solo)}
                         first={i === 0}
                         last={i === runs.length - 1}
                         compact={compact}
@@ -270,6 +271,15 @@ function RunSection({
                     ↳ {tx.chat.note} {nameOf(run.run.queuedBy)}: <span className="run-line-text">{run.note}</span>
                 </p>
             )}
+            {/* the option of each approved proposal the facilitator chose (ADR 0030): what the run was asked to do */}
+            {(run.run.input.proposals?.approved ?? []).map(
+                (a) =>
+                    a.instruction.label !== undefined && (
+                        <p key={a.proposal} className="run-line">
+                            ↳ {tx.chat.proposal.chosen}: <span className="run-line-text">{a.instruction.label}</span>
+                        </p>
+                    ),
+            )}
             {display.quotes && (
                 <ul className="run-quotes">
                     {run.quotes.map((q) => (
@@ -280,7 +290,7 @@ function RunSection({
             {/* what the running run is doing now (in AI の作業, the unit's row above shows it) */}
             {!compact && run.message.kind === 'running' && <ActivityLine run={run.run.id} />}
             <div className="run-agent-body">
-                <AgentBody message={run.message} />
+                <AgentBody run={run.run.id} message={run.message} />
                 {/* in AI の作業, the unit's own line above already lists what it changed */}
                 {!compact && <RunFiles run={run.run} about={about} />}
                 {revert.kind === 'reverted' && (
@@ -359,9 +369,10 @@ function AnswerLine({ run }: { run: CardRun }) {
 
 /**
  * What the agent says of a run, as the chat said it; the files it changed are a line of their own below
- * (`RunFiles`). A question asked without the structured form is shown on the question's surface.
+ * (`RunFiles`). A question asked without the structured form is shown on the question's surface. An answer instead
+ * of an edit is clamped as the AI's answers are (`Clamped`: when it was there at the page's load).
  */
-function AgentBody({ message: m }: { message: AgentMessage }) {
+function AgentBody({ run, message: m }: { run: string; message: AgentMessage }) {
     const { tx, nameOf, onNavigate } = useChat();
     const says = tx.chat.agentSays;
     switch (m.kind) {
@@ -379,6 +390,24 @@ function AgentBody({ message: m }: { message: AgentMessage }) {
                 </ReplySection>
             );
         case 'completed':
+            // a run that answered a question instead of editing (ADR 0030): its answer is what it says; its summary too
+            // when it changed files after all, which is flagged
+            if (m.reply?.answer !== undefined) {
+                const changed = (m.files ?? (m.changed ? 1 : 0)) > 0;
+                return (
+                    <>
+                        {changed && (
+                            <p className="chat-text reply-summary">
+                                <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
+                            </p>
+                        )}
+                        <Clamped tx={tx} revealKey={`run:${run}`} className="reply-answer">
+                            <ReplyText text={m.reply.answer} onNavigate={onNavigate} />
+                        </Clamped>
+                        {changed && <p className="chat-text reply-answered-changed">{tx.chat.ai.answeredChanged}</p>}
+                    </>
+                );
+            }
             return m.reply ? (
                 <p className="chat-text reply-summary">
                     <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
@@ -801,7 +830,7 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
  * Who decided and when, small and muted under what was decided (`回答 ooyama_F · 23:47`); when the decision queued a
  * run (a pick), its time is a link to that run (it continues the same card, so it has no number to show).
  */
-function DecidedLine({ label, by, at, run, hint }: { label: string; by: string; at: string; run?: string; hint?: string }) {
+export function DecidedLine({ label, by, at, run, hint }: { label: string; by: string; at: string; run?: string; hint?: string }) {
     const { tx, nameOf, jump } = useChat();
     return (
         <p className="decided-line">

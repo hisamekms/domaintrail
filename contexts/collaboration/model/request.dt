@@ -26,13 +26,14 @@ context Collaboration {
   /// リビジョンが違う）で、まだ打ち消されておらず、打ち消しの待ちや最中でもない。
   verified RevertableRun "打ち消せる実行" of AgentRunId for SessionId errors RunNotFound, RunOfAnotherSession, RunNotRevertable
 
-  /// 本文で言及できると、依頼を送るときに確かめた人。そのセッションの参加者（オフラインの人も）。
+  /// 本文で言及できると、依頼を送るときに確かめた人。そのセッションの参加者（オフラインの人も）と、AI（予約の参加者 ID `ai`）。
   verified MentionableParticipant "言及できる参加者" of ParticipantId for SessionId errors MentionedNotAParticipant
 
-  /// 参加者がモデルの要素について送る依頼。送ったあとは変わらない。下書きはブラウザにだけ置く。
+  /// 参加者がモデルの要素について送るメッセージ（以前の名前は依頼）。送ったあとは変わらない。下書きはブラウザにだけ置く。
+  /// AI の回答も、書き手が AI（`ai`）のメッセージで、答えたメッセージへの返信。AI として送れるのはサーバーの `answer` だけ。
   /// 対象は0〜20件。対象がなければワークスペース全体についての依頼。本文の要素の言及（`#注文[1]`、以前の `@注文[1]`）は
   /// 対象の番号で、人の言及（`@佐藤[p1]`）は言及した人の番号で指す。
-  aggregate Request "依頼" {
+  aggregate Request "メッセージ" {
     id: RequestId
     references session: SessionId -> Session
     author: ParticipantId "依頼者"
@@ -46,6 +47,8 @@ context Collaboration {
     /// 作業の打ち消しの依頼なら、変更を打ち消す実行。ファシリテーターだけが送る（`requestRevert`）。本文は何を打ち消すかを
     /// 皆に伝える（「〈作業名〉の変更を打ち消す」）。ほかの依頼と同じく実行として待ちに入り、順が来るとサーバーが機械的に打ち消すか、できなければ AI に任せる。
     references reverts: AgentRunId? -> AgentRun "打ち消す実行"
+    /// 送ったときに依頼者が見ていたビュー。以前のメッセージ、AI の回答、打ち消しの依頼にはない。
+    viewedAt: ViewedAt? "送ったときのビュー"
 
     invariant atMostTwentyTargets "対象は20件まで" { count(targets) <= 20 }
     invariant distinctTargets "同じ対象は1回" { unique(targets, t => t.target) }
@@ -64,7 +67,7 @@ context Collaboration {
       dismissedAt: Timestamp "見送り日時"
     }
 
-    create command send(id: RequestId, session: ActiveSession, author: ParticipantId, targets: TargetSnapshot[0..20], body: Text, sentAt: Timestamp, replyTo: ReplyableTarget?, mentions: MentionableParticipant[0..20]) "依頼を送る"
+    create command send(id: RequestId, session: ActiveSession, author: ParticipantId, targets: TargetSnapshot[0..20], body: Text, sentAt: Timestamp, replyTo: ReplyableTarget?, mentions: MentionableParticipant[0..20], viewedAt: ViewedAt?) "依頼を送る"
       -> Sent
       requires atMostTwentyTargets "対象は20件まで" { count(targets) <= 20 } else TooManyTargets
       requires distinctTargets "同じ対象は1回" { unique(targets, t => t.target) } else DuplicateTarget
@@ -82,6 +85,11 @@ context Collaboration {
         authorRole == ParticipantRole.Facilitator
       } else FacilitatorOnly
       emits RequestSent
+
+    /// 読むだけの AI（回答役）が、相談のメッセージに答える。書き手は AI（`ai`）で、答えたメッセージへの返信。対象も言及もない。
+    create command answer(id: RequestId, session: ActiveSession, answers: RequestId "答えるメッセージ", body: Text, sentAt: Timestamp) "AI が答える"
+      -> Sent
+      emits RequestSent
   }
 
   persistent event RequestSent "依頼送信" {
@@ -95,6 +103,7 @@ context Collaboration {
     mentions: ParticipantId[0..20] "言及した人"
     /// 打ち消しの依頼なら、打ち消す実行。
     reverts: AgentRunId? "打ち消す実行"
+    viewedAt: ViewedAt? "送ったときのビュー"
   }
 
   /// 以前のセッションのアウトボックスに残る見送り。いまは発行しないが、読み直し（再生）のために残す。

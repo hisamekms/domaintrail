@@ -29,7 +29,7 @@ async function syntaxErrors(text: string) {
 
 const element = (s: Storming, id: string): NodeElement => {
     const el = s.elements.find((e) => e.id === id);
-    if (!el || el.kind === 'timeline') throw new Error(`no element ${id}`);
+    if (!el || el.kind === 'timeline' || el.kind === 'stage') throw new Error(`no element ${id}`);
     return el;
 };
 
@@ -44,6 +44,7 @@ const shape = (c: Clause): unknown => {
     if (c.type === 'ref') return { ref: c.path };
     if (c.type === 'relation') return { [c.keyword]: c.target };
     if (c.type === 'status') return { status: c.value };
+    if (c.type === 'level') return { level: c.value };
     return { resolution: c.text };
 };
 
@@ -193,6 +194,16 @@ describe('ES01: every construct of §3', () => {
         expect(h.clauses.map(shape)).toEqual([{ status: 'resolved' }, { resolution: 'しない\n\\ 理由: "運用"' }]);
     });
 
+    test('`level design` on an event, before or after its `ref`; a hyphenated level is one word', async () => {
+        const [s] = await parseOne(
+            wrap('event A {\n  ref X.A\n  level design\n}\nevent B {\n  level big - picture\n}\nevent C {\n  level design\n  ref X.C\n}'),
+        );
+        expect(element(s, 'A').clauses.map(shape)).toEqual([{ ref: 'X.A' }, { level: 'design' }]);
+        expect(element(s, 'B').clauses.map(shape)).toEqual([{ level: 'big-picture' }]);
+        expect(element(s, 'C').clauses.map(shape)).toEqual([{ level: 'design' }, { ref: 'X.C' }]);
+        expect(element(s, 'A').clauses[1]!.range).toMatchObject({ start: { line: 4, column: 3 }, end: { line: 4, column: 15 } });
+    });
+
     test('`///` doc comments describe declarations, groups included; other comments are ignored', async () => {
         const [s] = await parseOne(
             [
@@ -314,6 +325,9 @@ describe('syntax errors (spec §11 Syntax: 不正なブロック, 未知の関�
 
     test('a keyword used as an ID, a missing ID, a dangling dot, an unclosed block, an unterminated string', async () => {
         await syntaxErrors(wrap('event target'));
+        await syntaxErrors(wrap('event level'));
+        await syntaxErrors(wrap('event E { level }'));
+        await syntaxErrors(wrap('event E { level design- }'));
         await syntaxErrors(wrap('command { target G }'));
         await syntaxErrors(wrap('command C { ref Delivery. }'));
         await syntaxErrors('storming S {\n  event E');

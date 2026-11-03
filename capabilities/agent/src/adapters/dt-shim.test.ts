@@ -30,7 +30,7 @@ const failure = (p: Promise<unknown>): Promise<string> =>
 const run = { prompt: 'p', allowedTools: ['Bash(dt fmt:*)'], requests: 1 };
 const node = realpathSync(findProgram('node') ?? process.execPath);
 
-describe("the agent's dt (session.agent.dt)", () => {
+describe("the agent's dt (agent.run.dt)", () => {
     test('the shim only starts the runtime on the launcher; the pinned dt is JSON in the launcher, spawned without a shell in a private directory', () => {
         expect(dtShim('/usr/bin/node', "/tmp/it's/launcher.mjs", 'darwin')).toEqual({
             file: 'dt',
@@ -91,21 +91,39 @@ describe("the agent's dt (session.agent.dt)", () => {
         expect(refusal(['node', `../${path.basename(outside)}/dt.js`])).toBeUndefined();
         expect(refusal([path.join(outside, 'dt')])).toBeUndefined();
         expect(refusal(['node', './tools/dt.js'])).toBe(
-            `'session.agent.dt' may not run anything inside the workspace (${path.join(root, 'tools', 'dt.js')}): the agent can write there during a run. Use a dt outside the workspace (e.g. a clone next to it).`,
+            `'agent.run.dt' may not run anything inside the workspace (${path.join(root, 'tools', 'dt.js')}): the agent can write there during a run. Use a dt outside the workspace (e.g. a clone next to it).`,
         );
         for (const dt of [['node', `${path.join(outside, 'link')}/dt.js`], ['node', '..evil/dt.js'], ['./tools/dt.js']])
-            expect(refusal(dt)).toContain("'session.agent.dt' may not run anything inside the workspace");
+            expect(refusal(dt)).toContain("'agent.run.dt' may not run anything inside the workspace");
     });
 
-    test("the agent's arguments: fmt or check, then .dt / .dtes files of the workspace; no option; -r is the launcher's", async () => {
+    test("the agent's arguments: fmt or check, then .dt / .dtes files of the workspace, or guide with a topic or --all; no other option; -r is the launcher's", async () => {
         const root = await scratch();
         expect(agentDtArguments(['fmt'], root, root)).toEqual({ ok: true, args: ['-r', root, 'fmt'] });
+        // dt guide only prints: alone, with one topic or rule name, or --all
+        expect(agentDtArguments(['guide'], root, root)).toEqual({ ok: true, args: ['-r', root, 'guide'] });
+        expect(agentDtArguments(['guide', 'storming-practice'], root, root)).toEqual({ ok: true, args: ['-r', root, 'guide', 'storming-practice'] });
+        expect(agentDtArguments(['guide', 'M010'], root, root)).toEqual({ ok: true, args: ['-r', root, 'guide', 'M010'] });
+        expect(agentDtArguments(['guide', '--all'], root, root)).toEqual({ ok: true, args: ['-r', root, 'guide', '--all'] });
         expect(agentDtArguments(['check', 'sales/order.dt', 'es.dtes'], path.join(root, 'x'), root)).toEqual({
             ok: true,
             args: ['-r', root, 'check', path.join(root, 'x', 'sales', 'order.dt'), path.join(root, 'x', 'es.dtes')],
         });
         for (const given of [
             ['generate', 'ts'],
+            ['open'],
+            ['collab'],
+            ['agent'],
+            ['lsp'],
+            ['show', 'Sales.Order'],
+            ['guide', '-c', '/x'],
+            ['guide', '--config=/x'],
+            ['guide', '-r', '/'],
+            ['guide', 'dsl', 'requires'],
+            ['guide', '--all', 'dsl'],
+            ['guide', '../x'],
+            ['guide', 'a b'],
+            ['guide', ''],
             [],
             ['fmt', '--prefix', '/'],
             ['fmt', '-r', '/'],
@@ -134,7 +152,9 @@ describe("the agent's dt (session.agent.dt)", () => {
                 const ran = JSON.parse(String(dt(['check', 'a.dt']).stdout)) as { cwd: string; args: string[] };
                 expect(ran.args).toEqual(['-r', root, 'check', path.join(root, 'a.dt')]);
                 expect(realpathSync(ran.cwd)).toBe(realpathSync(shim.dir));
-                for (const bad of [['fmt', '--cwd', '/'], ['generate'], ['fmt', '../x.dt']]) {
+                const guide = JSON.parse(String(dt(['guide', 'storming-practice']).stdout)) as { args: string[] };
+                expect(guide.args).toEqual(['-r', root, 'guide', 'storming-practice']);
+                for (const bad of [['fmt', '--cwd', '/'], ['generate'], ['fmt', '../x.dt'], ['guide', '-c', '/x'], ['guide', 'dsl', 'requires'], ['open']]) {
                     const r = dt(bad);
                     expect(r.status).toBe(2);
                     expect(String(r.stdout)).toBe('');

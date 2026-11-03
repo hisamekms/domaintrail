@@ -2,6 +2,7 @@
 // Aggregates are stored whole as JSON next to the columns the queries and constraints need; the outbox is a table
 // appended in the transaction that saves the aggregates. Every transaction is BEGIN IMMEDIATE, one at a time.
 // Only node:sqlite's DatabaseSync is used (no Bun API), so the same code runs in the CLI under Node and in the tests under Bun as well.
+import { writeFile } from 'node:fs/promises';
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from 'node:sqlite';
 import * as path from 'node:path';
 import type { Collaboration } from '../generated/index.js';
@@ -17,7 +18,10 @@ import type {
     RequestRepository,
     RevisionStore,
     OperationLog,
+    InterviewRepository,
+    ProposalRepository,
     RestoreOperation,
+    TriageRepository,
     RestoreResult,
     RunQueue,
     SessionRepository,
@@ -25,8 +29,8 @@ import type {
     Stores,
     UnitOfWork,
 } from '../application/ports.js';
-import { upgradeEvent, upgradeRequest, upgradeRun } from './legacy.js';
-import { DATABASE_FILE, checkPlain, sessionDirectory } from './session-dir.js';
+import { upgradeEvent, upgradeProposal, upgradeRequest, upgradeRun, upgradeSession } from './legacy.js';
+import { DATABASE_FILE, PRIVATE_FILE, checkPlain, looserThan, restrict, sessionDirectory } from './session-dir.js';
 
 /**
  * The schema, one migration per entry: the database's `user_version` is the number applied. Never edit an applied
@@ -233,6 +237,59 @@ export const MIGRATIONS: readonly string[] = [
     ALTER TABLE requests ADD COLUMN reverts TEXT REFERENCES agent_runs(id);
     CREATE INDEX requests_by_reverts ON requests(reverts) WHERE reverts IS NOT NULL;
     `,
+    // ---------- modes, triage and change proposals ----------
+    // ADR 0030: each message addressed to the AI has one triage (a unique index); a change proposal names its triage,
+    // its message and, once approved, its run. The sessions and runs written before are read in the new shape
+    // (`legacy.ts`: a session without a mode is Collab, a report's former booleans are Ran / Failed); nothing is rewritten
+    `
+    CREATE TABLE triages (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        seq INTEGER NOT NULL,
+        request_id TEXT NOT NULL UNIQUE REFERENCES requests(id),
+        state TEXT NOT NULL,
+        data TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX triages_by_session ON triages(session_id, seq);
+
+    CREATE TABLE proposals (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        seq INTEGER NOT NULL,
+        triage_id TEXT NOT NULL REFERENCES triages(id),
+        request_id TEXT NOT NULL REFERENCES requests(id),
+        run_id TEXT REFERENCES agent_runs(id),
+        state TEXT NOT NULL,
+        data TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX proposals_by_session ON proposals(session_id, seq);
+    `,
+    // ---------- interviews of the `/` commands ----------
+    // the plan's round 5: an interview names its opening message and, once confirmed, its run. Sessions written before
+    // have none
+    `
+    CREATE TABLE interviews (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        seq INTEGER NOT NULL,
+        opening_id TEXT NOT NULL REFERENCES requests(id),
+        run_id TEXT REFERENCES agent_runs(id),
+        state TEXT NOT NULL,
+        data TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX interviews_by_session ON interviews(session_id, seq);
+    `,
+    // the invite links of the `link` identity mode: multi-use until they expire or are revoked; one live per session
+    `
+    CREATE TABLE invites (
+        code_hash TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        revoked_at INTEGER
+    ) STRICT;
+    CREATE INDEX invites_by_session ON invites(session_id) WHERE revoked_at IS NULL;
+    `,
 ];
 
 /** The database was written by a newer DomainTrail: its schema is unknown here. */
@@ -276,12 +333,34 @@ export function openDatabase(file: string): DatabaseSync {
 /**
  * Opens the session database of a workspace, `.domaintrail/session/session.db`, making the directory (with its
  * `.gitignore`) if needed. Refuses (`UnsafeSessionPath`) when the directory, the database or its WAL files are
- * symbolic links.
+ * symbolic links. The database and its WAL files are 0600: an absent database is made empty (a valid one) 0600 before
+ * SQLite opens it, since SQLite gives its WAL files the database's permissions; existing ones are tightened.
  */
 export async function openSessionDatabase(root: string): Promise<DatabaseSync> {
     const dir = await sessionDirectory(root);
     const file = path.join(dir, DATABASE_FILE);
-    for (const f of [file, `${file}-wal`, `${file}-shm`]) await checkPlain(f, 'file');
+    const files = [file, `${file}-wal`, `${file}-shm`];
+    for (const f of files) await checkPlain(f, 'file');
+    await writeFile(file, '', { flag: 'wx', mode: PRIVATE_FILE }).catch((e: unknown) => {
+        // there already (or made at the same time by another process): checked again below
+        if (!(e instanceof Error && 'code' in e && e.code === 'EEXIST')) throw e;
+    });
+    for (const f of files) if ((await checkPlain(f, 'file')) === 'present') await restrict(f, PRIVATE_FILE);
+    const db = openDatabase(file);
+    // the WAL files SQLite made, should the umask have loosened them: only looked at while the connection is open. Its
+    // locks are the process's (POSIX), and closing any other handle on these files drops them all: another process
+    // (`dt open link`) closing its connection would then take itself for the last one and remove the WAL files this one
+    // still uses, which would no longer see what the others write, nor be seen. Loose ones are tightened with it closed.
+    let loose = false;
+    try {
+        for (const f of files) if ((await checkPlain(f, 'file')) === 'present' && (await looserThan(f, PRIVATE_FILE))) loose = true;
+    } catch (e) {
+        db.close();
+        throw e;
+    }
+    if (!loose) return db;
+    db.close();
+    for (const f of files) if ((await checkPlain(f, 'file')) === 'present') await restrict(f, PRIVATE_FILE);
     return openDatabase(file);
 }
 
@@ -353,13 +432,13 @@ function sessions(db: DatabaseSync): SessionRepository {
     return {
         load(id) {
             const r = load.get(params({ id }));
-            return r ? decoded<Collaboration.Session>(text(r, 'data')) : undefined;
+            return r ? decoded<Collaboration.Session>(text(r, 'data'), upgradeSession) : undefined;
         },
         save(session) {
             save.run(params({ id: session.id, state: session.state, data: encodeJson(session) }));
         },
         listOpen() {
-            return open.all().map((r) => decoded<Collaboration.OpenSession>(text(r, 'data')));
+            return open.all().map((r) => decoded<Collaboration.OpenSession>(text(r, 'data'), upgradeSession));
         },
     };
 }
@@ -576,6 +655,96 @@ function approvals(db: DatabaseSync): ApprovalRepository {
     };
 }
 
+function triages(db: DatabaseSync): TriageRepository {
+    const load = db.prepare('SELECT data FROM triages WHERE id = :id');
+    const save = db.prepare(
+        `INSERT INTO triages (id, session_id, seq, request_id, state, data)
+         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM triages), :request, :state, :data)
+         ON CONFLICT (id) DO UPDATE SET state = excluded.state, data = excluded.data`,
+    );
+    const ofRequest = db.prepare('SELECT data FROM triages WHERE request_id = :request');
+    const list = db.prepare('SELECT data FROM triages WHERE session_id = :session ORDER BY seq');
+    return {
+        load(id) {
+            const r = load.get(params({ id }));
+            return r ? decoded<Collaboration.Triage>(text(r, 'data')) : undefined;
+        },
+        save(triage) {
+            save.run(params({ id: triage.id, session: triage.session, request: triage.request, state: triage.state, data: encodeJson(triage) }));
+        },
+        ofRequest(request) {
+            const r = ofRequest.get(params({ request }));
+            return r ? decoded<Collaboration.Triage>(text(r, 'data')) : undefined;
+        },
+        listBySession(session) {
+            return list.all(params({ session })).map((r) => decoded<Collaboration.Triage>(text(r, 'data')));
+        },
+    };
+}
+
+function proposals(db: DatabaseSync): ProposalRepository {
+    const load = db.prepare('SELECT data FROM proposals WHERE id = :id');
+    const save = db.prepare(
+        `INSERT INTO proposals (id, session_id, seq, triage_id, request_id, run_id, state, data)
+         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM proposals), :triage, :request, :run, :state, :data)
+         ON CONFLICT (id) DO UPDATE SET state = excluded.state, run_id = excluded.run_id, data = excluded.data`,
+    );
+    const list = db.prepare('SELECT data FROM proposals WHERE session_id = :session ORDER BY seq');
+    return {
+        load(id) {
+            const r = load.get(params({ id }));
+            return r ? decoded<Collaboration.ChangeProposal>(text(r, 'data'), upgradeProposal) : undefined;
+        },
+        save(proposal) {
+            save.run(
+                params({
+                    id: proposal.id,
+                    session: proposal.session,
+                    triage: proposal.triage,
+                    request: proposal.request,
+                    run: proposal.state === 'Approved' ? proposal.run : null,
+                    state: proposal.state,
+                    data: encodeJson(proposal),
+                }),
+            );
+        },
+        listBySession(session) {
+            return list.all(params({ session })).map((r) => decoded<Collaboration.ChangeProposal>(text(r, 'data'), upgradeProposal));
+        },
+    };
+}
+
+function interviews(db: DatabaseSync): InterviewRepository {
+    const load = db.prepare('SELECT data FROM interviews WHERE id = :id');
+    const save = db.prepare(
+        `INSERT INTO interviews (id, session_id, seq, opening_id, run_id, state, data)
+         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM interviews), :opening, :run, :state, :data)
+         ON CONFLICT (id) DO UPDATE SET state = excluded.state, run_id = excluded.run_id, data = excluded.data`,
+    );
+    const list = db.prepare('SELECT data FROM interviews WHERE session_id = :session ORDER BY seq');
+    return {
+        load(id) {
+            const r = load.get(params({ id }));
+            return r ? decoded<Collaboration.Interview>(text(r, 'data')) : undefined;
+        },
+        save(interview) {
+            save.run(
+                params({
+                    id: interview.id,
+                    session: interview.session,
+                    opening: interview.opening,
+                    run: interview.state === 'Confirmed' ? interview.run : null,
+                    state: interview.state,
+                    data: encodeJson(interview),
+                }),
+            );
+        },
+        listBySession(session) {
+            return list.all(params({ session })).map((r) => decoded<Collaboration.Interview>(text(r, 'data')));
+        },
+    };
+}
+
 function outbox(db: DatabaseSync): EventOutbox {
     const append = db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (:session, :type, :payload, :at)');
     const all = db.prepare('SELECT seq, session_id, payload, recorded_at FROM outbox WHERE seq > :cursor ORDER BY seq LIMIT :limit');
@@ -600,13 +769,14 @@ function outbox(db: DatabaseSync): EventOutbox {
     };
 }
 
-const isMode = (v: string): v is IdentityMode => v === 'dev' || v === 'access';
+const isMode = (v: string): v is IdentityMode => v === 'dev' || v === 'access' || v === 'link';
 
 function access(db: DatabaseSync): AccessStore {
     const addLink = db.prepare('INSERT INTO facilitator_links (code_hash, session_id, expires_at) VALUES (:hash, :session, :expires)');
     const useLink = db.prepare(
         'UPDATE facilitator_links SET used_at = :now WHERE code_hash = :hash AND used_at IS NULL AND expires_at > :now RETURNING session_id',
     );
+    const revokeLinks = db.prepare('UPDATE facilitator_links SET used_at = :now WHERE session_id = :session AND used_at IS NULL');
     const facilitator = db.prepare('SELECT provider, subject FROM facilitators WHERE session_id = :session');
     const setFacilitator = db.prepare(
         `INSERT INTO facilitators (session_id, provider, subject, bound_at) VALUES (:session, :provider, :subject, :at)
@@ -616,6 +786,17 @@ function access(db: DatabaseSync): AccessStore {
     const signIn = db.prepare('SELECT session_id, identity FROM sign_ins WHERE token_hash = :hash AND revoked_at IS NULL');
     const revokeSignIn = db.prepare('UPDATE sign_ins SET revoked_at = :at WHERE token_hash = :hash AND revoked_at IS NULL');
     const revokeSignIns = db.prepare('UPDATE sign_ins SET revoked_at = :at WHERE session_id = :session AND revoked_at IS NULL RETURNING identity');
+    const revokeSignInsOf = db.prepare(
+        `UPDATE sign_ins SET revoked_at = :at
+         WHERE session_id = :session AND revoked_at IS NULL
+           AND json_extract(identity, '$.provider') = :provider AND json_extract(identity, '$.subject') = :subject`,
+    );
+    const revokeInvites = db.prepare('UPDATE invites SET revoked_at = :now WHERE session_id = :session AND revoked_at IS NULL RETURNING expires_at');
+    const addInvite = db.prepare('INSERT INTO invites (code_hash, session_id, created_at, expires_at) VALUES (:hash, :session, :at, :expires)');
+    const invite = db.prepare('SELECT session_id FROM invites WHERE code_hash = :hash AND revoked_at IS NULL AND expires_at > :now');
+    const liveInvite = db.prepare(
+        'SELECT expires_at FROM invites WHERE session_id = :session AND revoked_at IS NULL AND expires_at > :now ORDER BY expires_at DESC LIMIT 1',
+    );
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the session of a row, written from a SessionId
     const sessionOf = (r: Row): Collaboration.SessionId => text(r, 'session_id') as Collaboration.SessionId;
     return {
@@ -625,6 +806,9 @@ function access(db: DatabaseSync): AccessStore {
         useLink(codeHash, now) {
             const r = useLink.get(params({ hash: codeHash, now: now.getTime() }));
             return r ? sessionOf(r) : undefined;
+        },
+        revokeLinks(session, now) {
+            revokeLinks.run(params({ session, now: now.getTime() }));
         },
         facilitator(session) {
             const r = facilitator.get(params({ session }));
@@ -651,6 +835,24 @@ function access(db: DatabaseSync): AccessStore {
                 const { provider, subject } = decoded<Identity>(text(r, 'identity'));
                 return { provider, subject };
             });
+        },
+        revokeSignInsOf(session, identity, at) {
+            return Number(revokeSignInsOf.run(params({ session, provider: identity.provider, subject: identity.subject, at: at.getTime() })).changes);
+        },
+        addInvite(codeHash, session, expiresAt, at) {
+            revokeInvites.all(params({ session, now: at.getTime() }));
+            addInvite.run(params({ hash: codeHash, session, at: at.getTime(), expires: expiresAt.getTime() }));
+        },
+        invite(codeHash, now) {
+            const r = invite.get(params({ hash: codeHash, now: now.getTime() }));
+            return r ? sessionOf(r) : undefined;
+        },
+        liveInvite(session, now) {
+            const r = liveInvite.get(params({ session, now: now.getTime() }));
+            return r ? new Date(integer(r, 'expires_at')) : undefined;
+        },
+        revokeInvites(session, now) {
+            return revokeInvites.all(params({ session, now: now.getTime() })).some((r) => integer(r, 'expires_at') > now.getTime());
         },
     };
 }
@@ -729,6 +931,9 @@ export function createStores(db: DatabaseSync): Stores {
         revisions: revisions(db),
         marks: marks(db),
         approvals: approvals(db),
+        triages: triages(db),
+        proposals: proposals(db),
+        interviews: interviews(db),
         outbox: outbox(db),
         access: access(db),
         operations: operations(db),

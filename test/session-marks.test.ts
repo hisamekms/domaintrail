@@ -157,7 +157,7 @@ async function ended(f: Fixture, how: 'clarification' | 'completed'): Promise<C.
             questions: [],
             assumptions: [{ text: 'Only drafts.', requests: [f.message], alternatives: [{ id: 'all', label: 'Any state' }] }],
         });
-        value(await f.use.finishRun({ run: queued.id, token: lease.token, facts: { exitCode: 0, formatted: true, checked: true }, reply }));
+        value(await f.use.finishRun({ run: queued.id, token: lease.token, facts: { exitCode: 0, formatted: 'Ran', checked: 'Ran' }, reply }));
     }
     return queued.id;
 }
@@ -323,7 +323,11 @@ describe('the marks route and its broadcast', () => {
                 port: 0,
                 host: '127.0.0.1',
                 identity: 'dev',
-                agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS], maxPreviousRunDiff: 20 * 1024 },
+                agent: {
+                    port: 0,
+                    allowedTools: [...DEFAULT_AGENT_TOOLS],
+                    maxPreviousRunDiff: 20 * 1024,
+                },
                 maxParticipants: 50,
                 quickReactions: ['👍', '👀', '🤔', '🎉', '❤️', '🙏'],
                 classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
@@ -333,7 +337,7 @@ describe('the marks route and its broadcast', () => {
         ada = await join('Ada');
         bob = await join('Bob');
         expect((await fetch(server.facilitatorLink, { headers: { cookie: ada }, redirect: 'manual' })).status).toBe(303);
-        cred = JSON.parse(await Bun.file(path.join(root, '.domaintrail', 'session', 'agent.json')).text());
+        cred = { url: server.agentUrl, token: server.agentToken };
     });
     afterAll(() => server?.stop());
 

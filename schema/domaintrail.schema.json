@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://domaintrail.dev/schema/domaintrail.schema.json",
-  "title": "DomainTrail configuration (domaintrail.jsonc / domaintrail.json)",
-  "description": "Paths are relative to this file. CLI options (--out, --port, --host) take precedence.",
+  "title": "DomainTrail configuration (domaintrail.jsonc / domaintrail.json, and the local override domaintrail.local.jsonc / domaintrail.local.json)",
+  "description": "Paths are relative to this file. CLI options (--out, --port, --host) take precedence. A local override beside it (domaintrail.local.jsonc, or .local.json; <name>.local.<ext> beside a -c <name>.<ext>) holds your own settings and is never committed: it is read after this file and merged into it (objects key by key, arrays and scalars replaced), any setting included, and validated against this same schema. Alone, without a project file, it is the configuration.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -114,26 +114,57 @@
         }
       }
     },
-    "view": {
-      "description": "Live View server (dt view).",
+    "open": {
+      "description": "dt open: the Live View with the chat for one person (a non-loopback host serves the Live View read-only).",
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "port": { "type": "integer", "minimum": 0, "maximum": 65535, "default": 4321 },
-        "host": { "type": "string", "default": "127.0.0.1" }
+        "port": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535,
+          "default": 4321
+        },
+        "host": {
+          "type": "string",
+          "default": "127.0.0.1"
+        }
       }
     },
-    "session": {
-      "description": "Collaboration sessions (dt session start, ADR 0026).",
+    "collab": {
+      "description": "Collaboration sessions (dt collab, dt collab link; ADR 0026, ADR 0030).",
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "port": { "description": "Port of the session's page and API.", "type": "integer", "minimum": 0, "maximum": 65535, "default": 4321 },
-        "host": { "description": "Address to bind; the dev identity mode refuses anything but a loopback address.", "type": "string", "default": "127.0.0.1" },
+        "port": {
+          "description": "Port of the session's page and API.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535,
+          "default": 4321
+        },
+        "host": {
+          "description": "Address to bind; the dev identity mode refuses anything but a loopback address.",
+          "type": "string",
+          "default": "127.0.0.1"
+        },
         "identity": {
-          "description": "How participants prove who they are: dev (loopback only, a name picked on the first visit, a session cookie) or access (Cloudflare Access). Never inferred from headers.",
-          "enum": ["dev", "access"],
+          "description": "How participants prove who they are: dev (loopback only, a name picked on the first visit, a session cookie), access (Cloudflare Access) or link (a shared invite link and the facilitator's approval of each join request, behind a tunnel: dt collab --tunnel, or link.publicUrl). Never inferred from headers.",
+          "enum": ["dev", "access", "link"],
           "default": "dev"
+        },
+        "link": {
+          "description": "The link identity mode (docs/session-link.md).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "publicUrl": {
+              "description": "The https URL (no path) a self-managed tunnel or reverse proxy serves the session at; its host and origin are then the only ones answered besides loopback. Unused with dt collab --tunnel, whose quick tunnel gives the URL.",
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https://[^/?#]+/?$"
+            }
+          }
         },
         "access": {
           "description": "Cloudflare Access, required with identity \"access\".",
@@ -146,22 +177,32 @@
               "type": "string",
               "pattern": "^(https://)?[A-Za-z0-9.-]+/?$"
             },
-            "audience": { "description": "The Access application's audience tag (AUD).", "type": "string", "minLength": 1 },
+            "audience": {
+              "description": "The Access application's audience tag (AUD).",
+              "type": "string",
+              "minLength": 1
+            },
             "publicUrl": {
-              "description": "The public URL of the session (the tunnel's, https). Not used to allow anything: dt session start refuses it unless its host is in allowedHosts and its origin in allowedOrigins.",
+              "description": "The public URL of the session (the tunnel's, https). Not used to allow anything: dt collab refuses it unless its host is in allowedHosts and its origin in allowedOrigins.",
               "type": "string",
               "format": "uri"
             },
             "allowedHosts": {
               "description": "Host names the server answers to besides loopback (nothing external is allowed without them).",
               "type": "array",
-              "items": { "type": "string", "pattern": "^[A-Za-z0-9.-]+$" },
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9.-]+$"
+              },
               "default": []
             },
             "allowedOrigins": {
               "description": "Origins (https://host[:port]) whose pages may call the server besides loopback.",
               "type": "array",
-              "items": { "type": "string", "format": "uri" },
+              "items": {
+                "type": "string",
+                "format": "uri"
+              },
               "default": []
             },
             "acceptCookie": {
@@ -172,81 +213,328 @@
             "avatarHosts": {
               "description": "Hosts an avatar (the identity's https picture) may come from; without them the page shows initials.",
               "type": "array",
-              "items": { "type": "string", "pattern": "^[A-Za-z0-9.-]+$" },
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9.-]+$"
+              },
               "default": []
             }
           }
         },
-        "agent": {
+        "maxParticipants": {
+          "description": "Most participants a session admits.",
+          "type": "integer",
+          "minimum": 1,
+          "default": 50
+        },
+        "quickReactions": {
+          "description": "The emoji the add-reaction popover of the chat offers first, in order: each exactly one emoji (one grapheme; ZWJ sequences, skin tones, flags and keycaps count as one), distinct. Any other emoji can still be typed there.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "default": ["👍", "👀", "🤔", "🎉", "❤️", "🙏"]
+        }
+      },
+      "if": {
+        "properties": {
+          "identity": {
+            "const": "access"
+          }
+        },
+        "required": ["identity"]
+      },
+      "then": {
+        "required": ["access"]
+      }
+    },
+    "agent": {
+      "description": "The agent (dt agent, or in process with dt open and dt collab), in both modes: its API's port and its roles.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "port": {
+          "description": "Port of the agent API, bound to 127.0.0.1 only; 0 picks a free port (written to .domaintrail/session/server.json; its credential is never written to disk).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535,
+          "default": 0
+        },
+        "run": {
+          "description": "The runner: the runs that edit the workspace, and how Claude Code carries them out.",
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "port": {
-              "description": "Port of the agent API, bound to 127.0.0.1 only; 0 picks a free port (written to .domaintrail/session/agent.json).",
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 65535,
-              "default": 0
-            },
             "allowedTools": {
               "description": "The tools the agent may use, chosen by the facilitator, as Claude Code permission rules.",
               "type": "array",
-              "items": { "type": "string", "minLength": 1 },
-              "default": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)"]
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "default": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)", "Bash(dt guide:*)"]
             },
             "dt": {
               "description": "The command the agent's dt runs (and the dt fmt / dt check after it), as an argument array, e.g. [\"node\", \"../clone/dist/dt.js\"]. An element with a path separator that is not absolute is relative to this file. Default: the running dt itself.",
               "type": "array",
               "minItems": 1,
-              "items": { "type": "string", "minLength": 1 }
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "warm": {
+              "description": "Keep one Claude Code process across runs (each run one turn of its conversation; it is replaced now and then), or start one per run (false).",
+              "type": "boolean",
+              "default": true
+            },
+            "restartAfter": {
+              "description": "Runs of one warm Claude Code process before a fresh one replaces it.",
+              "type": "integer",
+              "minimum": 1,
+              "default": 20
+            },
+            "idleTimeout": {
+              "description": "Minutes a warm Claude Code process may go without a run before it is ended to free its memory (the next run starts a fresh one); 0 = never.",
+              "type": "number",
+              "minimum": 0,
+              "default": 30
+            },
+            "model": {
+              "description": "The model Claude Code runs with (claude --model, e.g. \"sonnet\"). Default: the model of your Claude Code settings.",
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][\\w.:@\\[\\]/-]*$"
+            },
+            "effort": {
+              "description": "The effort Claude Code runs with (claude --effort). Default: the effort of your Claude Code settings.",
+              "enum": ["low", "medium", "high", "xhigh", "max"]
             },
             "maxPreviousRunDiff": {
               "description": "The most characters of unified diff the agent is given of the runs a run continues (the runs its messages reply to, the run it answers), all together; past it, only the files each changed.",
               "type": "integer",
               "minimum": 0,
               "default": 20480
+            },
+            "read": {
+              "description": "What the runner may also read outside the workspace, besides agent.read; it never writes there.",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "paths": {
+                  "description": "Directories or files outside the workspace: absolute, ~/..., or relative to this file. Honoured only from domaintrail.local.jsonc when git ignores it (an error in the project's file), and approved when they change (dt open / collab / agent ask). A path inside the workspace, one holding it, /, the home directory, or one that is or holds ~/.ssh, ~/.gnupg, ~/.aws, ~/.azure, ~/.config, ~/.kube, ~/.docker, ~/.netrc, ~/Library, /etc or /var is an error; one missing is skipped (the agent says so when it starts). In a git work tree the files git does not ignore there are readable, elsewhere every file; never .git nor .domaintrail, nor a nested repository inside the path. Nothing there is ever written.",
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "default": []
+                }
+              }
             }
           }
         },
-        "maxParticipants": { "description": "Most participants a session admits.", "type": "integer", "minimum": 1, "default": 50 },
-        "quickReactions": {
-          "description": "The emoji the add-reaction popover of the chat offers first, in order: each exactly one emoji (one grapheme; ZWJ sequences, skin tones, flags and keycaps count as one), distinct. Any other emoji can still be typed there.",
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 },
-          "minItems": 1,
-          "maxItems": 8,
-          "uniqueItems": true,
-          "default": ["👍", "👀", "🤔", "🎉", "❤️", "🙏"]
-        },
-        "classifier": {
-          "description": "Telling the chat's requests from its talk (opt-in). When enabled, the text of each chat message is sent to Cloudflare Workers AI.",
+        "answer": {
+          "description": "The answerer: read-only answers to the questions addressed to the AI (its tools, Read, Grep and Glob, are not configurable).",
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "enabled": { "description": "Classify the chat's messages; otherwise every message can be applied.", "type": "boolean", "default": false },
-            "provider": { "description": "The classifier.", "enum": ["cloudflare-clef"], "default": "cloudflare-clef" },
-            "model": { "description": "The Clef model of Workers AI.", "enum": ["clef-flash", "clef"], "default": "clef-flash" },
-            "accountId": { "description": "The Cloudflare account of Workers AI (required when enabled).", "type": "string", "pattern": "^[0-9a-fA-F]{32}$" },
-            "apiTokenEnv": {
-              "description": "The name of the environment variable holding the Workers AI API token (never the token itself).",
+            "model": {
+              "description": "The model of the answers (claude --model). Default: the model of your Claude Code settings, never the runner's.",
               "type": "string",
-              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-              "default": "CLOUDFLARE_API_TOKEN"
+              "pattern": "^[A-Za-z0-9][\\w.:@\\[\\]/-]*$"
             },
-            "threshold": {
-              "description": "The probability from which a message is a request.",
+            "effort": {
+              "description": "The effort of the answers (claude --effort). Default: the effort of your Claude Code settings.",
+              "enum": ["low", "medium", "high", "xhigh", "max"]
+            },
+            "warm": {
+              "description": "Keep one Claude Code process across answers (each one turn of its conversation; it is replaced now and then), or start one per answer (false).",
+              "type": "boolean",
+              "default": true
+            },
+            "restartAfter": {
+              "description": "Answers of one warm Claude Code process before a fresh one replaces it.",
+              "type": "integer",
+              "minimum": 1,
+              "default": 50
+            },
+            "idleTimeout": {
+              "description": "Minutes a warm Claude Code process may go without an answer before it is ended to free its memory; 0 = never.",
+              "type": "number",
+              "minimum": 0,
+              "default": 30
+            },
+            "timeout": {
+              "description": "The most seconds an answer may take.",
               "type": "number",
               "exclusiveMinimum": 0,
-              "exclusiveMaximum": 1,
-              "default": 0.5
+              "default": 120
+            },
+            "read": {
+              "description": "What the answerer may also read outside the workspace, besides agent.read.",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "paths": {
+                  "description": "Directories or files outside the workspace: absolute, ~/..., or relative to this file. Honoured only from domaintrail.local.jsonc when git ignores it (an error in the project's file), and approved when they change (dt open / collab / agent ask). A path inside the workspace, one holding it, /, the home directory, or one that is or holds ~/.ssh, ~/.gnupg, ~/.aws, ~/.azure, ~/.config, ~/.kube, ~/.docker, ~/.netrc, ~/Library, /etc or /var is an error; one missing is skipped (the agent says so when it starts). In a git work tree the files git does not ignore there are readable, elsewhere every file; never .git nor .domaintrail, nor a nested repository inside the path. Nothing there is ever written.",
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "default": []
+                }
+              }
             }
-          },
-          "if": { "properties": { "enabled": { "const": true } }, "required": ["enabled"] },
-          "then": { "required": ["accountId"] }
+          }
+        },
+        "triage": {
+          "description": "The light model that sorts the messages addressed to the AI (a question, a change request, or neither).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "description": "The model of the triage (claude --model).",
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][\\w.:@\\[\\]/-]*$",
+              "default": "haiku"
+            },
+            "warm": {
+              "description": "Keep one Claude Code process for the triage (true), or start a fresh claude -p per message (false).",
+              "type": "boolean",
+              "default": false
+            }
+          }
+        },
+        "read": {
+          "description": "What both roles of the AI may read outside the workspace, read-only (agent.answer.read and agent.run.read add to it). dt open, dt collab and dt agent print it at startup; in a collab session, any participant can make the AI quote these files.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "paths": {
+              "description": "Directories or files outside the workspace: absolute, ~/..., or relative to this file. Honoured only from domaintrail.local.jsonc when git ignores it (an error in the project's file), and approved when they change (dt open / collab / agent ask). A path inside the workspace, one holding it, /, the home directory, or one that is or holds ~/.ssh, ~/.gnupg, ~/.aws, ~/.azure, ~/.config, ~/.kube, ~/.docker, ~/.netrc, ~/Library, /etc or /var is an error; one missing is skipped (the agent says so when it starts). In a git work tree the files git does not ignore there are readable, elsewhere every file; never .git nor .domaintrail, nor a nested repository inside the path. Nothing there is ever written.",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "default": []
+            }
+          }
+        }
+      }
+    },
+    "classifier": {
+      "description": "Classifying the messages addressed to the AI with Cloudflare Clef (opt-in), called by the server in both modes. When enabled, the text of each addressed message is sent to Cloudflare Workers AI.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "description": "Classify the chat's messages; otherwise every message can be applied.",
+          "type": "boolean",
+          "default": false
+        },
+        "provider": {
+          "description": "The classifier.",
+          "enum": ["cloudflare-clef"],
+          "default": "cloudflare-clef"
+        },
+        "model": {
+          "description": "The Clef model of Workers AI.",
+          "enum": ["clef-flash", "clef"],
+          "default": "clef-flash"
+        },
+        "accountId": {
+          "description": "The Cloudflare account of Workers AI (required when enabled).",
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{32}$"
+        },
+        "apiTokenEnv": {
+          "description": "The name of the environment variable holding the Workers AI API token (never the token itself).",
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "default": "CLOUDFLARE_API_TOKEN"
+        },
+        "threshold": {
+          "description": "The probability from which one of Clef's answers (a question, a change request, nothing to answer) decides the triage of a message addressed to the AI; below it, the light model decides.",
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1,
+          "default": 0.9
         }
       },
-      "if": { "properties": { "identity": { "const": "access" } }, "required": ["identity"] },
-      "then": { "required": ["access"] }
+      "if": {
+        "properties": {
+          "enabled": {
+            "const": true
+          }
+        },
+        "required": ["enabled"]
+      },
+      "then": {
+        "required": ["accountId"]
+      }
+    },
+    "templates": {
+      "description": "The team's message templates of the chat: typing / in the composer lists them after the built-in ones (and after the commands). Picking one only puts its text in the composer, to edit and send. Used by dt open and dt collab.",
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "text"],
+        "properties": {
+          "id": {
+            "description": "A stable ID, matched by what is typed after / (as is the name in the page's language).",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$",
+            "maxLength": 40
+          },
+          "name": {
+            "description": "The name the list shows: one for every language, or one per language.",
+            "oneOf": [
+              { "type": "string", "minLength": 1, "maxLength": 60 },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                  "ja": { "type": "string", "minLength": 1, "maxLength": 60 },
+                  "en": { "type": "string", "minLength": 1, "maxLength": 60 }
+                }
+              }
+            ]
+          },
+          "text": {
+            "description": "The text put in the composer: one for every language, or one per language. {target} is where the selected element goes, as a # mention.",
+            "oneOf": [
+              { "type": "string", "minLength": 1, "maxLength": 2000 },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                  "ja": { "type": "string", "minLength": 1, "maxLength": 2000 },
+                  "en": { "type": "string", "minLength": 1, "maxLength": 2000 }
+                }
+              }
+            ]
+          },
+          "when": {
+            "description": "Where it is offered (any of them; absent: everywhere): a storming at Big Picture or Design Level (or any storming), a .dt view, anything selected, an aggregate, an event, a state selected, or nothing selected.",
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "enum": ["big-picture", "design-level", "storming", "model", "element", "aggregate", "event", "state", "none"]
+            }
+          }
+        }
+      }
     }
   }
 }

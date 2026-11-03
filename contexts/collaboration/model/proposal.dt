@@ -1,0 +1,159 @@
+context Collaboration {
+  /// 変更案の識別子。
+  id ChangeProposalId "変更案ID": UUID
+
+  /// 変更案の文（「どう」）。上限はコード（`domain/proposals.ts` の `PROPOSAL_LIMITS`）が決める: AI の文は短く、
+  /// ファシリテーターの編集は長くてもよい。前の形（何を・どこを・どう）で保存した変更案は、3つをつないだ文として読む。
+  primitive ProposalText "変更案の文": String { length(value) >= 1 and length(value) <= 2000 }
+
+  /// 変更案の選択肢の見出し（「集約だけ」など）。上限はコードが決める。
+  primitive ProposalLabel "選択肢の見出し": String { length(value) >= 1 and length(value) <= 200 }
+
+  /// 変更案の選択肢の番号（0 から）。
+  primitive ProposalOptionIndex "選択肢の番号": Int { value >= 0 and value <= 2 }
+
+  /// 範囲などで AI が迷ったときの、変更案の選択肢1つ: 見出し、対象、選択肢だけの「どう」。
+  value ProposalOption "変更案の選択肢" {
+    label: ProposalLabel "見出し"
+    /// 対象のモデルの要素（`.dt` の要素か `.dtes` の要素）。まだない要素（足すもの）も指せる。
+    targets: ModelTarget[0..50] "対象"
+    /// 変更案の「どう」と違うときだけ。
+    how: ProposalText? "どう"
+    recommended: Bool "AI の勧め"
+  }
+
+  /// 変更案の中身: 対象のモデルの要素と、どう変えるかを1〜2行で。AI が迷ったときは選択肢（2つか3つ、勧めは1つ）。
+  /// ファイル名やパスは持たない。差分の見本はまだない。
+  value ProposalContent "変更案の中身" {
+    targets: ModelTarget[0..50] "対象"
+    how: ProposalText "どう"
+    options: ProposalOption[0..3] "選択肢"
+
+    invariant choiceOfTwoOrMore "選択肢はないか、2つ以上" { count(options) == 0 or count(options) >= 2 }
+    invariant oneRecommended "選択肢があれば、AI の勧めはちょうど1つ"
+  }
+
+  /// 承認した変更案が実行に求めること: 選んだ選択肢の見出し（選択肢があれば）、対象、どう（ファシリテーターが編集したなら
+  /// その文）。
+  value ProposalInstruction "承認した指示" {
+    label: ProposalLabel? "選んだ選択肢"
+    targets: ModelTarget[0..50] "対象"
+    how: ProposalText "どう"
+  }
+
+  /// 実行の入力に凍結した、承認した変更案1つ。
+  value ApprovedProposal "承認した変更案" {
+    proposal: ChangeProposalId "変更案"
+    request: RequestId "元のメッセージ"
+    instruction: ProposalInstruction "承認した指示"
+  }
+
+  /// まとめて承認した変更案。まとめて承認したものは1つの実行になる。
+  value ApprovedProposals "承認した変更案の組" {
+    approved: ApprovedProposal[1..*] "変更案"
+
+    invariant distinctProposals "変更案は1回" { unique(approved, p => p.proposal) }
+  }
+
+  /// 参加者の変更依頼について、回答役（読むだけの AI）が書いた変更案。ファシリテーターが承認（編集してもよい）か却下し、
+  /// 依頼した参加者は承認待ちのあいだ取り下げられる。承認した変更案は、ふつうの実行として待ちに入る（まとめて承認したものは
+  /// 1つの実行）。
+  aggregate ChangeProposal "変更案" {
+    id: ChangeProposalId
+    references session: SessionId -> Session
+    references triage: TriageId -> Triage "仕分け"
+    references request: RequestId -> Request "元のメッセージ"
+    requestedBy: ParticipantId "依頼した人"
+    owns content: ProposalContent "変更案"
+    proposedAt: Timestamp "提案日時"
+
+    state Open "承認待ち"
+    state Approved "承認済み" {
+      approvedBy: ParticipantId "承認した人"
+      approvedAt: Timestamp "承認日時"
+      /// 選択肢があれば、ファシリテーターが選んだもの。
+      option: ProposalOptionIndex? "選んだ選択肢"
+      /// ファシリテーターが編集して承認したなら、その「どう」（実行はこちらに従う）。
+      editedHow: ProposalText? "編集した「どう」"
+      references run: AgentRunId -> AgentRun "実行"
+    }
+    state Rejected "却下" {
+      rejectedBy: ParticipantId "却下した人"
+      rejectedAt: Timestamp "却下日時"
+      /// 依頼した人へのひとこと。
+      note: Text? "ひとこと"
+    }
+    state Withdrawn "取り下げ" {
+      withdrawnAt: Timestamp "取り下げ日時"
+    }
+
+    /// 回答役が、参加者の変更依頼について変更案を書く。
+    create command propose(id: ChangeProposalId, session: ActiveSession, triage: ProposableTriage, request: RequestId, requestedBy: ParticipantId, content: ProposalContent, proposedAt: Timestamp) "変更案を書く"
+      -> Open
+      emits ChangeProposed
+
+    /// ファシリテーターが承認する（選択肢があれば1つ選び、その「どう」を編集してもよい）。実行の登録と同じ取引で、その
+    /// 実行を記録する。
+    command approve(approvedBy: ParticipantId, approvedByRole: ParticipantRole, option: ProposalOptionIndex?, editedHow: ProposalText?, run: AgentRunId, approvedAt: Timestamp) "変更案を承認する"
+      Open -> Approved
+      requires facilitatorApproves "ファシリテーターが承認する" {
+        approvedByRole == ParticipantRole.Facilitator
+      } else FacilitatorOnly
+      requires optionOfProposal "選択肢があれば、そのうちの1つを選ぶ" {
+        (count(content.options) == 0 implies not exists(option)) and (count(content.options) >= 1 implies exists(option) and option < count(content.options))
+      } else NoSuchOption
+      emits ProposalApproved
+
+    /// ファシリテーターが却下する（ひとことを添えてもよい）。
+    command reject(rejectedBy: ParticipantId, rejectedByRole: ParticipantRole, note: Text?, rejectedAt: Timestamp) "変更案を却下する"
+      Open -> Rejected
+      requires facilitatorRejects "ファシリテーターが却下する" {
+        rejectedByRole == ParticipantRole.Facilitator
+      } else FacilitatorOnly
+      emits ProposalRejected
+
+    /// 依頼した参加者が、承認待ちのあいだに取り下げる。
+    command withdraw(withdrawnBy: ParticipantId, withdrawnAt: Timestamp) "変更案を取り下げる"
+      Open -> Withdrawn
+      requires requesterWithdraws "依頼した人が取り下げる" { withdrawnBy == requestedBy } else NotTheRequester
+      emits ProposalWithdrawn
+  }
+
+  persistent event ChangeProposed "変更案の提案" {
+    proposalId: ChangeProposalId
+    session: SessionId
+    triage: TriageId
+    request: RequestId
+    requestedBy: ParticipantId
+    content: ProposalContent
+    proposedAt: Timestamp
+  }
+
+  persistent event ProposalApproved "変更案の承認" {
+    proposalId: ChangeProposalId
+    approvedBy: ParticipantId
+    option: ProposalOptionIndex? "選んだ選択肢"
+    editedHow: ProposalText? "編集した「どう」"
+    run: AgentRunId
+    approvedAt: Timestamp
+  }
+
+  persistent event ProposalRejected "変更案の却下" {
+    proposalId: ChangeProposalId
+    rejectedBy: ParticipantId
+    note: Text? "ひとこと"
+    rejectedAt: Timestamp
+  }
+
+  persistent event ProposalWithdrawn "変更案の取り下げ" {
+    proposalId: ChangeProposalId
+    withdrawnBy: ParticipantId
+    withdrawnAt: Timestamp
+  }
+
+  /// 変更案を取り下げられるのは、依頼した参加者だけ。
+  error NotTheRequester "依頼した人でない"
+
+  /// 承認で選んだ選択肢が変更案にない（選択肢のある変更案で選ばなかった、選択肢のない変更案で選んだ、を含む）。
+  error NoSuchOption "変更案にない選択肢"
+}

@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { Duplex } from 'node:stream';
-import { checkAccess, hostAllowList, type AccessPolicy, type Authorization } from './access.js';
+import { changesState, checkAccess, hostAllowList, type AccessPolicy, type Authorization } from './access.js';
 import type { Assets } from './assets.js';
 import { sendError } from './json.js';
 import { send, type ApiRoutes } from './routes.js';
@@ -8,7 +8,7 @@ import { send, type ApiRoutes } from './routes.js';
 /** The path of the WebSocket. */
 export const WS_PATH = '/ws';
 
-/** The API of a session, below `/api/session` (404 in `dt view`). */
+/** The API of a session, below `/api/session` (404 in the read-only Live View). */
 export const SESSION_API = '/api/session';
 
 /** The pages of a session that are not the Live View (the facilitator link, the join form), below `/session/`. */
@@ -39,19 +39,25 @@ export interface ViewHttpServerOptions {
     assets: Assets;
     /** The upgrade on `WS_PATH`. */
     upgrade: UpgradeHandler;
-    /** A session (`dt session start`): every request then needs an identity. Absent for `dt view`. */
+    /** A session (`dt open`, `dt collab`): every request then needs an identity. Absent for the read-only Live View. */
     session?: SessionSurface;
 }
 
 const isApi = (pathname: string): boolean => pathname === '/api' || pathname.startsWith('/api/');
 const isSessionApi = (pathname: string): boolean => pathname === SESSION_API || pathname.startsWith(`${SESSION_API}/`);
 
+/**
+ * A file of the page whose name carries its content's hash (`chunk-g13csqym.js`): the same name, the same bytes, and
+ * only the page's code (nothing of the model), so a browser may keep it; everything else of a session is `no-store`.
+ */
+export const isHashedAsset = (pathname: string): boolean => /^\/[\w.-]+-[a-z0-9]{8}\.(js|css|svg|png|woff2?)$/.test(pathname);
+
 /** The view API's requests that change what every page sees: in a session only the facilitator makes them. */
 const FACILITATOR_VIEW_API: ReadonlySet<string> = new Set(['/api/baseline']);
 
 /**
  * The Live View's HTTP server (not yet listening): the API, the WebSocket upgrade and the page. Every request and upgrade
- * enters through `checkAccess`. For `dt view` it guards the API's requests and the WebSocket's upgrade, and the page
+ * enters through `checkAccess`. For the read-only Live View it guards the API's requests and the WebSocket's upgrade, and the page
  * (and any other path) is served to anyone. In a session it guards everything: the page, the API, the session's API
  * and the WebSocket need an identity; without one a page request gets the session's sign-in answer, an API request 401.
  */
@@ -72,7 +78,10 @@ export function createViewHttpServer({ host, api, assets, upgrade, session }: Vi
             if (api.has(url.pathname) && (await checkAccess(req.headers, viewPolicy)).kind === 'forbidden') return send(res, 403, 'text/plain', 'Forbidden');
             return serveView(req, url, res);
         }
-        const auth = await checkAccess(req.headers, session.policy);
+        // a session's answers are never framed (clickjacking), and never kept by a browser or a proxy but the hashed files
+        res.setHeader('content-security-policy', "frame-ancestors 'none'");
+        if (!isHashedAsset(url.pathname)) res.setHeader('cache-control', 'no-store');
+        const auth = await checkAccess(req.headers, session.policy, changesState(req.method));
         if (auth.kind === 'forbidden') {
             return isApi(url.pathname) ? sendError(res, 403, 'Forbidden', 'Host or Origin not allowed.') : send(res, 403, 'text/plain', 'Forbidden');
         }
@@ -100,7 +109,8 @@ export function createViewHttpServer({ host, api, assets, upgrade, session }: Vi
         const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
         const refuse = (status: string): void => void socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`);
         if (pathname !== WS_PATH) return refuse('404 Not Found');
-        checkAccess(req.headers, session?.policy ?? viewPolicy).then(
+        // a WebSocket sends messages that change things: its upgrade needs an Origin where a session requires one
+        checkAccess(req.headers, session?.policy ?? viewPolicy, true).then(
             (auth) => {
                 if (auth.kind === 'forbidden') return refuse('403 Forbidden');
                 if (session && auth.kind !== 'participant') return refuse('401 Unauthorized');

@@ -2,7 +2,7 @@
 // queue's claim, lease and serial rule, the session directory and its blobs, never through a symbolic link.
 import { afterAll, describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
@@ -10,6 +10,7 @@ import { Collaboration as C } from '../generated/index.js';
 import type { Stores } from '../application/ports.js';
 import { agentRunCommands, sessionCommands } from '../domain/commands.js';
 import { createFileBlobs, openSessionBlobs } from './blobs.js';
+import { writeServerAddress } from './session-files.js';
 import { UnsafeSessionPath } from './session-dir.js';
 import { MIGRATIONS, NewerSchema, createUnitOfWork, decodeJson, encodeJson, openDatabase, openSessionDatabase } from './sqlite.js';
 import { knownAgentRunId, knownRequestId, knownRevisionId, knownSessionId } from '../domain/ids.js';
@@ -50,7 +51,7 @@ const request = knownRequestId('00000000-0000-4000-8000-000000000010');
 const revision = knownRevisionId('00000000-0000-4000-8000-000000000020');
 
 function openSession(stores: Stores, id: C.SessionId): void {
-    const { Open } = value(sessionCommands.start({ id, facilitator, name: value(C.makeDisplayName('Ada')), startedAt: at }));
+    const { Open } = value(sessionCommands.start({ id, facilitator, name: value(C.makeDisplayName('Ada')), mode: 'Collab', startedAt: at }));
     stores.sessions.save(Open.aggregate);
     stores.outbox.append(id, [Open.events.SessionStarted], at);
 }
@@ -98,14 +99,18 @@ describe('schema and transactions', () => {
             'approvals',
             'facilitator_links',
             'facilitators',
+            'interviews',
+            'invites',
             'marks',
             'outbox',
+            'proposals',
             'requests',
             'restore_operations',
             'revisions',
             'run_requests',
             'sessions',
             'sign_ins',
+            'triages',
         ]);
         db.exec(`PRAGMA user_version = ${MIGRATIONS.length + 1}`);
         db.close();
@@ -284,6 +289,65 @@ describe('the session directory and blobs', () => {
     });
 });
 
+/** The permission bits of `p` (not following a link). */
+const modeOf = async (p: string): Promise<number> => (await lstat(p)).mode & 0o777;
+
+describe('the session is private to the user', () => {
+    const sha = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+
+    test.skipIf(process.platform === 'win32')('its directories are 0700 and its files 0600, whatever the umask', async () => {
+        const root = await tempDir();
+        const umask = process.umask(0o000);
+        try {
+            const db = await openSessionDatabase(root);
+            db.exec('CREATE TABLE IF NOT EXISTS probe (x)');
+            const blobs = await openSessionBlobs(root);
+            const bytes = new TextEncoder().encode('context A {}');
+            await blobs.put([{ hash: sha(bytes), bytes }]);
+            await writeServerAddress(root, { url: 'http://127.0.0.1:1', session: 's', pid: process.pid });
+            const top = path.join(root, '.domaintrail');
+            const session = path.join(top, 'session');
+            const blobDir = path.join(session, 'blobs', sha(bytes).slice(0, 2));
+            for (const dir of [top, session, path.join(session, 'blobs'), blobDir]) expect({ dir, mode: await modeOf(dir) }).toEqual({ dir, mode: 0o700 });
+            const files = [
+                path.join(top, '.gitignore'),
+                path.join(session, '.gitignore'),
+                path.join(session, 'session.db'),
+                path.join(session, 'session.db-wal'),
+                path.join(session, 'session.db-shm'),
+                path.join(session, 'server.json'),
+                path.join(blobDir, sha(bytes)),
+            ];
+            for (const file of files) expect({ file, mode: await modeOf(file) }).toEqual({ file, mode: 0o600 });
+            db.close();
+        } finally {
+            process.umask(umask);
+        }
+    });
+
+    test.skipIf(process.platform === 'win32')('directories and files an older version left readable by others are tightened when opened', async () => {
+        const root = await tempDir();
+        const old = await openSessionDatabase(root);
+        const blobs = await openSessionBlobs(root);
+        const bytes = new TextEncoder().encode('context B {}');
+        await blobs.put([{ hash: sha(bytes), bytes }]);
+        old.close();
+        const top = path.join(root, '.domaintrail');
+        const session = path.join(top, 'session');
+        const blobDir = path.join(session, 'blobs', sha(bytes).slice(0, 2));
+        const dirs = [top, session, path.join(session, 'blobs'), blobDir];
+        const files = [path.join(top, '.gitignore'), path.join(session, '.gitignore'), path.join(session, 'session.db'), path.join(blobDir, sha(bytes))];
+        for (const dir of dirs) await chmod(dir, 0o755);
+        for (const file of files) await chmod(file, 0o644);
+
+        const db = await openSessionDatabase(root);
+        await openSessionBlobs(root);
+        db.close();
+        for (const dir of dirs) expect({ dir, mode: await modeOf(dir) }).toEqual({ dir, mode: 0o700 });
+        for (const file of files) expect({ file, mode: await modeOf(file) }).toEqual({ file, mode: 0o600 });
+    });
+});
+
 describe('rows written before requests had several targets', () => {
     // a request, a run's frozen request and the RequestSent event held one `target` (0.6.0): read as a list, nothing rewritten
     test('are read as a list of targets: none for the whole workspace, else that one', async () => {
@@ -343,6 +407,40 @@ describe('rows written before requests had several targets', () => {
         // written before people could be mentioned: they mention no one, the event too
         expect(requests.map((r) => r.mentions)).toEqual([[], []]);
         expect(events.map((e) => (e.event.type === 'RequestSent' ? e.event.mentions : undefined))).toEqual([[], []]);
+        // written before messages carried the view they were sent from: none, in the request, the run and the event
+        expect(requests.map((r) => r.viewedAt)).toEqual([undefined, undefined]);
+        expect(runs[0].input.requests.map((r) => r.viewedAt)).toEqual([undefined, undefined]);
+        expect(events.map((e) => (e.event.type === 'RequestSent' ? e.event.viewedAt : undefined))).toEqual([undefined, undefined]);
+    });
+
+    test('a request with the view it was sent from keeps it through the store', async () => {
+        const uow = createUnitOfWork(openDatabase(':memory:'));
+        const viewedAt: C.ViewedAt = {
+            view: {
+                kind: 'Storming',
+                storming: value(C.makeStormingName('OrderToCash')),
+                level: 'DesignLevel',
+                stage: value(C.makeStageName('Payment')),
+                exceptions: false,
+            },
+            states: value(C.makeElementName('Sales.Order')),
+        };
+        const loaded = await uow.transaction((st) => {
+            openSession(st, sessionId);
+            st.requests.save({
+                state: 'Sent',
+                id: request,
+                session: sessionId,
+                author: facilitator,
+                targets: [],
+                body: value(C.makeText('x')),
+                sentAt: at,
+                mentions: [],
+                viewedAt,
+            });
+            return st.requests.load(request);
+        });
+        expect(loaded?.viewedAt).toEqual(viewedAt);
     });
 });
 
@@ -383,5 +481,99 @@ describe("rows written before the agent's reply was structured", () => {
         }
         expect(done?.state === 'Completed' && done.changed).toBe(true);
         expect(events.map((e) => e.event.type)).toEqual(['RunNeedsClarification', 'RunCompleted']);
+    });
+});
+
+describe('change proposals written when a proposal was three texts', () => {
+    // a proposal was `{ what, where, how }` and an approval's edit a whole one (ADR 0030, M2): read as a proposal with no
+    // targets and no options whose how is the three joined, the edit as the how it edited; nothing rewritten
+    test('load with the three texts as their how, in the proposal, its events and the run that followed it', async () => {
+        const db = openDatabase(':memory:');
+        const raw = (o: unknown): string => JSON.stringify(o);
+        const ids = {
+            session: '00000000-0000-4000-8000-000000000101',
+            request: '00000000-0000-4000-8000-000000000102',
+            triage: '00000000-0000-4000-8000-000000000103',
+            run: '00000000-0000-4000-8000-000000000104',
+            proposal: '00000000-0000-4000-8000-000000000105',
+        };
+        const former = { what: '取り消しのコマンド', where: '@{Sales.Order}, sales/order.dt', how: 'Confirmed から Cancelled へ' };
+        const edited = { what: '取り消しのコマンド', where: '@{Sales.Order}', how: 'Placed からだけ' };
+        db.prepare('INSERT INTO sessions (id, state, data) VALUES (?, ?, ?)').run(ids.session, 'Open', raw({}));
+        db.prepare('INSERT INTO requests (id, session_id, seq, state, data) VALUES (?, ?, 1, ?, ?)').run(ids.request, ids.session, 'Sent', raw({}));
+        db.prepare('INSERT INTO triages (id, session_id, seq, request_id, state, data) VALUES (?, ?, 1, ?, ?, ?)').run(
+            ids.triage,
+            ids.session,
+            ids.request,
+            'Decided',
+            raw({}),
+        );
+        const input = { requests: [], proposals: { approved: [{ proposal: ids.proposal, request: ids.request, content: edited }] } };
+        db.prepare('INSERT INTO agent_runs (id, session_id, seq, state, data) VALUES (?, ?, 1, ?, ?)').run(
+            ids.run,
+            ids.session,
+            'Queued',
+            raw({ state: 'Queued', input }),
+        );
+        const proposal = {
+            state: 'Approved',
+            id: ids.proposal,
+            session: ids.session,
+            triage: ids.triage,
+            request: ids.request,
+            requestedBy: 'dev:bob',
+            content: former,
+            proposedAt: at.toISOString(),
+            approvedBy: 'local:facilitator',
+            approvedAt: at.toISOString(),
+            edited,
+            run: ids.run,
+        };
+        db.prepare('INSERT INTO proposals (id, session_id, seq, triage_id, request_id, run_id, state, data) VALUES (?, ?, 1, ?, ?, ?, ?, ?)').run(
+            ids.proposal,
+            ids.session,
+            ids.triage,
+            ids.request,
+            ids.run,
+            'Approved',
+            raw(proposal),
+        );
+        for (const payload of [
+            { type: 'ChangeProposed', proposalId: ids.proposal, content: former },
+            { type: 'ProposalApproved', proposalId: ids.proposal, edited, run: ids.run },
+        ])
+            db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(
+                ids.session,
+                payload.type,
+                raw(payload),
+                at.toISOString(),
+            );
+        const stored = JSON.stringify(db.prepare('SELECT data FROM proposals').all());
+        const uow = createUnitOfWork(db);
+        const session = knownSessionId(ids.session);
+        const read = await uow.transaction((st) => ({
+            proposals: st.proposals.listBySession(session),
+            run: st.runs.load(knownAgentRunId(ids.run))?.run,
+            events: st.outbox.readAfter(0, 10, session),
+        }));
+        const plain = (v: unknown): unknown => JSON.parse(JSON.stringify(v));
+        const [p] = read.proposals;
+        expect(plain(p?.content)).toEqual({ targets: [], how: '取り消しのコマンド\n@{Sales.Order}, sales/order.dt\nConfirmed から Cancelled へ', options: [] });
+        expect(p && C.checkProposalContentWith({ oneRecommended: () => true })(p.content)).toEqual([]);
+        expect((p?.state === 'Approved' && [p.editedHow, 'edited' in p, p.option]) as unknown).toEqual([
+            '取り消しのコマンド\n@{Sales.Order}\nPlaced からだけ',
+            false,
+            undefined,
+        ]);
+        expect(plain(read.run?.input.proposals?.approved)).toEqual([
+            { proposal: ids.proposal, request: ids.request, instruction: { targets: [], how: '取り消しのコマンド\n@{Sales.Order}\nPlaced からだけ' } },
+        ]);
+        expect(plain(read.events.map((e) => (e.event.type === 'ChangeProposed' ? e.event.content : e.event)))).toEqual([
+            { targets: [], how: '取り消しのコマンド\n@{Sales.Order}, sales/order.dt\nConfirmed から Cancelled へ', options: [] },
+            { type: 'ProposalApproved', proposalId: ids.proposal, run: ids.run, editedHow: '取り消しのコマンド\n@{Sales.Order}\nPlaced からだけ' },
+        ]);
+        // reading changes nothing in the database
+        expect(JSON.stringify(db.prepare('SELECT data FROM proposals').all())).toBe(stored);
+        db.close();
     });
 });

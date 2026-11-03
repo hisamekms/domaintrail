@@ -1,7 +1,7 @@
 # The Live View
 
-`dt view` watches the workspace, re-validates on every save and pushes updates to the browser over WebSocket. It
-serves the page at <http://127.0.0.1:4321> (`--port`, `--host`, or `view.port` / `view.host` in `domaintrail.jsonc`)
+`dt open` watches the workspace, re-validates on every save and pushes updates to the browser over WebSocket. It
+serves the page at <http://127.0.0.1:4321> (`--port`, `--host`, or `open.port` / `open.host` in `domaintrail.jsonc`)
 and runs until Ctrl+C. [Getting started](getting-started.md#watch-it-in-the-live-view) shows what to look at first;
 this page describes every pane.
 
@@ -46,20 +46,34 @@ it, the items added, changed and removed since then. A removed item opens in the
 Views of the whole model, in tabs. Under the tabs, every view's toolbar puts the same kinds of controls in the same
 places, leaving out what the view does not have: at the left the subject (what is looked at: the storming and its
 timeline) and then the level (how much of it is drawn: icons, named in their tooltips); at the right
-「⏷ 絞り込み」 (what is hidden: the BCs, the kinds…, in a popover; while anything is narrowed the button shows how many
-narrowings are active, e.g. 「絞り込み 2」, and the popover clears them all with すべて解除). On a narrow canvas the
-subject's names are cut short first (the whole name in a tooltip); 絞り込み stays, and goes onto a second row only when
-even that is not enough. Notices — the connection lost, a syntax error that keeps the last diagram, a revision that cannot be compared,
+「⏷ 絞り込み」 (what is hidden: the BCs, the kinds, a storming's exceptions…, in a popover; while anything is narrowed
+the button shows how many narrowings are active, e.g. 「絞り込み 2」, and the popover clears them all with すべて解除),
+then 「⤓ 書き出し」 (a menu: 印刷, PDF, PNG, SVG; see [Printing and exporting](#printing-and-exporting)) — the
+catalog has 「印刷」 there instead. The toolbar says what is shown (what an AI is told the view was); the canvas's
+controls, how it is looked at. On a narrow canvas (a toolbar under 40rem) the right end's buttons drop their text
+(icons, named in their tooltips; the count stays) and the subject's names are cut short (the whole name in a
+tooltip); the right end stays, and goes onto a second row only when even that is not enough. Notices — the connection lost, a syntax error that keeps the last diagram, a revision that cannot be compared,
 a storming that stopped parsing — are a strip over the canvas. Anything about one selected item is in the inspector.
 See [ADR 0007](adr/0007-pane-roles.md).
 
 The canvas's controls sit at its bottom-left: `− 85% +` zooms out and in around the middle (the level shows live;
 a click on it goes back to 100%), ⤢ fits everything (`Shift+1`), ◎ fits the selection (`Shift+2`; disabled while
-nothing is selected), the book (凡例, named in its tooltip) opens the legend upward, and « at the right end collapses the
-bar toward the corner, leaving only », which brings it back (the legend's panel is hidden while collapsed and keeps
-its own open or closed state). `U` does the same as « and », and the choice is remembered per browser. Hovering an
+nothing is selected), 詰めて表示 (two inward arrows, named in its tooltip) closes up the gaps between the notes and
+boxes of every diagram, the book (凡例,
+named in its tooltip) opens the legend upward, and « at the right end collapses the bar toward the corner, leaving only
+», which brings it back (the legend's panel is hidden while collapsed and keeps its own open or closed state). `U` does the same as « and », and the choice is remembered per browser. Hovering an
 edge (its line or arrowhead) tells what it means, in the legend's words for that view (「参照（ID で別の集約へ）」…).
-The keys do nothing while typing. The inspector's 状態遷移 diagram has the same controls.
+The keys do nothing while typing. The inspector's 状態遷移 diagram has the same controls, without 詰めて表示, and
+with its own 書き出し (the download arrow: PNG and SVG, opening upward).
+
+詰めて表示 is off by default and remembered per browser. While it is on, every diagram — the Event Storming views (the
+stages' grid included), the Context Map, the Structure View (focused views included) and the inspector's 状態遷移 —
+is laid out again with narrower gaps between notes, boxes, layers and frames (arrowheads, edge labels, the exceptions'
+captions and the frames' titles keep their room). The page asks for a diagram's compact layout the first time it shows
+it and shows the normal one until it comes; both are kept (in `.domaintrail/layout.json`, under their own keys), so
+switching back and forth lays out nothing again. Each spacing keeps its own camera. A compact diagram draws no ghosts
+of removed elements (they are where the baseline's normal layout had them), and the others' cursors are drawn only
+between viewers who see the same spacing.
 
 The canvas is read-only and moves the same way everywhere: a drag pans (on the background or over an item; there is
 no hand tool, so `H` does nothing), the wheel or a trackpad's two fingers pan, and Ctrl / ⌘ + wheel or a pinch zoom
@@ -90,7 +104,7 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   subject is a breadcrumb of two pickers: the storming (表示するストーミング; its name alone when there is only one) ▸ the
   タイムライン — すべて（統合） for the integrated canvas, or one timeline with its one-hop causal paths (a subject, not
   a filter: the two draw different things). The level icons are ビッグピクチャー (the telescope: events, timelines
-  and hotspots only) and デザインレベル (the microscope: also commands, policies, actors, external systems, aggregates
+  and hotspots only, without the events marked `level design`) and デザインレベル (the microscope: also commands, policies, actors, external systems, aggregates
   and read models). The choices are
   remembered per browser and never change the `.dtes` file. The integrated canvas draws each event once (no group
   frames), and a dashed arrow between two events names the timelines it belongs to when not all of them do; one
@@ -99,9 +113,17 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   dotted lines the other relations (without an arrowhead for a hotspot's event). The notes take the convention's
   colours, and the legend shows each kind with its colour and name: event orange, command blue, policy purple,
   aggregate yellow, read model green, hotspot pink, actor pale yellow (rounded), external system lilac (dashed edge),
-  and a group a dashed frame tinted with the event's orange. Every note also names its kind above its label
+  and a group a dashed frame tinted with the event's orange. A resolved hotspot (`status resolved`) is a paler,
+  greyer pink with a green ✓ in its top-right corner and a fainter dotted `on`; hovering it shows its `resolution`, and
+  the legend has it as 解決済みのホットスポット next to ホットスポット (the canvas, the printed sheet and the exported
+  SVG and PNG alike). Every note also names its kind above its label
   («イベント»), so the colour is never the only cue. Light: soft pastel paper, a coloured edge and dark text; dark:
   muted deep paper of the same hue, a coloured edge and pale text. A storming whose file stops parsing stays as it last parsed, with a banner.
+  A storming with stages or exceptions (`stage`, `exception`) is drawn in time order: the stages as labelled frames
+  left to right, the trunk of the main flows one straight row through them, every other timeline on a row below the
+  step it branches off at (the exceptions' dashed arrows a quieter red, a dotted arrow back for `then`). The タイムライン
+  picker then also lists each stage (「…（例外を含む）」), and the 絞り込み has 「例外を表示」 (on by default,
+  remembered per browser; off counts as one narrowing) to draw the integrated canvas and the stages without their exceptions.
 
 The modeling views (Context Map, Structure, Catalog, the inspector, the explorer) use the same hues for the same
 concepts, on smaller areas: the cards are neutral, and the kind is on their edge, their stereotype («集約ルート») and
@@ -118,6 +140,52 @@ indigo ring outside the node; a change from the baseline is a green (added) or y
 badge, and a removed element a faded, dashed ghost with its name struck through and a 削除 badge; a diagnostic is a ✕
 or ! mark on the node's corner, with its text in the inspector and the problems list (a state view's transitions keep
 their command's blue). The others' cursors and names have a light halo, so that they read over any sticky note.
+
+## Printing and exporting
+
+The browser's print (Ctrl+P / ⌘P) prints the current diagram alone — without the panes, the chat, the toolbars, the
+canvas's controls or the legend — fitted whole to one landscape page, in the light colours whatever the theme. The
+paper size is chosen in the browser's print dialog; the diagram is scaled to it. The diagram is printed in its compact
+layout when the page has it (詰めて表示 on, or printed before), else in the layout shown.
+
+The page has no margin of the browser's, so the browser prints no header or footer of its own (the page's title, its
+URL, the date); the sheet keeps its own margin. Above the diagram, one line says what it is and how it is shown, in the
+display mode's names: the workspace, the view and what in it is shown, then its conditions, e.g.
+`ws › イベントストーミング › 住民票などのコンビニ交付 › コンビニでの発行 · デザインレベル · 例外を含む` (an Event Storming
+view: the storming, すべて（統合）, a stage or a timeline, the level, and whether the exceptions are drawn when the storming
+has some; the Structure View: the focused contexts, if any, and the level; the Context Map: すべてのコンテキスト when
+shared and external BCs are shown). Nothing else is printed (no date, no version).
+
+書き出し at the right end of the view's toolbar opens a menu below it. Its **印刷** is the surer way to print: it gets
+the compact layout first (the button spins meanwhile), then opens the print dialog. The catalog has 「印刷」 there
+instead: it prints as a page, its list without the panes around it (it has no export). The menu:
+
+- **PNG**: the current diagram (its stage, level and exceptions, and its spacing: compact while 詰めて表示 is on) on
+  white, at twice its size (less for a diagram too large for a browser's canvas).
+- **SVG**: the same as a portable SVG — plain shapes and text, no embedded HTML, the colours as attributes, the fonts as
+  the page's font stack ending with a generic family — that opens in browsers, Figma and Inkscape. Each note's label is
+  broken into lines, shrunk and cut short with «…» as on the canvas (measured in the page's fonts); a viewer without
+  those fonts draws the same lines in its own, a little wider or narrower.
+- **PDF（印刷画面から保存）**: the 印刷 action; the print dialog saves the PDF.
+- **見出しを含める** (off by default): the heading line above the diagram in a PNG or SVG (a printed sheet always has it).
+- **凡例を含める** (off by default): the view's legend under the diagram, at the left, in a PNG, an SVG and a print.
+
+The two options are remembered per browser. A file is named from IDs, not labels:
+`<workspace>-<view>-<storming or contexts>-<stage or timeline>-<level>.png`, e.g.
+`shop-storming-OrderToCash-all-design-level.svg` or `shop-structure-detail.png`; a state diagram's is
+`shop-states-Billing.Invoice.png`.
+
+## Downloading the sources
+
+ソース一式をダウンロード (en: Download sources (.zip)), in the collab menu (under `dt open`, its ⋯), is for everyone on
+the page: the facilitator and every participant. It saves `<workspace>-sources.zip`, the same archive as
+[`dt export sources`](guide.md#sharing-the-sources): the `.dt` and `.dtes` files `dt check` analyzes and the config
+file, below a folder named after the workspace, made from the files on disk when it is clicked — never the local
+override, `.domaintrail`, `.git`, generated output, symlinks or files git ignores. The server serves it at
+`GET /api/export/sources.zip` behind the page's own sign-in (no identity: 401; a Host or Origin not allowed: 403), as
+an attachment (`Content-Disposition` with the UTF-8 `filename*`), never cached; 404 when the workspace has no
+sources, told in the menu. The read-only Live View (`dt open --host <address>`) serves the same path to whoever it
+serves the view, but has no menu.
 
 ## Inspector (right or below)
 
@@ -143,7 +211,7 @@ explorer.
 
 The 比較対象 menu, at the top of the 差分 list, picks what additions, changes and removals are shown against: 前回の保存 (the last valid
 model shown before, the default) or a git revision of the workspace — a branch, a tag, one of the latest commits, or
-any revision typed in (`main`, `HEAD~3`, a commit). `dt view --base main` starts with one. The model compared is the
+any revision typed in (`main`, `HEAD~3`, a commit). `dt open --base main` starts with one. The model compared is the
 working tree, saved but not necessarily committed, against the `.dt` files of that commit (picked by `sources`). The
 choice is the server's, so every open page follows it; a branch is followed as it moves (a commit, a checkout).
 
@@ -177,15 +245,16 @@ neither baseline: their views are not marked.
   larger text does not wrap everywhere; a width you dragged is kept.
 - Names follow the 名前の表示 setting: ラベル (the default; the string after a declaration's name, falling back to
   the name when there is none or it is blank), 名前 or 両方 (the label and the name; the name alone without a label).
-  Layouts are cached in `<root>/.domaintrail/layout.json`. The canvas is read-only.
+  Layouts are cached in `<root>/.domaintrail/layout.json` (the compact ones of 詰めて表示 beside the normal ones). The
+  canvas is read-only.
 
 See [ADR 0001](adr/0001-mvp-implementation-decisions.md) for the design decisions.
 
 ## In a session
 
-Under `dt session start` (not `dt view`) the session's chat is a pillar at the right end of the page, the whole height,
+Under `dt collab` (and `dt open`, for one person) the session's chat is a pillar at the right end of the page, the whole height,
 the same for everyone and open when the page joins. Its head shows the collab menu (the avatars and the participants online ▾: who is where, the invite link,
-退出, and the facilitator's actions; see [`dt guide session`](guide.md#collaboration-sessions)) and
+ソース一式をダウンロード, 退出, and the facilitator's actions; see [`dt guide session`](guide.md#collaboration-sessions)) and
 the agent's status at a glance (running and for how long, waiting for an answer, or queued; nothing when idle), with ✕ to
 close it. A click on the status (AI の作業を見る) switches to AI の作業 and opens the card it stands for — the running one,
 else the next to run, else the one waiting longest for an answer — scrolled to and marked for a moment, besides those
@@ -213,8 +282,8 @@ The chat has two views:
   `AI の作業へ（実行待ち）`, a click going to the turn). While
   a run runs, a small line under its quoted messages tells what the AI is doing, as it goes: `読んでいます order.dt`,
   `書き換えています`, `確かめています dt check`, `まとめています` (a file by its last segment, its path in the tooltip). The
-  facilitator sends messages to the AI from the stream (AI に送る, … to send with a comment, several
-  with Shift/⌘-click), answers questions and picks alternatives in the cards, stops runs (✕ right after a running or
+  facilitator sends messages to the AI from the stream (AI に送る on a message not addressed or judged to need nothing,
+  several with Shift/⌘-click or … → まとめて送る, each then triaged), answers questions and picks alternatives in the cards, stops runs (✕ right after a running or
   queued turn's state, always shown, after a dialog asks: 実行を中止), and reaches
   the revert and the changes from a card's ⋯ (この作業を打ち消す, 変更を見る; the revisions are
   in the tooltips only: a revert, once confirmed, is the facilitator's message 「〈作業名〉の変更を打ち消す」 and an AI
@@ -229,7 +298,7 @@ The chat has two views:
   the filled mark (◉, ☑) on what was chosen, the rest muted, the votes frozen and `回答 name · time` under it; a picked
   alternative has ◉ and `選択 name · time`, the time a link to the run the pick queued. Anyone reacts to a message or an AI turn with any one emoji
   (☺+ on hover: a row's actions — the facilitator's tools, ↩ and ☺+ — float in a small bar over its top right while
-  it is hovered or focused, always on touch; the quick row of `session.quickReactions` and ＋ to type or paste another; the app gives none a
+  it is hovered or focused, always on touch; the quick row of `collab.quickReactions` and ＋ to type or paste another; the app gives none a
   meaning). Reactions show as colored emoji with small counts, mine with a violet count and a faint violet outline;
   who marked is in the tooltip and, for a vote, in a list on a click.
   ↩ on an ended AI turn (on hover) replies to it: a chip above the composer (`↩ 「請求書の税区分」への返信 ✕`), the targets of its
@@ -241,6 +310,36 @@ The chat has two views:
   The composer's text is 6 rows high to start. The handle on its top edge makes it taller (drag up) or shorter, from 2
   rows up to 60% of the chat's height — focused, ↑↓ change it by a row and Home/End go to the ends; a double click
   brings the default back. The height is in rows, so it follows the text size, and is remembered per browser.
+- **The AI as a participant** (ADR 0030): `@` offers `AI` first; a message mentioning it, replying to the AI or to an
+  AI turn, and every message under `dt open`, reaches the AI (the composer shows the AI's mark beside 送る in collab).
+  Such a message shows the AI's mark and a quiet `…` in its status slot while it is triaged and answered, then a link
+  (the AI's mark and ↓) to what came of it: the AI's answer (a message of the AI under it, its element names as links;
+  replying to it reaches the AI again), a change proposal (変更案, a participant's 依頼: 何を / どこを / どう, 承認待ち until
+  the facilitator approves it — as is, after 編集, or several chosen together, one run — or rejects it with an optional
+  note; its requester can 取り下げ it meanwhile), or its run's card; nothing when it needed nothing from the AI (the
+  facilitator can still AI に送る it). An answer the server gave up after its retries reads AI が答えられませんでした, with
+  もう一度 for the facilitator. The facilitator opens a message's 仕分けの記録 from its … (how it was addressed, each stage's
+  answer, confidence, model, time and reason). A run that answered a question instead of editing shows its answer,
+  flagged when it changed files all the same. The head says AI 接続なし (with n 件待ち) while no agent is connected, and
+  nothing once it is. Under `dt open` the collab menu is a ⋯ with the workspace's record, restore and download only, and
+  reactions, votes, `@` and AI に送る are gone: every message goes to the AI as it is sent. How long a run takes is
+  mostly the model and effort it runs with: `agent.run.model` / `agent.run.effort` (and `agent.answer.*` for answers)
+  are the biggest lever.
+- **`/` in the composer** (the plan's rounds 4 and 5): `/` alone opens a list like `@`'s (↑↓, Enter or Tab, Esc; the
+  text after `/` filters by an item's English ID or its name in the page's language). First the **commands**, for the
+  facilitator (under `dt open`, the person) while none runs: `/es` (ES を始める) and `/model` (モデリングを始める). A
+  command starts an **interview**: the AI asks one question at a time (digging into a vague answer, skipping what the
+  stormings and the model already say) and every message of the person who started it answers it — no triage —
+  while the others' messages go to the AI as usual. A bar above the composer says it runs (AI が考えています while the
+  AI writes) with 中止. It ends with a **brief** in that bar: where it goes (a new storming or context, or that it
+  replaces the current description), four or five lines with heads (目的 / 範囲 / 使い道 / レベル for `/es`), and 確定 /
+  編集して確定 / 中止. A message instead of confirming takes it back to the questions. Confirmed, a run writes the brief as
+  the `///` description right above the `storming` (or the `context`), creating it when new; the inspector shows it
+  when the storming is selected. The interview survives a reload. Then the **templates**: the beginnings of a message
+  for what is open and selected (このあとを足す at Big Picture, 前後を詰める for a selected event, 不変条件を挙げる for an
+  aggregate …), then the team's from `templates` in `domaintrail.jsonc`; picking one only puts its text in the composer
+  (the selected element as its `#` target), to edit and send. An empty view says 「まだありません。チャットで /es から
+  始められます」 while an AI is connected.
 - **AI の作業**: everything sent to the AI, from start to end; the tab's badge counts what is not finished (running and
   queued; not what awaits an answer). Each row is one card — a run with the runs that continue it — in groups:
   答え待ち (the AI asked a question), 実行中 (a pulsing dot, how long it has run, and the line of what the AI is doing), 待ち n (numbered in the order they
@@ -262,4 +361,4 @@ The chat has two views:
   that changed files; すべて also lists the runs that changed nothing, and those declined, failed or cancelled. The
   other groups always show.
 
-The others' cursors are drawn on the same view. `dt view` serves the same page without any of it. See [`dt guide session`](guide.md#collaboration-sessions).
+The others' cursors are drawn on the same view. `dt open --host <non-loopback>` serves the same page read-only, without any of it. See [`dt guide session`](guide.md#collaboration-sessions).

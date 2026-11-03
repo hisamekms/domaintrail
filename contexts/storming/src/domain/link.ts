@@ -11,7 +11,7 @@ import type { Diagnostic } from '@domaintrail/kernel';
 import { didYouMean, type Candidate } from '@domaintrail/kernel';
 import { commandId } from '@domaintrail/modeling';
 import { commandsOf, elementOf, emittedEvents, type CommandModel, type DomainModel, type ElementModel } from '@domaintrail/modeling';
-import { esDiagnostic, esElementId, REF_KINDS, type Clause, type NodeElement, type Storming } from './ir.js';
+import { esDiagnostic, esElementId, nodeElements, REF_KINDS, type Clause, type NodeElement, type Storming } from './ir.js';
 
 export type DtRefKind = 'event' | 'aggregate' | 'command';
 
@@ -116,7 +116,7 @@ export function linkStormings(stormings: readonly Storming[], model: DomainModel
     if (!model) return [];
     const diagnostics: Diagnostic[] = [];
     for (const storming of stormings) {
-        const nodes = storming.elements.filter((el): el is NodeElement => el.kind !== 'timeline');
+        const nodes = nodeElements(storming);
         const byId = new Map(nodes.map((el) => [el.id, el]));
         // The `.dt` ID of each element with exactly one `ref` that resolves; a second `ref` is the validator's S004.
         const resolved = new Map<string, string>();

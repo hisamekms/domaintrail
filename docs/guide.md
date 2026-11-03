@@ -97,7 +97,8 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 - `dt generate ts` — check, then write the TypeScript (and the contract tests, if configured).
 - `dt show <name>` — one element, command or state resolved, with who uses it; read it instead of the `.dt` files.
 - `dt lsp` — language server over stdio: the diagnostics of `dt check`, definitions, references, hover, rename.
-- `dt view` — the Live View in the browser; it runs until Ctrl+C, so run it in the background.
+- `dt open` — the Live View in the browser, with a chat to the AI; it runs until Ctrl+C, so run it in the background.
+- `dt export sources` — the `.dt`, `.dtes` and config files as one ZIP, to hand to someone without the repository.
 
 **When the contract and the implementation disagree**, follow `@see` on the generated type to the declaration and
 change the DSL, not the implementation: never emit an event or set a field only to satisfy the types.
@@ -119,12 +120,17 @@ change the DSL, not the implementation: never emit an event or set a field only 
 6. With `generate.ts.tests` configured, run the generated contract tests against your implementation with your test
    runner (see [Generated tests](#generated-tests)).
 
-`dt view` starts the Live View, a browser page where people watch the model update as files are saved. It is a server
-that keeps running and never exits by itself (stop it with Ctrl+C), so do not wait for it to finish: run it in the
+`dt open` starts the Live View, a browser page where people watch the model update as files are saved (with a chat to
+the AI for the person who started it; see [Collaboration sessions](#collaboration-sessions)). It is a server that keeps
+running and never exits by itself (stop it with Ctrl+C), so do not wait for it to finish: run it in the
 background, or use `dt check` for a result.
 
 Event Storming files (`.dtes`) go through the same loop: `dt fmt`, then `dt check` until it exits 0 (see [Event
 Storming](#event-storming-dtes)). They are not generated: `dt generate ts` writes the `.dt` model only.
+
+How to work, beyond the rules of the languages: `dt guide storming-practice` for running a storming (Big Picture, then
+Design Level) and `dt guide modeling-practice` for growing the `.dt` model (terms, aggregates by their invariants,
+commands as contracts, small steps).
 
 `dt --help` and `dt <command> --help` list the options with examples.
 
@@ -134,7 +140,7 @@ dt check                        # every *.dt and *.dtes file below the current d
 dt -r domain check              # below domain/ (or as configured by a domaintrail.jsonc found there or above)
 dt generate ts                  # into <root>/generated/domain
 dt generate ts --out src/domain/generated
-dt view --port 8080             # http://127.0.0.1:8080, until Ctrl+C
+dt open --port 8080             # http://127.0.0.1:8080, until Ctrl+C
 ```
 
 <!-- topic: layout -->
@@ -1149,6 +1155,43 @@ export function billingPolicies({ loadOrder, newInvoiceId }: PolicyDeps): Billin
 }
 ```
 
+<!-- topic: modeling-practice -->
+### Modeling with DomainTrail
+
+How to grow the `.dt` model, for people and AI agents. The rules of the language are in [DSL](#dsl); this is the way
+of working.
+
+**Start from the brief.** The `///` description above a `context` says its purpose, scope, what the generated code is
+for and how far to go (`/model` in the chat writes it). Keep to that context; ask before changing another one.
+
+**One context at a time, terms first.**
+- Agree on the words before the structure: the context's `terms` with their labels, and a `///` for any term people
+  could read two ways.
+- Name things in the business's words. A label is what people say; the ID is its stable English name.
+
+**Aggregates by their invariants.**
+- An aggregate is what must stay consistent in one decision. Draw its boundary around an invariant you can state,
+  not around a screen, a table or a noun.
+- Write the invariants as expressions where the DSL can (see [Invariant expressions](#invariant-expressions)), and as
+  a label or `///` where it cannot. Keep aggregates small; refer to another aggregate by its ID.
+- States (a union of states) when the allowed commands depend on where the thing is in its life.
+
+**Commands as contracts.**
+- A command says what it needs (`requires`), what it changes, and exactly which events it emits (`emits` is exhaustive:
+  see [Command events](#command-events)). A failure is a named error, and it emits nothing.
+- Reactions between aggregates or contexts are `policy`s on events, not commands calling commands.
+- The DSL holds structure and contracts only. Business logic is written by hand in `decide` against the generated
+  types; do not try to encode it in the model.
+
+**From a storming.** When a storming feeds the context (its brief says so), take the Design Level's commands,
+aggregates and events as the starting point, not as the answer: the model has to state invariants the storming did
+not. Then add `ref`s in the `.dtes` to the new `.dt` symbols that resolve. Open hotspots are questions to ask, not
+gaps to fill by guessing.
+
+**Small steps.** Change a little, run `dt fmt` and `dt check` until it exits 0, and keep the model valid between
+steps. Do not rename or remove what the people did not ask to change: other files, generated code and the chat refer
+to the IDs.
+
 <!-- topic: generated -->
 ## Generated TypeScript
 
@@ -1825,7 +1868,7 @@ it, and no tool changes a `.dt` file because of it, or a `.dtes` file because of
   what is unclear as hotspots. Report the diagnostics (mechanical inconsistencies between the two files) apart from the
   business findings (improvements of the model, made only when people decide them).
 
-`dt check`, `dt fmt`, `dt view` and `dt lsp` take the `.dtes` files with the `.dt` files: the default `sources` find
+`dt check`, `dt fmt`, `dt open`, `dt collab` and `dt lsp` take the `.dtes` files with the `.dt` files: the default `sources` find
 both, and a config that sets `sources` lists a `.dtes` glob itself (see [Configuration](#configuration)). `dt check`
 fails on a `.dtes` error as on a `.dt` one. `dt generate ts` reads the `.dt` files only, and `.dtes` errors do not block
 it. `dt show` shows the `.dt` model only. Keep the stormings in a directory of their own, `stormings/<name>.dtes`.
@@ -1851,6 +1894,9 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
     ref Billing.InvoicePaid
   }
   event PaymentFailed "支払に失敗した"
+  event PaymentAuthorized "与信が通った" {
+    level design // a detail of the mechanism: shown at Design Level only
+  }
 
   actor Customer "顧客"
   external PaymentService "決済サービス" // an external system that issues a command, not one that is called
@@ -1892,6 +1938,7 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
     OrderPlaced
     OrderConfirmed
     InvoiceIssued
+    PaymentAuthorized // hidden at Big Picture: InvoiceIssued is then followed by InvoicePaid
     InvoicePaid
   }
   timeline PaymentRetry "支払の再試行" {
@@ -1905,7 +1952,7 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
   timeline CancelAfterConfirm "確定後の取消" {
     OrderPlaced
     OrderConfirmed
-    group Cancelled "取消の結果" { // one stage, no order inside
+    group Cancelled "取消の結果" { // one step, no order inside
       OrderCancelled
       RefundRequested
     }
@@ -1924,7 +1971,7 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
 
 | Element | What it is | Its clauses |
 |---|---|---|
-| `event` | something that happened in the business, a fact in the past tense | `ref Context.Event` |
+| `event` | something that happened in the business, a fact in the past tense | `ref Context.Event`, `level design` |
 | `actor` | a person or role that may issue commands | none |
 | `external` | an external system that may issue commands | none |
 | `command` | an operation someone attempts | `ref Context.Aggregate.command`, `actor`, `reads`, `target` (at most one), `emits` |
@@ -1933,7 +1980,9 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
 | `readmodel` | information that a command is decided on | none |
 | `hotspot` | a question or an important point, open or resolved | `on` (one event at most), `status`, `resolution` |
 | `timeline` | a partial time order of events | event IDs and groups |
-| `group` | events of one stage of a timeline, without an order among them | event IDs, each once |
+| `group` | events of one step of a timeline, without an order among them | event IDs, each once |
+| `exception` | an exception from the main flows: a timeline that branches off one | event IDs and groups, then `then <Event>` (optional) |
+| `stage` | a time section of the flow: its main flows and exceptions | `after <Stage>` (at most one), then `timeline`s and `exception`s |
 
 - `kind ID "label"`, with a `{ … }` body for clauses, one per line. `///` lines above a declaration are its
   description. The IDs of a storming are one namespace across kinds, timelines and groups included; a clause or a
@@ -1947,14 +1996,84 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
 - **Timelines** hold event IDs and groups only. A timeline is partial and proves no causality; an event may appear in
   several timelines and several times in one, each an occurrence of its own; timelines are never merged into one global
   order. A group is a set: its order and ID carry no meaning. An event in no timeline is fine.
+- **Stages, main flows and exceptions.** A flow in several phases is a `stage` per phase, in time order, each
+  `after` the one before it. In a stage, a `timeline` is a main flow and an `exception` an exception: written so,
+  never guessed from the order. The first `timeline` is the *trunk*, drawn as one straight row through every stage.
+  Every other timeline starts with the step it branches off at, written again: a step of the trunk (its first, to share
+  the start), or of another timeline that branches off itself. An exception may end with `then <Event>`: it returns to
+  that step of a main flow, of its own stage first, or of a later or earlier one. Another normal path is another
+  `timeline` from its branch event. Events stay declared in the storming, and may appear in several stages. Once a
+  storming has stages, every timeline is in one (S020); without stages, `exception`s and `then` work the same at the
+  top level, and a storming with neither keeps its timelines as before.
+- **Design Level only.** An event with `level design` is a detail of the mechanism (a reservation, an authorisation,
+  an internal failure or retry) rather than a business fact: Big Picture leaves it out, and Design Level shows it.
+  Without the clause, an event is shown at both levels; `level design` is the only level (S016), on events only, and
+  its place is the last clause, after the `ref`. To show such an event at Big Picture too, remove the clause.
 - **Hotspots** are `open` unless `status resolved`, which needs a `resolution "…"`. Resolved means the business agreed,
   not that the `.dt` model has it. Keep the resolved hotspots that matter (an exception, a boundary, an invariant) and
   delete the trivial ones: git keeps the history.
 - Not in the DSL: positions and layout, conditions, guards, compensation, ordering or transactions. Not diagnosed:
   completeness (events in no timeline or not referenced, commands without `emits`, elements without `ref`), timeline
   order against the causal relations, and policies across contexts.
-- `dt fmt` formats a storming: 2 spaces per level, each element, clause, timeline step and group event on its own line,
-  an element without clauses on one line, comments kept.
+- `dt fmt` formats a storming: 2 spaces per level, each element, clause, timeline step (`then` included), group event
+  and timeline of a stage on its own line, an element without clauses on one line, comments kept. It never reorders
+  clauses.
+
+A storming in stages:
+
+```dtes
+// stormings/certificate.dtes
+/// A resident certificate from a convenience store: what is prepared, then issued, then handed in.
+storming CertificateIssuance "住民票のコンビニ交付" {
+  event CertificateAsked "住民票を頼まれた"
+  event MethodResearched "取り方を調べた"
+  event LeftWithCard "カードを持って出た"
+  event StoreVisited "コンビニに行った"
+  event CardRead "カードを読み取った"
+  event PinEntered "暗証番号を入力した"
+  event PinLocked "暗証番号がロックされた"
+  event PinReset "暗証番号を再設定した"
+  event FeePaid "手数料を払った"
+  event CertificateIssued "証明書が発行された"
+  event CertificateHandedIn "証明書を提出した"
+
+  hotspot ResetWhere "再設定は市役所だけ？" {
+    on PinReset
+  }
+
+  stage Preparation "準備" {
+    timeline PrepareFlow "通常" { // the first timeline: the trunk
+      CertificateAsked
+      LeftWithCard
+    }
+    timeline ResearchFirst "調べてから" { // another normal path, from the step it shares
+      CertificateAsked
+      MethodResearched
+      LeftWithCard
+    }
+  }
+  stage Issuance "コンビニでの発行" after Preparation {
+    timeline IssueFlow "通常" {
+      StoreVisited
+      CardRead
+      PinEntered
+      FeePaid
+      CertificateIssued
+    }
+    exception Locked "暗証番号のロック" { // branches off at CardRead, written again
+      CardRead
+      PinLocked
+      PinReset
+      then PinEntered // back to the main flow
+    }
+  }
+  stage Submission "提出" after Issuance {
+    timeline SubmitFlow "通常" {
+      CertificateHandedIn
+    }
+  }
+}
+```
 
 <!-- topic: storming-refs -->
 ### References to the model (`ref`)
@@ -1994,9 +2113,13 @@ hotspot is a decision to model (an error, a requirement, an invariant). Then add
 A storming is viewed along two independent axes, neither of which changes the `.dtes`:
 
 - **Level.** *Big Picture* shows the events, the timelines' order, groups and hotspots. *Design Level* adds actors,
-  external systems, commands, policies, aggregates, read models and the relations. Big Picture hides the details of
-  the same file; it is not an earlier version, and the events are all there.
-- **Scope.** The *integrated canvas* shows every timeline, the events in no timeline and every element. *One timeline*
+  external systems, commands, policies, aggregates, read models and the relations, and the events marked
+  `level design`. Big Picture hides the details of the same file; it is not an earlier version, and every event
+  without `level design` is there. A timeline's order there skips the hidden events (their neighbours are joined),
+  a group of hidden events only is not drawn, timelines that differ only in hidden events share their start, and a
+  hotspot on a hidden event is shown without its line.
+- **Scope.** The *integrated canvas* shows every timeline, the events in no timeline and every element. A storming
+  with stages also has a view of each *stage* (its main flows and exceptions, drawn as on the integrated canvas). *One timeline*
   shows its events, plus each one-hop path event → policy → command → event whose two events are both in that timeline
   (with the command's actors, read models and target), and the hotspots on its events. Longer chains are not followed,
   and a hotspot without `on` is shown on the integrated canvas only.
@@ -2007,14 +2130,35 @@ to its note. One timeline draws each occurrence of an event, and a group as a fr
 make two occurrences the same happening, so read a path along one timeline's name. Solid arrows are type-level causal
 relations (`on`, `issues`, `emits`: possible, not "happened"), dotted lines the other relations (`actor`, `reads`,
 `target`; a hotspot's `on` without an arrowhead), dashed arrows the order of a timeline.
-The layout is automatic, left to right; positions are kept in `.domaintrail/layout.json`, never in the `.dtes`. In
-`dt view`, the イベントストーミング tab shows one storming at a time, with the storming and the timeline picked as
-its toolbar's subject (a breadcrumb at the left) and the level next to them; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in.
+A hotspot with `status resolved` is drawn paler, with a green check in its corner and a fainter `on` (hovering it shows
+its `resolution`), so the open ones stand out; to settle one, ask the AI in the chat.
+At Design Level an actor or external system, a read model and an aggregate are drawn next to each command that uses
+them, one note per command, so their lines stay short (one that no command uses is drawn once); selecting any of these
+notes selects the element and marks its other notes with a fainter dashed ring.
+Every note is a square of the same size: a long label is drawn smaller, and one too long even then is cut short with
+«…» (hovering it shows the whole label; S015 warns about it), so keep labels short (about 12 Japanese characters).
+The layout is automatic, left to right; positions are kept in `.domaintrail/layout.json`, never in the `.dtes`.
+詰めて表示 in the canvas's controls closes up the gaps between the notes (every diagram, remembered per browser), and
+印刷 in the toolbar's 書き出し menu prints the diagram alone, fitted to one landscape page (Ctrl+P too). In
+`dt open`, the イベントストーミング tab shows one storming at a time, with the storming and the timeline picked as
+its toolbar's subject (a breadcrumb at the left) and the level next to them; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in (and
+デザインレベルのみ for an event marked `level design`).
+
+A storming with stages or exceptions is drawn in time order instead: the stages left to right, each a labelled frame,
+one column per step, the trunks as one straight row through every frame (the `after` arrow joins one trunk's end to
+the next one's start). Every other timeline hangs below the step it branches off at, on a row of its own flowing right
+and named by its label: the other main flows first, then the exceptions, whose dashed arrows are a quieter red. The
+step an exception branches off at is one note for both; a dotted arrow goes from an exception's last step back to the
+step of its `then`. Elements of Design Level stand above the event they belong to. The timeline picker lists the
+stages (「コンビニでの発行（例外を含む）」) between すべて（統合） and the timelines; clicking a stage's frame selects
+it (its main flows, its exceptions and 「この段階を表示」). 「例外を表示」 in the toolbar's 絞り込み (a storming with
+exceptions only) hides the exceptions of the integrated canvas and of a stage: their steps, the events only they have, the
+hotspots on those events and their `then` arrows; an exception's own view is unchanged.
 
 <!-- topic: storming-rules -->
 ### Diagnostics of a storming
 
-S001–S009 and S014 need only the storming, S010–S013 check its `ref`s against the model. Each example below is a whole
+S001–S009 and S014–S022 need only the storming, S010–S013 check its `ref`s against the model. Each example below is a whole
 file with that one problem. Syntax errors are `SYNTAX`: an unknown keyword or clause, a `ref` or clause in a timeline or
 group, a declaration outside a storming or inside a body, a nested group, an empty group, a keyword used as an ID.
 
@@ -2060,7 +2204,7 @@ storming Checkout {
 }
 ```
 
-**S004**: more than one `target`, `ref`, hotspot `on`, `status` or `resolution`. Keep one; a command with two main
+**S004**: more than one `target`, `ref`, hotspot `on`, `status`, `resolution` or `level`. Keep one; a command with two main
 aggregates is two commands, or a hotspot.
 
 ```dtes
@@ -2092,7 +2236,7 @@ storming Checkout {
 ```
 
 **S006**: a clause the element does not take: relations belong to commands (`actor`, `reads`, `target`, `emits`),
-policies (`on`, `issues`) and hotspots (`on`), `status` and `resolution` to hotspots. Move it to the element it
+policies (`on`, `issues`) and hotspots (`on`), `status` and `resolution` to hotspots, `level` to events. Move it to the element it
 belongs to (an event's outcome is the command's `emits`).
 
 ```dtes
@@ -2218,6 +2362,177 @@ storming Checkout {
 }
 ```
 
+**S015** (warning): a label too long for its sticky note. Every note is the same size; its label is drawn smaller to
+fit, down to a floor, and one that does not fit even then is cut short with «…» (the whole label shows on hover and in
+the inspector). Shorten it, to about 12 Japanese characters (an event in the past tense), and put the details in a
+`///` comment. An element without a label shows its ID, which is checked the same way.
+
+```dtes
+// S015
+storming Errands {
+  event CertificateReissued "マイナンバーカードの暗証番号を三回間違えてロックされたので市役所の窓口で再設定の手続きをしてから改めてコンビニのマルチコピー機で住民票の写しを発行し直した"
+}
+```
+
+**S016**: a `level` other than `design`. `level big-picture` is not written: an event without `level` is already shown
+at both levels. Remove it, or write `level design` for an event to show at Design Level only.
+
+```dtes
+// S016
+storming Checkout {
+  event PaymentAuthorized {
+    level big-picture
+  }
+}
+```
+
+**S017**: a stage `after` itself, or stages whose `after`s go round in a circle. Stages are in time order: remove the
+`after` of the stage that comes first. (An `after` naming nothing is S002, naming something else than a stage S003, a
+second `after` S004.)
+
+```dtes
+// S017
+storming Errands {
+  event Requested
+  stage First after First {
+    timeline Main {
+      Requested
+    }
+  }
+}
+```
+
+**S018**: a `then` on a main flow (a `timeline`), or naming an event of no main flow. Only an `exception` returns,
+and to a step of a `timeline`: write the timeline as an `exception`, name an event of a main flow, or remove `then`.
+
+```dtes
+// S018
+storming Errands {
+  event Visited
+  event Read
+  stage Issuance {
+    timeline Main {
+      Visited
+      Read
+      then Visited
+    }
+  }
+}
+```
+
+**S019** (warning): a timeline of a stage (or, with exceptions, of a storming without stages) whose first step is in
+neither the trunk nor another timeline that branches off: it is drawn apart. Start it with the step it branches off
+at, written again.
+
+```dtes
+// S019
+storming Errands {
+  event Visited
+  event Read
+  event Closed
+  stage Issuance {
+    timeline Main {
+      Visited
+      Read
+    }
+    exception OutOfHours {
+      Closed
+    }
+  }
+}
+```
+
+**S020**: a timeline or exception outside the stages of a storming that has stages. Move it into the stage it happens
+in.
+
+```dtes
+// S020
+storming Errands {
+  event Visited
+  timeline Outside {
+    Visited
+  }
+  stage Issuance {
+    timeline Main {
+      Visited
+    }
+  }
+}
+```
+
+**S021** (warning): a second stage without `after`. It is drawn as a separate start after the stages written before
+it, with no arrow from them: add `after` with the stage it follows.
+
+```dtes
+// S021
+storming Errands {
+  event Requested
+  event Visited
+  stage Preparation {
+    timeline Prepare {
+      Requested
+    }
+  }
+  stage Issuance {
+    timeline Issue {
+      Visited
+    }
+  }
+}
+```
+
+**S022** (warning): a stage without a main flow (a `timeline`; an `exception` is not one). Add its main flow, or
+remove the stage.
+
+```dtes
+// S022
+storming Errands {
+  stage Issuance {}
+}
+```
+
+<!-- topic: storming-practice -->
+### Event Storming with DomainTrail
+
+How to run a storming in `.dtes` files, for people and AI agents. The rules of the language are in [Event
+Storming](#event-storming-dtes); this is the way of working.
+
+**Start from the brief.** The `///` description above a `storming` says its purpose, scope, what the result is for
+and how far to go (`/es` in the chat writes it). Keep to that scope; ask before going beyond it. With no brief, ask
+for the purpose and the first and last events before writing much.
+
+**Big Picture first.**
+- Events first, and mostly events: what happened in the business, in the past tense, in the words the business uses
+  (「注文を受け付けた」, not 「注文受付処理」 or 「OrderService が保存した」). One fact per event.
+- Short labels: about 12 Japanese characters or 4–5 English words. A long label is usually two events or a
+  description; put the detail in `///`.
+- Order them in `timeline`s, the usual flow first; events that happen together go in a `group`. A flow in phases
+  (preparation, the main act, follow-up) gets a `stage` per phase, each `after` the one before.
+- Each failure or detour is an `exception` that starts with the event where it branches off, written again, and ends
+  with `then <Event>` when it returns to the flow (in this stage or another); without `then`, the flow ends there. A
+  second normal path is another `timeline` from where it splits off. The usual flow should read as one straight row.
+- Anything unclear, disputed or risky becomes a `hotspot` on the events it concerns, worded as a question. Do not
+  settle it by guessing; an open hotspot is a good result.
+- No commands, policies, aggregates or read models yet, and no `ref`s.
+
+**Design Level next**, once the flow is agreed (the brief says how far to go):
+- For each event, what caused it: a `command` (and the `actor` or `external` system that issues it), or a `policy`
+  reacting to an earlier event (「〜したら〜する」).
+- What a command needs to decide: the `readmodel` it `reads`, and the `aggregate` it `target`s, which decides and
+  emits the events.
+- Fine-grained events found here (reservations, authorisations, internal failures, retries) get `level design`, so
+  that Big Picture keeps the flow people agreed on. An event the people want to see at Big Picture loses it.
+- Keep hotspots for what is still open; set `status resolved` with its `resolution "…"` only when the people settle
+  one.
+
+**Model references.** Add `ref` only to an element that has a counterpart in the `.dt` model and resolves; never
+invent a `.dt` symbol to make a `ref` work. A storming does not change the `.dt` files: moving from a storming to the
+model is modeling (see [Modeling with DomainTrail](#modeling-with-domaintrail)).
+
+**Keep it a storming.** It records what people found, including the doubts: do not tidy it into a design document,
+do not delete hotspots or events because they look redundant, and keep the IDs stable (people and the chat refer to
+them).
+
 <!-- topic: rules -->
 ## Rules
 
@@ -2258,9 +2573,9 @@ storming](#diagnostics-of-a-storming).
 | S001 | `.dtes`: the IDs of a storming's declarations are unique across kinds (groups and timelines included), and storming IDs are unique in the workspace |
 | S002 | `.dtes`: a relation target or timeline step names a declaration of its storming |
 | S003 | `.dtes`: a reference names a declaration of the right kind (`target` an aggregate, `reads` a read model, `actor` an actor or external, `emits` / `on` and timeline steps an event, `issues` a command) |
-| S004 | `.dtes`: at most one `target`, `ref`, hotspot `on`, `status` and `resolution` per element |
+| S004 | `.dtes`: at most one `target`, `ref`, hotspot `on`, `status`, `resolution` and `level` per element |
 | S005 | `.dtes`: only events, aggregates and commands have a `ref` |
-| S006 | `.dtes`: an element has only the clauses of its kind: relations in commands, policies and hotspots, `status` / `resolution` in hotspots |
+| S006 | `.dtes`: an element has only the clauses of its kind: relations in commands, policies and hotspots, `status` / `resolution` in hotspots, `level` in events |
 | S007 | `.dtes`: an event appears at most once in a group |
 | S008 | `.dtes`: a policy has at least one `on` and one `issues` |
 | S009 | `.dtes`: a hotspot's `status` is `open` or `resolved`; `resolved` needs a `resolution`, `open` has none |
@@ -2269,6 +2584,14 @@ storming](#diagnostics-of-a-storming).
 | S012 | (warning) `.dtes`: a command's `ref` is a command of the aggregate that its `target`'s `ref` names |
 | S013 | (warning) `.dtes`: a command `emits` no event whose `ref` its `.dt` command never emits (`.dt` `emits` is exhaustive) |
 | S014 | (warning) `.dtes`: a type-level cycle policy → command → event → policy (possible, not an infinite loop) |
+| S015 | (warning) `.dtes`: a label fits its sticky note (one too long even at the smallest font is cut short with «…») |
+| S016 | `.dtes`: an event's `level` is `design` (Design Level only); without `level`, it is shown at both levels |
+| S017 | `.dtes`: a stage comes `after` another stage, never itself or round a circle |
+| S018 | `.dtes`: only an `exception` has `then`, naming an event of a main flow (a `timeline`) |
+| S019 | (warning) `.dtes`: a timeline other than the trunk starts at a step it branches off from (of the trunk or of another timeline branching off) |
+| S020 | `.dtes`: in a storming with stages, every timeline and exception is in a stage |
+| S021 | (warning) `.dtes`: only the first stage comes after no stage |
+| S022 | (warning) `.dtes`: a stage has a main flow (a `timeline`) |
 
 <!-- topic: show -->
 ## Looking up one element
@@ -2353,6 +2676,22 @@ A `.dtes` file has its own layout, in the same spirit: 2 spaces per level; every
 event on its own line; an element without clauses on one line (an empty `{}` is dropped unless it holds a comment); one
 blank line kept where the author wrote some, one between stormings; no spaces around the dots of a `ref`.
 
+<!-- topic: export -->
+## Sharing the sources
+
+`dt export sources` writes the model's sources as one ZIP archive, `<workspace>-sources.zip` in the current directory
+(`-o <file>` for another name, `-o -` for stdout), so that someone without git or the repository can open them and run
+`dt` on them: unzip it anywhere and run `dt check` in the folder it holds. The Live View offers the same archive in its
+menu (「ソース一式をダウンロード」).
+
+- It holds the files `dt check` analyzes (the config's `sources`; only `.dt` and `.dtes` files) and the config file
+  (`domaintrail.jsonc` / `.json`), below one folder named after the workspace (the root's directory), their folders
+  kept: `shop/domaintrail.jsonc`, `shop/sales/order.dt`.
+- Never in it: the local override (`domaintrail.local.jsonc`), `.domaintrail`, `.git`, `node_modules`, generated output,
+  symlinks (neither followed nor stored), and, in a git repository, any file git ignores (even with
+  `"respectGitignore": false`).
+- Exits 1 when the workspace has no `.dt` or `.dtes` file.
+
 <!-- topic: output -->
 ## Output and exit codes
 
@@ -2405,6 +2744,31 @@ default `.`) and its parents, like `tsconfig.json`; `--config <file>` (`-c`) pic
 relative to the config file, and its directory becomes the root. Without a config file, the defaults apply with
 `--root` as the root. Every key is optional.
 
+**Your own settings: `domaintrail.local.jsonc`.** A local override beside the config file — `domaintrail.local.jsonc`
+(or `domaintrail.local.json`), and `<name>.local.<ext>` beside a `-c <name>.<ext>` — holds the settings that are yours
+only (a port, a model, the paths the AI reads outside the workspace) and is never committed. It is read after the
+config file and merged into it: objects key by key, arrays and scalars replaced (`"sources": [...]` in it replaces the
+whole list); any setting may be overridden. It is checked against the same schema: the project's file on its own
+first (its errors name it), then the merge (its errors name the local file). Its relative paths are relative to its
+own directory, the config file's. Without a project config file, a local file alone is the configuration. Every
+command loads both (`check`, `generate`, `fmt`, `show`, `lsp`, `open`, `collab`, `agent`); `dt open`, `dt collab` and
+`dt agent` print them (`Config: domaintrail.jsonc + domaintrail.local.jsonc`) and warn when git tracks the local file or
+does not ignore it, with the line to add to `.gitignore` (the file is never edited for you). A file is taken only under
+its exact name (`DomainTrail.Local.JSONC` is not it, even where the file system ignores case). The paths the AI reads
+outside the workspace (`agent.read.paths`, see `dt guide session-agent`) are honoured **only from a local file git
+ignores** (or outside any repository): in the project's file, or in a local file git tracks or does not ignore, they
+are a config error.
+
+**Approving the security-relevant settings.** `dt open`, `dt collab` and `dt agent` start only with security-relevant
+settings you approved for the workspace: what the AI reads outside the workspace (`agent.read.paths` and the roles'),
+`agent.run.allowedTools`, `agent.run.dt`, `collab.identity`, `collab.host`, `collab.access`, `open.host` and
+`classifier` (but its `threshold`), as they are after the local file is merged. When they differ from the defaults and
+from what you approved last for this workspace (by its real path), they are printed and asked about (`Start with
+these settings? [y/N]`); without a terminal, `--yes` approves them, else the command refuses to start. Approvals are
+kept outside the workspace, in `$XDG_CONFIG_HOME/domaintrail/trust.json` (by default `~/.config/domaintrail/trust.json`,
+on macOS too; private to you). So a commit, or anything that writes in the workspace, cannot widen what the AI may do
+without your seeing it.
+
 ```jsonc
 {
   "$schema": "./node_modules/domaintrail/schema/domaintrail.schema.json",
@@ -2432,11 +2796,18 @@ relative to the config file, and its directory becomes the root. Without a confi
       }
     }
   },
-  "view": { "port": 4321, "host": "127.0.0.1" }             // defaults shown
+  "open": { "port": 4321, "host": "127.0.0.1" },            // dt open; defaults shown
+  // the chat's message templates, listed after / with the built-in ones (dt open and dt collab); text and name: one
+  // string, or { "ja", "en" }; {target} is where the selected element goes; "when" (optional): big-picture,
+  // design-level, storming, model, element, aggregate, event, state, none
+  "templates": [
+    { "id": "glossary", "name": { "ja": "用語を確かめる", "en": "Check the terms" }, "text": "用語集と食い違うところを挙げて", "when": ["model"] }
+  ]
+  // collab, agent and classifier: see dt guide session-config
 }
 ```
 
-CLI options win over the file: `generate ts --out`, `view --port`, `view --host`. `--out` replaces `generate.ts.out`
+CLI options win over the file: `generate ts --out`, `open --port`, `open --host` (and `collab --port`, `collab --host`). `--out` replaces `generate.ts.out`
 only; contexts listed in `generate.ts.contexts` keep their own directories. Sources and output directories, `--out`
 included, must stay inside the config file's directory (the root without a config file): an absolute path or one with
 `..` is a config error, and an output directory reached through a symlink stops generation. A name in
@@ -2448,7 +2819,7 @@ are `generate.ts.contexts.<Context>.policies` if given, else `generate.ts.polici
 [Reactions to events](#reactions-to-events-policies)).
 
 **Sources and `.gitignore`.** The sources are the files below the root that match `sources`, outside `node_modules`,
-`.git` and `.domaintrail`, and not ignored by git: every command that finds them (`check`, `generate`, `view`, `fmt`,
+`.git` and `.domaintrail`, and not ignored by git: every command that finds them (`check`, `generate`, `open`, `collab`, `fmt`,
 `show`, `lsp`) skips the files and directories that the `.gitignore` files ignore, with git's rules (`!` negation,
 `dir/` for directories only, a leading or inner `/` anchoring to the file's directory, a deeper file winning). The
 `.gitignore` files that count are those of the root and its subdirectories, those of the directories above the root up
@@ -2539,33 +2910,54 @@ formatting, hover, an outline and go to definition.
 <!-- topic: session -->
 ## Collaboration sessions
 
-A **session** is the Live View shared by several people while an AI agent edits the model: the facilitator runs
-`dt session start` on their machine, the participants open the page in their browsers, see each other, and post
-**messages** in a chat, about elements of the `.dt` model or the `.dtes` stormings; the facilitator applies messages as
-**runs** (requests to the agent), and `dt session subscribe --agent claude` runs Claude Code on the facilitator's workspace, one run at a
-time. The edits reach every page through the Live View, and every run leaves a **revision** of all the `.dt` and
-`.dtes` sources that can be compared or restored. `dt view` is unchanged: it has no session, and its
-page no session chat. Sessions need Node.js 22.13 or later (for `node:sqlite`). In the repository,
+A **session** is the Live View with a chat to the AI, in one of two modes. **`dt open`** is for one person: on
+loopback, signed in as the facilitator by the one-time link it prints (no form), every message goes to the AI. **`dt collab`** is the
+Live View shared by several people while an AI agent edits the model: the facilitator runs it on their machine, the
+participants open the page in their browsers, see each other, and post **messages** in a chat, about elements of the
+`.dt` model or the `.dtes` stormings; the facilitator applies messages as **runs** (requests to the agent). In both,
+the agent (Claude Code) runs in the same process when `claude` is usable, on the facilitator's workspace, one run at a
+time (`dt agent` runs it alone, in another terminal or on another machine). The edits reach every page through the
+Live View, and every run leaves a **revision** of all the `.dt` and `.dtes` sources that can be compared or restored.
+Sessions need Node.js 22.13 or later (for `node:sqlite`). In the repository,
 `docs/session-first-run.md` walks through a first run with Claude Code, and ADR 0026 has the decisions behind them.
 
-**The commands.** All three find the workspace like `dt check` (`-r`, `-c`):
+**The commands.** All four find the workspace like `dt check` (`-r`, `-c`):
 
-- `dt session start` — the session server: the Live View as `dt view` serves it, plus the session, at
-  `http://127.0.0.1:4321` (`--port`, `--host`, or `session.port` / `session.host`; `--base <ref>` as in `dt view`),
-  until Ctrl+C or until the facilitator closes the session. A workspace has one open session: starting again resumes
-  it, with its sign-ins, requests, runs and revisions. It prints the page's URL, a one-time **facilitator link** and the
-  agent API's address.
-- `dt session link` — another facilitator link, for the server running on the workspace (each link works once, for 10
-  minutes).
-- `dt session subscribe --agent claude` — the agent: it connects to the running server through its agent API and runs
-  the queued runs one after another, until Ctrl+C or the session closes; `--once` handles one run and exits.
+- `dt open` — the Live View and a chat for you alone, at `http://127.0.0.1:4321` (`--port`, `--host`, or `open.port` /
+  `open.host`; `--base <ref>` compares with a git revision), until Ctrl+C. It prints a one-time link instead of the
+  plain address: opened within 60 minutes, it signs that browser in as you, the facilitator (an HttpOnly session
+  cookie this server alone knows: a restart prints a new link), with no join form; a browser or another program without that cookie is not let in, and no one else
+  joins. It answers loopback only (never `collab.access`'s hosts). The chat, runs and revisions are kept across restarts. It refuses a
+  workspace with an open collab session (resume it with `dt collab`, or end it from its collab menu). With `--host` on
+  a non-loopback address it serves the Live View read-only: no chat, no agent.
+- `dt open link` — another one-time sign-in link, for the `dt open` server running on the workspace (each link works
+  once, for 60 minutes; all are revoked when the server stops), e.g. for another browser or after the first link
+  expired, without restarting the server. It refuses a running `dt collab` server (use `dt collab link`).
+- `dt collab` — the session server for several people, at `http://127.0.0.1:4321` (`--port`, `--host`, or
+  `collab.port` / `collab.host`; `--base <ref>`), until Ctrl+C or until the facilitator closes the session. A
+  workspace has one open session: starting again resumes it, with its sign-ins, requests, runs and revisions, and a
+  `dt open` session is continued as a collab one (its history kept; open the facilitator link to hold the role). It
+  prints the page's URL, a one-time **facilitator link** and the agent API's address.
+- `dt collab link` — another facilitator link, for the collab server running on the workspace (each link works once,
+  for 10 minutes).
+- `dt agent --code <code>` — the agent alone: it pairs with the running server (`dt open` or `dt collab`) with the
+  one-time code `dt collab agent-link` (or `dt open agent-link`) prints, keeps the agent API's credential in memory, and
+  takes on its two roles (below) — the **runner**, which runs the queued runs one after another, and the
+  **answerer**, which triages and answers the messages addressed to the AI — until Ctrl+C or the session closes;
+  `--once` handles one run and exits. `--role run` or `--role answer` takes on one of them; both by default.
+
+`dt open` and `dt collab` start the agent, with both roles, in their own process (as `dt agent` would, over loopback) when Claude Code is
+usable (`claude` on the `PATH`, answering `--version`, with the flags the agent needs); otherwise they start without
+it and print one line saying why (`AI: not started (…)`). `--no-agent` does not start it; `--agent claude` makes an
+unusable Claude Code an error. `dt view`, `dt session start`, `dt session link` and `dt session subscribe` were
+removed: each fails with the name of its replacement.
 
 **Roles.** Everyone signed in is a **participant**: they see the Live View and the session's chat, a pillar at the
 right end of the page — チャット: every message posted, one card per run, and the composer; AI の作業: everything sent to the AI,
 awaiting an answer, running, queued and finished — and post messages. Closed, the chat leaves a 💬 button at the bottom right of the canvas that shows whether the
 agent is running or waiting for an answer and how many messages and cards are new. The **facilitator** is whoever
 opened the facilitator link while signed in (never derived from Cloudflare Access); a new link moves the role (the
-collab menu's ファシリテーターを引き継ぐ issues one, as `dt session link` does), and the previous holder's pages reconnect as a participant. Only the
+collab menu's ファシリテーターを引き継ぐ issues one, as `dt collab link` does), and the previous holder's pages reconnect as a participant. Only the
 facilitator applies messages, answers the agent, stops and reverts runs, records and restores revisions, changes the
 shared 比較対象 (baseline) and closes the session (the collab menu's コラボを終える). The server checks every role; the page
 only hides what is not yours.
@@ -2580,11 +2972,21 @@ files, with how many files and who asked), the participants and how long it last
 when it ended; the session's record stays in the workspace's `.domaintrail`.
 
 **Messages and sending to the AI.** Everything posted in the chat is a **message**, shown in the stream as it is
-sent; nothing runs until the facilitator **sends** it to the AI (*applies* it, in the ADR's terms: queues a run with it
-as the input). On each message the facilitator has the robot button, AI に送る (a run of that message, queued at once;
-runs are serial, so it waits as 実行待ち while another runs), and … (その他の操作): もう一度送る once it was sent, AI に送る
-on a message read as talk (where the button is not shown), コメントをつけて送る (a comment for the agent first) and
-まとめて送る (choose several). Shift- or ⌘-click chooses messages too; a bar then offers コメント… and まとめて送る, one
+sent. A message is **addressed to the AI** when it mentions `@AI` or replies to the AI (one of its answers, or a run);
+other messages are talk between people, and no model sees them ([ADR 0030](adr/0030-modes-triage-and-the-warm-agent.md)).
+An addressed message is **triaged** — nobody says whether it is a question or a request: stage 1 (on the server) takes
+sure acknowledgements such as ありがとう as needing no answer; stage 2 is Clef when `classifier` is enabled
+(below); stage 3 is a light model of the agent's answerer (`haiku` unless configured, no tools); still unknown is a
+question. A **question** (相談) is answered at once by the answerer, read-only, in parallel with the runs: the answer is
+a message of the AI replying to it. A **request** (依頼) from the facilitator is queued as a run at once; from a
+participant, the answerer writes a **change proposal** (what, where, how) that the facilitator approves (as is or
+edited; several approved together are one run), or rejects with a note; its author may withdraw it while it waits.
+Participants see only where a triage went; the facilitator sees its record (each stage's answer, confidence, reason
+and model). On each message the facilitator has the robot button, AI に送る (addresses it to the AI, as a mention would
+have: its triage decides what follows, and a request the facilitator sends this way is queued without a proposal), and
+… (その他の操作): もう一度送る once it was sent (a run of that message, queued at once; runs are serial, so it waits as
+実行待ち while another runs), コメントをつけて送る (a run with a comment for the agent first) and まとめて送る (choose
+several). Shift- or ⌘-click chooses messages too; a bar then offers コメント… and まとめて送る, one
 run of all of them, and Esc leaves it. Right after sending, AI に送りました offers 実行を中止, which stops the run while it
 is still queued. Participants see a run once it is in the stream, and the queue in AI の作業. Every message and
 AI turn has a status slot at the right end of its name row, there only when the row has a status and then as wide on
@@ -2685,7 +3087,7 @@ made from replies continues the replied run's card in place, quoting the replies
 that run extends the same card. The agent is given the replied run as context: its messages, how it ended, its reply
 (summary, per-message status, assumptions, questions) and what it changed — the unified diff of the sources between
 its base and result revisions, or only the list of the changed files when the diffs of all the replied runs together
-exceed `session.agent.maxPreviousRunDiff` (20480 characters by default). Answering a question gives the agent the run
+exceed `agent.run.maxPreviousRunDiff` (20480 characters by default). Answering a question gives the agent the run
 that asked in the same way. The current files stay the truth for the agent: other runs may have changed them since.
 
 **Replies to a message.** People answer each other too: ↩ just before ☺+ on any message (on hover, always on touch),
@@ -2716,7 +3118,7 @@ was picked shows ◉ on it, the others muted, and `選択 name · time` under it
 the same card); one
 left as it was (a later run without a pick) has nothing filled and keeps only its frozen votes. A pick is recognized by the note the page writes for it. On every message and
 every AI turn, anyone (the facilitator too) can **react** with an emoji: hover the message (on touch it is always
-there) and ☺+ at the end of its actions offers a row of quick emoji (`session.quickReactions`, by default 👍 👀 🤔 🎉 ❤️ 🙏)
+there) and ☺+ at the end of its actions offers a row of quick emoji (`collab.quickReactions`, by default 👍 👀 🤔 🎉 ❤️ 🙏)
 and ＋, a small field where any one emoji can be typed or pasted (the OS emoji picker works there; Enter adds it, Escape
 closes the field), with who reacted under them. The app gives no emoji a meaning. A reaction is exactly one emoji — a
 ZWJ sequence (👨‍👩‍👧‍👦), a skin tone (👍🏽), a flag (🇯🇵) or a keycap (1️⃣) counts as one; text and two emoji are refused —
@@ -2785,16 +3187,14 @@ card is frozen into the next run as `answerTo` and `answer` (the question and th
 alternative picked is frozen as `pick` (the run, the assumption and the alternative as they were shown), with a note
 asking for it; the agent is given the run it assumed in, and the card shows the pick with ◉.
 
-**Classifying messages (opt-in).** With `session.classifier.enabled`, the session server asks Cloudflare Workers AI's
-Clef (`@cf/cloudflare/clef-flash`, or `clef`) whether each new message asks for a change to the model or is talk. The
-message appears at once; its classification follows, for the facilitator only, and shows only as whether the row has
-the AI に送る button: it is offered on requests, and on anything the classifier could not tell — a failure, a timeout or a
-probability near `threshold` leaves a message sendable — while a message read as talk can still be sent from its …
-menu. Results are kept in memory: after a restart, earlier messages are all sendable. **The text of each message is sent to
-Cloudflare** under your account (the token is read from the environment variable named by `apiTokenEnv`, never from
+**Clef, stage 2 of the triage (opt-in).** With `classifier.enabled`, the session server asks Cloudflare
+Workers AI's Clef (`@cf/cloudflare/clef-flash`, or `clef`) three questions about each message **addressed to the AI**
+(only those): is it a question about the model, a request to change it, or does it need no answer. One answer at or
+above `threshold` decides; anything else — none or several, a failure, a timeout — leaves the message to stage 3. Talk
+between people is never sent. **The text of each addressed message is sent to Cloudflare** under your account (the token is read from the environment variable named by `apiTokenEnv`, never from
 the file); Cloudflare states that it does not use customer content processed by Workers AI to train models
 ([Workers AI data usage](https://developers.cloudflare.com/workers-ai/platform/data-usage/)). Disabled (the default),
-nothing is sent and every message can be sent to the AI.
+nothing is sent: the triage's record says Clef is not configured, and stage 3 decides.
 
 **Presence** is never stored: each page tells the others where it is (this page, the same view, another view,
 offline) and its cursor, at most about 20 times a second. A cursor is drawn only on the same view — the same `.dt`
@@ -2803,15 +3203,19 @@ different views). An occurrence is only told apart in a timeline's view.
 
 **Privacy.** Pages show participants by name only: the name picked on the join form (`dev`), or the Access identity's
 name, else the part of the e-mail before `@` (`access`). The e-mail is never sent to any page, not even your own, and
-never logged; an avatar is shown only from the hosts in `session.access.avatarHosts`, else initials. The server's log
+never logged; an avatar is shown only from the hosts in `collab.access.avatarHosts`, else initials. The server's log
 has no token, cookie, link code or e-mail. A run's prompt carries the requests' text and their authors' names to the
 agent.
 
 **What is stored where.** Everything of the session is in `.domaintrail/session/` of the workspace, beside a
 `.gitignore` that ignores it all: `session.db` (SQLite: the session, requests, runs, revisions, the event outbox,
 sign-ins and facilitator links as hashes, the log of restores), `blobs/` (the revisions' file contents, by SHA-256),
-`agent.json` (the agent API's address and credential, mode 0600, removed when the server stops) and `server.json`
-(the page's URL, for `dt session link`). Drafts are in each browser; presence only in memory.
+and `server.json` (the page's and the agent API's addresses, no secret, mode 0600, removed when the server stops; for
+`dt collab link`, `dt collab agent-link` and `dt agent`). The agent API's credential is never written to disk: the
+agent in process is handed it in memory, and a standalone `dt agent` exchanges the one-time code of `dt collab
+agent-link` (or `dt open agent-link`; single use, 10 minutes, revoked when the server stops) for it and keeps it in
+memory. An `agent.json` an older version left is removed when a server starts. `.domaintrail/` gets a `.gitignore`
+(`*`) when it has none. Drafts are in each browser; presence only in memory.
 
 **Limitations.** The log of restores is in `session.db` only, not served over HTTP. In the `access` mode, leaving the
 session sends the page to Access's logout, but the server cannot see a sign-out made elsewhere: the person's other
@@ -2821,14 +3225,23 @@ one open session per workspace.
 <!-- topic: session-config -->
 ### Session configuration
 
-The `session` section of `domaintrail.jsonc`; every key is optional, and the defaults are shown:
+The sections `open`, `collab`, `agent` and `classifier` of `domaintrail.jsonc`; every key is optional, and the defaults
+are shown. The old sections `session` and `view` are refused when the file is loaded, with where each key went.
 
 ```jsonc
 {
-  "session": {
+  // dt open (one person, the Live View with the chat)
+  "open": {
+    "port": 4321,
+    "host": "127.0.0.1"        // a non-loopback address serves the Live View read-only (no chat, no agent)
+  },
+  // dt collab and dt collab link
+  "collab": {
     "port": 4321,              // the page and its API
     "host": "127.0.0.1",       // the dev identity refuses a non-loopback address
-    "identity": "dev",         // "dev" or "access"
+    "identity": "dev",         // "dev", "access" or "link" (dt collab --tunnel sets "link")
+    // only with "identity": "link" and your own tunnel (not with --tunnel); see docs/session-link.md
+    // "link": { "publicUrl": "https://dt.example.com" }, // https, no path: the only host and origin answered
     // only with "identity": "access" (then teamDomain and audience are required); see docs/session-access.md
     "access": {
       "teamDomain": "myteam.cloudflareaccess.com", // your team domain
@@ -2839,29 +3252,59 @@ The `session` section of `domaintrail.jsonc`; every key is optional, and the def
       "acceptCookie": false,   // also accept the CF_Authorization cookie when the header is missing
       "avatarHosts": []        // hosts an https avatar may come from; default: none, initials
     },
-    "agent": {
-      "port": 0,               // the agent API, on 127.0.0.1 only; 0 = any free port (written to agent.json)
+    "maxParticipants": 50,
+    // the emoji ☺+ offers first in the chat (1 to 8, each one emoji, distinct); any other can be typed there
+    "quickReactions": ["👍", "👀", "🤔", "🎉", "❤️", "🙏"]
+  },
+  // the agent (dt agent, or the one dt open and dt collab start in process), in both modes
+  "agent": {
+    "port": 0,                 // the agent API, on 127.0.0.1 only; 0 = any free port (written to server.json)
+    // the runner: the runs that edit the workspace
+    "run": {
       // Claude Code permission rules; this is the default
-      "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)"]
+      "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)", "Bash(dt guide:*)"],
+      "warm": true,            // one Claude Code process across runs (each run a turn); false: one process per run
+      "restartAfter": 20,      // runs of one warm process before a fresh one replaces it
+      "idleTimeout": 30        // minutes without a run before the warm process ends (its memory freed); 0 = never
+      // "model": "sonnet",    // claude --model; default: your Claude Code settings' model
+      // "effort": "medium",   // claude --effort (low, medium, high, xhigh, max); default: your settings'
       // the dt the agent runs (and dt fmt / dt check after it); default: the running dt itself.
       // ["node" | "bun" | "deno", "<script>"] or ["<dt executable>"], relative to this file, outside the workspace:
-      // "dt": ["node", "../domaintrail/dist/dt.js"]
+      // "dt": ["node", "../domaintrail/dist/dt.js"],
       // the most characters of diff given to the agent of the runs a run replies to or answers, all together;
       // past it, only their changed files (default 20480)
       // "maxPreviousRunDiff": 20480
+      // what the runner also reads outside the workspace, besides agent.read (never writes there);
+      // in domaintrail.local.jsonc only (git-ignored): "read": { "paths": ["../tools/notes.md"] }
     },
-    "maxParticipants": 50,
-    // the emoji ☺+ offers first in the chat (1 to 8, each one emoji, distinct); any other can be typed there
-    "quickReactions": ["👍", "👀", "🤔", "🎉", "❤️", "🙏"],
-    // opt-in: messages classified by Cloudflare Workers AI (their text is sent to Cloudflare)
-    "classifier": {
-      "enabled": false,
-      "provider": "cloudflare-clef",
-      "model": "clef-flash",   // or "clef"
-      // "accountId": "<your Cloudflare account ID, 32 hex digits>", // required when enabled
-      "apiTokenEnv": "CLOUDFLARE_API_TOKEN",       // the NAME of the variable holding a Workers AI token
-      "threshold": 0.5         // from this probability a message is a request
-    }
+    // the answerer: read-only answers to questions and change proposals (its tools are Read, Grep and Glob, not configurable)
+    "answer": {
+      "warm": true,
+      "restartAfter": 50,      // answers of one warm process before a fresh one replaces it
+      "idleTimeout": 30,
+      "timeout": 120           // the most seconds an answer may take
+      // "model": "sonnet",    // default: your Claude Code settings' model (never the runner's)
+      // "effort": "low"
+      // what the answerer also reads outside the workspace, besides agent.read;
+      // in domaintrail.local.jsonc only (git-ignored): "read": { "paths": ["~/notes/glossary.md"] }
+    },
+    // the light model that sorts the messages addressed to the AI (question, change request or neither)
+    "triage": {
+      "model": "haiku",
+      "warm": false            // true: one long-lived process; false: a fresh claude -p per message
+    },
+    // what both roles may read outside the workspace, read-only: directories or files, absolute, ~/… or relative to
+    // this file (see dt guide session-agent); in domaintrail.local.jsonc only (git-ignored), never in this file
+    // "read": { "paths": ["../specs", "~/notes/glossary.md"] }
+  },
+  // opt-in, stage 2 of the triage: the messages addressed to the AI classified by Cloudflare Workers AI (their text is sent to Cloudflare)
+  "classifier": {
+    "enabled": false,
+    "provider": "cloudflare-clef",
+    "model": "clef-flash",     // or "clef"
+    // "accountId": "<your Cloudflare account ID, 32 hex digits>", // required when enabled
+    "apiTokenEnv": "CLOUDFLARE_API_TOKEN",       // the NAME of the variable holding a Workers AI token
+    "threshold": 0.9           // from this probability one of Clef's answers decides; below it, stage 3
   }
 }
 ```
@@ -2873,7 +3316,14 @@ are in Japanese when the browser prefers Japanese, else in English. `access` put
 and a Cloudflare Tunnel: each request's Access token is verified (signature with the team's keys, issuer, audience,
 expiry), the name comes from Access's Identity API, a page's WebSocket closes when its token expires, and only the
 configured hosts and origins are answered; `docs/session-access.md` in the repository sets it up and checks it by
-hand. `--port` and `--host` win over the file.
+hand. `link` puts the session on the internet without an account: `dt collab --tunnel` starts a Cloudflare quick
+tunnel (`cloudflared`, a temporary public `https://….trycloudflare.com` address, stopped with the session), the
+facilitator shares an invite link (the collab menu's 招待, or `dt collab invite`; 60 minutes, a new one stops the
+previous), each person who opens it gives a name and waits, and the facilitator lets them in or not from the page.
+Only the public URL's host and origin are answered, every change needs that Origin, the cookies are Secure and
+SameSite=Strict, and every sign-in ends with the server; `docs/session-link.md` in the repository tells the security
+model and its limits. With your own tunnel, set `link.publicUrl` instead of `--tunnel`. `--port` and `--host` win
+over the file.
 
 <!-- topic: session-revisions -->
 ### Revisions, comparison and restore
@@ -2909,38 +3359,92 @@ around it (its ⋯ → 変更を見る).
 <!-- topic: session-agent -->
 ### The agent and its security
 
-`dt session subscribe --agent claude` runs `claude` from the `PATH` in the workspace's root, for each run, as
-`claude --print --output-format json --no-session-persistence --strict-mcp-config --setting-sources user
---permission-mode dontAsk --tools … --allowedTools …`, with the rules of `session.agent.allowedTools` only (any other
-tool is refused without asking, and no MCP server is loaded). The prompt tells it to read the related files, edit only
+The agent (`dt agent`, or in process) runs `claude` from the `PATH` in the workspace's root, for each run, as
+`claude --print --output-format stream-json --no-session-persistence --strict-mcp-config --setting-sources ""
+--permission-mode dontAsk --tools … --disallowedTools … --allowedTools …`, with the rules of `agent.run.allowedTools`
+only (any other tool is refused without asking, and no MCP server is loaded). The prompt tells it to read the related files, edit only
 the `.dt` and `.dtes` sources, keep a storming exploratory, and change no `.dt` when the requests are only about
-stormings; then `dt fmt` and `dt check` run, and the server records the result.
+stormings, and lets it answer instead (status `answered`) a request that turns out to be a question. It also gives the
+ways of working of the languages the requests are about, as `dt guide storming-practice` and `dt guide
+modeling-practice` print them (both for a request about the whole workspace); the answerer's prompts give them too.
+Then `dt fmt` and `dt check` run when the run changed files (else both are skipped), and the server records the
+result.
 
-- **The agent's `dt`.** The agent may run `dt fmt` and `dt check` (the default `allowedTools`), whatever is installed:
-  for each run the subscriber puts a `dt` first on the agent's `PATH`, in a private temporary directory (0700) outside
-  the workspace. It runs `session.agent.dt` — `["node" | "bun" | "deno", "<script>"]` or `["<dt executable>"]`, e.g. a
-  clone of DomainTrail next to the workspace while developing it — or, unset, the very `dt` running the subscriber.
-  That command is read once when the subscriber starts (never again from the config file, which is in the workspace),
-  pinned to absolute real paths (the runtime found on the `PATH`), refused when the script or executable is inside the
-  workspace (symbolic links followed), and fingerprinted: a run does not start once either file changed. The agent's
-  `dt` takes `fmt` or `check` and then `.dt` / `.dtes` files of the workspace only; any option or other argument is
+- **The agent's `dt`.** The agent may run `dt fmt`, `dt check` and `dt guide` (the default `allowedTools`), whatever
+  is installed: for each run the subscriber puts a `dt` first on the agent's `PATH`, in a private temporary directory
+  (0700) outside the workspace. It runs `agent.run.dt` — `["node" | "bun" | "deno", "<script>"]` or
+  `["<dt executable>"]`, e.g. a clone of DomainTrail next to the workspace while developing it — or, unset, the very
+  `dt` running the subscriber. That command is read once when the subscriber starts (never again from the config file,
+  which is in the workspace), pinned to absolute real paths (the runtime found on the `PATH`), refused when the script
+  or executable is inside the workspace (symbolic links followed), and fingerprinted: a run does not start once either
+  file changed. The agent's `dt` takes `fmt` or `check` and then `.dt` / `.dtes` files of the workspace only, or
+  `guide` alone, with one topic or rule name, or with `--all` (it only prints); any other option or argument is
   refused with a message to the agent, and `-r <workspace>` is always added by the shim. Both the agent's `dt` and the
   `dt fmt` / `dt check` after the agent run with a private working directory, never the workspace.
 
 - **Request text is untrusted.** Any participant writes it, and the agent reads it: the prompt puts the requests (and,
   for replies and answers, the earlier run's messages, reply and diff) in a delimited block of JSON marked as data, but admit only people you trust, and keep `allowedTools` narrow (never a
   plain `Bash`).
-- **Your own settings still apply.** `--setting-sources user` keeps the workspace's `.claude/settings.json` and
-  `.claude/settings.local.json` out (the agent could write them), but loads `~/.claude/settings.json` of whoever runs
-  the subscriber: check that its allow rules, hooks and `apiKeyHelper` allow nothing more than you want for a run.
+- **What the agents can read: the workspace, minus what git ignores.** Both roles may read any file inside the
+  workspace's root — the model, READMEs, notes, code — and nothing else: no path outside the root (your home, `..`,
+  absolute paths) unless `agent.read.paths` names it (below), never `.domaintrail/` (the session's state) nor `.git/`, and no file `.gitignore` ignores (`.env`,
+  build outputs, `node_modules`). **Keeping secrets out of the repository is your responsibility**: a secret committed
+  or merely not ignored can be read by the agents and quoted in the chat to every participant. `claude` is started
+  without any settings file (`--setting-sources ""`): neither the workspace's `.claude/` (the agent could write it) nor
+  your `~/.claude/settings.json` (its allow rules could let it read anywhere) is loaded; only its `model` and
+  `effortLevel` are taken as the agents' when they have none of their own. Your hooks and `apiKeyHelper` do not run
+  for the agents (sign in to Claude Code, or set `ANTHROPIC_API_KEY`). The answerer reads a private copy of the
+  readable files (refreshed before each job, outside the workspace); the runner, which edits the workspace, has deny
+  rules for `.domaintrail/`, `.git/` and the ignored files and directories present when its run starts. "Ignored" is
+  git's own answer (your global excludes file and `.git/info/exclude` included). A nested repository or a submodule
+  is left out as a whole: the answerer never sees its files and the runner is denied its directory. More than 500
+  ignored entries and nested repositories make a run fail (`ReadScopeTooLarge`, shown on the page): ignore whole
+  directories (e.g. `dist/` rather than its files) or move nested repositories out. As defense in depth, the server
+  refuses an answer, a proposal or a run's reply that contains the agent API's credential.
+- **Reading outside the workspace: `agent.read.paths`.** You may let the AI read directories or files outside the
+  workspace, read-only: `agent.read.paths` for both roles, `agent.answer.read.paths` and `agent.run.read.paths` added
+  for one (absolute, `~/…`, or relative to the config file). They are yours to choose: honoured only from
+  `domaintrail.local.jsonc` when git ignores it (or outside any repository), an error in the project's file, and asked
+  about when they change (see the approval in `dt guide config`). A path inside the workspace, one holding it, one in a
+  `.git` or `.domaintrail` directory, `/`, your home directory, and a path that is or holds `~/.ssh`, `~/.gnupg`,
+  `~/.aws`, `~/.azure`, `~/.config`, `~/.kube`, `~/.docker`, `~/.netrc`, `~/Library`, `/etc`, `/private/etc`, `/var`
+  or `/private/var` (or is inside one of them, but `~/Library`, `/var` and `/private/var`) is a config error naming
+  its key. Each path is taken by its real path (symbolic links followed, the file system's case) when the agent starts,
+  and one that is missing is skipped (its log says so); before each answer and each run it must still be the same
+  directory or file (else that turn or run fails: restart the agent). In each, the workspace's rules apply: in a git
+  work tree the files git does not ignore there, elsewhere every file; never `.git` nor `.domaintrail` at any depth; a
+  nested repository inside it denied as a whole (the path itself may be one). The answerer reads private copies of
+  them, as of the workspace (200 MiB at most, all together; copies an agent that was killed left behind are removed
+  when the next starts); the runner reads them in place (`--add-dir` for a directory, a `Read(//…)` rule for a file)
+  and may never edit, write or remove anything there (`Edit(//…)` deny rules, which win over every allow rule); what
+  git ignores there, the nested repositories and the symbolic links are denied to it as a whole, counted with the
+  workspace's against the 500 entries; a name no permission rule can express (a line break in it) makes the run fail
+  rather than go without its rule. `dt open`, `dt collab` and `dt agent` print what each role reads beyond the
+  workspace when they start (`AI answers read outside the workspace: …`, `AI runs read (never write) outside the
+  workspace: …`). **In a collab session, any participant can make the AI quote these files in the chat**: name only
+  what every participant may read.
+- **The configuration files are never written by the agents.** Deny rules keep them from editing
+  `domaintrail.jsonc`, `domaintrail.json`, `domaintrail.local.jsonc` and `domaintrail.local.json` at any depth and in any
+  case, and a `-c` file and its local override by every path they may be reached by; a configuration-like file
+  created or changed beside a `-c` file outside the workspace fails the run as a change outside the DSL does.
 - **A change outside the DSL stops the subscriber.** The workspace is scanned before and after the agent; if any file
   other than a `.dt` or `.dtes` source was added, changed or removed (`.claude/` included, and files that `.gitignore`
   ignores), the run fails (`AgentError`) and the subscriber claims no further run. Its log names the files (`not
   claiming further runs: review … then restart the subscriber`). Review them and undo what you do not want, then start
-  `dt session subscribe --agent claude` again and queue the requests in a new run. A scan that fails stops it the same
+  `dt agent` (or `dt open` / `dt collab`) again and queue the requests in a new run. A scan that fails stops it the same
   way.
-- **The agent API** listens on 127.0.0.1 only, on its own port, with a bearer token in `.domaintrail/session/agent.json`
-  (mode 0600); it refuses a request with an `Origin` or a `Host` other than loopback, and is never reachable through the page's port.
+- **The agent API** listens on 127.0.0.1 only, on its own port, with a bearer token held in memory only (paired for
+  with a one-time code by a standalone `dt agent`); it refuses a request with an `Origin` or a `Host` other than loopback, and is never reachable through the page's port.
+- **Two roles, two entry points.** The runner follows `GET /agent/events` and claims runs; the answerer follows `GET
+  /agent/answers/events`, where the server hands each job (stage 3 of a triage, an answer, a proposal) to one connected
+  answerer with none in hand — no claim, no lease, never waiting for the runs — and takes its result at `POST
+  /agent/answers/:job`; a job not answered within its timeout (120 s) is withdrawn (a triage's stage 3 is then a
+  question; an answer or a proposal is handed out again, twice at most), and the jobs of an answerer that disconnects go
+  to another or wait. The answerer's Claude Code has the reading tools only (`--tools Read,Grep,Glob`; stage 3: none),
+  whatever the message says; it is warm (one process across answers) by default, stage 3 a fresh `claude -p` per
+  message. Every prompt carries the session so far (the chat, the AI's turns and what is open), whole for a fresh
+  process and only what was added since for a warm one. The page's state and `agent.presence` say how many of each role
+  are connected and how much work waits for one.
 - **One run at a time.** Each run is claimed with a lease kept alive by heartbeats. If the subscriber dies, the run's
   lease expires and a running run fails (`LeaseExpired`) rather than run twice; a run only claimed goes back to the
   queue. Ctrl+C fails the running run as `Interrupted`.

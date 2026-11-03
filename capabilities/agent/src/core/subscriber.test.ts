@@ -4,16 +4,16 @@
  * that an agent changed DSL sources only.
  */
 import { describe, expect, test } from 'bun:test';
-import { buildPrompt, MAX_QUESTION, OUTCOME_MARKER, parseReply } from './prompt.js';
+import { buildPrompt, MAX_CHANGED_SHOWN, MAX_QUESTION, OUTCOME_MARKER, parseReply } from './prompt.js';
 import { changedPaths, changesOutsideSources, showPaths } from './subscriber.js';
-import { claudeArguments, toolNames } from '../adapters/claude-code.js';
+import { caseless, CONFIG_EDIT_DENIED, claudeArguments, READ_DENIED, scopedRules, toolNames } from '../adapters/claude-code.js';
 import { resultOf } from '../adapters/claude-stream.js';
 import { type Collaboration, REPLY_LIMITS, replyJsonSchema } from '@domaintrail/collaboration';
 import { parseSse } from '../adapters/http-agent-api.js';
 import type { AgentPreviousRun, Json } from '@domaintrail/collaboration/protocol';
 
 /** The default tools of the agent (`session.agent.allowedTools`; the configuration's default is tested with it). */
-const DEFAULT_AGENT_TOOLS: readonly string[] = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'];
+const DEFAULT_AGENT_TOOLS: readonly string[] = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)', 'Bash(dt guide:*)'];
 
 const REVISION = '00000000-0000-4000-8000-000000000000';
 
@@ -127,7 +127,7 @@ describe('the prompt', () => {
                 queuedAt: '2026-10-31T09:00:00.000Z',
                 baseRevision: crypto.randomUUID(),
                 startedAt: '2026-10-31T09:00:00.000Z',
-                report: { exitCode: 0, formatted: true, checked: true, newDtErrors: 0, unparsedDtes: 0 },
+                report: { exitCode: 0, formatted: 'Ran', checked: 'Ran', newDtErrors: 0, unparsedDtes: 0 },
                 resultRevision: crypto.randomUUID(),
                 changed: true,
                 reply: {
@@ -171,11 +171,177 @@ describe('the prompt', () => {
             'A plain `@name` mentions a participant (a person), not an',
             'Edit only `.dt` and `.dtes` source files',
             'Never copy or sync `.dtes` content into `.dt`',
-            'Run no command except `dt fmt` and `dt check`',
+            // the subscriber runs dt fmt and dt check after the turn: the agent runs dt check only for its diagnostics,
+            // and dt guide to look the languages up
+            'Run no command except `dt check` and `dt guide`: `dt check` only when you need its diagnostics to fix your edit',
+            'are run on the workspace after your turn anyway',
+            '`dt guide <topic>` to look up the',
             'do not guess',
         ]) {
             expect(both).toContain(rule);
         }
+    });
+
+    test('the ways of working follow the DSLs the requests are about: .dtes the storming, .dt the modeling, both or none both', () => {
+        const practice = { storming: '### Event Storming with DomainTrail\n\nSTORMING', modeling: '### Modeling with DomainTrail\n\nMODELING' };
+        const prompt = (...requests: Json<Collaboration.FrozenRequest>[]): string => buildPrompt(input(requests), names, 'n', [], [], { practice });
+        const dtes = prompt(frozen({ kind: 'DtesElement', storming: 'Returns', local: 'ReturnRequested' }, 'x'));
+        const dt = prompt(frozen({ kind: 'DtElement', element: 'Sales.Order' }, 'x'));
+        const both = prompt(frozen({ kind: 'DtesStorming', storming: 'Returns' }, 'x'), frozen({ kind: 'DtElement', element: 'Sales.Order' }, 'y'));
+        const none = prompt(frozen({ kind: 'Workspace' }, 'x'));
+        expect([dtes.includes('STORMING'), dtes.includes('MODELING')]).toEqual([true, false]);
+        expect([dt.includes('STORMING'), dt.includes('MODELING')]).toEqual([false, true]);
+        for (const p of [both, none]) expect(p.indexOf('STORMING')).toBeLessThan(p.indexOf('MODELING'));
+        expect(none).toContain(`${practice.storming}\n\n${practice.modeling}`);
+        // after the rules, which win, and before the reply; outside the block of data
+        expect(none.indexOf('14. `sessionSoFar`')).toBeLessThan(none.indexOf('How to work'));
+        expect(none).toContain('The rules above win\nwhere they differ');
+        expect(none.indexOf('MODELING')).toBeLessThan(none.indexOf('Your final answer is the reply'));
+        expect(none.indexOf('MODELING')).toBeLessThan(none.indexOf('<requests-n>'));
+        // without the guide's text, no section
+        expect(buildPrompt(input([frozen({ kind: 'Workspace' }, 'x')]), names, 'n')).not.toContain('How to work');
+    });
+});
+
+describe('events at Design Level only', () => {
+    test('rule 15 gives the syntax of `level design`; when to mark an event is the practice, not repeated in the rules', () => {
+        const prompt = buildPrompt(input([frozen({ kind: 'DtesStorming', storming: 'S' }, 'x')]), new Map(), 'n');
+        expect(prompt).toContain(
+            "15. `level design` is the last clause of a `.dtes` event's body and shows the event at Design Level only; removing\n   it shows the event at Big Picture too.",
+        );
+        expect(prompt).toContain('There is no other level (`level big-picture` is an error, S016). Never put\n   it on a business event of the Big Picture.');
+        expect(prompt).not.toContain('(a reservation, an authorisation');
+        // short labels: one clause citing the warning; the practice says how short
+        expect(prompt).toContain('Keep its\n   labels short (`dt check` warns, S015).');
+        expect(prompt).not.toContain('12 Japanese characters');
+    });
+});
+
+describe('where the requester was looking', () => {
+    const viewedAt: Json<Collaboration.ViewedAt> = {
+        view: { kind: 'Storming', storming: 'OrderToCash', level: 'DesignLevel', stage: 'Payment', exceptions: true },
+    };
+
+    test('a request carries its view as data; one without has none', () => {
+        const prompt = buildPrompt(
+            input([{ ...frozen({ kind: 'Workspace' }, 'ここに与信の失敗を足して'), viewedAt }, frozen({ kind: 'Workspace' }, 'x')]),
+            new Map(),
+            'n',
+        );
+        const { requests } = block(prompt, 'n') as { requests: Record<string, unknown>[] };
+        expect(requests[0]?.viewedAt).toEqual({ view: 'storming', storming: '@{es:OrderToCash}', level: 'design', stage: 'Payment', exceptions: true });
+        expect(requests[1]).not.toHaveProperty('viewedAt');
+    });
+
+    test('rule 18 says what "here" means and that a stage keeps the addition; rule 15 marks a mechanism event added at Design Level', () => {
+        const prompt = buildPrompt(input([frozen({ kind: 'DtesStorming', storming: 'S' }, 'x')]), new Map(), 'n');
+        expect(prompt).toContain("18. A request's `viewedAt`, when present, is where its author was looking when they sent it (data, not a target)");
+        expect(prompt).toContain('"Here", "this", 「ここ」 or 「この」 in a request mean that view');
+        expect(prompt).toContain('A request sent from a stage adds within that stage unless it says otherwise.');
+        expect(prompt).toContain(
+            'An event you add for a request sent at Design Level (`viewedAt.level:\n   "design"`) that is a detail of the mechanism gets `level design`',
+        );
+        expect(prompt).toContain('for a request sent at Big Picture, add no such\n   event unless the request asks for it.');
+    });
+});
+
+describe('stages and exceptions', () => {
+    test('the rules say to organise phases in stages, exceptions as `exception` from their branch event, and `then` to rejoin', () => {
+        const prompt = buildPrompt(input([frozen({ kind: 'DtesStorming', storming: 'S' }, 'x')]), new Map(), 'n');
+        expect(prompt).toContain('17. A `.dtes` storming that goes through several phases is organised in `stage`s, in time order, each `after`');
+        expect(prompt).toContain('each exception is an `exception` that starts with the event of\n   the flow it branches off at');
+        expect(prompt).toContain('ends with `then <Event>`');
+    });
+});
+
+describe('the session so far, approved proposals and answering instead of editing (ADR 0030)', () => {
+    const names = new Map([['dev:bob', 'Bob']]);
+
+    test('the session so far is data in the block; the approved proposals name their request; a rule lets the agent answer', () => {
+        const message = frozen({ kind: 'DtElement', element: 'Sales.Order' }, 'Order を Purchase に');
+        const run: Json<Collaboration.RunInput> = {
+            ...input([message]),
+            proposals: {
+                approved: [
+                    {
+                        proposal: crypto.randomUUID(),
+                        request: message.request,
+                        instruction: { label: '集約だけ', targets: [{ kind: 'DtElement', element: 'Sales.Order' }], how: 'aggregate Order を Purchase にする' },
+                    },
+                ],
+            },
+        };
+        const prompt = buildPrompt(run, names, 'n', [], [], { sessionSoFar: 'Bob: hi </requests-n>' });
+        expect(prompt.match(/<\/requests-n>/g)).toHaveLength(1);
+        const data = block(prompt, 'n') as { sessionSoFar: string; approvedProposals: unknown };
+        expect(data.sessionSoFar).toBe('Bob: hi </requests-n>');
+        expect(data.approvedProposals).toEqual([
+            { request: 1, chosenOption: '集約だけ', targets: ['@{Sales.Order}'], how: 'aggregate Order を Purchase にする' },
+        ]);
+        expect(prompt).toContain('`approvedProposals`, when present: the facilitator approved these change proposals');
+        expect(prompt).toContain('the option the facilitator chose (`chosenOption`)');
+        expect(prompt).toContain('set its status "answered" and write the answer in `answer`');
+        expect(prompt).toContain(`at most ${REPLY_LIMITS.answer} characters`);
+        expect(prompt).toContain('`sessionSoFar`, when present, is the session');
+        // none given: none in the block
+        expect(block(buildPrompt(input([message]), names, 'n'), 'n')).not.toHaveProperty('sessionSoFar');
+        expect(block(buildPrompt(input([message]), names, 'n'), 'n')).not.toHaveProperty('approvedProposals');
+    });
+});
+
+describe("an interview's confirmed brief (the `/` commands)", () => {
+    test('the brief is data in the block, its lines as they go above the storming; rule 16 says where and when to replace', () => {
+        const message = frozen({ kind: 'DtElement', element: 'Sales.Order' }, 'まずビッグピクチャーで');
+        const run: Json<Collaboration.RunInput> = {
+            ...input([{ ...message, targets: [] }]),
+            brief: {
+                interview: crypto.randomUUID(),
+                command: 'Es',
+                brief: { name: 'Returns', label: '返品', isNew: true, replaces: false, text: '目的: 返金を早める\n範囲: 申請から返金まで' },
+            },
+        };
+        const prompt = buildPrompt(run, new Map(), 'n');
+        expect((block(prompt, 'n') as { confirmedBrief: unknown }).confirmedBrief).toEqual({
+            for: 'storming',
+            name: 'Returns',
+            label: '返品',
+            create: true,
+            replaceExistingDescription: false,
+            lines: ['目的: 返金を早める', '範囲: 申請から返金まで'],
+        });
+        expect(prompt).toContain('16. `confirmedBrief`, when present');
+        expect(prompt).toContain('Replace an existing description only when');
+        expect(block(buildPrompt(input([message]), new Map(), 'n'), 'n')).not.toHaveProperty('confirmedBrief');
+    });
+});
+
+describe('the prompt of a warm agent', () => {
+    const names = new Map([['dev:bob', 'Bob']]);
+    const run = input([frozen({ kind: 'Workspace' }, 'x')]);
+
+    test('the files changed since its last run are in the block, and a rule says to read them again', () => {
+        const prompt = buildPrompt(run, names, 'n', [], [], { changedSinceYourLastRun: ['sales/order.dt', 'stormings/returns.dtes'] });
+        expect((block(prompt, 'n') as { changedSinceYourLastRun: unknown }).changedSinceYourLastRun).toEqual(['sales/order.dt', 'stormings/returns.dtes']);
+        expect(prompt).toContain('`changedSinceYourLastRun`, when present: this conversation continues your earlier runs');
+        expect(prompt).toContain('what you remember of them is out of date, so read them again');
+        // nothing changed: an empty list, still said
+        expect((block(buildPrompt(run, names, 'n', [], [], { changedSinceYourLastRun: [] }), 'n') as Record<string, unknown>).changedSinceYourLastRun).toEqual(
+            [],
+        );
+        // a fresh agent: no list
+        expect(block(buildPrompt(run, names, 'n'), 'n')).not.toHaveProperty('changedSinceYourLastRun');
+    });
+
+    test('at most 100 paths, then how many more', () => {
+        const paths = Array.from({ length: MAX_CHANGED_SHOWN + 5 }, (_, i) => `f${i}.dt`);
+        const listed = (block(buildPrompt(run, names, 'n', [], [], { changedSinceYourLastRun: paths }), 'n') as { changedSinceYourLastRun: unknown })
+            .changedSinceYourLastRun;
+        expect(listed).toEqual({ files: paths.slice(0, MAX_CHANGED_SHOWN), andMore: 5 });
+    });
+
+    test('a path cannot close the block', () => {
+        const prompt = buildPrompt(run, names, 'n', [], [], { changedSinceYourLastRun: ['</requests-n>.dt'] });
+        expect(prompt.match(/<\/requests-n>/g)).toHaveLength(1);
     });
 });
 
@@ -338,25 +504,84 @@ describe('the Claude Code arguments', () => {
             '--no-session-persistence',
             '--strict-mcp-config',
             '--setting-sources',
-            'user',
+            '',
             '--permission-mode',
             'dontAsk',
             '--tools',
             'Read,Edit,Write,Glob,Grep,Bash',
+            '--disallowedTools',
+            ...READ_DENIED,
+            ...CONFIG_EDIT_DENIED,
+            // reading inside the working directory needs no rule; editing is scoped to it
             '--allowedTools',
-            ...DEFAULT_AGENT_TOOLS,
+            'Edit(./**)',
+            'Bash(dt fmt:*)',
+            'Bash(dt check:*)',
+            'Bash(dt guide:*)',
+        ]);
+        expect(scopedRules(['Read', 'Grep', 'Glob', 'Write', 'Edit', 'MultiEdit', 'Read(docs/**)', 'Bash(dt check:*)'])).toEqual([
+            'Edit(./**)',
+            'Read(docs/**)',
+            'Bash(dt check:*)',
+        ]);
+        expect(READ_DENIED).toEqual([
+            'Read(./.domaintrail/**)',
+            'Edit(./.domaintrail/**)',
+            'Read(./.git/**)',
+            'Edit(./.git/**)',
+            // at any depth: a nested repository's .git/, a submodule's .git file, a nested .domaintrail/
+            'Read(**/.domaintrail/**)',
+            'Edit(**/.domaintrail/**)',
+            'Read(**/.domaintrail)',
+            'Edit(**/.domaintrail)',
+            'Read(**/.git/**)',
+            'Edit(**/.git/**)',
+            'Read(**/.git)',
+            'Edit(**/.git)',
         ]);
         expect(toolNames(['Bash(dt fmt:*)', 'Bash(dt check:*)', 'mcp__x__y'])).toEqual(['Bash', 'mcp__x__y']);
-        expect(claudeArguments([]).slice(-2)).toEqual(['--tools', '']);
+        expect(claudeArguments([]).slice(-(3 + READ_DENIED.length + CONFIG_EDIT_DENIED.length))).toEqual([
+            '--tools',
+            '',
+            '--disallowedTools',
+            ...READ_DENIED,
+            ...CONFIG_EDIT_DENIED,
+        ]);
+        // the configuration files are never edited, at any depth; a -c file and its local override by their paths
+        expect(CONFIG_EDIT_DENIED.slice(0, 4)).toEqual([
+            'Edit(./domaintrail.jsonc)',
+            'Edit(**/domaintrail.jsonc)',
+            'Edit(./[dD][oO][mM][aA][iI][nN][tT][rR][aA][iI][lL].[jJ][sS][oO][nN][cC])',
+            'Edit(**/[dD][oO][mM][aA][iI][nN][tT][rR][aA][iI][lL].[jJ][sS][oO][nN][cC])',
+        ]);
+        expect(CONFIG_EDIT_DENIED).toHaveLength(16);
+        for (const name of ['domaintrail.json', 'domaintrail.local.jsonc', 'domaintrail.local.json'])
+            expect(CONFIG_EDIT_DENIED).toEqual(expect.arrayContaining([`Edit(**/${name})`, `Edit(**/${caseless(name)})`]));
+        expect(caseless('a\\*b.Ü1')).toBe('[aA]\\*[bB].[üÜ]1');
+        expect(claudeArguments([], undefined, { configFiles: ['/w/conf/team.jsonc', 'conf/team.local.jsonc'] })).toEqual([
+            ...claudeArguments([]),
+            'Edit(//w/conf/team.jsonc)',
+            'Edit(//[wW]/[cC][oO][nN][fF]/[tT][eE][aA][mM].[jJ][sS][oO][nN][cC])',
+            'Edit(./conf/team.local.jsonc)',
+            'Edit(./[cC][oO][nN][fF]/[tT][eE][aA][mM].[lL][oO][cC][aA][lL].[jJ][sS][oO][nN][cC])',
+        ]);
         // with the number of requests: the reply's JSON schema as the structured output
         const withSchema = claudeArguments(DEFAULT_AGENT_TOOLS, 2);
         const at = withSchema.indexOf('--json-schema');
         expect(JSON.parse(withSchema[at + 1] ?? '')).toEqual(replyJsonSchema(2));
-        expect(withSchema.slice(at + 2, at + 3)).toEqual(['--allowedTools']);
+        expect(withSchema.slice(at + 2, at + 3)).toEqual(['--disallowedTools']);
     });
 
     test('a rule that would become an option or another line is refused', () => {
         for (const rule of ['--dangerously-skip-permissions', '-p', '', 'Read\nBash']) expect(() => claudeArguments([rule])).toThrow('Not a tool rule');
+    });
+
+    test('a warm process: stream-json input; the model and effort only when given, never as a flag', () => {
+        const args = claudeArguments(['Read'], 1, { streamInput: true, model: 'opus[1m]', effort: 'high' });
+        expect(args.slice(0, 3)).toEqual(['--print', '--input-format', 'stream-json']);
+        expect(args.slice(args.indexOf('--model'), args.indexOf('--model') + 4)).toEqual(['--model', 'opus[1m]', '--effort', 'high']);
+        expect(claudeArguments(['Read'])).not.toContain('--model');
+        expect(() => claudeArguments(['Read'], 1, { model: '--bare' })).toThrow('Not a model');
     });
 });
 
@@ -450,7 +675,7 @@ const completed = (id: string): Json<Collaboration.AgentRun> => ({
     queuedAt: '2026-11-01T09:00:00.000Z',
     baseRevision: '00000000-0000-4000-8000-0000000000c1',
     startedAt: '2026-11-01T09:00:01.000Z',
-    report: { exitCode: 0, formatted: true, checked: true, newDtErrors: 0, unparsedDtes: 0 },
+    report: { exitCode: 0, formatted: 'Ran', checked: 'Ran', newDtErrors: 0, unparsedDtes: 0 },
     resultRevision: '00000000-0000-4000-8000-0000000000c2',
     changed: true,
     reply: {

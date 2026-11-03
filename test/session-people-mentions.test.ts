@@ -116,7 +116,7 @@ describe('the requests route with mentions', () => {
     let server: SessionServer;
     let ada: string;
     let bob: string;
-    // what the classifier is asked: the bodies with their mentions as names
+    // what the classifier is asked (stage 2 of the triage, messages addressed to the AI only): the bodies with their mentions as names
     const classified: string[] = [];
     const json = { 'content-type': 'application/json' };
     const join = async (who: string): Promise<string> => {
@@ -137,14 +137,18 @@ describe('the requests route with mentions', () => {
             classifier: {
                 classify: async (text) => {
                     classified.push(text);
-                    return 0.9;
+                    return { consultation: 0.95, changeRequest: 0.01, neither: 0.01 };
                 },
             },
             session: {
                 port: 0,
                 host: '127.0.0.1',
                 identity: 'dev',
-                agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS], maxPreviousRunDiff: 20 * 1024 },
+                agent: {
+                    port: 0,
+                    allowedTools: [...DEFAULT_AGENT_TOOLS],
+                    maxPreviousRunDiff: 20 * 1024,
+                },
                 maxParticipants: 50,
                 quickReactions: ['👍'],
                 classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
@@ -162,8 +166,11 @@ describe('the requests route with mentions', () => {
         const sent = await api(ada, 'requests', { targets: [], body: '@Bob[p1] 見て', mentions: [bobId] });
         expect(sent.status).toBe(201);
         expect(((await sent.json()) as { request: { mentions: string[] } }).request.mentions).toEqual([bobId]);
+        // talk between people: never classified; a mention of the AI too: the message is addressed to it
+        const addressed = await api(ada, 'requests', { targets: [], body: '@AI[p1] @Bob[p2] 見て', mentions: ['ai', bobId] });
+        expect(addressed.status).toBe(201);
         for (let i = 0; i < 50 && classified.length === 0; i++) await Bun.sleep(10);
-        expect(classified).toEqual(['Bob 見て']);
+        expect(classified).toEqual(['AI Bob 見て']);
         // without: none
         const plain = (await (await api(bob, 'requests', { targets: [], body: 'x' })).json()) as { request: { mentions: string[] } };
         expect(plain.request.mentions).toEqual([]);

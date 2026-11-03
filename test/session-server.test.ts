@@ -1,5 +1,5 @@
 /**
- * `dt session start` (ADR 0026, S4) over HTTP, the WebSocket and the agent API, on a temporary workspace with `.dt`
+ * The session server (`dt collab`; ADR 0026, S4) over HTTP, the WebSocket and the agent API, on a temporary workspace with `.dt`
  * and `.dtes` sources: without an identity nothing is served; Host and Origin are checked; participants cannot reach
  * the facilitator's routes or the agent API; the agent API needs its credential and is not on the public port; SSE
  * resumes with `Last-Event-ID`; claim and finish are idempotent; the watcher holds around a write; presence; revoke.
@@ -24,7 +24,7 @@ import {
     SessionError,
 } from '@domaintrail/dt';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
-import type { ResolvedSessionConfig } from '@domaintrail/dt';
+import type { SessionSettings } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 
 const DT = `context Shop {
@@ -78,7 +78,7 @@ async function workspace(): Promise<string> {
     return dir;
 }
 
-const sessionConfig = (overrides: Partial<ResolvedSessionConfig> = {}): ResolvedSessionConfig => ({
+const sessionConfig = (overrides: Partial<SessionSettings> = {}): SessionSettings => ({
     port: 0,
     host: '127.0.0.1',
     identity: 'dev',
@@ -89,7 +89,7 @@ const sessionConfig = (overrides: Partial<ResolvedSessionConfig> = {}): Resolved
     ...overrides,
 });
 
-const accessConfig = (overrides: Partial<NonNullable<ResolvedSessionConfig['access']>> = {}): NonNullable<ResolvedSessionConfig['access']> => ({
+const accessConfig = (overrides: Partial<NonNullable<SessionSettings['access']>> = {}): NonNullable<SessionSettings['access']> => ({
     teamDomain: 'team.cloudflareaccess.com',
     audience: 'aud-tag',
     allowedHosts: [],
@@ -127,9 +127,8 @@ const api = (server: SessionServer, cookie: string, p: string, body?: unknown): 
         ...(body !== undefined && { body: JSON.stringify(body) }),
     });
 
-async function agentCredential(root: string): Promise<{ url: string; token: string }> {
-    return JSON.parse(await readFile(path.join(root, '.domaintrail', 'session', 'agent.json'), 'utf8'));
-}
+/** The agent API's credential, in memory (never on disk): as the agent in process gets it. */
+const agentCredential = (server: SessionServer): { url: string; token: string } => ({ url: server.agentUrl, token: server.agentToken });
 
 const agent = (cred: { url: string; token: string }, p: string, body?: unknown, headers: Record<string, string> = {}): Promise<Response> =>
     fetch(`${cred.url}agent/${p}`, {
@@ -187,12 +186,18 @@ async function refused(server: SessionServer, headers: Record<string, string>): 
     return result;
 }
 
-describe('messages applied, and classified for the facilitator', () => {
+describe('messages addressed to the AI, and the former apply', () => {
     let root: string;
     let server: SessionServer;
     let ada: string;
     let bob: string;
-    const classifier = { classify: async (text: string) => (text.startsWith('Add') ? 0.9 : 0.1) };
+    const asked: string[] = [];
+    const classifier = {
+        classify: async (text: string) => {
+            asked.push(text);
+            return { consultation: 0.1, changeRequest: text.includes('Add') ? 0.95 : 0.1, neither: 0.1 };
+        },
+    };
 
     beforeAll(async () => {
         root = await workspace();
@@ -204,31 +209,29 @@ describe('messages applied, and classified for the facilitator', () => {
     });
     afterAll(() => server?.stop());
 
-    test("the facilitator's pages learn how each message reads; the participants' never do", async () => {
-        const a = await socket(server, ada);
-        const b = await socket(server, bob);
-        try {
-            expect(await a.next('session.classifications')).toMatchObject({ classifications: {} });
-            const sent = (await (await api(server, bob, 'requests', { targets: [], body: 'Add a cancel command.' })).json()) as { request: { id: string } };
-            await api(server, bob, 'requests', { targets: [], body: 'nice!' });
-            const first = await a.next('session.classification');
-            const second = await a.next('session.classification');
-            expect([first, second].map((m) => (m.classification as { kind: string }).kind).sort()).toEqual(['chat', 'request']);
-            expect([first, second].find((m) => m.request === sent.request.id)).toMatchObject({ classification: { kind: 'request', probability: 0.9 } });
-            await Bun.sleep(100);
-            expect(b.received.some((m) => m.type.startsWith('session.classification'))).toBe(false);
-        } finally {
-            a.ws.close();
-            b.ws.close();
+    test('talk between people is never sent to Clef; a mention of the AI is, and Clef decides', async () => {
+        const talk = (await (await api(server, bob, 'requests', { targets: [], body: 'Add a cancel command, Ada?' })).json()) as { triage?: unknown };
+        expect(talk.triage).toBeUndefined();
+        const res = await api(server, ada, 'requests', { targets: [], body: '@AI[p1] Add a total.', mentions: ['ai'] });
+        expect(res.status).toBe(201);
+        const sent = (await res.json()) as { request: { id: string }; triage: { state: string; steps: { stage: string }[] } };
+        expect(sent.triage).toMatchObject({ state: 'Pending', steps: [{ stage: 'Mechanical' }] });
+        let state: SessionStateBody | undefined;
+        for (let i = 0; i < 100; i++) {
+            state = (await (await api(server, ada, 'state')).json()) as SessionStateBody;
+            if (state.runs.length) break;
+            await Bun.sleep(20);
         }
+        // the facilitator's own 依頼, decided by Clef: queued at once
+        expect(asked).toEqual(['AI Add a total.']);
+        expect(state?.runs.map((r) => r.state)).toEqual(['Queued']);
+        expect(state?.triages?.[0]).toMatchObject({ state: 'Decided', kind: 'ChangeRequest', decidedBy: 'Clef', outcome: { kind: 'Run' } });
     });
 
-    test('the facilitator sends and applies at once, with a note; a new facilitator link to hand the role over', async () => {
+    test('the former apply is refused; a new facilitator link to hand the role over', async () => {
         const res = await api(server, ada, 'requests', { targets: [], body: 'Add a total.', apply: { note: 'Keep it short.' } });
-        expect(res.status).toBe(201);
-        const body = (await res.json()) as { request: { id: string }; run: { state: string; input: { requests: { request: string }[]; note: string } } };
-        expect(body.run).toMatchObject({ state: 'Queued', input: { requests: [{ request: body.request.id }], note: 'Keep it short.' } });
-        expect((await api(server, ada, 'requests', { targets: [], body: 'x', apply: { other: 1 } })).status).toBe(400);
+        expect(res.status).toBe(400);
+        expect(((await res.json()) as { error: { field: string } }).error.field).toBe('apply');
         const link = await api(server, ada, 'facilitator/link', {});
         expect(link.status).toBe(201);
         expect(((await link.json()) as { link: string }).link).toContain('/session/facilitator?code=');
@@ -281,7 +284,7 @@ describe('a session in dev mode', () => {
         expect((await fetch(`${server.url}api/state`, { headers: { cookie: `dt_session=${'A'.repeat(43)}` } })).status).toBe(401);
     });
 
-    test('serves the Live View to a participant, as dt view does', async () => {
+    test('serves the Live View to a participant, as the read-only Live View does', async () => {
         const res = await fetch(`${server.url}api/state`, { headers: { cookie: bob } });
         expect(res.status).toBe(200);
         expect(((await res.json()) as ViewPayload).files).toEqual(['ordering.dtes', 'shop.dt']);
@@ -342,8 +345,8 @@ describe('a session in dev mode', () => {
             const res = await api(server, bob, p, body);
             expect([p, res.status, ((await res.json()) as { error: { type: string } }).error.type]).toEqual([p, 403, 'FacilitatorOnly']);
         }
-        // applying a message on sending it is the facilitator's; dismissing is gone (messages are chat)
-        const applied = await api(server, bob, 'requests', { targets: [], body: 'Do it now.', apply: true });
+        // addressing any message to the AI is the facilitator's; dismissing is gone (messages are chat)
+        const applied = await api(server, bob, 'requests/address', { requests: [adas.request.id] });
         expect([applied.status, ((await applied.json()) as { error: { type: string } }).error.type]).toEqual([403, 'FacilitatorOnly']);
         expect((await api(server, bob, `requests/${adas.request.id}/dismiss`, {})).status).toBe(404);
     });
@@ -529,13 +532,17 @@ describe('the agent API', () => {
         ada = await join(server, 'Ada');
         bob = await join(server, 'Bob');
         await claim(server, ada);
-        cred = await agentCredential(root);
+        cred = agentCredential(server);
     });
     afterAll(() => server?.stop());
 
-    test('agent.json is the credential, private to the user; the listener is on 127.0.0.1 only', async () => {
-        const file = path.join(root, '.domaintrail', 'session', 'agent.json');
-        expect((await stat(file)).mode & 0o777).toBe(0o600);
+    test('the credential is never on disk; server.json has the addresses only; the listener is on 127.0.0.1 only', async () => {
+        expect(await readFile(path.join(root, '.domaintrail', 'session', 'agent.json'), 'utf8').catch(() => 'gone')).toBe('gone');
+        const address = await readFile(path.join(root, '.domaintrail', 'session', 'server.json'), 'utf8');
+        expect((await stat(path.join(root, '.domaintrail', 'session', 'server.json'))).mode & 0o777).toBe(0o600);
+        expect(address).not.toContain(cred.token);
+        expect(JSON.parse(address)).toMatchObject({ agentUrl: server.agentUrl });
+        expect(await readFile(path.join(root, '.domaintrail', '.gitignore'), 'utf8')).toBe('*\n');
         expect(new URL(cred.url).hostname).toBe('127.0.0.1');
         expect(cred.url).toBe(server.agentUrl);
         expect(new URL(cred.url).port).not.toBe(new URL(server.url).port);
@@ -969,7 +976,7 @@ describe('revisions: comparison and restore (S7)', () => {
             await server.ready;
             const ada = await join(server, 'Ada');
             await claim(server, ada);
-            const cred = await agentCredential(root);
+            const cred = agentCredential(server);
             const [first] = await revisions(server, ada);
             const target = { target: { kind: 'Workspace' }, sourceRevision: first.id };
             const request = ((await (await api(server, ada, 'requests', { target, body: 'Ship it.' })).json()) as { request: { id: string } }).request;
@@ -1010,7 +1017,7 @@ describe('closing and resuming', () => {
         const id = first.session;
         expect(first.resumed).toBe(false);
         await first.stop();
-        expect(await readFile(path.join(root, '.domaintrail', 'session', 'agent.json'), 'utf8').catch(() => 'gone')).toBe('gone');
+        expect(await readFile(path.join(root, '.domaintrail', 'session', 'server.json'), 'utf8').catch(() => 'gone')).toBe('gone');
 
         const second = await start(root);
         try {
@@ -1021,7 +1028,7 @@ describe('closing and resuming', () => {
             expect(another.link.startsWith(`${second.url}session/facilitator?code=`)).toBe(true);
             const bob = await join(second, 'Bob');
             const s = await socket(second, bob);
-            const cred = await agentCredential(root);
+            const cred = agentCredential(second);
             const stream = sse(cred, undefined, ['session.closed']);
             const closed = await api(second, ada, 'close', {});
             expect(closed.status).toBe(200);
@@ -1302,12 +1309,12 @@ describe('the CLI', () => {
         return { code, out, err };
     };
 
-    test('dt session start refuses a non-loopback bind in dev mode; dt session link needs a running server', async () => {
+    test('dt collab refuses a non-loopback bind in dev mode; dt collab link needs a running server', async () => {
         const root = await workspace();
-        const started = await run('-r', root, 'session', 'start', '--host', '0.0.0.0', '--port', '0');
+        const started = await run('-r', root, 'collab', '--no-agent', '--host', '0.0.0.0', '--port', '0');
         expect(started.code).toBe(1);
         expect(started.err.join('\n')).toContain('loopback');
-        const link = await run('-r', root, 'session', 'link');
+        const link = await run('-r', root, 'collab', 'link');
         expect(link.code).toBe(1);
         expect(link.err.join('\n')).toContain('No session server is running');
     });

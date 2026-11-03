@@ -27,9 +27,13 @@ export const INITIAL_SESSION: SessionModel = { state: undefined, me: undefined, 
 
 const isEvent = (m: SessionServerMessage): m is EventMessage => 'seq' in m && 'event' in m;
 
-/** The page received a message of the session; presence messages leave the model as it is. */
+/**
+ * The page received a message of the session; presence messages leave the model as it is. The agents' presence
+ * (`agent.presence`) replaces the state's `agent`; before a state, the next one carries it.
+ */
 export function receive(model: SessionModel, message: SessionServerMessage): SessionModel {
     if (message.type === 'session.state') return adopt(model, message.state, message.me, true);
+    if (message.type === 'agent.presence') return model.state ? { ...model, state: { ...model.state, agent: message.agent } } : model;
     if (!isEvent(message)) return model;
     if (model.awaitingState || !model.state) return { ...model, buffer: [...model.buffer, message] };
     const applied = applyEvent(model.state, message);
@@ -221,6 +225,28 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
             };
             return { state: { ...at, approvals: [...approvals, approval] }, refetch: false };
         }
+        case 'SessionCollaborated':
+            return { state: session({ ...state.session, mode: 'Collab' }), refetch: false };
+        // the triages and proposals (ADR 0030): the state is fetched again to hold them (a participant's page gets the
+        // triages' events without their records, and an event does not carry the triage or the proposal whole)
+        case 'TriageOpened':
+        case 'TriageStepRecorded':
+        case 'TriageDecided':
+        case 'TriageOverridden':
+        case 'TriageReaddressed':
+        case 'TriageConcluded':
+        case 'ChangeProposed':
+        case 'ProposalApproved':
+        case 'ProposalRejected':
+        case 'ProposalWithdrawn':
+        // the interviews of the `/` commands: the state holds them whole
+        case 'InterviewStarted':
+        case 'InterviewAnswered':
+        case 'InterviewQuestionAsked':
+        case 'InterviewBriefed':
+        case 'InterviewConfirmed':
+        case 'InterviewStopped':
+            return { state: at, refetch: true };
     }
 }
 

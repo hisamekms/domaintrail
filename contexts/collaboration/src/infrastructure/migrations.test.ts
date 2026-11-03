@@ -1,6 +1,7 @@
 // Databases written by earlier versions, upgraded in place: before marks and emoji reactions (migration 4), before
 // replies (migration 5), before replies to messages (migration 7), before approvals (migration 8), with confirmed
-// revisions (migration 9), before reverting runs (migration 10). The store itself: sqlite.test.ts.
+// revisions (migration 9), before reverting runs (migration 10), before modes, triages and change proposals (migration
+// 11). The store itself: sqlite.test.ts.
 import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -9,7 +10,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Collaboration as C } from '../generated/index.js';
 import { makeEmoji, markKey, VOTE, type MarkTargetData } from '../domain/marks.js';
 import { createUnitOfWork, MIGRATIONS, openDatabase } from './sqlite.js';
-import { knownAgentRunId, knownMarkId, knownRequestId, knownRevisionId, knownSessionId } from '../domain/ids.js';
+import { knownAgentRunId, knownChangeProposalId, knownMarkId, knownRequestId, knownRevisionId, knownSessionId, knownTriageId } from '../domain/ids.js';
 
 const dirs: string[] = [];
 afterAll(async () => {
@@ -198,7 +199,7 @@ describe('the reply_to column (migration 5)', () => {
 
         const db = openDatabase(file);
         expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: MIGRATIONS.length });
-        expect(MIGRATIONS.length).toBe(10);
+        expect(MIGRATIONS.length).toBe(13);
         const uow = createUnitOfWork(db);
         const loaded = await uow.transaction((s) => s.requests.load(knownRequestId(rid)));
         expect(loaded).toMatchObject({ state: 'Sent', body: 'Add cancel.' });
@@ -540,6 +541,140 @@ describe('the reverts column (migration 10)', () => {
         expect(db.prepare('SELECT reverts FROM requests WHERE id = ?').get(kept.id)).toEqual({ reverts: runId });
         const unknown = await uow
             .transaction((s) => s.requests.save(revert('00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-0000000000ff')))
+            .then(
+                () => 'saved',
+                () => 'refused',
+            );
+        expect(unknown).toBe('refused');
+        db.close();
+    });
+});
+
+describe('triages and change proposals (migration 11)', () => {
+    test('a database of the schema before modes: its session is Collab, its run reports read as outcomes; one triage per message, proposals keep their run', async () => {
+        const dir = await workspace({});
+        const file = path.join(dir, 'session.db');
+        // the schema before modes (10 migrations): a session, a request and a completed run with the former report
+        const old = new DatabaseSync(file);
+        for (const m of MIGRATIONS.slice(0, 10)) old.exec(m);
+        old.exec('PRAGMA user_version = 10');
+        const sid = '00000000-0000-4000-8000-000000000001';
+        const rid = '00000000-0000-4000-8000-000000000002';
+        const runId = '00000000-0000-4000-8000-000000000003';
+        const base = '00000000-0000-4000-8000-000000000009';
+        const at = { $date: '2026-10-31T09:00:00.000Z' };
+        const who = 'local:facilitator';
+        const session = {
+            state: 'Open',
+            id: sid,
+            facilitator: who,
+            participants: [{ id: who, name: 'Facilitator', role: 'Facilitator', joinedAt: at }],
+            startedAt: at,
+        };
+        const request = { state: 'Sent', id: rid, session: sid, author: who, targets: [], body: 'Add cancel.', sentAt: at, mentions: [] };
+        const report = { exitCode: 0, formatted: true, checked: false, newDtErrors: 0, unparsedDtes: 0 };
+        const run = {
+            state: 'Failed',
+            id: runId,
+            session: sid,
+            input: { requests: [{ request: rid, author: who, targets: [], body: 'Add cancel.' }] },
+            queuedBy: who,
+            queuedAt: at,
+            baseRevision: base,
+            startedAt: at,
+            reason: 'RuleNotMet',
+            report,
+            resultRevision: base,
+            finishedAt: at,
+        };
+        old.prepare('INSERT INTO sessions (id, state, data) VALUES (?, ?, ?)').run(sid, 'Open', JSON.stringify(session));
+        old.prepare('INSERT INTO requests (id, session_id, seq, state, data) VALUES (?, ?, ?, ?, ?)').run(rid, sid, 1, 'Sent', JSON.stringify(request));
+        old.prepare('INSERT INTO agent_runs (id, session_id, seq, state, data) VALUES (?, ?, ?, ?, ?)').run(runId, sid, 1, 'Failed', JSON.stringify(run));
+        old.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(
+            sid,
+            'SessionStarted',
+            JSON.stringify({ type: 'SessionStarted', sessionId: sid, facilitator: who, name: 'Facilitator', startedAt: at }),
+            '2026-10-31T09:00:00.000Z',
+        );
+        old.close();
+
+        const db = openDatabase(file);
+        expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: MIGRATIONS.length });
+        const uow = createUnitOfWork(db);
+        const read = await uow.transaction((s) => ({
+            session: s.sessions.load(knownSessionId(sid)),
+            open: s.sessions.listOpen(),
+            run: s.runs.load(knownAgentRunId(runId))?.run,
+            events: s.outbox.readAfter(0, 10, knownSessionId(sid)),
+            triages: s.triages.listBySession(knownSessionId(sid)),
+            proposals: s.proposals.listBySession(knownSessionId(sid)),
+        }));
+        expect(read.session?.mode).toBe('Collab');
+        expect(read.open.map((o) => o.mode)).toEqual(['Collab']);
+        expect(read.run?.state === 'Failed' ? JSON.parse(JSON.stringify(read.run.report)) : undefined).toEqual({
+            ...report,
+            formatted: 'Ran',
+            checked: 'Failed',
+        });
+        expect(read.run && C.checkAgentRunWith({ serial: () => true })(read.run)).toEqual([]);
+        expect(read.events.map((e) => e.event.type === 'SessionStarted' && e.event.mode)).toEqual(['Collab']);
+        expect([read.triages, read.proposals]).toEqual([[], []]);
+        // nothing is rewritten: the rows keep their former shape until saved again
+        expect(JSON.parse((db.prepare('SELECT data FROM agent_runs').get() as { data: string }).data).report.formatted).toBe(true);
+
+        const triage: C.Triage = {
+            state: 'Decided',
+            id: knownTriageId('00000000-0000-4000-8000-000000000010'),
+            session: knownSessionId(sid),
+            request: knownRequestId(rid),
+            addressedBy: 'Mention',
+            addressedByParticipant: value(C.makeParticipantId(who)),
+            steps: [],
+            openedAt: new Date('2026-11-03T09:00:00Z'),
+            kind: 'ChangeRequest',
+            decidedBy: 'Model',
+            decidedAt: new Date('2026-11-03T09:00:01Z'),
+        };
+        await uow.transaction((s) => s.triages.save(triage));
+        expect(await uow.transaction((s) => s.triages.ofRequest(knownRequestId(rid)))).toEqual(triage);
+        // one triage per message
+        const second = await uow
+            .transaction((s) => s.triages.save({ ...triage, id: knownTriageId('00000000-0000-4000-8000-000000000011') }))
+            .then(
+                () => 'saved',
+                () => 'refused',
+            );
+        expect(second).toBe('refused');
+
+        const content: C.ProposalContent = {
+            targets: [{ kind: 'DtElement', element: value(C.makeElementName('Sales.Order')) }],
+            how: value(C.makeProposalText('add a cancel command')),
+            options: [],
+        };
+        const proposal: C.ChangeProposal = {
+            state: 'Open',
+            id: knownChangeProposalId('00000000-0000-4000-8000-000000000012'),
+            session: knownSessionId(sid),
+            triage: triage.id,
+            request: knownRequestId(rid),
+            requestedBy: value(C.makeParticipantId(who)),
+            content,
+            proposedAt: new Date('2026-11-03T09:00:02Z'),
+        };
+        await uow.transaction((s) => s.proposals.save(proposal));
+        const approved: C.ChangeProposal = {
+            ...proposal,
+            state: 'Approved',
+            approvedBy: value(C.makeParticipantId(who)),
+            approvedAt: new Date('2026-11-03T09:01:00Z'),
+            run: knownAgentRunId(runId),
+        };
+        await uow.transaction((s) => s.proposals.save(approved));
+        expect(await uow.transaction((s) => s.proposals.load(proposal.id))).toEqual(approved);
+        expect(db.prepare('SELECT state, run_id FROM proposals').get()).toEqual({ state: 'Approved', run_id: runId });
+        // an approval names a run the database holds
+        const unknown = await uow
+            .transaction((s) => s.proposals.save({ ...approved, run: knownAgentRunId('00000000-0000-4000-8000-0000000000ff') }))
             .then(
                 () => 'saved',
                 () => 'refused',

@@ -59,6 +59,35 @@ export interface ApprovalRepository {
     listBySession(session: SessionId): Collaboration.AssumptionApproval[];
 }
 
+/** The triages of the addressed messages: at most one per message (a unique index). */
+export interface TriageRepository {
+    load(id: Collaboration.TriageId): Collaboration.Triage | undefined;
+    /** Inserts or replaces the triage; a second triage of the same message is refused by the store (it throws). */
+    save(triage: Collaboration.Triage): void;
+    /** The triage of a message, if it was addressed. */
+    ofRequest(request: Collaboration.RequestId): Collaboration.Triage | undefined;
+    /** The triages of a session, in the order they were opened. */
+    listBySession(session: SessionId): Collaboration.Triage[];
+}
+
+/** The interviews of the `/` commands. */
+export interface InterviewRepository {
+    load(id: Collaboration.InterviewId): Collaboration.Interview | undefined;
+    /** Inserts or replaces it. */
+    save(interview: Collaboration.Interview): void;
+    /** The interviews of a session, in the order they were started. */
+    listBySession(session: SessionId): Collaboration.Interview[];
+}
+
+/** The change proposals of the sessions. */
+export interface ProposalRepository {
+    load(id: Collaboration.ChangeProposalId): Collaboration.ChangeProposal | undefined;
+    /** Inserts or replaces the proposal. */
+    save(proposal: Collaboration.ChangeProposal): void;
+    /** The proposals of a session, in the order they were made. */
+    listBySession(session: SessionId): Collaboration.ChangeProposal[];
+}
+
 /** A claim on a run: who holds it, its secret token, and until when. */
 export interface Lease {
     readonly owner: string;
@@ -145,6 +174,8 @@ export interface AccessStore {
     addLink(codeHash: string, session: SessionId, expiresAt: Date): void;
     /** Marks a link used when it is unused and not expired at `now`: the session it is for; `undefined` otherwise. */
     useLink(codeHash: string, now: Date): SessionId | undefined;
+    /** Marks every unused link of the session used (facilitator links and agent pairing codes alike). */
+    revokeLinks(session: SessionId, now: Date): void;
     /** The identity that holds the facilitator role of the session, if one claimed it. */
     facilitator(session: SessionId): IdentityKey | undefined;
     setFacilitator(session: SessionId, identity: IdentityKey, at: Date): void;
@@ -155,6 +186,16 @@ export interface AccessStore {
     revokeSignIn(tokenHash: string, at: Date): boolean;
     /** Revokes every sign-in of the session: the identities they stood for. */
     revokeSignIns(session: SessionId, at: Date): IdentityKey[];
+    /** Revokes every sign-in of one identity in the session (the facilitator removed them): how many there were. */
+    revokeSignInsOf(session: SessionId, identity: IdentityKey, at: Date): number;
+    /** Adds the session's invite (`link` identity mode), revoking any other it has: one invite link at a time. */
+    addInvite(codeHash: string, session: SessionId, expiresAt: Date, at: Date): void;
+    /** The session of an invite that is neither revoked nor expired at `now` (an invite is used any number of times). */
+    invite(codeHash: string, now: Date): SessionId | undefined;
+    /** When the session's live invite expires, if it has one at `now`. */
+    liveInvite(session: SessionId, now: Date): Date | undefined;
+    /** Revokes the session's invites: whether one was live. */
+    revokeInvites(session: SessionId, now: Date): boolean;
 }
 
 /** How an attempted restore ended: written and recorded, refused before anything was written, or failed after. */
@@ -201,6 +242,9 @@ export interface Stores {
     readonly revisions: RevisionStore;
     readonly marks: MarkRepository;
     readonly approvals: ApprovalRepository;
+    readonly triages: TriageRepository;
+    readonly proposals: ProposalRepository;
+    readonly interviews: InterviewRepository;
     readonly outbox: EventOutbox;
     readonly access: AccessStore;
     readonly operations: OperationLog;

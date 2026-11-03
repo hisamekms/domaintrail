@@ -1,11 +1,11 @@
 // The bytes of the snapshots' files, content addressed: `.domaintrail/session/blobs/<first two hex digits>/<sha256>`.
 // A content stored once is never stored again; a blob is written through a temporary file renamed into place, never
-// through a symbolic link, and read back only when it still has its hash.
+// through a symbolic link, and read back only when it still has its hash. Blobs are 0600 in directories 0700.
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { lstat, readFile, readdir } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { SnapshotBlobs } from '../application/ports.js';
-import { BLOBS_DIR, checkPlain, plainDirectory, replaceFile, sessionDirectory } from './session-dir.js';
+import { BLOBS_DIR, PRIVATE_DIR, PRIVATE_FILE, checkPlain, plainDirectory, replaceFile, restrict, sessionDirectory } from './session-dir.js';
 
 const SHA256 = /^[0-9a-f]{64}$/;
 
@@ -42,7 +42,26 @@ export function createFileBlobs(dir: string): SnapshotBlobs {
     };
 }
 
-/** The blobs of a workspace's session: `.domaintrail/session/blobs`. */
+/**
+ * Makes the blobs already below `dir` (written by older versions, 0755 and 0644) the user's alone. Links are left
+ * alone: a linked `dir` is refused when a blob is put.
+ */
+async function tightenBlobs(dir: string): Promise<void> {
+    if (!(await lstat(dir).catch(() => undefined))?.isDirectory()) return;
+    await restrict(dir, PRIVATE_DIR);
+    for (const sub of await readdir(dir, { withFileTypes: true })) {
+        if (!sub.isDirectory()) continue;
+        const subDir = path.join(dir, sub.name);
+        await restrict(subDir, PRIVATE_DIR);
+        for (const blob of await readdir(subDir, { withFileTypes: true })) {
+            if (blob.isFile()) await restrict(path.join(subDir, blob.name), PRIVATE_FILE);
+        }
+    }
+}
+
+/** The blobs of a workspace's session: `.domaintrail/session/blobs`, the existing ones made the user's alone. */
 export async function openSessionBlobs(root: string): Promise<SnapshotBlobs> {
-    return createFileBlobs(path.join(await sessionDirectory(root), BLOBS_DIR));
+    const dir = path.join(await sessionDirectory(root), BLOBS_DIR);
+    await tightenBlobs(dir);
+    return createFileBlobs(dir);
 }

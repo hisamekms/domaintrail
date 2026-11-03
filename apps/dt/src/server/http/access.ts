@@ -34,7 +34,7 @@ export interface Identified {
 
 /**
  * What the access check decides about a request: refused (unexpected Host or Origin), let in without an identity
- * (always so in `dt view`; in a session, someone who has not signed in), or a participant with their role.
+ * (always so in the read-only Live View; in a session, someone who has not signed in), or a participant with their role.
  */
 export type Authorization = { readonly kind: 'forbidden' } | { readonly kind: 'anonymous' } | ({ readonly kind: 'participant' } & Identified);
 
@@ -47,8 +47,14 @@ export interface AccessPolicy {
     readonly allowedHost: (hostname: string) => boolean;
     /** Whether a browser's `Origin` may call; default: the same host as the request's `Host`. */
     readonly allowedOrigin?: (origin: URL, host: string) => boolean;
-    /** A session's identities; absent in `dt view`, where everyone admitted is anonymous. */
+    /** A session's identities; absent in the read-only Live View, where everyone admitted is anonymous. */
     readonly identify?: Identify;
+    /**
+     * Whether a request that changes something (any method but GET and HEAD, and the WebSocket's upgrade) must carry an
+     * allowed `Origin`: a session open to the internet (`link`) refuses one without it, so that only its own pages make
+     * them (the CSRF check, with the SameSite=Strict cookie). Default: false (non-browser clients send no Origin).
+     */
+    readonly requireOrigin?: boolean;
 }
 
 const sameHost = (origin: URL, host: string): boolean => origin.host === host;
@@ -57,11 +63,12 @@ const sameHost = (origin: URL, host: string): boolean => origin.host === host;
  * The one access check of the Live View and of a session, for every request it guards and the `/ws` upgrade (see
  * `createViewHttpServer`). The model may be confidential: reject requests whose Host is unexpected (DNS rebinding) and
  * cross-origin browser requests (browsers do not apply the same-origin policy to WebSockets); non-browser clients send
- * no Origin. Then, in a session, who is asking. `dt view` has no identities: its answers are `forbidden` and
+ * no Origin. Then, in a session, who is asking. The read-only Live View has no identities: its answers are `forbidden` and
  * `anonymous`, as `'forbidden'` and `'ok'` were before.
  */
-export async function checkAccess(headers: IncomingHttpHeaders, policy: AccessPolicy): Promise<Authorization> {
+export async function checkAccess(headers: IncomingHttpHeaders, policy: AccessPolicy, changes = false): Promise<Authorization> {
     if (!hostAndOriginAllowed(headers, policy)) return { kind: 'forbidden' };
+    if (changes && policy.requireOrigin && !headers.origin) return { kind: 'forbidden' };
     if (!policy.identify) return { kind: 'anonymous' };
     const who = await policy.identify(headers);
     return who ? { kind: 'participant', participant: who.participant, role: who.role, actor: who.actor } : { kind: 'anonymous' };
@@ -82,6 +89,58 @@ function hostAndOriginAllowed(headers: IncomingHttpHeaders, policy: AccessPolicy
     } catch {
         return false;
     }
+}
+
+/** Whether a request of `method` changes something: anything but a read (the `requireOrigin` check). */
+export const changesState = (method: string | undefined): boolean => method !== 'GET' && method !== 'HEAD';
+
+/** Whether a socket's remote address is this machine (IPv4, IPv6, or IPv4 mapped into IPv6). */
+export const isLoopbackAddress = (address: string | undefined): boolean =>
+    address !== undefined && (address === '::1' || /^(::ffff:)?127\.\d+\.\d+\.\d+$/.test(address));
+
+/** The header the local `cloudflared` puts the visitor's address in. */
+const CONNECTING_IP = 'cf-connecting-ip';
+
+/** The eight 16-bit groups of an IPv6 address (`::` expanded), or undefined when it is not one. */
+function ipv6Groups(address: string): string[] | undefined {
+    const [head = '', tail, ...more] = address.split('::');
+    if (more.length) return undefined;
+    const part = (s: string): string[] => (s ? s.split(':') : []);
+    const left = part(head);
+    const right = part(tail ?? '');
+    const missing = 8 - left.length - right.length;
+    if (tail === undefined ? missing !== 0 : missing < 1) return undefined;
+    const groups = [...left, ...Array<string>(missing).fill('0'), ...right];
+    return groups.every((g) => /^[0-9a-f]{1,4}$/i.test(g)) ? groups.map((g) => g.toLowerCase().replace(/^0+(?=.)/, '')) : undefined;
+}
+
+/**
+ * An address as a rate limit counts it: IPv4 as it is (an IPv4-mapped IPv6 address as its IPv4), IPv6 by its /64 (one
+ * host usually has a whole /64 to pick addresses from).
+ */
+export function addressKey(address: string): string {
+    const plain = address
+        .trim()
+        .toLowerCase()
+        .replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/, '');
+    if (!plain.includes(':')) return plain;
+    const groups = ipv6Groups(plain);
+    return groups ? `${groups.slice(0, 4).join(':')}::/64` : plain;
+}
+
+/**
+ * Who a request comes from, as a key for a rate limit (`addressKey`): the socket's remote address when it is not this
+ * machine. From this machine, the visitor's address in `CF-Connecting-IP` when `trustForwarded` (this process started
+ * the `cloudflared` quick tunnel itself: `dt collab --tunnel`); else undefined: behind a reverse proxy of one's own
+ * every client comes from loopback, and the header could say anything (any local client may send it), so clients
+ * cannot be told apart and only the limits that need no key hold.
+ */
+export function clientKey(remoteAddress: string | undefined, headers: IncomingHttpHeaders, trustForwarded = false): string | undefined {
+    if (remoteAddress === undefined) return undefined;
+    if (!isLoopbackAddress(remoteAddress)) return addressKey(remoteAddress);
+    const forwarded = headers[CONNECTING_IP];
+    if (trustForwarded && typeof forwarded === 'string' && /^[0-9a-f.:]{2,45}$/i.test(forwarded.trim())) return addressKey(forwarded);
+    return undefined;
 }
 
 /**

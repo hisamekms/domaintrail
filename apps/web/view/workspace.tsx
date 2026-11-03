@@ -4,19 +4,26 @@ import { type DisplayMode, type Lang, STRUCTURE_LEVELS, type StructureLevel } fr
 import type { StormingView, ViewPayload } from '@domaintrail/visualization/protocol';
 import { Catalog, CatalogFilters, CatalogSearch, useCatalogFilter } from '../catalog';
 import { ContextList } from '../context-picker';
-import { useT } from '../i18n';
-import { contextLabels } from '../model-utils';
+import { useLang, useT } from '../i18n';
+import { type CatalogFilter, contextLabels } from '../model-utils';
 import type { LegendView } from '../legend';
-import { StormingToolbar } from '../storming';
+import { StormingFilter, StormingToolbar } from '../storming';
 import { applyTheme, type Theme } from '../theme';
+import { workspaceName } from '../app/health';
+import { buildScene } from '../render';
 import { useViewCamera } from './camera';
 import { useCenterOnResize } from './center';
 import { CanvasControls, EdgeHint } from './canvas-controls';
+import { emptyLine, isEmptyView, VIEW_TABS } from './empty';
 import { FlowCanvas } from './flow-canvas';
 import { fitAll } from './canvas';
 import type { DiagramCanvas } from './diagram';
 import { activeFilterCount } from './filters';
 import { useViewGraph, type ViewGraph } from './graph';
+import { useExportOptions, type ExportOptions, type ExportTarget } from './export';
+import { ExportButton, PrintButton, toolbarOutput } from './export-menu';
+import { PrintSheet, printKind, usePrint, usePrintWhenReady, type Printer } from './print';
+import { canvasSubject, exportFileName, sheetHeading } from './sheet';
 import { isCanvas, useNavigation, useOpenOnStormings, useSelectOnCanvas, type Navigation } from './navigation';
 import { useViewSettings, type ViewSettings } from './settings';
 import { FilterPopover, FilterSection, LevelSwitch, ToolbarEnd, ToolbarSubject } from './toolbar';
@@ -31,6 +38,11 @@ export interface Workspace {
     nav: Navigation;
     settings: ViewSettings;
     viewGraph: ViewGraph;
+    /** The catalog's filter (a session's message carries it as where it was sent from). */
+    catalog: { filter: CatalogFilter; setFilter: (filter: CatalogFilter) => void };
+    printer: Printer;
+    /** What an export (and a print) includes besides the diagram, remembered. */
+    exportOptions: { options: ExportOptions; setOptions: (options: ExportOptions) => void };
 }
 
 /**
@@ -43,9 +55,14 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
     const stormings = useMemo(() => current?.stormings ?? [], [current?.stormings]);
     const nav = useNavigation(canvas, current, stormings);
     const settings = useViewSettings();
-    const viewGraph = useViewGraph(current, nav.view, settings, stormings);
+    const catalog = useCatalogFilter();
+    const printer = usePrint(theme);
+    const [exportOptions, setExportOptions] = useExportOptions();
+    // printing a diagram prints its compact layout
+    const viewGraph = useViewGraph(current, nav.view, settings, stormings, settings.compact || printer.phase !== 'idle');
+    usePrintWhenReady(printer, isCanvas(nav.view) ? viewGraph.graph : null);
     useOpenOnStormings(current, nav.setView);
-    useViewCamera(canvas, current, nav.view, settings, viewGraph, { mode, lang });
+    useViewCamera(canvas, current, nav.view, settings, viewGraph, { mode, lang }, current !== null && isEmptyView(nav.view.kind, current));
 
     useEffect(() => {
         applyTheme(theme, canvas);
@@ -56,7 +73,7 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
 
     const onMount = useCallback((c: DiagramCanvas) => setCanvas(c), []);
 
-    return { canvas, onMount, stormings, nav, settings, viewGraph };
+    return { canvas, onMount, stormings, nav, settings, viewGraph, catalog, printer, exportOptions: { options: exportOptions, setOptions: setExportOptions } };
 }
 
 /** The center of the page: the view tabs, the current view's toolbar, and the canvas (or the catalog). */
@@ -68,17 +85,26 @@ export function ViewWorkspace(props: {
     onLegendToggle: () => void;
     /** Drawn over the canvas (a session's cursors of the others). */
     overlay?: ReactNode;
+    /** An AI is connected to the chat: an empty view says that asking there makes it. */
+    aiReady?: boolean;
 }) {
     const { workspace, current, mode, legendOpen, onLegendToggle } = props;
-    const { canvas, onMount, stormings, nav, settings, viewGraph } = workspace;
+    const { canvas, onMount, stormings, nav, settings, viewGraph, printer } = workspace;
     const { view, setView, selected, select } = nav;
     const { structureLevel, setStructureLevel, setStructureContexts, setHiddenContexts, mapAll, setMapAll, stormingChoice, setStormingChoice } = settings;
     const { checked, hidden, focusKey, noneChecked, graph } = viewGraph;
     const model = current?.model ?? null;
     const focusContexts = current?.focusContexts ?? [];
-    const { filter: catalogFilter, setFilter: setCatalogFilter } = useCatalogFilter();
+    const { filter: catalogFilter, setFilter: setCatalogFilter } = workspace.catalog;
     const t = useT();
+    const lang = useLang();
     const empty = { added: [], changed: [], removed: [] };
+    /** The view has nothing yet: it shows one line, and no control that would have nothing to act on. */
+    const nothing = current !== null && isEmptyView(view.kind, current);
+    /** The view whose controls the toolbar shows: none for an empty view (they would have nothing to act on). */
+    const bar = nothing ? undefined : view.kind;
+    /** What the toolbar offers to take the view out of the page (printing, exporting): what it shows, as it is shown. */
+    const output = toolbarOutput(bar);
     const legendView: LegendView | null =
         !graph || !isCanvas(view)
             ? null
@@ -87,6 +113,21 @@ export function ViewWorkspace(props: {
               : view.kind === 'storming'
                 ? 'storming'
                 : `${structureLevel === 'aggregates' ? 'aggregates' : 'structure'}${focusKey ? 'Focus' : ''}`;
+    /** What the canvas shows, as a printed or exported diagram says it (its heading and its file's name). */
+    const subject = canvasSubject(view.kind, settings, focusKey ? checked : [], model, stormings);
+    const wsName = current ? workspaceName(current.root) : undefined;
+    const heading = subject ? sheetHeading(wsName, subject, t, mode) : '';
+    const { options: exportOptions } = workspace.exportOptions;
+    const exportTarget = (): ExportTarget | null =>
+        graph && current && subject
+            ? {
+                  graph,
+                  scene: () => buildScene(graph, { diff: current.diff, diagnostics: current.diagnostics, mode, lang }),
+                  heading,
+                  legend: legendView,
+                  fileName: (ext) => exportFileName(wsName, subject, ext),
+              }
+            : null;
     /** Fits the whole view: a storming view like when it is shown (its graph, never zoomed in past normal size). */
     const fitView = (): void => {
         if (!canvas) return;
@@ -98,22 +139,20 @@ export function ViewWorkspace(props: {
         <section className="center">
             <div className="view-tabs">
                 <div className="view-tab-list" role="tablist">
-                    {(['contextMap', 'structure', 'catalog', 'storming'] as const)
-                        .filter((k) => k !== 'storming' || stormings.length > 0 || view.kind === 'storming')
-                        .map((k) => (
-                            <button
-                                key={k}
-                                role="tab"
-                                aria-selected={view.kind === k}
-                                className={view.kind === k ? 'active' : ''}
-                                onClick={() => setView({ kind: k })}
-                            >
-                                {t.views[k]}
-                            </button>
-                        ))}
+                    {VIEW_TABS.map((k) => (
+                        <button
+                            key={k}
+                            role="tab"
+                            aria-selected={view.kind === k}
+                            className={view.kind === k ? 'active' : ''}
+                            onClick={() => setView({ kind: k })}
+                        >
+                            {t.views[k]}
+                        </button>
+                    ))}
                 </div>
                 <div className="view-toolbar">
-                    {view.kind === 'structure' && (
+                    {bar === 'structure' && (
                         <ToolbarSubject>
                             <LevelSwitch
                                 label={t.structureMode}
@@ -125,14 +164,14 @@ export function ViewWorkspace(props: {
                             />
                         </ToolbarSubject>
                     )}
-                    {view.kind === 'catalog' && (
+                    {bar === 'catalog' && (
                         <ToolbarSubject>
                             <CatalogSearch filter={catalogFilter} onChange={setCatalogFilter} />
                         </ToolbarSubject>
                     )}
-                    {view.kind === 'storming' && <StormingToolbar stormings={stormings} choice={stormingChoice} mode={mode} onChange={setStormingChoice} />}
+                    {bar === 'storming' && <StormingToolbar stormings={stormings} choice={stormingChoice} mode={mode} onChange={setStormingChoice} />}
                     <ToolbarEnd>
-                        {view.kind === 'contextMap' && (
+                        {bar === 'contextMap' && (
                             <FilterPopover count={activeFilterCount({ view: 'contextMap', mapAll })} onClear={() => setMapAll(false)}>
                                 <FilterSection title={t.filters.contexts}>
                                     <label className="check">
@@ -142,9 +181,14 @@ export function ViewWorkspace(props: {
                                 </FilterSection>
                             </FilterPopover>
                         )}
-                        {view.kind === 'structure' && (
+                        {bar === 'structure' && (
                             <FilterPopover
-                                count={activeFilterCount({ view: 'structure', contexts: focusContexts.length, checked: checked.length, hidden: hidden.length })}
+                                count={activeFilterCount({
+                                    view: 'structure',
+                                    contexts: focusContexts.length,
+                                    checked: checked.length,
+                                    hidden: hidden.length,
+                                })}
                                 onClear={() => {
                                     setStructureContexts(null);
                                     setHiddenContexts([]);
@@ -163,7 +207,7 @@ export function ViewWorkspace(props: {
                                 </FilterSection>
                             </FilterPopover>
                         )}
-                        {view.kind === 'catalog' && model && (
+                        {bar === 'catalog' && model && (
                             <FilterPopover
                                 count={activeFilterCount({ view: 'catalog', contexts: catalogFilter.contexts, kinds: catalogFilter.sections })}
                                 onClear={() => setCatalogFilter({ ...catalogFilter, contexts: null, sections: [] })}
@@ -171,35 +215,54 @@ export function ViewWorkspace(props: {
                                 <CatalogFilters model={model} mode={mode} filter={catalogFilter} onChange={setCatalogFilter} />
                             </FilterPopover>
                         )}
+                        {bar === 'storming' && <StormingFilter stormings={stormings} choice={stormingChoice} onChange={setStormingChoice} />}
+                        {output === 'print' && <PrintButton onPrint={printer.print} />}
+                        {output === 'export' && (
+                            <ExportButton
+                                control={{
+                                    target: exportTarget,
+                                    ...workspace.exportOptions,
+                                    print: { preparing: printer.phase === 'preparing', onPrint: printer.print },
+                                }}
+                            />
+                        )}
                     </ToolbarEnd>
                 </div>
             </div>
             <div className="view-area">
                 <FlowCanvas onMount={onMount} />
                 {isCanvas(view) && props.overlay}
-                {isCanvas(view) && (
+                {isCanvas(view) && !nothing && (
                     <CanvasControls
                         canvas={canvas}
                         fitAll={fitView}
                         legend={legendView && { view: legendView, open: legendOpen, onToggle: onLegendToggle }}
+                        compact={{ on: settings.compact, onToggle: () => settings.setCompact(!settings.compact) }}
                         keys
                     />
                 )}
-                <EdgeHint canvas={canvas} view={legendView} />
-                {current && !graph && isCanvas(view) && (
-                    <div className="empty">
-                        {current.status === 'empty'
-                            ? t.noDtFiles
-                            : view.kind === 'storming'
-                              ? t.noStormings
-                              : noneChecked && view.kind === 'structure'
-                                ? t.pickContexts
-                                : focusKey && view.kind === 'structure'
-                                  ? t.loading
-                                  : t.noDiagram}
-                    </div>
+                {printer.phase === 'printing' && printKind(isCanvas(view)) === 'diagram' && current && graph && (
+                    <PrintSheet graph={graph} current={current} mode={mode} heading={heading} legend={exportOptions.legend ? legendView : null} />
                 )}
-                {view.kind === 'catalog' && model && (
+                <EdgeHint canvas={canvas} view={legendView} />
+                {nothing ? (
+                    <div className="empty">{emptyLine(t, props.aiReady === true)}</div>
+                ) : (
+                    current &&
+                    !graph &&
+                    isCanvas(view) && (
+                        <div className="empty">
+                            {view.kind === 'storming'
+                                ? t.noStormings
+                                : noneChecked && view.kind === 'structure'
+                                  ? t.pickContexts
+                                  : focusKey && view.kind === 'structure'
+                                    ? t.loading
+                                    : t.noDiagram}
+                        </div>
+                    )
+                )}
+                {view.kind === 'catalog' && model && !nothing && (
                     <Catalog
                         model={model}
                         mode={mode}

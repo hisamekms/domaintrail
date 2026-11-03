@@ -1,7 +1,7 @@
 /**
  * What the collaboration sessions (ADR 0026, M1-0) build on and the other Live View tests do not pin down yet: the
  * payload of a workspace with `.dt` only, `.dtes` only and both, a `ref` that stops resolving, a `.dtes` syntax error,
- * an event shared by timelines, and that `dt view` exposes no session surface.
+ * an event shared by timelines, and that the read-only Live View (`dt open --host`) exposes no session surface.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -217,7 +217,7 @@ describe('an event shared by timelines', () => {
     });
 });
 
-describe('dt view exposes no session surface', () => {
+describe('the read-only Live View exposes no session surface', () => {
     let dir: string;
     let server: ViewServer;
     beforeAll(async () => {

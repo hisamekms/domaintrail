@@ -7,23 +7,29 @@ import { changeUnits, shownUnits, unitName, type ChangeUnit } from './history';
 import { listedParticipants, type Peers } from './presence';
 import { participantAvatars, participantNames } from './stream';
 
-/**
- * An action of the collab menu (below its list of participants). Today the page is only ever in a collab (`dt session
- * start`); a solo page (`dt view`, one person) would get a menu of its own here, 「👤 1 人 ▾」 with `start` (コラボを始める),
- * once the page can start one.
- */
-export type CollabMenuItem = 'invite' | 'record' | 'restore' | 'hand-over' | 'end' | 'leave';
+/** An action of the collab menu (below its list of participants). */
+export type CollabMenuItem = 'invite' | 'stop-invite' | 'record' | 'restore' | 'download-sources' | 'hand-over' | 'end' | 'leave';
 
 /**
- * The actions of the collab menu for a role. Everyone can copy the invite link. The facilitator records the workspace,
+ * The actions of the collab menu for a role. Everyone can copy the invite link and download the sources (a ZIP of the
+ * `.dt`, `.dtes` and config files, to share without git). The facilitator records the workspace,
  * restores an earlier state of it (the last resort: a unit of work is reverted from its card), hands the role over and
  * ends the collab; a participant leaves. The facilitator has no 退出: leaving would leave the
  * collab without anyone to apply, answer or end it — they hand the role over first (and can leave then, as a
- * participant), or end it. `live` false (ended, or signed out): only the list.
+ * participant), or end it. `live` false (ended, or signed out): only the list. In Solo (`dt open`): only the
+ * workspace's record, restore and download — no one to invite or hand over to, and the session goes on with the next
+ * `dt open`. In the `link` identity mode (`link` given): the facilitator makes the invite link (a new one each time;
+ * 招待を止める while one is live) and lets each person in; a participant has no link to copy.
  */
-export function collabMenuItems(role: Me['participant']['role'], live: boolean): CollabMenuItem[] {
+export function collabMenuItems(role: Me['participant']['role'], live: boolean, solo = false, link?: { readonly inviteLive: boolean }): CollabMenuItem[] {
     if (!live) return [];
-    return role === 'facilitator' ? ['invite', 'record', 'restore', 'hand-over', 'end'] : ['invite', 'leave'];
+    if (solo) return role === 'facilitator' ? ['record', 'restore', 'download-sources'] : ['download-sources'];
+    // `link`: an invite is a link the facilitator makes (and stops); the page's own address lets no one in
+    if (link)
+        return role === 'facilitator'
+            ? ['invite', ...(link.inviteLive ? (['stop-invite'] as const) : []), 'record', 'restore', 'download-sources', 'hand-over', 'end']
+            : ['download-sources', 'leave'];
+    return role === 'facilitator' ? ['invite', 'record', 'restore', 'download-sources', 'hand-over', 'end'] : ['invite', 'download-sources', 'leave'];
 }
 
 /**

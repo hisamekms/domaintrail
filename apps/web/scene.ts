@@ -29,6 +29,8 @@ export interface NodeProps {
     /** The change badge's text (in the Live View's language), empty without one. */
     badge: string;
     diag: DiagMark;
+    /** A resolved hotspot (`.dtes` §3.5): what was agreed, empty when not written. Absent while open and on other nodes. */
+    resolution?: string;
 }
 
 /** What a container shows: a bounded context, an aggregate boundary, a storming group. */
@@ -74,6 +76,8 @@ export interface EdgeProps {
     lw: number;
     lh: number;
     tone: EdgeTone;
+    /** A resolved hotspot's `on`: drawn quieter, as its note is. */
+    resolved?: true;
 }
 
 /** What every item has: a stable ID (unchanged items keep their identity and selection), its origin and its element. */
@@ -155,9 +159,30 @@ export function sceneItems(scene: Scene): SceneItem[] {
     return [...contexts, ...boundaries, ...scene.nodes, ...scene.ghosts, ...scene.internal, ...scene.edges];
 }
 
-/** The item drawing `elementId`: its node if it has one, else the first item that stands for it. */
-export function itemForElement(items: readonly SceneItem[], elementId: string): SceneItem | undefined {
-    return items.find((s) => s.elementId === elementId && s.type === 'node') ?? items.find((s) => s.elementId === elementId);
+/**
+ * The item drawing `elementId`: its node if it has one, else the first item that stands for it. An element drawn as
+ * several notes (a storming's actor beside each command it issues) is the note nearest `near` (the viewport's centre),
+ * or without it the first in reading order (top to bottom, then left to right).
+ */
+export function itemForElement(items: readonly SceneItem[], elementId: string, near?: Point): SceneItem | undefined {
+    const nodes = items.filter((s): s is SceneNode => s.elementId === elementId && s.type === 'node');
+    if (!nodes.length) return items.find((s) => s.elementId === elementId);
+    const centre = (n: SceneNode): Point => ({ x: n.x + n.props.w / 2, y: n.y + n.props.h / 2 });
+    const distance = (n: SceneNode): number => (near ? Math.hypot(centre(n).x - near.x, centre(n).y - near.y) : 0);
+    return nodes.reduce((best, n) => {
+        const [d, b] = [distance(n), distance(best)];
+        return d < b || (d === b && (n.y < best.y || (n.y === best.y && n.x < best.x))) ? n : best;
+    });
+}
+
+/**
+ * The other notes of the elements whose notes are selected (`selected`): an element drawn more than once (a storming's
+ * actor, read model or aggregate beside each command that uses it) shows all its notes when one is selected.
+ */
+export function sameElementNodes(items: Iterable<SceneItem>, selected: ReadonlySet<SceneId>): Set<SceneId> {
+    const nodes = [...items].filter((s) => s.type === 'node' && !s.ghost);
+    const elements = new Set(nodes.filter((s) => selected.has(s.id)).map((s) => s.elementId));
+    return new Set(nodes.filter((s) => elements.has(s.elementId) && !selected.has(s.id)).map((s) => s.id));
 }
 
 /** A rectangle on the page (or on the screen, as said where it is used). */

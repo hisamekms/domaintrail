@@ -44,6 +44,7 @@ import {
 } from '../diagram-items';
 import {
     itemForElement,
+    rectCenter,
     rectContains,
     unionRects,
     type DiagMark,
@@ -56,6 +57,7 @@ import {
     type SceneInternal,
     type SceneItem,
     type SceneNode,
+    sameElementNodes,
     sceneItems,
 } from '../scene';
 import type { Theme } from '../theme';
@@ -79,7 +81,8 @@ import {
 
 /** A scene item drawn as a React Flow node (everything but edges), or an anchor for an edge whose end is not drawn. */
 type BoxItem = SceneNode | SceneGroup | SceneInternal;
-type ItemNode = Node<{ item: BoxItem }, 'domain-node' | 'domain-group' | 'domain-internal'>;
+/** `same`: a note of the element of a selected note (an element drawn more than once), not itself selected. */
+type ItemNode = Node<{ item: BoxItem; same?: true }, 'domain-node' | 'domain-group' | 'domain-internal'>;
 type AnchorNode = Node<Record<string, never>, 'domain-anchor'>;
 type FlowNode = ItemNode | AnchorNode;
 type ItemEdge = Edge<{ item: SceneEdge }, 'domain-edge'>;
@@ -92,7 +95,8 @@ const LAYER = { context: 0, boundary: 1, node: 2, ghost: 3, internal: 4, edge: 5
 
 function layerOf(item: SceneItem): number {
     if (item.ghost) return LAYER.ghost;
-    if (item.type === 'group') return item.props.kind === 'aggregateBoundary' ? LAYER.boundary : LAYER.context;
+    // an aggregate's boundary in its context's frame, a timeline's group in its stage's frame: above the frame
+    if (item.type === 'group') return item.props.kind === 'aggregateBoundary' || item.props.kind === 'esGroup' ? LAYER.boundary : LAYER.context;
     return LAYER[item.type];
 }
 
@@ -144,7 +148,7 @@ function DomainNode({ data, selected }: NodeProps<ItemNode>): ReactNode {
     const marked = p.kind !== 'initial' && (p.badge !== '' || p.diag !== 'none');
     return (
         <>
-            <div className={nodeClassName(p, selected)} style={nodeStyle(p)}>
+            <div className={nodeClassName(p, selected, data.same === true)} style={nodeStyle(p)}>
                 <NodeContent p={p} Marks={ZoomedMarks} />
             </div>
             {marked ? <MarkedOutline p={p} /> : <Outline w={p.w} h={p.h} d={nodeOutlinePath(p, 1)} />}
@@ -285,19 +289,21 @@ class CanvasState {
 /** React Flow's nodes and edges for the state, reusing those of unchanged items (so that React Flow redraws only what changed). */
 function useFlowElements(state: CanvasState): { nodes: FlowNode[]; edges: ItemEdge[] } {
     const rendered = useSyncExternalStore(state.subscribeRender, () => state.rendered);
-    const cache = useRef(new Map<SceneId, { item: SceneItem; selected: boolean; element: FlowNode | ItemEdge }>());
+    const cache = useRef(new Map<SceneId, { item: SceneItem; selected: boolean; same: boolean; element: FlowNode | ItemEdge }>());
     return useMemo(() => {
         void rendered;
         const previous = cache.current;
-        const next = new Map<SceneId, { item: SceneItem; selected: boolean; element: FlowNode | ItemEdge }>();
+        const next = new Map<SceneId, { item: SceneItem; selected: boolean; same: boolean; element: FlowNode | ItemEdge }>();
         const nodes: FlowNode[] = [];
         const edges: ItemEdge[] = [];
         const anchors = new Set<SceneId>();
-        const reuse = (item: SceneItem, build: (selected: boolean) => FlowNode | ItemEdge): FlowNode | ItemEdge => {
+        const same = sameElementNodes(state.items.values(), state.selected);
+        const reuse = (item: SceneItem, build: (selected: boolean, same: boolean) => FlowNode | ItemEdge): FlowNode | ItemEdge => {
             const selected = state.selected.has(item.id);
+            const isSame = same.has(item.id);
             const old = previous.get(item.id);
-            const element = old && old.item === item && old.selected === selected ? old.element : build(selected);
-            next.set(item.id, { item, selected, element });
+            const element = old && old.item === item && old.selected === selected && old.same === isSame ? old.element : build(selected, isSame);
+            next.set(item.id, { item, selected, same: isSame, element });
             return element;
         };
         for (const item of state.items.values()) {
@@ -311,7 +317,7 @@ function useFlowElements(state: CanvasState): { nodes: FlowNode[]; edges: ItemEd
                 }
             } else {
                 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- built as a node below
-                nodes.push(reuse(item, (selected) => toNode(item, selected)) as FlowNode);
+                nodes.push(reuse(item, (selected, isSame) => toNode(item, selected, isSame)) as FlowNode);
             }
         }
         cache.current = next;
@@ -319,7 +325,7 @@ function useFlowElements(state: CanvasState): { nodes: FlowNode[]; edges: ItemEd
     }, [state, rendered]);
 }
 
-function toNode(item: BoxItem, selected: boolean): ItemNode {
+function toNode(item: BoxItem, selected: boolean, same: boolean): ItemNode {
     const ghost = item.ghost === true;
     return {
         id: item.id,
@@ -327,7 +333,7 @@ function toNode(item: BoxItem, selected: boolean): ItemNode {
         position: { x: item.x, y: item.y },
         width: item.props.w,
         height: item.props.h,
-        data: { item },
+        data: same ? { item, same } : { item },
         selected,
         selectable: !ghost,
         draggable: false,
@@ -477,7 +483,12 @@ function createFlowCanvas(state: CanvasState, store: ReturnType<typeof useStoreA
             return { id, type: item.type, elementId: item.elementId, ghost: item.ghost === true, kind };
         },
         itemBounds,
-        findElement: (elementId) => itemForElement([...state.items.values()], elementId)?.id,
+        // of an element drawn more than once, the note nearest the middle of what the canvas shows
+        findElement: (elementId) => {
+            const { x, y, zoom } = transform();
+            const { w, h } = size();
+            return itemForElement([...state.items.values()], elementId, rectCenter({ x: -x / zoom, y: -y / zoom, w: w / zoom, h: h / zoom }))?.id;
+        },
 
         selectedIds: () => [...state.selected],
         onlySelectedId: () => (state.selected.size === 1 ? [...state.selected][0] : undefined),

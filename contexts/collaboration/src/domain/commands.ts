@@ -6,16 +6,17 @@
 // the role of who acts as a parameter, from the use case's `Actor`. A command takes its parameters as one object
 // (ADR 0028), which it passes on as it is to its check of requirements.
 import { Collaboration, decide, err, ok } from '../generated/index.js';
+import { AI_PARTICIPANT_ID } from './ai.js';
 import { holdsHashOfFiles } from './snapshot.js';
 import { succeeded } from './validation.js';
 
 export const sessionCommands: Collaboration.SessionCommands = {
     // the facilitator is the first participant
-    start: decide<Collaboration.StartSessionDecision>(Collaboration.SessionShape, ({ id, facilitator, name, startedAt }) =>
+    start: decide<Collaboration.StartSessionDecision>(Collaboration.SessionShape, ({ id, facilitator, name, mode, startedAt }) =>
         ok({
             Open: {
-                set: { id, facilitator, participants: [{ id: facilitator, name, role: 'Facilitator', joinedAt: startedAt }], startedAt },
-                events: { SessionStarted: { type: 'SessionStarted', sessionId: id, facilitator, name, startedAt } },
+                set: { id, facilitator, mode, participants: [{ id: facilitator, name, role: 'Facilitator', joinedAt: startedAt }], startedAt },
+                events: { SessionStarted: { type: 'SessionStarted', sessionId: id, facilitator, name, mode, startedAt } },
             },
         }),
     ),
@@ -23,12 +24,28 @@ export const sessionCommands: Collaboration.SessionCommands = {
     join: decide<Collaboration.JoinSessionDecision>(Collaboration.SessionShape, {
         Open: (session, params) => {
             const { participant, name, joinedAt } = params;
-            if (Collaboration.checkJoinSessionRequires(session, params) === 'newcomer') return err({ type: 'AlreadyJoined', participant });
+            switch (Collaboration.checkJoinSessionRequires(session, params)) {
+                case 'newcomer':
+                    return err({ type: 'AlreadyJoined', participant });
+                case 'collaborative':
+                    return err({ type: 'SoloSession' });
+            }
             return ok({
                 Open: {
                     set: { participants: [...session.participants, { id: participant, name, role: 'Participant', joinedAt }] },
                     events: { ParticipantJoined: { type: 'ParticipantJoined', sessionId: session.id, participant, name, joinedAt } },
                 },
+            });
+        },
+    }),
+
+    // a Solo session continued as a Collab one (`dt collab` on a workspace whose open session is `dt open`'s)
+    collaborate: decide<Collaboration.CollaborateSessionDecision>(Collaboration.SessionShape, {
+        Open: (session, params) => {
+            if (Collaboration.checkCollaborateSessionRequires(session, params) === 'solo') return err({ type: 'NotSolo' });
+            const { collaboratedAt } = params;
+            return ok({
+                Open: { set: { mode: 'Collab' }, events: { SessionCollaborated: { type: 'SessionCollaborated', sessionId: session.id, collaboratedAt } } },
             });
         },
     }),
@@ -56,12 +73,25 @@ export const requestCommands: Collaboration.RequestCommands = {
             case 'distinctMentions':
                 return err({ type: 'DuplicateMention' });
         }
-        const { id, session, author, targets, body, sentAt, replyTo, mentions } = params;
+        const { id, session, author, targets, body, sentAt, replyTo, mentions, viewedAt } = params;
         return ok({
             Sent: {
                 // a reply names the run it answers; whether it runs is the facilitator's to decide, as for any message
-                set: { id, session, author, targets, body, sentAt, replyTo, mentions, reverts: undefined },
-                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets, body, sentAt, ...(replyTo && { replyTo }), mentions } },
+                set: { id, session, author, targets, body, sentAt, replyTo, mentions, reverts: undefined, viewedAt },
+                events: {
+                    RequestSent: {
+                        type: 'RequestSent',
+                        requestId: id,
+                        session,
+                        author,
+                        targets,
+                        body,
+                        sentAt,
+                        ...(replyTo && { replyTo }),
+                        mentions,
+                        ...(viewedAt && { viewedAt }),
+                    },
+                },
             },
         });
     }),
@@ -74,8 +104,20 @@ export const requestCommands: Collaboration.RequestCommands = {
         const reverts: Collaboration.AgentRunId = params.reverts;
         return ok({
             Sent: {
-                set: { id, session, author, targets: [], body, sentAt, replyTo: undefined, mentions: [], reverts },
+                set: { id, session, author, targets: [], body, sentAt, replyTo: undefined, mentions: [], reverts, viewedAt: undefined },
                 events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, mentions: [], reverts } },
+            },
+        });
+    }),
+
+    // the read-only answerer's answer: written as the AI, a reply to the message it answers, with no target or mention
+    answer: decide<Collaboration.AnswerRequestDecision>(Collaboration.RequestShape, ({ id, session, answers, body, sentAt }) => {
+        const replyTo: Collaboration.ReplyTarget = { kind: 'Message', request: answers };
+        const author = AI_PARTICIPANT_ID;
+        return ok({
+            Sent: {
+                set: { id, session, author, targets: [], body, sentAt, replyTo, mentions: [], reverts: undefined, viewedAt: undefined },
+                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, replyTo, mentions: [] } },
             },
         });
     }),
@@ -149,7 +191,7 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
                     return err({ type: 'InvalidReply' });
             }
             const { report, resultRevision, changed, reply, finishedAt } = params;
-            if (succeeded(report)) {
+            if (succeeded(report, changed)) {
                 return ok({
                     Completed: {
                         // the reply is kept with a completed run only: a failure is the facts'

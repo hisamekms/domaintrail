@@ -1,5 +1,5 @@
 // `bun run session:seed`: a collaboration session filled with every display pattern of the chat, for review, without
-// Claude Code. It copies examples/shop into a scratch directory, starts `dt session start` there (the built CLI), signs
+// Claude Code. It copies examples/shop into a scratch directory, starts `dt collab --no-agent` there (the built CLI), signs
 // in named participants, plays the chosen scenarios through the session's real APIs with a scripted agent, stops that
 // agent and leaves the session server running in the foreground (Ctrl+C stops it). See docs/dev-session-seed.md.
 import { tmpdir } from 'node:os';
@@ -71,10 +71,10 @@ Seeded ${scenarios.join(', ')}: ${state.requests.length} messages, ${state.runs.
   Facilitator: open the Live View, join with any name, then open (single use, 10 minutes):
                ${seeded.facilitatorLink}
                You then hold the role of ${facilitator?.name ?? 'the facilitator'}: the facilitator's messages and reactions show as 「あなた」.
-               Another link: node ${path.relative(process.cwd(), path.join(ROOT, 'dist', 'dt.js'))} -r ${seeded.dir} session link
+               Another link: node ${path.relative(process.cwd(), path.join(ROOT, 'dist', 'dt.js'))} -r ${seeded.dir} collab link
   Participant: a private window, the same URL, any name (a new participant). The seeded ones
                (${seeded.participants.map((p) => p.name).join(', ')}) and their cookies are in ${seeded.seedFile}.
-  Agent:       ${values['leave-running'] ? "the seed's agent holds the run left running and the queued ones (cancel them to move on)" : "the seed's agent is stopped"}. For real runs: node ${path.relative(process.cwd(), path.join(ROOT, 'dist', 'dt.js'))} -r ${seeded.dir} session subscribe --agent claude
+  Agent:       ${values['leave-running'] ? "the seed's agent holds the run left running and the queued ones (cancel them to move on)" : "the seed's agent is stopped"}. For real runs: node ${path.relative(process.cwd(), path.join(ROOT, 'dist', 'dt.js'))} -r ${seeded.dir} collab agent-link, then agent --code <code>
 `);
     if (values.exit) {
         await seeded.stop();

@@ -2,9 +2,9 @@
 // actions and revision tools, and the selection of messages to apply together. A message and its quote are not marked
 // together on hover: each row reacts only to itself, and a link leads from one to the other.
 import { createContext, useContext } from 'react';
-import type { Classification } from '@domaintrail/collaboration/protocol';
 import type { Messages } from '../i18n';
 import type { ChatActions, QuestionChoice } from './actions';
+import type { TriageJson } from './ai';
 import type { MessageMark } from './cards';
 import type { MarkIndex, MarkTargetData, Sign } from './marks';
 import type { MessageReference, ReplyDraft, ReplyReference } from './replies';
@@ -24,6 +24,23 @@ export interface ChatContextValue {
     readonly onNavigate: (target: ModelTarget) => void;
     /** The facilitator, in an open session: the actions are offered. */
     readonly control: boolean;
+    /** The session is `dt open`'s (one person, every message to the AI): what only makes sense with others is hidden. */
+    readonly solo: boolean;
+    /** The triage of each message addressed to the AI, by the message's ID (ADR 0030). */
+    readonly triages: ReadonlyMap<string, TriageJson>;
+    /** The messages whose answer or proposal the server gave up. */
+    readonly givenUp: ReadonlySet<string>;
+    /**
+     * The open change proposals the facilitator chose to approve together (one run), and the option the facilitator
+     * picked of each proposal with options (by its ID; none: the AI's recommendation).
+     */
+    readonly proposalPicks: {
+        readonly ids: ReadonlySet<string>;
+        toggle(id: string): void;
+        clear(): void;
+        readonly options: ReadonlyMap<string, number>;
+        choose(id: string, option: number): void;
+    };
     readonly actions: ChatActions;
     /** The facilitator cancels a unit's running or queued run (`ChangeUnit.key`): a dialog asks first. */
     readonly confirmCancel: (unit: string) => void;
@@ -44,10 +61,13 @@ export interface ChatContextValue {
         /** A mark being set (its sign and target key): not clickable again until the server answered. */
         readonly pending: ReadonlySet<string>;
     };
-    /** The facilitator's: how each message reads (undefined: not classified, every message applicable). */
-    readonly classifications: Readonly<Record<string, Classification>> | undefined;
     /** The messages chosen to apply together (selection mode while any is chosen or the mode was entered). */
     readonly selection: { readonly active: boolean; readonly ids: ReadonlySet<string>; toggle(id: string): void; start(id: string): void; clear(): void };
+    /**
+     * Whether a long text is clamped (by its key: `message:<id>`, `proposal:<id>`, `run:<id>`): only one there when the
+     * page loaded and not opened yet; `open` keeps it open (`reveal.ts`).
+     */
+    readonly reveal: { clamps(key: string): boolean; open(key: string): void };
     /** Scrolls the stream to an item (`message:<id>`, `card:<key>`) and marks it for a moment. */
     readonly jump: (key: string) => void;
     /** Opens the participants at a person (a mention of them was clicked), their row marked for a moment. */

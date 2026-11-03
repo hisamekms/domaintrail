@@ -8,7 +8,7 @@ when you need the details, is the guide: `dt guide` in the terminal, the same te
 
 DomainTrail is a language for domain models (`.dt` files) and a CLI, `dt`. The model states the **structure and the
 contracts** of a domain — bounded contexts, aggregates and their states, commands with their requirements and events,
-invariants — and is their single source of truth. `dt check` checks it, `dt view` shows it live in the browser, and
+invariants — and is their single source of truth. `dt check` checks it, `dt open` shows it live in the browser, and
 `dt generate ts` turns it into TypeScript types, command contracts, checks of the invariants, and contract tests for
 your implementation. It never generates business logic: that is written by hand (or by the agent) against the
 generated types, and the compiler and the tests hold it to the model.
@@ -16,7 +16,7 @@ generated types, and the compiler and the tests hold it to the model.
 ## Working with an AI agent
 
 This is the way DomainTrail is meant to be used. If you only want to get going: install it (`npm i -D domaintrail`,
-see [Install](#install)), add the block below to your agent's instructions, run `npx dt view`, and ask the agent to
+see [Install](#install)), add the block below to your agent's instructions, run `npx dt open`, and ask the agent to
 model something. The rest of the page walks through by hand what the agent does, so that you can follow its work.
 
 ### Who does what
@@ -55,7 +55,7 @@ structure and contracts; `generated/domain` is generated from it.
 - Never cast to a domain type (`as X`): make values with `make<Name>`, `parseDecimal` or a verified type's factory.
 - To look up one element, run `npx dt show <name>` (e.g. `npx dt show Booking.Reservation.confirm`) instead of reading
   the `.dt` files. Use `--format json` with `check`, `generate ts` and `show` when you parse the output.
-- People watch the model in the Live View (`npx dt view`). Do not wait for it: it runs until stopped.
+- People watch the model in the Live View (`npx dt open`). Do not wait for it: it runs until stopped.
 - After upgrading domaintrail, read the Upgrading steps in `node_modules/domaintrail/CHANGELOG.md` of every version
   since the previous one, and follow them.
 ```
@@ -69,7 +69,7 @@ points agents to it.
 Start the Live View in a terminal of your own and open it in the browser:
 
 ```bash
-npx dt view
+npx dt open
 ```
 
 Then ask for the model in the words of the domain, one step at a time. A model is reviewed more easily when the agent
@@ -137,6 +137,10 @@ every `.dt` file below the current directory is part of the model.
   "sources": ["domain/**/*.dt"]
 }
 ```
+
+Settings that are yours only (a port, the model the AI runs with, the folders outside the project the AI may read) go
+into `domaintrail.local.jsonc` beside it, which you keep out of git: it is merged into `domaintrail.jsonc` key by key
+(`dt guide config`). When the settings that widen what the AI may do change, `dt open` asks you to approve them once.
 
 The recommended layout is one directory per bounded context and one file per aggregate:
 
@@ -344,15 +348,18 @@ domain/booking/reservation.dt
 ### Watch it in the Live View
 
 ```bash
-npx dt view
+npx dt open
 ```
 
 ```text
 Config: domaintrail.jsonc
-Live View: http://127.0.0.1:4321/
+Live View: http://127.0.0.1:4321/session/open?code=…
+  (a link for you only: opened once within 60 minutes, it signs that browser in; then http://127.0.0.1:4321/)
+Session: … (started, solo)
+AI: started in this process (claude …; role run)
 ```
 
-Open the address in the browser; it runs until Ctrl+C (`--port` to change the port). What to look at for this model:
+Open the printed link in the browser (it signs your browser in, once; afterwards the plain address works); it runs until Ctrl+C (`--port` to change the port). What to look at for this model:
 
 - **Structure** (the main view): the context `Booking` with `Reservation`, the value `Slot` it owns, and the ID it
   refers to.
@@ -724,7 +731,7 @@ tree-sitter (Neovim, Helix, Emacs) can use the grammar in
 
 - `dt guide` and [guide.md](guide.md): the reference for the language and the CLI, one topic at a time.
 - [examples/shop](../examples/shop/README.md): a complete example with an implementation.
-- [The Live View](live-view.md): every pane and view of `dt view`.
+- [The Live View](live-view.md): every pane and view of `dt open`.
 - [CHANGELOG.md](../CHANGELOG.md): what changed in each version, with the steps to upgrade a model and its code
   (also in the package: the last line of the block for the agent tells it to read it after an upgrade).
 - [docs/adr](adr): the design decisions behind the language.

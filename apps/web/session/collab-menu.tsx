@@ -4,13 +4,19 @@
 // the chat), hands the role over and ends the collab (asked first, with what is unfinished); a participant leaves.
 // Once it ended, everyone sees its summary (`CollabSummaryDialog`). What the menu offers to whom is in `collab.ts`.
 //
-// Only the collab state exists today (`dt session start`). A solo state — 「👤 1 人 ▾」 with 「コラボを始める」 under
-// `dt view` — would be another button and list here, chosen by the page's state, with the same popover.
+// Everyone downloads the sources (a ZIP of the .dt, .dtes and config files, `download.ts`).
+//
+// In the `link` identity mode the facilitator makes the invite link here (copied; a new one stops the previous) and
+// stops it, removes a participant from the list, and lets each person who asks in (`JoinRequests`, in the chat's head).
+//
+// In Solo (`dt open`, one person) the button is a plain ⋯ and the popover holds no people, only the workspace's
+// record, restore and download: the invite, the hand-over, the end and 退出 make sense only with others.
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { ChevronDown, X } from 'lucide-react';
+import { ChevronDown, Ellipsis, X } from 'lucide-react';
 import type { ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
 import { sessionApi } from './api';
+import { downloadSources } from './download';
 import { useChat, type Tx } from './chat-context';
 import { collabMenuItems, collabSummary, hasUnfinished, hoursMinutes, inviteLink, unfinishedWork, type CollabMenuItem, type CollabSummary } from './collab';
 import { unitName, type ChangeUnit } from './history';
@@ -38,6 +44,8 @@ export function openPeople(participantId?: string): void {
 const focusables = (root: HTMLElement): HTMLElement[] => [...root.querySelectorAll<HTMLElement>('button:not(:disabled), li[tabindex]')];
 
 export function CollabMenu(props: {
+    /** The session is Solo: no people, only the workspace's tools. */
+    solo: boolean;
     session: SessionData;
     location: ViewLocation;
     scope: ViewScope;
@@ -81,7 +89,8 @@ export function CollabMenu(props: {
     const rows = participantRows(session.state, session.peers, session.me, props.location);
     const online = rows.filter((r) => r.where !== 'away').length;
     const label = tx.chat.participantsOnline(online, rows.length);
-    const items = collabMenuItems(session.me.participant.role, live);
+    const link = session.me.identity.provider === 'link';
+    const items = collabMenuItems(session.me.participant.role, live, props.solo, link ? { inviteLive: Boolean(session.joining?.invite) } : undefined);
 
     const pick = (f: () => void | Promise<void>) => (): void => {
         close();
@@ -90,9 +99,26 @@ export function CollabMenu(props: {
     };
     const run: Record<CollabMenuItem, () => void | Promise<void>> = {
         invite: async () => {
-            const link = inviteLink(location.origin);
-            await navigator.clipboard?.writeText(link).catch(() => undefined);
-            setNote(tx.collab.inviteCopied(link));
+            if (!link) {
+                const address = inviteLink(location.origin);
+                await navigator.clipboard?.writeText(address).catch(() => undefined);
+                return setNote(tx.collab.inviteCopied(address));
+            }
+            try {
+                const made = await sessionApi.invite();
+                await navigator.clipboard?.writeText(made.link).catch(() => undefined);
+                setNote(tx.collab.inviteMade(made.link));
+            } catch (e) {
+                setNote(tx.error(failure(e)));
+            }
+        },
+        'stop-invite': async () => {
+            try {
+                await sessionApi.stopInvite();
+                setNote(tx.collab.inviteStopped);
+            } catch (e) {
+                setNote(tx.error(failure(e)));
+            }
         },
         record: () => revisions.take(),
         restore: () => setRestoring(true),
@@ -105,13 +131,22 @@ export function CollabMenu(props: {
                 setNote(tx.error(failure(e)));
             }
         },
+        'download-sources': async () => {
+            try {
+                await downloadSources();
+            } catch (e) {
+                setNote(tx.error(e instanceof Error ? e.message : String(e)));
+            }
+        },
         end: () => setEnding(true),
         leave: () => props.onLeave(),
     };
     const itemLabel: Record<CollabMenuItem, string> = {
-        invite: tx.collab.invite,
+        invite: link ? tx.collab.makeInvite : tx.collab.invite,
+        'stop-invite': tx.collab.stopInvite,
         record: tx.takeRevision,
         restore: tx.collab.restore,
+        'download-sources': tx.collab.downloadSources,
         'hand-over': tx.chat.handOver,
         end: tx.collab.end,
         leave: tx.leave,
@@ -133,6 +168,8 @@ export function CollabMenu(props: {
         wasOpen.current = open;
     }, [open]);
 
+    // alone with nothing to offer (ended): no menu
+    if (props.solo && items.length === 0) return null;
     return (
         <div className="collab-menu" ref={root}>
             <button
@@ -140,35 +177,52 @@ export function CollabMenu(props: {
                 className="collab-menu-button"
                 aria-haspopup="dialog"
                 aria-expanded={open}
-                aria-label={`${tx.collab.menu}: ${label}`}
+                aria-label={props.solo ? tx.collab.menu : `${tx.collab.menu}: ${label}`}
                 data-tooltip={tx.collab.menu}
                 onClick={() => (open ? close() : setOpen(true))}
             >
-                <span className="chat-avatars">
-                    {rows.slice(0, AVATARS).map((r) => (
-                        <span key={r.id} className={`chat-avatar${r.where === 'away' ? ' away' : ''}`}>
-                            <Avatar id={r.id} name={r.name} {...(r.avatarUrl && { url: r.avatarUrl })} facilitator={r.role === 'facilitator'} />
+                {props.solo ? (
+                    <Ellipsis size={15} aria-hidden />
+                ) : (
+                    <>
+                        <span className="chat-avatars">
+                            {rows.slice(0, AVATARS).map((r) => (
+                                <span key={r.id} className={`chat-avatar${r.where === 'away' ? ' away' : ''}`}>
+                                    <Avatar id={r.id} name={r.name} {...(r.avatarUrl && { url: r.avatarUrl })} facilitator={r.role === 'facilitator'} />
+                                </span>
+                            ))}
                         </span>
-                    ))}
-                </span>
-                <span className="chat-online">{tx.chat.onlineCount(online, rows.length)}</span>
-                <ChevronDown size={13} aria-hidden className="collab-menu-chevron" />
+                        <span className="chat-online">{tx.chat.onlineCount(online, rows.length)}</span>
+                        <ChevronDown size={13} aria-hidden className="collab-menu-chevron" />
+                    </>
+                )}
             </button>
             {open && (
                 <div ref={popover} className="collab-menu-popover motion-pop" role="dialog" aria-label={tx.collab.menu} onKeyDown={onKeyDown}>
                     {/* the people need no heading: the actions are set apart by a rule */}
-                    <p className="visually-hidden" id="collab-menu-people">
-                        {tx.collab.people}
-                    </p>
-                    <ParticipantsList
-                        rows={rows}
-                        scope={props.scope}
-                        focus={focus}
-                        onOpenView={(target) => {
-                            props.onOpenView(target);
-                            close();
-                        }}
-                    />
+                    {!props.solo && (
+                        <>
+                            <p className="visually-hidden" id="collab-menu-people">
+                                {tx.collab.people}
+                            </p>
+                            <ParticipantsList
+                                rows={rows}
+                                scope={props.scope}
+                                focus={focus}
+                                {...(link &&
+                                    live &&
+                                    session.me.participant.role === 'facilitator' && {
+                                        onRemove: (id: string) => {
+                                            sessionApi.removeParticipant(id).catch((e: unknown) => setNote(tx.error(failure(e))));
+                                        },
+                                    })}
+                                onOpenView={(target) => {
+                                    props.onOpenView(target);
+                                    close();
+                                }}
+                            />
+                        </>
+                    )}
                     {items.length > 0 && (
                         <div className="collab-menu-actions" role="menu" aria-label={tx.collab.actions}>
                             {items.map((item) => (
@@ -177,7 +231,7 @@ export function CollabMenu(props: {
                                     role="menuitem"
                                     className={item === 'end' ? 'danger' : undefined}
                                     data-item={item}
-                                    {...(item === 'invite' && { 'data-tooltip': tx.collab.inviteHint })}
+                                    {...(item === 'invite' && { 'data-tooltip': link ? tx.collab.makeInviteHint : tx.collab.inviteHint })}
                                     onClick={pick(run[item])}
                                 >
                                     {itemLabel[item]}

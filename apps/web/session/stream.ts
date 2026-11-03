@@ -6,6 +6,7 @@ import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { listedParticipants, type Peers } from './presence';
 import { changeUnits, type ChangeUnit } from './history';
 import { timeline } from './timeline';
+import { AI_CANDIDATE, AI_NAME, AI_PARTICIPANT, isSolo, type AiSlot, type ProposalJson } from './ai';
 import type { PersonCandidate } from './mentions';
 import { targetKey, targetName, targetShortName, type NamingContext, type TargetDraft } from './targets';
 
@@ -29,6 +30,8 @@ export interface ReplyRequest {
  */
 export interface ReplyView {
     readonly summary: string;
+    /** The answer, when the run judged a request a question and answered it instead of editing (ADR 0030). */
+    readonly answer?: string;
     readonly requests: readonly { readonly request: ReplyRequest; readonly status: RequestProgress; readonly note?: string }[];
     readonly questions: readonly {
         readonly id: string;
@@ -75,6 +78,7 @@ export function replyView(input: RunJson['input'], reply: ReplyJson): ReplyView 
     const resolve = (ids: readonly string[]): ReplyRequest[] => ids.flatMap((id) => byId.get(id) ?? []);
     return {
         summary: reply.summary,
+        ...(reply.answer !== undefined && { answer: reply.answer }),
         requests: reply.requests.flatMap((r) => {
             const request = byId.get(r.request);
             return request ? [{ request, status: r.status, ...(r.note !== undefined && { note: r.note }) }] : [];
@@ -108,6 +112,8 @@ export type StreamItem =
     | { readonly kind: 'session-start'; readonly key: string; readonly at: string; readonly revision: number }
     | { readonly kind: 'message'; readonly key: string; readonly at: string; readonly request: RequestJson }
     | { readonly kind: 'card'; readonly key: string; readonly at: string; readonly updatedAt: string; readonly unit: ChangeUnit }
+    /** A change proposal the AI wrote for a participant's 依頼 (ADR 0030), where it was made. */
+    | { readonly kind: 'proposal'; readonly key: string; readonly at: string; readonly proposal: ProposalJson }
     | {
           readonly kind: 'restored';
           readonly key: string;
@@ -187,10 +193,11 @@ export function agentMessage(run: RunJson, lookup: ReturnType<typeof revisionLoo
 }
 
 /**
- * The main stream, oldest first: the session's start, every message as it was sent (each is chat; the facilitator
- * applies some), one card per change unit where its first run was queued (`history.ts`), and the revisions restored.
+ * The main stream, oldest first: the session's start, every message as it was sent (each is chat; the AI's answers
+ * among them), one card per change unit where its first run was queued (`history.ts`), the change proposals where
+ * they were made, and the revisions restored.
  */
-export function streamItems(state: Pick<SessionStateBody, 'runs' | 'revisions' | 'requests'>): StreamItem[] {
+export function streamItems(state: Pick<SessionStateBody, 'runs' | 'revisions' | 'requests' | 'proposals'>): StreamItem[] {
     const numbers = new Map(timeline(state).map((e) => [e.revision.id, e.number]));
     const byId = new Map(state.revisions.map((r) => [r.id, r]));
     const items: StreamItem[] = [];
@@ -205,11 +212,62 @@ export function streamItems(state: Pick<SessionStateBody, 'runs' | 'revisions' |
     }
     for (const request of state.requests) items.push({ kind: 'message', key: `message:${request.id}`, at: request.sentAt, request });
     for (const unit of changeUnits(state)) items.push({ kind: 'card', key: `card:${unit.key}`, at: unit.start, updatedAt: unit.at, unit });
+    for (const proposal of state.proposals ?? []) items.push({ kind: 'proposal', key: `proposal:${proposal.id}`, at: proposal.proposedAt, proposal });
     // by time; items at the same moment keep the order they were pushed in (a message before the card applying it)
     return items
         .map((item, i) => ({ item, i }))
         .sort((a, b) => a.item.at.localeCompare(b.item.at) || a.i - b.i)
         .map(({ item }) => item);
+}
+
+/**
+ * A line of the chat as Solo shows it: an item of the stream, or the AI's card under a message (`request`), which is
+ * pending (or given up) until the answer or the run card it went to takes its place.
+ */
+export type ChatEntry =
+    | { readonly kind: 'item'; readonly item: StreamItem }
+    | {
+          readonly kind: 'slot';
+          readonly request: string;
+          readonly content: { readonly kind: 'pending' | 'given-up' } | { readonly kind: 'item'; readonly item: StreamItem };
+      };
+
+/**
+ * The stream with the AI's card under each message that has one (`slots`, by the message's ID): the answer or the run
+ * card a message went to is taken from where it stands by time and put right under the message, in its card's place;
+ * a run card holding the runs of several messages stays under the first. Without slots (Collab) it is the stream as is.
+ */
+export function placeAiSlots(items: readonly StreamItem[], slots: ReadonlyMap<string, AiSlot>): ChatEntry[] {
+    const byKey = new Map(items.map((i) => [i.key, i]));
+    const cardOf = new Map<string, string>();
+    for (const i of items) if (i.kind === 'card') for (const { run } of i.unit.runs) cardOf.set(run.id, i.key);
+    // the item each slot shows once it is there, the first message taking it
+    const placed = new Map<string, StreamItem>();
+    const taken = new Set<string>();
+    for (const i of items) {
+        const slot = i.kind === 'message' ? slots.get(i.request.id) : undefined;
+        if (!slot || i.kind !== 'message' || (slot.kind !== 'answer' && slot.kind !== 'run')) continue;
+        const key = slot.kind === 'answer' ? `message:${slot.answer}` : cardOf.get(slot.run);
+        const item = key === undefined ? undefined : byKey.get(key);
+        if (!item || taken.has(item.key)) continue;
+        taken.add(item.key);
+        placed.set(i.request.id, item);
+    }
+    const entries: ChatEntry[] = [];
+    for (const i of items) {
+        if (taken.has(i.key)) continue;
+        entries.push({ kind: 'item', item: i });
+        if (i.kind !== 'message') continue;
+        const slot = slots.get(i.request.id);
+        if (!slot) continue;
+        const item = placed.get(i.request.id);
+        if (item) entries.push({ kind: 'slot', request: i.request.id, content: { kind: 'item', item } });
+        else if (slot.kind === 'pending' || slot.kind === 'given-up') entries.push({ kind: 'slot', request: i.request.id, content: { kind: slot.kind } });
+        // decided, its answer or card not on the page yet: pending until it is
+        else if (!taken.has(slot.kind === 'answer' ? `message:${slot.answer}` : (cardOf.get(slot.run) ?? '')))
+            entries.push({ kind: 'slot', request: i.request.id, content: { kind: 'pending' } });
+    }
+    return entries;
 }
 
 /** When an item last changed: a card when its runs did, anything else when it was added. */
@@ -283,6 +341,7 @@ export function participantNames(state: Pick<SessionStateBody, 'session' | 'faci
     for (const p of listedParticipants(state)) names.set(p.id, p.name);
     for (const p of peers.values()) names.set(p.participant.id, p.participant.name);
     names.set(me.participant.id, me.participant.name);
+    names.set(AI_PARTICIPANT, AI_NAME);
     return names;
 }
 
@@ -390,17 +449,20 @@ export function arrivedBelow(
 }
 
 /**
- * The people `@` offers: everyone in the session but me, online first then away, by name within each (the order of
- * the header). The facilitator is one of them; no one else in the session: none.
+ * The people `@` offers: the AI first (ADR 0030), then everyone in the session but me, online first then away, by name
+ * within each (the order of the header). The facilitator is one of them. In Solo (`dt open`) every message goes to the
+ * AI already: none.
  */
 export function mentionablePeople(state: Pick<SessionStateBody, 'session' | 'facilitatorHolder'>, peers: Peers, me: Me): PersonCandidate[] {
+    if (isSolo(state)) return [];
     // holding the facilitator's role, I am the facilitator's row too
     const holding = me.participant.id === state.facilitatorHolder;
-    return headerParticipants(state, peers, me).flatMap((p): PersonCandidate[] =>
+    const people = headerParticipants(state, peers, me).flatMap((p): PersonCandidate[] =>
         p.me || (holding && p.id === state.session.facilitator)
             ? []
             : [{ id: p.id, name: p.name, role: p.role, online: p.online, ...(p.avatarUrl && { avatarUrl: p.avatarUrl }) }],
     );
+    return [AI_CANDIDATE, ...people];
 }
 
 /** When the stream last changed (its latest change), for `unreadCount`. */

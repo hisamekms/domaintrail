@@ -4,10 +4,15 @@
 //
 // A downstream context (Collaboration) takes only the published language (`published` in test/architecture/map.ts).
 
-// ---- published language: the IR of a storming, its semantic graph and timeline occurrences, its rule IDs, its files
+// ---- published language: the IR of a storming, its semantic graph and timeline occurrences, its rule IDs, its files,
+// the sticky note its elements are drawn as
 export {
+    allTimelines,
     declarations,
+    DESIGN_LEVEL,
     esElementId,
+    isDesignLevelOnly,
+    nodeElements,
     RELATION_RULES,
     type AnyDeclaration,
     type Clause,
@@ -18,6 +23,8 @@ export {
     type NodeElementKind,
     type RelationKeyword,
     type SourceRange,
+    type Stage,
+    type StageRef,
     type Storming,
     type StormingAnalysis,
     type StormingElement,
@@ -28,6 +35,7 @@ export {
     buildSemanticGraph,
     firstDeclarations,
     semanticEdgeKey,
+    stormingStages,
     stormingTimelines,
     timelineOccurrences,
     type EventOccurrence,
@@ -35,8 +43,26 @@ export {
     type SemanticEdgeKind,
     type SemanticGraph,
 } from './domain/semantic.js';
+export {
+    branchPoints,
+    drawnInSections,
+    hasExceptions,
+    mainFlows,
+    orderStages,
+    rejoinPoint,
+    sameStep,
+    sections,
+    stepEvents,
+    topLevel,
+    trunk,
+    type BranchPoint,
+    type RejoinPoint,
+    type Section,
+    type StageOrder,
+} from './domain/stages.js';
 export type { StormingRuleId } from './domain/rule-ids.js';
 export { isStormingFile } from './domain/files.js';
+export { estimatedLabelLines, labelOverflowsNote, LINES_AT_FLOOR, STICKY_NOTE } from './domain/sticky-note.js';
 
 // ---- use cases: Storming's analysis of the `.dtes` sources against the typed model; formatting -----------------
 export { analyzeStormings } from './application/analyze.js';

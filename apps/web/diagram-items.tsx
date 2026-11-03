@@ -2,9 +2,12 @@
 // size of an item's box, what goes in it, and the outline drawn around it while it is hovered or selected. A canvas
 // wraps each in its own container (React Flow's custom nodes and edges in `view/flow-canvas.tsx`), at the item's place
 // on the page.
-import { Fragment, type ComponentType, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useLayoutEffect, useReducer, useRef, useSyncExternalStore, type ComponentType, type CSSProperties, type ReactNode } from 'react';
 import { TRANSITION_LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, TRANSITION_SUB_SIZE } from '@domaintrail/visualization';
 import type { DiagMark, EdgeProps, GroupProps, InternalProps, NodeProps, Point } from './scene';
+import { fitKey, fitLabel, fontLoadCount, NOTE_KINDS, rememberedFit, rememberFit, subscribeFonts, type LabelFit } from './note-fit';
+import { useT } from './i18n';
+import { TOOLTIP_ATTR } from './tooltip';
 
 /** A box's size and text scale (`--s`), as its CSS expects them. */
 const boxStyle = (p: { w: number; h: number; scale: number }): CSSProperties => ({ width: p.w, height: p.h, ['--s' as string]: p.scale });
@@ -12,9 +15,11 @@ const boxStyle = (p: { w: number; h: number; scale: number }): CSSProperties => 
 /**
  * The classes of a node's box. `selected` draws the local selection as a ring outside it (`.dn-selected`): an outline
  * on the node's edge would be lost against an edge of the same hue (an aggregate root's indigo, a command's blue).
+ * `same` marks another note of the selected element (`.dn-same`, a fainter dashed ring). A resolved hotspot is toned
+ * down (`.dn-resolved`).
  */
-export const nodeClassName = (p: NodeProps, selected: boolean): string =>
-    `dn dn-${p.kind} dn-change-${p.change} dn-diag-${p.diag}${selected ? ' dn-selected' : ''}`;
+export const nodeClassName = (p: NodeProps, selected: boolean, same = false): string =>
+    `dn dn-${p.kind} dn-change-${p.change} dn-diag-${p.diag}${p.resolution !== undefined ? ' dn-resolved' : ''}${selected ? ' dn-selected' : same ? ' dn-same' : ''}`;
 export const nodeStyle = boxStyle;
 
 /** The change badge and the diagnostic mark on a node's edge, drawn by `EdgeMarks` (or a canvas's wrapper of it). */
@@ -22,13 +27,17 @@ export type MarksComponent = ComponentType<{ badge: string; diag: DiagMark }>;
 
 /** A model element (aggregate root, entity, value object, state): its heading, rows, compartment and marks. */
 export function NodeContent({ p, Marks }: { p: NodeProps; Marks: MarksComponent }): ReactNode {
+    const t = useT();
     if (p.kind === 'initial') return <div className="dn-initial">{p.label}</div>;
+    // a resolved hotspot tells what was agreed on hover
+    const settled = p.resolution === undefined ? undefined : t.resolvedHotspotTip(p.resolution);
     return (
         <>
-            <div className="dn-head">
+            <div className="dn-head" {...(settled !== undefined ? { [TOOLTIP_ATTR]: settled } : {})}>
                 {p.stereotype && <div className="dn-stereo">{p.stereotype}</div>}
-                <div className="dn-label">{p.label}</div>
+                {NOTE_KINDS.has(p.kind) ? <NoteLabel p={p} extra={settled} /> : <div className="dn-label">{p.label}</div>}
             </div>
+            {settled !== undefined && <ResolvedMark />}
             {p.rows.length > 0 && (
                 <div className="dn-body">
                     {p.rows.map((r, i) =>
@@ -51,6 +60,89 @@ export function NodeContent({ p, Marks }: { p: NodeProps; Marks: MarksComponent 
             {p.compartment > 0 && <div className="dn-compartment" style={{ height: p.compartment }} />}
             {(p.badge || p.diag !== 'none') && <Marks badge={p.badge} diag={p.diag} />}
         </>
+    );
+}
+
+/**
+ * A sticky note's label, fitted to the note (`note-fit.ts`): measured once per label, note size and fonts loaded, as
+ * the browser wraps it, and not again on pan or zoom. Clamped, it shows the whole label on hover (and `extra` under it:
+ * its note's own tooltip, which the label's covers).
+ */
+function NoteLabel({ p, extra }: { p: NodeProps; extra?: string | undefined }): ReactNode {
+    const ref = useRef<HTMLDivElement>(null);
+    const fonts = useSyncExternalStore(subscribeFonts, fontLoadCount, fontLoadCount);
+    const [, measured] = useReducer((n: number) => n + 1, 0);
+    const key = fitKey(p.label, p.w, p.h, p.scale, fonts);
+    useLayoutEffect(() => {
+        if (!ref.current || rememberedFit(key)) return;
+        const fit = measureLabel(ref.current, p.scale);
+        if (!fit) return;
+        rememberFit(key, fit);
+        measured();
+    }, [key, p.scale]);
+    const fit = rememberedFit(key);
+    const style: CSSProperties | undefined = fit && {
+        fontSize: fit.fontSize,
+        lineHeight: `${fit.lineHeight}px`,
+        ...(fit.clamp ? { WebkitLineClamp: fit.clamp } : {}),
+    };
+    return (
+        <div
+            ref={ref}
+            className={fit?.clamp ? 'dn-label dn-label-clamped' : 'dn-label'}
+            style={style}
+            {...(fit?.clamp ? { [TOOLTIP_ATTR]: extra ? `${p.label}\n${extra}` : p.label } : {})}
+        >
+            {p.label}
+        </div>
+    );
+}
+
+/**
+ * The fit of a note's label (`label`, in its `.dn-head`), measured on a hidden copy of it as wide as it is: its room is
+ * the head's height less its padding and the stereotype. None while the note is not laid out (a hidden view).
+ */
+function measureLabel(label: HTMLElement, scale: number): LabelFit | undefined {
+    const head = label.parentElement;
+    if (!head || head.clientHeight === 0 || label.clientWidth === 0) return undefined;
+    const padding = getComputedStyle(head);
+    const stereotype = label.previousElementSibling instanceof HTMLElement ? label.previousElementSibling.offsetHeight : 0;
+    const room = head.clientHeight - parseFloat(padding.paddingTop) - parseFloat(padding.paddingBottom) - stereotype;
+    const probe = document.createElement('div');
+    probe.className = 'dn-label';
+    probe.textContent = label.textContent;
+    Object.assign(probe.style, { position: 'absolute', visibility: 'hidden', left: '0', top: '0', width: `${label.clientWidth}px` });
+    head.appendChild(probe);
+    try {
+        return fitLabel(
+            (fontSize, lineHeight) => {
+                probe.style.fontSize = `${fontSize}px`;
+                probe.style.lineHeight = `${lineHeight}px`;
+                return probe.scrollHeight;
+            },
+            room,
+            scale,
+        );
+    } finally {
+        probe.remove();
+    }
+}
+
+/** Where a resolved hotspot's check sits: a disc this far inside its note's top-right corner. */
+export const RESOLVED_MARK = { inset: 4, radius: 8 };
+
+/** The check of a resolved hotspot's mark, in a disc of radius `r` centred at (`cx`, `cy`): an SVG path to stroke. */
+export const checkPath = (cx: number, cy: number, r: number): string =>
+    `M${cx - 0.45 * r},${cy + 0.02 * r} L${cx - 0.12 * r},${cy + 0.36 * r} L${cx + 0.48 * r},${cy - 0.32 * r}`;
+
+/** A resolved hotspot's mark: a green disc with a check, inside its note's top-right corner (`.dn-resolved-mark`). */
+function ResolvedMark(): ReactNode {
+    const { radius: r } = RESOLVED_MARK;
+    return (
+        <svg className="dn-resolved-mark" width={2 * r} height={2 * r} viewBox={`0 0 ${2 * r} ${2 * r}`} aria-hidden>
+            <circle cx={r} cy={r} r={r} className="dn-resolved-disc" />
+            <path d={checkPath(r, r, r)} className="dn-resolved-check" />
+        </svg>
     );
 }
 
@@ -89,7 +181,7 @@ export function GroupContent({ p }: { p: GroupProps }): ReactNode {
 }
 
 /** The classes of an edge's `<svg>`. */
-export const edgeClassName = (p: EdgeProps): string => `de de-${p.kind} de-tone-${p.tone}`;
+export const edgeClassName = (p: EdgeProps): string => `de de-${p.kind} de-tone-${p.tone}${p.resolved ? ' de-resolved' : ''}`;
 
 /**
  * An edge drawn exactly along the route computed by the layout engine (including bends and label position), in the

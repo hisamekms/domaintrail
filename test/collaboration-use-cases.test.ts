@@ -112,7 +112,7 @@ const facilitator = value(C.makeParticipantId('facilitator'));
 const guest = value(C.makeParticipantId('guest'));
 const name = value(C.makeDisplayName('Ada'));
 const text = (t: string): C.Text => value(C.makeText(t));
-const facts = { exitCode: 0, formatted: true, checked: true };
+const facts = { exitCode: 0, formatted: 'Ran', checked: 'Ran' } as const;
 
 async function started(s: Session): Promise<{ id: C.SessionId; start: C.RecordedRevision }> {
     const { session: open, revision } = value(await s.use.startSession({ facilitator, name }));

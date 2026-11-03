@@ -26,8 +26,9 @@ describe('the page: whom `@` offers, and the messages that mention me', () => {
     const message = (id: string, author: string, mentions: string[], minute: number) =>
         ({ id, session: 's', author, targets: [], body: 'x', sentAt: at(minute), state: 'Sent', mentions }) as unknown as SessionStateBody['requests'][number];
 
-    test('everyone but me, online first, then by name; the facilitator too; alone: no one', () => {
+    test('the AI first, then everyone but me, online first, then by name; the facilitator too; alone: the AI; Solo: no one', () => {
         expect(mentionablePeople(state(), peers, me).map((p) => [p.id, p.online, p.role])).toEqual([
+            ['ai', true, 'participant'],
             ['b', true, 'participant'],
             ['a', false, 'participant'],
             ['f', false, 'facilitator'],
@@ -36,7 +37,9 @@ describe('the page: whom `@` offers, and the messages that mention me', () => {
             ...state(),
             session: { facilitator: 'me', participants: [{ id: 'me', name: 'Me', role: 'Facilitator' }] },
         } as unknown as SessionStateBody;
-        expect(mentionablePeople(alone, new Map(), me)).toEqual([]);
+        expect(mentionablePeople(alone, new Map(), me).map((p) => [p.id, p.name, p.ai])).toEqual([['ai', 'AI', true]]);
+        // dt open: every message goes to the AI already
+        expect(mentionablePeople({ ...alone, session: { ...alone.session, mode: 'Solo' } } as unknown as SessionStateBody, new Map(), me)).toEqual([]);
         // holding the facilitator's role, the facilitator's row is me
         expect(mentionablePeople(state('me'), peers, me).map((p) => p.id)).not.toContain('f');
     });

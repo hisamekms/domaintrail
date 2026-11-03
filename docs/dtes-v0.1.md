@@ -2,7 +2,7 @@
 
 > 対象: Claude Code / Codex による実装
 >
-> ステータス: 設計合意事項の統合版（2026-10-31、最終仕様反映版）。本書中の **確定** は対話で採用した方針、**提案** は実装を進めるための具体化、**要確認** はリポジトリの現行実装との照合が必要な項目を意味する。
+> ステータス: 設計合意事項の統合版（2026-10-31、最終仕様反映版。2026-11-03 に Design Level のみの Event（`level design`、§3.6）と、段階・例外・合流（`stage` / `exception` / `then`、§3.7）を追加）。本書中の **確定** は対話で採用した方針、**提案** は実装を進めるための具体化、**要確認** はリポジトリの現行実装との照合が必要な項目を意味する。
 >
 > 対象プロジェクト: DomainTrail（`.dt` の既存実装に独立した `.dtes` を追加）。既存のパーサー／型体系／CLI／描画基盤を先に調査して適合させること。**本書の `.dt` サンプルを現行パーサーで動く構文と決めつけない。**
 
@@ -31,7 +31,7 @@
 - `.dtes` は `.dt` と**独立したテキスト DSL**。【確定】
 - `.dt` と同様に、ユーザー指定の **workspace root** 以下を共通コンテキストとして扱う。【確定】
 - `storming <ID> "表示名" { ... }` が Event Storming の単位。【確定】
-- Event / Command / Policy / Actor / External System / Aggregate / Read Model / Hotspot / Timeline / Group の **ローカル ID は storming 内で種別横断の単一名前空間に属し、一意**。異なる種別間の衝突も Error。【確定】
+- Event / Command / Policy / Actor / External System / Aggregate / Read Model / Hotspot / Timeline（`exception` を含む）/ Group / Stage の **ローカル ID は storming 内で種別横断の単一名前空間に属し、一意**。異なる種別間の衝突も Error。【確定】
 - 異なる storming 間の要素参照は v0.1 では扱わない。【提案】
 - `.dtes` には所属 BC の暗黙指定を設けない。【確定】
 - `ref` は `ref <BC>.<Model>[.<Member>]` の**完全修飾名**を必ず使う。省略形・名前による暗黙マッチングは禁止。【確定】
@@ -44,7 +44,7 @@
 
 | 要素 | 意味 | 備考 |
 |---|---|---|
-| `event` | 業務上起こった出来事の型（過去形の事実） | `timeline` から参照される |
+| `event` | 業務上起こった出来事の型（過去形の事実） | `timeline` から参照される。`level design` で Design Level のみに表示（§3.6） |
 | `actor` | Command を発行し得る人・役割 | 複数の Command から参照可 |
 | `external` | Command を発行し得る外部システム | `actor` 関係の参照先として使用可。外部呼び出し先を表すものではない |
 | `command` | 実行を試みる業務上の操作 | 主対象 Aggregate は最大1つ |
@@ -53,7 +53,9 @@
 | `readmodel` | Command の判断に必要な情報のモデル | DB アクセス仕様ではない |
 | `hotspot` | 未解決/解決済みの疑問・重要事項 | 解決済みは選択的に残す |
 | `timeline` | Event 発生の**部分的な時間順序** | 複数個可、Event のみ |
-| `group` | 同一段階の Event 群（内部は順序なし） | timeline 内に記述 |
+| `group` | 同一ステップの Event 群（内部は順序なし） | timeline 内に記述 |
+| `exception` | 本流から分岐する例外の timeline | `timeline` と同じ本体。最後に `then` を書ける（§3.7） |
+| `stage` | 流れの時間的な区切り（段階）。本流と例外をまとめる | `after` で順序づける（§3.7） |
 
 ### 3.2 関係と多重度【確定した設計方針】
 
@@ -67,6 +69,7 @@
 | Policy | `issues C` | Command | **1..N** | 発行し得る Command。順序/必須性/全部実行を保証しない |
 | Event / Aggregate / Command | `ref ...` | `.dt` | **0..1** | 型の合う `.dt` シンボルへの明示対応。他の要素では禁止 |
 | Hotspot | `on E` | Event | 0..1 | 関連 Event。因果ではない |
+| Event | `level design` | — | 0..1 | Design Level のみに表示する（§3.6）。値は `design` だけ |
 
 **複数 `on` と複数 `issues` を持つ Policy は許可**。ただし、任意の Event が任意の Command を必ず起動するという**直積の意味を与えてはならない**。個別の対応条件が異なるなら AI は Policy を分割するよう推奨する。`rule` のネストは v0.1 で導入しない。
 
@@ -79,7 +82,7 @@
 ### 3.4 Timeline の意味【確定】
 
 - 本体には **Event ID の参照のみ**。Command / Policy / Actor / Aggregate / Read Model は含まない。
-- `group` 内も Event 参照のみ。group 内は順序を持たず、group の前後との大まかな順序だけを持つ。**同じ group 内での同一 Event ID の重複は Error**。別 group・別段階での反復は合法。
+- `group` 内も Event 参照のみ。group 内は順序を持たず、group の前後との大まかな順序だけを持つ。**同じ group 内での同一 Event ID の重複は Error**。別 group・別ステップでの反復は合法。
 - Event 型は複数 timeline や同一 timeline に繰り返し登場してよい。これらは**異なる EventOccurrence**。
 - timeline は因果の証明でも完全な履歴でもない。省略可、部分的な時間順序である。
 - 異なる timeline の前後関係は統合してグローバルな時刻順にしない。
@@ -92,6 +95,43 @@
 - `open` に `resolution` を付けることは禁止（Error）。【確定】
 - `resolved` は**業務認識の合意**を意味し、`.dt` に実装済みであることは意味しない。
 - 解決済みの重要な例外・境界・不変条件は選択的に残し、些細なものは削除可能。履歴専用 DSL は不要（Git に委ねる）。
+
+### 3.6 Design Level のみの Event【確定（2026-11-03 追加）】
+
+- Event は本体に `level design` を書くと **Design Level のみ**に表示される。仕組み側の細かい出来事（引当・与信・内部の失敗や再試行など）を、Big Picture の業務の流れから外すためのもの。
+- 書かなければ両方の抽象度に表示する（従来どおり）。`level big-picture` は書かない（Error）。値は `design` のみ。
+- `level` を書けるのは Event だけ（他の要素は Error）。1つの Event に2つ以上は Error。`ref` との順序は自由で、正規の位置は本体の最後（`ref` の後）。`dt fmt` は句の順序を変えない。
+- Big Picture に「昇格」させるときは `level design` を消す。`.dtes` の意味（timeline の順序、関係、`ref`）は変わらず、表示だけが変わる（§6）。
+
+### 3.7 段階・本流・例外・合流【確定（2026-11-03 追加）】
+
+```text
+stage Issuance "コンビニでの発行" after Preparation {
+  timeline IssuanceFlow "通常" {
+    ConvenienceStoreVisited
+    GovernmentServiceMenuSelected
+    MyNumberCardRead
+    PinEntered
+    MyNumberCardCollected
+  }
+  exception PinLocked "暗証番号のロック" {
+    MyNumberCardRead
+    PinLockedOut
+    PinResetAtCityOffice
+    then PinEntered
+  }
+}
+```
+
+- **本流と例外は書いて区別する**。`timeline` は本流、`exception` は例外。順序から推測しない。
+- **区画（section）** は段階（`stage`）か、段階のない storming のトップレベルの timeline 群。区画の最初の `timeline` を **幹（trunk）** とし、統合キャンバスで一直線に時系列順で描く。幹以外の timeline（別の本流・例外）は先頭ステップで分岐する: その先頭ステップが幹にあればそこから（先頭なら従来どおり prefix を共有）、なければ分岐済みの別の timeline にあればそこから。どこにもなければ **宙に浮いた** timeline（S019）として区画の先頭から別に描く。分岐点の Event は1枚だけ描く（その Occurrence は分岐点のノードに属する）。
+- 同じ Event が幹に複数回あるときは最初の出現から分岐する。先頭ステップが単独の Event なら同じ Event か group の要素に、group なら同じ要素集合の group に一致する。
+- **合流 `then <Event>`** は例外だけが最後に書ける（本流に書くと S018）。最後のステップの後、本流（`timeline`）のその Event のステップへ戻る。探す順は同じ区画の幹、同じ区画のほかの本流、ほかの区画の本流（時間順）。前の段階（再試行）にも後の段階（郵送で取り寄せた証明書を確かめる）にも戻れる。
+- **段階の順序 `after <Stage>`**: 1つまで（2つ目は S004）。自分自身・循環は S017。`after` のない段階は先頭の1つを除き S021（警告）で、それより前に書かれた段階の後に別の始点として描く。`after` は前の段階の幹の最後から、この段階の幹の最初へのエッジになる。
+- Event は storming に宣言したまま。段階の中には timeline と exception だけを書く。同じ Event を複数の段階で使ってよい。
+- 段階を使う storming では、すべての timeline / exception を段階に入れる（外にあれば S020）。
+- 段階も `exception` もない storming は従来どおり（共通 prefix 統合、§8）。`exception` があれば、段階がなくても区画として描く（§8.6）。
+- `level design`（§3.6）との関係: Big Picture で分岐点が非表示なら、その直前の見える幹のステップ（なければ区画の先頭）から分岐する。`then` の戻り先が非表示なら、その後の見える最初のステップ（なければ直前）へ戻る。
 
 ## 4. `.dtes` サンプル（構文の基準例）
 
@@ -169,6 +209,15 @@ storming DeliveryCancellation "配送キャンセル" {
 
 **注**: `ReceivePaymentNotice` は External System が Command を発行し得ることを示す構文例であり、外部システムを呼び出す意味ではない。実際の業務内容に応じて命名する。上記の `ReleaseFailed` は、実際に Event として採用するかを業務で検討した例であり、異常結果の厳密な排他性は DSL から導かない。`group` の `CleanupResults` は表現上の命名で、ビューのレイアウト命令ではない。
 
+Design Level のみの Event（§3.6）は本体の最後に `level design` を書く。
+
+```text
+event BikeLocked "車両がロックされた" {
+  ref Fleet.BikeLocked
+  level design
+}
+```
+
 ## 5. `.dt` 連携と検証範囲
 
 ### 5.1 `ref` の解決【確定】
@@ -207,13 +256,15 @@ storming DeliveryCancellation "配送キャンセル" {
 type ViewOptions = {
   level: 'big-picture' | 'design-level'
   timelineId?: string // 省略 = 統合キャンバス
+  stageId?: string // 段階ビュー（§3.7。timelineId とは併用しない）
+  hideExceptions?: true // 例外を表示しない（統合キャンバスと段階ビューのみ）
 }
 ```
 
 | 要素 | Big Picture | Design Level |
 |---|---|---|
-| Event | 表示 | 表示 |
-| Timeline の順序 | 表示 | 表示 |
+| Event | 表示（`level design` の Event は非表示） | 表示 |
+| Timeline の順序 | 表示（非表示の Event を飛ばして前後をつなぐ） | 表示 |
 | Hotspot | 表示 | 表示 |
 | Actor / External System | 非表示（v0.1 の既定） | 表示 |
 | Command / Policy / Aggregate / Read Model | 非表示 | 表示 |
@@ -221,10 +272,14 @@ type ViewOptions = {
 | `.dt ref` | ノード詳細等で参照可 | ノード詳細等で参照可 |
 
 - Big Picture は**詳細を隠した投影**。詳細化前の過去モデルを復元する機能ではない。
+- Big Picture では `level design` の Event（§3.6）を、その timeline のステップが書かれていないものとして投影する。順序エッジは前後の Event をつなぎ、全要素が非表示の `group` は描かない。共通 prefix 統合（§8）は表示される列で行う。Hotspot は表示し、非表示の Event への `on` だけを描かない（timeline フィルタでも、その timeline の Event への `on` を持つ Hotspot は表示する）。
 - Big Picture に戻しても、Design Level で追加・分割した Event 定義は消さない。
 - 名前付き timeline の選択に応じて、その timeline の EventOccurrence と関連要素を抽出。
 - 統合キャンバスでは timeline に属さない Event や孤立した要素も表示。
+- **使われるごとに描く要素**【確定（2026-11-03 追加）】: Design Level では Actor / External System（Command の実行者）、Read Model（Command の `reads`）、Aggregate（Command の `target`）を、そのビューで使う Command ごとに1枚ずつ、その Command の隣に描く（線は付箋から Command への短い1本）。どの Command にも使われないものは従来どおり1枚。表示上の分割で、`.dtes` も意味的なグラフも変わらない。どの付箋を選んでも同じ要素を選び（インスペクタは1つ）、同じ要素のほかの付箋を控えめに示す。変更マーク・参照・在席表示は要素に付くので全部の付箋に出る。チャットやカタログから要素へ飛ぶときは、画面の中央に最も近い付箋を選ぶ。
 - 複数 timeline フィルタ／抽象度切替は `.dtes` を変更しない。
+- **段階・例外のある storming**（§3.7）: 統合キャンバスは区画を時間順に左→右へ並べ、段階をラベル付きの枠で描く（§8.6）。**段階ビュー**（その段階の本流と例外を同じ描き方で統合）を段階ごとに選べる。名前付き timeline のビューは従来どおり。
+- **例外の表示切替**（「例外を表示」）: 統合キャンバスと段階ビューで、例外を描かないこともできる。そのとき例外のステップ、例外にしか現れない Event、それらだけに付いた Hotspot、例外の `then` を描かない。例外そのものの timeline ビューには影響しない。表示状態は閲覧者ごとの UI 状態で、`.dtes` を変更しない。
 
 ## 7. グラフの3階層【確定】
 
@@ -261,6 +316,8 @@ type SemanticEdge = {
 }
 ```
 
+Event 以外の要素は1ビュー1ノードだが、Actor / External System / Read Model / Aggregate は使う Command ごとのノード（ID `n:<要素>@<Command>`、要素の ID は共通。§6）になる。これも描画上の分割で、意味的な関係を増やさない。
+
 **重要**: 同一 EventOccurrence を2か所に描画する案は将来の高度化として残す。**v0.1 の基本投影では各 EventOccurrence はちょうど1つの Event RenderNode に所属**し、同一 RenderNode 内に同じ timeline の異なる Occurrence を混在させない。
 
 ## 8. 共通 prefix 統合【確定】
@@ -271,7 +328,7 @@ type SemanticEdge = {
 - 最長共通部分列（LCS）や共通 suffix の自動統合は行わない。
 - Event 型が一致しないステップは共有しない。
 - 同じ timeline の異なる EventOccurrence は共有しない。
-- `group` は同一段階の Event の**集合**として扱う（順序なし、同一 Event ID の重複禁止）。【確定】
+- `group` は同一ステップの Event の**集合**として扱う（順序なし、同一 Event ID の重複禁止）。【確定】
 - `group` ID や Event 記述順は `group` 同値判定に使用しない。
 - `group` と単独 Event は部分統合しない。
 - shared prefix は**描画共有**であり、同一業務発生との認定ではない。
@@ -321,6 +378,15 @@ Render Graph（§7.3、本節 8.1〜8.4）は prefix trie のまま変えない�
 
 個別 timeline のビューは従来どおり、Occurrence ごとに付箋を置き、`group` を枠で描く。
 
+### 8.6 区画として描く統合キャンバス【確定（2026-11-03 追加）】
+
+段階または `exception` のある storming（§3.7）の統合キャンバスと段階ビューは、prefix trie の代わりに区画ごとの木で描く。
+
+- 区画の木: 幹を先頭から、ほかの timeline を分岐点のノードから挿入する。分岐点の先頭ステップは分岐点のノードを共有し（§8 の prefix 共有と同じ扱い）、その後も同じように続く timeline はステップを共有する。分岐後の共通 suffix は共有しない（§8.1）。
+- 配置（**時間順が左→右**）: 1ステップ1列。区画を時間順に横に並べ、幹は全段階を通る1本の行（行0）。ほかの timeline は分岐ステップの下の **レーン** に右へ流れる（重ならないレーンは同じ行を共有し、別の本流を例外より上に置く）。例外は段階の枠の中に収める。Design Level の要素は属する Event の列の上に積み（Command ごとに描く Actor・Read Model・Aggregate は、その Command の列の上に）、どこにも属さないものは区画の下に置く。
+- 線: 段階の `after` は前の幹の最後から次の幹の最初へ。例外だけの時間順は例外の線（控えめな赤系の破線）で描く。`then` は最後のステップの下から戻り先の下へ入る点線。どの線も付箋と交差しない（列・行の間を通す）。レーンの最初の線にその timeline のラベルを添える。
+- 座標は DSL に保存しない。同じ `.dtes`・同じビューなら同じ配置（canonical）。
+
 ## 9. 因果関係と timeline の投影【確定＋実装提案】
 
 ### 9.1 意味的エッジ
@@ -361,7 +427,7 @@ Render Graph（§7.3、本節 8.1〜8.4）は prefix trie のまま変えない�
 | 非因果関連 | 点線・細線 |
 | Hotspot の `on` | 点線・細線、**方向なし**（因果でも時間順でもない） |
 
-付箋は正方形で描き、ラベルは折り返す（収まらないときだけ付箋を大きくする）。付箋の色は Event Storming の慣習に従って種類を表す：イベント付箋はオレンジ、Command 青、Policy 紫、Aggregate 黄、Read Model 緑、Hotspot ピンク（Actor・External System などの割り当ては `docs/live-view.md`）。色は Live View の表示の約束で、`.dtes` の構文や意味論には含めない。種類は付箋のステレオタイプ（«イベント»）と凡例でも示し、色だけに頼らない。視認性・アクセシビリティを確保すること。
+付箋はすべて同じ大きさの正方形で描き、ラベルは折り返す（収まらないときは文字を小さくし、下限の大きさでも収まらないときは収まる行までで「…」で切る。全文はホバーとインスペクタで見られる）。付箋の色は Event Storming の慣習に従って種類を表す：イベント付箋はオレンジ、Command 青、Policy 紫、Aggregate 黄、Read Model 緑、Hotspot ピンク（Actor・External System などの割り当ては `docs/live-view.md`）。色は Live View の表示の約束で、`.dtes` の構文や意味論には含めない。種類は付箋のステレオタイプ（«イベント»）と凡例でも示し、色だけに頼らない。視認性・アクセシビリティを確保すること。
 
 ## 10. レイアウトと安定性
 
@@ -405,6 +471,9 @@ Render Graph（§7.3、本節 8.1〜8.4）は prefix trie のまま変えない�
 | Group | group 内の同じ Event ID の重複 | Error |
 | Policy | `on` 0件、`issues` 0件 | Error |
 | Hotspot | 不正 status、resolved なのに resolution なし、`on` の対象不正 | Error |
+| Level | `level` が `design` 以外（`big-picture` を含む）、Event 以外の `level`、`level` が2つ以上 | Error |
+| Stage | `after` が自分自身・循環（S017）、`then` が本流にある／本流にない Event を指す（S018）、段階の外の timeline（S020） | Error |
+| Stage | 宙に浮いた timeline（S019）、2つ目の `after` のない段階（S021）、本流のない段階（S022） | Warning |
 | `.dt ref` | 完全修飾でない、未解決、種別不一致 | Error |
 | `.dt` contract | 有効な `ref` 同士で証明できる不整合 | Warning |
 | Graph | Policy→Command→Event→Policy の型レベル循環 | Warning（無限ループ断定禁止） |
@@ -432,6 +501,10 @@ Render Graph（§7.3、本節 8.1〜8.4）は prefix trie のまま変えない�
 - [ ] ES12: 異種要素間でも ID 衝突が Error。
 - [ ] ES13: Policy を含む Event/Command/Aggregate 以外の `ref` が Error。
 - [ ] ES14: `external` は Command の `actor` 参照で合法。`reads/target` など別種の関係では Error。
+- [ ] ES15: Event の `level design` は合法（`ref` の前後どちらでも）。`level big-picture` などの他の値、Event 以外の `level`、2つ目の `level` は Error。
+- [ ] ES16: `stage … after …`、`exception`、`then` をパース・整形できる。`after` の未定義（S002）・種別違い（S003）・2つ目（S004）・自分自身と循環（S017）、本流の `then` と本流にない `then` の戻り先（S018）、段階の外の timeline（S020）は Error。
+- [ ] ES17: どこからも分岐しない timeline（S019）、2つ目の `after` のない段階（S021）、本流のない段階（S022）は Warning。段階も `exception` もない storming の timeline には S019 を出さない。
+- [ ] ES18: stage / timeline / exception の ID は storming の単一名前空間（S001）。
 
 ### 12.2 投影 / 描画
 
@@ -448,10 +521,18 @@ Render Graph（§7.3、本節 8.1〜8.4）は prefix trie のまま変えない�
 - [ ] R11: Big Picture / Design Level を切替可能。DSL は不変。
 - [ ] R12: 統合 / timeline フィルタを切替可能。DSL は不変。
 - [ ] R13: `.dt ref` を修正しても Semantic ID は変わらない。
-- [ ] R14: Big Picture で Command/Policy を隠しても Event は消えない。
+- [ ] R14: Big Picture で Command/Policy を隠しても、`level design` のない Event は消えない。
 - [ ] R15: 全体ビューに timeline 未所属の Event が現れる。
 - [ ] R16: timeline のフィルタは1ホップの Event→Policy→Command→Event のみ（両端が対象 timeline）投影し、多段連鎖は自動展開しない。
 - [ ] R17: Big Picture と Design Level のどちらでも同一 `.dtes` を使い、`external` は Design Level に表示する。
+- [ ] R18: `level design` の Event は Big Picture で非表示、Design Level で表示。timeline の順序エッジは前後をつなぎ、全要素が非表示の group は描かず、共通 prefix 統合は表示される列で行う。Hotspot は残り、非表示の Event への `on` は描かない。
+- [ ] R19: 段階のある統合キャンバスで、幹の付箋の x 座標は全段階を通して狭義単調増加し、y は同じ。段階の枠は重ならない。
+- [ ] R20: 例外は分岐ステップより下・右にあり、その段階の枠の中にある。途中から分岐する例外の分岐 Event は1枚で、本流と例外の Occurrence を持つ。
+- [ ] R21: `then` は例外の最後のステップから戻り先（同じ段階・前後の段階）へのエッジ。`after` は前の幹の最後から次の幹の最初へのエッジ。
+- [ ] R22: 段階ビューはその段階の本流と例外だけを描き、ほかの段階への `then` を描かない。
+- [ ] R23: 2つ目の本流は幹から分岐し、例外の線ではなく本流の線で、例外より上のレーンに描く。
+- [ ] R24: 例外を表示しないとき、例外のステップ・例外だけの Event・それに付いた Hotspot・`then` を描かない。例外の timeline ビューは変わらない。
+- [ ] R25: 段階も `exception` もない storming の描画は従来どおり（examples/shop の payload は変わらない）。Big Picture で分岐点・戻り先が非表示なら最寄りの見えるステップを使う。どの線も付箋と交差しない。
 
 ### 12.3 Property / 不変条件
 

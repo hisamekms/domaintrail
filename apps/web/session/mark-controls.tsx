@@ -80,11 +80,13 @@ function VoteCount({ tally }: { tally: Tally }) {
  * has a slot of its own (two digits wide), so that the hearts of a reply's rows stand in one column, counted or not.
  */
 export function VoteMark({ target }: { target: MarkTargetData }) {
-    const { tx, session, marking } = useChat();
+    const { tx, session, marking, solo } = useChat();
     const live = useLive();
     const tally = tallyOf(marking.index, target, VOTE);
     const can = canVote(target, session.state, session.me.participant.role, live);
     const v = tx.chat.votes;
+    // alone in Solo: no one votes
+    if (solo) return null;
     const heart = <Heart size={12} aria-hidden fill={tally.mine ? 'currentColor' : 'none'} />;
     return (
         <span className={`vote-mark${tally.mine ? ' mine' : ''}${can ? '' : ' frozen'}`}>

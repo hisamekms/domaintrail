@@ -9,13 +9,15 @@ import type { Panes } from '../app/panes';
 import type { Conversation } from '../app/shell';
 import type { ViewSocket } from '../app/useViewSocket';
 import { useT } from '../i18n';
-import { contextLabels } from '../model-utils';
+import { contextLabels, resolve } from '../model-utils';
 import { stormingGraph, type StormingChoice } from '../storming';
 import { graphNodeOf, nodeItemId } from '../scene';
 import { highlightElement, showItem } from '../view/canvas';
 import { useCanvasValue } from '../view/diagram';
 import type { Workspace } from '../view/workspace';
+import { aiPresence } from './ai';
 import { ChatLauncher, SessionChat } from './chat';
+import { PAGE_REVEAL, revealKeys } from './reveal';
 import { PeerCursors } from './cursors';
 import { TargetNamingProvider } from './naming';
 import { viewLocation } from './location';
@@ -24,7 +26,7 @@ import { confirmSelection, isAdded, isConfirmKey, isTyping } from './selection';
 import type { ComposerValue } from './mentions';
 import { cursorsOn } from './presence';
 import { mentionCandidates } from './mentions';
-import type { ViewScope, ViewTarget } from './views';
+import { sentView, type ViewScope, type ViewTarget } from './views';
 import { occurrenceNode, targetKey, targetOfSelection, type ModelTarget, type NamingContext, type TargetDraft } from './targets';
 import { agentStatus, latestAt, streamItems, unreadCount, unreadMentions } from './stream';
 import { defaultDraftStorage, useComposerDraft, usePresence, useSession } from './useSession';
@@ -40,6 +42,8 @@ export interface SessionPage {
     readonly baselineLocked: boolean;
     /** The collab ended: the server is gone for good, so the page does not say it waits to reconnect (the summary says it ended). */
     readonly ended: boolean;
+    /** An AI is connected to the live chat (every role) and the person may start `/es`: an empty view points to it. */
+    readonly aiReady: boolean;
 }
 
 export function useSessionPage(input: {
@@ -56,6 +60,8 @@ export function useSessionPage(input: {
     const { canvas, stormings, nav, settings, viewGraph } = workspace;
     const { view } = nav;
     const session = useSession(socket, current);
+    // what the chat holds when the page first has the session is its history (clamped), even with the chat closed
+    if (session) PAGE_REVEAL.history(session.state.session.id, () => revealKeys(session.state));
     const model = current?.model ?? null;
     const naming = useMemo((): NamingContext => ({ mode: input.mode, model, stormings }), [input.mode, model, stormings]);
     const t = useT();
@@ -82,6 +88,32 @@ export function useSessionPage(input: {
         ...(selectedNode && { selectedNode }),
     });
     usePresence(socket, session, canvas, location, selectionTarget?.target);
+
+    // where a message is sent from: the view, a storming's stage and exceptions, the catalog's filter, and the
+    // aggregate whose state diagram the inspector shows
+    const resolvedSelection = model && nav.selected ? resolve(model, nav.selected) : undefined;
+    const statesOf =
+        panes.inspectorOpen && panes.inspectorTab === 'states' && resolvedSelection
+            ? resolvedSelection.kind === 'element'
+                ? resolvedSelection.el.kind === 'aggregate'
+                    ? resolvedSelection.el.id
+                    : undefined
+                : resolvedSelection.kind === 'state' || resolvedSelection.kind === 'command'
+                  ? resolvedSelection.agg.id
+                  : undefined
+            : undefined;
+    const shownOptions = view.kind === 'storming' ? viewGraph.shown?.options : undefined;
+    const viewedAt = sentView({
+        location,
+        ...(shownOptions && {
+            storming: {
+                ...(shownOptions.stageId !== undefined && { stageId: shownOptions.stageId }),
+                ...(shownOptions.hideExceptions && { hideExceptions: true }),
+            },
+        }),
+        ...(view.kind === 'catalog' && { catalog: workspace.catalog.filter }),
+        ...(statesOf !== undefined && { states: statesOf }),
+    });
 
     // a selection of several items on the canvas: each targetable element once (the composer's `+` adds them all)
     const selectedKey = useCanvasValue(
@@ -123,6 +155,23 @@ export function useSessionPage(input: {
     const candidates = useMemo(
         () => (session ? mentionCandidates({ mode: input.mode, model, stormings, sources: sources ?? [] }) : []),
         [session !== undefined, input.mode, model, stormings, sources],
+    );
+
+    // what `/` lists depends on the view (a storming at its level, a `.dt` view) and the element selected
+    const level = viewGraph.shown?.options.level;
+    const slash = useMemo(
+        () => ({
+            view:
+                view.kind === 'storming'
+                    ? ({ kind: 'storming', level: level ?? 'big-picture' } as const)
+                    : view.kind === 'catalog' || view.kind === 'structure' || view.kind === 'contextMap'
+                      ? ({ kind: 'model' } as const)
+                      : ({ kind: 'other' } as const),
+            selected: selectionTarget,
+        }),
+        // the selection is covered by its key
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [view.kind, level, selectionTarget && targetKey(selectionTarget.target)],
     );
 
     const storage = useMemo(defaultDraftStorage, []);
@@ -201,12 +250,20 @@ export function useSessionPage(input: {
             const storming = stormings.find((s) => s.id === target.storming);
             if (!storming) return;
             const { [target.storming]: _, ...others } = stormingChoice.timelines;
+            if (target.kind === 'DtesStorming') {
+                // the whole storming: its integrated canvas, at the level chosen, the storming in the inspector (its
+                // description: an interview's brief)
+                setStormingChoice({ ...stormingChoice, stormingId: target.storming, level: stormingChoice.level, timelines: others });
+                setView({ kind: 'storming' });
+                select(`es/${target.storming}`, { highlight: false });
+                return;
+            }
             if (target.kind === 'DtesElement') {
                 // the integrated canvas, at a level that draws the element
                 const kind = firstDeclarations(storming.storming).get(target.local)?.kind;
                 const drawn = LEVEL_KINDS[stormingChoice.level].some((k) => k === kind);
                 const level = drawn ? stormingChoice.level : 'design-level';
-                setStormingChoice({ stormingId: target.storming, level, timelines: others });
+                setStormingChoice({ ...stormingChoice, stormingId: target.storming, level, timelines: others });
                 const id = `es/${target.storming}/${target.local}`;
                 setView({ kind: 'storming' });
                 select(id, { highlight: false });
@@ -215,6 +272,7 @@ export function useSessionPage(input: {
             }
             // an occurrence: its timeline's view, and the note of that step
             const choice: StormingChoice = {
+                ...stormingChoice,
                 stormingId: target.storming,
                 level: stormingChoice.level,
                 timelines: { ...others, [target.storming]: target.timeline },
@@ -262,6 +320,7 @@ export function useSessionPage(input: {
                 case 'storming': {
                     const { [target.stormingId]: _, ...others } = stormingChoice.timelines;
                     setStormingChoice({
+                        ...stormingChoice,
                         stormingId: target.stormingId,
                         level: target.level,
                         timelines: target.timelineId === undefined ? others : { ...others, [target.stormingId]: target.timelineId },
@@ -273,11 +332,13 @@ export function useSessionPage(input: {
         [setView, setMapAll, setStructureLevel, setStructureContexts, setHiddenContexts, stormingChoice, setStormingChoice],
     );
 
-    if (!session) return { conversation: undefined, canvasOverlay: undefined, inspectorAction: undefined, baselineLocked: false, ended: false };
+    if (!session) return { conversation: undefined, canvasOverlay: undefined, inspectorAction: undefined, baselineLocked: false, ended: false, aiReady: false };
     const facilitator = session.me.participant.role === 'facilitator';
     return {
         baselineLocked: !facilitator,
         ended,
+        // the empty view points to `/es`: only for who may start it
+        aiReady: !ended && facilitator && aiPresence(session.state.agent).kind === 'connected',
         canvasOverlay: (
             <>
                 <PeerCursors canvas={canvas} cursors={cursorsOn(session.peers, location)} />
@@ -296,6 +357,8 @@ export function useSessionPage(input: {
                         onFocused={onFocused}
                         location={location}
                         viewScope={viewScope}
+                        slash={slash}
+                        viewedAt={viewedAt}
                         onOpenView={openView}
                         onNavigate={navigate}
                         onClose={() => setConversationOpen(false)}
