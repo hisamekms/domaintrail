@@ -9,7 +9,8 @@
  * Every node gets a cell (`StageGrid`): a column per step, strictly later to the right through every stage, the trunks
  * on row 0, every other timeline on a lane of its own below the step it branches off from (the other main flows above
  * the exceptions; lanes that do not overlap share a row), the other elements of the level above the event they belong
- * to. As in the other views, sharing a node is a drawing optimization only: every edge is a semantic edge's drawing, or
+ * to (a copy of an actor, external system, read model or aggregate above the command it stands beside, `uses.ts`). As
+ * in the other views, sharing a node is a drawing optimization only: every edge is a semantic edge's drawing, or
  * one of the time order (`sequence`, `rejoin`, `stage`).
  *
  * At Big Picture the events marked `level design` are left out as if their steps were not written; a timeline whose
@@ -39,9 +40,21 @@ import {
     timelineOccurrences,
     trunk,
 } from '@domaintrail/storming';
-import { LEVEL_KINDS, stepKey, type GridCell, type RenderEdge, type RenderGraph, type RenderNode, type StageGrid, type Step, type ViewOptions } from './ir.js';
+import {
+    LEVEL_KINDS,
+    stepKey,
+    type GridCell,
+    type RenderEdge,
+    type RenderElementNode,
+    type RenderGraph,
+    type RenderNode,
+    type StageGrid,
+    type Step,
+    type ViewOptions,
+} from './ir.js';
 import { filterEdges } from './filter.js';
 import { compare, compareOccurrences } from './trie.js';
+import { useEnds, useNodeId, usesOf } from './uses.js';
 
 /** A step of a section's tree. */
 interface StageNode {
@@ -217,9 +230,18 @@ export function projectStageView(storming: Storming, options: ViewOptions): Rend
         (n): n is NodeElement & { kind: Exclude<NodeElementKind, 'event'> } =>
             n.kind !== 'event' && shownKinds.has(n.kind) && !gone.has(n.id) && (!one || drawn.some((e) => e.sourceId === n.id || e.targetId === n.id)),
     );
-    for (const n of elements) nodes.set(`n:${n.id}`, { type: 'element', id: `n:${n.id}`, elementId: n.id, kind: n.kind });
+    // an actor, external system, read model or aggregate beside each command that uses it; once when none does
+    const commands = new Set(elements.filter((n) => n.kind === 'command').map((n) => n.id));
+    const uses = usesOf(drawn, (id) => commands.has(id));
+    const elementNodes: RenderElementNode[] = elements.flatMap((n): RenderElementNode[] => {
+        const users = uses.get(n.id);
+        if (!users) return [{ type: 'element', id: `n:${n.id}`, elementId: n.id, kind: n.kind }];
+        return users.map((use) => ({ type: 'element', id: useNodeId(n.id, use), elementId: n.id, kind: n.kind, use }));
+    });
+    for (const n of elementNodes) nodes.set(n.id, n);
 
-    // each element above the earliest note of the events it belongs to
+    // each element above the earliest note of the events it belongs to; a copy above its command
+    /** The column of each element's render node. */
     const colOf = new Map<string, number>();
     const eventCol = (id: string): number | undefined => {
         const cols = (eventNodes.get(id) ?? []).map((n) => n.col).filter((c) => c >= 0);
@@ -232,43 +254,30 @@ export function projectStageView(storming: Storming, options: ViewOptions): Rend
     /** The other ends of the `kind` edges of `id` (`end`: which end of the edge to take). */
     const related = (kind: SemanticEdge['kind'], end: 'sourceId' | 'targetId', id: string): string[] =>
         drawn.filter((e) => e.kind === kind && e[end === 'sourceId' ? 'targetId' : 'sourceId'] === id).map((e) => e[end]);
-    const ofKind = (...ks: NodeElementKind[]): NodeElement[] => elements.filter((n) => ks.includes(n.kind));
-    for (const n of ofKind('hotspot')) place(n.id, related('hotspot-on', 'targetId', n.id).map(eventCol));
-    for (const n of ofKind('policy')) place(n.id, related('on', 'sourceId', n.id).map(eventCol));
-    for (const n of ofKind('command')) place(n.id, related('emits', 'targetId', n.id).map(eventCol));
+    const ofKind = (...ks: NodeElementKind[]): RenderElementNode[] => elementNodes.filter((n) => ks.includes(n.kind));
+    for (const n of ofKind('hotspot')) place(n.id, related('hotspot-on', 'targetId', n.elementId).map(eventCol));
+    for (const n of ofKind('policy')) place(n.id, related('on', 'sourceId', n.elementId).map(eventCol));
+    for (const n of ofKind('command')) place(n.id, related('emits', 'targetId', n.elementId).map(eventCol));
     for (const n of ofKind('command'))
         place(
             n.id,
-            related('issues', 'sourceId', n.id).map((p) => colOf.get(p)),
+            related('issues', 'sourceId', n.elementId).map((p) => colOf.get(`n:${p}`)),
         );
-    for (const n of ofKind('aggregate'))
-        place(
-            n.id,
-            related('target', 'sourceId', n.id).map((c) => colOf.get(c)),
-        );
-    for (const n of ofKind('actor', 'external'))
-        place(
-            n.id,
-            related('actor', 'targetId', n.id).map((c) => colOf.get(c)),
-        );
-    for (const n of ofKind('readmodel'))
-        place(
-            n.id,
-            related('reads', 'targetId', n.id).map((c) => colOf.get(c)),
-        );
-    const stacks = new Map<number, string[]>();
-    for (const n of elements) {
+    // a copy in its command's stack (an element no command uses has no column: it goes below the sections)
+    for (const n of elementNodes) if (n.use !== undefined) place(n.id, [colOf.get(`n:${n.use}`)]);
+    const stacks = new Map<number, RenderElementNode[]>();
+    for (const n of elementNodes) {
         const col = colOf.get(n.id);
         if (col === undefined) {
-            loose.push(`n:${n.id}`);
+            loose.push(n.id);
             continue;
         }
-        stacks.set(col, [...(stacks.get(col) ?? []), n.id]);
+        stacks.set(col, [...(stacks.get(col) ?? []), n]);
     }
-    const kindRank = (id: string): number => ELEMENT_ORDER.findIndex((k) => k === kinds.get(id));
-    for (const [col, ids] of stacks) {
-        ids.sort((a, b) => kindRank(a) - kindRank(b) || compare(a, b));
-        ids.forEach((id, i) => (cells[`n:${id}`] = { col, row: -1 - i }));
+    const kindRank = (n: RenderElementNode): number => ELEMENT_ORDER.findIndex((k) => k === n.kind);
+    for (const [col, stack] of stacks) {
+        stack.sort((a, b) => kindRank(a) - kindRank(b) || compare(a.id, b.id));
+        stack.forEach((n, i) => (cells[n.id] = { col, row: -1 - i }));
     }
 
     // the notes outside the sections, below them
@@ -281,10 +290,11 @@ export function projectStageView(storming: Storming, options: ViewOptions): Rend
 
     const renderNodesOf = (id: string): string[] =>
         kinds.get(id) === 'event' ? (eventNodes.get(id) ?? []).map((n) => n.id) : nodes.has(`n:${id}`) ? [`n:${id}`] : [];
+    const ends = (e: SemanticEdge, end: 'sourceId' | 'targetId'): string[] => useEnds(e, end, (id) => nodes.has(id), renderNodesOf);
     for (const e of drawn) {
         const key = semanticEdgeKey(e);
-        for (const source of renderNodesOf(e.sourceId)) {
-            for (const target of renderNodesOf(e.targetId)) {
+        for (const source of ends(e, 'sourceId')) {
+            for (const target of ends(e, 'targetId')) {
                 const id = `${key}@${source}->${target}`;
                 edges.set(id, { type: 'semantic', id, kind: e.kind, source, target, semantic: key });
             }

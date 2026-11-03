@@ -11,6 +11,7 @@
 import {
     buildSemanticGraph,
     isDesignLevelOnly,
+    type NodeElement,
     type NodeElementKind,
     semanticEdgeKey,
     type SemanticEdge,
@@ -22,6 +23,7 @@ import { LEVEL_KINDS, type RenderEdge, type RenderEventNode, type RenderGraph, t
 import { buildTrie, compare, memberId, type TrieNode } from './trie.js';
 import { filterEdges } from './filter.js';
 import { hasStages, projectStageView } from './stage-view.js';
+import { useEnds, useNodeId, usesOf } from './uses.js';
 
 export function projectView(storming: Storming, options: ViewOptions): RenderGraph {
     // a storming with stages: its integrated canvas and its stages are views of stages (a timeline's view is as ever)
@@ -83,16 +85,24 @@ export function projectView(storming: Storming, options: ViewOptions): RenderGra
         drawn = filterEdges(semantic.edges, new Set(events.filter((id) => kinds.get(id) === 'event')));
     }
 
-    for (const n of semantic.nodes) {
-        if (n.kind === 'event' || !shown.has(n.kind)) continue;
-        if (timelineId !== undefined && !drawn.some((e) => e.sourceId === n.id || e.targetId === n.id)) continue;
-        nodes.set(`n:${n.id}`, { type: 'element', id: `n:${n.id}`, elementId: n.id, kind: n.kind });
+    const elements = semantic.nodes.filter(
+        (n): n is NodeElement & { kind: Exclude<NodeElementKind, 'event'> } =>
+            n.kind !== 'event' && shown.has(n.kind) && (timelineId === undefined || drawn.some((e) => e.sourceId === n.id || e.targetId === n.id)),
+    );
+    // an actor, external system, read model or aggregate beside each command that uses it; once when none does
+    const commands = new Set(elements.filter((n) => n.kind === 'command').map((n) => n.id));
+    const uses = usesOf(drawn, (id) => commands.has(id));
+    for (const n of elements) {
+        const users = uses.get(n.id);
+        if (!users) nodes.set(`n:${n.id}`, { type: 'element', id: `n:${n.id}`, elementId: n.id, kind: n.kind });
+        for (const use of users ?? []) nodes.set(useNodeId(n.id, use), { type: 'element', id: useNodeId(n.id, use), elementId: n.id, kind: n.kind, use });
     }
     const renderNodesOf = (id: string): string[] => (kinds.get(id) === 'event' ? (eventNodes.get(id) ?? []) : nodes.has(`n:${id}`) ? [`n:${id}`] : []);
+    const ends = (e: SemanticEdge, end: 'sourceId' | 'targetId'): string[] => useEnds(e, end, (id) => nodes.has(id), renderNodesOf);
     for (const e of drawn) {
         const key = semanticEdgeKey(e);
-        for (const source of renderNodesOf(e.sourceId)) {
-            for (const target of renderNodesOf(e.targetId)) {
+        for (const source of ends(e, 'sourceId')) {
+            for (const target of ends(e, 'targetId')) {
                 const id = `${key}@${source}->${target}`;
                 edges.set(id, { type: 'semantic', id, kind: e.kind, source, target, semantic: key });
             }

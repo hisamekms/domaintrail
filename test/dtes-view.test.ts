@@ -67,8 +67,9 @@ describe('the Live View of a workspace with stormings', () => {
     test('shows external systems at the Design Level only, and every event at both levels (R14, R17)', async () => {
         const [view] = (await viewService(dir).refresh()).stormings;
         const ids = (key: string) => view.views[key].graph.nodes.map((n) => n.id);
-        expect(ids('design-level|')).toContain('n:PaymentGateway');
-        expect(ids('big-picture|')).not.toContain('n:PaymentGateway');
+        // beside the command it issues (one note per use)
+        expect(ids('design-level|')).toContain('n:PaymentGateway@ReceivePaymentNotice');
+        expect(ids('big-picture|').filter((id) => id.startsWith('n:PaymentGateway'))).toEqual([]);
         const events = (key: string) => view.views[key].graph.nodes.filter((n) => n.kind === 'esEvent').map((n) => n.id);
         expect(events('big-picture|')).toEqual(events('design-level|'));
         expect(ids('big-picture|Failure')).toEqual(['n:Compensation', 't:e:ShipmentCancelled', 't:e:ShipmentCancelled>e:ReleaseFailed']);

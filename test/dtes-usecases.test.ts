@@ -260,7 +260,15 @@ describe('UC1: from events to a Design Level storming, then to a .dt model', () 
         // the same file goes back to Big Picture: the events and the hotspot, as before the Design Level was added
         expect(await view({ 'stormings/rental.dtes': DESIGN }, BIG_PICTURE)).toEqual(events);
         expect(await view({ 'stormings/rental.dtes': DESIGN }, DESIGN_LEVEL)).toEqual(
-            expect.arrayContaining(['n:Member', 'n:Clock', 'n:Availability', 'n:ChargeLateReturn', 'n:LateFee']),
+            // an actor, read model or aggregate beside each command that uses it
+            expect.arrayContaining([
+                'n:Member@Reserve',
+                'n:Member@PickUp',
+                'n:Clock@Expire',
+                'n:Availability@Reserve',
+                'n:ChargeLateReturn',
+                'n:LateFee@ChargeLateFee',
+            ]),
         );
 
         // the model, proposed from the storming: the storming has no refs yet, and needs none
@@ -358,7 +366,7 @@ describe('UC2: storming from the existing model of examples/shop', () => {
         const a = Object.fromEntries(await Promise.all([SHOP_STORMING].map(async (f) => [f, await readFile(path.join(EXAMPLES, f), 'utf8')])));
         const normal = await view(a, { level: 'design-level', timelineId: 'Normal' });
         // OrderConfirmed → BillConfirmedOrder → IssueInvoice → InvoiceIssued: both ends are in Normal
-        expect(normal).toEqual(expect.arrayContaining(['n:BillConfirmedOrder', 'n:IssueInvoice', 'n:OrderTotal', 'n:Invoice']));
+        expect(normal).toEqual(expect.arrayContaining(['n:BillConfirmedOrder', 'n:IssueInvoice', 'n:OrderTotal@IssueInvoice', 'n:Invoice@IssueInvoice']));
         expect(normal).not.toContain('n:CancelOrder');
         const cancel = await view(a, { level: 'big-picture', timelineId: 'CancelAfterConfirm' });
         expect(cancel.filter((id) => id.startsWith('n:'))).toEqual(['n:InvoiceOfCancelledOrder', 'n:MixedCurrencies']);
