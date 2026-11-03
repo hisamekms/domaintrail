@@ -2557,8 +2557,9 @@ page no session chat. Sessions need Node.js 22.13 or later (for `node:sqlite`). 
   agent API's address.
 - `dt session link` — another facilitator link, for the server running on the workspace (each link works once, for 10
   minutes).
-- `dt session subscribe --agent claude` — the agent: it connects to the running server through its agent API and runs
-  the queued runs one after another, until Ctrl+C or the session closes; `--once` handles one run and exits.
+- `dt session subscribe --agent claude` — the agent: it connects to the running server through its agent API in its
+  two roles (below) — the **runner**, which runs the queued runs one after another, and the **answerer**, which triages
+  and answers the messages addressed to the AI — until Ctrl+C or the session closes; `--once` handles one run and exits.
 
 **Roles.** Everyone signed in is a **participant**: they see the Live View and the session's chat, a pillar at the
 right end of the page — チャット: every message posted, one card per run, and the composer; AI の作業: everything sent to the AI,
@@ -2580,11 +2581,21 @@ files, with how many files and who asked), the participants and how long it last
 when it ended; the session's record stays in the workspace's `.domaintrail`.
 
 **Messages and sending to the AI.** Everything posted in the chat is a **message**, shown in the stream as it is
-sent; nothing runs until the facilitator **sends** it to the AI (*applies* it, in the ADR's terms: queues a run with it
-as the input). On each message the facilitator has the robot button, AI に送る (a run of that message, queued at once;
-runs are serial, so it waits as 実行待ち while another runs), and … (その他の操作): もう一度送る once it was sent, AI に送る
-on a message read as talk (where the button is not shown), コメントをつけて送る (a comment for the agent first) and
-まとめて送る (choose several). Shift- or ⌘-click chooses messages too; a bar then offers コメント… and まとめて送る, one
+sent. A message is **addressed to the AI** when it mentions `@AI` or replies to the AI (one of its answers, or a run);
+other messages are talk between people, and no model sees them ([ADR 0030](adr/0030-modes-triage-and-the-warm-agent.md)).
+An addressed message is **triaged** — nobody says whether it is a question or a request: stage 1 (on the server) takes
+sure acknowledgements such as ありがとう as needing no answer; stage 2 is Clef when `session.classifier` is enabled
+(below); stage 3 is a light model of the agent's answerer (`haiku` unless configured, no tools); still unknown is a
+question. A **question** (相談) is answered at once by the answerer, read-only, in parallel with the runs: the answer is
+a message of the AI replying to it. A **request** (依頼) from the facilitator is queued as a run at once; from a
+participant, the answerer writes a **change proposal** (what, where, how) that the facilitator approves (as is or
+edited; several approved together are one run), or rejects with a note; its author may withdraw it while it waits.
+Participants see only where a triage went; the facilitator sees its record (each stage's answer, confidence, reason
+and model). On each message the facilitator has the robot button, AI に送る (addresses it to the AI, as a mention would
+have: its triage decides what follows, and a request the facilitator sends this way is queued without a proposal), and
+… (その他の操作): もう一度送る once it was sent (a run of that message, queued at once; runs are serial, so it waits as
+実行待ち while another runs), コメントをつけて送る (a run with a comment for the agent first) and まとめて送る (choose
+several). Shift- or ⌘-click chooses messages too; a bar then offers コメント… and まとめて送る, one
 run of all of them, and Esc leaves it. Right after sending, AI に送りました offers 実行を中止, which stops the run while it
 is still queued. Participants see a run once it is in the stream, and the queue in AI の作業. Every message and
 AI turn has a status slot at the right end of its name row, there only when the row has a status and then as wide on
@@ -2785,16 +2796,14 @@ card is frozen into the next run as `answerTo` and `answer` (the question and th
 alternative picked is frozen as `pick` (the run, the assumption and the alternative as they were shown), with a note
 asking for it; the agent is given the run it assumed in, and the card shows the pick with ◉.
 
-**Classifying messages (opt-in).** With `session.classifier.enabled`, the session server asks Cloudflare Workers AI's
-Clef (`@cf/cloudflare/clef-flash`, or `clef`) whether each new message asks for a change to the model or is talk. The
-message appears at once; its classification follows, for the facilitator only, and shows only as whether the row has
-the AI に送る button: it is offered on requests, and on anything the classifier could not tell — a failure, a timeout or a
-probability near `threshold` leaves a message sendable — while a message read as talk can still be sent from its …
-menu. Results are kept in memory: after a restart, earlier messages are all sendable. **The text of each message is sent to
-Cloudflare** under your account (the token is read from the environment variable named by `apiTokenEnv`, never from
+**Clef, stage 2 of the triage (opt-in).** With `session.classifier.enabled`, the session server asks Cloudflare
+Workers AI's Clef (`@cf/cloudflare/clef-flash`, or `clef`) three questions about each message **addressed to the AI**
+(only those): is it a question about the model, a request to change it, or does it need no answer. One answer at or
+above `threshold` decides; anything else — none or several, a failure, a timeout — leaves the message to stage 3. Talk
+between people is never sent. **The text of each addressed message is sent to Cloudflare** under your account (the token is read from the environment variable named by `apiTokenEnv`, never from
 the file); Cloudflare states that it does not use customer content processed by Workers AI to train models
 ([Workers AI data usage](https://developers.cloudflare.com/workers-ai/platform/data-usage/)). Disabled (the default),
-nothing is sent and every message can be sent to the AI.
+nothing is sent: the triage's record says Clef is not configured, and stage 3 decides.
 
 **Presence** is never stored: each page tells the others where it is (this page, the same view, another view,
 offline) and its cursor, at most about 20 times a second. A cursor is drawn only on the same view — the same `.dt`
@@ -2922,7 +2931,8 @@ around it (its ⋯ → 変更を見る).
 --permission-mode dontAsk --tools … --allowedTools …`, with the rules of `session.agent.allowedTools` only (any other
 tool is refused without asking, and no MCP server is loaded). The prompt tells it to read the related files, edit only
 the `.dt` and `.dtes` sources, keep a storming exploratory, and change no `.dt` when the requests are only about
-stormings; then `dt fmt` and `dt check` run, and the server records the result.
+stormings, and lets it answer instead (status `answered`) a request that turns out to be a question; then `dt fmt` and
+`dt check` run when the run changed files (else both are skipped), and the server records the result.
 
 - **The agent's `dt`.** The agent may run `dt fmt` and `dt check` (the default `allowedTools`), whatever is installed:
   for each run the subscriber puts a `dt` first on the agent's `PATH`, in a private temporary directory (0700) outside
@@ -2949,6 +2959,16 @@ stormings; then `dt fmt` and `dt check` run, and the server records the result.
   way.
 - **The agent API** listens on 127.0.0.1 only, on its own port, with a bearer token in `.domaintrail/session/agent.json`
   (mode 0600); it refuses a request with an `Origin` or a `Host` other than loopback, and is never reachable through the page's port.
+- **Two roles, two entry points.** The runner follows `GET /agent/events` and claims runs; the answerer follows `GET
+  /agent/answers/events`, where the server hands each job (stage 3 of a triage, an answer, a proposal) to one connected
+  answerer with none in hand — no claim, no lease, never waiting for the runs — and takes its result at `POST
+  /agent/answers/:job`; a job not answered within its timeout (120 s) is withdrawn (a triage's stage 3 is then a
+  question; an answer or a proposal is handed out again, twice at most), and the jobs of an answerer that disconnects go
+  to another or wait. The answerer's Claude Code has the reading tools only (`--tools Read,Grep,Glob`; stage 3: none),
+  whatever the message says; it is warm (one process across answers) by default, stage 3 a fresh `claude -p` per
+  message. Every prompt carries the session so far (the chat, the AI's turns and what is open), whole for a fresh
+  process and only what was added since for a warm one. The page's state and `agent.presence` say how many of each role
+  are connected and how much work waits for one.
 - **One run at a time.** Each run is claimed with a lease kept alive by heartbeats. If the subscriber dies, the run's
   lease expires and a running run fails (`LeaseExpired`) rather than run twice; a run only claimed goes back to the
   queue. Ctrl+C fails the running run as `Interrupted`.

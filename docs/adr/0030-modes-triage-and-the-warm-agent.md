@@ -1,6 +1,6 @@
 # ADR 0030: Modes (`dt open` / `dt collab` / `dt agent`), messages addressed to the AI, triage and a warm agent
 
-- Status: accepted (2026-11-03), not implemented; tasks M2–M7 of [the plan](../plans/modes.md). Every decision below
+- Status: accepted (2026-11-03), being implemented: M2–M4 landed; tasks M5–M7 of [the plan](../plans/modes.md). Every decision below
   was taken by the maintainer (marked *Decided by the maintainer*) except those marked *Proposed*, which the plan
   chose where the maintainer left the choice open; the plan's open questions are not decided here.
 - Date: 2026-11-03
@@ -151,6 +151,16 @@ participants; the facilitator's re-address of a "neither" is a triage step of it
 records where it went (an answer, a proposal or a run) once; the approved proposals are an optional group of the run's
 input; `dt fmt` / `dt check` report `Ran`, `Failed` or `Skipped`, and stored rows of the former shape are read in the new
 one rather than rewritten.
+
+### 10. The triage and the answers as built (M4)
+
+*Proposed* (M4, where the plan left the detail open; see the plan's "As built in M4"): the answers entry point holds
+what it handed out in memory (a job per answerer, withdrawn after its timeout; a failed stage 3 is a 相談, a failed
+answer or proposal is tried twice and then left until the server starts again); a participant's page gets the triages'
+outcomes without the stages, also in the events; Clef asks three questions in one call; the answerer and the triage
+model are reached through Claude Code only, the triage cold by default, the answers warm with one schema for answers and
+proposals; the session so far is given whole and since the last entry the same process saw (the runner asks for it at
+the start, the server tracks it per answer stream); `dt fmt` and `dt check` are skipped when a run changed no file.
 
 ## Alternatives considered
 
