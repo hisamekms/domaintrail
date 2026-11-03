@@ -35,7 +35,10 @@ export function interviewSlot(
     if (isAiAuthor(request.author)) return undefined;
     const interview = (state.interviews ?? []).find((i) => i.startedBy === request.author && (i.opening === request.id || heardBy(i, request.id, state)));
     if (!interview) return undefined;
-    const question = state.requests.find((r) => isAiAuthor(r.author) && r.replyTo?.kind === 'Message' && r.replyTo.request === request.id);
+    // dt's note after the brief is confirmed is not a question: it stands on its own row, after a new storming's run
+    const question = state.requests.find(
+        (r) => isAiAuthor(r.author) && r.replyTo?.kind === 'Message' && r.replyTo.request === request.id && r.journeyNote === undefined,
+    );
     if (question) return { kind: 'answer', answer: question.id };
     if (interview.state === 'Asking' && interview.awaiting === request.id) return { kind: 'pending' };
     return 'none';
