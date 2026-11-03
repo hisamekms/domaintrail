@@ -3,7 +3,8 @@
 //
 //   claim (naming what it can run: a revert) → start (the server takes the base revision, and gives the runs it continues
 //   and the runs it reverts) → prompt → the agent, with heartbeats → the changed files are
-//   only DSL sources? → `dt fmt`, `dt check` → finish {exitCode, formatted, checked, reply} (the server decides the rest)
+//   only DSL sources? → `dt fmt`, `dt check` when it changed files (else both skipped) → finish {exitCode, formatted,
+//   checked, reply} (the server decides the rest)
 //
 // or, instead of finish, a clarification (the agent asked questions), a decline (the agent will not do the requests,
 // and says why) or a failure (`AgentError`: the agent could not
@@ -12,11 +13,22 @@
 // queued one is claimed without waiting for anyone. While the agent runs, what it is doing (as the runner maps it) is
 // reported on change, at most once a second, never holding it up. An agent that keeps its conversation across runs
 // (a warm one) is also given the prompt that says which files changed since its previous run (the scan after it
-// against the scan before this one), is told to forget when a revision is restored, and is closed when the
-// subscriber ends. Functions over the ports only: no I/O of its own.
+// against the scan before this one) and only the session so far since its previous run, is told to forget when a
+// revision is restored, and is closed when the subscriber ends. Every prompt carries the session so far (ADR 0030,
+// round 3): whole for a fresh agent. Functions over the ports only: no I/O of its own.
 import { mapRequests } from '@domaintrail/collaboration';
-import { AGENT_CAPABILITIES, AGENT_EVENT_TYPES, type AgentClaimed, type AgentPreviousRun, type AgentRevertedRun } from '@domaintrail/collaboration/protocol';
-import { AgentApiError, type AgentApi, type AgentOutcome, type AgentRunner, type ApiResult, type Clock, type DslTools, type WorkspaceFiles } from './ports.js';
+import { AGENT_CAPABILITIES, AGENT_EVENT_TYPES, type AgentClaimed, type ToolOutcomeBody } from '@domaintrail/collaboration/protocol';
+import {
+    AgentApiError,
+    type AgentApi,
+    type AgentOutcome,
+    type AgentRunner,
+    type ApiResult,
+    type Clock,
+    type DslTools,
+    type Started,
+    type WorkspaceFiles,
+} from './ports.js';
 import { createActivityReporter } from './activity.js';
 import { buildPrompt } from './prompt.js';
 
@@ -134,6 +146,8 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
     let halted: string | undefined;
     /** The workspace as the agent left it at the end of its previous run (scanned after it): what it last saw. */
     let lastAgentScan: ReadonlyMap<string, string> | undefined;
+    /** The last entry of the session so far the agent's previous run was given. */
+    let lastSoFar: number | undefined;
 
     /** Stops claiming because of what the run `id` left (`shown`: escaped paths, or why they are unknown). */
     const halt = (id: string, shown: string): void => {
@@ -183,7 +197,7 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                 await complete('released', id, () => api.release(id, token));
                 return;
             }
-            const started = await api.start(id, token);
+            const started = await api.start(id, token, lastSoFar);
             if (!started.ok) {
                 if (isFinal(started)) return log(`run ${id}: not started (${started.type})`);
                 log(`run ${id}: not started (${started.status} ${started.type}); releasing it`);
@@ -205,7 +219,7 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                 );
             });
             try {
-                await runPipeline(id, token, run.input, started.value.previousRuns ?? [], started.value.revert ?? [], cancel.signal);
+                await runPipeline(id, token, run.input, started.value, cancel.signal);
             } catch (e) {
                 // the workspace could not be scanned, the participants not read…: the run fails, the next one is taken
                 log(`run ${id}: ${message(e)}`);
@@ -218,14 +232,9 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
         }
     };
 
-    const runPipeline = async (
-        id: string,
-        token: string,
-        input: AgentClaimed['run']['input'],
-        previousRuns: readonly AgentPreviousRun[],
-        revert: readonly AgentRevertedRun[],
-        cancelled: AbortSignal,
-    ): Promise<void> => {
+    const runPipeline = async (id: string, token: string, input: AgentClaimed['run']['input'], started: Started, cancelled: AbortSignal): Promise<void> => {
+        const previousRuns = started.previousRuns ?? [];
+        const revert = started.revert ?? [];
         // a revert is never run without the changes it reverts: the agent would take it for a request of its own
         const reverts = input.requests.flatMap((r) => (r.reverts === undefined ? [] : [r.reverts]));
         if (reverts.some((u) => !revert.some((d) => d.run.id === u))) {
@@ -282,12 +291,21 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
             });
             let outcome: AgentOutcome;
             const nonce = deps.nonce();
-            // for an agent that remembers its previous run: what changed since (people, another agent, dt fmt, a restore)
+            // for an agent that remembers its previous run: what changed since (people, another agent, dt fmt, a restore),
+            // and the session so far since then
             const sinceLast = lastAgentScan && changedPaths(lastAgentScan, before);
+            const soFar = started.sessionSoFar;
+            const soFarSince = started.sessionSoFarSince ?? soFar;
+            if (soFar) lastSoFar = soFar.last;
             try {
                 outcome = await deps.runner.run({
-                    prompt: buildPrompt(input, names, nonce, previousRuns, revert),
-                    ...(sinceLast && { continuedPrompt: buildPrompt(input, names, nonce, previousRuns, revert, { changedSinceYourLastRun: sinceLast }) }),
+                    prompt: buildPrompt(input, names, nonce, previousRuns, revert, { ...(soFar && { sessionSoFar: soFar.text }) }),
+                    ...(sinceLast && {
+                        continuedPrompt: buildPrompt(input, names, nonce, previousRuns, revert, {
+                            changedSinceYourLastRun: sinceLast,
+                            ...(soFarSince && { sessionSoFar: soFarSince.text }),
+                        }),
+                    }),
                     allowedTools: options.allowedTools,
                     requests: input.requests.length,
                     signal,
@@ -316,11 +334,13 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
             if (outcome.exitCode === 0 && outcome.outcome === 'declined' && reply) {
                 return complete(`declined (${changed} file(s) changed)`, id, () => api.decline(id, token, reply));
             }
-            const formatted = await deps.tools.format();
-            const checked = await deps.tools.check();
+            // nothing changed (an answer, a run that found nothing to do): no dt fmt nor dt check (ADR 0030)
+            const outcomeOf = (ran: boolean): ToolOutcomeBody => (ran ? 'ran' : 'failed');
+            const formatted: ToolOutcomeBody = changed === 0 ? 'skipped' : outcomeOf(await deps.tools.format());
+            const checked: ToolOutcomeBody = changed === 0 ? 'skipped' : outcomeOf(await deps.tools.check());
             if (cancelled.aborted) return log(`run ${id}: cancelled`);
             await complete(
-                `finished (${changed} file(s) changed; dt fmt ${formatted ? 'ran' : 'did not run'}, dt check ${checked ? 'ran' : 'did not run'})`,
+                `finished (${changed} file(s) changed; dt fmt ${formatted}, dt check ${checked})`,
                 id,
                 // the reply of a done run only: a question or a decline that did not end the run is dropped
                 () => api.finish(id, token, { exitCode: outcome.exitCode, formatted, checked, ...(outcome.outcome === 'done' && reply && { reply }) }),

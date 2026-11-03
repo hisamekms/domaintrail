@@ -10,6 +10,7 @@ import type {
     AgentParticipantsBody,
     AgentRevertedRun,
     AgentSessionBody,
+    AgentSessionSoFar,
     EventMessage,
     Json,
     RunActivity,
@@ -50,6 +51,10 @@ export interface Started {
     readonly baseRevision: Json<Collaboration.Revision>;
     readonly previousRuns?: readonly AgentPreviousRun[];
     readonly revert?: readonly AgentRevertedRun[];
+    /** The session so far, whole (absent from an older server). */
+    readonly sessionSoFar?: AgentSessionSoFar;
+    /** The session so far after the `since` the start was given. */
+    readonly sessionSoFarSince?: AgentSessionSoFar;
 }
 
 /** The agent API of the session server (loopback, bearer token). */
@@ -64,7 +69,8 @@ export interface AgentApi {
     events(lastEventId: string | undefined, signal: AbortSignal): AsyncIterable<StreamItem>;
     /** Claims the next run; `capabilities`: what this subscriber can run (`AGENT_CAPABILITIES`), so that it is given no run it cannot. */
     claim(owner: string, capabilities: readonly string[]): Promise<ApiResult<AgentClaimed>>;
-    start(run: string, token: string): Promise<ApiResult<Started>>;
+    /** `since`: the last entry of the session so far the runner's warm process was given (for `sessionSoFarSince`). */
+    start(run: string, token: string, since?: number): Promise<ApiResult<Started>>;
     heartbeat(run: string, token: string): Promise<ApiResult<{ readonly lease: AgentLease }>>;
     /** What the running run is doing now (the server keeps the latest for the pages; the lease is not extended). */
     activity(run: string, token: string, activity: RunActivity): Promise<ApiResult<unknown>>;
@@ -124,7 +130,10 @@ export interface AgentRunner {
     close?(): Promise<void>;
 }
 
-/** `dt fmt` and `dt check` on the workspace: each resolves whether it ran (exit 0 or 1), not whether it found nothing. */
+/**
+ * `dt fmt` and `dt check` on the workspace: each resolves whether it ran (exit 0 or 1), not whether it found nothing.
+ * The subscriber runs them only when the run changed files (else they are `skipped`).
+ */
 export interface DslTools {
     format(): Promise<boolean>;
     check(): Promise<boolean>;

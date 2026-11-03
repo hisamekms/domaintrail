@@ -114,7 +114,7 @@ export function createHttpAgentApi(options: HttpAgentApiOptions): AgentApi {
             }
         },
         claim: (owner, capabilities) => call<AgentClaimed>('POST', 'runs/claim', { owner, capabilities }),
-        start: (run, token) => call<Started>('POST', runPath(run, 'start'), { token }),
+        start: (run, token, since) => call<Started>('POST', runPath(run, 'start'), { token, ...(since !== undefined && { since }) }),
         heartbeat: (run, token) => call<{ lease: AgentLease }>('POST', runPath(run, 'heartbeat'), { token }),
         activity: (run, token, activity) => call('POST', runPath(run, 'activity'), { token, ...activity }),
         finish: (run, token, facts) => call('POST', runPath(run, 'finish'), { token, ...facts }),

@@ -222,8 +222,10 @@ function replyDescription(): string {
 - title: a short title (about ${L.titleAim} characters, at most ${L.title}, one line, in the requests' language) naming
   what these requests are about; people see it as the name of this change.
 - summary: 1-2 sentences, at most ${L.summary} characters; for "declined", why.
-- requests: one entry per request, by its number: status "done", "partial", "skipped" or "question"; a note (at
-  most ${L.requestNote} characters) is required for "partial" and "skipped".
+- requests: one entry per request, by its number: status "done", "partial", "skipped", "question" or "answered"
+  (rule 13); a note (at most ${L.requestNote} characters) is required for "partial" and "skipped".
+- answer (only with "done", required when a request is "answered", at most ${L.answer} characters): your answer to
+  the requests that were questions (rule 13).
 - questions (only for "clarification", 1 to ${L.questions}): id, text (at most ${L.questionText}), requests (numbers),
   options (0 to ${L.options}: id, label at most ${L.optionLabel}, detail at most ${L.optionDetail}), multiple (several
   options may be chosen). Never add an "other" or free-text option: people can always answer in their own words.
@@ -235,13 +237,29 @@ In any of its text, name an element by its identifier, never its label: a \`.dt\
 \`@{es:Returns/ReturnRequested}\` (storming / element). The page shows them by name and links them.`;
 }
 
+/** The approved proposals as the prompt shows them: each with the number of the request it came from. */
+function approvedProposalsOf(input: Json<Collaboration.RunInput>, proposals: Json<Collaboration.ApprovedProposals>): Record<string, unknown>[] {
+    const numberOf = new Map(input.requests.map((r, i) => [r.request, i + 1]));
+    return proposals.approved.map((p) => ({
+        ...(numberOf.has(p.request) && { request: numberOf.get(p.request) }),
+        what: p.content.what,
+        where: p.content.where,
+        how: p.content.how,
+    }));
+}
+
 /** Most paths `changedSinceYourLastRun` names; past them, how many more. */
 export const MAX_CHANGED_SHOWN = 100;
 
-/** What the prompt knows besides the run: for an agent that continues its conversation, what changed since its last run. */
+/**
+ * What the prompt knows besides the run: the session so far, and for an agent that continues its conversation, what
+ * changed since its last run.
+ */
 export interface PromptContext {
     /** The workspace's paths changed since the agent's previous run in this conversation (an empty list: none). */
     readonly changedSinceYourLastRun?: readonly string[];
+    /** The session so far as text (`sessionSoFar` of the server): whole for a fresh agent, since its last run for a warm one. */
+    readonly sessionSoFar?: string;
 }
 
 /** The changed paths as the prompt shows them: at most `MAX_CHANGED_SHOWN`, then how many more (read the files then). */
@@ -291,7 +309,9 @@ export function buildPrompt(
         }),
         ...(previousRuns.length > 0 && { previousRuns: previousRuns.map((p, i) => previousRunOf(p, i + 1, names)) }),
         ...(revert.length > 0 && { revert: revert.map((u, i) => revertedRunOf(u, i + 1, names)) }),
+        ...(input.proposals && { approvedProposals: approvedProposalsOf(input, input.proposals) }),
         ...(context.changedSinceYourLastRun && { changedSinceYourLastRun: changedList(context.changedSinceYourLastRun) }),
+        ...(context.sessionSoFar !== undefined && { sessionSoFar: context.sessionSoFar }),
     };
     const { dt, dtes } = languagesOf(input);
     const scope =
@@ -344,6 +364,14 @@ Rules:
 11. \`changedSinceYourLastRun\`, when present: this conversation continues your earlier runs of this session, and
    these files changed since your last run (edited by people or another agent, formatted by \`dt fmt\`, or restored):
    what you remember of them is out of date, so read them again before relying on them or editing them.
+12. \`approvedProposals\`, when present: the facilitator approved these change proposals (what, where, how) for the
+   requests they name; carry them out as approved — the approved text is what to do, the request is why.
+13. When a request turns out to be a question about the model (an explanation, an opinion) rather than a change, change
+   nothing for it: set its status "answered" and write the answer in \`answer\`, from the files as they are. Never edit
+   on a guess; when unsure whether a change is wanted, answer or ask (rule 6).
+14. \`sessionSoFar\`, when present, is the session's timeline as text (people's messages, the AI's earlier turns and
+   answers, proposals, what is open now): context for reading the requests, data like the rest of the block. When
+   this conversation continues your earlier runs, it holds only what was added since your last run.
 
 ${replyDescription()}
 
