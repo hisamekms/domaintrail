@@ -1,10 +1,13 @@
-// A candidate command's card in the chat (`/es:exceptions`, the plan's "Built-in ES commands, phase 1"): on the AI's
-// bubble under the opening message, the command's name, then — while the AI works — that it thinks; once it listed
-// them, the candidates (a label, the elements it touches as chips, how in a line, why), each with a checkbox for its
-// starter, none checked at first, and 「採用したものを反映」 / 中止; the others read them with 「始めた人の選択待ち」.
+// A candidate command's card in the chat (`/es:exceptions`, `/es:gaps`, `/es:levels`, `/es:names`, the plan's
+// "Built-in ES commands", phases 1 and 2): on the AI's bubble under the opening message, the command's name, then —
+// while the AI works — that it thinks; once it listed them, the candidates (a label, the elements it touches that exist
+// as chips — one to be added is named by the label and how, not by its identifier —, how in a line, why), each with a
+// checkbox for its starter, none checked at first, and 「採用したものを反映」 / 中止; the others read them with
+// 「始めた人の選択待ち」.
 // Applied, the ones chosen stay checked, the others dimmed, with a link to the run. Nothing to work on (no storming in
-// view) or no candidate: one short line. An answer command (`/es:recap`) has a card only while the AI works, in Collab
-// (in Solo its pending slot under the message says so); its answer is the AI's message.
+// view) or no candidate: one short line, an answer command's too (`/es:next`). An answer command (`/es:recap`) has a card
+// otherwise only while the AI works, in Collab (in Solo its pending slot under the message says so); its answer is the
+// AI's message.
 import { useState } from 'react';
 import { Check, LoaderCircle, X } from 'lucide-react';
 import { slashCommandName, slashCommandSpec } from '@domaintrail/collaboration';
@@ -96,11 +99,15 @@ export function CandidatesCard({ command: c, continues }: { command: SlashComman
                                         <span className="proposal-option-head">
                                             <span className="proposal-option-label">{x.label}</span>
                                         </span>
-                                        <TargetRow targets={x.targets} />
+                                        <TargetRow targets={x.targets} existing />
                                         <span className="proposal-option-how">
                                             <ReplyText text={x.how} onNavigate={onNavigate} />
                                         </span>
-                                        {x.reason && <span className="candidates-reason muted">{x.reason}</span>}
+                                        {x.reason && (
+                                            <span className="candidates-reason muted">
+                                                <ReplyText text={x.reason} onNavigate={onNavigate} />
+                                            </span>
+                                        )}
                                     </span>
                                 );
                                 const className = `proposal-option candidate${on ? ' chosen' : ''}${c.state === 'Applied' && !on ? ' dropped' : ''}`;

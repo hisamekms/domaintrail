@@ -671,6 +671,43 @@ describe('the candidate and answer commands of the `/` list', () => {
         expect(answer?.body).toBe('**Decided**\n- nothing yet');
         expect(state.slashCommands?.find((c) => c.id === command.id)).toMatchObject({ state: 'Answered', answer: answer?.id });
     });
+
+    test('/es:next: anyone, on the storming in view; its steps read again, the message written from them, the steps kept', async () => {
+        const root = await scratch();
+        await writeFile(path.join(root, 'orders.dtes'), STORMING);
+        const ctx = await setup(root);
+        const started = await ctx.api(ctx.bob, 'commands', { command: 'es:next', body: '次にやること', language: 'ja', viewedAt: { view: storming } });
+        expect(started.status).toBe(201);
+        const { command, request } = (await started.json()) as { command: { id: string; scope: string }; request: { id: string } };
+        expect(command.scope).toBe('Orders');
+        const stream = answerStream(ctx);
+        const job = await stream.commandJob();
+        expect(job).toMatchObject({ kind: 'command', name: 'es:next', type: 'next', author: 'Bob' });
+        // a plain answer is not what it takes
+        expect((await stream.post(job.job, { kind: 'answer', answer: 'x', durationMs: 1 })).status).toBe(409);
+        const again = await stream.commandJob();
+        const steps = [
+            { text: '例外を洗い出す', reason: '例外がない', command: 'es:exceptions' },
+            { text: '専門家に聞く', reason: '未決のホットスポット', command: 'es:nope' },
+        ];
+        expect((await stream.post(again.job, { kind: 'next', status: 'Big Picture: 通常フローまで', steps, durationMs: 2 })).status).toBe(200);
+        const state = await ctx.state(ctx.bob);
+        const answer = state.requests.find((r) => r.author === 'ai' && r.replyTo?.kind === 'Message' && r.replyTo.request === request.id);
+        expect(answer?.body).toBe(
+            'Big Picture: 通常フローまで\n\n1. **例外を洗い出す** — 例外がない `/es:exceptions`\n2. **専門家に聞く** — 未決のホットスポット',
+        );
+        expect(state.slashCommands?.find((c) => c.id === command.id)).toMatchObject({
+            state: 'Answered',
+            answer: answer?.id,
+            next: {
+                status: 'Big Picture: 通常フローまで',
+                steps: [
+                    { text: '例外を洗い出す', reason: '例外がない', command: 'EsExceptions' },
+                    { text: '専門家に聞く', reason: '未決のホットスポット' },
+                ],
+            },
+        });
+    });
 });
 
 describe('end to end with the two roles and a fake Claude Code', () => {

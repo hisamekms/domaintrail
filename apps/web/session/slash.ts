@@ -1,6 +1,7 @@
 // What `/` lists in the composer (the plan's "message templates", round 4, and "`/` commands", round 5), without
-// React: the commands — interviews (`/es:start`, `/model:start`), candidate commands (`/es:exceptions`: the AI lists
-// changes to check) and answer commands (`/es:recap`: the AI answers) — and the templates (built in, then the team's
+// React: the commands — interviews (`/es:start`, `/model:start`), candidate commands (`/es:exceptions`, `/es:gaps`,
+// `/es:levels`, `/es:names`: the AI lists changes to check) and answer commands (`/es:recap`, `/es:next`: the AI
+// answers) — and the templates (built in, then the team's
 // from `domaintrail.jsonc`: each only puts its text in the composer). The commands are grouped by their prefix (`es:`,
 // then `model:`), each group's `:start` first, so that `/es` lists the ES commands. The list depends on what is open and
 // selected (`TemplateContext`); filtering after `/` matches an item's stable English ID and its name in the UI
@@ -211,13 +212,18 @@ export type InterviewJson = NonNullable<SessionStateBody['interviews']>[number];
 
 export type SlashCommandJson = NonNullable<SessionStateBody['slashCommands']>[number];
 
+/** Whether a person may start a command at all: an interview, the facilitator; another command, anyone unless it is the facilitator's. */
+export function isCommandAllowed(facilitator: boolean, id: CommandId): boolean {
+    return facilitator || (isSlashCommandName(id) && !SLASH_COMMANDS[id].facilitatorOnly);
+}
+
 /**
  * Whether a person may start a command now: an interview, the facilitator while none runs; another command, anyone
  * unless it is the facilitator's, while none of its kind runs.
  */
 export function canStartCommand(state: Pick<SessionStateBody, 'interviews' | 'slashCommands'>, facilitator: boolean, id: CommandId): boolean {
-    if (!isSlashCommandName(id)) return facilitator && !runningInterview(state);
+    if (!isCommandAllowed(facilitator, id)) return false;
+    if (!isSlashCommandName(id)) return !runningInterview(state);
     const spec = SLASH_COMMANDS[id];
-    if (spec.facilitatorOnly && !facilitator) return false;
     return !(state.slashCommands ?? []).some((c) => c.kind === spec.kind && (c.state === 'Working' || c.state === 'Listed'));
 }

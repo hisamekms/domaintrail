@@ -392,8 +392,15 @@ The chat has two views:
   not model yet: a card in the chat with each candidate (its label, the events as chips, how in a line, why), none
   checked; its starter checks some and 採用したものを反映 makes one run that adds them as `exception`s (中止 drops it;
   the others read it). The run's card links back to it. With no storming in view the card only says so.
-  `/es:recap` (ここまでのまとめ, anyone's) has the AI answer in the chat with a short recap of the session: what was
-  decided, what was added or changed, what is still open. Then the **templates**: the beginnings of a message
+  `/es:gaps` (間を埋める), `/es:levels` (レベルを見直す) and `/es:names` (名前を揃える), the facilitator's too, work the
+  same way: the events missing between two consecutive events of a flow in view, the events to move to Design Level
+  (`level design`) or back to Big Picture, and the labels to rename (not in the past tense, the same thing named
+  differently, too long, technical) — the label only, the ID stays. A candidate's chips are the elements that exist;
+  one to be added is named by its label and how. `/es:recap` (ここまでのまとめ, anyone's) has the AI answer in the chat
+  with a short recap of the session: what was decided, what was added or changed, what is still open. `/es:next`
+  (次にやること, anyone's) answers for the storming in view with one line on where it stands and one to three next
+  steps, each with its reason; a step an ES command does has a button with the command (`/es:gaps`) that puts it in
+  the composer, `/`'s list open on it, for the person to send. Then the **templates**: the beginnings of a message
   for what is open and selected (このあとを足す at Big Picture, 前後を詰める for a selected event, 不変条件を挙げる for an
   aggregate …), then the team's from `templates` in `domaintrail.jsonc`; picking one only puts its text in the composer
   (the selected element as its `#` target), to edit and send. An empty view says 「まだありません。チャットで /es:start

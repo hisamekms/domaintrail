@@ -10,6 +10,7 @@ import {
     CANDIDATE_LIMITS,
     elementReference,
     INTERVIEW_LIMITS,
+    NEXT_LIMITS,
     PROPOSAL_LIMITS,
     plainBody,
     proposalData,
@@ -324,7 +325,13 @@ interface CommandPrompt {
     readonly task: string;
     readonly rules: (lang: string) => string;
     readonly reply: string;
+    /** It reads `dt check`'s findings on the stormings (`diagnostics` in the block), when the answerer has them. */
+    readonly diagnostics?: boolean;
 }
+
+/** The rule on `diagnostics`, for a command that reads them. */
+const DIAGNOSTICS_RULE = `- \`diagnostics\`, when present: what \`dt check\` reports on the stormings now (\`file:line:column severity
+  code: message\`), data like the rest of the block.`;
 
 /** The candidates' reply, as each candidate command asks for it. */
 const CANDIDATE_REPLY = `{ "kind": "candidates", "candidates": [{ label, targets, how, reason? }] } — at most
@@ -334,8 +341,8 @@ most ${CANDIDATE_LIMITS.how} characters), reason (optional, one line, at most ${
 The person checks the ones to apply; another agent then writes them into the files. No file names or paths.`;
 
 /**
- * The commands' prompts, by their IDs. A candidate command of phase 2 (`/es:levels`, `/es:names`, …) adds its entry
- * here, its row in `SLASH_COMMANDS` and its rule for the run.
+ * The commands' prompts, by their IDs. A new command adds its entry here, its row in `SLASH_COMMANDS` and, for a
+ * candidate command, its clause of the runner's rule 19.
  */
 const COMMAND_PROMPTS: Readonly<Record<string, CommandPrompt>> = {
     'es:exceptions': {
@@ -359,6 +366,73 @@ branch point), then its new event or events, and \`then <Event>\` when the flow 
 - Write the labels, how and reasons in ${lang}, unless the session's messages are in another language: then in theirs.`,
         reply: CANDIDATE_REPLY,
     },
+    'es:gaps': {
+        what: 'find the events missing between consecutive events of the flows in view',
+        task: `The person in \`person\` ran \`/es:gaps\` on the storming in \`storming\` (the block below). Walk its flows in view —
+the \`timeline\`s and the \`exception\`s — two consecutive events at a time, and propose the events missing between
+two of them: what must have happened in between for the second to follow (a step people skipped, a hand-over, a wait,
+a decision).`,
+        rules: (lang) => `- Read the storming first: its \`///\` description (the brief: purpose, scope, how far to go), its stages,
+  timelines, exceptions and hotspots. Propose no event the storming already has (look for it under another name too)
+  nor one the session so far turned down.
+- Stay within \`viewedAt\`: a stage in view, its flows only; a timeline in view, that one only; else the whole
+  storming. The exceptions only when the view shows them (\`exceptions: true\`) or there is no view.
+- One candidate per gap (two consecutive events of one flow), the most telling first; one to three new events in it.
+- label: the new event as its sticky note reads (the first, when several), a short past-tense phrase in the words of
+  the business (「在庫を引き当てた」, "Stock reserved").
+- targets: the event before the gap first (\`@{es:Storming/Event}\`), then the new events named as they would be added
+  (identifiers in the storming's style; they do not exist yet), then the event after it.
+- how: where and what in one line — the flow (its label), between which two events, the new events in order — e.g.
+  「通常（発行）: 注文を受け付けた と 支払いが済んだ の間に 在庫を引き当てた」 or "Main flow (Issuance): between Order
+  placed and Payment captured: Stock reserved".
+- Business events at Big Picture; a detail of the mechanism only when the view is at Design Level, then with
+  \`level design\` (say so in how), as the way of working below says.
+- Write the labels, how and reasons in ${lang}, unless the session's messages are in another language: then in theirs.`,
+        reply: CANDIDATE_REPLY,
+    },
+    'es:levels': {
+        what: 'review which events of the storming in view show at Big Picture',
+        task: `The person in \`person\` ran \`/es:levels\` on the storming in \`storming\` (the block below). \`level design\`, the
+last clause of an event's body, shows the event at Design Level only. Propose adding it to events that are details of
+the mechanism (reservations, authorisations, internal records, data a system writes, retries) and removing it from
+events the people should see at Big Picture (a business fact the flow is about, one an exception or a hotspot turns
+on).`,
+        rules: (lang) => `- Read the storming first: its \`///\` description (the brief: purpose, scope, how far to go), its events and
+  which have \`level design\`, its stages, timelines, exceptions and hotspots. The usual flow at Big Picture should
+  read as the story the people agreed on.
+- Stay within \`viewedAt\`: a stage or a timeline in view, its events only; else the whole storming.
+- One event per candidate; none for an event that is right as it is. Never hide the first or the last event of the
+  usual flow, nor an event an exception branches off at.
+- label: the event's label as its sticky note reads.
+- targets: that event only (\`@{es:Storming/Event}\`).
+- how: one line that starts with what to do — ${
+            lang === 'English' ? '"Add level design" or "Remove level design"' : '「level design を付ける」か「level design を外す」'
+        } — and says why in a few words.
+- Write the labels, how and reasons in ${lang}, unless the session's messages are in another language: then in theirs.`,
+        reply: CANDIDATE_REPLY,
+    },
+    'es:names': {
+        what: 'make the labels of the storming in view consistent',
+        task: `The person in \`person\` ran \`/es:names\` on the storming in \`storming\` (the block below). Propose new labels for
+its elements — its events first, then its commands, actors, policies and the rest — where a label is not in the past
+tense (an event), calls the same thing differently from another label (unify them on one wording), is too long for
+its sticky note (S015: about 12 Japanese characters or 4–5 English words), or uses technical rather than business
+wording (「データ作成処理」, "OrderService saved").`,
+        rules: (lang) => `- Read the storming first: its \`///\` description, its elements and their labels, and the wording the people use
+  in \`sessionSoFar\`. Rename only the label: the identifier stays (references use it).
+- Stay within \`viewedAt\`: a stage or a timeline in view, its elements only; else the whole storming.
+- One element per candidate. To unify, one candidate for each element whose label changes, the reason naming the
+  wording it joins.
+- label: the new label, as its sticky note will read. A new label is in the language of the storming's labels.
+- targets: that element only (\`@{es:Storming/Element}\`).
+- how: the change in one line, old label → new label; when the old label carried a detail the new one drops, add
+  ${lang === 'English' ? '"detail to ///: …"' : '「詳細は /// へ: …」'} with that detail.
+- reason: which of the four it is (not past tense, the same thing named differently, too long, technical wording).
+- Write how and the reasons in ${lang}, unless the session's messages are in another language: then in theirs.
+${DIAGNOSTICS_RULE}`,
+        reply: CANDIDATE_REPLY,
+        diagnostics: true,
+    },
     'es:recap': {
         what: 'a short recap of this session so far',
         task: `The person in \`person\` ran \`/es:recap\`: recap this session so far for the people in it, from \`sessionSoFar\` (the
@@ -375,14 +449,59 @@ only to name what changed precisely.`,
 - Write in ${lang}, unless the session's messages are in another language: then in theirs.`,
         reply: `{ "kind": "answer", "answer" } — the recap (at most ${REPLY_LIMITS.answer} characters).`,
     },
+    'es:next': {
+        what: 'say where the storming in view stands and what to do next',
+        task: `The person in \`person\` ran \`/es:next\` on the storming in \`storming\` (the block below): say in one line where it
+stands, and give the next one to three steps, each with its reason. Read the storming: its brief (the \`///\`
+description above \`storming\`: purpose, scope, how far to go), how far it got (Big Picture only — events, timelines,
+exceptions — or Design Level too — commands, policies, aggregates, read models), its stages and how far the exceptions
+cover them, its open hotspots; \`diagnostics\` when given; and from \`sessionSoFar\` what the people did lately and what
+is still waiting.`,
+        rules: (lang) => `- status: one line (at most ${NEXT_LIMITS.status} characters), where it stands, with counts where they help
+  (stages covered, exceptions, open hotspots).
+- steps: one to three, the most useful first. text: what to do, one short line (at most ${NEXT_LIMITS.text}
+  characters); reason: why now, one line (at most ${NEXT_LIMITS.reason} characters), grounded in what you read.
+- A step may be for the people rather than a command: call in a domain expert on an open hotspot, stop and recap,
+  decide something with the people (say what), move on to Design Level when the brief goes that far.
+- command, only when an ES command does that step, at most one step per command: \`es:start\` (no brief: the purpose or
+  the scope is unknown), \`es:exceptions\` (a stage's flow has no exceptions yet), \`es:gaps\` (a flow jumps between two
+  events), \`es:levels\` (mechanism details shown at Big Picture, or a business event hidden at Design Level),
+  \`es:names\` (labels not in the past tense, inconsistent, too long or technical), \`es:recap\` (much happened since the
+  last recap). Leave it out otherwise.
+- Follow the brief: propose nothing beyond its scope or its level (no Design Level for a Big Picture only storming).
+- Plain text in status, text and reason: no Markdown, no line breaks.
+- Write in ${lang}, unless the session's messages are in another language: then in theirs.
+${DIAGNOSTICS_RULE}`,
+        reply: `{ "kind": "next", "status", "steps": [{ text, reason, command? }] } — at most ${NEXT_LIMITS.steps} steps; command,
+when given, one of es:start, es:exceptions, es:gaps, es:levels, es:names, es:recap (the page offers it as a button
+that puts it in the composer: the person sends it).`,
+        diagnostics: true,
+    },
 };
 
+/** The diagnostics a block shows: at most `MAX_DIAGNOSTICS_SHOWN`, then how many more; none: an empty list. */
+function diagnosticsShown(lines: readonly string[]): readonly string[] | { readonly first: readonly string[]; readonly andMore: number } {
+    return lines.length <= MAX_DIAGNOSTICS_SHOWN ? lines : { first: lines.slice(0, MAX_DIAGNOSTICS_SHOWN), andMore: lines.length - MAX_DIAGNOSTICS_SHOWN };
+}
+
+/** Whether a command reads `dt check`'s findings on the stormings (`/es:names`, `/es:next`). */
+export const commandReadsDiagnostics = (name: string): boolean => COMMAND_PROMPTS[name]?.diagnostics === true;
+
+/** The most diagnostics a command's block shows (the first ones, in `dt check`'s order). */
+export const MAX_DIAGNOSTICS_SHOWN = 40;
+
+/** What a command's prompt knows besides the job: the ways of working, and `dt check`'s findings on the stormings. */
+export interface CommandContext extends Pick<AnswerContext, 'practice'> {
+    /** The diagnostics of the `.dtes` files, one line each (for a command that reads them). */
+    readonly diagnostics?: readonly string[];
+}
+
 /**
- * The prompt of a command job (`/es:exceptions`, `/es:recap`): the command's task and rules, read-only, with the opening
- * message's view, the storming it is about and the session so far as data; the storming's way of working for the ES
- * commands.
+ * The prompt of a command job (`/es:exceptions`, `/es:next`, …): the command's task and rules, read-only, with the
+ * opening message's view, the storming it is about, the session so far and (`/es:names`, `/es:next`) the stormings'
+ * diagnostics as data; the storming's way of working for the ES commands.
  */
-export function buildCommandPrompt(job: AgentCommandJobBody, nonce: string, context: Pick<AnswerContext, 'practice'> = {}): string {
+export function buildCommandPrompt(job: AgentCommandJobBody, nonce: string, context: CommandContext = {}): string {
     const command = COMMAND_PROMPTS[job.name];
     if (!command) throw new Error(`No prompt for the command /${job.name}`);
     const storming = job.command.scope === undefined ? undefined : `@{es:${job.command.scope}}`;
@@ -403,6 +522,7 @@ ${practice.join('\n\n')}
         ...(storming && { storming }),
         ...(job.request.viewedAt && { viewedAt: viewedAtData(job.request.viewedAt) }),
         ...(job.sessionSoFar && { sessionSoFar: job.sessionSoFar.text }),
+        ...(command.diagnostics && context.diagnostics && { diagnostics: diagnosticsShown(context.diagnostics) }),
     };
     return `You are the read-only answerer of a DomainTrail session, working in this workspace: ${command.what}.
 

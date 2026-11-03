@@ -73,6 +73,14 @@ const inView: C.ViewedAt = {
 const start = (use: CollaborationUseCases, session: C.SessionId, actor: Actor = facilitator, viewedAt: C.ViewedAt | null = inView) =>
     use.startCommand({ session, actor, kind: 'EsExceptions', body: text('例外を洗い出す'), language: 'Ja', ...(viewedAt && { viewedAt }) });
 
+const nextAnswer: C.NextAnswer = {
+    status: value(C.makeProposalText('発行まで')),
+    steps: [
+        { text: value(C.makeProposalText('例外を洗い出す')), reason: value(C.makeProposalText('発行に例外がない')), command: 'EsExceptions' },
+        { text: value(C.makeProposalText('専門家に聞く')), reason: value(C.makeProposalText('未決のホットスポット')) },
+    ],
+};
+
 const candidate = (label: string): C.CommandCandidate => ({
     label: value(C.makeCandidateLabel(label)),
     targets: [{ kind: 'DtesElement', storming: value(C.makeStormingName('Orders')), local: value(C.makeStormingLocalName('OrderPaid')) }],
@@ -161,6 +169,50 @@ describe('answer commands', () => {
             body: '**決まったこと**\n- なし',
         });
         expect(answered.command).toMatchObject({ state: 'Answered', answer: answered.answer.id });
+        expect(answered.command.next).toBeUndefined();
         expect(value(await use.commandJobs({ session }))).toEqual([]);
+        // the next steps are /es:next's only
+        const again = value(await use.startCommand({ session, actor: bob, kind: 'EsRecap', body: text('ここまでのまとめ'), language: 'Ja' }));
+        expect(error(await use.answerCommand({ command: again.command.id, answer: text('x'), next: nextAnswer }))).toEqual({ type: 'WrongCommandType' });
+    });
+
+    test("/es:next: anyone's, about the storming in view; answered with its steps, kept for the page and read back", async () => {
+        const { use, session, db } = await solo();
+        const started = value(
+            await use.startCommand({ session, actor: facilitator, kind: 'EsNext', body: text('次にやること'), language: 'Ja', viewedAt: inView }),
+        );
+        expect(started.command).toMatchObject({ state: 'Working', kind: 'EsNext', scope: 'Orders' });
+        expect(error(await use.answerCommand({ command: started.command.id, answer: text('x') }))).toEqual({ type: 'WrongCommandType' });
+        const answered = value(await use.answerCommand({ command: started.command.id, answer: text('発行まで\n\n1. **例外**'), next: nextAnswer }));
+        expect(answered.command).toMatchObject({ state: 'Answered', answer: answered.answer.id, next: nextAnswer });
+        const back = await createUnitOfWork(db).transaction((s) => s.slashCommands.listBySession(session));
+        expect(back[0]).toMatchObject({ state: 'Answered', next: nextAnswer });
+    });
+
+    test('/es:next with no storming in view: no job, the one-line card of a candidate command, closed by its starter', async () => {
+        const { use, session } = await collab();
+        const started = value(await use.startCommand({ session, actor: bob, kind: 'EsNext', body: text('次にやること'), language: 'Ja' }));
+        expect(started.command).toMatchObject({ state: 'Listed', candidates: [] });
+        expect(value(await use.commandJobs({ session }))).toEqual([]);
+        expect(error(await use.startCommand({ session, actor: bob, kind: 'EsNext', body: text('次にやること'), language: 'Ja' }))).toEqual({
+            type: 'CommandAlreadyRunning',
+        });
+        expect(value(await use.stopCommand({ command: started.command.id, actor: bob }))).toMatchObject({ state: 'Stopped' });
+    });
+});
+
+describe('the candidate commands of phase 2', () => {
+    test("/es:gaps, /es:levels and /es:names: the facilitator's, about the storming in view, applied as /es:exceptions is", async () => {
+        for (const kind of ['EsGaps', 'EsLevels', 'EsNames'] as const) {
+            const { use, session } = await collab();
+            expect(error(await use.startCommand({ session, actor: bob, kind, body: text('x'), language: 'Ja', viewedAt: inView }))).toEqual({
+                type: 'FacilitatorOnly',
+            });
+            const started = value(await use.startCommand({ session, actor: facilitator, kind, body: text('x'), language: 'Ja', viewedAt: inView }));
+            expect(started.command).toMatchObject({ state: 'Working', kind, scope: 'Orders' });
+            value(await use.listCandidates({ command: started.command.id, candidates: [candidate('A')] }));
+            const applied = value(await use.applyCandidates({ command: started.command.id, actor: facilitator, chosen: [0] }));
+            expect(applied.run.input.candidates).toMatchObject({ kind, scope: 'Orders', chosen: [candidate('A')] });
+        }
     });
 });

@@ -116,7 +116,10 @@ export type StreamItem =
     | { readonly kind: 'card'; readonly key: string; readonly at: string; readonly updatedAt: string; readonly unit: ChangeUnit }
     /** A change proposal the AI wrote for a participant's 依頼 (ADR 0030), where it was made. */
     | { readonly kind: 'proposal'; readonly key: string; readonly at: string; readonly proposal: ProposalJson }
-    /** A candidate command's card (`/es:exceptions`), or an answer command's while the AI works on it (Collab), where it started. */
+    /**
+     * A candidate command's card (`/es:exceptions`, …), or an answer command's while the AI works on it (Collab) or when
+     * it had nothing to work on, where it started.
+     */
     | { readonly kind: 'command'; readonly key: string; readonly at: string; readonly command: SlashCommandJson }
     | {
           readonly kind: 'restored';
@@ -219,10 +222,11 @@ export function streamItems(
     for (const request of state.requests) items.push({ kind: 'message', key: `message:${request.id}`, at: request.sentAt, request });
     for (const unit of changeUnits(state)) items.push({ kind: 'card', key: `card:${unit.key}`, at: unit.start, updatedAt: unit.at, unit });
     for (const proposal of state.proposals ?? []) items.push({ kind: 'proposal', key: `proposal:${proposal.id}`, at: proposal.proposedAt, proposal });
-    // an answer command's answer is the AI's message: its card says only that the AI works on it (in Solo, its slot does)
+    // an answer command's answer is the AI's message: its card says only that the AI works on it (in Solo, its slot
+    // does), or that it had nothing to work on (`/es:next` with no storming in view: listed with none, until closed)
     const solo = state.session !== undefined && isSolo({ session: state.session });
     for (const command of state.slashCommands ?? []) {
-        const card = slashCommandSpec(command.kind).type === 'candidates' || (command.state === 'Working' && !solo);
+        const card = slashCommandSpec(command.kind).type === 'candidates' || (command.state === 'Working' && !solo) || command.state === 'Listed';
         if (card) items.push({ kind: 'command', key: `command:${command.id}`, at: command.startedAt, command });
     }
     // by time; items at the same moment keep the order they were pushed in (a message before the card applying it)

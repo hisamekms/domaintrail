@@ -1084,7 +1084,7 @@ changes, the person checks some, they become one run) and **answer** commands (t
 - **The table** (`SLASH_COMMANDS`): each command's ID, kind, type (`candidates` | `answer`), whether only the
   facilitator starts it and whether it needs a storming in view. `/es:exceptions`: candidates, the facilitator's,
   needs a storming. `/es:recap`: an answer, anyone's (an answer changes nothing, so a participant may ask for one).
-  Phase 2 (`/es:levels`, `/es:names`, `/es:gaps`, `/es:next`) adds a row, an enum entry, a prompt in
+  Phase 2 (`/es:levels`, `/es:names`, `/es:gaps`, `/es:next`, below) adds a row, an enum entry, a prompt in
   `COMMAND_PROMPTS` (`answer-prompt.ts`) and, for a candidate command, a clause of the runner's rule 19.
 - **Routing**: `POST /api/session/commands` (`{ command, body, language, focus?, viewedAt? }`, any participant) sends
   the opening message without triage and starts the command; nothing in view for a command that needs a storming lists
@@ -1124,6 +1124,50 @@ changes, the person checks some, they become one run) and **answer** commands (t
 - **Session so far**: the command run (on which storming), its candidates (listed, each a line), those applied (with
   the run) or that it was stopped; what is open (a command the AI works on, candidates awaiting a choice).
 - **Not done**: editing a candidate's how before applying.
+
+### Built-in ES commands, phase 2
+
+Decided by the maintainer (2026-11-03): four more ES commands, each a row of `SLASH_COMMANDS`, an entry of
+`SlashCommandKind`, a prompt in `COMMAND_PROMPTS` and, for a candidate command, a clause of rule 19. `/` lists them
+after `es:start` in the order of the work on a storming — the flow, then its details, then the session:
+`es:exceptions`, `es:gaps`, `es:levels`, `es:names`, `es:recap`, `es:next` —, then `model:start`, then the templates.
+
+- **`/es:gaps` 間を埋める** (candidates, the facilitator's, needs a storming): the events missing between two
+  consecutive events of the flows in view (the timelines, and the exceptions when the view shows them), one candidate
+  per gap: label the (first) new event, targets the event before, the new ones, the event after, how the flow and
+  where. Rule 19: declare the new events and insert them between the first and the last target in the timeline or
+  exception `how` names, nowhere else.
+- **`/es:levels` レベルを見直す** (candidates, the facilitator's, needs a storming): events to give `level design`
+  (details of the mechanism) or to take it from (what the people should see at Big Picture), one event per candidate
+  (its only target), how starting with 「level design を付ける」/「level design を外す」 ("Add/Remove level design").
+  Rule 19: exactly that, as the last clause of the event's body, nothing else of it.
+- **`/es:names` 名前を揃える** (candidates, the facilitator's, needs a storming): labels to rename — not in the past
+  tense, the same thing named differently (one candidate per element that changes), too long (S015), technical
+  wording —, one element per candidate, label the new label (in the storming's language), how old → new and, when
+  the old label carried a detail, 「詳細は /// へ: …」. Rule 19: the label only, never the identifier; the `///` kept,
+  the detail added to it.
+- **`/es:next` 次にやること** (an answer, anyone's, needs a storming): the answerer replies `{ kind: 'next', status,
+  steps: [{ text, reason, command? }] }` — status one line (200), one to three steps (more dropped), text (120) and
+  reason (200) one line each, `command` one of `es:start`, `es:exceptions`, `es:gaps`, `es:levels`, `es:names`,
+  `es:recap` (another is dropped, the step kept). The server writes the message from it (`nextAnswerText`: the
+  status, then a numbered list `**text** — reason`, the command's ID in code after it), so the session so far and any
+  reader see it whole, and keeps the steps on the command (`Answered.next: NextAnswer`, `SuggestedCommand` an enum of
+  its own; the stored row is JSON, no migration). The job's `type` is the reply's shape (`candidates` | `answer` |
+  `next`). Steps may be for the people (call a domain expert, stop and recap, decide X).
+- **The page**: `/es:next`'s message shows the status, the numbered steps, each reason muted and — where a step names
+  a command the person may start (a participant sees no button for a facilitator's one; one of its kind running is
+  disabled) — a brand-coloured button with the command's ID that puts `/es:gaps` in the composer and focuses it:
+  `/`'s list opens on that command, and the person sends it; nothing runs by itself. What the composer held is
+  replaced.
+- **Nothing in view**: a command that needs a storming, an answer command included, lists no candidates at once and
+  asks nothing; its card says 「見ているストーミングがありません」 until its starter closes it (an answer command's card
+  shows while it is listed).
+- **What they read**: the storming-practice topic, as phase 1. `/es:names` and `/es:next` also get `dt check`'s
+  findings on the `.dtes` files (`diagnostics`, the first forty; computed by the answerer's side with the analysis
+  `dt check` makes, `stormingDiagnostics`), in the data block: they carry the files' labels.
+- **Chips** (from the review of phase 1): a candidate's chips are only the targets that resolve now; one to be added
+  (an exception's or a gap's new event) is named by the candidate's label and how rather than by an identifier
+  nobody wrote (`#NoMyNumberCard`). Once applied, the new elements resolve and their chips appear.
 
 ## The view a message was sent from (as built)
 

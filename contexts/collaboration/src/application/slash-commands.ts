@@ -43,8 +43,9 @@ export interface SlashCommandUseCases {
     /**
      * Starts a candidate or answer command (`/es:exceptions`, `/es:recap`): the starter's opening message (the command's
      * name), sent without triage, and the command waiting for the answerer. A command for the facilitator only refuses
-     * the others (`FacilitatorOnly`); one of each kind runs at a time (`CommandAlreadyRunning`). A candidate command
-     * about the storming in view, with none in view, lists no candidates at once (the AI is not asked).
+     * the others (`FacilitatorOnly`); one of each kind runs at a time (`CommandAlreadyRunning`). A command about the
+     * storming in view, with none in view, lists no candidates at once (the AI is not asked) — an answer command too
+     * (`/es:next`): its card then says so, as a candidate command's.
      */
     startCommand(input: {
         readonly session: SessionId;
@@ -61,10 +62,14 @@ export interface SlashCommandUseCases {
         readonly command: SlashCommandId;
         readonly candidates: readonly Collaboration.CommandCandidate[];
     }): Promise<Result<Collaboration.ListedSlashCommand, NotFound | NotAllowed | WrongCommandType | Closed>>;
-    /** The answerer's answer (an answer command): a message of the AI replying to the opening message. */
+    /**
+     * The answerer's answer (an answer command): a message of the AI replying to the opening message; for `/es:next`,
+     * with the next steps it was written from (required there, refused elsewhere: `WrongCommandType`).
+     */
     answerCommand(input: {
         readonly command: SlashCommandId;
         readonly answer: Collaboration.Text;
+        readonly next?: Collaboration.NextAnswer;
     }): Promise<
         Result<
             { readonly command: Collaboration.AnsweredSlashCommand; readonly answer: Collaboration.SentRequest },
@@ -132,8 +137,8 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
                 if (!started.ok) return started;
                 const { Working } = started.value;
                 save(stores, Working.aggregate, Working.events, at);
-                // nothing to work on: no candidates, and the card says why
-                if (spec.type === 'candidates' && spec.needsStorming && scope === undefined) {
+                // nothing to work on: no candidates (whatever its type), and the card says why
+                if (spec.needsStorming && scope === undefined) {
                     const listed = decided(slashCommandCommands.list(Working.aggregate, { candidates: [], listedAt: at }));
                     save(stores, listed.Listed.aggregate, listed.Listed.events, at);
                     return ok({ command: listed.Listed.aggregate, request: sent.value });
@@ -158,13 +163,14 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
             });
         },
 
-        async answerCommand({ command, answer }) {
+        async answerCommand({ command, answer, next }) {
             return uow.transaction(async (stores) => {
                 const found = load(stores, command);
                 if (!found.ok) return found;
                 const c = found.value;
                 if (c.state !== 'Working') return err(notAllowed('answer', c.state));
-                if (slashCommandSpec(c.kind).type !== 'answer') return err({ type: 'WrongCommandType' });
+                const spec = slashCommandSpec(c.kind);
+                if (spec.type !== 'answer' || (spec.reply === 'next') !== (next !== undefined)) return err({ type: 'WrongCommandType' });
                 const active = await storeVerifications(stores).makeActiveSession(c.session);
                 if (!active.ok) return active;
                 const at = clock.now();
@@ -172,7 +178,7 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
                 const { Sent } = decided(requestCommands.answer({ id, session: active.value, answers: c.opening, body: answer, sentAt: at }));
                 stores.requests.save(Sent.aggregate);
                 publish(stores, c.session, Sent.events, at);
-                const answered = decided(slashCommandCommands.answer(c, { answer: id, answeredAt: at }));
+                const answered = decided(slashCommandCommands.answer(c, { answer: id, next, answeredAt: at }));
                 save(stores, answered.Answered.aggregate, answered.Answered.events, at);
                 return ok({ command: answered.Answered.aggregate, answer: Sent.aggregate });
             });
