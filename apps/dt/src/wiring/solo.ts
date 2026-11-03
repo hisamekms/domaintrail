@@ -2,7 +2,9 @@
 // loopback, the facilitator without a join form or a facilitator link to claim. The person is bound to secrets only the
 // user who launched this `dt open` holds, kept in this server's memory and nowhere else: it prints a one-time link
 // (`/session/open?code=…`, `SOLO_LINK_TTL_MS`), accepted only there (it is not a facilitator link: the database never
-// sees it); opening it sets a cookie whose name is chosen when the server starts (`dt_open_<random>`), HttpOnly,
+// sees it). `dt open link` issues another while the server runs: the same single use and lifetime, written by that
+// command (as a hash, in a domain of its own: never a facilitator link nor an agent code) to the session's database,
+// where this server redeems it, and revoked with the rest when it stops. Opening a link sets a cookie whose name is chosen when the server starts (`dt_open_<random>`), HttpOnly,
 // SameSite=Strict, without Max-Age (gone with the browser session), and whose value this server instance alone knows.
 // A request without it is not identified (401, a page saying to open the printed link): another local process or OS
 // user is not the facilitator, and the cookie (sent by the browser to every port of the host) is worth nothing to
@@ -43,35 +45,54 @@ export interface SoloSignIn {
     readonly cookieName: string;
     /** The one-time link below `url` (the server's address). */
     link(url: string): string;
-    /** Uses the link's `code`: once, before it expires; a new browser secret for the cookie, or undefined. */
-    redeem(code: string): string | undefined;
+    /**
+     * Uses a link's `code` (the printed link's, or one `dt open link` issued): once, before it expires; a new browser
+     * secret for the cookie, or undefined.
+     */
+    redeem(code: string): Promise<string | undefined>;
     /** Whether `headers` carry the cookie of a browser signed in here. */
     signedIn(headers: IncomingHttpHeaders): boolean;
     /** Forgets the link and every browser signed in. */
     revoke(): void;
 }
 
-export function createSoloSignIn(options: { ttlMs?: number; now?: () => number } = {}): SoloSignIn {
+export function createSoloSignIn(
+    options: {
+        ttlMs?: number;
+        now?: () => number;
+        /** Uses a code `dt open link` issued (single use, unexpired, of this session): whether it was valid. */
+        redeemIssued?: (code: string) => Promise<boolean>;
+    } = {},
+): SoloSignIn {
     const now = options.now ?? Date.now;
     const cookieName = `dt_open_${randomBytes(6).toString('hex')}`;
     let code: string | undefined = secret();
     const expiresAt = now() + (options.ttlMs ?? SOLO_LINK_TTL_MS);
     const browsers = new Set<string>();
+    let revoked = false;
+    const signedInBrowser = (): string => {
+        const browser = secret();
+        browsers.add(secretHash(browser));
+        return browser;
+    };
     return {
         cookieName,
         link: (url) => `${url}${SOLO_LINK_PATH.slice(1)}?code=${code ?? ''}`,
-        redeem(given) {
-            if (code === undefined || now() > expiresAt || secretHash(given) !== secretHash(code)) return undefined;
-            code = undefined;
-            const browser = secret();
-            browsers.add(secretHash(browser));
-            return browser;
+        async redeem(given) {
+            if (revoked || !given) return undefined;
+            if (code !== undefined && now() <= expiresAt && secretHash(given) === secretHash(code)) {
+                code = undefined;
+                return signedInBrowser();
+            }
+            if (!options.redeemIssued || !(await options.redeemIssued(given)) || revoked) return undefined;
+            return signedInBrowser();
         },
         signedIn(headers) {
             const value = cookies(headers).get(cookieName);
             return value !== undefined && browsers.has(secretHash(value));
         },
         revoke() {
+            revoked = true;
             code = undefined;
             browsers.clear();
         },
@@ -128,7 +149,7 @@ const sendText = (res: ServerResponse, status: number, text: string): void => {
     res.end(`${text}\n`);
 };
 
-const NOT_SIGNED_IN = 'This is `dt open`: open the link it printed in its terminal to sign this browser in (or restart it for a new one).';
+const NOT_SIGNED_IN = 'This is `dt open`: open the link it printed in its terminal to sign this browser in (`dt open link` prints a new one).';
 
 /**
  * The session's surface in the Solo mode: the dev mode's, but a page without the cookie gets a page saying to open the
@@ -139,8 +160,8 @@ export function soloSurface(surface: SessionSurface, signIn: SoloSignIn): Sessio
     const pages: SessionHandler = async (req, url, res) => {
         if (url.pathname !== SOLO_LINK_PATH) return sendText(res, 404, 'Not found');
         if (req.method !== 'GET') return sendText(res, 405, 'Method not allowed');
-        const browser = signIn.redeem(url.searchParams.get('code') ?? '');
-        if (!browser) return sendText(res, 403, 'This link was used already or has expired. Restart `dt open` for a new one.');
+        const browser = await signIn.redeem(url.searchParams.get('code') ?? '');
+        if (!browser) return sendText(res, 403, 'This link was used already or has expired. `dt open link` prints a new one.');
         // a session cookie (no Max-Age): it ends with the browser session, and the server forgets it when it stops
         const cookie = `${signIn.cookieName}=${browser}; Path=/; HttpOnly; SameSite=Strict`;
         res.writeHead(303, { location: '/', 'cache-control': 'no-store', 'set-cookie': cookie });

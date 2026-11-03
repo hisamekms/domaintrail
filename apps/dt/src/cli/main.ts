@@ -329,7 +329,8 @@ Examples:
                 'after',
                 `
 Serves the Live View and a chat for one person on loopback. It prints a one-time link: opened within 60 minutes, it
-signs that browser in as you, the facilitator (a cookie; no join form); nothing else is let in. Every message you send goes to the AI, which answers questions and applies change requests. It re-checks on
+signs that browser in as you, the facilitator (a cookie; no join form); nothing else is let in (\`dt open link\` prints
+another link while it runs). Every message you send goes to the AI, which answers questions and applies change requests. It re-checks on
 every save and pushes updates to the browser. The chat, the runs and the revisions are kept in .domaintrail/session/
 across restarts. The agent (Claude Code) starts in this process when \`claude\` is usable; otherwise the server starts
 without it and says why (\`dt agent\` connects one later). Refused while the workspace has an open collab session
@@ -341,6 +342,7 @@ Examples:
   dt open --port 8080
   dt open --base main           mark what changed since main (the base can be switched in the page)
   dt open --no-agent            the chat without the AI in this process (dt agent elsewhere)
+  dt open link                  another sign-in link, for another browser or after the first expired
   dt -r examples/shop open`,
             ),
         'open',
@@ -383,7 +385,7 @@ Examples:
         if (cfg.file) io.out(`Config: ${path.relative(process.cwd(), cfg.file) || cfg.file}`);
         // the printed link is the only step: opened once, it signs this browser in (a cookie) as the one person
         io.out(`Live View: ${server.facilitatorLink ?? server.url}`);
-        io.out(`  (a link for you only: opened once within 60 minutes, it signs that browser in; then ${server.url})`);
+        io.out(`  (a link for you only: opened once within 60 minutes, it signs that browser in; then ${server.url}; \`dt open link\` prints another)`);
         io.out(`Session: ${server.session} (${server.opened}, solo)`);
         await serveWithAgent(cfg, opts, server);
     });
@@ -462,6 +464,28 @@ Examples:
                 throw e;
             });
             io.out(`Facilitator link (single use, expires in 10 minutes): ${link}`);
+        });
+
+    open.command('link')
+        .description('Print another one-time sign-in link for the `dt open` server running on the workspace.')
+        .addHelpText(
+            'after',
+            `
+The link signs the browser that opens it in as you, as the link \`dt open\` printed does: it works once, for 60
+minutes, and every link dies with the server. For another browser, or when the first link expired, without restarting
+\`dt open\`. A \`dt collab\` server is refused: \`dt collab link\` prints its facilitator link.
+
+Examples:
+  dt open link
+  dt -r examples/shop open link`,
+        )
+        .action(async () => {
+            const cfg = await config();
+            const { link } = await deps.issueOpenLink(cfg.root).catch((e: unknown) => {
+                if (e instanceof SessionError) throw new CliError(e.message);
+                throw e;
+            });
+            io.out(`Sign-in link (single use, expires in 60 minutes): ${link}`);
         });
 
     // a one-time code for a standalone `dt agent` (the credential itself is never written to disk)

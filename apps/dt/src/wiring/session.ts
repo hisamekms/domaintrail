@@ -58,7 +58,7 @@ import { processAlive } from './process.js';
 import { createModelValidator, createSourceFormatter } from './validator.js';
 import { prepareLiveView, serverUrl, watchLiveView, type ViewServerOptions } from './view.js';
 import { createWatcherHold, type WatcherHold } from './watcher-hold.js';
-import { createSoloSignIn, soloIdentities, soloName, soloSurface } from './solo.js';
+import { createSoloSignIn, SOLO_LINK_PATH, SOLO_LINK_TTL_MS, soloIdentities, soloName, soloSurface } from './solo.js';
 import * as path from 'node:path';
 
 /** How long a lease of the agent holds without a heartbeat. */
@@ -302,8 +302,8 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             maxParticipants: config.maxParticipants,
         });
         const soloPerson = soloPersonName(sessionOpened.session);
-        // `dt open`'s sign-in: in this server's memory only, revoked when it stops
-        const soloSignIn = createSoloSignIn();
+        // `dt open`'s sign-in: in this server's memory, and the codes `dt open link` issued; revoked when it stops
+        const soloSignIn = createSoloSignIn({ redeemIssued: (code) => access.redeemOpenCode({ session, code }) });
         // a Solo session's person, bound to the cookie of the link `dt open` prints; nobody once it is no longer Solo
         const identities =
             mode === 'Solo'
@@ -673,6 +673,29 @@ export async function issueAgentLink(root: string): Promise<{ code: string; agen
         const code = await access.issueAgentCode({ session: open.id, ttlMs: AGENT_CODE_TTL_MS });
         if (!code.ok) throw new SessionError('The session is not open.');
         return { code: code.value.code, agentUrl: address.agentUrl, expiresAt: code.value.expiresAt };
+    } finally {
+        db.close();
+    }
+}
+
+/**
+ * Another one-time sign-in link for the `dt open` server running on the workspace at `root` (`dt open link`): single
+ * use, for `SOLO_LINK_TTL_MS`, written (as a hash, in a domain of its own) to the session's database, where the running
+ * server redeems it; revoked when it stops. Rejects with `SessionError` when no server runs, or when it is `dt collab`'s.
+ */
+export async function issueOpenLink(root: string): Promise<{ link: string; expiresAt: Date }> {
+    const address = await readServerAddress(root);
+    if (!address || !processAlive(address.pid)) throw new SessionError('No session server is running for this workspace (start one with `dt open`).');
+    const db = await openSessionDatabase(root);
+    try {
+        const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
+        const open = await openSessionOf(db);
+        if (open?.id !== address.session) throw new SessionError('The running session server serves a session that is no longer open.');
+        if (open.mode !== 'Solo')
+            throw new SessionError('The running server is `dt collab`: people join with its address, and `dt collab link` prints a facilitator link.');
+        const code = await access.issueOpenCode({ session: open.id, ttlMs: SOLO_LINK_TTL_MS });
+        if (!code.ok) throw new SessionError('The session is not open.');
+        return { link: `${address.url}${SOLO_LINK_PATH.slice(1)}?code=${code.value.code}`, expiresAt: code.value.expiresAt };
     } finally {
         db.close();
     }

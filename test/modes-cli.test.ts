@@ -5,7 +5,7 @@
  * not with `--no-agent`), and the removed commands and config sections.
  */
 import { afterAll, describe, expect, test } from 'bun:test';
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
@@ -13,6 +13,7 @@ import {
     type CliDeps,
     cliDeps,
     issueAgentLink,
+    issueOpenLink,
     issueFacilitatorLink,
     pairAgent,
     runCli,
@@ -202,7 +203,9 @@ describe('dt open and dt collab: the agent in process', () => {
         expect(calls.sessions[0]).toMatchObject({ mode: 'Solo', session: { port: 4321, host: '127.0.0.1', identity: 'dev' } });
         expect(calls.agents).toEqual([{ roles: ['answer', 'run'], once: false }]);
         expect(r.out).toContain('Live View: http://127.0.0.1:1/session/open?code=y');
-        expect(r.out).toContain('  (a link for you only: opened once within 60 minutes, it signs that browser in; then http://127.0.0.1:1/)');
+        expect(r.out).toContain(
+            '  (a link for you only: opened once within 60 minutes, it signs that browser in; then http://127.0.0.1:1/; `dt open link` prints another)',
+        );
         expect(r.out).toContain('Session: s1 (started, solo)');
         expect(r.out).toContain('AI: started in this process (claude 9.9.9 (Claude Code); roles answer, run)');
         expect(r.out.join('\n')).not.toContain('Facilitator link');
@@ -421,6 +424,61 @@ describe('the modes on one workspace (decision 13)', () => {
         }
     });
 
+    test('dt open link prints another one-time sign-in link for the running dt open server; refused for dt collab', async () => {
+        const root = await copy();
+        expect((await run(cliDeps(), '-r', root, 'open', 'link')).err).toEqual(['No session server is running for this workspace (start one with `dt open`).']);
+        const server = await start(root, 'Solo');
+        let left = '';
+        try {
+            const printed = await run(cliDeps(), '-r', root, 'open', 'link');
+            expect(printed.code).toBe(0);
+            const link = /^Sign-in link \(single use, expires in 60 minutes\): (\S+)$/.exec(printed.out[0])?.[1] ?? '';
+            expect(link).toStartWith(`${server.url}session/open?code=`);
+            expect(link).not.toBe(server.facilitatorLink);
+            // it signs a browser in as the printed link does, once
+            const cookie = await signInSolo(link);
+            expect(((await (await api(server, 'me', undefined, cookie)).json()) as Me).participant.role).toBe('facilitator');
+            expect((await fetch(link, { redirect: 'manual' })).status).toBe(403);
+            // the printed link still works on its own
+            await signInSolo(server.facilitatorLink);
+            // neither a facilitator link nor an agent code
+            const { link: another } = await issueOpenLink(root);
+            const code = new URL(another).searchParams.get('code') ?? '';
+            expect(await pairAgent(root, code).catch((e: unknown) => e)).toBeInstanceOf(SessionError);
+            expect((await fetch(another, { redirect: 'manual' })).status).toBe(303);
+            // an agent code is not a sign-in link
+            const { code: agentCode } = await issueAgentLink(root);
+            expect((await fetch(`${server.url}session/open?code=${agentCode}`, { redirect: 'manual' })).status).toBe(403);
+            // expired
+            const db = await openSessionDatabase(root);
+            const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
+            const short = await access.issueOpenCode({ session: server.session, ttlMs: 1 });
+            db.close();
+            await Bun.sleep(10);
+            expect((await fetch(`${server.url}session/open?code=${short.ok ? short.value.code : ''}`, { redirect: 'manual' })).status).toBe(403);
+            left = (await issueOpenLink(root)).link;
+        } finally {
+            await server.stop();
+        }
+        // unused links die with the server
+        const again = await start(root, 'Solo');
+        try {
+            const code = new URL(left).searchParams.get('code') ?? '';
+            expect((await fetch(`${again.url}session/open?code=${code}`, { redirect: 'manual' })).status).toBe(403);
+        } finally {
+            await again.stop();
+        }
+        // a dt collab server: refused, as dt collab link refuses a dt open one
+        const collab = await start(root, 'Collab');
+        try {
+            const refused = await run(cliDeps(), '-r', root, 'open', 'link');
+            expect(refused.code).toBe(1);
+            expect(refused.err).toEqual(['The running server is `dt collab`: people join with its address, and `dt collab link` prints a facilitator link.']);
+        } finally {
+            await collab.stop();
+        }
+    }, 30_000);
+
     test('dt open answers loopback only, whatever collab.access allows', async () => {
         const root = await copy();
         const server = await startSessionServer({
@@ -552,6 +610,7 @@ describe('the agent in process, with a fake claude on the PATH', () => {
             JSON.stringify({ agent: { run: { dt: ['bun', path.join(ROOT, 'bin', 'dt.ts')], warm: false } } }),
         );
         const returns = 'stormings/returns.dtes';
+        const realRoot = await realpath(root);
         const { bin, planFile } = await fakeClaude({
             runs: [
                 {
@@ -602,7 +661,12 @@ describe('the agent in process, with a fake claude on the PATH', () => {
             }
             expect(state?.runs.map((r) => r.state)).toEqual(['Completed']);
             expect(await readFile(path.join(root, returns), 'utf8')).toContain('ReturnCancelled');
-            expect((await readFile(`${planFile}.log`, 'utf8')).split('\n').filter(Boolean)).toHaveLength(1);
+            // the runner ran once in the workspace (the answerer, in its view, triaged the message: every one is addressed in Solo)
+            const invocations = (await readFile(`${planFile}.log`, 'utf8'))
+                .split('\n')
+                .filter(Boolean)
+                .map((l) => JSON.parse(l) as { cwd: string });
+            expect(invocations.filter((i) => i.cwd === realRoot)).toHaveLength(1);
             expect((await api(server, 'close', {}, cookie)).status).toBe(200);
             expect(await done).toBe(0);
             expect(out.at(-1)).toBe('Session closed.');

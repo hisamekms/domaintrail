@@ -9,6 +9,7 @@ export { startViewServer, type ViewServer, type ViewServerOptions } from './wiri
 export {
     AGENT_CODE_TTL_MS,
     issueAgentLink,
+    issueOpenLink,
     issueFacilitatorLink,
     startSessionServer,
     WS_EXPIRED,

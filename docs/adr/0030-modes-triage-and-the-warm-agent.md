@@ -208,6 +208,11 @@ The agent API's credential is never written to disk (decided by the maintainer, 
 it in memory; a standalone `dt agent` exchanges a one-time pairing code (`dt collab agent-link` / `dt open agent-link`:
 single use, 10 minutes, its own kind, revoked when the server stops) for it and keeps it in memory. `agent.json` is
 removed when found; `.domaintrail/` gets a `.gitignore` (`*`).
+`dt open link` (decided by the maintainer at the merge of M4 and M5) prints another sign-in link for the running
+`dt open` server under the same rules (single use, 60 minutes, the same cookie, all revoked when the server stops);
+being issued by another process, its code is kept as a hash in the session's database in a hash domain of its own,
+never accepted as a facilitator link or an agent code. It refuses a `dt collab` server; a Solo session continued by
+`dt collab` is held through the facilitator link only.
 
 ## Alternatives considered
 

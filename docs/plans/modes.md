@@ -623,6 +623,14 @@ The merge of M4 (the triage and the answers) and M5 (the commands and the config
   included); the unknown keys are the app's to check, with its hints. The resolved `agent.answer` (warm, restartAfter,
   idleTimeout, timeout, model, effort) and `agent.triage` (model, warm) feed the answerer; a role without its own model
   or effort takes the user's Claude Code settings. `classifier.threshold` defaults to 0.9 (`TRIAGE_THRESHOLDS.clef`).
+- **`dt open link`** (the maintainer's decision at the merge): another one-time sign-in link for the running `dt open`
+  server, so the person need not restart it for a new one (another browser, the first link expired). The same rules as
+  the printed link — single use, 60 minutes, the same cookie — but issued by the command, so its code is written (as a
+  hash, in a hash domain of its own: neither a facilitator link nor an agent code) to the session's database, where the
+  server redeems it; every unused one is revoked when the server stops, and none is accepted once the sign-in is
+  revoked (the session left Solo). Refused for a running `dt collab` server (mirror of `dt collab link` refusing a
+  `dt open` one). Continuing a Solo session with `dt collab` still requires the facilitator link it prints: the
+  solo cookie is not carried over.
 - **The seed**: one message applied without a note goes as the page's 「AI に送る」 does
   (`POST /api/session/requests/:id/address`): its triage decides a change request — the mock classifier, or, with
   `--no-classifier`, the seed's own answerer (the real `startAnswerer` with a scripted agent: stage 3 reads the

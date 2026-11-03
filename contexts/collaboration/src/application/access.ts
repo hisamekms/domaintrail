@@ -2,8 +2,8 @@
 // `dt collab` (or issued again locally), the identity it binds to the facilitator, the one-time agent pairing codes
 // (`dt collab agent-link`: exchanged by `dt agent --code` for the agent API's credential), and the sign-ins of the `dev`
 // identity mode (an opaque cookie mapped to a picked name). Secrets leave here once, to the caller; only their SHA-256
-// is kept. A pairing code is stored beside the facilitator links under a hash of its own domain (`AGENT_CODE_DOMAIN`):
-// neither kind is accepted as the other.
+// is kept. A pairing code is stored beside the facilitator links under a hash of its own domain (`AGENT_CODE_DOMAIN`),
+// and so is a sign-in link of `dt open` issued again (`dt open link`, `OPEN_CODE_DOMAIN`): no kind is accepted as another.
 import { err, ok, type Collaboration, type Result } from '../generated/index.js';
 import { sha256Hex } from '../domain/sha256.js';
 import type { Identity, IdentityKey } from './identity.js';
@@ -40,7 +40,11 @@ export interface SessionAccess {
     issueAgentCode(input: { readonly session: SessionId; readonly ttlMs: number }): Promise<Result<FacilitatorLink, SessionNotOpen>>;
     /** Uses an agent pairing code of the session: whether it was valid (unused, unexpired, an agent code of this session). */
     redeemAgentCode(input: { readonly session: SessionId; readonly code: string }): Promise<boolean>;
-    /** Revokes every unused link of the session: facilitator links and agent pairing codes (its server stops). */
+    /** A new one-time sign-in code for `dt open`'s Solo session, valid for `ttlMs`: neither a facilitator link nor an agent code. */
+    issueOpenCode(input: { readonly session: SessionId; readonly ttlMs: number }): Promise<Result<FacilitatorLink, SessionNotOpen>>;
+    /** Uses a sign-in code of `dt open`: whether it was valid (unused, unexpired, a sign-in code of this session). */
+    redeemOpenCode(input: { readonly session: SessionId; readonly code: string }): Promise<boolean>;
+    /** Revokes every unused link of the session: facilitator links, agent pairing codes, `dt open`'s sign-in codes (its server stops). */
     revokeLinks(session: SessionId): Promise<void>;
     /** The identity holding the facilitator role, if one claimed it. */
     facilitator(session: SessionId): Promise<IdentityKey | undefined>;
@@ -62,6 +66,9 @@ export const secretHash = (secret: string): string => sha256Hex(encoder.encode(s
 /** The domain an agent pairing code is hashed in, apart from the facilitator links'. */
 const AGENT_CODE_DOMAIN = 'dt-agent-pairing:';
 const agentCodeHash = (code: string): string => secretHash(`${AGENT_CODE_DOMAIN}${code}`);
+/** The domain a sign-in code of `dt open` is hashed in. */
+const OPEN_CODE_DOMAIN = 'dt-open-sign-in:';
+const openCodeHash = (code: string): string => secretHash(`${OPEN_CODE_DOMAIN}${code}`);
 
 export function createSessionAccess(deps: { readonly uow: UnitOfWork; readonly clock: Clock; readonly secrets: SecretGenerator }): SessionAccess {
     const { uow, clock, secrets } = deps;
@@ -100,6 +107,21 @@ export function createSessionAccess(deps: { readonly uow: UnitOfWork; readonly c
 
         async redeemAgentCode({ session, code }) {
             return uow.transaction((stores) => stores.access.useLink(agentCodeHash(code), clock.now()) === session);
+        },
+
+        async issueOpenCode({ session, ttlMs }) {
+            return uow.transaction((stores) => {
+                const open = stores.sessions.load(session);
+                if (open?.state !== 'Open' || open.mode !== 'Solo') return err({ type: 'SessionNotOpen' });
+                const code = secrets.newSecret();
+                const expiresAt = new Date(clock.now().getTime() + ttlMs);
+                stores.access.addLink(openCodeHash(code), session, expiresAt);
+                return ok({ code, expiresAt });
+            });
+        },
+
+        async redeemOpenCode({ session, code }) {
+            return uow.transaction((stores) => stores.access.useLink(openCodeHash(code), clock.now()) === session);
         },
 
         async revokeLinks(session) {

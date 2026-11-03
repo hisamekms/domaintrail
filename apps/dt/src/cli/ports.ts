@@ -33,6 +33,8 @@ export interface CliDeps {
     issueFacilitatorLink(root: string): Promise<{ link: string; expiresAt: Date }>;
     /** A one-time agent pairing code for the session server running on the workspace; rejects with `SessionError` when none runs. */
     issueAgentLink(root: string): Promise<{ code: string; agentUrl: string; expiresAt: Date }>;
+    /** Another one-time sign-in link for the `dt open` server running on the workspace; rejects with `SessionError` when none runs or it is `dt collab`'s. */
+    issueOpenLink(root: string): Promise<{ link: string; expiresAt: Date }>;
     /** Whether the agent can run here (`claude` on the PATH, answering, with the flags the adapters need), or why not. */
     checkAgent(agent: 'claude'): Promise<AgentUsability>;
     /**
