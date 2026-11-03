@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { StormingView, ViewPayload } from '@domaintrail/visualization/protocol';
 import type { RevealTarget } from '../inspector';
 import { resolve, selectedFile } from '../model-utils';
+import { usePersistentState } from '../shared/layout';
 import { locationOf, type SourceFocus } from '../source';
 import { isStormingSelection, stormingExists, stormingLocation } from '../storming';
 import { highlightElement } from './canvas';
 import { useCanvasValue, type DiagramCanvas } from './diagram';
 import { backIndex, popHistory, pushHistory, type History } from './history';
+import { rememberedView, VIEW_KEY } from './worlds';
 
 export type View = { kind: 'contextMap' } | { kind: 'structure' } | { kind: 'catalog' } | { kind: 'storming' };
 
@@ -32,7 +34,11 @@ export interface Navigation {
 export function useNavigation(canvas: DiagramCanvas | null, current: ViewPayload | null, stormings: readonly StormingView[]): Navigation {
     const model = current?.model ?? null;
     const base = current?.base ?? null;
-    const [view, setView] = useState<View>({ kind: 'structure' });
+    // the view (and with it the world) is remembered per browser: a reload comes back to it, whatever the first payload
+    // holds (a storming not there yet is drawn once it arrives; the storming view says so meanwhile)
+    const [storedView, storeView] = usePersistentState<View['kind']>(VIEW_KEY, 'structure');
+    const view = useMemo(() => rememberedView(storedView), [storedView]);
+    const setView = useCallback((v: View) => storeView(v.kind), [storeView]);
 
     // Selection with a back history
     const [history, setHistory] = useState<History>([]);
@@ -89,13 +95,21 @@ export function useNavigation(canvas: DiagramCanvas | null, current: ViewPayload
     return { view, setView, selected, sourceFocus, setSourceFocus, select, backTo, goBack, reveal };
 }
 
+/**
+ * Whether a payload is of a workspace of .dtes files only, which opens on its stormings. Decided from its files, not
+ * from what its model holds: a `.dt` that does not parse yet (a payload with no contexts) must not take the page away
+ * from the domain model a reader chose.
+ */
+export const opensOnStormings = (current: Pick<ViewPayload, 'status' | 'files' | 'stormings'>): boolean =>
+    current.status !== 'empty' && current.stormings.length > 0 && !current.files.some((f) => f.endsWith('.dt'));
+
 /** A workspace of .dtes files only opens on its stormings (decided once, on the first payload with files). */
 export function useOpenOnStormings(current: ViewPayload | null, setView: (v: View) => void): void {
     const openedOnStormings = useRef(false);
     useEffect(() => {
         if (openedOnStormings.current || !current || current.status === 'empty') return;
         openedOnStormings.current = true;
-        if (current.stormings.length && !current.focusContexts.length) setView({ kind: 'storming' });
+        if (opensOnStormings(current)) setView({ kind: 'storming' });
         // setView is a state setter: only a new payload runs this
     }, [current, setView]);
 }
