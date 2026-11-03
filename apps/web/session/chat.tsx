@@ -79,6 +79,7 @@ import {
 } from './mentions';
 import { useTargetNaming } from './naming';
 import { CollabMenu, CollabSummaryDialog, openPeople, useCollabSummary } from './collab-menu';
+import { JoinRequests } from './join-requests';
 import { Avatar, failure, MentionedText, TargetChips } from './parts';
 import { AiAvatar, ProposalCard } from './proposal';
 import { chosenIndex } from './proposal-view';
@@ -496,6 +497,7 @@ export function SessionChat(props: {
                     onPeek={peekStatus}
                     tx={tx}
                 />
+                {live && <JoinRequests session={session} />}
                 <ChatHead view={view} onView={setView} unfinished={unfinished} onClose={props.onClose} tx={tx} />
                 {session.status === 'signed-out' && <p className="session-note chat-notice">{tx.signedOut}</p>}
                 {ended && (

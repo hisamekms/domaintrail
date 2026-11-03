@@ -111,8 +111,12 @@ Tick each line; for a failure, record what is listed under [When something fails
 
 - [ ] Set the Access application's session duration to its shortest (e.g. 15 minutes) for this check, or wait for the
       configured one. When a participant's token expires, their page's WebSocket closes (close code 4002, "token
-      expired", visible in the developer tools' Network tab); the page reconnects once Access gives it a fresh token,
-      or Access asks them to sign in again.
+      expired", visible in the developer tools' Network tab); the page reconnects once Access gives it a fresh token.
+      When the Access session itself has run out, Access answers the page's requests in place of the origin, with a
+      302 to `https://<team>.cloudflareaccess.com/cdn-cgi/access/login/…` (not the origin's 401): the page sees that
+      redirect (it does not follow it) and reloads, so Access's sign-in shows and brings the participant back to the
+      session. It reloads at most once every 30 seconds; it never shows "Network (0)" for this, nor keeps reconnecting
+      in silence. A page whose server is down shows the network error and does not reload.
 - [ ] A participant who leaves the session (`POST /api/session/leave`, from the collab menu's 退出, else from the developer
       tools' console) has their pages closed (code 4001); the answer names `/cdn-cgi/access/logout`,
       where the page sends them to end the Access session.
@@ -124,8 +128,9 @@ Tick each line; for a failure, record what is listed under [When something fails
       model's update live, without reloading.
 - [ ] The facilitator restores the revision before the run; both participants see the model as it was, and
       `git diff` in the workspace shows the sources back as they were.
-- [ ] The facilitator closes the session: every page closes (code 4000), and a reload gets 401 from the origin even
-      with a valid Access session.
+- [ ] The facilitator closes the session: every page closes (code 4000), and `dt session start` exits. A reload,
+      even with a valid Access session, reaches no server: Cloudflare answers with its error page (502, the tunnel's
+      origin is gone), and nothing of the model or the chat is served.
 
 ## When something fails
 

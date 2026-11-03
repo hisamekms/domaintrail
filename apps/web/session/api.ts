@@ -8,6 +8,7 @@ import type {
     ProposalsApprovedBody,
     ComparisonBody,
     ErrorBody,
+    InviteBody,
     MarkSetBody,
     Me,
     ModelChangesBody,
@@ -21,9 +22,11 @@ import type {
     RevertRequestedBody,
 } from '@domaintrail/collaboration/protocol';
 import type { TargetStatus } from '@domaintrail/collaboration';
+import { isSignInRedirect, reloadForSignIn, SAME_ORIGIN } from '../app/sign-in';
 
 /**
- * A failed call: the server's error type (`FacilitatorOnly`, `InvalidInput`, …) or `Network`, its status, and the
+ * A failed call: the server's error type (`FacilitatorOnly`, `InvalidInput`, …), `Network`, or `SignInRequired` (the
+ * edge in front, Cloudflare Access, answered with a redirect to its sign-in: the page reloads), its status, and the
  * error's other fields (`paths` of external changes, the `run` in progress, the `preRestore` revision, …).
  */
 export class SessionApiError extends Error {
@@ -51,10 +54,15 @@ async function call<T>(path: string, init?: { method: 'POST'; body: unknown }): 
     try {
         res = await fetch(`/api/session/${path}`, {
             ...(init && { method: init.method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(init.body) }),
-            credentials: 'same-origin',
+            ...SAME_ORIGIN,
         });
     } catch (e) {
         throw new SessionApiError('Network', 0, e instanceof Error ? e.message : String(e));
+    }
+    if (isSignInRedirect(res)) {
+        // the Access session ran out: Access answers for the server, with its sign-in page; a reload goes there
+        reloadForSignIn();
+        throw new SessionApiError('SignInRequired', 0, 'Sign in again.');
     }
     let body: unknown;
     try {
@@ -103,6 +111,15 @@ export const sessionApi = {
     /** Another one-time facilitator link, to hand the role over. */
     facilitatorLink: (): Promise<{ link: string; expiresAt: string }> => call('facilitator/link', { method: 'POST', body: {} }),
     close: (): Promise<unknown> => call('close', { method: 'POST', body: {} }),
+    /** `link`: a new invite link (the facilitator; the previous one stops working). */
+    invite: (): Promise<InviteBody> => call('invite', { method: 'POST', body: {} }),
+    /** `link`: stops the invite link (the facilitator). */
+    stopInvite: (): Promise<{ revoked: boolean }> => call('invite/revoke', { method: 'POST', body: {} }),
+    /** `link`: lets a pending join request in, or turns it away (the facilitator). */
+    decideJoin: (id: string, decision: 'approve' | 'deny'): Promise<unknown> =>
+        call(`join-requests/${encodeURIComponent(id)}/${decision}`, { method: 'POST', body: {} }),
+    /** `link`: removes a participant: their sign-in ends, their pages close (the facilitator). */
+    removeParticipant: (id: string): Promise<unknown> => call(`participants/${encodeURIComponent(id)}/remove`, { method: 'POST', body: {} }),
     queueRun: (body: QueueRunBody): Promise<{ run: { id: string } }> => call('runs', { method: 'POST', body }),
     /** Signs out (`dev`), or leaves an `access` session: `logout` is where the page goes then (Access's logout). */
     leave: (): Promise<{ left: boolean; logout?: string }> => call('leave', { method: 'POST', body: {} }),

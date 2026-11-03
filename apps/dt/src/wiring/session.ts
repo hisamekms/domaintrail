@@ -4,7 +4,10 @@
 // that mode is resumed; `dt collab` continues a Solo session as a Collab one; `dt open` refuses an open Collab session.
 // In the Solo mode the one person is the facilitator without signing in (./solo.ts) and no facilitator link is made.
 // The server runs the triage's stage 2 (Clef, `classifier`) on the messages addressed to the AI, hands the answerer
-// role its jobs (the agent API's answers entry point) and tells the pages which agents are connected.
+// role its jobs (the agent API's answers entry point) and tells the pages which agents are connected. In the `link`
+// identity mode (docs/session-link.md) it answers its public URL's host and origin only besides loopback, requires an
+// Origin on every request that changes something, and lets people in through the invite link and the facilitator's
+// approval (../server/session/link-join.ts).
 import {
     type AccessAdapterOptions,
     type AccessTokenVerifier,
@@ -14,6 +17,7 @@ import {
     createClefClassifier,
     createCloudflareAccess,
     createCollaboration,
+    createJoinRequests,
     createRunActivities,
     createSessionAccess,
     createUnitOfWork,
@@ -46,6 +50,7 @@ import { createEventRelay, lastSeq } from '../server/session/relay.js';
 import { createPresenceRelay, type SessionConnection } from '../server/session/presence.js';
 import { createRevertQueue } from '../server/session/reverts.js';
 import { createSessionHttp, meOf, stateBody } from '../server/session/routes.js';
+import { createLinkJoin, INVITE_PATH, INVITE_TTL_MS, type LinkJoin } from '../server/session/link-join.js';
 import { createSessionIdentities } from '../server/session/identities.js';
 import { createTriageStage } from '../server/session/triage.js';
 import { eventFor } from '../server/session/views.js';
@@ -61,6 +66,7 @@ import { prepareLiveView, serverUrl, watchLiveView, type ViewServerOptions } fro
 import { createWatcherHold, type WatcherHold } from './watcher-hold.js';
 import { createSoloSignIn, SOLO_LINK_PATH, SOLO_LINK_TTL_MS, soloIdentities, soloName, soloSurface } from './solo.js';
 import * as path from 'node:path';
+import { randomBytes } from 'node:crypto';
 
 /** How long a lease of the agent holds without a heartbeat. */
 export const AGENT_LEASE_MS = 60_000;
@@ -93,6 +99,17 @@ const MAX_TIMER_MS = 2 ** 31 - 1;
 export interface SessionServerOptions extends ViewServerOptions {
     /** What the session server reads of the configuration (`collab`, `agent.port`, `agent.run`'s tools, `classifier`). */
     session: SessionSettings;
+    /**
+     * `dt collab --tunnel`: the server is reached through the quick tunnel this process started, so the visitor's
+     * address in `CF-Connecting-IP` is that cloudflared's word (the join requests' rate limit). Default: false.
+     */
+    quickTunnel?: boolean;
+    /**
+     * `link`: the public URL is known only once the server listens (`dt collab --tunnel` starts its tunnel to the port
+     * then, so that nothing else can take the port in between): called with the port bound; until it resolves the
+     * server answers loopback only. A rejection stops the server and is the start's.
+     */
+    publicUrlAfterListen?: (port: number) => Promise<string>;
     /** `access` mode: a stand-in for the JWKS check of the tokens' signature (tests); default: the team's JWKS. */
     accessVerifier?: AccessTokenVerifier;
     /** `access` mode: where the JWKS and the Identity API are and their timings (tests point them at a local mock). */
@@ -130,6 +147,10 @@ export interface SessionServer {
     opened: 'started' | 'resumed' | 'collaborated';
     /** A one-time link: opened by a signed-in browser, it makes that identity the facilitator; in `Solo`, it signs the browser that opens it in as the one person. */
     facilitatorLink: string;
+    /** The public origin of a `link` session (the tunnel's), which the links are made with; absent in the other modes. */
+    publicUrl?: string;
+    /** `link`: a new invite link (the previous one stops working). */
+    issueInvite?(): Promise<{ link: string; expiresAt: string }>;
     view: ViewService;
     /** The use cases of the session, for the tests and S7. */
     collaboration: CollaborationUseCases;
@@ -174,6 +195,9 @@ const soloPersonName = (session: Collaboration.OpenSession): Collaboration.Displ
 
 const linkOf = (url: string, code: string): string => `${url}session/facilitator?code=${code}`;
 
+/** The public origin of a `link` session: `collab.link.publicUrl` (the CLI puts a quick tunnel's there). */
+const linkPublicUrl = (config: SessionSettings): string | undefined => config.link?.publicUrl;
+
 /**
  * The identity provider of the configured mode (none for `dev`). `access` needs the team domain and the audience; a
  * `publicUrl` must be https with its host in `allowedHosts` and its origin in `allowedOrigins` (it allows nothing by
@@ -184,6 +208,17 @@ function identityProvider(options: SessionServerOptions, clock: Clock, log: (lin
     const config = options.session;
     if (options.mode === 'Solo' && !isLoopbackBind(config.host))
         throw new SessionError(`dt open serves the chat on loopback only; ${config.host} is not a loopback address.`);
+    if (config.identity === 'link' && options.mode !== 'Solo') {
+        if (!isLoopbackBind(config.host))
+            throw new SessionError(`The link identity mode serves loopback only (its tunnel connects there); ${config.host} is not a loopback address.`);
+        const publicUrl = linkPublicUrl(config);
+        const url = publicUrl !== undefined && URL.canParse(publicUrl) ? new URL(publicUrl) : undefined;
+        if (url?.protocol !== 'https:' && !options.publicUrlAfterListen)
+            throw new SessionError(
+                "The link identity mode needs an https public URL: run `dt collab --tunnel`, or set collab.link.publicUrl to your tunnel's.",
+            );
+        return undefined;
+    }
     if (config.identity === 'dev' || options.mode === 'Solo') {
         if (!isLoopbackBind(config.host)) {
             throw new SessionError(`The dev identity mode serves loopback only; ${config.host} is not a loopback address (use identity "access").`);
@@ -293,15 +328,24 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         const { value: sessionOpened } = openedSession;
         const session: Collaboration.SessionId = sessionOpened.session.id;
 
+        // `link`: the cookies' names are this server's (a restart signs everyone out), with the `__Host-` prefix (Secure,
+        // no Domain, Path=/: the browser keeps them to this very host)
+        const linkMode = mode === 'Collab' && config.identity === 'link';
+        const publicUrl = linkMode ? linkPublicUrl(config) : undefined;
+        const cookieSuffix = randomBytes(6).toString('hex');
         const shared = createSessionIdentities({
             session,
             mode: mode === 'Solo' ? 'dev' : config.identity,
+            ...(linkMode && { cookieName: `__Host-dt_link_${cookieSuffix}` }),
             provider,
             acceptAccessCookie: config.access?.acceptCookie ?? false,
             access,
             collaboration,
             maxParticipants: config.maxParticipants,
         });
+        // `link`: the sign-ins of an earlier server (whatever mode it had) end now: everyone is approved again, the
+        // facilitator signs in with this server's link
+        if (linkMode) await access.signOutAll(session);
         const soloPerson = soloPersonName(sessionOpened.session);
         // `dt open`'s sign-in: in this server's memory, and the codes `dt open link` issued; revoked when it stops
         const soloSignIn = createSoloSignIn({ redeemIssued: (code) => access.redeemOpenCode({ session, code }) });
@@ -357,6 +401,8 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                     expiries.set(connection.id, timer);
                 }
                 pages.set(connection.id, connection);
+                if (linkJoin && connection.data.role === 'facilitator')
+                    void linkJoin.snapshot().then((snapshot) => connection.send({ type: 'join.requests', ...snapshot }), stateFailed);
                 void sendState(connection).then(() => {
                     // what the running runs are doing now (a page that reloads gets the latest)
                     connection.send({ type: 'session.activities', activities: activities.all() });
@@ -509,13 +555,54 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             log,
         });
 
-        // `dt open` answers loopback only: `collab.access` (a tunnel's hosts and origins) is never its
-        const accessConfig = mode === 'Solo' ? undefined : config.access;
+        // `dt open` answers loopback only: `collab.access` (a tunnel's hosts and origins) is never its; `link` answers its
+        // public URL's host and origin only
+        const accessConfig = mode === 'Solo' || linkMode ? undefined : config.access;
+        // `link`: the public origin, known now (configured) or once the server listens (a quick tunnel's)
+        let publicOrigin = publicUrl === undefined || options.publicUrlAfterListen ? undefined : new URL(publicUrl);
+        /** The Host and Origin rules as of now: a `link` session's public origin is added once it is known. */
+        const hostRules = (): ReturnType<typeof sessionHostPolicy> =>
+            publicOrigin
+                ? sessionHostPolicy([publicOrigin.hostname], [publicOrigin.origin])
+                : sessionHostPolicy(accessConfig?.allowedHosts ?? [], accessConfig?.allowedOrigins ?? []);
+        /** The base the links are made with: the public origin of a `link` session, else the server's address. */
+        const linkBase = (): string => (publicOrigin ? `${publicOrigin.origin}/` : url);
+        // `link`: the invite link and the join requests, the facilitator's pages told of each change
+        const linkJoin: LinkJoin | undefined = linkMode
+            ? createLinkJoin({
+                  session,
+                  access,
+                  identities,
+                  requests: createJoinRequests({ clock, secrets: randomSecrets }),
+                  publicUrl: () => linkBase().replace(/\/$/, ''),
+                  // the participants who joined, and the names of the pages connected (the facilitator's own among them)
+                  participantNames: async () => {
+                      const state = await collaboration.sessionState({ session });
+                      const joined = state.ok ? state.value.session.participants.map((p) => p.name) : [];
+                      return [...new Set([...joined, ...[...pages.values()].map((c) => c.data.participant.identity.displayName)])];
+                  },
+                  waitCookie: `__Host-dt_wait_${cookieSuffix}`,
+                  changed: () => {
+                      void linkJoin
+                          ?.snapshot()
+                          .then((snapshot) => hub.publishWhere((c) => c.data.role === 'facilitator', { type: 'join.requests', ...snapshot }), stateFailed);
+                  },
+                  disconnect,
+                  pump,
+                  log,
+                  trustForwarded: options.quickTunnel ?? false,
+              })
+            : undefined;
         const sessionSurface = createSessionHttp({
             session,
             collaboration,
             identities,
-            hostPolicy: sessionHostPolicy(accessConfig?.allowedHosts ?? [], accessConfig?.allowedOrigins ?? []),
+            hostPolicy: {
+                allowedHost: (hostname) => hostRules().allowedHost(hostname),
+                allowedOrigin: (origin, host) => hostRules().allowedOrigin?.(origin, host) ?? false,
+                ...(linkMode && { requireOrigin: true }),
+            },
+            ...(linkJoin && { link: linkJoin }),
             pump,
             cursor,
             holdWatcher: (work, wrote) => watcherHold.aroundWrite(work, wrote),
@@ -526,9 +613,9 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             issueFacilitatorLink: async () => {
                 const link = await access.issueFacilitatorLink({ session, ttlMs: FACILITATOR_LINK_TTL_MS });
                 if (!link.ok) throw new Error('The session is not open');
-                return { link: linkOf(url, link.value.code), expiresAt: link.value.expiresAt.toISOString() };
+                return { link: linkOf(linkBase(), link.value.code), expiresAt: link.value.expiresAt.toISOString() };
             },
-            secureCookie: accessConfig?.publicUrl?.startsWith('https://') ?? false,
+            secureCookie: linkMode || (accessConfig?.publicUrl?.startsWith('https://') ?? false),
             quickReactions: config.quickReactions,
             ...(config.templates && { templates: config.templates }),
             triaged: () => stage.kick(),
@@ -553,16 +640,22 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         opened.agent = agent.server;
         const agentPort = await listen(agent.server, config.agent.port, '127.0.0.1');
         const agentUrl = serverUrl('127.0.0.1', agentPort);
+        if (options.publicUrlAfterListen) {
+            const given = await options.publicUrlAfterListen(port);
+            const parsed = URL.canParse(given) ? new URL(given) : undefined;
+            if (parsed?.protocol !== 'https:') throw new SessionError(`The public URL must be https: ${given}`);
+            publicOrigin = new URL(parsed.origin);
+        }
 
         watch = await watchLiveView(options, live, (payload) => hub.publish(payload), watcherHold);
         // the credential is never on disk: an older version's agent.json goes
         if (await removeLegacyAgentFile(options.root)) log('Removed .domaintrail/session/agent.json (an agent credential an older version wrote).');
-        await writeServerAddress(options.root, { url, agentUrl, session, pid: process.pid });
+        await writeServerAddress(options.root, { url, agentUrl, ...(publicOrigin && { publicUrl: publicOrigin.origin }), session, pid: process.pid });
 
         const issueFacilitatorLink = async (): Promise<string> => {
             const link = await access.issueFacilitatorLink({ session, ttlMs: FACILITATOR_LINK_TTL_MS });
             if (!link.ok) throw new Error('The session is not open');
-            return linkOf(url, link.value.code);
+            return linkOf(linkBase(), link.value.code);
         };
         // the one person of a Solo session is the facilitator already
         // in Solo, the one-time link that signs the launching user's browser in as the facilitator
@@ -580,6 +673,8 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                     () => reverts.kick(),
                     () => undefined,
                 );
+            // the join requests that expired, and an invite changed by `dt collab invite`
+            void linkJoin?.sweep().catch((e: unknown) => log(`join requests failed: ${e instanceof Error ? e.message : String(e)}`));
         }, options.expireEveryMs ?? EXPIRE_EVERY_MS);
         expiring.unref();
         // a revert left at the head of the queue when the server last stopped; triages left waiting for stage 2
@@ -596,6 +691,14 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             resumed: sessionOpened.opened !== 'started',
             opened: sessionOpened.opened,
             facilitatorLink,
+            ...(publicOrigin && { publicUrl: publicOrigin.origin }),
+            ...(linkJoin && {
+                issueInvite: async (): Promise<{ link: string; expiresAt: string }> => {
+                    const invite = await linkJoin.issueInvite();
+                    if (!invite.ok) throw new Error('The session is not open');
+                    return invite.value;
+                },
+            }),
             view,
             collaboration,
             ready: watch.ready,
@@ -607,8 +710,9 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 stopped ??= (async () => {
                     soloSignIn.revoke();
                     clearInterval(expiring);
-                    // the links and pairing codes not used yet die with the server
+                    // the links and pairing codes not used yet die with the server; in `link`, every sign-in too
                     await access.revokeLinks(session).catch(() => undefined);
+                    if (linkMode) await access.signOutAll(session).catch(() => undefined);
                     await reverts.stop();
                     for (const timer of expiries.values()) clearTimeout(timer);
                     expiries.clear();
@@ -656,7 +760,32 @@ export async function issueFacilitatorLink(root: string): Promise<{ link: string
             throw new SessionError('The running server is `dt open`: one person, the facilitator already. Stop it and run `dt collab` to invite others.');
         const link = await access.issueFacilitatorLink({ session: collaboration, ttlMs: FACILITATOR_LINK_TTL_MS });
         if (!link.ok) throw new SessionError('The session is not open.');
-        return { link: linkOf(address.url, link.value.code), expiresAt: link.value.expiresAt };
+        return { link: linkOf(address.publicUrl ? `${address.publicUrl}/` : address.url, link.value.code), expiresAt: link.value.expiresAt };
+    } finally {
+        db.close();
+    }
+}
+
+/**
+ * A new invite link for the `link` session running on the workspace at `root` (`dt collab invite`): written (as a
+ * hash) to the session's database, revoking the previous one; the running server notices within seconds (the requests
+ * made through the previous one expire). With `stop`, the invite is revoked and nothing is made. Rejects with
+ * `SessionError` when no `link` session runs.
+ */
+export async function issueInvite(root: string, stop = false): Promise<{ link: string; expiresAt: Date } | { stopped: boolean }> {
+    const address = await readServerAddress(root);
+    if (!address || !processAlive(address.pid))
+        throw new SessionError('No session server is running for this workspace (start one with `dt collab --tunnel`).');
+    if (!address.publicUrl) throw new SessionError('The running session is not of the link identity mode: people join it without an invite link.');
+    const db = await openSessionDatabase(root);
+    try {
+        const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
+        const open = await openSessionOf(db);
+        if (open?.id !== address.session) throw new SessionError('The running session server serves a session that is no longer open.');
+        if (stop) return { stopped: await access.revokeInvite(open.id) };
+        const invite = await access.issueInvite({ session: open.id, ttlMs: INVITE_TTL_MS });
+        if (!invite.ok) throw new SessionError('The session is not open.');
+        return { link: `${address.publicUrl}${INVITE_PATH}?code=${invite.value.code}`, expiresAt: invite.value.expiresAt };
     } finally {
         db.close();
     }

@@ -32,7 +32,28 @@ export interface PublicParticipant {
 export interface Me {
     readonly session: Collaboration.SessionId;
     readonly participant: PublicParticipant;
-    readonly identity: { readonly provider: 'dev' | 'access'; readonly displayName: string };
+    readonly identity: { readonly provider: 'dev' | 'access' | 'link'; readonly displayName: string };
+}
+
+/** A pending join request of the `link` identity mode, as the facilitator's page gets it. */
+export interface JoinRequestBody {
+    readonly id: string;
+    readonly name: string;
+    readonly requestedAt: string;
+    readonly expiresAt: string;
+    /** Its name is another pending request's or a participant's (the same, NFKC, case and spaces folded). */
+    readonly duplicate?: boolean;
+}
+
+/** The `link` identity mode's invite as the facilitator sees it: when the live one expires (the link itself is shown once, when made). */
+export interface InviteStateBody {
+    readonly expiresAt: string;
+}
+
+/** `POST /api/session/invite`: a new invite link (the previous one stops working). */
+export interface InviteBody {
+    readonly link: string;
+    readonly expiresAt: string;
 }
 
 /** `GET /api/session/state` and the WebSocket's `session.state`: everything the session holds. */
@@ -189,7 +210,16 @@ export type SessionServerMessage =
     // what the running runs are doing (ADR 0026, amendment): transient, never an event; every activity held on connect,
     // then each change. A page shows a run's only while the run is `Running`
     | { readonly type: 'session.activities'; readonly activities: Readonly<Record<string, RunActivity>> }
-    | { readonly type: 'run.activity'; readonly run: string; readonly activity: RunActivity };
+    | { readonly type: 'run.activity'; readonly run: string; readonly activity: RunActivity }
+    // the `link` identity mode, to the facilitator's pages only: the pending join requests and the live invite; on
+    // connect, then on each change
+    // (`inviteUsedUp`: the live invite took as many requests as it may)
+    | {
+          readonly type: 'join.requests';
+          readonly requests: readonly JoinRequestBody[];
+          readonly invite: InviteStateBody | null;
+          readonly inviteUsedUp?: boolean;
+      };
 
 /**
  * The triages' events as a participant's page gets them (plan decision 8): `triage.step_recorded` is not sent at all;

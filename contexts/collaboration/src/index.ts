@@ -200,7 +200,24 @@ export {
 } from './application/conversation.js';
 export { type InterviewJob, type InterviewStarted as InterviewStartedResult, type InterviewUseCases } from './application/interviews.js';
 export { actorOf, type Actor } from './application/actor.js';
-export { createSessionAccess, secretHash, type LinkInvalid, type SessionAccess } from './application/access.js';
+export { createSessionAccess, secretHash, type LinkInvalid, type SessionAccess, type SessionNotOpen } from './application/access.js';
+// the join requests of the `link` identity mode: made through the invite link, decided by the facilitator
+export {
+    createJoinRequests,
+    JOIN_REQUEST_TTL_MS,
+    JOIN_REQUEST_WINDOW_MS,
+    JOIN_REQUESTS_PER_INVITE,
+    JOIN_REQUESTS_PER_KEY,
+    MAX_PENDING_JOIN_REQUESTS,
+    type InviteExhausted,
+    type JoinRequest,
+    type JoinRequestNotFound,
+    type JoinRequests,
+    type JoinRequestState,
+    type JoinRequestStatus,
+    type RateLimited,
+    type TooManyPending,
+} from './application/join-requests.js';
 export {
     FACILITATOR_NAME,
     FACILITATOR_PARTICIPANT,
@@ -218,11 +235,13 @@ export { createRunActivities, RUN_ENDING_EVENTS, type RunActivities } from './ap
 export {
     ACCESS_CHECKS,
     COLLABORATION_CONFIG_KEYS,
+    isHttpsOrigin,
     resolveCollaborationConfig,
     validateAccessNeeded,
     validateClassifierConfig,
     validateCollaborationConfig,
     validateIdentityConfig,
+    validateLinkConfig,
     validatePreviousRunsConfig,
     validateTemplatesConfig,
     type ClassifierConfigFile,

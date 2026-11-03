@@ -224,7 +224,11 @@ describe('config file', () => {
         // each owner's refusal, through the composition
         ['{ "sources": ["!x/**"] }', "'sources' needs at least one include pattern"],
         ['{ "generate": { "rust": {} } }', "unknown generator 'generate.rust' (supported: ts)"],
-        ['{ "collab": { "identity": "basic" } }', "'collab.identity' must be one of 'dev', 'access'"],
+        ['{ "collab": { "identity": "basic" } }', "'collab.identity' must be one of 'dev', 'access', 'link'"],
+        ['{ "collab": { "link": [] } }', "'collab.link' must be an object"],
+        ['{ "collab": { "link": { "token": "x" } } }', "unknown key 'collab.link.token'"],
+        ['{ "collab": { "link": { "publicUrl": "http://dt.example.com" } } }', "'collab.link.publicUrl' must be an https URL without a path"],
+        ['{ "collab": { "link": { "publicUrl": "https://dt.example.com/session" } } }', "'collab.link.publicUrl' must be an https URL without a path"],
         ['{ "agent": { "run": { "allowedTools": [""] } } }', "'agent.run.allowedTools' must be an array of tool rules"],
         ['{ "agent": { "run": { "maxPreviousRunDiff": -1 } } }', "'agent.run.maxPreviousRunDiff' must be a non-negative integer"],
         ['{ "agent": { "run": { "warm": "yes" } } }', "'agent.run.warm' must be true or false"],
@@ -272,6 +276,13 @@ describe('config file', () => {
         ['{ "agent": { "run": { "maxPreviousRunDiff": -1 } } }', "'agent.run.maxPreviousRunDiff'"],
     ])('the first error of %s is %s', (text, expected) => {
         expect(message(text)).toContain(expected);
+    });
+
+    test('the link identity mode: its public URL resolved to its origin', () => {
+        const cfg = resolveConfig('{ "collab": { "identity": "link", "link": { "publicUrl": "https://dt.example.com/" } } }', FILE);
+        expect(cfg.collab.identity).toBe('link');
+        expect(cfg.collab.link).toEqual({ publicUrl: 'https://dt.example.com' });
+        expect(resolveConfig('{}', FILE).collab.link).toBeUndefined();
     });
 
     test('the team templates: kept as written, after the classifier is checked', () => {

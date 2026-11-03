@@ -21,12 +21,19 @@ export interface TrustStore {
     approve(workspace: string, hash: string): Promise<void>;
 }
 
+/** What a command adds to the settings of the file: `dt collab --tunnel` (a public quick tunnel, the `link` identity). */
+export interface StartFlags {
+    readonly tunnel?: boolean;
+}
+
 /**
  * The security-relevant settings of `cfg`, effective (merged), with their keys: what each role reads outside the
  * workspace, the runner's tools and its `dt`; who may reach the session (`collab.identity`, `collab.host`,
- * `collab.access`, `open.host`); and where the addressed messages are sent (`classifier`, but its threshold).
+ * `collab.access`, `collab.link`, `open.host`, and `--tunnel`: the session on the internet); and where the addressed
+ * messages are sent (`classifier`, but its threshold). `collab.link` and the tunnel are there only when set, so that
+ * the settings approved before them keep their hash.
  */
-export function securitySettings(cfg: ResolvedConfig): Record<string, unknown> {
+export function securitySettings(cfg: ResolvedConfig, flags: StartFlags = {}): Record<string, unknown> {
     const { threshold: _threshold, ...classifier } = cfg.classifier;
     return {
         'agent.read (answer)': cfg.agent.read.answer,
@@ -36,6 +43,8 @@ export function securitySettings(cfg: ResolvedConfig): Record<string, unknown> {
         'collab.identity': cfg.collab.identity,
         'collab.host': cfg.collab.host,
         'collab.access': cfg.collab.access ?? null,
+        ...(cfg.collab.link && { 'collab.link': cfg.collab.link }),
+        ...(flags.tunnel && { 'collab --tunnel': 'a public cloudflared quick tunnel (trycloudflare.com), identity link' }),
         'open.host': cfg.open.host,
         classifier,
     };
@@ -123,9 +132,9 @@ export class NotApproved extends Error {}
  * asks (`confirm`), or records them with `yes` (`--yes`). Refused (`NotApproved`) when declined, or with no one to ask
  * and no `--yes`. Without a store (a test's dependencies), nothing is asked.
  */
-export async function approveSettings(cfg: ResolvedConfig, deps: ApprovalDeps, yes: boolean): Promise<void> {
+export async function approveSettings(cfg: ResolvedConfig, deps: ApprovalDeps, yes: boolean, flags: StartFlags = {}): Promise<void> {
     if (!deps.trust) return;
-    const settings = securitySettings(cfg);
+    const settings = securitySettings(cfg, flags);
     const hash = settingsHash(settings);
     if (hash === settingsHash(securitySettings(defaultConfig(cfg.root)))) return;
     let workspace: string;

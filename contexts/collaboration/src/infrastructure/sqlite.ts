@@ -279,6 +279,17 @@ export const MIGRATIONS: readonly string[] = [
     ) STRICT;
     CREATE INDEX interviews_by_session ON interviews(session_id, seq);
     `,
+    // the invite links of the `link` identity mode: multi-use until they expire or are revoked; one live per session
+    `
+    CREATE TABLE invites (
+        code_hash TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        revoked_at INTEGER
+    ) STRICT;
+    CREATE INDEX invites_by_session ON invites(session_id) WHERE revoked_at IS NULL;
+    `,
 ];
 
 /** The database was written by a newer DomainTrail: its schema is unknown here. */
@@ -758,7 +769,7 @@ function outbox(db: DatabaseSync): EventOutbox {
     };
 }
 
-const isMode = (v: string): v is IdentityMode => v === 'dev' || v === 'access';
+const isMode = (v: string): v is IdentityMode => v === 'dev' || v === 'access' || v === 'link';
 
 function access(db: DatabaseSync): AccessStore {
     const addLink = db.prepare('INSERT INTO facilitator_links (code_hash, session_id, expires_at) VALUES (:hash, :session, :expires)');
@@ -775,6 +786,17 @@ function access(db: DatabaseSync): AccessStore {
     const signIn = db.prepare('SELECT session_id, identity FROM sign_ins WHERE token_hash = :hash AND revoked_at IS NULL');
     const revokeSignIn = db.prepare('UPDATE sign_ins SET revoked_at = :at WHERE token_hash = :hash AND revoked_at IS NULL');
     const revokeSignIns = db.prepare('UPDATE sign_ins SET revoked_at = :at WHERE session_id = :session AND revoked_at IS NULL RETURNING identity');
+    const revokeSignInsOf = db.prepare(
+        `UPDATE sign_ins SET revoked_at = :at
+         WHERE session_id = :session AND revoked_at IS NULL
+           AND json_extract(identity, '$.provider') = :provider AND json_extract(identity, '$.subject') = :subject`,
+    );
+    const revokeInvites = db.prepare('UPDATE invites SET revoked_at = :now WHERE session_id = :session AND revoked_at IS NULL RETURNING expires_at');
+    const addInvite = db.prepare('INSERT INTO invites (code_hash, session_id, created_at, expires_at) VALUES (:hash, :session, :at, :expires)');
+    const invite = db.prepare('SELECT session_id FROM invites WHERE code_hash = :hash AND revoked_at IS NULL AND expires_at > :now');
+    const liveInvite = db.prepare(
+        'SELECT expires_at FROM invites WHERE session_id = :session AND revoked_at IS NULL AND expires_at > :now ORDER BY expires_at DESC LIMIT 1',
+    );
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the session of a row, written from a SessionId
     const sessionOf = (r: Row): Collaboration.SessionId => text(r, 'session_id') as Collaboration.SessionId;
     return {
@@ -813,6 +835,24 @@ function access(db: DatabaseSync): AccessStore {
                 const { provider, subject } = decoded<Identity>(text(r, 'identity'));
                 return { provider, subject };
             });
+        },
+        revokeSignInsOf(session, identity, at) {
+            return Number(revokeSignInsOf.run(params({ session, provider: identity.provider, subject: identity.subject, at: at.getTime() })).changes);
+        },
+        addInvite(codeHash, session, expiresAt, at) {
+            revokeInvites.all(params({ session, now: at.getTime() }));
+            addInvite.run(params({ hash: codeHash, session, at: at.getTime(), expires: expiresAt.getTime() }));
+        },
+        invite(codeHash, now) {
+            const r = invite.get(params({ hash: codeHash, now: now.getTime() }));
+            return r ? sessionOf(r) : undefined;
+        },
+        liveInvite(session, now) {
+            const r = liveInvite.get(params({ session, now: now.getTime() }));
+            return r ? new Date(integer(r, 'expires_at')) : undefined;
+        },
+        revokeInvites(session, now) {
+            return revokeInvites.all(params({ session, now: now.getTime() })).some((r) => integer(r, 'expires_at') > now.getTime());
         },
     };
 }

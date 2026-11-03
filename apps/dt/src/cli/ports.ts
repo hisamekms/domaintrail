@@ -39,10 +39,21 @@ export interface CliDeps {
     startSessionServer(options: SessionServerOptions): Promise<StartedSession>;
     /** Another facilitator link for the session server running on the workspace; rejects with `SessionError` when none runs. */
     issueFacilitatorLink(root: string): Promise<{ link: string; expiresAt: Date }>;
+    /**
+     * A new invite link for the `link` session running on the workspace (the previous one stops working), or with `stop`
+     * the invite stopped; rejects with `SessionError` when no `link` session runs.
+     */
+    issueInvite(root: string, stop?: boolean): Promise<{ link: string; expiresAt: Date } | { stopped: boolean }>;
     /** A one-time agent pairing code for the session server running on the workspace; rejects with `SessionError` when none runs. */
     issueAgentLink(root: string): Promise<{ code: string; agentUrl: string; expiresAt: Date }>;
     /** Another one-time sign-in link for the `dt open` server running on the workspace; rejects with `SessionError` when none runs or it is `dt collab`'s. */
     issueOpenLink(root: string): Promise<{ link: string; expiresAt: Date }>;
+    /**
+     * Starts a Cloudflare quick tunnel to `127.0.0.1:<port>` (`dt collab --tunnel`): resolves with its public URL once
+     * it can be used; rejects with `TunnelError` (cloudflared missing, failed, or no URL in time). It is stopped by
+     * `stop`, on Ctrl+C, and when the process exits.
+     */
+    startTunnel(options: { port: number; log: (line: string) => void }): Promise<StartedTunnel>;
     /** Whether the agent can run here (`claude` on the PATH, answering, with the flags the adapters need), or why not. */
     checkAgent(agent: 'claude'): Promise<AgentUsability>;
     /**
@@ -108,6 +119,13 @@ export interface SessionServerOptions {
     mode: 'Solo' | 'Collab';
     /** What the session server is given of the configuration, with `--port` and `--host` applied. */
     session: SessionSettings;
+    /**
+     * `dt collab --tunnel`: the server is reached through the quick tunnel this process started, so the visitor's
+     * address in `CF-Connecting-IP` is that cloudflared's word (the join requests' rate limit). Default: false.
+     */
+    quickTunnel?: boolean;
+    /** `link`: the public URL, asked once the server listens, with the port bound (`--tunnel` starts its tunnel then). */
+    publicUrlAfterListen?: (port: number) => Promise<string>;
     log: (line: string) => void;
 }
 
@@ -134,10 +152,26 @@ export interface StartedSession {
     opened: 'started' | 'resumed' | 'collaborated';
     /** The one-time facilitator link; in `Solo`, the one-time link that signs the launching user's browser in as its person. */
     facilitatorLink?: string;
+    /** The public origin of a `link` session (the links are made with it). */
+    publicUrl?: string;
+    /** `link`: a new invite link (the previous one stops working). */
+    issueInvite?(): Promise<{ link: string; expiresAt: string }>;
     /** Resolves when the facilitator closes the session. */
     closed: Promise<void>;
     stop(): Promise<void>;
 }
+
+/** A running quick tunnel, as the CLI uses it. */
+export interface StartedTunnel {
+    /** `https://<words>.trycloudflare.com`. */
+    readonly url: string;
+    /** Resolves when cloudflared exits. */
+    readonly exited: Promise<void>;
+    stop(): Promise<void>;
+}
+
+/** The tunnel could not start: printed as one line. */
+export class TunnelError extends Error {}
 
 /** The roles of an agent (ADR 0030): the read-only answerer and the runner. */
 export const AGENT_ROLES = ['answer', 'run'] as const;

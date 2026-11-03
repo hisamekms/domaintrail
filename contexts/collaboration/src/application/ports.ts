@@ -186,6 +186,16 @@ export interface AccessStore {
     revokeSignIn(tokenHash: string, at: Date): boolean;
     /** Revokes every sign-in of the session: the identities they stood for. */
     revokeSignIns(session: SessionId, at: Date): IdentityKey[];
+    /** Revokes every sign-in of one identity in the session (the facilitator removed them): how many there were. */
+    revokeSignInsOf(session: SessionId, identity: IdentityKey, at: Date): number;
+    /** Adds the session's invite (`link` identity mode), revoking any other it has: one invite link at a time. */
+    addInvite(codeHash: string, session: SessionId, expiresAt: Date, at: Date): void;
+    /** The session of an invite that is neither revoked nor expired at `now` (an invite is used any number of times). */
+    invite(codeHash: string, now: Date): SessionId | undefined;
+    /** When the session's live invite expires, if it has one at `now`. */
+    liveInvite(session: SessionId, now: Date): Date | undefined;
+    /** Revokes the session's invites: whether one was live. */
+    revokeInvites(session: SessionId, now: Date): boolean;
 }
 
 /** How an attempted restore ended: written and recorded, refused before anything was written, or failed after. */

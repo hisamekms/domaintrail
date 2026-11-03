@@ -1,7 +1,8 @@
 // Collaboration's settings in domaintrail.jsonc (ADR 0026; ADR 0027, Project analysis and configuration: Collaboration
 // owns the identity mode and the participant limit; ADR 0030: the sections `collab`, `agent` and `classifier`): in
-// `collab`, `identity` and `access` (but its `allowedHosts` and `allowedOrigins`: the app's connection guards, ADR 0027,
-// Authorization), `maxParticipants` and `quickReactions`; the top-level `classifier` (called by the server in both
+// `collab`, `identity`, `access` (but its `allowedHosts` and `allowedOrigins`: the app's connection guards, ADR 0027,
+// Authorization) and `link` (the public URL of the `link` identity mode's self-managed tunnel), `maxParticipants` and
+// `quickReactions`; the top-level `classifier` (called by the server in both
 // modes) and `templates` (the chat's message templates, `domain/templates.ts`, in both modes); and `agent.run.maxPreviousRunDiff` (despite its place, what the run pipeline and the agent API give the agent
 // of the previous runs: `domain/previous-runs`). Their types, defaults and validation; the app composes them with the
 // other sections and reports the first error (`fail` throws).
@@ -11,7 +12,7 @@ import { TRIAGE_THRESHOLDS } from '../domain/triage.js';
 import type { IdentityMode } from './identity.js';
 
 /** How the participants of a session prove who they are (ADR 0026): explicit, never inferred from headers. */
-export const SESSION_IDENTITIES = ['dev', 'access'] as const satisfies readonly IdentityMode[];
+export const SESSION_IDENTITIES = ['dev', 'access', 'link'] as const satisfies readonly IdentityMode[];
 export type SessionIdentity = (typeof SESSION_IDENTITIES)[number];
 export const DEFAULT_MAX_PARTICIPANTS = 50;
 /** The most characters of unified diff the agent is given of the runs a run continues (replies, answers), together. */
@@ -29,8 +30,9 @@ export const MAX_QUICK_REACTIONS = 8;
 /** Collaboration's keys, by where they sit in the file. */
 export const COLLABORATION_CONFIG_KEYS: Readonly<Record<string, readonly string[]>> = {
     '': ['collab', 'classifier', 'templates'],
-    collab: ['identity', 'access', 'maxParticipants', 'quickReactions'],
+    collab: ['identity', 'access', 'link', 'maxParticipants', 'quickReactions'],
     'collab.access': ['teamDomain', 'audience', 'publicUrl', 'acceptCookie', 'avatarHosts'],
+    'collab.link': ['publicUrl'],
     'agent.run': ['maxPreviousRunDiff'],
     classifier: ['enabled', 'provider', 'model', 'accountId', 'apiTokenEnv', 'threshold'],
 };
@@ -55,7 +57,10 @@ export interface PreviousRunsConfigFile {
 
 /** Collaboration's part of the `collab` section of the config file. */
 export interface CollabConfigFile {
-    /** `dev` (loopback only, a name picked on the first visit) or `access` (Cloudflare Access). Default: `dev`. */
+    /**
+     * `dev` (loopback only, a name picked on the first visit), `access` (Cloudflare Access) or `link` (an invite link and
+     * the facilitator's approval, behind a tunnel: `dt collab --tunnel`, or `link.publicUrl`). Default: `dev`.
+     */
     identity?: SessionIdentity;
     /** Cloudflare Access, required with `identity: "access"` (with the app's `allowedHosts` and `allowedOrigins`). */
     access?: {
@@ -69,6 +74,15 @@ export interface CollabConfigFile {
         acceptCookie?: boolean;
         /** Hosts an avatar (the identity's `https` picture) may come from. Default: none, the page shows initials. */
         avatarHosts?: string[];
+    };
+    /** The `link` identity mode. */
+    link?: {
+        /**
+         * The https URL a self-managed tunnel or reverse proxy (ngrok, Tailscale Funnel, cloudflared with your own
+         * hostname, …) serves the session at; its host and origin are then the only ones answered besides loopback.
+         * Unused with `dt collab --tunnel`, whose quick tunnel gives the URL.
+         */
+        publicUrl?: string;
     };
     /** Most participants a session admits. Default: 50. */
     maxParticipants?: number;
@@ -104,6 +118,12 @@ export interface ResolvedAccessConfig {
     avatarHosts: string[];
 }
 
+/** Collaboration's part of `collab.link` resolved. */
+export interface ResolvedLinkConfig {
+    /** The public URL's origin (`https://host[:port]`). */
+    publicUrl?: string;
+}
+
 /** The `classifier` section resolved. */
 export interface ResolvedClassifierConfig {
     enabled: boolean;
@@ -118,6 +138,7 @@ export interface ResolvedClassifierConfig {
 export interface ResolvedCollaborationConfig {
     identity: SessionIdentity;
     access?: ResolvedAccessConfig;
+    link?: ResolvedLinkConfig;
     maxPreviousRunDiff: number;
     maxParticipants: number;
     /** In the form reactions are kept (`normalizeEmoji`). */
@@ -167,6 +188,22 @@ export const ACCESS_CHECKS: Readonly<Record<string, (access: Record<string, unkn
 export function validateAccessNeeded(collab: Record<string, unknown>, fail: (msg: string) => never): void {
     if (collab.identity === 'access' && collab.access === undefined)
         fail("'collab.identity' \"access\" needs 'collab.access' with 'teamDomain' and 'audience'");
+}
+
+/** Whether `url` is an https origin (a path of `/` at most, no credentials, query or fragment): what a public URL must be. */
+export function isHttpsOrigin(url: string): boolean {
+    if (!URL.canParse(url)) return false;
+    const u = new URL(url);
+    return u.protocol === 'https:' && !u.username && !u.password && (u.pathname === '/' || u.pathname === '') && !u.search && !u.hash;
+}
+
+/** Checks `collab.link` (`collab`: an object; the keys of `collab.link` are checked by the app with the others). */
+export function validateLinkConfig(collab: Record<string, unknown>, fail: (msg: string) => never): void {
+    const link = collab.link;
+    if (link === undefined) return;
+    if (!isObject(link)) return fail("'collab.link' must be an object");
+    if (link.publicUrl !== undefined && (typeof link.publicUrl !== 'string' || !isHttpsOrigin(link.publicUrl)))
+        fail("'collab.link.publicUrl' must be an https URL without a path, like 'https://session.example.com'");
 }
 
 /** Checks `agent.run.maxPreviousRunDiff` (`run`: an object). */
@@ -225,9 +262,10 @@ export function validateCollaborationConfig(collab: Record<string, unknown>, fai
 /** Collaboration's settings with their defaults (validated). */
 export function resolveCollaborationConfig(config: CollaborationConfigFile = {}): ResolvedCollaborationConfig {
     const { collab = {}, classifier, templates = [] } = config;
-    const { access } = collab;
+    const { access, link } = collab;
     return {
         identity: collab.identity ?? 'dev',
+        ...(link && { link: { ...(link.publicUrl !== undefined && { publicUrl: new URL(link.publicUrl).origin }) } }),
         ...(access && {
             access: {
                 teamDomain: access.teamDomain,

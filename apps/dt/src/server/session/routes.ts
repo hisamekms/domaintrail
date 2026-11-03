@@ -1,5 +1,6 @@
 // The browser's side of a session (ADR 0026, S4): the REST API under `/api/session/`, the pages under `/session/` (the
-// join form, the facilitator link) and the sign-in answer for a page without an identity. Every input is checked at
+// join form, the facilitator link; in the `link` identity mode the invite and the waiting page, `link-join.ts`) and the
+// sign-in answer for a page without an identity. Every input is checked at
 // the boundary (`input.ts`); every error is typed JSON (`{ "error": { "type": … } }`). Participants read, send
 // messages (addressed to the AI by a mention of it or a reply to it, ADR 0030), react to messages and AI turns, vote on
 // a question's options or an assumption's choices and withdraw their change proposals; only the facilitator addresses
@@ -32,7 +33,8 @@ import type { AgentPresence, Me, MessageTemplateBody, ModelChangesBody, Role, Se
 import type { AccessPolicy, Authorization } from '../http/access.js';
 import { BodyError, mediaType, readJson, readText, sendError, sendJson } from '../http/json.js';
 import type { SessionSurface } from '../http/server.js';
-import { DEV_COOKIE, type Identified, type SessionIdentities } from './identities.js';
+import { type Identified, type SessionIdentities } from './identities.js';
+import { linkCookie, type LinkJoin } from './link-join.js';
 import {
     answer as answerInput,
     assumptionRef,
@@ -94,6 +96,8 @@ export interface SessionHttpDeps {
     readonly issueFacilitatorLink: () => Promise<{ readonly link: string; readonly expiresAt: string }>;
     /** The cookie is `Secure` (the session is served over https). */
     readonly secureCookie: boolean;
+    /** The `link` identity mode's invite and join requests (absent in the other modes). */
+    readonly link?: LinkJoin;
     /** The emoji the add-reaction popover offers first (`session.quickReactions`), sent with the state. */
     readonly quickReactions: readonly string[];
     /** The team's message templates (`templates`), sent with the state. */
@@ -229,9 +233,13 @@ export function stateBody(
     return stateFor(role, body);
 }
 
-/** The cookie that signs a browser in (dev), or out (`secret` undefined). */
-function devCookie(secret: string | undefined, secure: boolean): string {
-    const parts = [`${DEV_COOKIE}=${secret ?? ''}`, 'Path=/', 'HttpOnly', 'SameSite=Strict', secret ? `Max-Age=${COOKIE_MAX_AGE}` : 'Max-Age=0'];
+/**
+ * The cookie that signs a browser in (`dev`, `link`), or out (`secret` undefined). In `link` mode it is Secure and
+ * lives as long as the browser session; in `dev` mode, `COOKIE_MAX_AGE`.
+ */
+function sessionCookie(identities: SessionIdentities, secret: string | undefined, secure: boolean): string {
+    if (identities.mode === 'link') return linkCookie(identities.cookieName, secret);
+    const parts = [`${identities.cookieName}=${secret ?? ''}`, 'Path=/', 'HttpOnly', 'SameSite=Strict', secret ? `Max-Age=${COOKIE_MAX_AGE}` : 'Max-Age=0'];
     if (secure) parts.push('Secure');
     return parts.join('; ');
 }
@@ -352,7 +360,8 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             path: /^\/api\/session\/join$/,
             role: 'anyone',
             handle: async ({ req, res, auth }) => {
-                if (identities.mode !== 'dev') return sendError(res, 404, 'NotFound', 'Participants of this session sign in through Cloudflare Access.');
+                if (identities.mode === 'access') return sendError(res, 404, 'NotFound', 'Participants of this session sign in through Cloudflare Access.');
+                if (identities.mode === 'link') return sendError(res, 404, 'NotFound', 'Join this session through its invite link.');
                 const raw = await input(req, res, ['name']);
                 if (!raw) return;
                 const name = checked(res, displayName(raw.name));
@@ -360,7 +369,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 if (auth.kind === 'participant') return sendJson(res, 200, meOf(session, auth));
                 const r = await signIn(name);
                 if (!r.ok) return fail(res, r.error);
-                sendJson(res, 201, meOf(session, r.identified), { 'set-cookie': devCookie(r.secret, deps.secureCookie) });
+                sendJson(res, 201, meOf(session, r.identified), { 'set-cookie': sessionCookie(identities, r.secret, deps.secureCookie) });
             },
         },
         {
@@ -368,14 +377,14 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             path: /^\/api\/session\/leave$/,
             role: 'participant',
             handle: async ({ req, res, auth }) => {
-                if (identities.mode !== 'dev') {
+                if (identities.mode === 'access') {
                     // the sign-in is Cloudflare's: this identity's pages close, and the page goes on to Access's logout
                     deps.disconnect(who(auth).participant.identity, 'signed out');
                     return sendJson(res, 200, { left: true, logout: ACCESS_LOGOUT });
                 }
                 const left = await identities.signOut(req.headers);
                 if (left) deps.disconnect(left, 'signed out');
-                sendJson(res, 200, { left: left !== undefined }, { 'set-cookie': devCookie(undefined, deps.secureCookie) });
+                sendJson(res, 200, { left: left !== undefined }, { 'set-cookie': sessionCookie(identities, undefined, deps.secureCookie) });
             },
         },
         {
@@ -885,6 +894,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 sendJson(res, 201, await deps.issueFacilitatorLink());
             },
         },
+        ...linkRoutes(deps.link),
         {
             method: 'POST',
             path: /^\/api\/session\/close$/,
@@ -915,13 +925,48 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
 
     const signInAnswer: SessionSurface['signIn'] = (req, url, res) => {
         const language = pageLanguage(req.headers['accept-language']);
-        if (identities.mode === 'dev') return joinPage(res, language, 401, `${url.pathname}${url.search}`, { name: rememberedName(req.headers) });
+        const next = `${url.pathname}${url.search}`;
+        if (identities.mode === 'dev') return joinPage(res, language, 401, next, { name: rememberedName(req.headers) });
+        // `link`: the facilitator signs in with their link (a name, then the role); anyone else needs the invite
+        if (identities.mode === 'link') {
+            if (url.pathname === '/session/facilitator') return joinPage(res, language, 401, next, { name: rememberedName(req.headers) });
+            return messagePage(res, language, 401, 'useInvite');
+        }
         messagePage(res, language, 401, 'signInRequired');
+    };
+
+    /** `link`: the join form of a facilitator link posted: a name, signed in holding the role (the code used up). */
+    const facilitatorJoin = async (req: IncomingMessage, res: ServerResponse, language: ReturnType<typeof pageLanguage>, auth: Admitted): Promise<void> => {
+        if (req.method !== 'POST') return messagePage(res, language, 405, 'formMethod');
+        if (mediaType(req) !== 'application/x-www-form-urlencoded') return messagePage(res, language, 415, 'formMediaType');
+        let form: URLSearchParams;
+        try {
+            form = new URLSearchParams(await readText(req, MAX_FORM));
+        } catch (e) {
+            if (e instanceof BodyError) return messagePage(res, language, e.status, 'formTooLarge');
+            throw e;
+        }
+        if (auth.kind === 'participant') return redirect(res, '/');
+        const next = safeNext(form.get('next'));
+        const code = next.startsWith('/session/facilitator?') ? (new URLSearchParams(next.slice(next.indexOf('?') + 1)).get('code') ?? '') : '';
+        if (!/^[A-Za-z0-9_-]{16,128}$/.test(code)) return messagePage(res, language, 401, 'useInvite');
+        const remembered = { name: rememberedName(req.headers) };
+        const name = displayName(form.get('name') ?? '');
+        if (!name.ok) return joinPage(res, language, 400, next, { ...remembered, error: 'invalidName' });
+        const r = await identities.signInFacilitator(name.value, code);
+        if (!r.ok) return r.error.type === 'LinkInvalid' ? messagePage(res, language, 409, 'linkNotValid') : messagePage(res, language, 409, 'sessionClosed');
+        if (r.value.previous) deps.disconnect(r.value.previous, 'facilitator changed');
+        deps.facilitatorChanged();
+        await deps.pump();
+        deps.log('facilitator claimed');
+        return redirect(res, '/', [sessionCookie(identities, r.value.secret, true), nameCookie(name.value, true)]);
     };
 
     const pages: SessionSurface['pages'] = async (req, url, res, auth) => {
         const language = pageLanguage(req.headers['accept-language']);
+        if (deps.link && (await deps.link.page(req, url, res, auth.kind === 'participant'))) return;
         if (url.pathname === '/session/join') {
+            if (identities.mode === 'link') return facilitatorJoin(req, res, language, auth);
             if (identities.mode !== 'dev') return messagePage(res, language, 404, 'signInThroughAccess');
             const remembered = { name: rememberedName(req.headers) };
             if (req.method === 'GET' || req.method === 'HEAD') {
@@ -948,7 +993,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                     error: r.error.type === 'SessionFull' ? 'sessionFull' : 'sessionNotOpen',
                 });
             // the name is remembered for the next join form, of this session or another one on the host
-            return redirect(res, next, [devCookie(r.secret, deps.secureCookie), nameCookie(name.value, deps.secureCookie)]);
+            return redirect(res, next, [sessionCookie(identities, r.secret, deps.secureCookie), nameCookie(name.value, deps.secureCookie)]);
         }
         if (url.pathname === '/session/facilitator') {
             if (req.method !== 'GET' && req.method !== 'HEAD') return messagePage(res, language, 405, 'linkMethod');
@@ -968,6 +1013,83 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
     };
 
     return { policy: { ...deps.hostPolicy, identify: (headers) => identities.identify(headers) }, api, pages, signIn: signInAnswer };
+}
+
+/** A join request's ID in a path. */
+const LINK_ID = '([A-Za-z0-9_-]{1,64})';
+
+/**
+ * The `link` identity mode's API, for the facilitator only: make or stop the invite link, the pending join requests
+ * (also pushed to their pages), approve or deny one, remove a participant. None without `link`.
+ */
+function linkRoutes(link: LinkJoin | undefined): Route[] {
+    if (!link) return [];
+    const empty = async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
+        try {
+            await readJson(req, 1024);
+            return true;
+        } catch (e) {
+            bodyError(res, e);
+            return false;
+        }
+    };
+    const decided = (res: ServerResponse, r: ReturnType<LinkJoin['approve']>): void =>
+        r.ok ? sendJson(res, 200, { id: r.value.id, state: r.value.state }) : sendError(res, 404, r.error.type, 'No such pending join request.');
+    return [
+        {
+            method: 'POST',
+            path: /^\/api\/session\/invite$/,
+            role: 'facilitator',
+            handle: async ({ req, res }) => {
+                if (!(await empty(req, res))) return;
+                const issued = await link.issueInvite();
+                if (!issued.ok) return fail(res, issued.error);
+                sendJson(res, 201, issued.value);
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/invite\/revoke$/,
+            role: 'facilitator',
+            handle: async ({ req, res }) => {
+                if (!(await empty(req, res))) return;
+                sendJson(res, 200, { revoked: await link.revokeInvite() });
+            },
+        },
+        {
+            method: 'GET',
+            path: /^\/api\/session\/join-requests$/,
+            role: 'facilitator',
+            handle: async ({ res }) => sendJson(res, 200, await link.snapshot()),
+        },
+        {
+            method: 'POST',
+            path: new RegExp(`^/api/session/join-requests/${LINK_ID}/approve$`),
+            role: 'facilitator',
+            handle: async ({ req, res, params }) => {
+                if (await empty(req, res)) decided(res, link.approve(params[0]));
+            },
+        },
+        {
+            method: 'POST',
+            path: new RegExp(`^/api/session/join-requests/${LINK_ID}/deny$`),
+            role: 'facilitator',
+            handle: async ({ req, res, params }) => {
+                if (await empty(req, res)) decided(res, link.deny(params[0]));
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/participants\/([A-Za-z0-9:%_-]{1,128})\/remove$/,
+            role: 'facilitator',
+            handle: async ({ req, res, params }) => {
+                if (!(await empty(req, res))) return;
+                const removed = await link.remove(params[0].replace(/%3A/gi, ':'));
+                if (!removed.ok) return sendError(res, 409, removed.error.type, 'This participant cannot be removed.');
+                sendJson(res, 200, { removed: true });
+            },
+        },
+    ];
 }
 
 function redirect(res: ServerResponse, location: string, cookie?: string | string[]): void {

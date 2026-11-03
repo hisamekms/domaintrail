@@ -4,6 +4,8 @@
 // identity mode (an opaque cookie mapped to a picked name). Secrets leave here once, to the caller; only their SHA-256
 // is kept. A pairing code is stored beside the facilitator links under a hash of its own domain (`AGENT_CODE_DOMAIN`),
 // and so is a sign-in link of `dt open` issued again (`dt open link`, `OPEN_CODE_DOMAIN`): no kind is accepted as another.
+// The invite link of the `link` identity mode is apart from them all (`INVITE_DOMAIN`, a table of its own): used any
+// number of times until it expires or is revoked, one live per session (a new one revokes the previous).
 import { err, ok, type Collaboration, type Result } from '../generated/index.js';
 import { sha256Hex } from '../domain/sha256.js';
 import type { Identity, IdentityKey } from './identity.js';
@@ -44,8 +46,21 @@ export interface SessionAccess {
     issueOpenCode(input: { readonly session: SessionId; readonly ttlMs: number }): Promise<Result<FacilitatorLink, SessionNotOpen>>;
     /** Uses a sign-in code of `dt open`: whether it was valid (unused, unexpired, a sign-in code of this session). */
     redeemOpenCode(input: { readonly session: SessionId; readonly code: string }): Promise<boolean>;
-    /** Revokes every unused link of the session: facilitator links, agent pairing codes, `dt open`'s sign-in codes (its server stops). */
+    /**
+     * Revokes every unused link of the session: facilitator links, agent pairing codes, `dt open`'s sign-in codes and
+     * the invite (its server stops).
+     */
     revokeLinks(session: SessionId): Promise<void>;
+    /** A new invite link's code for the open session, valid for `ttlMs` and any number of uses; the previous one is revoked. */
+    issueInvite(input: { readonly session: SessionId; readonly ttlMs: number }): Promise<Result<FacilitatorLink, SessionNotOpen>>;
+    /** When the invite of `code` expires, if it is the session's and neither revoked nor expired (it is not used up). */
+    checkInvite(input: { readonly session: SessionId; readonly code: string }): Promise<Date | undefined>;
+    /** When the session's live invite expires, if it has one. */
+    liveInvite(session: SessionId): Promise<Date | undefined>;
+    /** Revokes the session's invite: whether one was live. */
+    revokeInvite(session: SessionId): Promise<boolean>;
+    /** Revokes every sign-in of `identity` in the session (removed by the facilitator): whether there was one. */
+    signOutIdentity(input: { readonly session: SessionId; readonly identity: IdentityKey }): Promise<boolean>;
     /** The identity holding the facilitator role, if one claimed it. */
     facilitator(session: SessionId): Promise<IdentityKey | undefined>;
     /** Signs `identity` in (dev mode): the cookie's secret, returned once. */
@@ -69,6 +84,9 @@ const agentCodeHash = (code: string): string => secretHash(`${AGENT_CODE_DOMAIN}
 /** The domain a sign-in code of `dt open` is hashed in. */
 const OPEN_CODE_DOMAIN = 'dt-open-sign-in:';
 const openCodeHash = (code: string): string => secretHash(`${OPEN_CODE_DOMAIN}${code}`);
+/** The domain an invite link's code is hashed in. */
+const INVITE_DOMAIN = 'dt-invite:';
+const inviteHash = (code: string): string => secretHash(`${INVITE_DOMAIN}${code}`);
 
 export function createSessionAccess(deps: { readonly uow: UnitOfWork; readonly clock: Clock; readonly secrets: SecretGenerator }): SessionAccess {
     const { uow, clock, secrets } = deps;
@@ -125,7 +143,42 @@ export function createSessionAccess(deps: { readonly uow: UnitOfWork; readonly c
         },
 
         async revokeLinks(session) {
-            await uow.transaction((stores) => stores.access.revokeLinks(session, clock.now()));
+            await uow.transaction((stores) => {
+                stores.access.revokeLinks(session, clock.now());
+                stores.access.revokeInvites(session, clock.now());
+            });
+        },
+
+        async issueInvite({ session, ttlMs }) {
+            return uow.transaction((stores) => {
+                const open = stores.sessions.load(session);
+                if (open?.state !== 'Open' || open.mode === 'Solo') return err({ type: 'SessionNotOpen' });
+                const code = secrets.newSecret();
+                const now = clock.now();
+                const expiresAt = new Date(now.getTime() + ttlMs);
+                stores.access.addInvite(inviteHash(code), session, expiresAt, now);
+                return ok({ code, expiresAt });
+            });
+        },
+
+        async checkInvite({ session, code }) {
+            return uow.transaction((stores) => {
+                const now = clock.now();
+                if (stores.sessions.load(session)?.state !== 'Open' || stores.access.invite(inviteHash(code), now) !== session) return undefined;
+                return stores.access.liveInvite(session, now);
+            });
+        },
+
+        async liveInvite(session) {
+            return uow.transaction((stores) => stores.access.liveInvite(session, clock.now()));
+        },
+
+        async revokeInvite(session) {
+            return uow.transaction((stores) => stores.access.revokeInvites(session, clock.now()));
+        },
+
+        async signOutIdentity({ session, identity }) {
+            return uow.transaction((stores) => stores.access.revokeSignInsOf(session, identity, clock.now()) > 0);
         },
 
         async facilitator(session) {

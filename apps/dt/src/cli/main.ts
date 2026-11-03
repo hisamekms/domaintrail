@@ -19,9 +19,11 @@ import {
     type SourcesExportOptions,
     type StartedAgent,
     type StartedSession,
+    type StartedTunnel,
+    TunnelError,
 } from './ports.js';
 import { lookup, showJson, showText } from './show.js';
-import { approveSettings, NotApproved } from './trust.js';
+import { approveSettings, NotApproved, type StartFlags } from './trust.js';
 import guide from '../../../../docs/guide.md' with { type: 'text' };
 
 export interface CliIO {
@@ -439,6 +441,7 @@ Examples:
     const collab = serveOptions(
         program
             .command('collab')
+            .option('--tunnel', 'serve the session on the internet through a Cloudflare quick tunnel (cloudflared, no account): identity link')
             .description('Start the collaboration session: the Live View, the chat and the AI for several people (runs until Ctrl+C or the session closes).')
             .addHelpText(
                 'after',
@@ -447,7 +450,10 @@ Serves the Live View and the workspace's collaboration session: participants sig
 collab.identity: dev, a name picked in the browser on loopback; access, Cloudflare Access), send messages about
 elements of the model, and address the AI with @AI; the facilitator decides what changes. One session per workspace:
 an open session is resumed, and a \`dt open\` session is continued with you as its facilitator. Prints a one-time
-facilitator link: open it in your browser to become the facilitator (\`dt collab link\` prints another). The agent
+facilitator link: open it in your browser to become the facilitator (\`dt collab link\` prints another). With
+--tunnel, \`cloudflared\` gives the session a temporary public https://….trycloudflare.com address and the identity
+mode is link: people join through the invite link printed (and the page's 招待), and you let each one in from the
+page (docs/session-link.md); cloudflared stops with the session. The agent
 (Claude Code) starts in this process when \`claude\` is usable; otherwise the server starts without it and says why.
 The agent API listens on 127.0.0.1 only; its credential is in memory, never on disk (\`dt collab agent-link\` pairs
 another agent).
@@ -456,38 +462,69 @@ Examples:
   dt collab
   dt collab --port 8080
   dt collab --no-agent          the agent on another machine or terminal (dt agent)
+  dt collab --tunnel            on the internet: an invite link and your approval of each person
   dt collab link                another facilitator link
   dt -r examples/shop collab`,
             ),
         'collab',
         'host to bind (default: collab.host, else 127.0.0.1; the dev identity mode allows loopback only)',
-    ).action(async (opts: ServeOptions) => {
+    ).action(async (opts: ServeOptions & { tunnel?: boolean }) => {
         const cfg = await config();
-        await approve(cfg, opts.yes);
+        if (opts.tunnel && cfg.collab.identity === 'access')
+            throw new CliError(
+                '--tunnel starts a quick tunnel for the link identity mode; with identity "access", run your own named tunnel (docs/session-access.md).',
+            );
+        await approve(cfg, opts.yes, { tunnel: opts.tunnel ?? false });
         const { UnknownRevisionError } = await import('@domaintrail/visualization');
-        const settings = sessionSettings(cfg, cfg.collab, opts);
+        let settings = sessionSettings(cfg, cfg.collab, opts);
+        let tunnel: StartedTunnel | undefined;
+        if (opts.tunnel) {
+            if (!isLoopback(settings.host))
+                throw new CliError(`--tunnel serves loopback only (cloudflared connects there); ${settings.host} is not a loopback address.`);
+            settings = { ...settings, identity: 'link' };
+        }
+        // the tunnel starts once the server holds the port: nothing else can take it in between
+        const startTunnel = async (port: number): Promise<string> => {
+            tunnel = await deps.startTunnel({ port, log: io.out });
+            io.out(`Tunnel: ${tunnel.url} (a Cloudflare quick tunnel: public, temporary, gone when the session ends)`);
+            return tunnel.url;
+        };
         const server = await deps
             .startSessionServer({
                 ...workspaceOf(cfg),
                 base: opts.base,
                 mode: 'Collab',
                 session: settings,
+                ...(opts.tunnel && { quickTunnel: true, publicUrlAfterListen: startTunnel }),
                 log: io.out,
             })
-            .catch((e: unknown) => {
+            .catch(async (e: unknown) => {
+                await tunnel?.stop();
+                if (e instanceof TunnelError) throw new CliError(e.message);
                 if (e instanceof SessionError) throw new CliError(e.message);
                 if (e instanceof UnknownRevisionError) throw new CliError(`${e.message}: pass a branch, tag or commit to --base.`);
                 if (errorCode(e) === 'EADDRINUSE')
                     throw new CliError(`Port ${settings.port} on ${settings.host} (or the agent port) is already in use; pick another with --port.`);
                 throw e;
             });
+        // cloudflared ending by itself ends nothing else: the session goes on, on this machine
+        void tunnel?.exited.then(() => io.out('Tunnel: cloudflared stopped.'));
         await printConfig(cfg);
         const opened = server.opened === 'collaborated' ? 'continued from dt open' : server.opened;
         io.out(`Session: ${server.session} (${opened}, identity ${settings.identity})`);
-        io.out(`Live View: ${server.url}`);
+        io.out(`Live View: ${server.publicUrl ? `${server.publicUrl}/ (on this machine: ${server.url})` : server.url}`);
         if (server.facilitatorLink) io.out(`Facilitator link (single use, expires in 10 minutes): ${server.facilitatorLink}`);
+        if (server.issueInvite) {
+            // `link`: the invite to share; each person who opens it asks to join, and you let them in from the page
+            const invite = await server.issueInvite();
+            io.out(`Invite link (anyone with it can ask to join; expires in 60 minutes; the page's 招待 makes another): ${invite.link}`);
+        }
         io.out(`Agent API: ${server.agentUrl} (another agent pairs with a code: dt collab agent-link)`);
-        await serveWithAgent(cfg, opts, server);
+        try {
+            await serveWithAgent(cfg, opts, server);
+        } finally {
+            await tunnel?.stop();
+        }
     });
     collab
         .command('link')
@@ -509,6 +546,31 @@ Examples:
                 throw e;
             });
             io.out(`Facilitator link (single use, expires in 10 minutes): ${link}`);
+        });
+
+    collab
+        .command('invite')
+        .description('Print a new invite link for the link-mode collaboration session running on the workspace (the previous one stops working).')
+        .option('--stop', 'stop the invite link instead: nobody can ask to join with it any more')
+        .addHelpText(
+            'after',
+            `
+In the link identity mode (\`dt collab --tunnel\`, or collab.identity "link"), people join through an invite link:
+whoever opens it gives a name and waits until the facilitator lets them in (or not) from the page. The link works for
+60 minutes, any number of times; a new one stops the previous one, and the requests made through it expire.
+
+Examples:
+  dt collab invite
+  dt collab invite --stop`,
+        )
+        .action(async (opts: { stop?: boolean }) => {
+            const cfg = await config();
+            const invite = await deps.issueInvite(cfg.root, opts.stop ?? false).catch((e: unknown) => {
+                if (e instanceof SessionError) throw new CliError(e.message);
+                throw e;
+            });
+            if ('stopped' in invite) io.out(invite.stopped ? 'Invite link stopped.' : 'No invite link was live.');
+            else io.out(`Invite link (anyone with it can ask to join; expires in 60 minutes): ${invite.link}`);
         });
 
     open.command('link')
@@ -813,11 +875,12 @@ Examples:
     };
 
     /** Starts only with approved security-relevant settings (`approveSettings`); refused: a one-line error. */
-    const approve = async (cfg: ResolvedConfig, yes: boolean | undefined): Promise<void> => {
+    const approve = async (cfg: ResolvedConfig, yes: boolean | undefined, flags: StartFlags = {}): Promise<void> => {
         await approveSettings(
             cfg,
             { ...(deps.trust && { trust: deps.trust }), ...(deps.confirm && { confirm: (q: string) => deps.confirm!(q) }), out: io.out },
             yes ?? false,
+            flags,
         ).catch((e: unknown) => {
             if (e instanceof NotApproved) throw new CliError(e.message);
             throw e;

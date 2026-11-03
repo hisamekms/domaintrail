@@ -1,15 +1,20 @@
 // Who is at the other end of a request (ADR 0026): an identity proven by the identity mode of the session (`dev`, a
-// name picked on the first visit and a session cookie; `access`, a Cloudflare Access token), and the participant it
+// name picked on the first visit and a session cookie; `access`, a Cloudflare Access token; `link`, a session cookie
+// given once the facilitator approved a join request made through the invite link), and the participant it
 // stands for. The facilitator is assigned locally (a one-time link), never derived from the identity provider.
 import { Collaboration } from '../generated/index.js';
 
-/** The identity modes of a session, explicit in the configuration (`collab.identity`), never inferred from headers. */
-export type IdentityMode = 'dev' | 'access';
+/**
+ * The identity modes of a session, explicit in the configuration (`collab.identity`), never inferred from headers:
+ * `dev` (loopback, a picked name), `access` (Cloudflare Access), `link` (a shared invite link and the facilitator's
+ * approval of each join request, behind a tunnel).
+ */
+export type IdentityMode = 'dev' | 'access' | 'link';
 
 /** A proven identity. The e-mail is never shown to other participants. */
 export interface Identity {
     readonly provider: IdentityMode;
-    /** Stable for the person within the provider: a random ID (dev), the token's `sub` (access). */
+    /** Stable for the person within the provider: a random ID (dev, link), the token's `sub` (access). */
     readonly subject: string;
     readonly displayName: string;
     readonly email?: string;

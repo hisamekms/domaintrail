@@ -2,9 +2,10 @@
 // the drafts in IndexedDB. The page is in a session only once the socket sent `session.state`; under `dt view` it never
 // does, so nothing here calls the session API or sends anything there.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Cursor, Me, RunActivity, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
+import type { Cursor, InviteStateBody, JoinRequestBody, Me, RunActivity, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import type { ViewSocket } from '../app/useViewSocket';
+import { reloadForSignIn } from '../app/sign-in';
 import type { DiagramCanvas } from '../view/diagram';
 import { SessionApiError, sessionApi, type TargetStatuses } from './api';
 import {
@@ -28,7 +29,10 @@ import type { ModelTarget, TargetDraft } from './targets';
 /** The WebSocket close codes of a session (apps/dt's `WS_SESSION_CLOSED`, `WS_REVOKED`). */
 const WS_SESSION_CLOSED = 4000;
 const WS_REVOKED = 4001;
-/** The Access token of the page expired (apps/dt's `WS_EXPIRED`): the socket reconnects; a reload signs in again. */
+/**
+ * The Access token of the page expired (apps/dt's `WS_EXPIRED`): the socket reconnects when Access still lets the page
+ * in; else a reload signs in again.
+ */
 const WS_EXPIRED = 4002;
 /** At most 20 presence updates a second (the server's interval). */
 export const PRESENCE_INTERVAL_MS = 50;
@@ -48,6 +52,8 @@ export interface SessionData {
     readonly error: string | undefined;
     /** What the running runs are doing, by run ID (the latest each reported; shown only while a run is running). */
     readonly activities: Readonly<Record<string, RunActivity>>;
+    /** `link`, the facilitator's page: the pending join requests and the live invite (undefined elsewhere). */
+    readonly joining?: { readonly requests: readonly JoinRequestBody[]; readonly invite: InviteStateBody | null; readonly inviteUsedUp: boolean };
 }
 
 const NO_ACTIVITIES: Readonly<Record<string, RunActivity>> = {};
@@ -64,12 +70,14 @@ export function useSession(socket: ViewSocket, current: ViewPayload | null): Ses
     const [targets, setTargets] = useState<TargetStatuses | undefined>();
     const [error, setError] = useState<string | undefined>();
     const [activities, setActivities] = useState<Readonly<Record<string, RunActivity>>>(NO_ACTIVITIES);
+    const [joining, setJoining] = useState<SessionData['joining']>();
 
     useEffect(
         () =>
             subscribe((m) => {
                 if (m.type === 'session.activities') return setActivities(m.activities);
                 if (m.type === 'run.activity') return setActivities((a) => ({ ...a, [m.run]: m.activity }));
+                if (m.type === 'join.requests') return setJoining({ requests: m.requests, invite: m.invite, inviteUsedUp: m.inviteUsedUp ?? false });
                 if (m.type === 'session.state') {
                     setEpoch((e) => e + 1);
                     setStatus('live');
@@ -86,14 +94,18 @@ export function useSession(socket: ViewSocket, current: ViewPayload | null): Ses
             subscribeClose((code) => {
                 setModel(disconnected);
                 setPeers(NO_PEERS);
+                // the server sends them again to a facilitator's page that reconnects
+                setJoining(undefined);
                 if (code === WS_SESSION_CLOSED) setStatus('closed');
                 if (code === WS_EXPIRED && inSession) {
-                    // the socket reconnects by itself; when the sign-in is gone, a reload lets Access sign the page in again
+                    // the socket reconnects by itself; when the sign-in is gone, a reload lets Access sign the page in again.
+                    // Behind Access, Access answers for the server then (SignInRequired: the API client reloaded already);
+                    // the server's own 401 is what a token the server no longer takes gets
                     sessionApi.me().then(
                         () => undefined,
                         (e: unknown) => {
-                            if (e instanceof SessionApiError && e.status === 401) location.reload();
-                            else setError(message(e));
+                            if (e instanceof SessionApiError && e.status === 401 && reloadForSignIn()) return;
+                            setError(message(e));
                         },
                     );
                     return;
@@ -132,8 +144,11 @@ export function useSession(socket: ViewSocket, current: ViewPayload | null): Ses
     }, [inSession, requestCount, current]);
 
     return useMemo(
-        () => (model.state && model.me ? { me: model.me, state: model.state, peers, status, targets, epoch, error, activities } : undefined),
-        [model.state, model.me, peers, status, targets, epoch, error, activities],
+        () =>
+            model.state && model.me
+                ? { me: model.me, state: model.state, peers, status, targets, epoch, error, activities, ...(joining && { joining }) }
+                : undefined,
+        [model.state, model.me, peers, status, targets, epoch, error, activities, joining],
     );
 }
 

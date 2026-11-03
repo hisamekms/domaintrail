@@ -114,7 +114,7 @@ describe("Collaboration's settings", () => {
     });
 
     test.each([
-        [{ identity: 'basic' }, "'collab.identity' must be one of 'dev', 'access'"],
+        [{ identity: 'basic' }, "'collab.identity' must be one of 'dev', 'access', 'link'"],
         [{ identity: 'access' }, "'collab.identity' \"access\" needs 'collab.access' with 'teamDomain' and 'audience'"],
         [{ access: [] }, "'collab.access' must be an object"],
         [{ access: { teamDomain: 't' } }, "'collab.access.audience' must be a non-empty string"],
@@ -136,7 +136,7 @@ describe("Collaboration's settings", () => {
         [{ quickReactions: ['👍👍'] }, "'collab.quickReactions' must hold one emoji per entry: '👍👍'"],
         [{ quickReactions: ['❤', '❤️'] }, "'collab.quickReactions' must not repeat an emoji: '❤️'"],
         // the first refusal wins: the identity before the participants
-        [{ maxParticipants: 0, identity: 'basic' }, "'collab.identity' must be one of 'dev', 'access'"],
+        [{ maxParticipants: 0, identity: 'basic' }, "'collab.identity' must be one of 'dev', 'access', 'link'"],
     ])('collab %j is refused', (collab, message) => {
         expect(refusal(collab)).toBe(message);
     });

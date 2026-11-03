@@ -149,9 +149,22 @@
           "default": "127.0.0.1"
         },
         "identity": {
-          "description": "How participants prove who they are: dev (loopback only, a name picked on the first visit, a session cookie) or access (Cloudflare Access). Never inferred from headers.",
-          "enum": ["dev", "access"],
+          "description": "How participants prove who they are: dev (loopback only, a name picked on the first visit, a session cookie), access (Cloudflare Access) or link (a shared invite link and the facilitator's approval of each join request, behind a tunnel: dt collab --tunnel, or link.publicUrl). Never inferred from headers.",
+          "enum": ["dev", "access", "link"],
           "default": "dev"
+        },
+        "link": {
+          "description": "The link identity mode (docs/session-link.md).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "publicUrl": {
+              "description": "The https URL (no path) a self-managed tunnel or reverse proxy serves the session at; its host and origin are then the only ones answered besides loopback. Unused with dt collab --tunnel, whose quick tunnel gives the URL.",
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https://[^/?#]+/?$"
+            }
+          }
         },
         "access": {
           "description": "Cloudflare Access, required with identity \"access\".",

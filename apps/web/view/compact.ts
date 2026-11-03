@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { LaidOutGraph } from '@domaintrail/visualization';
+import { fetchServer } from '../app/sign-in';
 
 /**
  * The compact layouts (「詰めて表示」, printing) of the pushed graphs: the server lays a graph out compactly on request
@@ -41,7 +42,7 @@ export function fetchCompact(graph: LaidOutGraph): Promise<LaidOutGraph | null> 
     const key = compactCacheKey(graph);
     const running = pending.get(key);
     if (running) return running;
-    const request = fetch(`/api/compact?${new URLSearchParams({ graph: graph.id })}`)
+    const request = fetchServer(`/api/compact?${new URLSearchParams({ graph: graph.id })}`)
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the response of our own server's api/compact
         .then((r) => (r.ok ? (r.json() as Promise<LaidOutGraph>) : null))
         .then((laid) => {

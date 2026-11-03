@@ -1244,3 +1244,55 @@ told the view was); the canvas's controls, how it is looked at.
   Behind the access check of the view's API: in a session the page's identity (the dev cookie, or Access's JWT;
   none: 401) for every role; in the read-only Live View (`dt open --host`) the Host/Origin check only, like the view
   itself. The page fetches it, so that a failure is told in the menu, then saves it under the server's name.
+
+### As built: joining over the internet with an invite link (the `link` identity mode)
+
+- **Decided by the user**: collaborate over the internet without Cloudflare Access: a third identity mode, `link`
+  (a shared invite link and the facilitator's approval of each join request), and `dt collab --tunnel` (a Cloudflare
+  quick tunnel, no account). How to run it, what participants see, the security model and its limits:
+  [docs/session-link.md](../session-link.md).
+- **Config**: `collab.identity: "link"`; `collab.link.publicUrl` (an https origin, no path) for a self-managed tunnel
+  or reverse proxy. `--tunnel` switches the identity to `link` (decided: it implies it rather than requiring it; refused
+  with `identity: "access"`, `--port 0` or a non-loopback host) and uses the quick tunnel's URL as the public URL. The
+  allowed host and origin are derived from the public URL, never configured apart. `collab.link` and `--tunnel` are in
+  the start's approval (`collab --tunnel` as a key of its own, so that settings approved before keep their hash).
+- **Collaboration**: the invite (`SessionAccess.issueInvite` / `checkInvite` / `liveInvite` / `revokeInvite`; a table of
+  its own, migration 13, its code hashed in a domain of its own; one live per session; revoked with the server's
+  links), revoking one identity's sign-ins (`signOutIdentity`), and the join requests (`createJoinRequests`, in the
+  server's memory: pending, approved then admitted once, denied, expired after 10 minutes or with the invite; at most
+  20 pending, 100 per invite, 5 per client key per 10 minutes). The protocol's `join.requests` message (to the
+  facilitator's pages only) and the invite bodies.
+- **Server** (`apps/dt/src/server/session/link-join.ts`): `/session/invite` (the name form, posted with the code; a
+  request made, then a redirect to `/session/wait`), `/session/wait` (reloads itself with a meta refresh, no script;
+  approved: signs in and goes to `/`; denied or expired: says so). Facilitator-only API: `POST /api/session/invite`,
+  `POST /api/session/invite/revoke`, `GET /api/session/join-requests`, `POST /api/session/join-requests/:id/approve|deny`,
+  `POST /api/session/participants/:id/remove`. The facilitator signs in with the facilitator link: not signed in, it
+  asks for a name and signs in holding the role (the code checked first: nothing is signed in with a bad one). The
+  cookies (`__Host-dt_link_<random>`, `__Host-dt_wait_<random>`): HttpOnly, Secure, SameSite=Strict, named per server.
+  Every request answers the public host or loopback only; a change (any method but GET/HEAD) and the WebSocket's
+  upgrade need the public origin (`AccessPolicy.requireOrigin`). The rate limit's client key reads `CF-Connecting-IP`
+  only from loopback and only behind the quick tunnel this process started (`quickTunnel`). Every sign-in of the
+  session ends when a link server starts and stops, and a sign-in of another mode is never accepted (after the
+  security review of this branch). `server.json` records the public URL, so `dt collab link` and `dt collab invite`
+  (`--stop`) print links on it; the server notices an invite changed there within seconds.
+- **Tunnel** (`apps/dt/src/wiring/tunnel.ts`): `cloudflared tunnel --url http://127.0.0.1:<port> --no-autoupdate`;
+  the `https://<words>.trycloudflare.com` URL read from its output (never `api.trycloudflare.com`), then the first
+  "Registered tunnel connection" waited for (10 s at most); clear errors when cloudflared is missing, exits first or
+  gives no URL in 30 s. Stopped with the session, on Ctrl+C (after the server), when the server cannot start, and by
+  an `exit` handler on any other end; SIGTERM, then SIGKILL after 3 s.
+- **Page**: the facilitator's collab menu has 招待 (makes the link and copies it) and 招待を止める while one is live; a
+  participant has no invite to copy. Each person waiting is one row in the chat's head (name, 許可, 拒否). The
+  participant list offers removing someone who joined through the invite.
+- **After the review of this branch** (2026-11-03): behind a proxy of one's own (no `--tunnel`) no per-client limit
+  (clients cannot be told apart), only the pending and per-invite caps; IPv6 counted by its /64; a new invite resets
+  the counts; the facilitator's page says when the invite is used up (`join.requests.inviteUsedUp`). The waiting page
+  clears only its own cookie, and only when sent; stopping the invite turns away the approved not yet in. A session's
+  Live View and API are `frame-ancestors 'none'` and `no-store`, but for the content-hashed files of the page. Names
+  refuse format characters (Cf; an emoji's ZWJ allowed); a request whose name is a participant's (or a connected
+  page's) or another request's is marked, and each shows when it was made. The quick tunnel starts once the server
+  holds the port (`publicUrlAfterListen`), so `--port 0` works with `--tunnel`.
+- **Checked for real** (2026-11-03, macOS, cloudflared from Homebrew, system Chrome through Playwright): `dt collab
+  --tunnel --port 4530 --yes --no-agent` on a scratch copy of `examples/shop`; the facilitator link opened at the
+  trycloudflare URL, an invite made from the menu, a second browser asked to join and was let in as a participant, a
+  third was denied; `dt collab link` and `dt collab invite` printed links on the public URL; Ctrl+C left no
+  cloudflared.

@@ -24,6 +24,8 @@ export interface ServerAddress {
     readonly url: string;
     /** The agent API (loopback); absent in a file of an older version. */
     readonly agentUrl?: string;
+    /** The public origin of a `link` session (a tunnel's): the links printed by other commands are made with it. */
+    readonly publicUrl?: string;
     readonly session: string;
     readonly pid: number;
 }
@@ -49,7 +51,13 @@ export const writeServerAddress = (root: string, address: ServerAddress): Promis
 export async function readServerAddress(root: string): Promise<ServerAddress | undefined> {
     const v = await readJson(root, SERVER_FILE);
     if (!isObject(v) || typeof v.url !== 'string' || typeof v.session !== 'string' || typeof v.pid !== 'number') return undefined;
-    return { url: v.url, ...(typeof v.agentUrl === 'string' && { agentUrl: v.agentUrl }), session: v.session, pid: v.pid };
+    return {
+        url: v.url,
+        ...(typeof v.agentUrl === 'string' && { agentUrl: v.agentUrl }),
+        ...(typeof v.publicUrl === 'string' && { publicUrl: v.publicUrl }),
+        session: v.session,
+        pid: v.pid,
+    };
 }
 
 /** Removes the `agent.json` an older version left (a credential on disk), whoever wrote it; not through a link. */

@@ -8,7 +8,7 @@ import { listedParticipants, type Peers } from './presence';
 import { participantAvatars, participantNames } from './stream';
 
 /** An action of the collab menu (below its list of participants). */
-export type CollabMenuItem = 'invite' | 'record' | 'restore' | 'download-sources' | 'hand-over' | 'end' | 'leave';
+export type CollabMenuItem = 'invite' | 'stop-invite' | 'record' | 'restore' | 'download-sources' | 'hand-over' | 'end' | 'leave';
 
 /**
  * The actions of the collab menu for a role. Everyone can copy the invite link and download the sources (a ZIP of the
@@ -18,11 +18,17 @@ export type CollabMenuItem = 'invite' | 'record' | 'restore' | 'download-sources
  * collab without anyone to apply, answer or end it — they hand the role over first (and can leave then, as a
  * participant), or end it. `live` false (ended, or signed out): only the list. In Solo (`dt open`): only the
  * workspace's record, restore and download — no one to invite or hand over to, and the session goes on with the next
- * `dt open`.
+ * `dt open`. In the `link` identity mode (`link` given): the facilitator makes the invite link (a new one each time;
+ * 招待を止める while one is live) and lets each person in; a participant has no link to copy.
  */
-export function collabMenuItems(role: Me['participant']['role'], live: boolean, solo = false): CollabMenuItem[] {
+export function collabMenuItems(role: Me['participant']['role'], live: boolean, solo = false, link?: { readonly inviteLive: boolean }): CollabMenuItem[] {
     if (!live) return [];
     if (solo) return role === 'facilitator' ? ['record', 'restore', 'download-sources'] : ['download-sources'];
+    // `link`: an invite is a link the facilitator makes (and stops); the page's own address lets no one in
+    if (link)
+        return role === 'facilitator'
+            ? ['invite', ...(link.inviteLive ? (['stop-invite'] as const) : []), 'record', 'restore', 'download-sources', 'hand-over', 'end']
+            : ['download-sources', 'leave'];
     return role === 'facilitator' ? ['invite', 'record', 'restore', 'download-sources', 'hand-over', 'end'] : ['invite', 'download-sources', 'leave'];
 }
 
