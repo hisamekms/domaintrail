@@ -110,6 +110,7 @@ describe('schema and transactions', () => {
             'run_requests',
             'sessions',
             'sign_ins',
+            'slash_commands',
             'triages',
         ]);
         db.exec(`PRAGMA user_version = ${MIGRATIONS.length + 1}`);

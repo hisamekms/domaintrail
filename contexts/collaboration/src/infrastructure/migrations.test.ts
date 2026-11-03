@@ -199,7 +199,7 @@ describe('the reply_to column (migration 5)', () => {
 
         const db = openDatabase(file);
         expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: MIGRATIONS.length });
-        expect(MIGRATIONS.length).toBe(13);
+        expect(MIGRATIONS.length).toBe(14);
         const uow = createUnitOfWork(db);
         const loaded = await uow.transaction((s) => s.requests.load(knownRequestId(rid)));
         expect(loaded).toMatchObject({ state: 'Sent', body: 'Add cancel.' });

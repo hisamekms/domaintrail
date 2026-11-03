@@ -5,7 +5,7 @@ import type { StormingElementKind as EsElementKind } from '@domaintrail/storming
 import type { Connection } from './app/useViewSocket';
 import type { CatalogSectionKey } from './model-utils';
 import type { ElementChange, Role } from '@domaintrail/collaboration/protocol';
-import type { Collaboration, InterviewCommandId, TargetStatus } from '@domaintrail/collaboration';
+import type { Collaboration, InterviewCommandId, SlashCommandName, TargetStatus } from '@domaintrail/collaboration';
 import type { Whereabouts } from './session/presence';
 import type { RestorePoint } from './session/revisions';
 
@@ -141,7 +141,7 @@ const ja = {
     noDiagram: '表示できる図がありません',
     // a view with nothing yet (no BC, or no storming): one line, and with an AI in the chat, that it can make it
     emptyView: 'まだありません',
-    emptyViewAskAi: 'まだありません。チャットで /es から始められます',
+    emptyViewAskAi: 'まだありません。チャットで /es:start から始められます',
 
     // Event Storming view (its level and timeline are the page's state: they never change a .dtes file)
     noStormings: 'ストーミングがありません（.dtes ファイルに storming を書くと表示されます）',
@@ -820,13 +820,36 @@ const ja = {
             },
             // what `/` lists in the composer: the commands (an interview) and the templates (text to edit)
             slash: {
-                commands: { es: 'ES を始める', model: 'モデリングを始める' } as Record<InterviewCommandId, string>,
-                command: 'AI が聞き取ります',
+                commands: {
+                    'es:start': 'ES を始める',
+                    'es:exceptions': '例外を洗い出す',
+                    'es:recap': 'ここまでのまとめ',
+                    'model:start': 'モデリングを始める',
+                } as Record<InterviewCommandId | SlashCommandName, string>,
+                // what each type of command does, beside its name
+                types: { interview: 'AI が聞き取ります', candidates: 'AI が候補を挙げます', answer: 'AI が答えます' } as Record<
+                    'interview' | 'candidates' | 'answer',
+                    string
+                >,
                 team: 'チーム',
                 noMatch: '一致するものがありません',
                 hint: '↑↓ で選び、Enter か Tab で決める（Esc で閉じる）',
             },
-            // a `/es` or `/model` interview: the bar above the composer, and its brief
+            // a candidate command's card in the chat (`/es:exceptions`): the candidates to check, applied as one run
+            candidates: {
+                thinking: 'AI が考えています',
+                none: '候補はありません',
+                noStorming: '見ているストーミングがありません',
+                apply: '採用したものを反映',
+                stop: '中止',
+                close: '閉じる',
+                stopped: '中止しました',
+                applied: (n: number) => `${n} 件を反映`,
+                waiting: '始めた人の選択待ち',
+                chosen: '採用した候補',
+                toCard: '候補へ',
+            },
+            // a `/es:start` or `/model:start` interview: the bar above the composer, and its brief
             interview: {
                 running: '聞き取り中',
                 thinking: 'AI が考えています',
@@ -1068,7 +1091,7 @@ const en: Messages = {
     loading: 'Loading…',
     noDiagram: 'Nothing to draw',
     emptyView: 'Nothing yet',
-    emptyViewAskAi: 'Nothing yet. Start with /es in the chat',
+    emptyViewAskAi: 'Nothing yet. Start with /es:start in the chat',
 
     noStormings: 'No stormings (write a storming in a .dtes file to see it here)',
     stormingPicker: 'Storming to show',
@@ -1708,11 +1731,29 @@ const en: Messages = {
                 answeredChanged: 'Answered as a question, yet changed files',
             },
             slash: {
-                commands: { es: 'Start event storming', model: 'Start modeling' },
-                command: 'The AI interviews you',
+                commands: {
+                    'es:start': 'Start event storming',
+                    'es:exceptions': 'Find exceptions',
+                    'es:recap': 'Recap so far',
+                    'model:start': 'Start modeling',
+                },
+                types: { interview: 'The AI interviews you', candidates: 'The AI lists candidates', answer: 'The AI answers' },
                 team: 'Team',
                 noMatch: 'Nothing matches',
                 hint: 'Choose with ↑↓, pick with Enter or Tab (Esc closes)',
+            },
+            candidates: {
+                thinking: 'The AI is thinking',
+                none: 'No candidates',
+                noStorming: 'No storming in view',
+                apply: 'Apply the checked',
+                stop: 'Stop',
+                close: 'Close',
+                stopped: 'Stopped',
+                applied: (n) => `${n} applied`,
+                waiting: 'Waiting for its starter to choose',
+                chosen: 'Candidates applied',
+                toCard: 'To the candidates',
             },
             interview: {
                 running: 'Interview',

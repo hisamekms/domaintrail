@@ -4,7 +4,8 @@
 //
 // - stage 3 (`triage`): the light model (`--model`, default `haiku`), **no tools at all** (`--tools ""`), stage 3's JSON
 //   schema; a fresh `claude -p` per turn by default, or one warm process (`triageWarm`; plan Q12);
-// - answers and proposals (`answer`), and the interviews' turns (`interview`, a warm process of their own: another schema): the read-only tools only — `--tools Read,Grep,Glob` with `--permission-mode
+// - answers and proposals (`answer`), the interviews' turns (`interview`, a warm process of their own: another schema)
+//   and the `/` commands' turns (`command`, a fresh process each, the schema of the command's type): the read-only tools only — `--tools Read,Grep,Glob` with `--permission-mode
 //   dontAsk` and no settings file loaded: no edit, write or shell tool exists in the process, whatever the prompt or the
 //   message says, and it reads only inside its working directory (the guarantee is here, not configurable) — the
 //   answerer's JSON schema (one for answers and
@@ -18,7 +19,7 @@
 // the runner does (`warm-claude.ts`). The model that answered is read from the process's `init` event. Neither a prompt
 // nor the agent's output is logged.
 import { spawn } from 'node:child_process';
-import { answererJsonSchema, interviewerJsonSchema, triageJsonSchema } from '@domaintrail/collaboration';
+import { answererJsonSchema, commandJsonSchema, interviewerJsonSchema, triageJsonSchema, type SlashCommandType } from '@domaintrail/collaboration';
 import type { AnswerAgent, AnswerTurn, AnswerTurnResult } from '../core/ports.js';
 import { type ClaudeResult, createStreamReader } from './claude-stream.js';
 import { type AgentCommand, CLAUDE, claudeArguments, type ExtraRead, KILL_GRACE_MS, killTree } from './claude-code.js';
@@ -75,6 +76,11 @@ export function answererArguments(options: ReadingTurnOptions = {}): string[] {
 /** The arguments of an interview's turn: the reading tools only, the interviewer's schema. */
 export function interviewerArguments(options: ReadingTurnOptions = {}): string[] {
     return claudeArguments(ANSWERER_TOOLS, undefined, { ...options, schema: interviewerJsonSchema() });
+}
+
+/** The arguments of a `/` command's turn: the reading tools only, the schema of its type (candidates or an answer). */
+export function commandArguments(type: SlashCommandType, options: ReadingTurnOptions = {}): string[] {
+    return claudeArguments(ANSWERER_TOOLS, undefined, { ...options, schema: commandJsonSchema(type) });
 }
 
 /** The arguments of a stage 3 turn: no tool at all, stage 3's schema, the light model. */
@@ -253,6 +259,10 @@ export function createClaudeAnswerer(options: ClaudeAnswererOptions): AnswerAgen
         interview(turn) {
             if (!warmInterviewer) return prepared(() => cold(interviewerArguments(answerFlags), turn, answer.model));
             return prepared(() => warmTurn(warmInterviewer, interviewerArguments({ ...answerFlags, streamInput: true }), turn, answer.model));
+        },
+        // a command is rare and reads the model afresh: a process of its own for each, with the answers' settings
+        command(turn) {
+            return prepared(() => cold(commandArguments(turn.type, answerFlags), turn, answer.model));
         },
         reset(reason) {
             warmAnswerer?.reset(reason);

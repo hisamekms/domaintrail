@@ -1162,7 +1162,7 @@ How to grow the `.dt` model, for people and AI agents. The rules of the language
 of working.
 
 **Start from the brief.** The `///` description above a `context` says its purpose, scope, what the generated code is
-for and how far to go (`/model` in the chat writes it). Keep to that context; ask before changing another one.
+for and how far to go (`/model:start` in the chat writes it). Keep to that context; ask before changing another one.
 
 **One context at a time, terms first.**
 - Agree on the words before the structure: the context's `terms` with their labels, and a `///` for any term people
@@ -2500,7 +2500,7 @@ How to run a storming in `.dtes` files, for people and AI agents. The rules of t
 Storming](#event-storming-dtes); this is the way of working.
 
 **Start from the brief.** The `///` description above a `storming` says its purpose, scope, what the result is for
-and how far to go (`/es` in the chat writes it). Keep to that scope; ask before going beyond it. With no brief, ask
+and how far to go (`/es:start` in the chat writes it). Keep to that scope; ask before going beyond it. With no brief, ask
 for the purpose and the first and last events before writing much.
 
 **Big Picture first.**

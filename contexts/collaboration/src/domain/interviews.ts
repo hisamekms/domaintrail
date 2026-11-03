@@ -1,5 +1,5 @@
-// The interviews of the `/` commands (the plan's "`/` commands: ways of working with the AI", round 5): `/es` starts an
-// event storming, `/model` the modeling of a context. The AI (the answerer role, read-only) asks one question at a time
+// The interviews of the `/` commands (the plan's "`/` commands: ways of working with the AI", round 5): `/es:start`
+// starts an event storming, `/model:start` the modeling of a context. The AI (the answerer role, read-only) asks one question at a time
 // and ends with a brief — four or five lines with conventional heads — that the person who started it confirms (as is
 // or edited) or drops; confirmed, a run writes it as the `///` description right above the `storming` or the `context`.
 // While an interview runs, its starter's messages go to it without triage (`interviewOf` in the use cases).
@@ -11,12 +11,25 @@ import { Collaboration, decide, err, ok, type Result } from '../generated/index.
 import { isAi } from './ai.js';
 
 /** The commands' stable IDs (what one types after `/`), and the commands they are. */
-export const INTERVIEW_COMMANDS = { es: 'Es', model: 'Model' } as const satisfies Record<string, Collaboration.InterviewCommand>;
+export const INTERVIEW_COMMANDS = { 'es:start': 'Es', 'model:start': 'Model' } as const satisfies Record<string, Collaboration.InterviewCommand>;
 
 export type InterviewCommandId = keyof typeof INTERVIEW_COMMANDS;
 
-/** The ID of a command (`es`, `model`). */
-export const commandId = (command: Collaboration.InterviewCommand): InterviewCommandId => (command === 'Es' ? 'es' : 'model');
+/** Whether a string is an interview's ID (`es:start`, `model:start`). */
+export const isInterviewCommandId = (id: string): id is InterviewCommandId => Object.hasOwn(INTERVIEW_COMMANDS, id);
+
+/** The IDs before the ES commands had a prefix (`/es`, `/model`), still read on the wire. */
+const LEGACY_INTERVIEW_IDS: Readonly<Record<string, InterviewCommandId>> = { es: 'es:start', model: 'model:start' };
+
+/** The command an ID names (`es:start`, `model:start`, or the former `es`, `model`); undefined for any other. */
+export function interviewCommandOf(id: unknown): Collaboration.InterviewCommand | undefined {
+    if (typeof id !== 'string') return undefined;
+    const current = Object.hasOwn(LEGACY_INTERVIEW_IDS, id) ? LEGACY_INTERVIEW_IDS[id] : id;
+    return Object.entries(INTERVIEW_COMMANDS).find(([k]) => k === current)?.[1];
+}
+
+/** The ID of a command (`es:start`, `model:start`). */
+export const commandId = (command: Collaboration.InterviewCommand): InterviewCommandId => (command === 'Es' ? 'es:start' : 'model:start');
 
 /** The UI languages on the wire (`ja`, `en`), and the model's. */
 export const UI_LANGUAGES = { ja: 'Ja', en: 'En' } as const satisfies Record<string, Collaboration.UiLanguage>;

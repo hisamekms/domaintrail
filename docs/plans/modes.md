@@ -1020,6 +1020,8 @@ A template only puts text in the composer.
 
 ### As built in M8 (first set)
 
+(The IDs `es` and `model` below are `es:start` and `model:start` since phase 1 of the ES commands, below.)
+
 - **Model** (`interview.dt`, `domain/interviews.ts`): an `Interview` aggregate (聞き取り) — `command` (`Es` | `Model`,
   wire IDs `es` / `model`), `startedBy`, `opening` (the starter's message sent with it: the command's name), `focus`
   (the element selected then), `language` (`Ja` | `En`) — with states `Asking { awaiting? }` → `Briefed { brief,
@@ -1059,6 +1061,69 @@ A template only puts text in the composer.
 - **Templates**: eight built in (both languages) and the team's in the top-level `templates` of `domaintrail.jsonc`
   (`{ id, name, text, when? }`, a name and a text as one string or `{ ja, en }`; at most 30), validated by
   Collaboration (`checkTemplates`) and in the JSON schema, used by `dt open` and `dt collab`.
+
+### Built-in ES commands, phase 1
+
+Decided by the maintainer (2026-11-03): ES-only commands are `/es:{name}`, modeling ones `/model:{name}`; the
+interviews became `/es:start` and `/model:start` (IDs `es:start`, `model:start`; the wire still reads `es` and `model`,
+and stored interviews keep their `Es` / `Model`, so older sessions read as before). Display names stay verbs in each UI
+language. Besides the interviews there are two kinds of command: **candidate** commands (the AI lists candidate
+changes, the person checks some, they become one run) and **answer** commands (the AI answers in the chat).
+
+- **Model** (`command.dt`, `domain/slash-commands.ts`): a `SlashCommand` aggregate (コマンド) of its own, not an
+  extension of `Interview` (no transcript, no brief; one shape for both kinds) — `kind` (`EsExceptions` | `EsRecap`),
+  `startedBy`, `opening` (the starter's message: the command's name, with the view it was sent from), `scope` (the
+  storming in view: the view's, else the selected element's), `language` — with states `Working` → `Listed {
+  candidates[0..20], listedAt }` → `Applied { candidates, chosen: CandidateIndex[1..20], run }`, or `Working` →
+  `Answered { answer }`, or `Stopped`. A candidate is `{ label (60), targets (element references, at most 20), how
+  (one line, 300), reason? (200) }`. `start` requires the facilitator when the command is the facilitator's
+  (`FacilitatorOnly`); `apply` and `stop` its starter (`NotTheStarter`), `apply` numbers of the list
+  (`NoSuchCandidate`); one running (`Working` or `Listed`) of each kind per session (`CommandAlreadyRunning`, the use
+  case). Stored in a table of its own (migration 14, `slash_commands`). The run's input gains `candidates:
+  CandidatesInstruction { command, kind, scope?, chosen[1..20] }`.
+- **The table** (`SLASH_COMMANDS`): each command's ID, kind, type (`candidates` | `answer`), whether only the
+  facilitator starts it and whether it needs a storming in view. `/es:exceptions`: candidates, the facilitator's,
+  needs a storming. `/es:recap`: an answer, anyone's (an answer changes nothing, so a participant may ask for one).
+  Phase 2 (`/es:levels`, `/es:names`, `/es:gaps`, `/es:next`) adds a row, an enum entry, a prompt in
+  `COMMAND_PROMPTS` (`answer-prompt.ts`) and, for a candidate command, a clause of the runner's rule 19.
+- **Routing**: `POST /api/session/commands` (`{ command, body, language, focus?, viewedAt? }`, any participant) sends
+  the opening message without triage and starts the command; nothing in view for a command that needs a storming lists
+  no candidates at once (the AI is not asked) and the card says 「見ているストーミングがありません」. While it works the
+  answers entry point hands out a `command` job (`commandJobs`: one per `Working` command) with the command, its ID
+  and type, the opening message (its `viewedAt`), the language and the session so far; the answerer runs it in a
+  fresh read-only process with the schema of its type (`{ kind: 'candidates', candidates }` or `{ kind: 'answer',
+  answer }`), read again by the server (`readCommandReply`): candidates past twelve dropped, malformed references
+  dropped as a proposal's, text past its limit refused, the other kind refused. Candidates → `listCandidates`; an
+  answer → `answerCommand`, a message of the AI replying to the opening (as the interviewer's questions), Markdown.
+  Given up as the other answer jobs (`MAX_ATTEMPTS`, もう一度).
+- **Apply**: `POST /api/session/commands/:id/apply` (`{ chosen: number[] }`, its starter) queues one run on the
+  opening message whose input carries the chosen candidates (`queueRequests`, as a confirmed brief): a sibling of the
+  approved proposal rather than a reuse of it, since there is no triage and several are picked. `…/:id/stop` drops it.
+  The runner's **rule 19**: `chosenCandidates` (`{ command, storming, candidates: [{ label, targets, how, reason? }] }`)
+  are what to do, not the request; for `/es:exceptions` each is one `exception` in the storming (rule 17) in the stage
+  of its branch point — the branch event written again, the new events, `then <Event>` when it returns —, `level
+  design` only when `how` says so (rule 15), none the storming already has. A run of an ES command is about `.dtes`
+  only (rule 4, the storming's way of working).
+- **Prompts** (English; the output follows the UI language unless the session is written in another): both get the
+  storming-practice topic. `/es:exceptions`: for each step of the main flow in view (a stage's or timeline's when one
+  is shown, else the whole storming), plausible exceptions not modeled yet — failure, cancellation, timeout, missing
+  input, rejection —, at most two per step and twelve in all, as an `exception` to add: label the new event (a short
+  past-tense phrase), targets the branch event then the new ones then the return, how the timeline in one line.
+  `/es:recap`: from the session so far, three short bullet lists under bold lead-ins (決まったこと / 追加・変更 / 未決),
+  empty ones left out, nothing invented.
+- **The page**: `/` lists the commands the person may start now (`canStartCommand`: interviews and
+  `/es:exceptions` for the facilitator, `/es:recap` for anyone; none of a kind while one runs), grouped `es:start`,
+  the other `es:` commands, `model:start`, then the templates; `/es` filters to the ES commands, each with what it
+  does (AI が聞き取ります / AI が候補を挙げます / AI が答えます). A candidate command is a card on the AI's bubble under
+  its message (`candidates.tsx`): AI が考えています and 中止 while it works; the candidates with a checkbox each for its
+  starter, **none checked** (the person chooses deliberately; the AI's order already puts the strongest first), chips
+  for their elements, how and why, 採用したものを反映 / 中止, read-only for the others (始めた人の選択待ち); applied, the
+  chosen ones checked and the rest dimmed, with 「n 件を反映」 and a link to the run, whose card says ↳ 採用した候補 and
+  links back. An answer command's card shows only while the AI works (Collab); in Solo its message has the pending
+  slot, then the answer. Everything is server state: a reload shows the same.
+- **Session so far**: the command run (on which storming), its candidates (listed, each a line), those applied (with
+  the run) or that it was stopped; what is open (a command the AI works on, candidates awaiting a choice).
+- **Not done**: editing a candidate's how before applying.
 
 ## The view a message was sent from (as built)
 

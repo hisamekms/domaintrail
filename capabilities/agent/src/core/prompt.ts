@@ -6,6 +6,7 @@
 // as data the rules tell the agent not to obey, and nothing of them reaches a command line.
 import {
     type Collaboration,
+    candidateData,
     elementReference,
     peopleAsNames,
     plainBody,
@@ -16,6 +17,7 @@ import {
     type ReplyData,
     type ReplyOutcome,
     requestNumber,
+    slashCommandName,
     viewedAtData,
 } from '@domaintrail/collaboration';
 import type { AgentPreviousRun, AgentRevertedRun, Json } from '@domaintrail/collaboration/protocol';
@@ -103,8 +105,12 @@ export function languagesOfTargets(targets: readonly Json<Collaboration.TargetSn
     return { dt, dtes };
 }
 
-/** The DSLs a run's requests are about: a request on the workspace as a whole (no target) may be about either. */
+/**
+ * The DSLs a run's requests are about: a request on the workspace as a whole (no target) may be about either; the
+ * candidates of an ES command (`/es:…`) are about the stormings only.
+ */
 function languagesOf(input: Json<Collaboration.RunInput>): Languages {
+    if (input.candidates && slashCommandName(input.candidates.kind).startsWith('es:')) return { dt: false, dtes: true };
     const each = input.requests.map((r) => languagesOfTargets(r.targets));
     return { dt: each.some((l) => l.dt), dtes: each.some((l) => l.dtes) };
 }
@@ -366,6 +372,7 @@ export function buildPrompt(
         ...(revert.length > 0 && { revert: revert.map((u, i) => revertedRunOf(u, i + 1, names)) }),
         ...(input.proposals && { approvedProposals: approvedProposalsOf(input, input.proposals) }),
         ...(input.brief && { confirmedBrief: confirmedBriefOf(input.brief) }),
+        ...(input.candidates && { chosenCandidates: chosenCandidatesOf(input.candidates) }),
         ...(context.changedSinceYourLastRun && { changedSinceYourLastRun: changedList(context.changedSinceYourLastRun) }),
         ...(context.sessionSoFar !== undefined && { sessionSoFar: context.sessionSoFar }),
     };
@@ -454,6 +461,13 @@ Rules:
    whether its \`exceptions\` were shown. "Here", "this", 「ここ」 or 「この」 in a request mean that view, unless a
    target or the text says otherwise. A request sent from a stage adds within that stage unless it says otherwise.
    Names in it are as they were when it was sent: the files are the truth.
+19. \`chosenCandidates\`, when present: the person who ran a \`/\` command checked these of the AI's candidates; they,
+   not the request (the command's name), are what to do — each its \`label\`, the elements it touches (\`targets\`;
+   those that do not exist yet are to be added under that name) and \`how\`. Carry out each one, and nothing else. For
+   \`/es:exceptions\`, each is one \`exception\` in the storming \`storming\` (rule 17), in the stage of its branch
+   point: it starts with that event of the flow, written again, then the new events (short past-tense labels), and
+   ends with \`then <Event>\` when it returns to the flow; a new event gets \`level design\` only when \`how\` says so
+   (rule 15). Add no exception the storming already has.
 
 ${practiceSection(practice)}${replyDescription()}
 
@@ -461,6 +475,15 @@ ${practiceSection(practice)}${replyDescription()}
 ${blockJson(data)}
 </requests-${nonce}>
 `;
+}
+
+/** The candidates chosen of a `/` command as the run's data shows them (rule 19). */
+function chosenCandidatesOf(c: Json<Collaboration.CandidatesInstruction>): Record<string, unknown> {
+    return {
+        command: `/${slashCommandName(c.kind)}`,
+        ...(c.scope !== undefined && { storming: `@{es:${c.scope}}` }),
+        candidates: c.chosen.map(candidateData),
+    };
 }
 
 /** A confirmed brief as the run's data shows it (rule 16). */

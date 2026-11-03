@@ -18,6 +18,7 @@ import type {
     SentBody,
     SessionStateBody,
     SetMarkBody,
+    StartCommandBody,
     StartInterviewBody,
     RevertRequestedBody,
 } from '@domaintrail/collaboration/protocol';
@@ -99,7 +100,14 @@ export const sessionApi = {
         call(`proposals/${encodeURIComponent(id)}/reject`, { method: 'POST', body: note ? { note } : {} }),
     /** Hands the AI's answer or proposal for a message out again, once the server gave it up (the facilitator). */
     retryAnswer: (request: string): Promise<unknown> => call(`requests/${encodeURIComponent(request)}/retry-answer`, { method: 'POST', body: {} }),
-    /** Starts the `/es` or `/model` interview (the facilitator; in Solo, the person). */
+    /** Starts a candidate or answer command (`/es:exceptions`, `/es:recap`). */
+    startCommand: (body: StartCommandBody): Promise<unknown> => call('commands', { method: 'POST', body }),
+    /** Applies the candidates checked of a candidate command (its starter): one run. */
+    applyCandidates: (id: string, chosen: readonly number[]): Promise<unknown> =>
+        call(`commands/${encodeURIComponent(id)}/apply`, { method: 'POST', body: { chosen } }),
+    /** Stops a command (its starter). */
+    stopCommand: (id: string): Promise<unknown> => call(`commands/${encodeURIComponent(id)}/stop`, { method: 'POST', body: {} }),
+    /** Starts the `/es:start` or `/model:start` interview (the facilitator; in Solo, the person). */
     startInterview: (body: StartInterviewBody): Promise<unknown> => call('interviews', { method: 'POST', body }),
     /** Confirms an interview's brief, as is or with its text edited (its starter): a run writes it. */
     confirmInterview: (id: string, text?: string): Promise<unknown> =>

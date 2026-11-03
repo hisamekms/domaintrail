@@ -52,6 +52,23 @@ export interface Arbitraries {
     readonly ApprovedAssumptionApproval: fc.Arbitrary<Collaboration.ApprovedAssumptionApproval>;
     readonly AssumptionApproval: fc.Arbitrary<Collaboration.AssumptionApproval>;
     readonly AssumptionApproved: fc.Arbitrary<Collaboration.AssumptionApproved>;
+    readonly SlashCommandId: fc.Arbitrary<Collaboration.SlashCommandId>;
+    readonly SlashCommandKind: fc.Arbitrary<Collaboration.SlashCommandKind>;
+    readonly CandidateLabel: fc.Arbitrary<Collaboration.CandidateLabel>;
+    readonly CandidateIndex: fc.Arbitrary<Collaboration.CandidateIndex>;
+    readonly CommandCandidate: fc.Arbitrary<Collaboration.CommandCandidate>;
+    readonly CandidatesInstruction: fc.Arbitrary<Collaboration.CandidatesInstruction>;
+    readonly WorkingSlashCommand: fc.Arbitrary<Collaboration.WorkingSlashCommand>;
+    readonly ListedSlashCommand: fc.Arbitrary<Collaboration.ListedSlashCommand>;
+    readonly AppliedSlashCommand: fc.Arbitrary<Collaboration.AppliedSlashCommand>;
+    readonly AnsweredSlashCommand: fc.Arbitrary<Collaboration.AnsweredSlashCommand>;
+    readonly StoppedSlashCommand: fc.Arbitrary<Collaboration.StoppedSlashCommand>;
+    readonly SlashCommand: fc.Arbitrary<Collaboration.SlashCommand>;
+    readonly SlashCommandStarted: fc.Arbitrary<Collaboration.SlashCommandStarted>;
+    readonly CandidatesListed: fc.Arbitrary<Collaboration.CandidatesListed>;
+    readonly SlashCommandAnswered: fc.Arbitrary<Collaboration.SlashCommandAnswered>;
+    readonly CandidatesApplied: fc.Arbitrary<Collaboration.CandidatesApplied>;
+    readonly SlashCommandStopped: fc.Arbitrary<Collaboration.SlashCommandStopped>;
     readonly Text: fc.Arbitrary<Collaboration.Text>;
     readonly LineNumber: fc.Arbitrary<Collaboration.LineNumber>;
     readonly ColumnNumber: fc.Arbitrary<Collaboration.ColumnNumber>;
@@ -200,6 +217,10 @@ export interface Examples {
         readonly states?: { readonly Approved?: readonly Collaboration.ApprovedAssumptionApproval[] };
         readonly commands?: { readonly approve?: readonly Parameters<Collaboration.AssumptionApprovalCommands['approve']>[] };
     };
+    readonly SlashCommand?: {
+        readonly states?: { readonly Working?: readonly Collaboration.WorkingSlashCommand[]; readonly Listed?: readonly Collaboration.ListedSlashCommand[]; readonly Applied?: readonly Collaboration.AppliedSlashCommand[]; readonly Answered?: readonly Collaboration.AnsweredSlashCommand[]; readonly Stopped?: readonly Collaboration.StoppedSlashCommand[] };
+        readonly commands?: { readonly start?: readonly Parameters<Collaboration.SlashCommandCommands['start']>[]; readonly list?: readonly Parameters<Collaboration.SlashCommandCommands['list']>[]; readonly answer?: readonly Parameters<Collaboration.SlashCommandCommands['answer']>[]; readonly apply?: readonly Parameters<Collaboration.SlashCommandCommands['apply']>[]; readonly stop?: readonly Parameters<Collaboration.SlashCommandCommands['stop']>[] };
+    };
     readonly Interview?: {
         readonly states?: { readonly Asking?: readonly Collaboration.AskingInterview[]; readonly Briefed?: readonly Collaboration.BriefedInterview[]; readonly Confirmed?: readonly Collaboration.ConfirmedInterview[]; readonly Stopped?: readonly Collaboration.StoppedInterview[] };
         readonly commands?: { readonly start?: readonly Parameters<Collaboration.InterviewCommands['start']>[]; readonly hear?: readonly Parameters<Collaboration.InterviewCommands['hear']>[]; readonly ask?: readonly Parameters<Collaboration.InterviewCommands['ask']>[]; readonly summarize?: readonly Parameters<Collaboration.InterviewCommands['summarize']>[]; readonly confirm?: readonly Parameters<Collaboration.InterviewCommands['confirm']>[]; readonly stop?: readonly Parameters<Collaboration.InterviewCommands['stop']>[] };
@@ -244,9 +265,10 @@ export interface Options extends Generation {
 
 /** What `contract` tests: the constructors of domain primitives and the commands of aggregates, each optional. */
 export interface Implementation {
-    readonly make?: { readonly AgentRunId?: Collaboration.MakeAgentRunId; readonly ReplyKey?: Collaboration.MakeReplyKey; readonly AssumptionApprovalId?: Collaboration.MakeAssumptionApprovalId; readonly Text?: Collaboration.MakeText; readonly LineNumber?: Collaboration.MakeLineNumber; readonly ColumnNumber?: Collaboration.MakeColumnNumber; readonly Tally?: Collaboration.MakeTally; readonly ContentHash?: Collaboration.MakeContentHash; readonly WorkspacePath?: Collaboration.MakeWorkspacePath; readonly InterviewId?: Collaboration.MakeInterviewId; readonly BriefName?: Collaboration.MakeBriefName; readonly BriefLabel?: Collaboration.MakeBriefLabel; readonly BriefText?: Collaboration.MakeBriefText; readonly MarkId?: Collaboration.MakeMarkId; readonly Emoji?: Collaboration.MakeEmoji; readonly ChangeProposalId?: Collaboration.MakeChangeProposalId; readonly ProposalText?: Collaboration.MakeProposalText; readonly ProposalLabel?: Collaboration.MakeProposalLabel; readonly ProposalOptionIndex?: Collaboration.MakeProposalOptionIndex; readonly RequestId?: Collaboration.MakeRequestId; readonly RevisionId?: Collaboration.MakeRevisionId; readonly SessionId?: Collaboration.MakeSessionId; readonly ParticipantId?: Collaboration.MakeParticipantId; readonly DisplayName?: Collaboration.MakeDisplayName; readonly ElementName?: Collaboration.MakeElementName; readonly StormingName?: Collaboration.MakeStormingName; readonly StormingLocalName?: Collaboration.MakeStormingLocalName; readonly TimelineName?: Collaboration.MakeTimelineName; readonly StormingEventName?: Collaboration.MakeStormingEventName; readonly OccurrencePath?: Collaboration.MakeOccurrencePath; readonly TriageId?: Collaboration.MakeTriageId; readonly Confidence?: Collaboration.MakeConfidence; readonly Milliseconds?: Collaboration.MakeMilliseconds; readonly ContextName?: Collaboration.MakeContextName; readonly StageName?: Collaboration.MakeStageName; readonly CatalogQuery?: Collaboration.MakeCatalogQuery; readonly CatalogSection?: Collaboration.MakeCatalogSection };
+    readonly make?: { readonly AgentRunId?: Collaboration.MakeAgentRunId; readonly ReplyKey?: Collaboration.MakeReplyKey; readonly AssumptionApprovalId?: Collaboration.MakeAssumptionApprovalId; readonly SlashCommandId?: Collaboration.MakeSlashCommandId; readonly CandidateLabel?: Collaboration.MakeCandidateLabel; readonly CandidateIndex?: Collaboration.MakeCandidateIndex; readonly Text?: Collaboration.MakeText; readonly LineNumber?: Collaboration.MakeLineNumber; readonly ColumnNumber?: Collaboration.MakeColumnNumber; readonly Tally?: Collaboration.MakeTally; readonly ContentHash?: Collaboration.MakeContentHash; readonly WorkspacePath?: Collaboration.MakeWorkspacePath; readonly InterviewId?: Collaboration.MakeInterviewId; readonly BriefName?: Collaboration.MakeBriefName; readonly BriefLabel?: Collaboration.MakeBriefLabel; readonly BriefText?: Collaboration.MakeBriefText; readonly MarkId?: Collaboration.MakeMarkId; readonly Emoji?: Collaboration.MakeEmoji; readonly ChangeProposalId?: Collaboration.MakeChangeProposalId; readonly ProposalText?: Collaboration.MakeProposalText; readonly ProposalLabel?: Collaboration.MakeProposalLabel; readonly ProposalOptionIndex?: Collaboration.MakeProposalOptionIndex; readonly RequestId?: Collaboration.MakeRequestId; readonly RevisionId?: Collaboration.MakeRevisionId; readonly SessionId?: Collaboration.MakeSessionId; readonly ParticipantId?: Collaboration.MakeParticipantId; readonly DisplayName?: Collaboration.MakeDisplayName; readonly ElementName?: Collaboration.MakeElementName; readonly StormingName?: Collaboration.MakeStormingName; readonly StormingLocalName?: Collaboration.MakeStormingLocalName; readonly TimelineName?: Collaboration.MakeTimelineName; readonly StormingEventName?: Collaboration.MakeStormingEventName; readonly OccurrencePath?: Collaboration.MakeOccurrencePath; readonly TriageId?: Collaboration.MakeTriageId; readonly Confidence?: Collaboration.MakeConfidence; readonly Milliseconds?: Collaboration.MakeMilliseconds; readonly ContextName?: Collaboration.MakeContextName; readonly StageName?: Collaboration.MakeStageName; readonly CatalogQuery?: Collaboration.MakeCatalogQuery; readonly CatalogSection?: Collaboration.MakeCatalogSection };
     readonly AgentRun?: Collaboration.AgentRunCommands;
     readonly AssumptionApproval?: Collaboration.AssumptionApprovalCommands;
+    readonly SlashCommand?: Collaboration.SlashCommandCommands;
     readonly Interview?: Collaboration.InterviewCommands;
     readonly Mark?: Collaboration.MarkCommands;
     readonly ChangeProposal?: Collaboration.ChangeProposalCommands;
@@ -269,7 +291,7 @@ export function arbitraries(options: Options = {}): Arbitraries {
         RunReport: () => given.RunReport ?? testing.cast<Collaboration.RunReport>(fc.record({ exitCode: testing.cast<number>(scalar.Int), formatted: a.ToolOutcome, checked: a.ToolOutcome, newDtErrors: a.Tally, unparsedDtes: a.Tally })),
         FrozenRequest: () => given.FrozenRequest ?? testing.cast<Collaboration.FrozenRequest>(fc.record({ request: a.RequestId, author: a.ParticipantId, targets: testing.many(a.TargetSnapshot, 0, 20), body: a.Text, replyTo: a.FrozenReplyTarget, reverts: a.AgentRunId, viewedAt: a.ViewedAt }, { requiredKeys: ['request', 'author', 'targets', 'body'] })),
         FrozenReplyTarget: () => given.FrozenReplyTarget ?? testing.cast<Collaboration.FrozenReplyTarget>(fc.oneof(fc.record({ kind: fc.constant('Run' as const), run: a.AgentRunId }), fc.record({ kind: fc.constant('Message' as const), request: a.RequestId, author: a.ParticipantId, body: a.Text }))),
-        RunInput: () => testing.valid(given.RunInput ?? testing.cast<Collaboration.RunInput>(fc.record({ requests: testing.many(a.FrozenRequest, 1), note: a.Text, answer: a.Answer, pick: a.AlternativePick, proposals: a.ApprovedProposals, brief: a.BriefInstruction }, { requiredKeys: ['requests'] })), (v) => Collaboration.checkRunInput(v).length === 0, 'Collaboration.RunInput'),
+        RunInput: () => testing.valid(given.RunInput ?? testing.cast<Collaboration.RunInput>(fc.record({ requests: testing.many(a.FrozenRequest, 1), note: a.Text, answer: a.Answer, pick: a.AlternativePick, proposals: a.ApprovedProposals, brief: a.BriefInstruction, candidates: a.CandidatesInstruction }, { requiredKeys: ['requests'] })), (v) => Collaboration.checkRunInput(v).length === 0, 'Collaboration.RunInput'),
         ReplyKey: () => testing.valid(given.ReplyKey ?? testing.collide(testing.cast<Collaboration.ReplyKey>(testing.base('String', { pattern: '^[A-Za-z0-9_-]+$' })), seed), (v) => Collaboration.checkReplyKey(v).length === 0, 'Collaboration.ReplyKey'),
         RequestProgress: () => given.RequestProgress ?? fc.constantFrom<Collaboration.RequestProgress>('Done', 'Partial', 'Skipped', 'Question', 'Answered'),
         RequestReply: () => testing.valid(given.RequestReply ?? testing.cast<Collaboration.RequestReply>(fc.record({ request: a.RequestId, status: a.RequestProgress, note: a.Text }, { requiredKeys: ['request', 'status'] })), (v) => Collaboration.checkRequestReply(v).length === 0, 'Collaboration.RequestReply'),
@@ -306,6 +328,23 @@ export function arbitraries(options: Options = {}): Arbitraries {
         ApprovedAssumptionApproval: () => testing.withExamples(given.ApprovedAssumptionApproval ?? testing.cast<Collaboration.ApprovedAssumptionApproval>(fc.record({ state: fc.constant('Approved' as const), id: a.AssumptionApprovalId, session: a.SessionId, assumption: a.AssumptionRef, approvedBy: a.ParticipantId, approvedAt: testing.cast<Date>(scalar.Timestamp) })), options.examples?.AssumptionApproval?.states?.Approved, () => [], 'Collaboration.ApprovedAssumptionApproval'),
         AssumptionApproval: () => given.AssumptionApproval ?? fc.oneof(a.ApprovedAssumptionApproval),
         AssumptionApproved: () => given.AssumptionApproved ?? testing.cast<Collaboration.AssumptionApproved>(fc.record({ type: fc.constant('AssumptionApproved' as const), approvalId: a.AssumptionApprovalId, session: a.SessionId, assumption: a.AssumptionRef, approvedBy: a.ParticipantId, approvedAt: testing.cast<Date>(scalar.Timestamp) })),
+        SlashCommandId: () => testing.valid(given.SlashCommandId ?? testing.collide(testing.cast<Collaboration.SlashCommandId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkSlashCommandId(v).length === 0, 'Collaboration.SlashCommandId'),
+        SlashCommandKind: () => given.SlashCommandKind ?? fc.constantFrom<Collaboration.SlashCommandKind>('EsExceptions', 'EsRecap'),
+        CandidateLabel: () => testing.valid(given.CandidateLabel ?? testing.collide(testing.cast<Collaboration.CandidateLabel>(testing.base('String', { minLength: 1, maxLength: 100 })), seed), (v) => Collaboration.checkCandidateLabel(v).length === 0, 'Collaboration.CandidateLabel'),
+        CandidateIndex: () => testing.valid(given.CandidateIndex ?? testing.collide(testing.cast<Collaboration.CandidateIndex>(testing.base('Int', { ge: 0, le: 19 })), seed), (v) => Collaboration.checkCandidateIndex(v).length === 0, 'Collaboration.CandidateIndex'),
+        CommandCandidate: () => given.CommandCandidate ?? testing.cast<Collaboration.CommandCandidate>(fc.record({ label: a.CandidateLabel, targets: testing.many(a.ModelTarget, 0, 20), how: a.ProposalText, reason: a.ProposalText }, { requiredKeys: ['label', 'targets', 'how'] })),
+        CandidatesInstruction: () => given.CandidatesInstruction ?? testing.cast<Collaboration.CandidatesInstruction>(fc.record({ command: a.SlashCommandId, kind: a.SlashCommandKind, scope: a.StormingName, chosen: testing.many(a.CommandCandidate, 1, 20) }, { requiredKeys: ['command', 'kind', 'chosen'] })),
+        WorkingSlashCommand: () => testing.withExamples(given.WorkingSlashCommand ?? testing.cast<Collaboration.WorkingSlashCommand>(fc.record({ state: fc.constant('Working' as const), id: a.SlashCommandId, session: a.SessionId, kind: a.SlashCommandKind, startedBy: a.ParticipantId, opening: a.RequestId, scope: a.StormingName, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'kind', 'startedBy', 'opening', 'language', 'startedAt'] })), options.examples?.SlashCommand?.states?.Working, () => [], 'Collaboration.WorkingSlashCommand'),
+        ListedSlashCommand: () => testing.withExamples(given.ListedSlashCommand ?? testing.cast<Collaboration.ListedSlashCommand>(fc.record({ state: fc.constant('Listed' as const), id: a.SlashCommandId, session: a.SessionId, kind: a.SlashCommandKind, startedBy: a.ParticipantId, opening: a.RequestId, scope: a.StormingName, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), candidates: testing.many(a.CommandCandidate, 0, 20), listedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'kind', 'startedBy', 'opening', 'language', 'startedAt', 'candidates', 'listedAt'] })), options.examples?.SlashCommand?.states?.Listed, () => [], 'Collaboration.ListedSlashCommand'),
+        AppliedSlashCommand: () => testing.withExamples(given.AppliedSlashCommand ?? testing.cast<Collaboration.AppliedSlashCommand>(fc.record({ state: fc.constant('Applied' as const), id: a.SlashCommandId, session: a.SessionId, kind: a.SlashCommandKind, startedBy: a.ParticipantId, opening: a.RequestId, scope: a.StormingName, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), candidates: testing.many(a.CommandCandidate, 0, 20), chosen: testing.many(a.CandidateIndex, 1, 20), appliedAt: testing.cast<Date>(scalar.Timestamp), run: a.AgentRunId }, { requiredKeys: ['state', 'id', 'session', 'kind', 'startedBy', 'opening', 'language', 'startedAt', 'candidates', 'chosen', 'appliedAt', 'run'] })), options.examples?.SlashCommand?.states?.Applied, () => [], 'Collaboration.AppliedSlashCommand'),
+        AnsweredSlashCommand: () => testing.withExamples(given.AnsweredSlashCommand ?? testing.cast<Collaboration.AnsweredSlashCommand>(fc.record({ state: fc.constant('Answered' as const), id: a.SlashCommandId, session: a.SessionId, kind: a.SlashCommandKind, startedBy: a.ParticipantId, opening: a.RequestId, scope: a.StormingName, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), answer: a.RequestId, answeredAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'kind', 'startedBy', 'opening', 'language', 'startedAt', 'answer', 'answeredAt'] })), options.examples?.SlashCommand?.states?.Answered, () => [], 'Collaboration.AnsweredSlashCommand'),
+        StoppedSlashCommand: () => testing.withExamples(given.StoppedSlashCommand ?? testing.cast<Collaboration.StoppedSlashCommand>(fc.record({ state: fc.constant('Stopped' as const), id: a.SlashCommandId, session: a.SessionId, kind: a.SlashCommandKind, startedBy: a.ParticipantId, opening: a.RequestId, scope: a.StormingName, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), stoppedBy: a.ParticipantId, stoppedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'kind', 'startedBy', 'opening', 'language', 'startedAt', 'stoppedBy', 'stoppedAt'] })), options.examples?.SlashCommand?.states?.Stopped, () => [], 'Collaboration.StoppedSlashCommand'),
+        SlashCommand: () => given.SlashCommand ?? fc.oneof(a.WorkingSlashCommand, a.ListedSlashCommand, a.AppliedSlashCommand, a.AnsweredSlashCommand, a.StoppedSlashCommand),
+        SlashCommandStarted: () => given.SlashCommandStarted ?? testing.cast<Collaboration.SlashCommandStarted>(fc.record({ type: fc.constant('SlashCommandStarted' as const), commandId: a.SlashCommandId, session: a.SessionId, kind: a.SlashCommandKind, startedBy: a.ParticipantId, opening: a.RequestId, scope: a.StormingName, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'commandId', 'session', 'kind', 'startedBy', 'opening', 'language', 'startedAt'] })),
+        CandidatesListed: () => given.CandidatesListed ?? testing.cast<Collaboration.CandidatesListed>(fc.record({ type: fc.constant('CandidatesListed' as const), commandId: a.SlashCommandId, candidates: testing.many(a.CommandCandidate, 0, 20), listedAt: testing.cast<Date>(scalar.Timestamp) })),
+        SlashCommandAnswered: () => given.SlashCommandAnswered ?? testing.cast<Collaboration.SlashCommandAnswered>(fc.record({ type: fc.constant('SlashCommandAnswered' as const), commandId: a.SlashCommandId, answer: a.RequestId, answeredAt: testing.cast<Date>(scalar.Timestamp) })),
+        CandidatesApplied: () => given.CandidatesApplied ?? testing.cast<Collaboration.CandidatesApplied>(fc.record({ type: fc.constant('CandidatesApplied' as const), commandId: a.SlashCommandId, chosen: testing.many(a.CandidateIndex, 1, 20), run: a.AgentRunId, appliedAt: testing.cast<Date>(scalar.Timestamp) })),
+        SlashCommandStopped: () => given.SlashCommandStopped ?? testing.cast<Collaboration.SlashCommandStopped>(fc.record({ type: fc.constant('SlashCommandStopped' as const), commandId: a.SlashCommandId, stoppedBy: a.ParticipantId, stoppedAt: testing.cast<Date>(scalar.Timestamp) })),
         Text: () => testing.valid(given.Text ?? testing.collide(testing.cast<Collaboration.Text>(testing.base('String', { minLength: 1, maxLength: 20000 })), seed), (v) => Collaboration.checkText(v).length === 0, 'Collaboration.Text'),
         LineNumber: () => testing.valid(given.LineNumber ?? testing.collide(testing.cast<Collaboration.LineNumber>(testing.base('Int', { ge: 1 })), seed), (v) => Collaboration.checkLineNumber(v).length === 0, 'Collaboration.LineNumber'),
         ColumnNumber: () => testing.valid(given.ColumnNumber ?? testing.collide(testing.cast<Collaboration.ColumnNumber>(testing.base('Int', { ge: 1 })), seed), (v) => Collaboration.checkColumnNumber(v).length === 0, 'Collaboration.ColumnNumber'),
@@ -473,6 +512,33 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 declared: [],
                 check: () => Collaboration.checkAssumptionApprovalId,
                 make: impl.make.AssumptionApprovalId,
+            }, options) : []),
+            ...(impl.make.SlashCommandId ? testing.primitiveCases({
+                type: 'Collaboration.SlashCommandId',
+                base: 'UUID',
+                hints: {},
+                invariants: ['uuid'],
+                declared: [],
+                check: () => Collaboration.checkSlashCommandId,
+                make: impl.make.SlashCommandId,
+            }, options) : []),
+            ...(impl.make.CandidateLabel ? testing.primitiveCases({
+                type: 'Collaboration.CandidateLabel',
+                base: 'String',
+                hints: { minLength: 1, maxLength: 100 },
+                invariants: ['valid'],
+                declared: [],
+                check: () => Collaboration.checkCandidateLabel,
+                make: impl.make.CandidateLabel,
+            }, options) : []),
+            ...(impl.make.CandidateIndex ? testing.primitiveCases({
+                type: 'Collaboration.CandidateIndex',
+                base: 'Int',
+                hints: { ge: 0, le: 19 },
+                invariants: ['valid'],
+                declared: [],
+                check: () => Collaboration.checkCandidateIndex,
+                make: impl.make.CandidateIndex,
             }, options) : []),
             ...(impl.make.Text ? testing.primitiveCases({
                 type: 'Collaboration.Text',
@@ -928,6 +994,71 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 requires: [{ name: 'facilitatorApproves', error: 'FacilitatorOnly' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkApproveAssumptionApprovalRequires,
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+        ]),
+        impl.SlashCommand && testing.suite('SlashCommand', [
+            ...testing.commandCases({
+                name: 'SlashCommand.start',
+                run: impl.SlashCommand.start,
+                input: () => fc.tuple(fc.record({ id: a.SlashCommandId, session: a.ActiveSession, kind: a.SlashCommandKind, facilitatorOnly: testing.cast<boolean>(scalar.Bool), startedBy: a.ParticipantId, startedByRole: a.ParticipantRole, opening: a.RequestId, scope: a.StormingName, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['id', 'session', 'kind', 'facilitatorOnly', 'startedBy', 'startedByRole', 'opening', 'language', 'startedAt'] })),
+                examples: options.examples?.SlashCommand?.commands?.start ?? [],
+                factory: true,
+                requires: [{ name: 'facilitatorStarts', error: 'FacilitatorOnly' }],
+                declaredRequires: [],
+                firstFailing: () => Collaboration.checkStartSlashCommandRequires,
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'SlashCommand.list',
+                run: impl.SlashCommand.list,
+                input: () => fc.tuple(fc.oneof(a.WorkingSlashCommand), fc.record({ candidates: testing.many(a.CommandCandidate, 0, 20), listedAt: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.SlashCommand?.commands?.list ?? [],
+                factory: false,
+                requires: [],
+                declaredRequires: [],
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'SlashCommand.answer',
+                run: impl.SlashCommand.answer,
+                input: () => fc.tuple(fc.oneof(a.WorkingSlashCommand), fc.record({ answer: a.RequestId, answeredAt: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.SlashCommand?.commands?.answer ?? [],
+                factory: false,
+                requires: [],
+                declaredRequires: [],
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'SlashCommand.apply',
+                run: impl.SlashCommand.apply,
+                input: () => fc.tuple(fc.oneof(a.ListedSlashCommand), fc.record({ appliedBy: a.ParticipantId, chosen: testing.many(a.CandidateIndex, 1, 20), run: a.AgentRunId, appliedAt: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.SlashCommand?.commands?.apply ?? [],
+                factory: false,
+                requires: [{ name: 'starterApplies', error: 'NotTheStarter' }, { name: 'chosenOfList', error: 'NoSuchCandidate' }],
+                declaredRequires: [],
+                firstFailing: () => Collaboration.checkApplySlashCommandRequires,
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'SlashCommand.stop',
+                run: impl.SlashCommand.stop,
+                input: () => fc.tuple(fc.oneof(a.WorkingSlashCommand, a.ListedSlashCommand), fc.record({ stoppedBy: a.ParticipantId, stoppedAt: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.SlashCommand?.commands?.stop ?? [],
+                factory: false,
+                requires: [{ name: 'starterStops', error: 'NotTheStarter' }],
+                declaredRequires: [],
+                firstFailing: () => Collaboration.checkStopSlashCommandRequires,
                 declaredInvariants: [],
                 stateful: true,
                 counted: [],

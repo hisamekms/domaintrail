@@ -1,11 +1,21 @@
 // What `/` lists in the composer: the commands first (for who may start one), the templates by what is open and
-// selected, filtered by ID and by the name in the UI language; a template picked; a running interview's messages in Solo.
+// selected, filtered by ID and by the name in the UI language; a template picked; a running interview's messages in Solo;
+// who may start which command.
 import { describe, expect, test } from 'bun:test';
 import type { MessageTemplateBody } from '@domaintrail/collaboration/protocol';
 import { interviewSlot } from './interview';
-import { slashItems, slashQuery, templateContexts, templateValue, type SlashScope } from './slash';
+import { commandSlot } from './candidates';
+import { streamItems } from './stream';
+import { canStartCommand, COMMAND_IDS, slashItems, slashQuery, templateContexts, templateValue, type CommandId, type SlashScope } from './slash';
 
-const commandNames = { es: 'ES を始める', model: 'モデリングを始める' } as const;
+const commandNames = {
+    'es:start': 'ES を始める',
+    'es:exceptions': '例外を洗い出す',
+    'es:recap': 'ここまでのまとめ',
+    'model:start': 'モデリングを始める',
+} as const;
+const everyone = (): boolean => true;
+const ES = ['command:es:start', 'command:es:exceptions', 'command:es:recap'];
 const storming = (level: string): SlashScope['view'] => ({ kind: 'storming', level });
 const event: SlashScope['selected'] = {
     target: { target: { kind: 'DtesElement', storming: 'Returns', local: 'ReturnRequested' }, label: '返品が依頼された' },
@@ -18,12 +28,13 @@ const aggregate: SlashScope['selected'] = {
     mention: '注文',
 };
 const ids = (input: Partial<Parameters<typeof slashItems>[0]>): string[] =>
-    slashItems({ query: '', lang: 'ja', scope: { view: { kind: 'model' } }, commandNames, canStart: true, ...input }).map((i) => `${i.kind}:${i.id}`);
+    slashItems({ query: '', lang: 'ja', scope: { view: { kind: 'model' } }, commandNames, canStart: everyone, ...input }).map((i) => `${i.kind}:${i.id}`);
 
 describe('/ in the composer', () => {
     test('only `/` and its query, alone in the text, opens it', () => {
         expect(slashQuery('/')).toBe('');
         expect(slashQuery('/es')).toBe('es');
+        expect(slashQuery('/es:exceptions')).toBe('es:exceptions');
         expect(slashQuery('/es more')).toBeUndefined();
         expect(slashQuery('see /es')).toBeUndefined();
         expect(slashQuery('a/b')).toBeUndefined();
@@ -37,17 +48,18 @@ describe('/ in the composer', () => {
         expect(templateContexts({ view: { kind: 'model' }, selected: state }).has('state')).toBe(true);
     });
 
-    test('commands first, then the templates of what is open and selected; none for who cannot start one', () => {
-        expect(ids({ scope: { view: storming('big-picture') } })).toEqual(['command:es', 'command:model', 'template:next-events', 'template:hotspots']);
+    test('commands first, grouped by prefix with :start first, then the templates of what is open and selected', () => {
+        expect(COMMAND_IDS).toEqual(['es:start', 'es:exceptions', 'es:recap', 'model:start']);
+        expect(ids({ scope: { view: storming('big-picture') } })).toEqual([...ES, 'command:model:start', 'template:next-events', 'template:hotspots']);
         expect(ids({ scope: { view: storming('design-level'), selected: event } })).toEqual([
-            'command:es',
-            'command:model',
+            ...ES,
+            'command:model:start',
             'template:around',
             'template:hotspots',
             'template:commands',
             'template:explain',
         ]);
-        expect(ids({ scope: { view: { kind: 'model' }, selected: aggregate }, canStart: false })).toEqual([
+        expect(ids({ scope: { view: { kind: 'model' }, selected: aggregate }, canStart: () => false })).toEqual([
             'template:invariants',
             'template:states',
             'template:explain',
@@ -56,9 +68,14 @@ describe('/ in the composer', () => {
     });
 
     test('filtering matches the ID and the name in the UI language', () => {
-        expect(ids({ query: 'es' })).toEqual(['command:es']);
-        expect(ids({ query: 'モデ' })).toEqual(['command:model']);
-        expect(ids({ query: 'model', lang: 'en', commandNames: { es: 'Start event storming', model: 'Start modeling' } })).toEqual(['command:model']);
+        // `/es` lists every ES command, `/es:start` first
+        expect(ids({ query: 'es' })).toEqual(ES);
+        expect(ids({ query: 'es:e' })).toEqual(['command:es:exceptions']);
+        expect(ids({ query: 'モデ' })).toEqual(['command:model:start']);
+        expect(ids({ query: 'まとめ' })).toEqual(['command:es:recap']);
+        const en = { 'es:start': 'Start event storming', 'es:exceptions': 'Find exceptions', 'es:recap': 'Recap so far', 'model:start': 'Start modeling' };
+        expect(ids({ query: 'model', lang: 'en', commandNames: en })).toEqual(['command:model:start']);
+        expect(ids({ query: 'exceptions', lang: 'en', commandNames: en })).toEqual(['command:es:exceptions']);
         expect(ids({ query: 'issues', lang: 'en' })).toEqual(['template:review']);
         expect(ids({ query: '気になる' })).toEqual(['template:review']);
         expect(ids({ query: 'zzz' })).toEqual([]);
@@ -69,13 +86,19 @@ describe('/ in the composer', () => {
             { id: 'glossary', name: { ja: '用語を確かめる', en: 'Check the terms' }, text: '用語集と食い違うところを挙げて', when: ['model'] },
             { id: 'es-only', name: 'ES only', text: 'x', when: ['storming'] },
         ];
-        expect(ids({ team })).toEqual(['command:es', 'command:model', 'template:review', 'template:glossary']);
-        const [glossary] = slashItems({ query: 'glossary', lang: 'en', scope: { view: { kind: 'model' } }, commandNames, canStart: false, team });
+        expect(ids({ team })).toEqual([...ES, 'command:model:start', 'template:review', 'template:glossary']);
+        const [glossary] = slashItems({ query: 'glossary', lang: 'en', scope: { view: { kind: 'model' } }, commandNames, canStart: () => false, team });
         expect(glossary).toMatchObject({ kind: 'template', name: 'Check the terms', template: { team: true } });
     });
 
     test('a template picked: its text, the selection as the `#` target where it says {target}', () => {
-        const [around] = slashItems({ query: 'around', lang: 'ja', scope: { view: storming('big-picture'), selected: event }, commandNames, canStart: true });
+        const [around] = slashItems({
+            query: 'around',
+            lang: 'ja',
+            scope: { view: storming('big-picture'), selected: event },
+            commandNames,
+            canStart: everyone,
+        });
         if (around.kind !== 'template') throw new Error('a template');
         expect(templateValue(around.template, 'ja', event)).toEqual({
             text: '#返品が依頼された[1] の前後を詰めて',
@@ -83,7 +106,7 @@ describe('/ in the composer', () => {
             people: [],
         });
         expect(templateValue(around.template, 'en', event).text).toBe('Fill in what happens before and after #返品が依頼された[1]');
-        const [next] = slashItems({ query: 'next', lang: 'ja', scope: { view: storming('big-picture') }, commandNames, canStart: true });
+        const [next] = slashItems({ query: 'next', lang: 'ja', scope: { view: storming('big-picture') }, commandNames, canStart: everyone });
         if (next.kind !== 'template') throw new Error('a template');
         expect(templateValue(next.template, 'ja', undefined)).toEqual({ text: 'このあとに起きることを足して', chips: [], people: [] });
     });
@@ -100,5 +123,50 @@ describe('/ in the composer', () => {
         const briefed = { ...state, interviews: [{ ...(interview as object), state: 'Briefed', answered: 'a2' }] } as never;
         expect(interviewSlot(briefed, { id: 'a2', author: 'me' })).toBe('none');
         expect(interviewSlot(state, { id: 'q1', author: 'ai' })).toBeUndefined();
+    });
+});
+
+describe('who may start a command', () => {
+    const can = (state: object, facilitator: boolean): CommandId[] => COMMAND_IDS.filter((id) => canStartCommand(state as never, facilitator, id));
+
+    test("the interviews and /es:exceptions are the facilitator's; /es:recap anyone's", () => {
+        expect(can({}, true)).toEqual(['es:start', 'es:exceptions', 'es:recap', 'model:start']);
+        expect(can({}, false)).toEqual(['es:recap']);
+    });
+
+    test('none while an interview runs; a command not while one of its kind runs', () => {
+        expect(can({ interviews: [{ state: 'Asking' }] }, true)).toEqual(['es:exceptions', 'es:recap']);
+        expect(can({ slashCommands: [{ kind: 'EsExceptions', state: 'Listed' }] }, true)).toEqual(['es:start', 'es:recap', 'model:start']);
+        expect(
+            can(
+                {
+                    slashCommands: [
+                        { kind: 'EsExceptions', state: 'Applied' },
+                        { kind: 'EsRecap', state: 'Working' },
+                    ],
+                },
+                true,
+            ),
+        ).toEqual(['es:start', 'es:exceptions', 'model:start']);
+    });
+});
+
+describe("a command's place in the chat", () => {
+    const at = (m: number) => `2026-11-03T09:0${m}:00.000Z`;
+    const command = (kind: string, state: string, more: object = {}) => ({ id: `c-${kind}`, kind, state, opening: 'o', startedAt: at(2), ...more }) as never;
+
+    test("Solo: an answer command's answer under its message, pending meanwhile; a candidate command's card instead", () => {
+        expect(commandSlot({ slashCommands: [command('EsRecap', 'Working')] }, { id: 'o' })).toEqual({ kind: 'pending' });
+        expect(commandSlot({ slashCommands: [command('EsRecap', 'Answered', { answer: 'a' })] }, { id: 'o' })).toEqual({ kind: 'answer', answer: 'a' });
+        expect(commandSlot({ slashCommands: [command('EsExceptions', 'Working')] }, { id: 'o' })).toBe('none');
+        expect(commandSlot({ slashCommands: [command('EsExceptions', 'Working')] }, { id: 'x' })).toBeUndefined();
+    });
+
+    test("the stream: a candidate command's card always; an answer command's only while it works, in Collab", () => {
+        const keys = (mode: string, commands: never[]): string[] =>
+            streamItems({ runs: [], revisions: [], requests: [], slashCommands: commands, session: { mode } as never }).map((i) => i.key);
+        expect(keys('Collab', [command('EsExceptions', 'Applied'), command('EsRecap', 'Working')])).toEqual(['command:c-EsExceptions', 'command:c-EsRecap']);
+        expect(keys('Collab', [command('EsRecap', 'Answered')])).toEqual([]);
+        expect(keys('Solo', [command('EsRecap', 'Working')])).toEqual([]);
     });
 });

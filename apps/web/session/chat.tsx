@@ -32,6 +32,7 @@ import {
     X,
     type LucideIcon,
 } from 'lucide-react';
+import { isInterviewCommandId } from '@domaintrail/collaboration';
 import type { ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
 import { motionMs, useGrow, useSwap } from '../shared/motion';
@@ -86,7 +87,8 @@ import { chosenIndex } from './proposal-view';
 import { parseReplyText, referenceText } from './references';
 import { TriageRecordPanel } from './triage-record';
 import { InterviewPanel, interviewSlot } from './interview';
-import { runningInterview, selectedOf, slashItems, slashQuery, templateValue, type SlashItem, type SlashScope } from './slash';
+import { CandidatesCard, commandSlot } from './candidates';
+import { canStartCommand, runningInterview, selectedOf, slashItems, slashQuery, templateValue, type SlashItem, type SlashScope } from './slash';
 import { isReplyable, messageReference, messageReplyTargets, repliesToMe, replyReference, replyTargets, type ReplyDraft } from './replies';
 import { useRevisionTools } from './revisions';
 import { CancelButton, CancelDialog, RowActions, StatusSizer, StatusSlot, TurnLink } from './status-slot';
@@ -113,7 +115,7 @@ import { ComposerChips } from './composer-chips';
 import { ComposerEditor, type ComposerEditorApi, type EditorQuery, type MentionLook } from './composer-editor';
 import { mentionFits, type ComposerMention } from './composer-text';
 import type { ModelTarget, TargetDraft } from './targets';
-import { interviewBody, messageBody } from './outgoing';
+import { commandBody, interviewBody, messageBody } from './outgoing';
 import { replyLooks, threadLines, type ReplyLook } from './threads';
 import { continued, isMac } from './views';
 import type { SentView, ViewScope, ViewTarget } from './views';
@@ -266,7 +268,7 @@ export function SessionChat(props: {
         for (const r of state.requests) if (isAiAuthor(r.author) && r.replyTo?.kind === 'Message') aiReplies.set(r.replyTo.request, r.id);
         for (const r of state.requests) {
             // a message of an interview: the AI's question under it, or pending while the interviewer thinks
-            const inInterview = solo ? interviewSlot(state, r) : undefined;
+            const inInterview = solo ? (interviewSlot(state, r) ?? commandSlot(state, r)) : undefined;
             const slot =
                 inInterview === 'none' ? undefined : (inInterview ?? aiSlot(solo, r, triages.get(r.id), givenUp, settled.sent.has(r.id), aiReplies.get(r.id)));
             if (slot) slots.set(r.id, slot);
@@ -957,6 +959,14 @@ function streamRows(shown: Shown, tx: Tx): Row[] {
                     // the AI's, continuing its answer right above as its messages do
                     author: AI_PARTICIPANT,
                     render: (continues) => <ProposalCard proposal={item.proposal} continues={continues} />,
+                };
+            case 'command':
+                return {
+                    key: item.key,
+                    kind: item.kind,
+                    // the AI's, under the message that started it
+                    author: AI_PARTICIPANT,
+                    render: (continues) => <CandidatesCard command={item.command} continues={continues} />,
                 };
             case 'card':
                 return { key: item.key, kind: item.kind, author: undefined, render: () => <RunCard unit={item.unit} /> };
@@ -1726,6 +1736,7 @@ function Composer(props: {
     const slashKey = slashText === undefined ? undefined : 'slash';
     const slashOpen = slashText !== undefined && dismissed !== slashKey;
     const running = runningInterview(session.state);
+    const facilitator = session.me.participant.role === 'facilitator';
     const scope = useMemo(
         (): SlashScope => ({ view: props.slash.view, selected: selectedOf(props.slash.selected, props.candidates) }),
         [props.slash.view, props.slash.selected, props.candidates],
@@ -1736,7 +1747,7 @@ function Composer(props: {
               lang,
               scope,
               commandNames: tx.chat.slash.commands,
-              canStart: session.me.participant.role === 'facilitator' && !running,
+              canStart: (id) => canStartCommand(session.state, facilitator, id),
               ...(session.state.templates && { team: session.state.templates }),
           })
         : [];
@@ -1808,7 +1819,7 @@ function Composer(props: {
         editor.current?.pick(query, mention);
     };
 
-    /** A `/` item picked: a template's text into the composer (to edit), or a command started (an interview). */
+    /** A `/` item picked: a template's text into the composer (to edit), or a command started (an interview, or another). */
     const pickSlash = async (item: SlashItem | undefined): Promise<void> => {
         if (!item) return;
         if (item.kind === 'template') {
@@ -1820,7 +1831,9 @@ function Composer(props: {
         setSending(true);
         try {
             const focus = scope.selected?.target.target;
-            await sessionApi.startInterview(interviewBody({ command: item.id, body: tx.chat.slash.commands[item.id], language: lang, focus, viewedAt }));
+            const start = { body: tx.chat.slash.commands[item.id], language: lang, focus, viewedAt };
+            if (isInterviewCommandId(item.id)) await sessionApi.startInterview(interviewBody({ ...start, command: item.id }));
+            else await sessionApi.startCommand(commandBody({ ...start, command: item.id }));
             await composer.clear();
             setError(undefined);
         } catch (e) {
@@ -1905,7 +1918,7 @@ function Composer(props: {
                             >
                                 {c.kind === 'command' && <Sparkles size={13} aria-hidden className="chat-slash-icon" />}
                                 <span className="chat-mention-name">{c.name}</span>
-                                {c.kind === 'command' && <span className="chat-slash-what muted">{tx.chat.slash.command}</span>}
+                                {c.kind === 'command' && <span className="chat-slash-what muted">{tx.chat.slash.types[c.type]}</span>}
                                 {c.kind === 'template' && c.template.team && <span className="chat-mention-kind">{tx.chat.slash.team}</span>}
                                 <span className="chat-mention-where muted">/{c.id}</span>
                             </li>

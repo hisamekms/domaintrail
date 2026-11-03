@@ -142,8 +142,8 @@ describe('interviews', () => {
         // ended: the starter's messages are triaged again
         expect(value(await say(use, session, facilitator, '@AI[p1] ありがとう', { mentions: [AI_PARTICIPANT_ID] })).triage).toBeDefined();
         const soFar = value(await use.sessionSoFar({ session }));
-        expect(soFar.text).toContain('started the interview /es');
-        expect(soFar.text).toContain('confirmed the brief of the interview /es after editing it');
+        expect(soFar.text).toContain('started the interview /es:start');
+        expect(soFar.text).toContain('confirmed the brief of the interview /es:start after editing it');
         expect(soFar.text).toContain('目的: 返金を3日以内に');
     });
 
@@ -153,7 +153,7 @@ describe('interviews', () => {
         value(await use.briefInterview({ interview: started.interview.id, answered: started.request.id, brief: brief() }));
         const more = value(await say(use, session, facilitator, '範囲に交換も入れて'));
         expect(more.interview).toMatchObject({ state: 'Asking', awaiting: more.request.id });
-        expect(value(await use.sessionSoFar({ session })).open).toEqual([expect.stringContaining('The interview /es')]);
+        expect(value(await use.sessionSoFar({ session })).open).toEqual([expect.stringContaining('The interview /es:start')]);
         const stopped = value(await use.stopInterview({ interview: started.interview.id, actor: facilitator }));
         expect(stopped).toMatchObject({ state: 'Stopped', stoppedBy: facilitatorId });
         expect(error(await use.stopInterview({ interview: started.interview.id, actor: facilitator }))).toMatchObject({ type: 'NotAllowed' });

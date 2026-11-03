@@ -7889,6 +7889,33 @@ label.proposal-option {
 .proposal-row.state-Withdrawn .proposal {
     opacity: 0.6;
 }
+/* a candidate command's card (`/es:exceptions`): the proposal's look, a checkbox per candidate */
+.proposal-option input[type='checkbox'] {
+    flex: none;
+    width: 13px;
+    height: 13px;
+    margin: calc((1.5em - 13px) / 2) 0 0;
+}
+.proposal-option.candidate.dropped {
+    opacity: 0.55;
+}
+.candidates-line {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin: 0;
+    font-size: 0.8125rem;
+}
+.candidates-reason {
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.candidates-scope {
+    font-weight: normal;
+}
+.candidates-row.state-Stopped .proposal {
+    opacity: 0.6;
+}
 /* the facilitator's record of a triage: small muted lines under the message, the stage that decided strong */
 .triage-record {
     margin-top: var(--space-2);
@@ -7955,7 +7982,7 @@ label.proposal-option {
     color: var(--accent);
 }
 
-/* a running interview (`/es`, `/model`): its bar above the composer and, once written, its brief */
+/* a running interview (`/es:start`, `/model:start`): its bar above the composer and, once written, its brief */
 .chat-interview {
     margin: var(--space-1) 0;
     border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);

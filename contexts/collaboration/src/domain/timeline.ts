@@ -6,11 +6,12 @@
 // - each AI turn in a few lines: which messages, the outcome (completed, unchanged, answered, needs clarification,
 //   failed, declined, cancelled, reverted), its title and summary, what it changed (elements when known, else files;
 //   never the diff), its assumptions and how each was decided;
-// - events: proposals made, approved (edited), rejected (with the note) or withdrawn; interviews (`/es`, `/model`)
-//   started, their brief, confirmed (with its run) or stopped; restores; files changed outside the session (a snapshot
-//   whose content differs from the revision before it);
-// - what is open now: the AI's questions awaiting an answer, the proposals awaiting approval, a running interview, the
-//   messages waiting for the AI, the queue.
+// - events: proposals made, approved (edited), rejected (with the note) or withdrawn; interviews (`/es:start`,
+//   `/model:start`) started, their brief, confirmed (with its run) or stopped; the other `/` commands started, their
+//   candidates, those applied (with the run) or the command stopped; restores; files changed outside the session (a
+//   snapshot whose content differs from the revision before it);
+// - what is open now: the AI's questions awaiting an answer, the proposals awaiting approval, a running interview or
+//   command, the messages waiting for the AI, the queue.
 //
 // Entries are numbered in time order; an AI turn is placed when it ended (a queued or running one is "open now"), so the
 // list only grows and a warm agent can be given only the entries after the last one it saw (`since`). Limits: the newest
@@ -25,6 +26,7 @@ import { compareFiles } from './compare.js';
 import { laterRunOf } from './marks.js';
 import { briefLines, commandId } from './interviews.js';
 import { elementReference } from './proposals.js';
+import { slashCommandName } from './slash-commands.js';
 import { revertStatus } from './revert.js';
 
 /** The limits of the timeline: the newest entries in full, then one line each, the rest counted (configurable later). */
@@ -45,6 +47,8 @@ export interface TimelineRecords {
     readonly triages: readonly Collaboration.Triage[];
     /** The interviews of the `/` commands (absent: none). */
     readonly interviews?: readonly Collaboration.Interview[];
+    /** The candidate and answer commands of the `/` list (absent: none). */
+    readonly slashCommands?: readonly Collaboration.SlashCommand[];
     /**
      * What a run changed in the model's words (element names, by run ID), when the caller measured it; a run without
      * one is told by the files its revisions differ by.
@@ -52,7 +56,7 @@ export interface TimelineRecords {
     readonly elementChanges?: ReadonlyMap<string, readonly string[]>;
 }
 
-export type TimelineEntryKind = 'message' | 'answer' | 'turn' | 'proposal' | 'interview' | 'restore' | 'external';
+export type TimelineEntryKind = 'message' | 'answer' | 'turn' | 'proposal' | 'interview' | 'command' | 'restore' | 'external';
 
 /** One entry of the timeline: its number (from 1, in time order), when, and its full and one-line texts. */
 export interface TimelineEntry {
@@ -233,6 +237,52 @@ function numbered(records: TimelineRecords): { readonly entries: TimelineEntry[]
             });
     }
 
+    for (const c of records.slashCommands ?? []) {
+        const what = `/${slashCommandName(c.kind)}`;
+        drafts.push({
+            at: c.startedAt,
+            kind: 'command',
+            key: `command:${c.id}`,
+            render: (ref) => {
+                const line = `${nameOf(c.startedBy)} ran ${what}${c.scope ? ` on @{es:${c.scope}}` : ''} (${ref(`request:${c.opening}`) ?? 'its opening message'})`;
+                return { full: line, line: cut(line, LINE_CHARS) };
+            },
+        });
+        const candidates = c.state === 'Listed' || c.state === 'Applied' ? c.candidates : undefined;
+        if (candidates && c.state === 'Listed')
+            drafts.push({
+                at: c.listedAt,
+                kind: 'command',
+                key: `command-listed:${c.id}`,
+                render: () => ({
+                    full: `${AI_NAME} listed ${candidates.length} candidate(s) for ${what}, waiting for ${nameOf(c.startedBy)} to choose:${candidates.length ? `\n${indent(candidates.map(candidateOf).join('\n'))}` : ''}`,
+                    line: cut(`${AI_NAME} listed ${candidates.length} candidate(s) for ${what}`, LINE_CHARS),
+                }),
+            });
+        if (c.state === 'Applied') {
+            const chosen = c.chosen.flatMap((i) => c.candidates[i] ?? []);
+            drafts.push({
+                at: c.appliedAt,
+                kind: 'command',
+                key: `command-applied:${c.id}`,
+                render: (ref) => ({
+                    full: `${nameOf(c.startedBy)} applied ${chosen.length} of the ${c.candidates.length} candidates of ${what} (${ref(`run:${c.run}`) ?? 'its run is in the queue'}):\n${indent(chosen.map(candidateOf).join('\n'))}`,
+                    line: cut(`${nameOf(c.startedBy)} applied ${chosen.map((x) => x.label).join(', ')} from ${what}`, LINE_CHARS),
+                }),
+            });
+        }
+        if (c.state === 'Stopped')
+            drafts.push({
+                at: c.stoppedAt,
+                kind: 'command',
+                key: `command-stopped:${c.id}`,
+                render: () => {
+                    const line = `${nameOf(c.stoppedBy)} stopped ${what}`;
+                    return { full: line, line };
+                },
+            });
+    }
+
     let previous: Collaboration.Revision | undefined;
     for (const rev of revisions) {
         const before = previous;
@@ -341,6 +391,10 @@ const briefOf = (b: Collaboration.InterviewBrief): string =>
         ...briefLines(b.text).map((l) => (l.head ? `${l.head}: ${l.text}` : l.text)),
     ].join('\n');
 
+/** A candidate of a `/` command as the timeline tells it: its label, the elements, how. */
+const candidateOf = (c: Collaboration.CommandCandidate): string =>
+    `- ${c.label}${c.targets.length ? ` (${c.targets.map(elementReference).join(', ')})` : ''}: ${c.how}`;
+
 /** The label of the option an approved proposal was approved with, if it had options. */
 const chosenLabel = (p: Collaboration.ChangeProposal): string | undefined =>
     p.state === 'Approved' && p.option !== undefined ? p.content.options[p.option]?.label : undefined;
@@ -445,6 +499,11 @@ export function openNow(records: TimelineRecords): string[] {
                 `The interview /${commandId(i.command)} ${ref(`interview:${i.id}`)} runs: ${i.awaiting ? 'the AI is to ask its next question' : 'the AI asked, the answer is awaited'}`,
             );
         if (i.state === 'Briefed') open.push(`The brief of the interview /${commandId(i.command)} ${ref(`interview:${i.id}`)} awaits confirmation`);
+    }
+    for (const c of records.slashCommands ?? []) {
+        const what = `/${slashCommandName(c.kind)} ${ref(`command:${c.id}`)}`;
+        if (c.state === 'Working') open.push(`The command ${what} runs: the AI is working on it`);
+        if (c.state === 'Listed' && c.candidates.length) open.push(`The candidates of the command ${what} await a choice`);
     }
     for (const t of records.triages) {
         if (t.state === 'Pending') open.push(`${ref(`request:${t.request}`)} waits for the AI (being triaged)`);
