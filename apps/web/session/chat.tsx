@@ -114,6 +114,7 @@ import { ComposerEditor, type ComposerEditorApi, type EditorQuery, type MentionL
 import { mentionFits, type ComposerMention } from './composer-text';
 import type { ModelTarget, TargetDraft } from './targets';
 import { interviewBody, messageBody } from './outgoing';
+import { replyLooks, threadLines, type ReplyLook } from './threads';
 import { continued, isMac } from './views';
 import type { SentView, ViewScope, ViewTarget } from './views';
 import type { ComposerDraft, SessionData } from './useSession';
@@ -801,7 +802,9 @@ function Stream({ shown }: { shown: Shown }) {
         toBottom();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [signature]);
-    const follows = continued(rows.map((r) => r.author));
+    // a row continues the one before of the same author on the same line of replies only (a reply hanging under a
+    // message, indented, shows its avatar; so does the row after the replies)
+    const follows = continued(rows.map((r) => r.author)).map((c, i) => c && rows[i - 1]?.look.hangsOn === rows[i]?.look.hangsOn);
     // the items there when the stream is first shown with something in it (the page loaded, the tab switched back):
     // only those posted after come in with motion
     const [initial] = useState(() => new Set<string>());
@@ -865,13 +868,15 @@ function Stream({ shown }: { shown: Shown }) {
  */
 function StreamLine({ row, continues, initial }: { row: Row; continues: boolean; initial: Set<string> }) {
     const live = !initial.has(row.id);
+    const { look } = row;
+    const thread = `${look.head ? ' chat-thread-head' : ''}${look.hangsOn !== undefined ? ' chat-thread-reply' : ''}${look.more ? ' chat-thread-more' : ''}`;
     // the AI's card turning into its answer grows in its own row (`AiSlotRow`); this is an answer in a row of its own
     const grows = live && isAiArrival(row) && !row.id.startsWith('ai:');
     const ref = useGrow<HTMLLIElement>(row.id, grows);
     return (
         <li
             ref={ref}
-            className={`chat-item chat-item-${row.kind}${continues ? ' continued' : ''}${live && !grows ? ' motion-pop motion-pop-up' : ''}`}
+            className={`chat-item chat-item-${row.kind}${continues ? ' continued' : ''}${thread}${live && !grows ? ' motion-pop motion-pop-up' : ''}`}
             data-item={row.key}
             onAnimationEnd={(e) => {
                 // once in, it is an item like the others: shown again (the tab switched back), it does not come in again
@@ -880,6 +885,8 @@ function StreamLine({ row, continues, initial }: { row: Row; continues: boolean;
                 e.currentTarget.classList.remove('motion-pop', 'motion-pop-up');
             }}
         >
+            {/* the line it hangs on says it without words: what it replies to, for those who do not see it */}
+            {look.hangsOn !== undefined && row.to && <RepliesTo to={row.to} />}
             {row.render(continues)}
         </li>
     );
@@ -889,25 +896,30 @@ function StreamLine({ row, continues, initial }: { row: Row; continues: boolean;
  * A line of the stream: a divider, a card, a message of an author that may continue the one before, or the AI's card
  * under a message (Solo). `key` names what it shows (`message:<id>`, `card:<key>`: what `jump` and the pills look for);
  * `id` is its row's, kept while what it shows changes (the AI's card turning into its answer, a message sent from this
- * page becoming the server's).
+ * page becoming the server's). `look`: how it stands among the replies (`threads.ts`), `to` what it replies to.
  */
 interface Row {
     readonly id: string;
     readonly key: string;
     readonly kind: string;
     readonly author: string | undefined;
+    readonly look: ReplyLook;
+    readonly to: ReplyTo | undefined;
     readonly render: (continues: boolean) => ReactNode;
 }
 
+/** What a row replies to: a message, or a run (on its card). */
+type ReplyTo = { readonly kind: 'Message'; readonly request: string } | { readonly kind: 'Run'; readonly run: string };
+
 function streamRows(shown: Shown, tx: Tx): Row[] {
-    const keyOf = (e: ChatEntry): string => (e.kind === 'item' ? e.item.key : `ai:${e.request}`);
     const slotted = new Set(shown.entries.flatMap((e) => (e.kind === 'slot' ? [e.request] : [])));
     // the row of a message sent from this page keeps the key it had while on its way
     const rowId = (item: StreamItem): string => {
         const local = item.kind === 'message' ? shown.sent.get(item.request.id) : undefined;
         return local === undefined ? item.key : `message:${local}`;
     };
-    const itemRow = (item: StreamItem, above: string | undefined): Omit<Row, 'id'> => {
+    const looks = replyLooks(threadLines(shown.entries));
+    const itemRow = (item: StreamItem, look: ReplyLook): Omit<Row, 'id' | 'look' | 'to'> => {
         switch (item.kind) {
             case 'session-start':
                 return { key: item.key, kind: item.kind, author: undefined, render: () => <Divider at={item.at}>{tx.chat.started}</Divider> };
@@ -923,9 +935,8 @@ function streamRows(shown: Shown, tx: Tx): Row[] {
                     ),
                 };
             case 'message': {
-                const to = item.request.replyTo;
-                // the item right above: an answer or a proposal right under its message needs no line naming it
-                const underIt = to?.kind === 'Message' && above === `message:${to.request}`;
+                // hanging right under what it replies to: no line quoting it
+                const hangs = look.hangsOn !== undefined;
                 const id = item.request.id;
                 return {
                     key: item.key,
@@ -933,9 +944,9 @@ function streamRows(shown: Shown, tx: Tx): Row[] {
                     author: item.request.author,
                     render: (continues) =>
                         isAiAuthor(item.request.author) ? (
-                            <AiMessageRow request={item.request} continues={continues} underIt={underIt} />
+                            <AiMessageRow request={item.request} continues={continues} hangs={hangs} />
                         ) : (
-                            <MessageRow request={item.request} continues={continues} slotted={slotted.has(id)} waiting={shown.waiting.has(id)} />
+                            <MessageRow request={item.request} continues={continues} hangs={hangs} slotted={slotted.has(id)} waiting={shown.waiting.has(id)} />
                         ),
                 };
             }
@@ -951,18 +962,27 @@ function streamRows(shown: Shown, tx: Tx): Row[] {
                 return { key: item.key, kind: item.kind, author: undefined, render: () => <RunCard unit={item.unit} /> };
         }
     };
+    const toOf = (item: StreamItem): ReplyTo | undefined => (item.kind === 'message' ? item.request.replyTo : undefined);
     return shown.entries.map((entry, i): Row => {
-        const prev = shown.entries[i - 1];
-        const above = prev && keyOf(prev);
-        if (entry.kind === 'item') return { id: rowId(entry.item), ...itemRow(entry.item, above) };
+        const look = looks[i] ?? { hangsOn: undefined, head: false, more: false, quote: false };
+        if (entry.kind === 'item') return { id: rowId(entry.item), look, to: toOf(entry.item), ...itemRow(entry.item, look) };
         const local = shown.sent.get(entry.request);
         const id = `ai:${local ?? entry.request}`;
+        const to: ReplyTo = { kind: 'Message', request: entry.request };
         const content = entry.content;
         if (content.kind !== 'item')
-            return { id, key: id, kind: 'ai-slot', author: AI_PARTICIPANT, render: () => <AiSlotRow request={entry.request} phase={content.kind} /> };
+            return {
+                id,
+                key: id,
+                kind: 'ai-slot',
+                author: AI_PARTICIPANT,
+                look,
+                to,
+                render: () => <AiSlotRow request={entry.request} phase={content.kind} />,
+            };
         // the answer or the run card, right under its message
-        const row = itemRow(content.item, `message:${entry.request}`);
-        return { ...row, id, render: (continues) => <AiSlotRow request={entry.request} phase="item" item={row.render(continues)} /> };
+        const row = itemRow(content.item, look);
+        return { ...row, id, look, to, render: (continues) => <AiSlotRow request={entry.request} phase="item" item={row.render(continues)} /> };
     });
 }
 
@@ -1031,7 +1051,19 @@ function AiPendingCard({ request, givenUp }: { request: string; givenUp: boolean
  * judged to need nothing) and its … (several together; the triage's record); ↩ and ☺+. In Solo, a message with the AI's
  * card under it (`slotted`) leaves all that to the card; one still on its way to the server (`waiting`) has no actions.
  */
-function MessageRow({ request: r, continues, slotted, waiting }: { request: RequestJson; continues: boolean; slotted: boolean; waiting: boolean }) {
+function MessageRow({
+    request: r,
+    continues,
+    hangs,
+    slotted,
+    waiting,
+}: {
+    request: RequestJson;
+    continues: boolean;
+    hangs: boolean;
+    slotted: boolean;
+    waiting: boolean;
+}) {
     const { session, tx, nameOf, avatarOf, onNavigate, control, solo, marks, selection, actions, showPerson, triages, givenUp } = useChat();
     const author = nameOf(r.author);
     const avatarUrl = avatarOf(r.author);
@@ -1109,8 +1141,9 @@ function MessageRow({ request: r, continues, slotted, waiting }: { request: Requ
                 className={`chat-bubble-request${mine ? ' mine' : ''}`}
                 side={side}
             >
-                {r.replyTo?.kind === 'Run' && <ReplyReferenceLine run={r.replyTo.run} />}
-                {r.replyTo?.kind === 'Message' && <MessageReferenceLine request={r.replyTo.request} />}
+                {/* what it replies to, unless it hangs right under it */}
+                {!hangs && r.replyTo?.kind === 'Run' && <ReplyReferenceLine run={r.replyTo.run} />}
+                {!hangs && r.replyTo?.kind === 'Message' && <MessageReferenceLine request={r.replyTo.request} />}
                 <TargetChips targets={r.targets} statuses={statuses} onNavigate={onNavigate} tx={tx} />
                 <Clamped tx={tx} revealKey={`message:${r.id}`}>
                     <MentionedText
@@ -1181,14 +1214,14 @@ function AiStatus({ ai }: { ai: MessageAi }) {
 
 /**
  * An answer of the AI (ADR 0030): a message of the AI, with its avatar and name, its text as Markdown with element links. On top,
- * the message it answers, unless it is right above. Anyone replies to it (the reply is addressed to the AI) and reacts.
+ * the message it answers, unless it hangs right under it. Anyone replies to it (the reply is addressed to the AI) and reacts.
  */
-function AiMessageRow({ request: r, continues, underIt }: { request: RequestJson; continues: boolean; underIt: boolean }) {
+function AiMessageRow({ request: r, continues, hangs }: { request: RequestJson; continues: boolean; hangs: boolean }) {
     const { tx, onNavigate, solo } = useChat();
     return (
         <div className="chat-row">
             <Bubble avatar={<AiAvatar />} who={tx.chat.agent} at={r.sentAt} continues={continues} className="chat-bubble-ai">
-                {r.replyTo?.kind === 'Message' && !underIt && <MessageReferenceLine request={r.replyTo.request} />}
+                {r.replyTo?.kind === 'Message' && !hangs && <MessageReferenceLine request={r.replyTo.request} />}
                 <Clamped tx={tx} revealKey={`message:${r.id}`} blocks>
                     <MarkdownText text={r.body} onNavigate={onNavigate} />
                 </Clamped>
@@ -1200,6 +1233,23 @@ function AiMessageRow({ request: r, continues, underIt }: { request: RequestJson
             </RowActions>
         </div>
     );
+}
+
+/**
+ * What a reply hanging right under it replies to, for a screen reader (the line it hangs on says it to the eye):
+ * 「返信: <its author>」, or the name of the run's card.
+ */
+function RepliesTo({ to }: { to: ReplyTo }) {
+    const { session, tx, nameOf, replies } = useChat();
+    let who: string | undefined;
+    if (to.kind === 'Message') {
+        const ref = replies.messageReferenceOf(to.request);
+        who = ref && speakerName(ref.author, session.me.participant.id, nameOf, tx.chat.you);
+    } else {
+        const ref = replies.referenceOf(to.run);
+        who = ref && tx.chat.replies.reference(ref.name);
+    }
+    return who === undefined ? null : <span className="visually-hidden">{tx.chat.replies.repliesTo(who)}</span>;
 }
 
 /**

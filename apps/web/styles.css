@@ -5309,6 +5309,55 @@ button.add-to-request.added:hover {
 .chat-item.continued {
     margin-top: var(--space-1);
 }
+/* a reply right under what it replies to (`threads.ts`): a little indented, hanging on a thin line from the avatar of
+   the row replied to, which runs down to each reply's avatar with a rounded turn into it; no words, no quote line. The
+   line is drawn by the rows themselves: under the head's avatar to its bottom and on through the gap (::after), a turn
+   into each reply's avatar (::before), and on past a reply that has more below it. Decorative: pseudo-elements only */
+.chat-items {
+    --thread-x: calc(var(--chat-avatar) / 2);
+    --thread-indent: calc(var(--chat-avatar) / 2 + var(--space-3));
+    --thread-gap: var(--space-3);
+    --thread-turn: 8px;
+    --thread-line: var(--border-strong);
+}
+.chat-thread-head,
+.chat-thread-reply {
+    position: relative;
+}
+.chat-item.chat-thread-reply {
+    margin-top: var(--thread-gap);
+    padding-left: var(--thread-indent);
+}
+.chat-thread-head::after,
+.chat-thread-more::after,
+.chat-thread-reply::before {
+    content: '';
+    position: absolute;
+    left: calc(var(--thread-x) - 0.5px);
+    border-left: 1px solid var(--thread-line);
+    pointer-events: none;
+}
+/* from under the head's avatar down through the gap to the first reply */
+.chat-thread-head::after {
+    top: calc(var(--chat-avatar) + var(--space-1));
+    bottom: calc(-1 * var(--thread-gap));
+}
+.chat-thread-head.continued::after {
+    top: var(--space-1);
+}
+/* the turn into the reply's avatar, to its middle */
+.chat-thread-reply::before {
+    top: 0;
+    height: calc(var(--chat-avatar) / 2);
+    width: calc(var(--thread-indent) - var(--thread-x) - var(--space-1));
+    border-bottom: 1px solid var(--thread-line);
+    border-bottom-left-radius: var(--thread-turn);
+}
+/* on past this reply to the next one on the line */
+.chat-thread-more::after {
+    top: calc(var(--chat-avatar) / 2 - var(--thread-turn));
+    bottom: calc(-1 * var(--thread-gap));
+}
 .chat-avatar-space {
     flex: none;
     width: var(--chat-avatar);
