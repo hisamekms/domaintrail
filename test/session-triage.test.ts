@@ -469,10 +469,13 @@ describe('the answers entry point', () => {
 });
 
 describe('the interviews of `/es:start` and `/model:start`', () => {
-    test("the facilitator only; the starter's answers go to the interviewer, others' are triaged; the brief confirmed is a run", async () => {
+    test("anyone starts one; the starter's answers go to the interviewer, others' are triaged; the brief confirmed is a run", async () => {
         const ctx = await setup();
-        const refused = await ctx.api(ctx.bob, 'interviews', { command: 'es:start', body: 'ES を始める', language: 'ja' });
-        expect(refused.status).toBe(403);
+        // a participant starts one too; the facilitator may stop it
+        const bobsStart = await ctx.api(ctx.bob, 'interviews', { command: 'es:start', body: 'ES を始める', language: 'ja' });
+        expect(bobsStart.status).toBe(201);
+        const { interview: bobsInterview } = (await bobsStart.json()) as { interview: { id: string } };
+        expect((await ctx.api(ctx.ada, `interviews/${bobsInterview.id}/stop`, {})).status).toBe(200);
         expect((await ctx.api(ctx.ada, 'interviews', { command: 'es:recap', body: 'x', language: 'ja' })).status).toBe(400);
         const started = await ctx.api(ctx.ada, 'interviews', { command: 'es:start', body: 'ES を始める', language: 'ja' });
         expect(started.status).toBe(201);
@@ -533,6 +536,54 @@ describe('the interviews of `/es:start` and `/model:start`', () => {
             brief: { command: 'Es', brief: { name: 'Returns', text: '目的: 返金を早める\n範囲: 返品' } },
         });
         expect((await ctx.state()).interviews?.find((i) => i.id === interview.id)).toMatchObject({ state: 'Confirmed', edited: true, run: run.id });
+    });
+
+    test("a participant's interview: he answers, its brief waits for the facilitator, who approves it or rejects it", async () => {
+        const ctx = await setup();
+        const stream = answerStream(ctx);
+        const lines = ['目的', '範囲', '使い道', 'レベル'].map((head) => ({ head, text: `${head}の答え` }));
+        /** Bob's interview, asked once, answered (his choice), briefed. */
+        const briefed = async (): Promise<{ id: string; answer: string }> => {
+            const started = await ctx.api(ctx.bob, 'interviews', { command: 'es:start', body: 'ES を始める', language: 'ja' });
+            expect(started.status).toBe(201);
+            const { interview } = (await started.json()) as { interview: { id: string } };
+            const first = await stream.interviewJob();
+            expect(first).toMatchObject({ kind: 'interview', author: 'Bob' });
+            const posted = { kind: 'question', question: 'どの業務ですか？', choices: ['返品', '交換'], multiple: false, durationMs: 1 };
+            expect((await stream.post(first.job, posted)).status).toBe(200);
+            const question = (await ctx.state()).requests.findLast((r) => r.author === 'ai');
+            const answer = await say(ctx, ctx.bob, '返品', { replyTo: { kind: 'Message', request: question?.id } });
+            expect(triageOf(await ctx.state(), answer)).toBeUndefined();
+            const second = await stream.interviewJob();
+            const brief = { name: 'Returns', label: '返品', isNew: true, replaces: false, lines };
+            expect((await stream.post(second.job, { kind: 'brief', brief, durationMs: 1 })).status).toBe(200);
+            return { id: interview.id, answer };
+        };
+        const error = async (res: Response): Promise<[number, string]> => [res.status, ((await res.json()) as { error: { type: string } }).error.type];
+
+        const first = await briefed();
+        // its starter cannot confirm nor reject it
+        expect(await error(await ctx.api(ctx.bob, `interviews/${first.id}/confirm`, {}))).toEqual([403, 'FacilitatorOnly']);
+        expect(await error(await ctx.api(ctx.bob, `interviews/${first.id}/reject`, {}))).toEqual([403, 'FacilitatorOnly']);
+        const approved = await ctx.api(ctx.ada, `interviews/${first.id}/confirm`, {});
+        expect(approved.status).toBe(201);
+        const { run } = (await approved.json()) as { run: { id: string } };
+        const state = await ctx.state(ctx.bob);
+        expect(state.runs.find((r) => r.id === run.id)?.input).toMatchObject({ requests: [{ request: first.answer }], brief: { command: 'Es' } });
+        const adaId = ((await (await ctx.api(ctx.ada, 'me')).json()) as { participant: { id: string } }).participant.id;
+        expect(state.interviews?.find((i) => i.id === first.id)).toMatchObject({ state: 'Confirmed', startedBy: ctx.bobId, confirmedBy: adaId });
+
+        const second = await briefed();
+        expect((await ctx.api(ctx.ada, `interviews/${second.id}/reject`, { note: '' })).status).toBe(400);
+        const rejected = await ctx.api(ctx.ada, `interviews/${second.id}/reject`, { note: '範囲が広すぎます' });
+        expect(rejected.status).toBe(200);
+        expect(((await rejected.json()) as { interview: object }).interview).toMatchObject({ state: 'Rejected', note: '範囲が広すぎます' });
+        expect(await error(await ctx.api(ctx.ada, `interviews/${second.id}/confirm`, {}))).toEqual([409, 'NotAllowed']);
+        // the session so far tells both (a recap's job carries it)
+        expect((await ctx.api(ctx.bob, 'commands', { command: 'es:recap', body: 'まとめ', language: 'ja' })).status).toBe(201);
+        const soFar = (await stream.commandJob()).sessionSoFar?.text;
+        expect(soFar).toContain("approved Bob's brief of the interview /es:start");
+        expect(soFar).toContain("rejected Bob's brief of the interview /es:start for Returns: 範囲が広すぎます");
     });
 });
 
@@ -600,14 +651,13 @@ describe('the candidate and answer commands of the `/` list', () => {
 `;
     const storming = { kind: 'Storming', storming: 'Orders', level: 'BigPicture', exceptions: true } as const;
 
-    test('/es:exceptions: the facilitator only, no triage; candidates validated, a subset applied as one run; reload keeps it', async () => {
+    test('/es:exceptions: anyone starts it, no triage; candidates validated, a subset applied by the facilitator as one run', async () => {
         const root = await scratch();
         await writeFile(path.join(root, 'orders.dtes'), STORMING);
         const ctx = await setup(root);
         const body = { command: 'es:exceptions', body: '例外を洗い出す', language: 'ja', viewedAt: { view: storming } };
-        expect((await ctx.api(ctx.bob, 'commands', body)).status).toBe(403);
         expect((await ctx.api(ctx.ada, 'commands', { ...body, command: 'es:start' })).status).toBe(400);
-        const started = await ctx.api(ctx.ada, 'commands', body);
+        const started = await ctx.api(ctx.bob, 'commands', body);
         expect(started.status).toBe(201);
         const { command, request } = (await started.json()) as { command: { id: string; scope: string }; request: { id: string } };
         expect(command.scope).toBe('Orders');
@@ -616,7 +666,7 @@ describe('the candidate and answer commands of the `/` list', () => {
 
         const stream = answerStream(ctx);
         const job = await stream.commandJob();
-        expect(job).toMatchObject({ kind: 'command', name: 'es:exceptions', type: 'candidates', language: 'ja', author: 'Facilitator' });
+        expect(job).toMatchObject({ kind: 'command', name: 'es:exceptions', type: 'candidates', language: 'ja', author: 'Bob' });
         expect(job.request.viewedAt).toEqual({ view: storming });
         // an answer is not what it takes
         expect((await stream.post(job.job, { kind: 'answer', answer: 'x', durationMs: 1 })).status).toBe(409);
@@ -637,6 +687,7 @@ describe('the candidate and answer commands of the `/` list', () => {
             { kind: 'DtesElement', storming: 'Orders', local: 'Failed0' },
         ]);
 
+        // its starter cannot apply them: the facilitator does (the approval)
         expect((await ctx.api(ctx.bob, `commands/${command.id}/apply`, { chosen: [0] })).status).toBe(403);
         expect((await ctx.api(ctx.ada, `commands/${command.id}/apply`, { chosen: [12] })).status).toBe(400);
         const applied = await ctx.api(ctx.ada, `commands/${command.id}/apply`, { chosen: [3, 1] });
@@ -647,7 +698,12 @@ describe('the candidate and answer commands of the `/` list', () => {
             requests: [{ request: request.id }],
             candidates: { command: command.id, kind: 'EsExceptions', scope: 'Orders', chosen: [{ label: 'Failed1' }, { label: 'Failed3' }] },
         });
-        expect(state.slashCommands?.find((c) => c.id === command.id)).toMatchObject({ state: 'Applied', chosen: [1, 3], run: run.id });
+        expect(state.slashCommands?.find((c) => c.id === command.id)).toMatchObject({
+            state: 'Applied',
+            chosen: [1, 3],
+            appliedBy: state.session.facilitator,
+            run: run.id,
+        });
         // the session so far tells it (a recap's job carries it)
         expect((await ctx.api(ctx.ada, 'commands', { command: 'es:recap', body: 'まとめ', language: 'ja' })).status).toBe(201);
         expect((await stream.commandJob()).sessionSoFar?.text).toContain('applied 2 of the 12 candidates of /es:exceptions');
