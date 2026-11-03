@@ -4,7 +4,7 @@
 // print path (the browser's print dialog saves one). The options (the heading, the legend) are the viewer's, remembered.
 import { useCallback, useState } from 'react';
 import type { LaidOutGraph } from '@domaintrail/visualization';
-import { legendContent, type LegendView } from '../legend';
+import { legendContent, legendKindNames, type LegendView } from '../legend';
 import type { Messages } from '../i18n';
 import type { Rect, Scene } from '../scene';
 import { graphBounds } from './canvas';
@@ -178,7 +178,7 @@ export function exportSvg(target: ExportTarget, options: ExportOptions, t: Messa
         scene: target.scene(),
         bounds: exportBounds(target.graph),
         heading: options.heading ? target.heading : undefined,
-        legend: options.legend && target.legend ? { title: t.legend, content: legendContent(target.legend, t), kindNames: t.esKinds } : undefined,
+        legend: options.legend && target.legend ? { title: t.legend, content: legendContent(target.legend, t), kindNames: legendKindNames(t) } : undefined,
         palette,
         fonts,
         measure: canvasMeasure(),

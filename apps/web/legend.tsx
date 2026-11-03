@@ -2,6 +2,7 @@ import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { StormingElementKind } from '@domaintrail/storming';
 import type { EdgeKind } from '@domaintrail/visualization';
+import { checkPath, RESOLVED_MARK } from './diagram-items';
 import { useT, type Messages } from './i18n';
 
 /** The canvas views a legend is for (the structure's levels, focused or not, read differently). */
@@ -53,18 +54,22 @@ export function legendRows(view: LegendView, words: Messages['legendRows']): rea
     }
 }
 
+/** A chip of the storming legend's key: a kind of note, or a resolved hotspot (a hotspot toned down, with a check). */
+export type LegendKind = StormingElementKind | 'resolvedHotspot';
+
 /**
  * The storming's kinds in the legend's key, in the convention's order: the core notes (event orange, command blue,
- * policy purple, aggregate yellow, read model green, hotspot red), then the actor, the external system, a
- * timeline's group and a stage's frame. A timeline itself is its arrows (the rows above).
+ * policy purple, aggregate yellow, read model green, hotspot red, then a resolved one), then the actor, the external
+ * system, a timeline's group and a stage's frame. A timeline itself is its arrows (the rows above).
  */
-export const STORMING_LEGEND_KINDS: readonly StormingElementKind[] = [
+export const STORMING_LEGEND_KINDS: readonly LegendKind[] = [
     'event',
     'command',
     'policy',
     'aggregate',
     'readmodel',
     'hotspot',
+    'resolvedHotspot',
     'actor',
     'external',
     'group',
@@ -77,10 +82,13 @@ export interface LegendContent {
     /** Notes under the rows (what the stubs and the ↻ rows are). */
     readonly notes: readonly string[];
     /** The storming's kinds of note, in the key's order (an Event Storming only). */
-    readonly kinds: readonly StormingElementKind[];
+    readonly kinds: readonly LegendKind[];
     /** The last note: which way the arrows point. */
     readonly arrows: string;
 }
+
+/** The names of the legend key's chips, in the Live View's language. */
+export const legendKindNames = (t: Messages): Record<LegendKind, string> => ({ ...t.esKinds, resolvedHotspot: t.resolvedHotspot });
 
 /** The legend of `view`: on the screen, on a printed sheet and in an exported image. */
 export function legendContent(view: LegendView, t: Messages): LegendContent {
@@ -122,6 +130,7 @@ export function Legend({ view, open, onToggle }: { view: LegendView; open: boole
 export function LegendBody({ view }: { view: LegendView }): ReactNode {
     const t = useT();
     const { rows, notes, kinds, arrows } = legendContent(view, t);
+    const names = legendKindNames(t);
     return (
         <>
             {rows.map((r) => (
@@ -143,12 +152,24 @@ export function LegendBody({ view }: { view: LegendView }): ReactNode {
                 <div className="legend-kinds">
                     {kinds.map((k) => (
                         <span key={k} className={`kind kind-es-${k}`}>
-                            {t.esKinds[k]}
+                            {k === 'resolvedHotspot' && <ResolvedChipMark />}
+                            {names[k]}
                         </span>
                     ))}
                 </div>
             )}
             <div className="legend-note">{arrows}</div>
         </>
+    );
+}
+
+/** The check of a resolved hotspot, in its legend chip (the note's `RESOLVED_MARK`, smaller). */
+function ResolvedChipMark(): ReactNode {
+    const r = RESOLVED_MARK.radius - 2;
+    return (
+        <svg className="dn-resolved-mark-chip" width={2 * r} height={2 * r} viewBox={`0 0 ${2 * r} ${2 * r}`} aria-hidden>
+            <circle cx={r} cy={r} r={r} className="dn-resolved-disc" />
+            <path d={checkPath(r, r, r)} className="dn-resolved-check" />
+        </svg>
     );
 }

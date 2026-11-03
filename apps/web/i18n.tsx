@@ -236,6 +236,9 @@ const ja = {
     hotspotStatus: '状態',
     hotspotStatuses: { open: '未解決', resolved: '解決済み' } as Record<string, string>,
     resolution: '結論',
+    /** A resolved hotspot: its chip in the storming legend's key, and its note's tooltip (what was agreed). */
+    resolvedHotspot: '解決済みのホットスポット',
+    resolvedHotspotTip: (resolution: string): string => (resolution ? `解決済み: ${resolution}` : '解決済み'),
     occurrences: 'タイムラインでの出現',
     noOccurrences: 'どのタイムラインにも属していません',
     stepOf: (n: number) => `${n} 番目`,
@@ -1105,6 +1108,8 @@ const en: Messages = {
     hotspotStatus: 'Status',
     hotspotStatuses: { open: 'open', resolved: 'resolved' },
     resolution: 'Resolution',
+    resolvedHotspot: 'Resolved hotspot',
+    resolvedHotspotTip: (resolution) => (resolution ? `Resolved: ${resolution}` : 'Resolved'),
     occurrences: 'In timelines',
     noOccurrences: 'In no timeline',
     stepOf: (n) => `step ${n}`,

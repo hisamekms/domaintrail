@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import { createViewService, ElkLayoutEngine, type LaidOutGraph } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { MESSAGES } from '../i18n';
-import { legendContent } from '../legend';
+import { legendContent, legendKindNames } from '../legend';
 import { fitLabel, NOTE_KINDS } from '../note-fit';
 import { buildScene } from '../render';
 import type { Scene } from '../scene';
@@ -76,7 +76,9 @@ const draw = (graph: LaidOutGraph, extra: { heading?: string; legend?: boolean }
         scene: scene(graph),
         bounds: exportBounds(graph),
         heading: extra.heading,
-        legend: extra.legend ? { title: MESSAGES.ja.legend, content: legendContent('storming', MESSAGES.ja), kindNames: MESSAGES.ja.esKinds } : undefined,
+        legend: extra.legend
+            ? { title: MESSAGES.ja.legend, content: legendContent('storming', MESSAGES.ja), kindNames: legendKindNames(MESSAGES.ja) }
+            : undefined,
         palette,
         fonts,
         measure,
@@ -169,6 +171,44 @@ describe('the portable SVG', async () => {
         expect(full.height).toBeGreaterThan(plain.height + 100);
         expect(plain.svg).not.toContain(MESSAGES.ja.stormingArrowNote);
         expect(wellFormed(full.svg)).toBe(true);
+    });
+
+    test('a resolved hotspot: its toned paper, edge and text, its check, and its quieter `on`; none of it without one', () => {
+        // examples/shop's order-to-cash: one resolved hotspot (MixedCurrencies) among open ones
+        const graph = shop.stormings.find((s) => s.id === 'OrderToCash')!.views['design-level|']!.graph;
+        const full = scene(graph);
+        const resolved = full.nodes.filter((n) => n.props.resolution !== undefined);
+        expect(resolved.map((n) => n.elementId)).toEqual(['es/OrderToCash/MixedCurrencies']);
+        expect(full.nodes.some((n) => n.props.kind === 'esHotspot' && n.props.resolution === undefined)).toBe(true);
+        const open: Scene = {
+            ...full,
+            nodes: full.nodes.map(({ props: { resolution: _, ...props }, ...n }) => ({ ...n, props })),
+            edges: full.edges.map(({ props: { resolved: _, ...props }, ...e }) => ({ ...e, props })),
+        };
+        const svgOf = (s: Scene): string => portableSvg({ scene: s, bounds: exportBounds(graph), palette, fonts, measure }).svg;
+        const [withResolved, without] = [svgOf(full), svgOf(open)];
+        const count = (svg: string, attr: string, v: keyof Palette): number => svg.split(`${attr}="${palette[v].hex}"`).length - 1;
+        expect(count(withResolved, 'fill', '--es-hotspot-resolved')).toBe(1);
+        expect(count(withResolved, 'stroke', '--es-hotspot-resolved-border')).toBe(1);
+        expect(count(withResolved, 'fill', '--es-hotspot-resolved-text')).toBeGreaterThan(0);
+        expect(count(withResolved, 'fill', '--es-resolved-mark')).toBe(1);
+        expect(count(withResolved, 'stroke', '--es-resolved-mark-ink')).toBe(1);
+        expect(count(withResolved, 'stroke', '--es-hotspot-resolved-edge')).toBe(full.edges.filter((e) => e.props.resolved).length);
+        expect(full.edges.filter((e) => e.props.resolved).length).toBeGreaterThan(0);
+        for (const v of ['--es-hotspot-resolved', '--es-hotspot-resolved-border', '--es-resolved-mark', '--es-hotspot-resolved-edge'] as const)
+            expect(without).not.toContain(`"${palette[v].hex}"`);
+        expect(wellFormed(withResolved)).toBe(true);
+        // the legend's key names it, with its check
+        const legend = portableSvg({
+            scene: open,
+            bounds: exportBounds(graph),
+            legend: { title: MESSAGES.ja.legend, content: legendContent('storming', MESSAGES.ja), kindNames: legendKindNames(MESSAGES.ja) },
+            palette,
+            fonts,
+            measure,
+        }).svg;
+        expect(legend).toContain(`>${MESSAGES.ja.resolvedHotspot}</tspan>`);
+        expect(count(legend, 'fill', '--es-resolved-mark')).toBe(1);
     });
 });
 

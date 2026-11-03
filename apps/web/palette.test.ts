@@ -98,3 +98,24 @@ describe('the text tokens on the surfaces', () => {
         }
     });
 });
+
+describe('a resolved hotspot', () => {
+    // its label on its toned paper (4.5:1, and Lc 75 in light, 60 in dark: quieter than an open hotspot's, as the
+    // theme's muted text is), the check on its disc (a symbol, held to 4.5:1 too)
+    const lc: Record<Theme, number> = { light: 75, dark: 60 };
+    for (const theme of ['light', 'dark'] as const) {
+        test(`${theme}: its text reads on its toned paper, and its check on the green disc`, () => {
+            const [text, paper] = [resolve('--es-hotspot-resolved-text', theme), resolve('--es-hotspot-resolved', theme)];
+            expect(wcag(text, paper)).toBeGreaterThanOrEqual(4.5);
+            expect(Math.abs(apca(text, paper))).toBeGreaterThanOrEqual(lc[theme]);
+            expect(wcag(resolve('--es-resolved-mark-ink', theme), resolve('--es-resolved-mark', theme))).toBeGreaterThanOrEqual(4.5);
+        });
+
+        test(`${theme}: is quieter than an open hotspot (its edge and its \`on\` nearer the surface)`, () => {
+            const surface = resolve('--surface', theme);
+            expect(wcag(resolve('--es-hotspot-resolved-border', theme), surface)).toBeLessThan(wcag(resolve('--es-hotspot-border', theme), surface));
+            expect(wcag(resolve('--es-hotspot-resolved-edge', theme), surface)).toBeLessThan(wcag(resolve('--model-edge-quiet', theme), surface));
+            expect(wcag(resolve('--es-hotspot-resolved', theme), surface)).toBeLessThan(wcag(resolve('--es-hotspot', theme), surface));
+        });
+    }
+});

@@ -5,7 +5,7 @@
 // (as a generic family stack) and wrapped, shrunk and cut short with «…» as the canvas does (`note-fit.ts`), measured
 // by the caller (a canvas's `measureText` in the page; a fixed measure in tests).
 import { TRANSITION_LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, TRANSITION_SUB_SIZE } from '@domaintrail/visualization';
-import { BADGE, badgeWidth, DIAG_RADIUS } from '../diagram-items';
+import { BADGE, badgeWidth, checkPath, DIAG_RADIUS, RESOLVED_MARK } from '../diagram-items';
 import type { LegendContent } from '../legend';
 import { fitLabel, NOTE_KINDS, type LabelFit } from '../note-fit';
 import { sceneItems, type EdgeProps, type GroupProps, type InternalProps, type NodeProps, type Rect, type Scene } from '../scene';
@@ -51,6 +51,12 @@ export const PALETTE_VARS = [
     '--es-hotspot',
     '--es-hotspot-border',
     '--es-hotspot-text',
+    '--es-hotspot-resolved',
+    '--es-hotspot-resolved-border',
+    '--es-hotspot-resolved-text',
+    '--es-hotspot-resolved-edge',
+    '--es-resolved-mark',
+    '--es-resolved-mark-ink',
     '--es-actor',
     '--es-actor-border',
     '--es-actor-text',
@@ -120,6 +126,9 @@ export interface PortableSvg {
     width: number;
     height: number;
 }
+
+/** The diameter of the check in a resolved hotspot's legend chip (`.dn-resolved-mark-chip`). */
+const CHIP_CHECK = 2 * (RESOLVED_MARK.radius - 2);
 
 /** Room around everything (px). */
 const MARGIN = 24;
@@ -353,6 +362,9 @@ const noteVars = (kind: string): { paper: PaletteVar; border: PaletteVar; text: 
     return { paper: `--es-${k}` as PaletteVar, border: `--es-${k}-border` as PaletteVar, text: `--es-${k}-text` as PaletteVar };
 };
 
+/** A resolved hotspot's paper, edge and text (`.dn-esHotspot.dn-resolved`): the hotspot's, toned down. */
+const RESOLVED_NOTE = { paper: '--es-hotspot-resolved', border: '--es-hotspot-resolved-border', text: '--es-hotspot-resolved-text' } as const;
+
 /** How a kind of container is drawn (`.dg-<kind>`): its border, paper and caption. */
 const GROUP_LOOKS: Record<string, { border: PaletteVar; paper: PaletteVar; paperAlpha?: number; dashed?: boolean; caption: PaletteVar; small?: boolean }> = {
     context: { border: '--model-context', paper: '--context-bg', caption: '--text-secondary' },
@@ -393,9 +405,13 @@ const EDGE_LOOKS: Record<string, EdgeLook> = {
 };
 const DEFAULT_EDGE: EdgeLook = { stroke: '--model-edge', width: 1.4, head: '--model-edge', label: '--model-edge-label' };
 
-/** The look of an edge with its tone (an added or changed edge takes the change's colour). */
-function edgeLook(kind: string, tone: EdgeProps['tone']): EdgeLook {
-    const look = EDGE_LOOKS[kind] ?? DEFAULT_EDGE;
+/**
+ * The look of an edge with its tone (an added or changed edge takes the change's colour); a resolved hotspot's `on` is
+ * quieter (`.de-resolved`).
+ */
+function edgeLook(kind: string, tone: EdgeProps['tone'], resolved?: true): EdgeLook {
+    const kept = EDGE_LOOKS[kind] ?? DEFAULT_EDGE;
+    const look = resolved ? { ...kept, stroke: '--es-hotspot-resolved-edge' as const } : kept;
     if (tone === 'normal') return look;
     const colour: PaletteVar = tone === 'added' ? '--added' : '--changed';
     return { ...look, stroke: colour, width: 2.4, head: colour };
@@ -504,13 +520,17 @@ class Drawing {
         let border: number;
         let radius: number;
         if (note) {
-            const v = noteVars(p.kind);
+            const v = p.resolution !== undefined ? RESOLVED_NOTE : noteVars(p.kind);
             border = NOTE_BORDER;
             radius = p.kind === 'esActor' ? 18 : 3;
             const style = p.kind === 'esExternal' || removed ? dashed(border) : undefined;
             out.push(this.ring(x, y, p, radius));
             out.push(borderRect(x, y, p.w, p.h, radius, { fill: this.c(v.paper), stroke: this.c(v.border), width: border, dash: style }));
             out.push(this.noteHead(x, y, p, this.c(v.text)));
+            if (p.resolution !== undefined) {
+                const r = RESOLVED_MARK.radius;
+                out.push(this.check(x + p.w - RESOLVED_MARK.inset - r, y + RESOLVED_MARK.inset + r, r, 2));
+            }
         } else {
             const look = BOX_LOOKS[p.kind] ?? DEFAULT_BOX;
             border = look.width;
@@ -718,6 +738,21 @@ class Drawing {
         return out.join('');
     }
 
+    /** A resolved hotspot's check (`.dn-resolved-mark`): a green disc of radius `r` at (`cx`, `cy`) and its tick. */
+    private check(cx: number, cy: number, r: number, width: number): string {
+        return (
+            tag('circle', { cx, cy, r, ...paint('fill', this.c('--es-resolved-mark')) }) +
+            tag('path', {
+                d: checkPath(cx, cy, r),
+                fill: 'none',
+                ...paint('stroke', this.c('--es-resolved-mark-ink')),
+                'stroke-width': width,
+                'stroke-linecap': 'round',
+                'stroke-linejoin': 'round',
+            })
+        );
+    }
+
     private diag(cx: number, cy: number, r: number, size: number, diag: 'warning' | 'error'): string {
         return (
             tag('circle', { cx, cy, r, ...paint('fill', this.c(diag === 'error' ? '--error' : '--warning')) }) +
@@ -774,7 +809,7 @@ class Drawing {
     /** An edge along its route, its head and its label (with a halo of the paper, drawn under it). */
     edge(x: number, y: number, p: EdgeProps): string {
         if (p.points.length < 2) return '';
-        const look = edgeLook(p.kind, p.tone);
+        const look = edgeLook(p.kind, p.tone, p.resolved);
         const d = p.points.map((pt, i) => `${i ? 'L' : 'M'}${num(x + pt.x)},${num(y + pt.y)}`).join(' ');
         const out = [
             tag('path', {
@@ -877,7 +912,7 @@ class Drawing {
             let rowTop = top;
             for (const k of content.kinds) {
                 const name = legend.kindNames[k] ?? k;
-                const w = this.measure.width(name, chip) + 12 + 2;
+                const w = this.measure.width(name, chip) + 12 + 2 + (k === 'resolvedHotspot' ? CHIP_CHECK + 4 : 0);
                 if (cx > 0 && cx + w > max) {
                     cx = 0;
                     rowTop += 20 + 4;
@@ -923,21 +958,27 @@ class Drawing {
         return out.join('');
     }
 
-    /** A kind of note in the legend (`.kind-es-<kind>`): its paper, edge and text. */
+    /** A kind of note in the legend (`.kind-es-<kind>`): its paper, edge and text; a resolved hotspot's check before its name. */
     private legendChip(kind: string, name: string, x: number, y: number, w: number, font: Font): string {
+        const resolved = kind === 'resolvedHotspot';
         const look: { paper: PaletteVar; border: PaletteVar; text: PaletteVar; dashed?: boolean; round?: boolean } =
             kind === 'group'
                 ? { paper: '--es-group-bg', border: '--es-group-border', text: '--es-group-text', dashed: true }
                 : kind === 'stage'
                   ? { paper: '--context-bg', border: '--model-context', text: '--text-secondary' }
-                  : { ...noteVars(`es${kind}`), dashed: kind === 'external', round: kind === 'actor' };
+                  : resolved
+                    ? RESOLVED_NOTE
+                    : { ...noteVars(`es${kind}`), dashed: kind === 'external', round: kind === 'actor' };
+        const mark = resolved ? CHIP_CHECK + 4 : 0;
         return (
             borderRect(x, y, w, 20, look.round ? 10 : 4, {
                 fill: this.c(look.paper),
                 stroke: this.c(look.border),
                 width: 1,
                 dash: look.dashed ? dashed(1) : undefined,
-            }) + textLines([name], { x: x + w / 2, top: y + 1, lineHeight: 18, font, fill: this.c(look.text), anchor: 'middle', measure: this.measure })
+            }) +
+            (resolved ? this.check(x + 7 + CHIP_CHECK / 2, y + 10, CHIP_CHECK / 2, 1.6) : '') +
+            textLines([name], { x: x + (w + mark) / 2, top: y + 1, lineHeight: 18, font, fill: this.c(look.text), anchor: 'middle', measure: this.measure })
         );
     }
 }

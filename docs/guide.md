@@ -2130,6 +2130,8 @@ to its note. One timeline draws each occurrence of an event, and a group as a fr
 make two occurrences the same happening, so read a path along one timeline's name. Solid arrows are type-level causal
 relations (`on`, `issues`, `emits`: possible, not "happened"), dotted lines the other relations (`actor`, `reads`,
 `target`; a hotspot's `on` without an arrowhead), dashed arrows the order of a timeline.
+A hotspot with `status resolved` is drawn paler, with a green check in its corner and a fainter `on` (hovering it shows
+its `resolution`), so the open ones stand out; to settle one, ask the AI in the chat.
 At Design Level an actor or external system, a read model and an aggregate are drawn next to each command that uses
 them, one note per command, so their lines stay short (one that no command uses is drawn once); selecting any of these
 notes selects the element and marks its other notes with a fainter dashed ring.
