@@ -120,7 +120,9 @@ describe('an older version’s .domaintrail/', () => {
             expect(lines.filter((l) => l.startsWith('Moved '))).toEqual([`Moved .domaintrail/ to ${state}${path.sep}`.replace(process.env.HOME ?? '\0', '~')]);
             expect(again.session).toBe(id);
             expect(again.resumed).toBe(true);
-            expect(await messages(again.url, ada)).toContain('Keep me across the move.');
+            // the chat is kept; the sign-ins are not (credentials are made again): Ada's cookie is no one now
+            expect((await fetch(`${again.url}api/session/me`, { headers: { cookie: ada } })).status).toBe(401);
+            expect(await messages(again.url, await join(again.url, 'Bob'))).toContain('Keep me across the move.');
             expect(await lstat(path.join(root, '.domaintrail')).catch(() => 'gone')).toBe('gone');
             expect(await lstat(path.join(cache, 'layout.json')).catch(() => 'missing')).not.toBe('missing');
         } finally {

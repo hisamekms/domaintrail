@@ -2,7 +2,7 @@
 // apps/dt/src/config/config.test.ts, the sections by their owners).
 import { afterEach, describe, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { cliDeps, runCli } from '@domaintrail/dt';
@@ -279,11 +279,12 @@ describe('generated output safety', () => {
     });
 
     test.skipIf(process.platform === 'win32')(
-        'generated.json is private to the user, in the state directory: 0600 in a directory of 0700; an older .domaintrail/ is moved there',
+        'generated.json is private to the user, in the state directory: 0600 in a directory of 0700; an older one in .domaintrail/ is not moved',
         async () => {
             const { chmod, lstat } = await import('node:fs/promises');
             const dir = await project({ 's.dt': MODEL });
-            // what an older version left: its manifest names a file this run no longer writes, which is removed
+            // what an older version left: its manifest is not moved (it says what a run deletes), so a file it names that
+            // this run no longer writes stays
             await mkdir(path.join(dir, '.domaintrail'));
             await chmod(path.join(dir, '.domaintrail'), 0o755);
             await mkdir(path.join(dir, 'old'));
@@ -292,10 +293,15 @@ describe('generated output safety', () => {
             expect((await run('-r', dir, 'generate', 'ts')).code).toBe(0);
             const { state } = workspaceDirs(dir);
             expect(await lstat(path.join(dir, '.domaintrail')).catch(() => 'gone')).toBe('gone');
-            expect(await lstat(path.join(dir, 'old', 'S.ts')).catch(() => 'gone')).toBe('gone');
+            expect(await lstat(path.join(dir, 'old', 'S.ts')).catch(() => 'gone')).not.toBe('gone');
             expect((await lstat(state)).mode & 0o777).toBe(0o700);
             expect((await lstat(path.join(state, 'generated.json'))).mode & 0o777).toBe(0o600);
-            expect((await readdir(dir)).sort()).toEqual(['generated', 's.dt']);
+            expect((await readdir(dir)).sort()).toEqual(['generated', 'old', 's.dt']);
+            expect(JSON.parse(await readFile(path.join(state, 'generated.json'), 'utf8')).files).toEqual([
+                'generated/domain/S.ts',
+                'generated/domain/_runtime.ts',
+                'generated/domain/index.ts',
+            ]);
         },
     );
 

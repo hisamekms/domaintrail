@@ -2855,13 +2855,28 @@ or moved), and with `--older-than <days>` also those not used for that long; `--
 running server is kept.
 
 Older versions kept all of this in `.domaintrail/` in the workspace. The first command that uses the state (`dt open`,
-`dt collab`, `dt agent`, the links, `dt generate ts`) moves it — the session database with its WAL files, the blobs, the
-record of `dt generate ts`, the layouts — prints `Moved .domaintrail/ to ~/.local/state/domaintrail/<workspace>/` once,
-and deletes the emptied `.domaintrail/` (the old `.gitignore` files, a stopped server's address and an old credential
-are not kept). It refuses while a server of the older version still runs there (stop it first), keeps `.domaintrail/`
+`dt collab`, `dt agent`, the links, `dt generate ts`) moves it — the session database with its WAL files, the blobs,
+the layouts — prints `Moved .domaintrail/ to ~/.local/state/domaintrail/<workspace>/` once, and deletes the emptied
+`.domaintrail/`. It refuses while a server of the older version still runs there (stop it first), keeps `.domaintrail/`
 as it is when the new directory already holds a session, and keeps the files in it that are not dt's. The move copies,
 checks and then renames the files into place: a move cut short leaves the old directory whole, and the next run
 finishes it.
+
+A `.domaintrail/` can also come with a cloned repository, so the move takes only what it can trust:
+
+- Nothing moves when git tracks or does not ignore anything in `.domaintrail/` (dt's own always ignored itself), or
+  when git cannot tell: it is left as it is, the workspace starts a new session, and the line says how to remove it
+  (`git rm -r --cached .domaintrail` when it is tracked). Outside a git repository there is nothing to ask.
+- Only regular files of yours, in directories of yours that nobody else can write, move; the others stay, named in one
+  line. The session database moves with its WAL files or not at all.
+- The moved database keeps the session — messages, runs, revisions, participants — but none of its credentials: the
+  sign-ins, the facilitator links, the sign-in and pairing codes, the invites and who holds the facilitator role are
+  deleted, so everyone signs in again (`dt open` prints a new link; `dt collab` a new facilitator link). A database that
+  cannot be cleaned (not one) is not moved.
+- The record of `dt generate ts` (`generated.json`) is not moved: it says which files a run deletes. The next
+  `dt generate ts` writes its output as usual and records it; generated files of earlier runs outside the output
+  directories it writes (a moved output directory, a removed context) are not deleted then: delete them by hand.
+- Its `.gitignore` files, a stopped server's `server.json` and an old `agent.json` are not kept either.
 
 <!-- topic: lsp -->
 ## Language server
@@ -3251,8 +3266,8 @@ addresses, no secret, mode 0600, removed when the server stops; for `dt open lin
 agent-link` and `dt agent`). Nothing is written into the workspace, so there is nothing to ignore in git. The agent
 API's credential is never written to disk: the agent in process is handed it in memory, and a standalone `dt agent`
 exchanges the one-time code of `dt collab agent-link` (or `dt open agent-link`; single use, 10 minutes, revoked when the
-server stops) for it and keeps it in memory. The `.domaintrail/` of an older version is moved there on the first run
-(its `agent.json` is not kept). `dt session prune` removes the state of workspaces that are gone. Drafts are in each
+server stops) for it and keeps it in memory. The `.domaintrail/` of an older version is moved there on the first run,
+without its credentials: everyone signs in again (`dt guide config`). `dt session prune` removes the state of workspaces that are gone. Drafts are in each
 browser; presence only in memory.
 
 **Limitations.** The log of restores is in `session.db` only, not served over HTTP. In the `access` mode, leaving the

@@ -182,11 +182,15 @@ export async function replaceFile(file: string, text: string | Uint8Array): Prom
     await rename(temp, file);
 }
 
-/** `workspace.json`: the workspace a directory belongs to, and where its state was moved from (`.domaintrail/`). */
+/**
+ * `workspace.json`: the workspace a directory belongs to, and where its state was moved from (`.domaintrail/`) with
+ * the SHA-256 of each file moved as it was there (`/`-separated paths below it).
+ */
 export interface WorkspaceRecord {
     readonly version: 1;
     readonly path: string;
     readonly movedFrom?: string;
+    readonly moved?: Readonly<Record<string, string>>;
 }
 
 /** The record of `dir`, if it has a readable one. */
@@ -196,7 +200,16 @@ export async function readWorkspaceRecord(dir: string): Promise<WorkspaceRecord 
         if ((await checkPlain(file, 'file')) === 'absent') return undefined;
         const v: unknown = JSON.parse(await readFile(file, 'utf8'));
         if (typeof v !== 'object' || v === null || !('path' in v) || typeof v.path !== 'string') return undefined;
-        return { version: 1, path: v.path, ...('movedFrom' in v && typeof v.movedFrom === 'string' && { movedFrom: v.movedFrom }) };
+        const moved =
+            'moved' in v && typeof v.moved === 'object' && v.moved !== null && !Array.isArray(v.moved)
+                ? Object.fromEntries(Object.entries(v.moved).filter((e): e is [string, string] => typeof e[1] === 'string'))
+                : undefined;
+        return {
+            version: 1,
+            path: v.path,
+            ...('movedFrom' in v && typeof v.movedFrom === 'string' && { movedFrom: v.movedFrom }),
+            ...(moved && { moved }),
+        };
     } catch {
         return undefined;
     }

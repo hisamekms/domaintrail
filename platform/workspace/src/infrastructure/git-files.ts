@@ -151,3 +151,14 @@ export async function gitFileState(file: string, options: GitFilesOptions = {}):
     if (ignored.code === 1) return 'unignored';
     throw new Error(`git check-ignore failed in ${dir}: ${ignored.stderr || `exit ${ignored.code}`}`);
 }
+
+/**
+ * The entries below `dir` (relative to the root, `/`-separated) that git tracks or does not ignore: what a commit may
+ * hold. `undefined`: no repository there. Rejects when git cannot be run or fails (the caller fails closed).
+ */
+export async function gitExposedEntries(root: string, dir: string, options: GitFilesOptions = {}): Promise<string[] | undefined> {
+    if (!repositoryTop(root)) return undefined;
+    const r = await git(root, ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', dir], options);
+    if (r.code !== 0) throw new Error(`git ls-files failed in ${root}: ${r.stderr || `exit ${r.code}`}`);
+    return r.stdout.toString('utf8').split('\0').filter(Boolean);
+}

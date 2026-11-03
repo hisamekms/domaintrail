@@ -1328,17 +1328,38 @@ the repository, was read by every tool that walks the workspace, and had to be k
   inside or holding the state or cache root (beside `~/.ssh` and the others). The deny rules for `.domaintrail` stay:
   other checkouts and older versions still have one.
 - **Migration** (*decided by the maintainer*: move, then delete). The first command that opens the state moves an older
-  version's `.domaintrail/`: `session/session.db` with `-wal` and `-shm`, `session/blobs/**`, `generated.json`,
-  `seed.json` into the state, `layout.json` into the cache; its `.gitignore` files, a stopped server's `server.json`
-  and the old `agent.json` are dropped. It prints `Moved .domaintrail/ to <state dir>/` once and deletes the emptied
+  version's `.domaintrail/`: `session/session.db` with `-wal` and `-shm`, `session/blobs/**` and `seed.json` into the
+  state, `layout.json` into the cache; its `.gitignore` files, a stopped server's `server.json`, the old `agent.json`
+  and `generated.json` are dropped (see the hardening below). It prints `Moved .domaintrail/ to <state dir>/` once and deletes the emptied
   directory; files that are not dt's (and links, never followed) stay with it, and that is said. While the `server.json`
   there names a live process, it refuses (stop the older server first). When the state directory already holds files
   (anything but its record), nothing is overwritten: `.domaintrail/` is kept, and that is said. Crash safety: the files
   are copied into `.<workspace>.moving-<pid>-<random>/` beside the state directory, checked byte for byte, the record
-  written with `movedFrom`, and the directory renamed into place; only then is `.domaintrail/` deleted. A copy left by a
+  written with `movedFrom` and `moved`, and the directory renamed into place; only then is `.domaintrail/` deleted. A copy left by a
   killed run (its process gone) is removed by the next one; a run killed after the rename leaves both copies, and the
-  next run, seeing `movedFrom` and the same bytes, deletes the old one. The WAL files move with their database while no
+  next run, seeing `movedFrom` and the recorded hashes, deletes the old one. The WAL files move with their database while no
   server runs, so SQLite recovers what was not checkpointed when it next opens it.
+- **Hardening of the migration** (after a security review: a cloned repository may ship a crafted `.domaintrail/` —
+  a database with sign-ins, facilitator links and invites, a `generated.json` that steers deletions — which the first
+  `dt open` would otherwise import silently into the user's state). The move stays automatic (the maintainer's
+  decision), but:
+  - nothing moves when git tracks or does not ignore any entry of `.domaintrail/` (`git ls-files --cached --others
+    --exclude-standard`), or git fails: it is left in place, the workspace starts a new session, and one line says how
+    to remove it. dt's own `.domaintrail/` always ignored itself. Outside a repository git is not asked;
+  - only regular files owned by the user (`lstat().uid === process.getuid()` on POSIX) move, in directories — from
+    `.domaintrail` down — owned by the user and writable by neither group nor others; links never. Any other file is
+    skipped and named in one line, and stays; the database and its WAL files move all or none (fail closed);
+  - in the staging copy, before the rename, the database loses every credential: the rows of `sign_ins`,
+    `facilitator_links` (facilitator links, `dt open` sign-in codes, agent pairing codes), `invites` and
+    `facilitators` (who holds the role) are deleted, after dropping any trigger or view (dt's schema has none) with
+    `trusted_schema` off, and checked to be empty. The session's content stays (sessions, requests, runs, revisions,
+    the outbox, triages, proposals, interviews, marks, approvals, restores). A database that cannot be cleaned is not
+    moved. Join requests and the solo sign-in are in memory only;
+  - `generated.json` is not moved: the next `dt generate ts` records its own, and generated files of earlier runs
+    outside the output directories it writes are no longer deleted automatically;
+  - `workspace.json` records the SHA-256 of each file as it was in `.domaintrail/` (`moved`): a later run recognizes a
+    move that was killed before deleting the old directory by those hashes, the moved copy having been changed by the
+    cleaning.
 - **`dt session prune`** (*decided by the maintainer*: manual only). Lists the state and cache directories whose
   workspace no longer exists, and with `--older-than <days>` those not changed for that long (the latest change of the
   directory or of what is directly in it); `--yes` removes them, else it is a dry run. A running server's state, a

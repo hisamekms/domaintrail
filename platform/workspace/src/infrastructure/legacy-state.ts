@@ -4,12 +4,21 @@
 // process: refused, said). The files are copied into a new directory beside the state directory, checked, and that
 // directory renamed into place; `.domaintrail/` is deleted only then. A run stopped half way leaves either the
 // workspace's files where they were (a copy left behind is removed by the next run) or both copies, which the next run
-// recognizes (`workspace.json` says where they were moved from) and finishes. A state directory that already holds a
-// session is never overwritten: `.domaintrail/` is kept and that is said.
+// recognizes (`workspace.json` says where they were moved from and what they were) and finishes. A state directory
+// that already holds a session is never overwritten: `.domaintrail/` is kept and that is said.
+//
+// A `.domaintrail/` may also have come with a cloned repository, crafted: it is imported only as far as it can be
+// trusted. Nothing moves when git tracks or does not ignore anything in it (dt's own was always ignored by its own
+// `.gitignore`), or when git cannot tell; only regular files of the user's, in directories nobody else can write, move
+// (the database with its WAL files all or none); the moved database loses every credential (sign-ins, facilitator
+// links, pairing and sign-in codes, invites, the facilitator's binding: made again by the links the server prints);
+// and `generated.json`, which says which files `dt generate ts` deletes, is never moved.
 import { createHash, randomBytes } from 'node:crypto';
 import { copyFile, lstat, mkdir, readFile, readdir, rename, rm, rmdir, unlink } from 'node:fs/promises';
 import { constants } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import * as path from 'node:path';
+import { gitExposedEntries } from './git-files.js';
 import {
     PRIVATE_DIR,
     PRIVATE_FILE,
@@ -20,6 +29,7 @@ import {
     plainDirectory,
     processAlive,
     readWorkspaceRecord,
+    type WorkspaceRecord,
     replaceFile,
     restrict,
     shownPath,
@@ -42,14 +52,21 @@ const FILES: readonly Moved[] = [
     { from: 'session/session.db', to: 'session.db', into: 'state' },
     { from: 'session/session.db-wal', to: 'session.db-wal', into: 'state' },
     { from: 'session/session.db-shm', to: 'session.db-shm', into: 'state' },
-    { from: 'generated.json', to: 'generated.json', into: 'state' },
     { from: 'seed.json', to: 'seed.json', into: 'state' },
     { from: 'layout.json', to: 'layout.json', into: 'cache' },
 ];
 /** The blobs: `session/blobs/<two hex digits>/<sha256>`, to `blobs/…` in the state directory. */
 const BLOBS = 'session/blobs';
-/** What older versions wrote that is not kept: their ignore files, a stopped server's address, a credential. */
-const DROPPED = new Set(['.gitignore', 'session/.gitignore', 'session/server.json', 'session/agent.json']);
+/**
+ * What older versions wrote that is not kept: their ignore files, a stopped server's address, a credential, and the
+ * record of `dt generate ts` (it says which files a run deletes: not taken from a directory that may be foreign; the
+ * next run records its own, and generated files of earlier runs outside its output directories stay).
+ */
+const DROPPED = new Set(['.gitignore', 'session/.gitignore', 'session/server.json', 'session/agent.json', 'generated.json']);
+/** The session's database and its WAL files: moved all or none. */
+const DATABASE = new Set(['session/session.db', 'session/session.db-wal', 'session/session.db-shm']);
+/** The tables of the session's database that hold credentials, emptied in the moved copy (the session's content stays). */
+const CREDENTIALS = ['sign_ins', 'facilitator_links', 'invites', 'facilitators'];
 const DIRECTORIES = new Set(['session', BLOBS]);
 
 /** What `.domaintrail/` holds: the files to move, what is dropped, and the entries that are not dt's. */
@@ -91,15 +108,74 @@ async function inventory(legacy: string): Promise<Inventory> {
     return { moved, dropped, foreign };
 }
 
-/** Whether every file of `moved` still in `legacy` is the same as its copy in `dirs` (a copy missing: not the same). */
-async function sameCopies(legacy: string, moved: readonly Moved[], dirs: WorkspaceDirs): Promise<boolean> {
+/** Whether every file of `moved` still in `legacy` is what `record` says was moved from there (none recorded: no). */
+async function movedAsRecorded(legacy: string, moved: readonly Moved[], record: WorkspaceRecord | undefined): Promise<boolean> {
+    if (record?.movedFrom !== legacy || !record.moved) return false;
     for (const m of moved) {
         const from = path.join(legacy, m.from);
         if (!(await exists(from))) continue;
-        const to = path.join(dirs[m.into], m.to);
-        if (!(await exists(to)) || (await sha256(from)) !== (await sha256(to))) return false;
+        if (record.moved[m.from] !== (await sha256(from))) return false;
     }
     return true;
+}
+
+/** Whether `p` (not followed) is the user's and nobody else can write it; always on Windows, where the modes do not apply. */
+async function yours(p: string, kind: 'file' | 'directory'): Promise<boolean> {
+    const s = await lstat(p).catch(() => undefined);
+    if (!s || (kind === 'file' ? !s.isFile() : !s.isDirectory())) return false;
+    if (process.platform === 'win32' || !process.getuid) return true;
+    return s.uid === process.getuid() && (kind === 'file' || (s.mode & 0o022) === 0);
+}
+
+/**
+ * The files of `moved` that can be trusted: regular files of the user's, in directories (from `.domaintrail` down) of
+ * the user's that nobody else can write. The database and its WAL files go together: one refused refuses them all.
+ */
+async function trusted(legacy: string, moved: readonly Moved[]): Promise<{ readonly ok: Moved[]; readonly refused: string[] }> {
+    const dirOk = new Map<string, boolean>();
+    const dirTrusted = async (rel: string): Promise<boolean> => {
+        if (!dirOk.has(rel)) dirOk.set(rel, (rel === '.' || (await dirTrusted(path.posix.dirname(rel)))) && (await yours(path.join(legacy, rel), 'directory')));
+        return dirOk.get(rel)!;
+    };
+    const fine = new Set<string>();
+    for (const m of moved) if ((await dirTrusted(path.posix.dirname(m.from))) && (await yours(path.join(legacy, m.from), 'file'))) fine.add(m.from);
+    const db = moved.filter((m) => DATABASE.has(m.from));
+    if (db.some((m) => !fine.has(m.from))) for (const m of db) fine.delete(m.from);
+    return { ok: moved.filter((m) => fine.has(m.from)), refused: moved.filter((m) => !fine.has(m.from)).map((m) => m.from) };
+}
+
+/**
+ * Empties the tables of credentials of the database `file` (its WAL files beside it, recovered into it): sign-ins,
+ * facilitator links and codes, invites and the facilitator's binding. Triggers and views go first (dt's schema has
+ * none; a crafted one could act on the deletions). False when it is no database, or something is left.
+ */
+function scrubCredentials(file: string): boolean {
+    let db: DatabaseSync | undefined;
+    try {
+        db = new DatabaseSync(file);
+        db.exec('PRAGMA trusted_schema = OFF');
+        db.exec('PRAGMA foreign_keys = OFF');
+        const names = (type: string): string[] =>
+            db!
+                .prepare('SELECT name FROM sqlite_master WHERE type = ?')
+                .all(type)
+                .map((r) => String(r.name));
+        const quoted = (name: string): string => `"${name.replaceAll('"', '""')}"`;
+        for (const t of names('trigger')) db.exec(`DROP TRIGGER IF EXISTS ${quoted(t)}`);
+        for (const v of names('view')) db.exec(`DROP VIEW IF EXISTS ${quoted(v)}`);
+        const tables = new Set(names('table'));
+        const present = CREDENTIALS.filter((t) => tables.has(t));
+        db.exec('BEGIN IMMEDIATE');
+        for (const t of present) db.exec(`DELETE FROM ${quoted(t)}`);
+        db.exec('COMMIT');
+        for (const t of present) if (Number(db.prepare(`SELECT count(*) AS n FROM ${quoted(t)}`).get()?.n) !== 0) return false;
+        db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+        return true;
+    } catch {
+        return false;
+    } finally {
+        db?.close();
+    }
 }
 
 /** Whether the state directory holds anything but its record (a session, generated files, ...). */
@@ -108,11 +184,13 @@ async function holdsData(dir: string): Promise<boolean> {
     return entries.some((e) => e !== WORKSPACE_FILE);
 }
 
-/** Copies `from` to `to` (a new file, 0600), checked to have the same bytes. */
-async function copyChecked(from: string, to: string): Promise<void> {
+/** Copies `from` to `to` (a new file, 0600), checked to have the same bytes; their SHA-256. */
+async function copyChecked(from: string, to: string): Promise<string> {
     await copyFile(from, to, constants.COPYFILE_EXCL);
     await restrict(to, PRIVATE_FILE);
-    if ((await sha256(from)) !== (await sha256(to))) throw new Error(`The copy of ${from} differs from it`);
+    const hash = await sha256(from);
+    if (hash !== (await sha256(to))) throw new Error(`The copy of ${from} differs from it`);
+    return hash;
 }
 
 /** Removes the copies a run stopped half way left beside the state directory (their process is gone). */
@@ -141,10 +219,15 @@ async function removeLegacy(legacy: string, inv: Inventory): Promise<boolean> {
 /** What became of `.domaintrail/`. */
 export type LegacyMove = 'none' | 'moved' | 'finished' | 'kept';
 
+/** At most `n` of `items`, and how many more. */
+const some = (items: readonly string[], n = 5): string =>
+    items.length > n ? `${items.slice(0, n).join(', ')} and ${items.length - n} more` : items.join(', ');
+
 /**
  * Moves the workspace's `.domaintrail/` (if it has one) to its state and cache directories `dirs`, saying so with
  * `log`. Refuses (`StateDirError`) while a server of an older version runs on it. A `.domaintrail` that is a symbolic
- * link or not a directory is not dt's: left alone.
+ * link or not a directory is not dt's: left alone. One that git tracks or does not ignore (or of which git cannot
+ * tell) is left as it is, and said: the workspace starts a new session.
  */
 export async function moveLegacyState(dirs: WorkspaceDirs, log: (line: string) => void): Promise<LegacyMove> {
     const legacy = path.join(dirs.workspace, LEGACY_DIR);
@@ -159,11 +242,29 @@ export async function moveLegacyState(dirs: WorkspaceDirs, log: (line: string) =
         throw new StateDirError(
             `A session server of an older dt (pid ${pid}) runs on this workspace, with its files in ${LEGACY_DIR}/: stop it, then run dt again to move them to ${where} (or remove ${LEGACY_DIR}/session/server.json if no such server runs).`,
         );
-    const inv = await inventory(legacy);
     const keep = (why: string): LegacyMove => {
         log(why);
         return 'kept';
     };
+    const fresh = `It stays as it is, and this workspace starts a new session in ${where}; delete ${LEGACY_DIR}/ once you no longer need it`;
+    // dt's own `.domaintrail/` was always ignored by its own `.gitignore`: one a commit may hold may be anyone's
+    let exposed: string[] | undefined;
+    try {
+        exposed = await gitExposedEntries(dirs.workspace, LEGACY_DIR);
+    } catch (e) {
+        return keep(`Not moving ${LEGACY_DIR}/: git cannot tell whether it ignores it (${e instanceof Error ? e.message : String(e)}). ${fresh}.`);
+    }
+    if (exposed?.length)
+        return keep(
+            `Not moving ${LEGACY_DIR}/: git tracks or does not ignore ${some(exposed)}, so it may have come with the repository rather than from dt. ${fresh} (\`git rm -r --cached ${LEGACY_DIR}\` if git tracks it).`,
+        );
+    const found = await inventory(legacy);
+    const { ok, refused } = await trusted(legacy, found.moved);
+    if (refused.length)
+        log(
+            `Not moving ${refused.length} file(s) of ${LEGACY_DIR}/ (not a plain file of yours, or in a directory others can write): ${some(refused)}. They stay there.`,
+        );
+    const inv: Inventory = { moved: ok, dropped: found.dropped, foreign: [...found.foreign, ...refused] };
 
     await mkdir(dirs.roots.state, { recursive: true, mode: PRIVATE_DIR });
     await removeUnfinished(dirs);
@@ -171,7 +272,7 @@ export async function moveLegacyState(dirs: WorkspaceDirs, log: (line: string) =
     if (toState.length && (await holdsData(dirs.state))) {
         // moved by a run that stopped before deleting `.domaintrail/` (or by another process just now): finished
         const record = await readWorkspaceRecord(dirs.state);
-        if (record?.path === dirs.workspace && record.movedFrom === legacy && (await sameCopies(legacy, toState, dirs))) {
+        if (record?.path === dirs.workspace && (await movedAsRecorded(legacy, toState, record))) {
             const gone = await removeLegacy(legacy, inv);
             if (!gone) log(`Kept ${LEGACY_DIR}/: it holds files that are not dt's (${inv.foreign.join(', ')}).`);
             return 'finished';
@@ -185,14 +286,28 @@ export async function moveLegacyState(dirs: WorkspaceDirs, log: (line: string) =
         await mkdir(staging, { mode: PRIVATE_DIR });
         try {
             await restrict(staging, PRIVATE_DIR);
+            const moved: Record<string, string> = {};
             for (const m of toState) {
                 const to = path.join(staging, m.to);
                 for (let d = path.dirname(m.to); d !== '.'; d = path.dirname(d)) await mkdir(path.join(staging, d), { recursive: true, mode: PRIVATE_DIR });
-                await copyChecked(path.join(legacy, m.from), to);
+                moved[m.from] = await copyChecked(path.join(legacy, m.from), to);
             }
             for (const d of await readdir(path.join(staging, 'blobs')).catch(() => [])) await restrict(path.join(staging, 'blobs', d), PRIVATE_DIR);
             if (await exists(path.join(staging, 'blobs'))) await restrict(path.join(staging, 'blobs'), PRIVATE_DIR);
-            await writeWorkspaceRecord(staging, { version: 1, path: dirs.workspace, movedFrom: legacy });
+            // the copy loses every credential before it is in place; one that cannot be cleaned is not moved
+            if (toState.some((m) => DATABASE.has(m.from)) && !scrubCredentials(path.join(staging, 'session.db'))) {
+                for (const m of toState.filter((t) => DATABASE.has(t.from))) {
+                    await rm(path.join(staging, m.to), { force: true });
+                    delete moved[m.from];
+                }
+                await rm(path.join(staging, 'session.db-journal'), { force: true });
+                inv.foreign.push(...toState.filter((t) => DATABASE.has(t.from)).map((t) => t.from));
+                inv.moved.splice(0, inv.moved.length, ...inv.moved.filter((t) => !DATABASE.has(t.from)));
+                log(`Not moving ${LEGACY_DIR}/session/session.db: it is not a session database dt can clean of its credentials. It stays there.`);
+            }
+            for (const f of ['session.db', 'session.db-wal', 'session.db-shm'])
+                if (await exists(path.join(staging, f))) await restrict(path.join(staging, f), PRIVATE_FILE);
+            await writeWorkspaceRecord(staging, { version: 1, path: dirs.workspace, movedFrom: legacy, moved });
             // an empty state directory (its record only) gives way; one with files was handled above
             if (await exists(dirs.state)) {
                 await plainDirectory(dirs.state);
@@ -204,7 +319,7 @@ export async function moveLegacyState(dirs: WorkspaceDirs, log: (line: string) =
             await rm(staging, { recursive: true, force: true });
             if (e instanceof Error && 'code' in e && (e.code === 'ENOTEMPTY' || e.code === 'EEXIST')) {
                 // another process moved them first
-                if (await sameCopies(legacy, toState, dirs)) {
+                if (await movedAsRecorded(legacy, toState, await readWorkspaceRecord(dirs.state))) {
                     await removeLegacy(legacy, inv);
                     return 'finished';
                 }
