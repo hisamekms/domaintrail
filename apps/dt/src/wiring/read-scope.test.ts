@@ -275,4 +275,25 @@ describe('what the agents read outside the workspace (agent.read.paths), as wire
         const outside = await runnerReadScope(async () => [], targets, env);
         expect(() => claudeArguments(['Read'], 1, { deniedPaths: [], ...(outside.extra && { extraRead: outside.extra }) })).toThrow(UnexpressiblePath);
     });
+
+    test('a path replaced since the agent started: the next turn of the answerer and the next run fail', async () => {
+        const { base, ws, env } = await beside();
+        const { targets } = readTargets([path.join(base, 'loose')], ws);
+        const views = await answererExtraViews(targets, env);
+        if (!views) throw new Error('no views');
+        try {
+            await views.refresh();
+            await rm(path.join(base, 'loose'), { recursive: true });
+            await put(path.join(base, 'loose'), { 'other.md': 'OTHER' });
+            const failure = (p: Promise<unknown>): Promise<string> =>
+                p.then(
+                    () => 'resolved',
+                    (e: unknown) => String(e),
+                );
+            expect(await failure(views.refresh())).toContain('changed since the agent started');
+            expect(await failure(runnerReadScope(async () => [], targets, env))).toContain('changed since the agent started');
+        } finally {
+            await views.dispose();
+        }
+    });
 });

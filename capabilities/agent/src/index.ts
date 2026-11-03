@@ -49,7 +49,7 @@ export {
     type WorkspaceViewOptions,
 } from './adapters/workspace-view.js';
 // what the AI reads outside the workspace (`agent.read.paths`): the configuration's check, and the paths as they are
-export { checkReadPaths, readPathError, readTargets, type ReadTarget, shownReadPath } from './adapters/read-paths.js';
+export { checkReadPaths, checkTarget, readPathError, readTargets, type ReadTarget, shownReadPath } from './adapters/read-paths.js';
 // the answerer role's Claude Code: stage 3 with no tools, answers and proposals with the reading tools only
 export { ANSWERER_TOOLS, answererArguments, createClaudeAnswerer, triageArguments, type ClaudeAnswererOptions } from './adapters/claude-answer.js';
 // the warm process itself, for a role other than the runs (its own tools, prompt and schema)

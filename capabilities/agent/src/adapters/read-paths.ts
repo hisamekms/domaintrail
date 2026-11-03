@@ -19,6 +19,32 @@ export interface ReadTarget {
     /** Its real path (symbolic links followed). */
     readonly real: string;
     readonly directory: boolean;
+    /** Its device and inode when the agent started (`dev:ino`): what `checkTarget` compares with. */
+    readonly id: string;
+}
+
+/** The device and inode of `p` (links followed), or none. */
+const idOf = (p: string): string | undefined => {
+    const s = statSync(p, { bigint: true, throwIfNoEntry: false });
+    return s && `${s.dev}:${s.ino}`;
+};
+
+/**
+ * Refuses (throws) when `target` is no longer what the agent started with: its configured path now resolves to another
+ * real path, or that path is another file or directory (replaced, or a link moved). Asked before each turn of the
+ * answerer and each run: the turn or run fails rather than read something else.
+ */
+export function checkTarget(target: ReadTarget): void {
+    let real: string | undefined;
+    try {
+        real = realpathSync.native(target.configured);
+    } catch {
+        real = undefined;
+    }
+    if (real !== target.real || idOf(target.real) !== target.id)
+        throw new Error(
+            `${target.configured} changed since the agent started (it was ${target.real}${real === undefined ? ', now missing' : real === target.real ? ', now another file or directory' : `, now ${real}`}): restart the agent to read it again.`,
+        );
 }
 
 /** Whether a part of `p` is `.git` or `.domaintrail`, in any case or Unicode form. */
@@ -82,12 +108,12 @@ export function readTargets(paths: readonly string[], workspace: string): { read
             skipped.push(`${configured} (${why})`);
             continue;
         }
-        const s = statSync(real, { throwIfNoEntry: false });
+        const s = statSync(real, { bigint: true, throwIfNoEntry: false });
         if (!s?.isDirectory() && !s?.isFile()) {
             skipped.push(`${configured} (not a directory or a regular file)`);
             continue;
         }
-        if (!targets.some((t) => t.real === real)) targets.push({ configured, real, directory: s.isDirectory() });
+        if (!targets.some((t) => t.real === real)) targets.push({ configured, real, directory: s.isDirectory(), id: `${s.dev}:${s.ino}` });
     }
     return { targets, skipped };
 }

@@ -4,11 +4,11 @@
 // `.domaintrail` denied below them, what is denied there denied as a whole). As wired with git:
 // apps/dt/src/wiring/read-scope.test.ts.
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { CONFIG_EDIT_DENIED, claudeArguments, deniedRules, extraReadRules, READ_DENIED, UnexpressiblePath } from './claude-code.js';
-import { checkReadPaths, readTargets, shownReadPath } from './read-paths.js';
+import { checkReadPaths, checkTarget, readTargets, shownReadPath } from './read-paths.js';
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -78,8 +78,8 @@ describe('the paths when the agent starts', () => {
             ws,
         );
         expect(targets).toEqual([
-            { configured: path.join(d, 'specs'), real: path.join(d, 'specs'), directory: true },
-            { configured: path.join(d, 'glossary.md'), real: path.join(d, 'glossary.md'), directory: false },
+            { configured: path.join(d, 'specs'), real: path.join(d, 'specs'), directory: true, id: expect.stringMatching(/^\d+:\d+$/) },
+            { configured: path.join(d, 'glossary.md'), real: path.join(d, 'glossary.md'), directory: false, id: expect.any(String) },
         ]);
         expect(skipped).toEqual([
             `${path.join(d, 'missing')} (not found)`,
@@ -87,6 +87,34 @@ describe('the paths when the agent starts', () => {
         ]);
         expect(shownReadPath('/home/me/notes/a.md', '/home/me')).toBe('~/notes/a.md');
         expect(shownReadPath('/srv/specs', '/home/me')).toBe('/srv/specs');
+    });
+});
+
+describe('each path checked again before each turn and run', () => {
+    test('the same real path and the same directory or file: fine; replaced, retargeted or gone: refused', async () => {
+        const d = await scratch();
+        const ws = path.join(d, 'ws');
+        await mkdir(path.join(d, 'other'));
+        await symlink(path.join(d, 'specs'), path.join(d, 'link'));
+        const { targets } = readTargets([path.join(d, 'specs'), path.join(d, 'link'), path.join(d, 'glossary.md')], ws);
+        // the link names the same directory: one target
+        expect(targets).toHaveLength(2);
+        const [specs, glossary] = targets;
+        expect(() => checkTarget(specs)).not.toThrow();
+        // the directory replaced by another under its name
+        await rename(path.join(d, 'specs'), path.join(d, 'specs-old'));
+        await mkdir(path.join(d, 'specs'));
+        expect(() => checkTarget(specs)).toThrow(
+            `${path.join(d, 'specs')} changed since the agent started (it was ${path.join(d, 'specs')}, now another file or directory)`,
+        );
+        // a link retargeted
+        const [viaLink] = readTargets([path.join(d, 'link')], ws).targets;
+        await unlink(path.join(d, 'link'));
+        await symlink(path.join(d, 'other'), path.join(d, 'link'));
+        expect(() => checkTarget(viaLink)).toThrow(`now ${path.join(d, 'other')}`);
+        // gone
+        await rm(path.join(d, 'glossary.md'));
+        expect(() => checkTarget(glossary)).toThrow('now missing');
     });
 });
 

@@ -17,6 +17,7 @@ import { chmod, lstat, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import {
+    checkTarget,
     createWorkspaceView,
     type ExtraRead,
     holdsRepository,
@@ -116,6 +117,8 @@ export async function answererExtraViews(targets: readonly ReadTarget[], env?: N
                 lines.join('\n'),
         },
         async refresh() {
+            // each path still what it was when the agent started (else the turn fails)
+            for (const t of targets) checkTarget(t);
             for (const v of views) await v.view.refresh();
         },
         async dispose() {
@@ -204,6 +207,8 @@ export async function runnerReadScope(
     const files: string[] = [];
     const denied: string[] = [];
     const lines: string[] = [];
+    // each path still what it was when the agent started (else the run fails)
+    for (const t of targets) checkTarget(t);
     for (const t of targets) {
         if (!t.directory) {
             if (!(await fileReadable(t.real, env))) continue;
