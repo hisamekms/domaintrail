@@ -1,9 +1,9 @@
 // How a reply shows in the stream, alike for people and the AI: one right under what it replies to (nothing in
-// between) hangs on a thin line from that row's avatar, a little indented, with no line quoting it; the replies that
-// follow it, each to the same row or to a reply already hanging there, hang on the same line. A reply with something
-// in between quotes what it replies to on its first line (「↩ 名前: …」, a click goes there). Solo puts the AI's card and
-// its answer (or its run card) right under the message, so they hang on it; Collab keeps the stream by time, so only
-// the replies that happen to come right after hang.
+// between) stays at its level and hangs on a thin line in the avatar column from that row's avatar down to its own,
+// with no line quoting it; the replies that follow it, each to the same row or to a reply already hanging there, hang
+// on the same line. A reply with something in between quotes what it replies to on its first line (「↩ 名前: …」, a
+// click goes there). Solo puts the AI's card and its answer (or its run card) right under the message, so they hang on
+// it; Collab keeps the stream by time, so only the replies that happen to come right after hang.
 
 import type { ChatEntry, StreamItem } from './stream';
 

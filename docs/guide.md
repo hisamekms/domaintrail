@@ -3149,8 +3149,9 @@ one's own included, starts a reply to it. The chip reads `↩ 田中への返信
 composer's targets start with those of the message, and the posted reply shows `↩ 田中: <the head of its text>` on one
 muted line at its top, a click scrolling to the message and flashing it (nothing shows when the message is not there).
 A reply right under what it replies to (the AI's answers included, and in Solo the AI's card under your message) has
-no such line: it hangs, a little indented, on a thin line from the avatar of the message (or the card) it replies to,
-and the replies that follow it on the same message hang on the same line.
+no such line: it stays at the level of the other messages, joined by a thin line in the avatar column from the avatar
+of the message (or the card) it replies to down to its own, and the replies that follow it on the same message hang
+on the same line.
 A reply to your message is marked in your stream as a message that mentions you is; nothing else notifies, and the
 stream stays one list (no threads). Applied, such a reply continues no card, and the agent is given the message it
 replies to — its author and text as they were sent — as context for the request.
