@@ -74,6 +74,11 @@ export function targetLabel(t: ModelTarget, naming: NamingContext | undefined, k
     return { name, resolved: true, ...(detail && { detail }), ...path };
 }
 
+/** The targets that resolve now (none before the model is read): a candidate's chips leave out those to be added. */
+export function existingTargets(targets: readonly ModelTarget[], naming: NamingContext | undefined, kinds: KindNames): readonly ModelTarget[] {
+    return targets.filter((t) => targetLabel(t, naming, kinds).resolved);
+}
+
 /** The first `SHOWN_TARGETS` of some targets, and how many more there are. */
 export function shownTargets<T>(targets: readonly T[]): { readonly shown: readonly T[]; readonly more: number } {
     return { shown: targets.slice(0, SHOWN_TARGETS), more: Math.max(0, targets.length - SHOWN_TARGETS) };

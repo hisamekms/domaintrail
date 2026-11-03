@@ -72,6 +72,11 @@ export interface ChatContextValue {
     readonly jump: (key: string) => void;
     /** Opens the participants at a person (a mention of them was clicked), their row marked for a moment. */
     readonly showPerson: (id: string) => void;
+    /**
+     * Puts a `/` command in the composer (`es:gaps`: the text `/es:gaps`, which opens `/`'s list on it) and gives it the
+     * focus: the person starts it from there. What the composer held is replaced.
+     */
+    readonly putCommand: (id: string) => void;
     /** Replies to runs and messages: the reply being written, starting one (from an AI turn or a message) and what a posted reply names. */
     readonly replies: {
         readonly draft: ReplyDraft | undefined;

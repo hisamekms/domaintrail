@@ -88,6 +88,7 @@ import { parseReplyText, referenceText } from './references';
 import { TriageRecordPanel } from './triage-record';
 import { InterviewPanel, interviewSlot } from './interview';
 import { CandidatesCard, commandSlot } from './candidates';
+import { commandComposerValue, nextAnswerOf, NextSteps } from './next-steps';
 import { canStartCommand, runningInterview, selectedOf, slashItems, slashQuery, templateValue, type SlashItem, type SlashScope } from './slash';
 import { isReplyable, messageReference, messageReplyTargets, repliesToMe, replyReference, replyTargets, type ReplyDraft } from './replies';
 import { useRevisionTools } from './revisions';
@@ -370,6 +371,15 @@ export function SessionChat(props: {
         }),
         [replyDraft, state, composer, units],
     );
+    // a command a step of `/es:next` suggests: in the composer, `/`'s list open on it, the composer focused
+    const putCommand = useCallback(
+        (id: string): void => {
+            composer.setValue(commandComposerValue(id));
+            setView('chat');
+            setReplyFocus((n) => n + 1);
+        },
+        [composer],
+    );
     // the selection confirmed for a request: the composer is in the chat
     useEffect(() => {
         if (focusPending) setView('chat');
@@ -504,6 +514,7 @@ export function SessionChat(props: {
         jump,
         reveal,
         showPerson,
+        putCommand,
         replies,
     };
 
@@ -1227,14 +1238,20 @@ function AiStatus({ ai }: { ai: MessageAi }) {
  * the message it answers, unless it hangs right under it. Anyone replies to it (the reply is addressed to the AI) and reacts.
  */
 function AiMessageRow({ request: r, continues, hangs }: { request: RequestJson; continues: boolean; hangs: boolean }) {
-    const { tx, onNavigate, solo } = useChat();
+    const { tx, onNavigate, solo, session } = useChat();
+    // `/es:next`'s answer: its steps with their command buttons, rather than its text
+    const next = nextAnswerOf(session.state, r.id);
     return (
         <div className="chat-row">
             <Bubble avatar={<AiAvatar />} who={tx.chat.agent} at={r.sentAt} continues={continues} className="chat-bubble-ai">
                 {r.replyTo?.kind === 'Message' && !hangs && <MessageReferenceLine request={r.replyTo.request} />}
-                <Clamped tx={tx} revealKey={`message:${r.id}`} blocks>
-                    <MarkdownText text={r.body} onNavigate={onNavigate} />
-                </Clamped>
+                {next ? (
+                    <NextSteps next={next} />
+                ) : (
+                    <Clamped tx={tx} revealKey={`message:${r.id}`} blocks>
+                        <MarkdownText text={r.body} onNavigate={onNavigate} />
+                    </Clamped>
+                )}
                 <ReactionRow target={{ kind: 'Message', request: r.id }} />
             </Bubble>
             <RowActions>
@@ -1693,7 +1710,10 @@ function Composer(props: {
     candidates: readonly MentionCandidate[];
     focusPending: boolean;
     onFocused: () => void;
-    /** The run or message the message replies to, while a reply is written; `replyFocus` changes when one starts. */
+    /**
+     * The run or message the message replies to, while a reply is written; `replyFocus` changes when one starts (and when
+     * a command is put in the composer).
+     */
     reply: ReplyDraft | undefined;
     replyFocus: number;
     onReplyDone: () => void;

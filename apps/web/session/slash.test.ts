@@ -6,16 +6,12 @@ import type { MessageTemplateBody } from '@domaintrail/collaboration/protocol';
 import { interviewSlot } from './interview';
 import { commandSlot } from './candidates';
 import { streamItems } from './stream';
+import { MESSAGES } from '../i18n';
 import { canStartCommand, COMMAND_IDS, slashItems, slashQuery, templateContexts, templateValue, type CommandId, type SlashScope } from './slash';
 
-const commandNames = {
-    'es:start': 'ES を始める',
-    'es:exceptions': '例外を洗い出す',
-    'es:recap': 'ここまでのまとめ',
-    'model:start': 'モデリングを始める',
-} as const;
+const commandNames = MESSAGES.ja.session.chat.slash.commands;
 const everyone = (): boolean => true;
-const ES = ['command:es:start', 'command:es:exceptions', 'command:es:recap'];
+const ES = ['es:start', 'es:exceptions', 'es:gaps', 'es:levels', 'es:names', 'es:recap', 'es:next'].map((id) => `command:${id}`);
 const storming = (level: string): SlashScope['view'] => ({ kind: 'storming', level });
 const event: SlashScope['selected'] = {
     target: { target: { kind: 'DtesElement', storming: 'Returns', local: 'ReturnRequested' }, label: '返品が依頼された' },
@@ -49,7 +45,8 @@ describe('/ in the composer', () => {
     });
 
     test('commands first, grouped by prefix with :start first, then the templates of what is open and selected', () => {
-        expect(COMMAND_IDS).toEqual(['es:start', 'es:exceptions', 'es:recap', 'model:start']);
+        // es:start, the other ES commands in the order of the work (the flow, its details, the session), model:start
+        expect(COMMAND_IDS).toEqual(['es:start', 'es:exceptions', 'es:gaps', 'es:levels', 'es:names', 'es:recap', 'es:next', 'model:start']);
         expect(ids({ scope: { view: storming('big-picture') } })).toEqual([...ES, 'command:model:start', 'template:next-events', 'template:hotspots']);
         expect(ids({ scope: { view: storming('design-level'), selected: event } })).toEqual([
             ...ES,
@@ -73,9 +70,14 @@ describe('/ in the composer', () => {
         expect(ids({ query: 'es:e' })).toEqual(['command:es:exceptions']);
         expect(ids({ query: 'モデ' })).toEqual(['command:model:start']);
         expect(ids({ query: 'まとめ' })).toEqual(['command:es:recap']);
-        const en = { 'es:start': 'Start event storming', 'es:exceptions': 'Find exceptions', 'es:recap': 'Recap so far', 'model:start': 'Start modeling' };
+        expect(ids({ query: '名前' })).toEqual(['command:es:names']);
+        expect(ids({ query: '次に' })).toEqual(['command:es:next']);
+        // a command put in the composer by a step of /es:next (`/es:gaps`): its query lists it alone
+        expect(ids({ query: slashQuery('/es:gaps') ?? '' })).toEqual(['command:es:gaps']);
+        const en = MESSAGES.en.session.chat.slash.commands;
         expect(ids({ query: 'model', lang: 'en', commandNames: en })).toEqual(['command:model:start']);
         expect(ids({ query: 'exceptions', lang: 'en', commandNames: en })).toEqual(['command:es:exceptions']);
+        expect(ids({ query: 'gaps', lang: 'en', commandNames: en })).toEqual(['command:es:gaps']);
         expect(ids({ query: 'issues', lang: 'en' })).toEqual(['template:review']);
         expect(ids({ query: '気になる' })).toEqual(['template:review']);
         expect(ids({ query: 'zzz' })).toEqual([]);
@@ -106,7 +108,9 @@ describe('/ in the composer', () => {
             people: [],
         });
         expect(templateValue(around.template, 'en', event).text).toBe('Fill in what happens before and after #返品が依頼された[1]');
-        const [next] = slashItems({ query: 'next', lang: 'ja', scope: { view: storming('big-picture') }, commandNames, canStart: everyone });
+        // (`/es:next` matches it too, first, when it may start)
+        expect(ids({ query: 'next', scope: { view: storming('big-picture') } })).toEqual(['command:es:next', 'template:next-events']);
+        const [next] = slashItems({ query: 'next', lang: 'ja', scope: { view: storming('big-picture') }, commandNames, canStart: () => false });
         if (next.kind !== 'template') throw new Error('a template');
         expect(templateValue(next.template, 'ja', undefined)).toEqual({ text: 'このあとに起きることを足して', chips: [], people: [] });
     });
@@ -127,16 +131,16 @@ describe('/ in the composer', () => {
 });
 
 describe('who may start a command', () => {
-    const can = (state: object, facilitator: boolean): CommandId[] => COMMAND_IDS.filter((id) => canStartCommand(state as never, facilitator, id));
+    const can = (state: object, facilitator: boolean): readonly CommandId[] => COMMAND_IDS.filter((id) => canStartCommand(state as never, facilitator, id));
 
-    test("the interviews and /es:exceptions are the facilitator's; /es:recap anyone's", () => {
-        expect(can({}, true)).toEqual(['es:start', 'es:exceptions', 'es:recap', 'model:start']);
-        expect(can({}, false)).toEqual(['es:recap']);
+    test("the interviews and the candidate commands are the facilitator's; /es:recap and /es:next anyone's", () => {
+        expect(can({}, true)).toEqual(COMMAND_IDS);
+        expect(can({}, false)).toEqual(['es:recap', 'es:next']);
     });
 
     test('none while an interview runs; a command not while one of its kind runs', () => {
-        expect(can({ interviews: [{ state: 'Asking' }] }, true)).toEqual(['es:exceptions', 'es:recap']);
-        expect(can({ slashCommands: [{ kind: 'EsExceptions', state: 'Listed' }] }, true)).toEqual(['es:start', 'es:recap', 'model:start']);
+        expect(can({ interviews: [{ state: 'Asking' }] }, true)).toEqual(COMMAND_IDS.filter((id) => !id.endsWith(':start')));
+        expect(can({ slashCommands: [{ kind: 'EsExceptions', state: 'Listed' }] }, true)).toEqual(COMMAND_IDS.filter((id) => id !== 'es:exceptions'));
         expect(
             can(
                 {
@@ -147,7 +151,7 @@ describe('who may start a command', () => {
                 },
                 true,
             ),
-        ).toEqual(['es:start', 'es:exceptions', 'model:start']);
+        ).toEqual(COMMAND_IDS.filter((id) => id !== 'es:recap'));
     });
 });
 
@@ -168,5 +172,9 @@ describe("a command's place in the chat", () => {
         expect(keys('Collab', [command('EsExceptions', 'Applied'), command('EsRecap', 'Working')])).toEqual(['command:c-EsExceptions', 'command:c-EsRecap']);
         expect(keys('Collab', [command('EsRecap', 'Answered')])).toEqual([]);
         expect(keys('Solo', [command('EsRecap', 'Working')])).toEqual([]);
+        // /es:next with no storming in view: listed with none, the card says so until its starter closes it
+        expect(keys('Solo', [command('EsNext', 'Listed', { candidates: [] })])).toEqual(['command:c-EsNext']);
+        expect(commandSlot({ slashCommands: [command('EsNext', 'Listed', { candidates: [] })] }, { id: 'o' })).toBe('none');
+        expect(keys('Solo', [command('EsNext', 'Stopped')])).toEqual([]);
     });
 });

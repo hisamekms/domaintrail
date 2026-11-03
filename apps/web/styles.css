@@ -7916,6 +7916,43 @@ label.proposal-option {
 .candidates-row.state-Stopped .proposal {
     opacity: 0.6;
 }
+/* `/es:next`'s answer: the status, then the steps numbered, each its text and its command's button on one line (wrapping),
+   its reason muted under it */
+.next-answer {
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+}
+.next-status {
+    margin: 0;
+}
+.next-steps {
+    margin: var(--space-2) 0 0;
+    padding-left: 1.5em;
+}
+.next-step + .next-step {
+    margin-top: var(--space-2);
+}
+.next-step-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-1) var(--space-2);
+}
+.next-step-text {
+    font-weight: var(--fw-strong);
+}
+.next-step-reason {
+    display: block;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.session-chat button.chat-small.next-command {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-family: var(--mono);
+    font-weight: var(--fw-strong);
+}
 /* the facilitator's record of a triage: small muted lines under the message, the stage that decided strong */
 .triage-record {
     margin-top: var(--space-2);
