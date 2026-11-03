@@ -1,4 +1,5 @@
 import { ChevronDown } from 'lucide-react';
+import type { ReactNode } from 'react';
 import type { StormingElementKind } from '@domaintrail/storming';
 import type { EdgeKind } from '@domaintrail/visualization';
 import { useT, type Messages } from './i18n';
@@ -70,6 +71,28 @@ export const STORMING_LEGEND_KINDS: readonly StormingElementKind[] = [
     'stage',
 ];
 
+/** What a view's legend says: its edges' rows, its notes, and for an Event Storming the kinds of note. */
+export interface LegendContent {
+    readonly rows: readonly LegendRow[];
+    /** Notes under the rows (what the stubs and the ↻ rows are). */
+    readonly notes: readonly string[];
+    /** The storming's kinds of note, in the key's order (an Event Storming only). */
+    readonly kinds: readonly StormingElementKind[];
+    /** The last note: which way the arrows point. */
+    readonly arrows: string;
+}
+
+/** The legend of `view`: on the screen, on a printed sheet and in an exported image. */
+export function legendContent(view: LegendView, t: Messages): LegendContent {
+    const note = view === 'structureFocus' ? t.stubNote : view === 'aggregatesFocus' ? t.aggregateStubNote : view === 'states' ? t.internalNote : undefined;
+    return {
+        rows: legendRows(view, t.legendRows),
+        notes: note ? [note] : [],
+        kinds: view === 'storming' ? STORMING_LEGEND_KINDS : [],
+        arrows: view === 'storming' ? t.stormingArrowNote : t.arrowNote,
+    };
+}
+
 /**
  * Key for the edges of the canvas views (and, for an Event Storming, the colour of each kind of note); every edge
  * points from the dependent to its dependency (in an Event Storming, along causes and time). It opens upward from the
@@ -77,7 +100,6 @@ export const STORMING_LEGEND_KINDS: readonly StormingElementKind[] = [
  */
 export function Legend({ view, open, onToggle }: { view: LegendView; open: boolean; onToggle: () => void }) {
     const t = useT();
-    const rows = legendRows(view, t.legendRows);
     return (
         // closed, it folds down into its button: the slot's height goes to nothing as the legend fades (styles.css)
         <div className={`legend-slot${open ? ' open' : ''}`} inert={!open}>
@@ -89,31 +111,44 @@ export function Legend({ view, open, onToggle }: { view: LegendView; open: boole
                             <ChevronDown size={14} aria-hidden />
                         </button>
                     </div>
-                    {rows.map((r) => (
-                        <div key={r.kind} className="legend-row">
-                            <svg width="56" height="14" className={`de de-${r.kind}`} aria-hidden>
-                                <path d="M4,7 L42,7" className="de-line" />
-                                {r.kind === 'owns' && <path d="M2,7 L9,3.5 L16,7 L9,10.5 Z" className="de-head de-diamond" />}
-                                {r.kind !== 'esHotspot' && <path d="M54,7 L41,0.5 L41,13.5 Z" className="de-head" />}
-                            </svg>
-                            <span>{r.text}</span>
-                        </div>
-                    ))}
-                    {view === 'structureFocus' && <div className="legend-note">{t.stubNote}</div>}
-                    {view === 'aggregatesFocus' && <div className="legend-note">{t.aggregateStubNote}</div>}
-                    {view === 'states' && <div className="legend-note">{t.internalNote}</div>}
-                    {view === 'storming' && (
-                        <div className="legend-kinds">
-                            {STORMING_LEGEND_KINDS.map((k) => (
-                                <span key={k} className={`kind kind-es-${k}`}>
-                                    {t.esKinds[k]}
-                                </span>
-                            ))}
-                        </div>
-                    )}
-                    <div className="legend-note">{view === 'storming' ? t.stormingArrowNote : t.arrowNote}</div>
+                    <LegendBody view={view} />
                 </div>
             </div>
         </div>
+    );
+}
+
+/** The legend's rows, notes and kinds (under its title, on the screen and on a printed sheet). */
+export function LegendBody({ view }: { view: LegendView }): ReactNode {
+    const t = useT();
+    const { rows, notes, kinds, arrows } = legendContent(view, t);
+    return (
+        <>
+            {rows.map((r) => (
+                <div key={r.kind} className="legend-row">
+                    <svg width="56" height="14" className={`de de-${r.kind}`} aria-hidden>
+                        <path d="M4,7 L42,7" className="de-line" />
+                        {r.kind === 'owns' && <path d="M2,7 L9,3.5 L16,7 L9,10.5 Z" className="de-head de-diamond" />}
+                        {r.kind !== 'esHotspot' && <path d="M54,7 L41,0.5 L41,13.5 Z" className="de-head" />}
+                    </svg>
+                    <span>{r.text}</span>
+                </div>
+            ))}
+            {notes.map((n) => (
+                <div key={n} className="legend-note">
+                    {n}
+                </div>
+            ))}
+            {kinds.length > 0 && (
+                <div className="legend-kinds">
+                    {kinds.map((k) => (
+                        <span key={k} className={`kind kind-es-${k}`}>
+                            {t.esKinds[k]}
+                        </span>
+                    ))}
+                </div>
+            )}
+            <div className="legend-note">{arrows}</div>
+        </>
     );
 }

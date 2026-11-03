@@ -7,6 +7,10 @@
 // camera is in pixels of the screen, which no print layout keeps). The sheet is static, so that it is drawn at once:
 // Ctrl+P prints as soon as `beforeprint` returns. The 印刷 action (`usePrint().print`) first gets the compact layout and
 // draws the sheet, then opens the print dialog; Ctrl+P prints the compact layout if the page has it, the shown one if not.
+//
+// The page has no margin (`@page { margin: 0 }`), so that the browser prints no header or footer of its own (the page's
+// title, its URL, the date); the sheet keeps its own margin, and has its own line above the diagram: where it is and how
+// it is shown (`sheetHeading`). The legend goes under the diagram if the viewer asked for it (書き出し's 凡例を含める).
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import type { DisplayMode, LaidOutGraph } from '@domaintrail/visualization';
@@ -25,7 +29,8 @@ import {
     nodeClassName,
     nodeStyle,
 } from '../diagram-items';
-import { useLang } from '../i18n';
+import { useLang, useT } from '../i18n';
+import { LegendBody, type LegendView } from '../legend';
 import { buildScene } from '../render';
 import { sceneItems, type DiagMark, type Rect, type SceneItem } from '../scene';
 import type { Theme } from '../theme';
@@ -177,11 +182,13 @@ function SheetBox({ item, origin }: { item: Exclude<SceneItem, { type: 'edge' }>
 
 /**
  * The diagram as printed: the scene of `graph`, as the canvas draws it (without selection or hover), on a landscape
- * page, fitted whole. Drawn into `<body>`, beside the app, which the print styles hide; hidden on the screen.
+ * page, fitted whole, under its heading and over its legend (if any). Drawn into `<body>`, beside the app, which the
+ * print styles hide; hidden on the screen.
  */
-export function PrintSheet(props: { graph: LaidOutGraph; current: ViewPayload; mode: DisplayMode }): ReactNode {
+export function PrintSheet(props: { graph: LaidOutGraph; current: ViewPayload; mode: DisplayMode; heading: string; legend: LegendView | null }): ReactNode {
     const { graph, current, mode } = props;
     const lang = useLang();
+    const t = useT();
     const scene = useMemo(
         () => buildScene(graph, { diff: current.diff, diagnostics: current.diagnostics, mode, lang }),
         [graph, current.diff, current.diagnostics, mode, lang],
@@ -190,8 +197,9 @@ export function PrintSheet(props: { graph: LaidOutGraph; current: ViewPayload; m
     const box = sheetBounds(graph);
     return createPortal(
         <div className="print-sheet" aria-hidden>
-            {/* a page of the diagram's shape (the catalog prints on the browser's default page) */}
-            <style>{'@page { size: landscape; margin: 10mm; }'}</style>
+            {/* a page of the diagram's shape, without the browser's header and footer (the catalog prints on its default page) */}
+            <style>{'@page { size: landscape; margin: 0; }'}</style>
+            <div className="print-heading">{props.heading}</div>
             <svg className="print-sheet-svg" viewBox={`${box.x} ${box.y} ${box.w} ${box.h}`} preserveAspectRatio="xMidYMid meet">
                 <foreignObject x={box.x} y={box.y} width={box.w} height={box.h}>
                     <div className="print-sheet-boxes" style={{ width: box.w, height: box.h }}>
@@ -206,6 +214,12 @@ export function PrintSheet(props: { graph: LaidOutGraph; current: ViewPayload; m
                     ) : null,
                 )}
             </svg>
+            {props.legend && (
+                <div className="legend print-legend">
+                    <div className="legend-title">{t.legend}</div>
+                    <LegendBody view={props.legend} />
+                </div>
+            )}
         </div>,
         document.body,
     );

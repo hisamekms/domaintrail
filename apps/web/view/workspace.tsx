@@ -4,11 +4,13 @@ import { type DisplayMode, type Lang, STRUCTURE_LEVELS, type StructureLevel } fr
 import type { StormingView, ViewPayload } from '@domaintrail/visualization/protocol';
 import { Catalog, CatalogFilters, CatalogSearch, useCatalogFilter } from '../catalog';
 import { ContextList } from '../context-picker';
-import { useT } from '../i18n';
+import { useLang, useT } from '../i18n';
 import { type CatalogFilter, contextLabels } from '../model-utils';
 import type { LegendView } from '../legend';
 import { StormingToolbar } from '../storming';
 import { applyTheme, type Theme } from '../theme';
+import { workspaceName } from '../app/health';
+import { buildScene } from '../render';
 import { useViewCamera } from './camera';
 import { useCenterOnResize } from './center';
 import { CanvasControls, EdgeHint } from './canvas-controls';
@@ -18,7 +20,9 @@ import { fitAll } from './canvas';
 import type { DiagramCanvas } from './diagram';
 import { activeFilterCount } from './filters';
 import { useViewGraph, type ViewGraph } from './graph';
+import { useExportOptions, type ExportOptions, type ExportTarget } from './export';
 import { PrintSheet, printKind, usePrint, usePrintWhenReady, type Printer } from './print';
+import { canvasSubject, exportFileName, sheetHeading } from './sheet';
 import { isCanvas, useNavigation, useOpenOnStormings, useSelectOnCanvas, type Navigation } from './navigation';
 import { useViewSettings, type ViewSettings } from './settings';
 import { FilterPopover, FilterSection, LevelSwitch, ToolbarEnd, ToolbarSubject } from './toolbar';
@@ -36,6 +40,8 @@ export interface Workspace {
     /** The catalog's filter (a session's message carries it as where it was sent from). */
     catalog: { filter: CatalogFilter; setFilter: (filter: CatalogFilter) => void };
     printer: Printer;
+    /** What an export (and a print) includes besides the diagram, remembered. */
+    exportOptions: { options: ExportOptions; setOptions: (options: ExportOptions) => void };
 }
 
 /**
@@ -50,6 +56,7 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
     const settings = useViewSettings();
     const catalog = useCatalogFilter();
     const printer = usePrint(theme);
+    const [exportOptions, setExportOptions] = useExportOptions();
     // printing a diagram prints its compact layout
     const viewGraph = useViewGraph(current, nav.view, settings, stormings, settings.compact || printer.phase !== 'idle');
     usePrintWhenReady(printer, isCanvas(nav.view) ? viewGraph.graph : null);
@@ -65,7 +72,7 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
 
     const onMount = useCallback((c: DiagramCanvas) => setCanvas(c), []);
 
-    return { canvas, onMount, stormings, nav, settings, viewGraph, catalog, printer };
+    return { canvas, onMount, stormings, nav, settings, viewGraph, catalog, printer, exportOptions: { options: exportOptions, setOptions: setExportOptions } };
 }
 
 /** The center of the page: the view tabs, the current view's toolbar, and the canvas (or the catalog). */
@@ -89,6 +96,7 @@ export function ViewWorkspace(props: {
     const focusContexts = current?.focusContexts ?? [];
     const { filter: catalogFilter, setFilter: setCatalogFilter } = workspace.catalog;
     const t = useT();
+    const lang = useLang();
     const empty = { added: [], changed: [], removed: [] };
     /** The view has nothing yet: it shows one line, and no control that would have nothing to act on. */
     const nothing = current !== null && isEmptyView(view.kind, current);
@@ -102,6 +110,21 @@ export function ViewWorkspace(props: {
               : view.kind === 'storming'
                 ? 'storming'
                 : `${structureLevel === 'aggregates' ? 'aggregates' : 'structure'}${focusKey ? 'Focus' : ''}`;
+    /** What the canvas shows, as a printed or exported diagram says it (its heading and its file's name). */
+    const subject = canvasSubject(view.kind, settings, focusKey ? checked : [], model, stormings);
+    const wsName = current ? workspaceName(current.root) : undefined;
+    const heading = subject ? sheetHeading(wsName, subject, t, mode) : '';
+    const { options: exportOptions } = workspace.exportOptions;
+    const exportTarget = (): ExportTarget | null =>
+        graph && current && subject
+            ? {
+                  graph,
+                  scene: () => buildScene(graph, { diff: current.diff, diagnostics: current.diagnostics, mode, lang }),
+                  heading,
+                  legend: legendView,
+                  fileName: (ext) => exportFileName(wsName, subject, ext),
+              }
+            : null;
     /** Fits the whole view: a storming view like when it is shown (its graph, never zoomed in past normal size). */
     const fitView = (): void => {
         if (!canvas) return;
@@ -202,11 +225,12 @@ export function ViewWorkspace(props: {
                         legend={legendView && { view: legendView, open: legendOpen, onToggle: onLegendToggle }}
                         compact={{ on: settings.compact, onToggle: () => settings.setCompact(!settings.compact) }}
                         print={{ preparing: printer.phase === 'preparing', onPrint: printer.print }}
+                        exporting={{ target: exportTarget, ...workspace.exportOptions, onPdf: printer.print }}
                         keys
                     />
                 )}
                 {printer.phase === 'printing' && printKind(isCanvas(view)) === 'diagram' && current && graph && (
-                    <PrintSheet graph={graph} current={current} mode={mode} />
+                    <PrintSheet graph={graph} current={current} mode={mode} heading={heading} legend={exportOptions.legend ? legendView : null} />
                 )}
                 <EdgeHint canvas={canvas} view={legendView} />
                 {nothing ? (

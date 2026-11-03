@@ -6778,6 +6778,39 @@ button.add-to-request.added:hover {
     background: var(--selected-bg);
     color: var(--action);
 }
+/* the 書き出し menu: above the bar, where the legend opens */
+.canvas-controls .export-menu {
+    position: static;
+    min-width: 12rem;
+    pointer-events: auto;
+}
+.export-menu > button {
+    padding: 5px 10px;
+    font: inherit;
+    text-align: left;
+    color: inherit;
+    background: none;
+    border: none;
+    border-radius: 5px;
+}
+.export-menu > button:hover:not(:disabled),
+.export-menu > button:focus-visible {
+    background: var(--hover);
+    outline: none;
+}
+.export-menu > button:disabled {
+    color: var(--disabled-text);
+    cursor: default;
+}
+.export-menu-options {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+    padding: 6px 10px 2px;
+    border-top: 1px solid var(--border);
+    color: var(--text-secondary);
+}
 /*
  * « collapses the bar toward the bottom-left corner, leaving a » there (the legend's panel goes with it).
  * It opens and closes at the panes' paces (the motion tokens).
@@ -7686,6 +7719,10 @@ label.proposal-option {
     top: 0;
     width: 100vw;
     height: 100vh;
+    /* the page's margin (the @page has none, so that the browser adds no header or footer of its own) */
+    padding: 10mm;
+    display: flex;
+    flex-direction: column;
     visibility: hidden;
     pointer-events: none;
     z-index: -1;
@@ -7693,9 +7730,26 @@ label.proposal-option {
 }
 .print-sheet-svg {
     display: block;
+    flex: 1;
+    min-height: 0;
     width: 100%;
-    height: 100%;
     overflow: visible;
+}
+/* the line above the diagram: where it is and how it is shown (the page has no header of the browser's) */
+.print-heading {
+    flex: none;
+    margin-bottom: 4mm;
+    overflow: hidden;
+    font-size: 10pt;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--text-secondary);
+}
+/* the view's legend, under the diagram at the left */
+.print-legend {
+    flex: none;
+    align-self: flex-start;
+    margin-top: 4mm;
 }
 .print-sheet-boxes {
     position: relative;

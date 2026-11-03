@@ -56,11 +56,13 @@ See [ADR 0007](adr/0007-pane-roles.md).
 The canvas's controls sit at its bottom-left: `− 85% +` zooms out and in around the middle (the level shows live;
 a click on it goes back to 100%), ⤢ fits everything (`Shift+1`), ◎ fits the selection (`Shift+2`; disabled while
 nothing is selected), 詰めて表示 (two inward arrows, named in its tooltip) closes up the gaps between the notes and
-boxes of every diagram, 印刷 (the printer) prints the diagram on one page (see [Printing](#printing)), the book (凡例,
+boxes of every diagram, 印刷 (the printer) prints the diagram on one page and 書き出し (the download arrow) exports it
+as a file (see [Printing and exporting](#printing-and-exporting)), the book (凡例,
 named in its tooltip) opens the legend upward, and « at the right end collapses the bar toward the corner, leaving only
 », which brings it back (the legend's panel is hidden while collapsed and keeps its own open or closed state). `U` does the same as « and », and the choice is remembered per browser. Hovering an
 edge (its line or arrowhead) tells what it means, in the legend's words for that view (「参照（ID で別の集約へ）」…).
-The keys do nothing while typing. The inspector's 状態遷移 diagram has the same controls, without 詰めて表示 and 印刷.
+The keys do nothing while typing. The inspector's 状態遷移 diagram has the same controls, without 詰めて表示 and 印刷
+(its 書き出し has PNG and SVG only).
 
 詰めて表示 is off by default and remembered per browser. While it is on, every diagram — the Event Storming views (the
 stages' grid included), the Context Map, the Structure View (focused views included) and the inspector's 状態遷移 —
@@ -134,15 +136,40 @@ badge, and a removed element a faded, dashed ghost with its name struck through 
 or ! mark on the node's corner, with its text in the inspector and the problems list (a state view's transitions keep
 their command's blue). The others' cursors and names have a light halo, so that they read over any sticky note.
 
-## Printing
+## Printing and exporting
 
 The browser's print (Ctrl+P / ⌘P) prints the current diagram alone — without the panes, the chat, the toolbars, the
 canvas's controls or the legend — fitted whole to one landscape page, in the light colours whatever the theme. The
 paper size is chosen in the browser's print dialog; the diagram is scaled to it. The diagram is printed in its compact
 layout when the page has it (詰めて表示 on, or printed before), else in the layout shown.
 
+The page has no margin of the browser's, so the browser prints no header or footer of its own (the page's title, its
+URL, the date); the sheet keeps its own margin. Above the diagram, one line says what it is and how it is shown, in the
+display mode's names: the workspace, the view and what in it is shown, then its conditions, e.g.
+`ws › イベントストーミング › 住民票などのコンビニ交付 › コンビニでの発行 · デザインレベル · 例外を含む` (an Event Storming
+view: the storming, すべて（統合）, a stage or a timeline, the level, and whether the exceptions are drawn when the storming
+has some; the Structure View: the focused contexts, if any, and the level; the Context Map: すべてのコンテキスト when
+shared and external BCs are shown). Nothing else is printed (no date, no version).
+
 印刷 in the canvas's controls is the surer way: it gets the compact layout first (the button spins meanwhile), then opens
-the print dialog. The catalog prints as a page: its list, without the panes around it.
+the print dialog. The catalog prints as a page: its list, without the panes around it (it has no export).
+
+書き出し, next to 印刷, opens a menu upward:
+
+- **PNG**: the current diagram (its stage, level and exceptions, and its spacing: compact while 詰めて表示 is on) on
+  white, at twice its size (less for a diagram too large for a browser's canvas).
+- **SVG**: the same as a portable SVG — plain shapes and text, no embedded HTML, the colours as attributes, the fonts as
+  the page's font stack ending with a generic family — that opens in browsers, Figma and Inkscape. Each note's label is
+  broken into lines, shrunk and cut short with «…» as on the canvas (measured in the page's fonts); a viewer without
+  those fonts draws the same lines in its own, a little wider or narrower.
+- **PDF（印刷画面から保存）**: the 印刷 action; the print dialog saves the PDF.
+- **見出しを含める** (off by default): the heading line above the diagram in a PNG or SVG (a printed sheet always has it).
+- **凡例を含める** (off by default): the view's legend under the diagram, at the left, in a PNG, an SVG and a print.
+
+The two options are remembered per browser. A file is named from IDs, not labels:
+`<workspace>-<view>-<storming or contexts>-<stage or timeline>-<level>.png`, e.g.
+`shop-storming-OrderToCash-all-design-level.svg` or `shop-structure-detail.png`; a state diagram's is
+`shop-states-Billing.Invoice.png`.
 
 ## Downloading the sources
 

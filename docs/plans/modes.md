@@ -1110,6 +1110,35 @@ A user asked to close up the gaps between sticky notes when printing (decided 20
   印刷 action waits for the compact layout (at most 5 s) and the fonts, then calls `window.print()`. The catalog prints
   as a page.
 
+### As built: the print heading, the legend and exporting
+
+Decided by the user (2026-11-03), after printing:
+
+- **Heading**: the print sheet's page has no margin (`@page { size: landscape; margin: 0 }`), so Chrome prints no header
+  or footer of its own; the sheet has its own margin (10mm) and one line above the diagram: the breadcrumb and the view's
+  conditions (`view/sheet.ts`, `sheetHeading`): the workspace › the view › the storming › すべて（統合）/ a stage / a
+  timeline (as its picker names it) · the level · 例外を含む / 例外を除く (a storming with exceptions, not one timeline);
+  the Structure View › the focused contexts · the level; the Context Map · すべてのコンテキスト (`mapAll`); a state
+  diagram: 状態遷移 › the aggregate. Names by the display mode; nothing else (no date, version or brand).
+- **Legend**: 凡例を含める (off by default) puts the view's legend under the diagram, on a printed sheet (the legend's
+  own markup, `LegendBody`) and in an export; the legend's content is one function (`legendContent`) for the screen, the
+  sheet and the SVG.
+- **書き出し** (`view/export.ts`, the menu in `canvas-controls.tsx`): PNG, SVG, PDF (the 印刷 action), 見出しを含める
+  (off; PNG and SVG only, a print always has it) and 凡例を含める, remembered per browser (`domaintrail.export`). The
+  inspector's state diagram exports PNG and SVG (it does not print); the catalog does not export.
+- **Portable SVG** (`view/portable-svg.ts`): built from the scene, not from the DOM: rects, paths, `text`/`tspan` and
+  markers only (no `foreignObject`, no classes, no `paint-order`: an edge label's halo is the same text stroked white
+  under it). styles.css's item rules are mirrored as tables of attributes; the colours are the light theme's custom
+  properties resolved in the page (switched to light and back within one task, read back through a 1×1 canvas as
+  `#rrggbb` and an opacity); the fonts are `--sans` / `--mono`. A sticky note's label is laid out by `fitLabel` with a
+  line breaker (`wrapLines`: wide characters break anywhere but before closing punctuation, words at spaces, an
+  overlong word where the line is full) over the canvas's `measureText`, clamped with «…»; baselines come from the
+  font's ascent and descent (CSS's half-leading). Checked to render alike as an `<img>` in Chrome and in resvg.
+- **PNG**: the portable SVG drawn into a canvas at 2× on white (`pngScale` lowers it for a canvas over 16384 px a side
+  or 64 M pixels); it has no foreign content, so the canvas is never tainted.
+- **File names**: `<workspace>-<view>-<storming | contexts>-<stage | timeline>-<level>`, from IDs, slugged
+  (`exportFileName`).
+
 ### As built: actors, read models and aggregates once per use (Event Storming views)
 
 - **Decided by the user**: at Design Level an actor drawn once and linked to every command that used it ran lines across

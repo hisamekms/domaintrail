@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { BookOpen, ChevronsLeft, ChevronsRight, Focus, FoldHorizontal, LoaderCircle, Maximize, Minus, Plus, Printer } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { BookOpen, ChevronsLeft, ChevronsRight, Download, Focus, FoldHorizontal, LoaderCircle, Maximize, Minus, Plus, Printer } from 'lucide-react';
 import { useT } from '../i18n';
 import { Legend, legendRows, type LegendView } from '../legend';
+import { useDismiss } from '../shared/layout';
 import { canvasShortcut, formatZoom, takesText, useCanvasControls, type CanvasShortcut } from './controls';
 import { useCanvasValue, type DiagramCanvas } from './diagram';
+import { exportDiagram, type ExportOptions, type ExportTarget } from './export';
 
 const ANIMATE = { animate: true };
 
@@ -11,7 +13,8 @@ const ANIMATE = { animate: true };
  * The canvas's camera controls and legend, at its bottom-left: `− 85% +` (zoom around the middle; the level resets to
  * 100% on a click), ⤢ (fit everything, as `fitAll` does for this canvas), ◎ (fit the selection), the legend's button,
  * which opens it upward, 「詰めて表示」 (every diagram in its compact layout, remembered), 印刷 (the diagram alone, on one
- * page), and « , which collapses all of it into a » in the same corner (as `U` does, remembered).
+ * page), 書き出し (a menu, opening upward: PNG, SVG, PDF by the print dialog, and what they include), and « , which
+ * collapses all of it into a » in the same corner (as `U` does, remembered).
  */
 export function CanvasControls(props: {
     canvas: DiagramCanvas | null;
@@ -24,10 +27,16 @@ export function CanvasControls(props: {
     compact?: { on: boolean; onToggle: () => void };
     /** The 印刷 action, if the canvas offers it (the main canvas); `preparing` while it gets the compact layout. */
     print?: { preparing: boolean; onPrint: () => void };
+    /** 書き出し, if the canvas offers it. */
+    exporting?: ExportControl;
 }) {
     const { canvas, fitAll, legend } = props;
     const t = useT();
     const { collapsed, toggle } = useCanvasControls();
+    const root = useRef<HTMLDivElement>(null);
+    const [exportOpen, setExportOpen] = useState(false);
+    const closeExport = useCallback(() => setExportOpen(false), []);
+    useDismiss(exportOpen, root, closeExport);
     const zoom = useCanvasValue(canvas, (c) => c?.getZoom() ?? 1, []);
     const selection = useCanvasValue(canvas, (c) => (c?.selectedIds().length ?? 0) > 0, []);
 
@@ -41,8 +50,9 @@ export function CanvasControls(props: {
     if (!canvas) return null;
     const pct = formatZoom(zoom);
     return (
-        <div className={`canvas-controls${collapsed ? ' collapsed' : ''}`}>
+        <div className={`canvas-controls${collapsed ? ' collapsed' : ''}`} ref={root}>
             {legend && !collapsed && <Legend view={legend.view} open={legend.open} onToggle={legend.onToggle} />}
+            {props.exporting && exportOpen && !collapsed && <ExportMenu control={props.exporting} onDone={closeExport} />}
             <div className="canvas-controls-bar" role="toolbar" aria-label={t.canvasControls.label} aria-hidden={collapsed} inert={collapsed}>
                 <div className="canvas-controls-group">
                     <ControlButton label={t.canvasControls.zoomOut} onClick={() => canvas.zoomOut(ANIMATE)}>
@@ -86,6 +96,18 @@ export function CanvasControls(props: {
                         {props.print.preparing ? <LoaderCircle size={14} className="spin" aria-hidden /> : <Printer size={14} aria-hidden />}
                     </ControlButton>
                 )}
+                {props.exporting && (
+                    <button
+                        className={`canvas-control${exportOpen ? ' active' : ''}`}
+                        aria-haspopup="menu"
+                        aria-expanded={exportOpen}
+                        aria-label={t.canvasControls.export}
+                        data-tooltip={exportOpen ? undefined : t.canvasControls.export}
+                        onClick={() => setExportOpen(!exportOpen)}
+                    >
+                        <Download size={14} aria-hidden />
+                    </button>
+                )}
                 {legend && (
                     <button
                         className={`canvas-control canvas-legend-button${legend.open ? ' active' : ''}`}
@@ -112,6 +134,69 @@ export function CanvasControls(props: {
             >
                 <ChevronsRight size={14} aria-hidden />
             </button>
+        </div>
+    );
+}
+
+/** What the 書き出し menu acts on: the canvas's diagram now, the viewer's options, and the print path for PDF. */
+export interface ExportControl {
+    /** The diagram to export, if there is one now. */
+    target: () => ExportTarget | null;
+    options: ExportOptions;
+    setOptions: (options: ExportOptions) => void;
+    /** PDF: the 印刷 action (the print dialog saves a PDF), if the canvas prints. */
+    onPdf?: () => void;
+}
+
+/**
+ * The 書き出し menu, above the bar: PNG, SVG, PDF (by the print dialog), then whether they include the heading line
+ * (PNG and SVG; a printed sheet always has it) and the legend (printed too). The options are remembered.
+ */
+function ExportMenu({ control, onDone }: { control: ExportControl; onDone: () => void }): ReactNode {
+    const t = useT();
+    const [busy, setBusy] = useState(false);
+    const { options, setOptions } = control;
+    const run = (format: 'png' | 'svg'): void => {
+        const target = control.target();
+        if (!target || busy) return;
+        setBusy(true);
+        exportDiagram(format, target, options, t)
+            .catch((e: unknown) => console.error('export failed', e))
+            .finally(() => {
+                setBusy(false);
+                onDone();
+            });
+    };
+    return (
+        <div className="toolbar-menu export-menu motion-pop motion-pop-up" role="menu" aria-label={t.canvasControls.export} aria-busy={busy}>
+            <button role="menuitem" disabled={busy} onClick={() => run('png')}>
+                {t.canvasControls.exportPng}
+            </button>
+            <button role="menuitem" disabled={busy} onClick={() => run('svg')}>
+                {t.canvasControls.exportSvg}
+            </button>
+            {control.onPdf && (
+                <button
+                    role="menuitem"
+                    disabled={busy}
+                    onClick={() => {
+                        onDone();
+                        control.onPdf?.();
+                    }}
+                >
+                    {t.canvasControls.exportPdf}
+                </button>
+            )}
+            <div className="export-menu-options">
+                <label className="check">
+                    <input type="checkbox" checked={options.heading} onChange={(e) => setOptions({ ...options, heading: e.target.checked })} />
+                    {t.canvasControls.withHeading}
+                </label>
+                <label className="check">
+                    <input type="checkbox" checked={options.legend} onChange={(e) => setOptions({ ...options, legend: e.target.checked })} />
+                    {t.canvasControls.withLegend}
+                </label>
+            </div>
         </div>
     );
 }
