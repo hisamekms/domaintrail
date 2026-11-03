@@ -1,8 +1,11 @@
 // The `/` commands that are not interviews (the plan's "`/` commands: ways of working with the AI", round 5, and its
-// "Built-in ES commands, phase 1"): a candidate command (`/es:exceptions`) has the read-only answerer list candidate
-// changes — each a short label, the elements it touches, how in one line, why — of which the person who started it
-// checks some and applies them as one run; an answer command (`/es:recap`) has it answer in the chat. Either way the
-// starter's message (the command's name) goes to the answerer with the command's prompt, without triage.
+// "Built-in ES commands", phases 1 and 2): a candidate command (`/es:exceptions`, `/es:gaps`, `/es:levels`,
+// `/es:names`) has the read-only answerer list candidate changes — each a short label, the elements it touches, how in
+// one line, why — of which the person who started it checks some and applies them as one run; an answer command
+// (`/es:recap`, `/es:next`) has it answer in the chat. `/es:next` answers in a shape of its own (`NextAnswer`: a status
+// and one to three steps, each maybe with an ES command the page offers as a button), from which the server writes the
+// message. Either way the starter's message (the command's name) goes to the answerer with the command's prompt,
+// without triage.
 //
 // Here: the commands' table (their stable English IDs, their type, who may start one, what they need), the
 // decisions, and the answerer's output (candidates or an answer: AI output, untrusted, validated against its shape and
@@ -16,19 +19,38 @@ import { REPLY_LIMITS } from './reply.js';
 /** What a command does: lists candidates to apply as a run, or answers in the chat. */
 export type SlashCommandType = 'candidates' | 'answer';
 
+/**
+ * What the answerer writes for a command: candidates, an answer in Markdown, or the next steps (`/es:next`: an answer
+ * the server writes from them).
+ */
+export type CommandReplyShape = SlashCommandType | 'next';
+
 /** A command's row: what it is in the model, its type, whether only the facilitator starts it, what it is about. */
 export interface SlashCommandSpec {
     readonly kind: Collaboration.SlashCommandKind;
     readonly type: SlashCommandType;
+    /** What the answerer writes: its type's shape, or the next steps (an answer command). */
+    readonly reply: CommandReplyShape;
     readonly facilitatorOnly: boolean;
-    /** It is about the storming in view: without one, a candidate command lists nothing (and asks nothing). */
+    /**
+     * It is about the storming in view: without one, it lists no candidates at once (an answer command too: nothing is
+     * asked, and the card says so).
+     */
     readonly needsStorming: boolean;
 }
 
-/** The commands by their stable IDs (what one types after `/`), in the order `/` lists them after the interviews. */
+/**
+ * The commands by their stable IDs (what one types after `/`), in the order `/` lists them after the interviews: the
+ * order of the work on a storming — the flow (exceptions, gaps), then its details (levels, names) — then the session
+ * (recap, next).
+ */
 export const SLASH_COMMANDS = {
-    'es:exceptions': { kind: 'EsExceptions', type: 'candidates', facilitatorOnly: true, needsStorming: true },
-    'es:recap': { kind: 'EsRecap', type: 'answer', facilitatorOnly: false, needsStorming: false },
+    'es:exceptions': { kind: 'EsExceptions', type: 'candidates', reply: 'candidates', facilitatorOnly: true, needsStorming: true },
+    'es:gaps': { kind: 'EsGaps', type: 'candidates', reply: 'candidates', facilitatorOnly: true, needsStorming: true },
+    'es:levels': { kind: 'EsLevels', type: 'candidates', reply: 'candidates', facilitatorOnly: true, needsStorming: true },
+    'es:names': { kind: 'EsNames', type: 'candidates', reply: 'candidates', facilitatorOnly: true, needsStorming: true },
+    'es:recap': { kind: 'EsRecap', type: 'answer', reply: 'answer', facilitatorOnly: false, needsStorming: false },
+    'es:next': { kind: 'EsNext', type: 'answer', reply: 'next', facilitatorOnly: false, needsStorming: true },
 } as const satisfies Record<string, SlashCommandSpec>;
 
 export type SlashCommandName = keyof typeof SLASH_COMMANDS;
@@ -90,6 +112,56 @@ export function stormingInView(
     return undefined;
 }
 
+/** The ES commands a step of `/es:next` may suggest, by their IDs (an interview's included: `/es:start`). */
+export const SUGGESTED_COMMANDS = {
+    'es:start': 'EsStart',
+    'es:exceptions': 'EsExceptions',
+    'es:gaps': 'EsGaps',
+    'es:levels': 'EsLevels',
+    'es:names': 'EsNames',
+    'es:recap': 'EsRecap',
+} as const satisfies Record<string, Collaboration.SuggestedCommand>;
+
+export type SuggestedCommandId = keyof typeof SUGGESTED_COMMANDS;
+
+/** Whether a string is the ID of a command a step may suggest. */
+const isSuggestedCommandId = (id: string): id is SuggestedCommandId => Object.hasOwn(SUGGESTED_COMMANDS, id);
+
+/** The IDs a step may suggest, in their order. */
+export const SUGGESTED_COMMAND_IDS: readonly SuggestedCommandId[] = Object.keys(SUGGESTED_COMMANDS).filter(isSuggestedCommandId);
+
+/** The ID of a suggested command (`es:gaps`): what the page puts in the composer after `/`. */
+export function suggestedCommandId(c: Collaboration.SuggestedCommand): SuggestedCommandId {
+    const found = SUGGESTED_COMMAND_IDS.find((id) => SUGGESTED_COMMANDS[id] === c);
+    if (!found) throw new Error(`No / command for ${c}`);
+    return found;
+}
+
+/** The limits of `/es:next`'s answer. */
+export const NEXT_LIMITS = {
+    /** Where the storming stands, in one line. */
+    status: 200,
+    /** Steps kept (more are dropped). */
+    steps: 3,
+    /** A step, in one line. */
+    text: 120,
+    /** Why that step, in one line. */
+    reason: 200,
+} as const;
+
+/** A step of `/es:next` as the answerer sends it: what to do, why, the ES command's ID when one does it. */
+export interface NextStepData {
+    readonly text: string;
+    readonly reason: string;
+    readonly command?: SuggestedCommandId;
+}
+
+/** `/es:next`'s answer as the answerer sends it. */
+export interface NextAnswerData {
+    readonly status: string;
+    readonly steps: readonly NextStepData[];
+}
+
 /** A candidate as the answerer sends it: element references, how in one line, why. */
 export interface CandidateData {
     readonly label: string;
@@ -98,10 +170,10 @@ export interface CandidateData {
     readonly reason?: string;
 }
 
-/** The answerer's reply to a command: its candidates, or its answer. */
+/** The answerer's reply to a command: its candidates, or its answer (with the next steps it was written from, `/es:next`). */
 export type CommandReply =
     | { readonly kind: 'candidates'; readonly candidates: readonly Collaboration.CommandCandidate[] }
-    | { readonly kind: 'answer'; readonly answer: string };
+    | { readonly kind: 'answer'; readonly answer: string; readonly next?: Collaboration.NextAnswer };
 
 /** What went wrong reading the answerer's output: where, and what. */
 export interface CommandProblem {
@@ -135,15 +207,78 @@ function readCandidate(raw: unknown, path: string): Result<Collaboration.Command
     return ok({ label: made.value, targets: targets.value, how: how.value, ...(reason && { reason: reason.value }) });
 }
 
+/** A line of `/es:next`: within its limit, its line breaks as spaces (it is shown on one line). */
+function readNextLine(v: unknown, path: string, max: number): Result<Collaboration.ProposalText, CommandProblem> {
+    return readProposalText(typeof v === 'string' ? v.replace(/\s*[\n\r]+\s*/gu, ' ') : v, path, max);
+}
+
+/** One step of `/es:next`: `{ text, reason, command? }`; a command that is not one of `SUGGESTED_COMMANDS` is dropped. */
+function readNextStep(raw: unknown, path: string): Result<Collaboration.NextStep, CommandProblem> {
+    if (!isObject(raw)) return err({ path, message: 'Expected an object.' });
+    const unknown = extra(raw, ['text', 'reason', 'command'], path);
+    if (unknown) return err(unknown);
+    const text = readNextLine(raw.text, `${path}.text`, NEXT_LIMITS.text);
+    if (!text.ok) return text;
+    const reason = readNextLine(raw.reason, `${path}.reason`, NEXT_LIMITS.reason);
+    if (!reason.ok) return reason;
+    const id = typeof raw.command === 'string' ? raw.command.replace(/^\//u, '') : undefined;
+    const command = id !== undefined && isSuggestedCommandId(id) ? SUGGESTED_COMMANDS[id] : undefined;
+    return ok({ text: text.value, reason: reason.value, ...(command && { command }) });
+}
+
+/** `/es:next`'s reply, `{ kind: 'next', status, steps }`: the first `NEXT_LIMITS.steps` steps kept, none refused. */
+function readNextAnswer(raw: Record<string, unknown>): Result<Collaboration.NextAnswer, CommandProblem> {
+    const unknown = extra(raw, ['kind', 'status', 'steps'], 'reply');
+    if (unknown) return err(unknown);
+    const status = readNextLine(raw.status, 'reply.status', NEXT_LIMITS.status);
+    if (!status.ok) return status;
+    if (!Array.isArray(raw.steps)) return err({ path: 'reply.steps', message: 'Expected a list of steps.' });
+    const steps: Collaboration.NextStep[] = [];
+    for (const [i, x] of raw.steps.slice(0, NEXT_LIMITS.steps).entries()) {
+        const read = readNextStep(x, `reply.steps[${i}]`);
+        if (!read.ok) return read;
+        steps.push(read.value);
+    }
+    const [first, ...rest] = steps;
+    if (!first) return err({ path: 'reply.steps', message: 'Expected at least one step.' });
+    return ok({ status: status.value, steps: [first, ...rest] });
+}
+
 /**
- * The answerer's JSON for a command of `type`: `{ kind: 'candidates', candidates }` (the first
- * `CANDIDATE_LIMITS.candidates` kept, none is a list too) or `{ kind: 'answer', answer }` (Markdown within the answers'
- * limit), validated. The other kind is refused.
+ * The message of `/es:next`'s answer, in Markdown: the status, then the steps as a numbered list, each with its reason
+ * and its command's ID (\`/es:gaps\`), so that the session so far and any reader without the page's buttons read it
+ * whole.
  */
-export function readCommandReply(raw: unknown, type: SlashCommandType): Result<CommandReply, CommandProblem> {
+export function nextAnswerText(next: Pick<Collaboration.NextAnswer, 'status' | 'steps'>): string {
+    const steps = next.steps.map((s, i) => `${i + 1}. **${s.text}** — ${s.reason}${s.command ? ` \`/${suggestedCommandId(s.command)}\`` : ''}`);
+    return [next.status, '', ...steps].join('\n');
+}
+
+/** `/es:next`'s answer as the answerer sends it (and the server reads it again). */
+export function nextAnswerData(next: Pick<Collaboration.NextAnswer, 'status' | 'steps'>): NextAnswerData {
+    return {
+        status: next.status,
+        steps: next.steps.map((s) => ({ text: s.text, reason: s.reason, ...(s.command && { command: suggestedCommandId(s.command) }) })),
+    };
+}
+
+/**
+ * The answerer's JSON for a command whose reply is `shape`: `{ kind: 'candidates', candidates }` (the first
+ * `CANDIDATE_LIMITS.candidates` kept, none is a list too), `{ kind: 'answer', answer }` (Markdown within the answers'
+ * limit) or `{ kind: 'next', status, steps }` (`/es:next`: read as an answer, its message written from them),
+ * validated. Another kind is refused.
+ */
+export function readCommandReply(raw: unknown, shape: CommandReplyShape): Result<CommandReply, CommandProblem> {
     if (!isObject(raw)) return err({ path: 'reply', message: 'Expected an object.' });
-    if (raw.kind !== type) return err({ path: 'reply.kind', message: `Expected ${type}.` });
-    if (type === 'answer') {
+    if (raw.kind !== shape) return err({ path: 'reply.kind', message: `Expected ${shape}.` });
+    if (shape === 'next') {
+        const next = readNextAnswer(raw);
+        if (!next.ok) return next;
+        const answer = nextAnswerText(next.value);
+        if (answer.length > REPLY_LIMITS.answer) return err({ path: 'reply', message: `At most ${REPLY_LIMITS.answer} characters.` });
+        return ok({ kind: 'answer', answer, next: next.value });
+    }
+    if (shape === 'answer') {
         const unknown = extra(raw, ['kind', 'answer'], 'reply');
         if (unknown) return err(unknown);
         if (typeof raw.answer !== 'string' || !raw.answer.trim()) return err({ path: 'reply.answer', message: 'Expected a non-empty string.' });
@@ -173,10 +308,35 @@ export function candidateData(c: {
     return { label: c.label, targets: c.targets.map(elementReference), how: c.how, ...(c.reason !== undefined && { reason: c.reason }) };
 }
 
-/** The JSON schema of the answerer's reply to a command of `type`. */
-export function commandJsonSchema(type: SlashCommandType): Record<string, unknown> {
+/** The JSON schema of the answerer's reply to a command whose reply is `shape`. */
+export function commandJsonSchema(shape: CommandReplyShape): Record<string, unknown> {
     const str = (maxLength: number): Record<string, unknown> => ({ type: 'string', minLength: 1, maxLength });
-    if (type === 'answer')
+    if (shape === 'next')
+        return {
+            type: 'object',
+            properties: {
+                kind: { type: 'string', enum: ['next'] },
+                status: str(NEXT_LIMITS.status),
+                steps: {
+                    type: 'array',
+                    minItems: 1,
+                    maxItems: NEXT_LIMITS.steps,
+                    items: {
+                        type: 'object',
+                        properties: {
+                            text: str(NEXT_LIMITS.text),
+                            reason: str(NEXT_LIMITS.reason),
+                            command: { type: 'string', enum: [...SUGGESTED_COMMAND_IDS] },
+                        },
+                        required: ['text', 'reason'],
+                        additionalProperties: false,
+                    },
+                },
+            },
+            required: ['kind', 'status', 'steps'],
+            additionalProperties: false,
+        };
+    if (shape === 'answer')
         return {
             type: 'object',
             properties: { kind: { type: 'string', enum: ['answer'] }, answer: str(REPLY_LIMITS.answer) },
@@ -261,11 +421,13 @@ export const slashCommandCommands: Collaboration.SlashCommandCommands = {
     }),
 
     answer: decide<Collaboration.AnswerSlashCommandDecision>(Collaboration.SlashCommandShape, {
-        Working: (command, { answer, answeredAt }) =>
+        Working: (command, { answer, next, answeredAt }) =>
             ok({
                 Answered: {
-                    set: { answer, answeredAt },
-                    events: { SlashCommandAnswered: { type: 'SlashCommandAnswered', commandId: command.id, answer, answeredAt } },
+                    set: { answer, next, answeredAt },
+                    events: {
+                        SlashCommandAnswered: { type: 'SlashCommandAnswered', commandId: command.id, answer, ...(next && { next }), answeredAt },
+                    },
                 },
             }),
     }),
