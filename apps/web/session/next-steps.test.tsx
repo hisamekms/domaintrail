@@ -75,18 +75,14 @@ describe("/hint's answer", () => {
         expect(html).toContain('data-tooltip="入力欄に入れる"');
     });
 
-    test("a participant has no button for a facilitator's command; one of a kind running is disabled", () => {
+    test('everyone has a button for every command; one of a kind running is disabled', () => {
         const participant = render(<NextSteps next={next} />, chat('bob'));
-        expect(participant).not.toContain('/es:exceptions');
+        expect(participant).toContain('/es:exceptions');
         expect(participant).toContain('/es:recap');
-        expect(commandButton({}, true, 'es:exceptions')).toBe('enabled');
-        expect(commandButton({}, false, 'es:exceptions')).toBe('hidden');
-        expect(commandButton({}, false, 'es:start')).toBe('hidden');
-        // `/model:start` (an interview): the facilitator's
-        expect(commandButton({}, true, 'model:start')).toBe('enabled');
-        expect(commandButton({}, false, 'model:start')).toBe('hidden');
-        expect(commandButton({ slashCommands: [{ kind: 'EsExceptions', state: 'Listed' }] } as never, true, 'es:exceptions')).toBe('disabled');
-        expect(commandButton({ interviews: [{ state: 'Asking' }] } as never, true, 'es:start')).toBe('disabled');
+        expect(commandButton({}, 'es:exceptions')).toBe('enabled');
+        expect(commandButton({}, 'model:start')).toBe('enabled');
+        expect(commandButton({ slashCommands: [{ kind: 'EsExceptions', state: 'Listed' }] } as never, 'es:exceptions')).toBe('disabled');
+        expect(commandButton({ interviews: [{ state: 'Asking' }] } as never, 'es:start')).toBe('disabled');
         const running = render(<NextSteps next={next} />, chat('f', [{ kind: 'EsExceptions', state: 'Working' }]));
         expect(running).toMatch(/<button[^>]*disabled=""[^>]*>.*?\/es:exceptions<\/button>/);
     });
@@ -125,5 +121,39 @@ describe("a candidate's chips", () => {
         expect(html.match(/class="chat-chip chat-target proposal-target"/g)).toHaveLength(1);
         // an element the reason names is its name (a link), not the raw reference
         expect(html).not.toContain('@{es:Returns/ReturnRequested}');
+    });
+});
+
+describe("a candidate command's card, by who looks", () => {
+    const listed = (startedBy: string) =>
+        ({
+            id: 'c3',
+            kind: 'EsExceptions',
+            state: 'Listed',
+            scope: 'Returns',
+            startedBy,
+            opening: 'o',
+            startedAt: at,
+            candidates: [{ label: '在庫がなかった', targets: [], how: '依頼から: 在庫なし' }],
+        }) as never;
+    const buttons = (html: string): string[] =>
+        [...html.matchAll(/<button[^>]*>(.*?)<\/button>/g)].map((m) => (m[1] ?? '').replace(/<svg.*?<\/svg>/g, '').trim());
+
+    test("the facilitator checks and applies a participant's candidates (the approval)", () => {
+        const html = render(<CandidatesCard command={listed('bob')} continues={false} />, chat('f', [listed('bob')]));
+        expect(html).toContain('type="checkbox"');
+        expect(buttons(html)).toEqual(['採用したものを反映', '中止']);
+        expect(html).not.toContain('ファシリテーターが選んで反映します');
+    });
+
+    test('a participant reads them, its starter too: no checkbox, no apply, one muted line; its starter may stop it', () => {
+        const starter = render(<CandidatesCard command={listed('bob')} continues={false} />, chat('bob', [listed('bob')]));
+        expect(starter).not.toContain('type="checkbox"');
+        expect(starter).toContain('<p class="candidates-line muted">ファシリテーターが選んで反映します</p>');
+        expect(buttons(starter)).toEqual(['中止']);
+        // the facilitator's own command: a participant reads it, and cannot stop it
+        const other = render(<CandidatesCard command={listed('f')} continues={false} />, chat('bob', [listed('f')]));
+        expect(other).not.toContain('type="checkbox"');
+        expect(buttons(other)).toEqual([]);
     });
 });

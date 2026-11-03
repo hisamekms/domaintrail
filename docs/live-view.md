@@ -379,27 +379,29 @@ The chat has two views:
 - **`/` in the composer** (the plan's rounds 4 and 5): `/` alone opens a list like `@`'s (↑↓, Enter or Tab, Esc; the
   text after `/` filters by an item's English ID or its name in the page's language; `/es` lists every ES command). First
   the **commands**, grouped by prefix (`es:` then `model:`, each group's `:start` first): `/es:start` (ES を始める) and
-  `/model:start` (モデリングを始める), for the facilitator (under `dt open`, the person) while none runs (`/es` and
-  `/model` are still read). Each starts an **interview**: the AI asks one question at a time (digging into a vague answer, skipping what the
+  `/model:start` (モデリングを始める), for anyone while none runs (`/es` and `/model` are still read; every command is
+  listed for everyone, one of a kind already running dimmed). Each starts an **interview**: the AI asks one question at a time (digging into a vague answer, skipping what the
   stormings and the model already say) and every message of the person who started it answers it — no triage —
   while the others' messages go to the AI as usual. A bar above the composer says it runs (AI が考えています while the
-  AI writes) with 中止. It ends with a **brief** in that bar: where it goes (a new storming or context, or that it
-  replaces the current description), four or five lines with heads (目的 / 範囲 / 使い道 / レベル for `/es:start`), and 確定 /
-  編集して確定 / 中止. A message instead of confirming takes it back to the questions. Confirmed, a run writes the brief as
+  AI writes) with 中止 (its starter's and the facilitator's). It ends with a **brief** in that bar: where it goes (a new
+  storming or context, or that it replaces the current description), four or five lines with heads (目的 / 範囲 / 使い道 /
+  レベル for `/es:start`), and for the facilitator 確定 / 編集して確定 / 中止. A participant's brief waits for the
+  facilitator: they see 承認 / 編集して承認 / 却下 (with an optional note, which its starter then reads), everyone else
+  承認待ち. A message instead of confirming takes it back to the questions. Confirmed, a run writes the brief as
   the `///` description right above the `storming` (or the `context`), creating it when new; the inspector shows it
   when the storming is selected. A question with natural candidates shows them as buttons under it for its starter
-  (one sends it at once; several are checked and sent with 送る; その他 goes to the composer). The interview survives a reload. `/es:exceptions` (例外を洗い出す, the facilitator's) has
+  (one sends it at once; several are checked and sent with 送る; その他 goes to the composer). The interview survives a reload. `/es:exceptions` (例外を洗い出す) has
   the AI list, for the storming in view (its stage or timeline when one is shown), the exceptions its main flow does
   not model yet: a card in the chat with each candidate (its label, the events as chips, how in a line, why), none
-  checked; its starter checks some and 採用したものを反映 makes one run that adds them as `exception`s (中止 drops it;
-  the others read it). The run's card links back to it. With no storming in view the card only says so.
-  `/es:gaps` (間を埋める), `/es:levels` (レベルを見直す) and `/es:names` (名前を揃える), the facilitator's too, work the
+  checked; whoever started it, the facilitator checks some and 採用したものを反映 makes one run that adds them as
+  `exception`s (中止 drops it: the facilitator's or its starter's); the others read it, 「ファシリテーターが選んで反映します」. The run's card links back to it. With no storming in view the card only says so.
+  `/es:gaps` (間を埋める), `/es:levels` (レベルを見直す) and `/es:names` (名前を揃える) work the
   same way: the events missing between two consecutive events of a flow in view, the events to move to Design Level
   (`level design`) or back to Big Picture, and the labels to rename (not in the past tense, the same thing named
   differently, too long, technical) — the label only, the ID stays. A candidate's chips are the elements that exist;
-  one to be added is named by its label and how. `/es:recap` (ここまでのまとめ, anyone's) has the AI answer in the chat
+  one to be added is named by its label and how. `/es:recap` (ここまでのまとめ) has the AI answer in the chat
   with a short recap of the session: what was decided, what was added or changed, what is still open. `/hint`
-  (ヒントをもらう, anyone's; listed first, and a button with a light bulb at the left end of the composer's bar that
+  (ヒントをもらう; listed first, and a button with a light bulb at the left end of the composer's bar that
   runs it at once, its label dropped when the chat is narrow) has the AI coach the person, in the event storming or
   the modeling: from the session so far, the view they are on, the stormings and the model, one line on where they
   stand and one to three next steps, each with its reason. The answer is the AI's message with a light bulb by its
@@ -409,7 +411,7 @@ The chat has two views:
   for what is open and selected (このあとを足す at Big Picture, 前後を詰める for a selected event, 不変条件を挙げる for an
   aggregate …), then the team's from `templates` in `domaintrail.jsonc`; picking one only puts its text in the composer
   (the selected element as its `#` target), to edit and send. An empty view says how to start its own world while an AI is
-  connected (and the person can start it: in Collab, the facilitator): the storming view 「まだありません。チャットで
+  connected: the storming view 「まだありません。チャットで
   /es:start から始められます」, the model's views (context map, structure, catalog; also with stormings but no BC)
   「まだありません。チャットで /model:start から始められます」; otherwise 「まだありません」.
 - **AI の作業**: everything sent to the AI, from start to end; the tab's badge counts what is not finished (running and

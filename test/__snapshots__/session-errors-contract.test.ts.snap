@@ -120,7 +120,34 @@ exports[`refused requests of a session in dev mode status and body of each refus
       },
     },
   ],
+  "POST commands/:id/apply, participant": [
+    403,
+    {
+      "error": {
+        "message": "Only the facilitator may do this.",
+        "type": "FacilitatorOnly",
+      },
+    },
+  ],
   "POST facilitator/link, participant": [
+    403,
+    {
+      "error": {
+        "message": "Only the facilitator may do this.",
+        "type": "FacilitatorOnly",
+      },
+    },
+  ],
+  "POST interviews/:id/confirm, participant": [
+    403,
+    {
+      "error": {
+        "message": "Only the facilitator may do this.",
+        "type": "FacilitatorOnly",
+      },
+    },
+  ],
+  "POST interviews/:id/reject, participant": [
     403,
     {
       "error": {

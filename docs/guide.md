@@ -3037,6 +3037,10 @@ question. A **question** (相談) is answered at once by the answerer, read-only
 a message of the AI replying to it. A **request** (依頼) from the facilitator is queued as a run at once; from a
 participant, the answerer writes a **change proposal** (what, where, how) that the facilitator approves (as is or
 edited; several approved together are one run), or rejects with a note; its author may withdraw it while it waits.
+Anyone may run the `/` commands (`/es:start`, `/es:exceptions`, `/hint` …; one of each kind at a time). What changes
+files is the facilitator's to approve: the candidates of `/es:exceptions` and the like are checked and applied by the
+facilitator, whoever started the command, and the brief of a participant's `/es:start` or `/model:start` (they answer
+its questions) waits for the facilitator's 承認, 編集して承認 or 却下. An answer (`/hint`, `/es:recap`) is for everyone.
 Participants see only where a triage went; the facilitator sees its record (each stage's answer, confidence, reason
 and model). On each message the facilitator has the robot button, AI に送る (addresses it to the AI, as a mention would
 have: its triage decides what follows, and a request the facilitator sends this way is queued without a proposal), and

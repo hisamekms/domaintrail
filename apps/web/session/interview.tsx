@@ -1,7 +1,9 @@
 // A `/es` or `/model` interview in the chat (the plan's round 5): a bar above the composer while it runs — the command's
-// name, whether the AI is thinking, and 中止 for its starter — and, once the AI wrote its brief, the brief as a card:
-// where it goes (a new storming or context, or that it replaces the current description), its lines with their heads,
-// and 確定 / 編集して確定 / 中止 for its starter (the others see it read-only). The questions themselves are the AI's
+// name, whether the AI is thinking, and 中止 for its starter and the facilitator — and, once the AI wrote its brief, the
+// brief as a card: where it goes (a new storming or context, or that it replaces the current description), its lines
+// with their heads, and for the facilitator 確定 / 編集して確定 / 中止 (their own interview) or 承認 / 編集して承認 / 却下
+// (a participant's, 却下 with an optional note); the others read it with 承認待ち (its starter can still stop it). A
+// rejected brief tells its starter so, with the note, until closed. The questions themselves are the AI's
 // messages in the stream; in Solo each sits under the answer it follows (`interviewSlot`). Under the question the
 // interview awaits, its starter gets its choices as buttons (`InterviewChoices`): one pressed is sent as the answer at
 // once, or — when several make one answer — checked and sent together; the last, その他, takes them to the composer.
@@ -42,27 +44,71 @@ export function interviewSlot(
 function heardBy(i: InterviewJson, id: string, state: Pick<SessionStateBody, 'requests'>): boolean {
     const r = state.requests.find((x) => x.id === id);
     if (!r || r.sentAt < i.startedAt) return false;
-    const end = i.state === 'Confirmed' ? i.confirmedAt : i.state === 'Stopped' ? i.stoppedAt : undefined;
+    const end = i.state === 'Confirmed' ? i.confirmedAt : i.state === 'Stopped' ? i.stoppedAt : i.state === 'Rejected' ? i.rejectedAt : undefined;
     return end === undefined || r.sentAt <= end;
 }
 
-/** The running interview's bar and brief, above the composer. */
+/**
+ * What a person does with an interview's brief: the facilitator confirms their own (確定) or approves a participant's
+ * (承認, or 却下); the others wait for it.
+ */
+export function briefRole(
+    interview: { readonly startedBy: string },
+    me: { readonly id: string; readonly role: string },
+    live: boolean,
+): 'confirm' | 'approve' | 'wait' {
+    if (!live || me.role !== 'facilitator') return 'wait';
+    return interview.startedBy === me.id ? 'confirm' : 'approve';
+}
+
+/** My latest interview, when it ended with its brief rejected (its note shows until closed). */
+export function rejectedOfMine(state: Pick<SessionStateBody, 'interviews'>, me: string): Extract<InterviewJson, { state: 'Rejected' }> | undefined {
+    const latest = (state.interviews ?? []).at(-1);
+    return latest?.state === 'Rejected' && latest.startedBy === me ? latest : undefined;
+}
+
+/** The running interview's bar and brief, above the composer; or my brief rejected. */
 export function InterviewPanel(props: { session: SessionData; live: boolean }) {
     const { tx } = useChat();
     const t = tx.chat.interview;
     const { session } = props;
+    const me = session.me.participant;
     const interview = runningInterview(session.state);
     const [editing, setEditing] = useState<string | undefined>();
+    const [rejecting, setRejecting] = useState<string | undefined>();
+    const [closed, setClosed] = useState<string | undefined>();
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | undefined>();
+    const rejected = props.live && !interview ? rejectedOfMine(session.state, me.id) : undefined;
+    if (rejected && closed !== rejected.id)
+        return (
+            <div className="chat-interview motion-pop motion-pop-up" role="status">
+                <div className="chat-interview-bar">
+                    <Sparkles size={13} aria-hidden className="chat-slash-icon" />
+                    <span className="chat-interview-name">{tx.chat.slash.commands[commandId(rejected.command)]}</span>
+                    <span className="chat-interview-state muted">{t.rejected}</span>
+                    <button className="chat-small" onClick={() => setClosed(rejected.id)}>
+                        {t.close}
+                    </button>
+                </div>
+                {rejected.note && (
+                    <div className="chat-brief">
+                        <p className="chat-brief-note">{rejected.note}</p>
+                    </div>
+                )}
+            </div>
+        );
     if (!interview) return null;
-    const mine = props.live && interview.startedBy === session.me.participant.id;
+    // stops it: its starter, or the facilitator
+    const mine = props.live && (interview.startedBy === me.id || me.role === 'facilitator');
+    const role = briefRole(interview, me, props.live);
     const name = tx.chat.slash.commands[commandId(interview.command)];
     const act = async (work: () => Promise<unknown>): Promise<void> => {
         setBusy(true);
         try {
             await work();
             setEditing(undefined);
+            setRejecting(undefined);
             setError(undefined);
         } catch (e) {
             setError(failure(e));
@@ -120,7 +166,36 @@ export function InterviewPanel(props: { session: SessionData; live: boolean }) {
                             autoFocus
                         />
                     )}
-                    {mine ? (
+                    {role === 'wait' ? (
+                        <>
+                            <p className="chat-brief-waiting muted">{t.waiting}</p>
+                            {mine && <div className="chat-brief-actions">{stop}</div>}
+                        </>
+                    ) : rejecting !== undefined ? (
+                        <form
+                            className="chat-apply-note"
+                            onSubmit={(e) => {
+                                e.preventDefault();
+                                void act(() => sessionApi.rejectInterview(interview.id, rejecting.trim() || undefined));
+                            }}
+                        >
+                            <input
+                                className="session-text"
+                                autoFocus
+                                value={rejecting}
+                                maxLength={2000}
+                                placeholder={t.note}
+                                aria-label={t.note}
+                                onChange={(e) => setRejecting(e.target.value)}
+                            />
+                            <button type="submit" className="chat-small danger" disabled={busy}>
+                                {t.reject}
+                            </button>
+                            <button type="button" className="icon-button" onClick={() => setRejecting(undefined)} aria-label={t.cancel}>
+                                <X size={13} aria-hidden />
+                            </button>
+                        </form>
+                    ) : (
                         <div className="chat-brief-actions">
                             {editing === undefined ? (
                                 <>
@@ -129,12 +204,18 @@ export function InterviewPanel(props: { session: SessionData; live: boolean }) {
                                         disabled={busy}
                                         onClick={() => void act(() => sessionApi.confirmInterview(interview.id))}
                                     >
-                                        <Check size={12} aria-hidden /> {t.confirm}
+                                        <Check size={12} aria-hidden /> {role === 'approve' ? t.approve : t.confirm}
                                     </button>
                                     <button className="chat-small" disabled={busy} onClick={() => setEditing(brief.text)}>
-                                        <Pencil size={12} aria-hidden /> {t.editConfirm}
+                                        <Pencil size={12} aria-hidden /> {role === 'approve' ? t.editApprove : t.editConfirm}
                                     </button>
-                                    {stop}
+                                    {role === 'approve' ? (
+                                        <button className="chat-small ghost" disabled={busy} onClick={() => setRejecting('')}>
+                                            {t.reject}
+                                        </button>
+                                    ) : (
+                                        stop
+                                    )}
                                 </>
                             ) : (
                                 <>
@@ -143,7 +224,7 @@ export function InterviewPanel(props: { session: SessionData; live: boolean }) {
                                         disabled={busy || editing.trim() === ''}
                                         onClick={() => void act(() => sessionApi.confirmInterview(interview.id, editing))}
                                     >
-                                        <Check size={12} aria-hidden /> {t.confirm}
+                                        <Check size={12} aria-hidden /> {role === 'approve' ? t.approve : t.confirm}
                                     </button>
                                     <button className="chat-small" disabled={busy} onClick={() => setEditing(undefined)}>
                                         {t.cancel}
@@ -151,8 +232,6 @@ export function InterviewPanel(props: { session: SessionData; live: boolean }) {
                                 </>
                             )}
                         </div>
-                    ) : (
-                        <p className="chat-brief-waiting muted">{t.waiting}</p>
                     )}
                 </div>
             )}

@@ -147,7 +147,14 @@ export function teamTemplate(t: MessageTemplateBody): MessageTemplate {
 
 /** One entry after `/`: a command (starts an interview, or has the AI list candidates or answer) or a template (puts its text in the composer). */
 export type SlashItem =
-    | { readonly kind: 'command'; readonly id: CommandId; readonly name: string; readonly type: CommandType }
+    | {
+          readonly kind: 'command';
+          readonly id: CommandId;
+          readonly name: string;
+          readonly type: CommandType;
+          /** One of its kind runs: listed, not picked. */
+          readonly disabled: boolean;
+      }
     | { readonly kind: 'template'; readonly id: string; readonly name: string; readonly template: MessageTemplate };
 
 /** Whether `text` in the composer is a `/` query: `/` then the query, nothing else (no line, no space). */
@@ -164,7 +171,8 @@ function matches(id: string, name: string, query: string): boolean {
 }
 
 /**
- * What `/` lists for a query: the commands first (those the person may start now: `canStart`), grouped by prefix,
+ * What `/` lists for a query: the commands first (all of them, for everyone; one that cannot start now — one of its
+ * kind runs: `canStart` — disabled), grouped by prefix,
  * then the templates offered in the scope's contexts — the built-in ones, then the team's — in the UI language. Items
  * whose ID starts with the query come before those that only contain it (within the commands, the templates).
  */
@@ -173,15 +181,19 @@ export function slashItems(input: {
     readonly lang: Lang;
     readonly scope: SlashScope;
     readonly commandNames: Readonly<Record<CommandId, string>>;
-    /** Whether the person may start the command now (the facilitator's only for the others, none of its kind running). */
+    /** Whether the command may start now (none of its kind running). */
     readonly canStart: (id: CommandId) => boolean;
     readonly team?: readonly MessageTemplateBody[];
 }): SlashItem[] {
     const { query, lang, scope } = input;
     const contexts = templateContexts(scope);
-    const commands = COMMAND_IDS.filter(input.canStart)
-        .map((id): SlashItem => ({ kind: 'command', id, name: input.commandNames[id], type: commandType(id) }))
-        .filter((c) => matches(c.id, c.name, query));
+    const commands = COMMAND_IDS.map((id): SlashItem => ({
+        kind: 'command',
+        id,
+        name: input.commandNames[id],
+        type: commandType(id),
+        disabled: !input.canStart(id),
+    })).filter((c) => matches(c.id, c.name, query));
     const offered = (t: MessageTemplate): boolean => !t.when || t.when.some((w) => contexts.has(w));
     // a template that needs the selection is offered only with one
     const fits = (t: MessageTemplate): boolean => !t.text[lang].includes('{target}') || scope.selected !== undefined;
@@ -220,17 +232,11 @@ export type InterviewJson = NonNullable<SessionStateBody['interviews']>[number];
 
 export type SlashCommandJson = NonNullable<SessionStateBody['slashCommands']>[number];
 
-/** Whether a person may start a command at all: an interview, the facilitator; another command, anyone unless it is the facilitator's. */
-export function isCommandAllowed(facilitator: boolean, id: CommandId): boolean {
-    return facilitator || (isSlashCommandName(id) && !SLASH_COMMANDS[id].facilitatorOnly);
-}
-
 /**
- * Whether a person may start a command now: an interview, the facilitator while none runs; another command, anyone
- * unless it is the facilitator's, while none of its kind runs.
+ * Whether a command may start now (anyone may start any command): an interview while none runs; another command while
+ * none of its kind runs.
  */
-export function canStartCommand(state: Pick<SessionStateBody, 'interviews' | 'slashCommands'>, facilitator: boolean, id: CommandId): boolean {
-    if (!isCommandAllowed(facilitator, id)) return false;
+export function canStartCommand(state: Pick<SessionStateBody, 'interviews' | 'slashCommands'>, id: CommandId): boolean {
     if (!isSlashCommandName(id)) return !runningInterview(state);
     const spec = SLASH_COMMANDS[id];
     return !(state.slashCommands ?? []).some((c) => c.kind === spec.kind && (c.state === 'Working' || c.state === 'Listed'));
@@ -240,13 +246,9 @@ export function canStartCommand(state: Pick<SessionStateBody, 'interviews' | 'sl
  * The hint button of the composer (ヒントをもらう): hidden when the person cannot have a hint at all (no answerer
  * connected: the commands go unanswered), disabled while a hint runs, else ready.
  */
-export function hintButton(
-    state: Pick<SessionStateBody, 'interviews' | 'slashCommands'>,
-    facilitator: boolean,
-    answerer: boolean,
-): 'ready' | 'disabled' | 'hidden' {
-    if (!answerer || !isCommandAllowed(facilitator, 'hint')) return 'hidden';
-    return canStartCommand(state, facilitator, 'hint') ? 'ready' : 'disabled';
+export function hintButton(state: Pick<SessionStateBody, 'interviews' | 'slashCommands'>, answerer: boolean): 'ready' | 'disabled' | 'hidden' {
+    if (!answerer) return 'hidden';
+    return canStartCommand(state, 'hint') ? 'ready' : 'disabled';
 }
 
 /**

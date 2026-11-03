@@ -4,7 +4,7 @@
 // the boundary (`input.ts`); every error is typed JSON (`{ "error": { "type": … } }`). Participants read, send
 // messages (addressed to the AI by a mention of it or a reply to it, ADR 0030), react to messages and AI turns, vote on
 // a question's options or an assumption's choices and withdraw their change proposals; only the facilitator addresses
-// any message to the AI (「AI に送る」), approves and rejects proposals, queues, cancels and reverts runs, takes and
+// any message to the AI (「AI に送る」), approves and rejects proposals, an interview's brief and a command's candidates, queues, cancels and reverts runs, takes and
 // restores revisions, hands the role over and closes the session. A participant sees the triages' outcomes only, the
 // facilitator their record (`views.ts`). Who
 // may do what is the collaboration's (ADR 0027): each use case takes the `Actor` of the identity and its commands
@@ -606,10 +606,11 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
         {
             method: 'POST',
             path: /^\/api\/session\/interviews$/,
-            role: 'facilitator',
+            role: 'participant',
             handle: async ({ req, res, auth }) => {
                 // `/es:start` or `/model:start` (the plan's round 5; the former `es`, `model` too): the opening message
-                // and the interview, the interviewer's first question due; the facilitator only (in Solo, the person)
+                // and the interview, the interviewer's first question due; anyone (a participant's brief waits for the
+                // facilitator)
                 const raw = await input(req, res, ['command', 'body', 'language', 'focus', 'viewedAt']);
                 if (!raw) return;
                 const command = interviewCommandOf(raw.command);
@@ -659,8 +660,28 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
         },
         {
             method: 'POST',
-            path: /^\/api\/session\/interviews\/([^/]+)\/stop$/,
+            path: /^\/api\/session\/interviews\/([^/]+)\/reject$/,
             role: 'facilitator',
+            handle: async ({ req, res, auth, params }) => {
+                // the brief rejected, with an optional note to its starter (as a proposal's): the interview ends
+                const id = checked(res, uuid(params[0], 'id'));
+                if (!id) return;
+                const raw = await input(req, res, ['note']);
+                if (!raw) return;
+                let note: Collaboration.Text | undefined;
+                if (raw.note !== undefined) {
+                    note = checked(res, text(raw.note, 'note', PROPOSAL_LIMITS.note));
+                    if (!note) return;
+                }
+                if (!(await interviewOfSession(res, id))) return;
+                const rejected = await use.rejectInterview({ interview: knownInterviewId(id), actor: who(auth).actor, ...(note && { note }) });
+                await answer(res, rejected, 200, (interview) => ({ interview }));
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/interviews\/([^/]+)\/stop$/,
+            role: 'participant',
             handle: async ({ req, res, auth, params }) => {
                 const id = checked(res, uuid(params[0], 'id'));
                 if (!id) return;
@@ -676,7 +697,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             role: 'participant',
             handle: async ({ req, res, auth }) => {
                 // a candidate or answer command (`/es:exceptions`, `/es:recap`): the opening message and the command, its
-                // job due; a command for the facilitator only refuses the others (the use case)
+                // job due; anyone
                 const raw = await input(req, res, ['command', 'body', 'language', 'focus', 'viewedAt']);
                 if (!raw) return;
                 const spec = slashCommandOf(raw.command);
@@ -707,7 +728,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
         {
             method: 'POST',
             path: /^\/api\/session\/commands\/([^/]+)\/apply$/,
-            role: 'participant',
+            role: 'facilitator',
             handle: async ({ req, res, auth, params }) => {
                 const id = checked(res, uuid(params[0], 'id'));
                 if (!id) return;

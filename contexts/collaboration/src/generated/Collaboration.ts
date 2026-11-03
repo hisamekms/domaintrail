@@ -2062,9 +2062,8 @@ export const makeSlashCommandId: MakeSlashCommandId = (value) => {
 /**
  * コマンドの種類
  * 候補型・答え型の `/` コマンド（聞き取りは `Interview`）。`/` のあとに打つ ID（`es:exceptions`、`es:recap`、`hint`）は
- * 英語のまま、名前は画面の言語で出す。どちらの型か、ファシリテーターだけが始めるかはコード（`domain/slash-commands.ts` の
- * `SLASH_COMMANDS`）が決める。`Hint` は以前 `EsNext`（`/es:next`）だった: 保存済みのものは読むときに `Hint` になる。
- * @see contexts/collaboration/model/command.dt:8
+ * 英語のまま、名前は画面の言語で出す。どちらの型かはコード（`domain/slash-commands.ts` の `SLASH_COMMANDS`）が決める。`Hint` は以前 `EsNext`（`/es:next`）だった: 保存済みのものは読むときに `Hint` になる。
+ * @see contexts/collaboration/model/command.dt:7
  */
 export type SlashCommandKind =
     | 'EsExceptions' // 例外を洗い出す（/es:exceptions）
@@ -2077,7 +2076,7 @@ export type SlashCommandKind =
 /**
  * 勧めるコマンド
  * ヒントの一手が勧めるコマンド（押すと入力欄にそのコマンドが入る。送るのは人）。
- * @see contexts/collaboration/model/command.dt:18
+ * @see contexts/collaboration/model/command.dt:17
  */
 export type SuggestedCommand =
     | 'EsStart' // ES を始める（/es:start）
@@ -2092,7 +2091,7 @@ export type SuggestedCommand =
  * 次の一手
  * ヒントの一手: 何をするか、なぜ（どちらも1行）、当てはまるコマンド（あれば）。上限はコード
  * （`NEXT_LIMITS`）が決める。
- * @see contexts/collaboration/model/command.dt:30
+ * @see contexts/collaboration/model/command.dt:29
  */
 export interface NextStep {
     /** 何をするか */
@@ -2105,7 +2104,7 @@ export interface NextStep {
 
 /**
  * Whether two NextStep values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/command.dt:30
+ * @see contexts/collaboration/model/command.dt:29
  */
 export function equalNextStep(a: NextStep, b: NextStep): boolean {
     return a.text === b.text && a.reason === b.reason && sameOptional(a.command, b.command, ($24: string, $25: string) => $24 === $25);
@@ -2114,7 +2113,7 @@ export function equalNextStep(a: NextStep, b: NextStep): boolean {
 /**
  * ヒント
  * `/hint` の答えの中身: いまの状態を1行と、次の一手を1〜3。答えのメッセージ（Markdown）はこれから作る。
- * @see contexts/collaboration/model/command.dt:37
+ * @see contexts/collaboration/model/command.dt:36
  */
 export interface NextAnswer {
     /** いまの状態 */
@@ -2125,7 +2124,7 @@ export interface NextAnswer {
 
 /**
  * Whether two NextAnswer values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/command.dt:37
+ * @see contexts/collaboration/model/command.dt:36
  */
 export function equalNextAnswer(a: NextAnswer, b: NextAnswer): boolean {
     return a.status === b.status && sameList(a.steps, b.steps, equalNextStep);
@@ -2136,13 +2135,13 @@ export function equalNextAnswer(a: NextAnswer, b: NextAnswer): boolean {
  * 候補の見出し（「支払いが失敗した」など）。上限はコード（`CANDIDATE_LIMITS`）が決める。
  * @invariant valid: length(value) >= 1 and length(value) <= 100
  * Make it with `makeCandidateLabel`; never `as CandidateLabel` (see dt guide lint).
- * @see contexts/collaboration/model/command.dt:43
+ * @see contexts/collaboration/model/command.dt:42
  */
 export type CandidateLabel = string & { readonly __domain: 'Collaboration.CandidateLabel' };
 
 /**
  * A value that violates an invariant of CandidateLabel.
- * @see contexts/collaboration/model/command.dt:43
+ * @see contexts/collaboration/model/command.dt:42
  */
 export interface InvalidCandidateLabel {
     readonly type: 'InvalidCandidateLabel';
@@ -2153,13 +2152,13 @@ export interface InvalidCandidateLabel {
 
 /**
  * Creates a CandidateLabel, checking its invariants: generated as `makeCandidateLabel`, or written by hand.
- * @see contexts/collaboration/model/command.dt:43
+ * @see contexts/collaboration/model/command.dt:42
  */
 export type MakeCandidateLabel = (value: string) => Result<CandidateLabel, InvalidCandidateLabel>;
 
 /**
  * The invariants of CandidateLabel that a value violates, in declaration order; empty when it is a CandidateLabel.
- * @see contexts/collaboration/model/command.dt:43
+ * @see contexts/collaboration/model/command.dt:42
  */
 export function checkCandidateLabel(value: string): readonly InvalidCandidateLabel['invariant'][] {
     const violated: InvalidCandidateLabel['invariant'][] = [];
@@ -2169,7 +2168,7 @@ export function checkCandidateLabel(value: string): readonly InvalidCandidateLab
 
 /**
  * Creates a CandidateLabel, checking its invariants with `checkCandidateLabel`: the first one violated is reported.
- * @see contexts/collaboration/model/command.dt:43
+ * @see contexts/collaboration/model/command.dt:42
  */
 export const makeCandidateLabel: MakeCandidateLabel = (value) => {
     const [invariant] = checkCandidateLabel(value);
@@ -2182,13 +2181,13 @@ export const makeCandidateLabel: MakeCandidateLabel = (value) => {
  * 候補の番号（0 から）。
  * @invariant valid: value >= 0 and value <= 19
  * Make it with `makeCandidateIndex`; never `as CandidateIndex` (see dt guide lint).
- * @see contexts/collaboration/model/command.dt:46
+ * @see contexts/collaboration/model/command.dt:45
  */
 export type CandidateIndex = number & { readonly __domain: 'Collaboration.CandidateIndex' };
 
 /**
  * A value that violates an invariant of CandidateIndex.
- * @see contexts/collaboration/model/command.dt:46
+ * @see contexts/collaboration/model/command.dt:45
  */
 export interface InvalidCandidateIndex {
     readonly type: 'InvalidCandidateIndex';
@@ -2199,13 +2198,13 @@ export interface InvalidCandidateIndex {
 
 /**
  * Creates a CandidateIndex, checking its invariants: generated as `makeCandidateIndex`, or written by hand.
- * @see contexts/collaboration/model/command.dt:46
+ * @see contexts/collaboration/model/command.dt:45
  */
 export type MakeCandidateIndex = (value: number) => Result<CandidateIndex, InvalidCandidateIndex>;
 
 /**
  * The invariants of CandidateIndex that a value violates, in declaration order; empty when it is a CandidateIndex.
- * @see contexts/collaboration/model/command.dt:46
+ * @see contexts/collaboration/model/command.dt:45
  */
 export function checkCandidateIndex(value: number): readonly InvalidCandidateIndex['invariant'][] {
     const violated: InvalidCandidateIndex['invariant'][] = [];
@@ -2215,7 +2214,7 @@ export function checkCandidateIndex(value: number): readonly InvalidCandidateInd
 
 /**
  * Creates a CandidateIndex, checking its invariants with `checkCandidateIndex`: the first one violated is reported.
- * @see contexts/collaboration/model/command.dt:46
+ * @see contexts/collaboration/model/command.dt:45
  */
 export const makeCandidateIndex: MakeCandidateIndex = (value) => {
     const [invariant] = checkCandidateIndex(value);
@@ -2226,7 +2225,7 @@ export const makeCandidateIndex: MakeCandidateIndex = (value) => {
 /**
  * 候補
  * AI が挙げた候補1つ: 見出し、対象の要素、どうするかを1行で、理由（あれば）。
- * @see contexts/collaboration/model/command.dt:49
+ * @see contexts/collaboration/model/command.dt:48
  */
 export interface CommandCandidate {
     /** 見出し */
@@ -2241,7 +2240,7 @@ export interface CommandCandidate {
 
 /**
  * Whether two CommandCandidate values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/command.dt:49
+ * @see contexts/collaboration/model/command.dt:48
  */
 export function equalCommandCandidate(a: CommandCandidate, b: CommandCandidate): boolean {
     return a.label === b.label && sameList(a.targets, b.targets, equalModelTarget) && a.how === b.how && sameOptional(a.reason, b.reason, ($26: ProposalText, $27: ProposalText) => $26 === $27);
@@ -2250,7 +2249,7 @@ export function equalCommandCandidate(a: CommandCandidate, b: CommandCandidate):
 /**
  * 採用した候補の指示
  * 採用した候補が実行に求めること: どのコマンドの、どのストーミングについての、どの候補か。
- * @see contexts/collaboration/model/command.dt:58
+ * @see contexts/collaboration/model/command.dt:57
  */
 export interface CandidatesInstruction {
     /** コマンド */
@@ -2265,7 +2264,7 @@ export interface CandidatesInstruction {
 
 /**
  * Whether two CandidatesInstruction values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/command.dt:58
+ * @see contexts/collaboration/model/command.dt:57
  */
 export function equalCandidatesInstruction(a: CandidatesInstruction, b: CandidatesInstruction): boolean {
     return a.command === b.command && a.kind === b.kind && sameOptional(a.scope, b.scope, ($28: StormingName, $29: StormingName) => $28 === $29) && sameList(a.chosen, b.chosen, equalCommandCandidate);
@@ -2273,7 +2272,7 @@ export function equalCandidatesInstruction(a: CandidatesInstruction, b: Candidat
 
 /**
  * Fields shared by every state of コマンド (SlashCommand).
- * @see contexts/collaboration/model/command.dt:68
+ * @see contexts/collaboration/model/command.dt:67
  */
 export interface SlashCommandCommon {
     /** コマンドID */
@@ -2302,7 +2301,7 @@ export interface SlashCommandCommon {
 
 /**
  * AI が考えている
- * @see contexts/collaboration/model/command.dt:80
+ * @see contexts/collaboration/model/command.dt:79
  */
 export interface WorkingSlashCommand extends SlashCommandCommon {
     readonly state: 'Working';
@@ -2310,7 +2309,7 @@ export interface WorkingSlashCommand extends SlashCommandCommon {
 
 /**
  * 候補の選択待ち
- * @see contexts/collaboration/model/command.dt:81
+ * @see contexts/collaboration/model/command.dt:80
  */
 export interface ListedSlashCommand extends SlashCommandCommon {
     readonly state: 'Listed';
@@ -2322,14 +2321,16 @@ export interface ListedSlashCommand extends SlashCommandCommon {
 
 /**
  * 反映
- * @see contexts/collaboration/model/command.dt:85
+ * @see contexts/collaboration/model/command.dt:84
  */
 export interface AppliedSlashCommand extends SlashCommandCommon {
     readonly state: 'Applied';
     /** 候補 */
     readonly candidates: readonly CommandCandidate[];
-    /** 採用した候補 — 始めた人が採用した候補の番号。 */
+    /** 採用した候補 — ファシリテーターが採用した候補の番号。 */
     readonly chosen: readonly [CandidateIndex, ...CandidateIndex[]];
+    /** 反映した人 — 反映したファシリテーター。前の行にはない（始めた人が反映した）。 */
+    readonly appliedBy?: ParticipantId;
     /** 反映日時 */
     readonly appliedAt: Timestamp;
     /**
@@ -2341,7 +2342,7 @@ export interface AppliedSlashCommand extends SlashCommandCommon {
 
 /**
  * 回答済み
- * @see contexts/collaboration/model/command.dt:92
+ * @see contexts/collaboration/model/command.dt:93
  */
 export interface AnsweredSlashCommand extends SlashCommandCommon {
     readonly state: 'Answered';
@@ -2358,7 +2359,7 @@ export interface AnsweredSlashCommand extends SlashCommandCommon {
 
 /**
  * 中止
- * @see contexts/collaboration/model/command.dt:99
+ * @see contexts/collaboration/model/command.dt:100
  */
 export interface StoppedSlashCommand extends SlashCommandCommon {
     readonly state: 'Stopped';
@@ -2371,24 +2372,24 @@ export interface StoppedSlashCommand extends SlashCommandCommon {
 /**
  * コマンド
  * 候補型（`/es:exceptions` など）と答え型（`/es:recap`、`/hint`）の `/` コマンド。始めた人のメッセージ（コマンドの名前）は仕分けを
- * 経ずに、回答役（読むだけの AI）がコマンドの指示で受け持つ。候補型は候補を挙げ、始めた人が選んだものを1つの実行が
- * 反映する。答え型は AI のメッセージで答える。
- * @see contexts/collaboration/model/command.dt:68
+ * 経ずに、回答役（読むだけの AI）がコマンドの指示で受け持つ。コラボでは誰でも始められる。候補型は候補を挙げ、
+ * ファシリテーターが選んだものを1つの実行が反映する（反映が承認になる）。答え型は AI のメッセージで答える。
+ * @see contexts/collaboration/model/command.dt:67
  */
 export type SlashCommand = WorkingSlashCommand | ListedSlashCommand | AppliedSlashCommand | AnsweredSlashCommand | StoppedSlashCommand;
 
 /**
  * The fields of SlashCommand as data for `decide`: the common fields, and the fields of each state on top of them.
- * @see contexts/collaboration/model/command.dt:68
+ * @see contexts/collaboration/model/command.dt:67
  */
 export const SlashCommandShape: Shape = {
     fields: ['id', 'session', 'kind', 'startedBy', 'opening', 'scope', 'language', 'startedAt'],
-    states: { Working: [], Listed: ['candidates', 'listedAt'], Applied: ['candidates', 'chosen', 'appliedAt', 'run'], Answered: ['answer', 'next', 'answeredAt'], Stopped: ['stoppedBy', 'stoppedAt'] },
+    states: { Working: [], Listed: ['candidates', 'listedAt'], Applied: ['candidates', 'chosen', 'appliedBy', 'appliedAt', 'run'], Answered: ['answer', 'next', 'answeredAt'], Stopped: ['stoppedBy', 'stoppedAt'] },
 };
 
 /**
  * The invariants of SlashCommand (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.
- * @see contexts/collaboration/model/command.dt:68
+ * @see contexts/collaboration/model/command.dt:67
  */
 export function checkSlashCommandCommon(_slashCommand: SlashCommandCommon): readonly never[] {
     return [];
@@ -2405,11 +2406,8 @@ export interface StartSlashCommandParams {
     readonly session: ActiveSession;
     /** コマンドの種類 */
     readonly kind: SlashCommandKind;
-    readonly facilitatorOnly: boolean;
     /** 参加者ID */
     readonly startedBy: ParticipantId;
-    /** 役割 */
-    readonly startedByRole: ParticipantRole;
     /** 依頼ID */
     readonly opening: RequestId;
     /** ストーミング名 */
@@ -2422,9 +2420,7 @@ export interface StartSlashCommandParams {
 /**
  * SlashCommand.start (new -> Working) — factory
  * コマンドを始める
- * コマンドを始める。ファシリテーターだけのコマンドは、コラボではファシリテーターだけ（ひとりのセッションでは、その人が
- * ファシリテーター）。
- * @requires facilitatorStarts (ファシリテーターだけのコマンドは、ファシリテーターが始める) else FacilitatorOnly: not facilitatorOnly or startedByRole == ParticipantRole.Facilitator
+ * コマンドを始める。コラボでは誰でも。
  * @emits SlashCommandStarted — exactly once when the command succeeds
  * @see contexts/collaboration/model/command.dt:106
  */
@@ -2435,12 +2431,11 @@ export type StartSlashCommand = (
         readonly aggregate: WorkingSlashCommand;
         readonly events: { readonly SlashCommandStarted: SlashCommandStarted };
     };
-}, FacilitatorOnly>;
+}, never>;
 
 /**
  * SlashCommand.start, decided by one function; implement it with `decide(SlashCommandShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
- * @requires facilitatorStarts (ファシリテーターだけのコマンドは、ファシリテーターが始める) else FacilitatorOnly: not facilitatorOnly or startedByRole == ParticipantRole.Facilitator
  * new -> Working — set: every field
  * @emits SlashCommandStarted — exactly once when the command succeeds
  * @see contexts/collaboration/model/command.dt:106
@@ -2452,20 +2447,11 @@ export type StartSlashCommandDecision = (
         readonly set: { readonly id: SlashCommandId; readonly session: SessionId; readonly kind: SlashCommandKind; readonly startedBy: ParticipantId; readonly opening: RequestId; readonly scope: StormingName | undefined; readonly language: UiLanguage; readonly startedAt: Timestamp };
         readonly events: { readonly SlashCommandStarted: SlashCommandStarted };
     };
-}, FacilitatorOnly>;
-
-/**
- * The first requirement of SlashCommand.start that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/command.dt:106
- */
-export function checkStartSlashCommandRequires(params: StartSlashCommandParams): 'facilitatorStarts' | undefined {
-    if (!(!(params.facilitatorOnly) || (params.startedByRole === 'Facilitator'))) return 'facilitatorStarts';
-    return undefined;
-}
+}, never>;
 
 /**
  * The parameters of SlashCommand.list, by name.
- * @see contexts/collaboration/model/command.dt:114
+ * @see contexts/collaboration/model/command.dt:111
  */
 export interface ListSlashCommandParams {
     /** 候補 */
@@ -2479,7 +2465,7 @@ export interface ListSlashCommandParams {
  * AI が候補を挙げる（候補型）。見ているストーミングがなければ、候補なしで。
  * @changes none — the command changes no common field
  * @emits CandidatesListed — exactly once when the command succeeds
- * @see contexts/collaboration/model/command.dt:114
+ * @see contexts/collaboration/model/command.dt:111
  */
 export type ListSlashCommand = (
     slashCommand: WorkingSlashCommand,
@@ -2496,7 +2482,7 @@ export type ListSlashCommand = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @changes none — the command changes no common field
  * Working -> Listed — set: candidates (new in Listed), listedAt (new in Listed); carried over: id, session, kind, startedBy, opening, scope, language, startedAt
- * @see contexts/collaboration/model/command.dt:114
+ * @see contexts/collaboration/model/command.dt:111
  */
 export type ListSlashCommandDecision = {
     /** @emits CandidatesListed — exactly once when the command succeeds */
@@ -2510,7 +2496,7 @@ export type ListSlashCommandDecision = {
 
 /**
  * The parameters of SlashCommand.answer, by name.
- * @see contexts/collaboration/model/command.dt:119
+ * @see contexts/collaboration/model/command.dt:116
  */
 export interface AnswerSlashCommandParams {
     /** 依頼ID */
@@ -2526,7 +2512,7 @@ export interface AnswerSlashCommandParams {
  * AI が答える（答え型）。始めのメッセージに応える AI のメッセージとして。`/hint` は、その中身も。
  * @changes none — the command changes no common field
  * @emits SlashCommandAnswered — exactly once when the command succeeds
- * @see contexts/collaboration/model/command.dt:119
+ * @see contexts/collaboration/model/command.dt:116
  */
 export type AnswerSlashCommand = (
     slashCommand: WorkingSlashCommand,
@@ -2543,7 +2529,7 @@ export type AnswerSlashCommand = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @changes none — the command changes no common field
  * Working -> Answered — set: answer (new in Answered), next (new in Answered), answeredAt (new in Answered); carried over: id, session, kind, startedBy, opening, scope, language, startedAt
- * @see contexts/collaboration/model/command.dt:119
+ * @see contexts/collaboration/model/command.dt:116
  */
 export type AnswerSlashCommandDecision = {
     /** @emits SlashCommandAnswered — exactly once when the command succeeds */
@@ -2557,11 +2543,13 @@ export type AnswerSlashCommandDecision = {
 
 /**
  * The parameters of SlashCommand.apply, by name.
- * @see contexts/collaboration/model/command.dt:124
+ * @see contexts/collaboration/model/command.dt:122
  */
 export interface ApplySlashCommandParams {
     /** 参加者ID */
     readonly appliedBy: ParticipantId;
+    /** 役割 */
+    readonly appliedByRole: ParticipantRole;
     /** 候補の番号 */
     readonly chosen: readonly [CandidateIndex, ...CandidateIndex[]];
     /** エージェント実行ID */
@@ -2572,12 +2560,13 @@ export interface ApplySlashCommandParams {
 /**
  * SlashCommand.apply (Listed -> Applied)
  * 採用したものを反映する
- * 始めた人が候補を選んで反映する。実行の登録と同じ取引で、その実行を記録する。
- * @requires starterApplies (始めた人が反映する) else NotTheStarter: appliedBy == startedBy
+ * ファシリテーターが候補を選んで反映する（誰が始めたコマンドでも。反映が承認になる）。実行の登録と同じ取引で、その
+ * 実行を記録する。
+ * @requires facilitatorApplies (ファシリテーターが反映する) else FacilitatorOnly: appliedByRole == ParticipantRole.Facilitator
  * @requires chosenOfList (挙げた候補から選ぶ) else NoSuchCandidate: all(chosen, c => c < count(candidates))
  * @changes none — the command changes no common field
  * @emits CandidatesApplied — exactly once when the command succeeds
- * @see contexts/collaboration/model/command.dt:124
+ * @see contexts/collaboration/model/command.dt:122
  */
 export type ApplySlashCommand = (
     slashCommand: ListedSlashCommand,
@@ -2587,33 +2576,33 @@ export type ApplySlashCommand = (
         readonly aggregate: AppliedSlashCommand;
         readonly events: { readonly CandidatesApplied: CandidatesApplied };
     };
-}, NotTheStarter | NoSuchCandidate>;
+}, FacilitatorOnly | NoSuchCandidate>;
 
 /**
  * SlashCommand.apply, decided per source state; implement it with `decide(SlashCommandShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires starterApplies (始めた人が反映する) else NotTheStarter: appliedBy == startedBy
+ * @requires facilitatorApplies (ファシリテーターが反映する) else FacilitatorOnly: appliedByRole == ParticipantRole.Facilitator
  * @requires chosenOfList (挙げた候補から選ぶ) else NoSuchCandidate: all(chosen, c => c < count(candidates))
  * @changes none — the command changes no common field
- * Listed -> Applied — set: chosen (new in Applied), appliedAt (new in Applied), run (new in Applied); carried over: id, session, kind, startedBy, opening, scope, language, startedAt, candidates; dropped: listedAt
- * @see contexts/collaboration/model/command.dt:124
+ * Listed -> Applied — set: chosen (new in Applied), appliedBy (new in Applied), appliedAt (new in Applied), run (new in Applied); carried over: id, session, kind, startedBy, opening, scope, language, startedAt, candidates; dropped: listedAt
+ * @see contexts/collaboration/model/command.dt:122
  */
 export type ApplySlashCommandDecision = {
     /** @emits CandidatesApplied — exactly once when the command succeeds */
     readonly Listed: (slashCommand: ListedSlashCommand, params: ApplySlashCommandParams) => Result<{
         readonly Applied: {
-            readonly set: { readonly chosen: readonly [CandidateIndex, ...CandidateIndex[]]; readonly appliedAt: Timestamp; readonly run: AgentRunId };
+            readonly set: { readonly chosen: readonly [CandidateIndex, ...CandidateIndex[]]; readonly appliedBy: ParticipantId | undefined; readonly appliedAt: Timestamp; readonly run: AgentRunId };
             readonly events: { readonly CandidatesApplied: CandidatesApplied };
         };
-    }, NotTheStarter | NoSuchCandidate>;
+    }, FacilitatorOnly | NoSuchCandidate>;
 };
 
 /**
  * The first requirement of SlashCommand.apply that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/command.dt:124
+ * @see contexts/collaboration/model/command.dt:122
  */
-export function checkApplySlashCommandRequires(slashCommand: ListedSlashCommand, params: ApplySlashCommandParams): 'starterApplies' | 'chosenOfList' | undefined {
-    if (!(params.appliedBy === slashCommand.startedBy)) return 'starterApplies';
+export function checkApplySlashCommandRequires(slashCommand: ListedSlashCommand, params: ApplySlashCommandParams): 'facilitatorApplies' | 'chosenOfList' | undefined {
+    if (!(params.appliedByRole === 'Facilitator')) return 'facilitatorApplies';
     if (!(params.chosen.every((c) => c < slashCommand.candidates.length))) return 'chosenOfList';
     return undefined;
 }
@@ -2625,14 +2614,16 @@ export function checkApplySlashCommandRequires(slashCommand: ListedSlashCommand,
 export interface StopSlashCommandParams {
     /** 参加者ID */
     readonly stoppedBy: ParticipantId;
+    /** 役割 */
+    readonly stoppedByRole: ParticipantRole;
     readonly stoppedAt: Timestamp;
 }
 
 /**
  * SlashCommand.stop (Working | Listed -> Stopped)
  * コマンドを中止する
- * 始めた人がコマンドを中止する（考えているあいだか、候補の選択待ち）。
- * @requires starterStops (始めた人が中止する) else NotTheStarter: stoppedBy == startedBy
+ * 始めた人かファシリテーターがコマンドを中止する（考えているあいだか、候補の選択待ち）。
+ * @requires starterOrFacilitatorStops (始めた人かファシリテーターが中止する) else NotTheStarter: stoppedBy == startedBy or stoppedByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * @emits SlashCommandStopped — exactly once when the command succeeds
  * @see contexts/collaboration/model/command.dt:131
@@ -2650,7 +2641,7 @@ export type StopSlashCommand = (
 /**
  * SlashCommand.stop, decided per source state; implement it with `decide(SlashCommandShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires starterStops (始めた人が中止する) else NotTheStarter: stoppedBy == startedBy
+ * @requires starterOrFacilitatorStops (始めた人かファシリテーターが中止する) else NotTheStarter: stoppedBy == startedBy or stoppedByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * Working -> Stopped — set: stoppedBy (new in Stopped), stoppedAt (new in Stopped); carried over: id, session, kind, startedBy, opening, scope, language, startedAt
  * Listed -> Stopped — set: stoppedBy (new in Stopped), stoppedAt (new in Stopped); carried over: id, session, kind, startedBy, opening, scope, language, startedAt; dropped: candidates, listedAt
@@ -2677,15 +2668,15 @@ export type StopSlashCommandDecision = {
  * The first requirement of SlashCommand.stop that does not hold, in declaration order; `undefined` when all hold.
  * @see contexts/collaboration/model/command.dt:131
  */
-export function checkStopSlashCommandRequires(slashCommand: WorkingSlashCommand | ListedSlashCommand, params: StopSlashCommandParams): 'starterStops' | undefined {
-    if (!(params.stoppedBy === slashCommand.startedBy)) return 'starterStops';
+export function checkStopSlashCommandRequires(slashCommand: WorkingSlashCommand | ListedSlashCommand, params: StopSlashCommandParams): 'starterOrFacilitatorStops' | undefined {
+    if (!((params.stoppedBy === slashCommand.startedBy) || (params.stoppedByRole === 'Facilitator'))) return 'starterOrFacilitatorStops';
     return undefined;
 }
 
 /**
  * Command contracts of SlashCommand. Implement this interface by hand.
  * Commands are pure functions of the aggregate and their parameters: no I/O, no clock, no randomness. IDs and times are passed in as parameters.
- * @see contexts/collaboration/model/command.dt:68
+ * @see contexts/collaboration/model/command.dt:67
  */
 export interface SlashCommandCommands {
     /** コマンドを始める */
@@ -2702,14 +2693,14 @@ export interface SlashCommandCommands {
 
 /**
  * Events that the commands of SlashCommand may emit.
- * @see contexts/collaboration/model/command.dt:68
+ * @see contexts/collaboration/model/command.dt:67
  */
 export type SlashCommandEvent = SlashCommandStarted | CandidatesListed | SlashCommandAnswered | CandidatesApplied | SlashCommandStopped;
 
 /**
  * コマンドの開始
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/command.dt:137
+ * @see contexts/collaboration/model/command.dt:139
  */
 export interface SlashCommandStarted {
     readonly type: 'SlashCommandStarted';
@@ -2733,7 +2724,7 @@ export interface SlashCommandStarted {
 /**
  * 候補を挙げた
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/command.dt:148
+ * @see contexts/collaboration/model/command.dt:150
  */
 export interface CandidatesListed {
     readonly type: 'CandidatesListed';
@@ -2747,7 +2738,7 @@ export interface CandidatesListed {
 /**
  * コマンドの答え
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/command.dt:154
+ * @see contexts/collaboration/model/command.dt:156
  */
 export interface SlashCommandAnswered {
     readonly type: 'SlashCommandAnswered';
@@ -2763,7 +2754,7 @@ export interface SlashCommandAnswered {
 /**
  * 候補の反映
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/command.dt:161
+ * @see contexts/collaboration/model/command.dt:163
  */
 export interface CandidatesApplied {
     readonly type: 'CandidatesApplied';
@@ -2771,6 +2762,8 @@ export interface CandidatesApplied {
     readonly commandId: SlashCommandId;
     /** 候補の番号 */
     readonly chosen: readonly [CandidateIndex, ...CandidateIndex[]];
+    /** 反映した人 — 前のイベントにはない（始めた人が反映した）。 */
+    readonly appliedBy?: ParticipantId;
     /** エージェント実行ID */
     readonly run: AgentRunId;
     readonly appliedAt: Timestamp;
@@ -2779,7 +2772,7 @@ export interface CandidatesApplied {
 /**
  * コマンドの中止
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/command.dt:168
+ * @see contexts/collaboration/model/command.dt:172
  */
 export interface SlashCommandStopped {
     readonly type: 'SlashCommandStopped';
@@ -2792,8 +2785,8 @@ export interface SlashCommandStopped {
 
 /**
  * コマンドを始めた人でない
- * コマンドを反映・中止できるのは、始めた人だけ。
- * @see contexts/collaboration/model/command.dt:175
+ * コマンドを中止できるのは、始めた人かファシリテーターだけ。
+ * @see contexts/collaboration/model/command.dt:179
  */
 export interface NotTheStarter {
     readonly type: 'NotTheStarter';
@@ -2802,7 +2795,7 @@ export interface NotTheStarter {
 /**
  * そんな候補はない
  * 採用した候補の番号が、挙げた候補にない。
- * @see contexts/collaboration/model/command.dt:178
+ * @see contexts/collaboration/model/command.dt:182
  */
 export interface NoSuchCandidate {
     readonly type: 'NoSuchCandidate';
@@ -2811,7 +2804,7 @@ export interface NoSuchCandidate {
 /**
  * 同じコマンドが走っている
  * セッションには、同じコマンドで走っているものがある（考えているか、候補の選択待ち）。
- * @see contexts/collaboration/model/command.dt:181
+ * @see contexts/collaboration/model/command.dt:185
  */
 export interface CommandAlreadyRunning {
     readonly type: 'CommandAlreadyRunning';
@@ -3436,7 +3429,7 @@ export function equalBriefInstruction(a: BriefInstruction, b: BriefInstruction):
 
 /**
  * Fields shared by every state of 聞き取り (Interview).
- * @see contexts/collaboration/model/interview.dt:59
+ * @see contexts/collaboration/model/interview.dt:60
  */
 export interface InterviewCommon {
     /** 聞き取りID */
@@ -3465,7 +3458,7 @@ export interface InterviewCommon {
 
 /**
  * 聞き取り中
- * @see contexts/collaboration/model/interview.dt:71
+ * @see contexts/collaboration/model/interview.dt:72
  */
 export interface AskingInterview extends InterviewCommon {
     readonly state: 'Asking';
@@ -3477,7 +3470,7 @@ export interface AskingInterview extends InterviewCommon {
 
 /**
  * 要約の確認待ち
- * @see contexts/collaboration/model/interview.dt:77
+ * @see contexts/collaboration/model/interview.dt:78
  */
 export interface BriefedInterview extends InterviewCommon {
     readonly state: 'Briefed';
@@ -3491,14 +3484,16 @@ export interface BriefedInterview extends InterviewCommon {
 
 /**
  * 確定
- * @see contexts/collaboration/model/interview.dt:83
+ * @see contexts/collaboration/model/interview.dt:84
  */
 export interface ConfirmedInterview extends InterviewCommon {
     readonly state: 'Confirmed';
     /** 確定した要約 */
     readonly brief: InterviewBrief;
-    /** 編集した — 始めた人が要約を編集して確定した。 */
+    /** 編集した — 要約を編集して確定した。 */
     readonly edited: boolean;
+    /** 確定した人 — 確定したファシリテーター。始めた人でなければ、参加者の要約を承認した。前の行にはない（始めた人が確定した）。 */
+    readonly confirmedBy?: ParticipantId;
     /** 確定日時 */
     readonly confirmedAt: Timestamp;
     /**
@@ -3510,7 +3505,7 @@ export interface ConfirmedInterview extends InterviewCommon {
 
 /**
  * 中止
- * @see contexts/collaboration/model/interview.dt:90
+ * @see contexts/collaboration/model/interview.dt:93
  */
 export interface StoppedInterview extends InterviewCommon {
     readonly state: 'Stopped';
@@ -3521,27 +3516,44 @@ export interface StoppedInterview extends InterviewCommon {
 }
 
 /**
+ * 却下
+ * @see contexts/collaboration/model/interview.dt:97
+ */
+export interface RejectedInterview extends InterviewCommon {
+    readonly state: 'Rejected';
+    /** 要約 — 却下した要約。 */
+    readonly brief: InterviewBrief;
+    /** 却下した人 */
+    readonly rejectedBy: ParticipantId;
+    /** ひとこと — 始めた人へのひとこと。 */
+    readonly note?: Text;
+    /** 却下日時 */
+    readonly rejectedAt: Timestamp;
+}
+
+/**
  * 聞き取り
  * `/es`・`/model` で始める聞き取り。AI（回答役、読むだけ）が1つずつ問い、あいまいな答えを掘り下げ、最後に要約を出す。
  * 聞き取りのあいだ、始めた人のメッセージは仕分けを経ずに聞き取りに入る（ほかの人のメッセージはふだんどおり仕分ける）。
- * 要約を確定すると、実行がそれを行き先の説明として書く。コラボではファシリテーターだけが始める。セッションに走っている
- * 聞き取りは1つまで（ユースケースが確かめる）。
- * @see contexts/collaboration/model/interview.dt:59
+ * 要約を確定すると、実行がそれを行き先の説明として書く。コラボでは誰でも始められ、要約を確定するのはファシリテーター
+ * （参加者が始めた聞き取りでは、それが承認になる。却下もできる）。セッションに走っている聞き取りは1つまで（ユースケースが
+ * 確かめる）。
+ * @see contexts/collaboration/model/interview.dt:60
  */
-export type Interview = AskingInterview | BriefedInterview | ConfirmedInterview | StoppedInterview;
+export type Interview = AskingInterview | BriefedInterview | ConfirmedInterview | StoppedInterview | RejectedInterview;
 
 /**
  * The fields of Interview as data for `decide`: the common fields, and the fields of each state on top of them.
- * @see contexts/collaboration/model/interview.dt:59
+ * @see contexts/collaboration/model/interview.dt:60
  */
 export const InterviewShape: Shape = {
     fields: ['id', 'session', 'command', 'startedBy', 'opening', 'focus', 'language', 'startedAt'],
-    states: { Asking: ['awaiting', 'asked'], Briefed: ['brief', 'answered', 'briefedAt'], Confirmed: ['brief', 'edited', 'confirmedAt', 'run'], Stopped: ['stoppedBy', 'stoppedAt'] },
+    states: { Asking: ['awaiting', 'asked'], Briefed: ['brief', 'answered', 'briefedAt'], Confirmed: ['brief', 'edited', 'confirmedBy', 'confirmedAt', 'run'], Stopped: ['stoppedBy', 'stoppedAt'], Rejected: ['brief', 'rejectedBy', 'note', 'rejectedAt'] },
 };
 
 /**
  * The invariants of Interview (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.
- * @see contexts/collaboration/model/interview.dt:59
+ * @see contexts/collaboration/model/interview.dt:60
  */
 export function checkInterviewCommon(_interview: InterviewCommon): readonly never[] {
     return [];
@@ -3549,7 +3561,7 @@ export function checkInterviewCommon(_interview: InterviewCommon): readonly neve
 
 /**
  * The parameters of Interview.start, by name.
- * @see contexts/collaboration/model/interview.dt:96
+ * @see contexts/collaboration/model/interview.dt:107
  */
 export interface StartInterviewParams {
     /** 聞き取りID */
@@ -3560,8 +3572,6 @@ export interface StartInterviewParams {
     readonly command: InterviewCommand;
     /** 参加者ID */
     readonly startedBy: ParticipantId;
-    /** 役割 */
-    readonly startedByRole: ParticipantRole;
     /** 依頼ID */
     readonly opening: RequestId;
     /** 依頼の対象 */
@@ -3574,10 +3584,9 @@ export interface StartInterviewParams {
 /**
  * Interview.start (new -> Asking) — factory
  * 聞き取りを始める
- * 聞き取りを始める。コラボではファシリテーターだけ（ひとりのセッションでは、その人がファシリテーター）。
- * @requires facilitatorStarts (ファシリテーターが始める) else FacilitatorOnly: startedByRole == ParticipantRole.Facilitator
+ * 聞き取りを始める。コラボでは誰でも（参加者が始めたら、その人が答え、要約はファシリテーターの承認を待つ）。
  * @emits InterviewStarted — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:96
+ * @see contexts/collaboration/model/interview.dt:107
  */
 export type StartInterview = (
     params: StartInterviewParams,
@@ -3586,15 +3595,14 @@ export type StartInterview = (
         readonly aggregate: AskingInterview;
         readonly events: { readonly InterviewStarted: InterviewStarted };
     };
-}, FacilitatorOnly>;
+}, never>;
 
 /**
  * Interview.start, decided by one function; implement it with `decide(InterviewShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
- * @requires facilitatorStarts (ファシリテーターが始める) else FacilitatorOnly: startedByRole == ParticipantRole.Facilitator
  * new -> Asking — set: every field
  * @emits InterviewStarted — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:96
+ * @see contexts/collaboration/model/interview.dt:107
  */
 export type StartInterviewDecision = (
     params: StartInterviewParams,
@@ -3603,20 +3611,11 @@ export type StartInterviewDecision = (
         readonly set: { readonly id: InterviewId; readonly session: SessionId; readonly command: InterviewCommand; readonly startedBy: ParticipantId; readonly opening: RequestId; readonly focus: ModelTarget | undefined; readonly language: UiLanguage; readonly startedAt: Timestamp; readonly awaiting: RequestId | undefined; readonly asked: AskedQuestion | undefined };
         readonly events: { readonly InterviewStarted: InterviewStarted };
     };
-}, FacilitatorOnly>;
-
-/**
- * The first requirement of Interview.start that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/interview.dt:96
- */
-export function checkStartInterviewRequires(params: StartInterviewParams): 'facilitatorStarts' | undefined {
-    if (!(params.startedByRole === 'Facilitator')) return 'facilitatorStarts';
-    return undefined;
-}
+}, never>;
 
 /**
  * The parameters of Interview.hear, by name.
- * @see contexts/collaboration/model/interview.dt:104
+ * @see contexts/collaboration/model/interview.dt:112
  */
 export interface HearInterviewParams {
     /** 依頼ID */
@@ -3630,7 +3629,7 @@ export interface HearInterviewParams {
  * 始めた人のメッセージが聞き取りに入る（答え、または要約への注文: 要約は取り下げて聞き取りに戻る）。
  * @changes awaiting, asked
  * @emits InterviewAnswered — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:104
+ * @see contexts/collaboration/model/interview.dt:112
  */
 export type HearInterview = (
     interview: AskingInterview | BriefedInterview,
@@ -3648,7 +3647,7 @@ export type HearInterview = (
  * @changes awaiting, asked
  * Asking -> Asking — set: awaiting, asked; carried over: id, session, command, startedBy, opening, focus, language, startedAt
  * Briefed -> Asking — set: awaiting, asked; carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: brief, answered, briefedAt
- * @see contexts/collaboration/model/interview.dt:104
+ * @see contexts/collaboration/model/interview.dt:112
  */
 export type HearInterviewDecision = {
     /** @emits InterviewAnswered — exactly once when the command succeeds */
@@ -3669,7 +3668,7 @@ export type HearInterviewDecision = {
 
 /**
  * The parameters of Interview.ask, by name.
- * @see contexts/collaboration/model/interview.dt:110
+ * @see contexts/collaboration/model/interview.dt:118
  */
 export interface AskInterviewParams {
     /** 答えたメッセージ */
@@ -3686,7 +3685,7 @@ export interface AskInterviewParams {
  * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: exists(awaiting) and awaiting == answered
  * @changes awaiting, asked
  * @emits InterviewQuestionAsked — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:110
+ * @see contexts/collaboration/model/interview.dt:118
  */
 export type AskInterview = (
     interview: AskingInterview,
@@ -3704,7 +3703,7 @@ export type AskInterview = (
  * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: exists(awaiting) and awaiting == answered
  * @changes awaiting, asked
  * Asking -> Asking — set: awaiting, asked; carried over: id, session, command, startedBy, opening, focus, language, startedAt
- * @see contexts/collaboration/model/interview.dt:110
+ * @see contexts/collaboration/model/interview.dt:118
  */
 export type AskInterviewDecision = {
     /** @emits InterviewQuestionAsked — exactly once when the command succeeds */
@@ -3718,7 +3717,7 @@ export type AskInterviewDecision = {
 
 /**
  * The first requirement of Interview.ask that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/interview.dt:110
+ * @see contexts/collaboration/model/interview.dt:118
  */
 export function checkAskInterviewRequires(interview: AskingInterview, params: AskInterviewParams): 'stillAwaited' | undefined {
     if (!((interview.awaiting !== undefined) && (interview.awaiting === params.answered))) return 'stillAwaited';
@@ -3727,7 +3726,7 @@ export function checkAskInterviewRequires(interview: AskingInterview, params: As
 
 /**
  * The parameters of Interview.summarize, by name.
- * @see contexts/collaboration/model/interview.dt:119
+ * @see contexts/collaboration/model/interview.dt:127
  */
 export interface SummarizeInterviewParams {
     /** 答えたメッセージ */
@@ -3740,11 +3739,11 @@ export interface SummarizeInterviewParams {
 /**
  * Interview.summarize (Asking -> Briefed)
  * 要約を出す
- * AI が要約を出す。始めた人が確定・編集して確定・中止を選ぶ。
+ * AI が要約を出す。ファシリテーターが確定（承認）・編集して確定・却下を選ぶ。始めた人は中止もできる。
  * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: exists(awaiting) and awaiting == answered
  * @changes none — the command changes no common field
  * @emits InterviewBriefed — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:119
+ * @see contexts/collaboration/model/interview.dt:127
  */
 export type SummarizeInterview = (
     interview: AskingInterview,
@@ -3762,7 +3761,7 @@ export type SummarizeInterview = (
  * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: exists(awaiting) and awaiting == answered
  * @changes none — the command changes no common field
  * Asking -> Briefed — set: brief (new in Briefed), answered (new in Briefed), briefedAt (new in Briefed); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: awaiting, asked
- * @see contexts/collaboration/model/interview.dt:119
+ * @see contexts/collaboration/model/interview.dt:127
  */
 export type SummarizeInterviewDecision = {
     /** @emits InterviewBriefed — exactly once when the command succeeds */
@@ -3776,7 +3775,7 @@ export type SummarizeInterviewDecision = {
 
 /**
  * The first requirement of Interview.summarize that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/interview.dt:119
+ * @see contexts/collaboration/model/interview.dt:127
  */
 export function checkSummarizeInterviewRequires(interview: AskingInterview, params: SummarizeInterviewParams): 'stillAwaited' | undefined {
     if (!((interview.awaiting !== undefined) && (interview.awaiting === params.answered))) return 'stillAwaited';
@@ -3785,11 +3784,13 @@ export function checkSummarizeInterviewRequires(interview: AskingInterview, para
 
 /**
  * The parameters of Interview.confirm, by name.
- * @see contexts/collaboration/model/interview.dt:127
+ * @see contexts/collaboration/model/interview.dt:136
  */
 export interface ConfirmInterviewParams {
     /** 参加者ID */
     readonly confirmedBy: ParticipantId;
+    /** 役割 */
+    readonly confirmedByRole: ParticipantRole;
     /** 確定する要約 */
     readonly confirmedBrief: InterviewBrief;
     readonly edited: boolean;
@@ -3801,11 +3802,12 @@ export interface ConfirmInterviewParams {
 /**
  * Interview.confirm (Briefed -> Confirmed)
  * 要約を確定する
- * 始めた人が要約を確定する（編集してもよい）。実行の登録と同じ取引で、その実行を記録する。
- * @requires starterConfirms (始めた人が確定する) else NotTheInterviewer: confirmedBy == startedBy
+ * ファシリテーターが要約を確定する（編集してもよい）。参加者が始めた聞き取りでは、それが承認になる。実行の登録と同じ
+ * 取引で、その実行を記録する。
+ * @requires facilitatorConfirms (ファシリテーターが確定する) else FacilitatorOnly: confirmedByRole == ParticipantRole.Facilitator
  * @changes brief
  * @emits InterviewConfirmed — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:127
+ * @see contexts/collaboration/model/interview.dt:136
  */
 export type ConfirmInterview = (
     interview: BriefedInterview,
@@ -3815,53 +3817,115 @@ export type ConfirmInterview = (
         readonly aggregate: ConfirmedInterview;
         readonly events: { readonly InterviewConfirmed: InterviewConfirmed };
     };
-}, NotTheInterviewer>;
+}, FacilitatorOnly>;
 
 /**
  * Interview.confirm, decided per source state; implement it with `decide(InterviewShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires starterConfirms (始めた人が確定する) else NotTheInterviewer: confirmedBy == startedBy
+ * @requires facilitatorConfirms (ファシリテーターが確定する) else FacilitatorOnly: confirmedByRole == ParticipantRole.Facilitator
  * @changes brief
- * Briefed -> Confirmed — set: brief, edited (new in Confirmed), confirmedAt (new in Confirmed), run (new in Confirmed); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: answered, briefedAt
- * @see contexts/collaboration/model/interview.dt:127
+ * Briefed -> Confirmed — set: brief, edited (new in Confirmed), confirmedBy (new in Confirmed), confirmedAt (new in Confirmed), run (new in Confirmed); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: answered, briefedAt
+ * @see contexts/collaboration/model/interview.dt:136
  */
 export type ConfirmInterviewDecision = {
     /** @emits InterviewConfirmed — exactly once when the command succeeds */
     readonly Briefed: (interview: BriefedInterview, params: ConfirmInterviewParams) => Result<{
         readonly Confirmed: {
-            readonly set: { readonly brief: InterviewBrief; readonly edited: boolean; readonly confirmedAt: Timestamp; readonly run: AgentRunId };
+            readonly set: { readonly brief: InterviewBrief; readonly edited: boolean; readonly confirmedBy: ParticipantId | undefined; readonly confirmedAt: Timestamp; readonly run: AgentRunId };
             readonly events: { readonly InterviewConfirmed: InterviewConfirmed };
         };
-    }, NotTheInterviewer>;
+    }, FacilitatorOnly>;
 };
 
 /**
  * The first requirement of Interview.confirm that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/interview.dt:127
+ * @see contexts/collaboration/model/interview.dt:136
  */
-export function checkConfirmInterviewRequires(interview: BriefedInterview, params: ConfirmInterviewParams): 'starterConfirms' | undefined {
-    if (!(params.confirmedBy === interview.startedBy)) return 'starterConfirms';
+export function checkConfirmInterviewRequires(_interview: BriefedInterview, params: ConfirmInterviewParams): 'facilitatorConfirms' | undefined {
+    if (!(params.confirmedByRole === 'Facilitator')) return 'facilitatorConfirms';
+    return undefined;
+}
+
+/**
+ * The parameters of Interview.reject, by name.
+ * @see contexts/collaboration/model/interview.dt:145
+ */
+export interface RejectInterviewParams {
+    /** 参加者ID */
+    readonly rejectedBy: ParticipantId;
+    /** 役割 */
+    readonly rejectedByRole: ParticipantRole;
+    /** 文章 */
+    readonly note?: Text;
+    readonly rejectedAt: Timestamp;
+}
+
+/**
+ * Interview.reject (Briefed -> Rejected)
+ * 要約を却下する
+ * ファシリテーターが要約を却下する（ひとことを添えてもよい）。聞き取りはそこで終わる。
+ * @requires facilitatorRejects (ファシリテーターが却下する) else FacilitatorOnly: rejectedByRole == ParticipantRole.Facilitator
+ * @changes none — the command changes no common field
+ * @emits InterviewRejected — exactly once when the command succeeds
+ * @see contexts/collaboration/model/interview.dt:145
+ */
+export type RejectInterview = (
+    interview: BriefedInterview,
+    params: RejectInterviewParams,
+) => Result<{
+    readonly Rejected: {
+        readonly aggregate: RejectedInterview;
+        readonly events: { readonly InterviewRejected: InterviewRejected };
+    };
+}, FacilitatorOnly>;
+
+/**
+ * Interview.reject, decided per source state; implement it with `decide(InterviewShape, …)` from the runtime.
+ * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
+ * @requires facilitatorRejects (ファシリテーターが却下する) else FacilitatorOnly: rejectedByRole == ParticipantRole.Facilitator
+ * @changes none — the command changes no common field
+ * Briefed -> Rejected — set: rejectedBy (new in Rejected), note (new in Rejected), rejectedAt (new in Rejected); carried over: id, session, command, startedBy, opening, focus, language, startedAt, brief; dropped: answered, briefedAt
+ * @see contexts/collaboration/model/interview.dt:145
+ */
+export type RejectInterviewDecision = {
+    /** @emits InterviewRejected — exactly once when the command succeeds */
+    readonly Briefed: (interview: BriefedInterview, params: RejectInterviewParams) => Result<{
+        readonly Rejected: {
+            readonly set: { readonly rejectedBy: ParticipantId; readonly note: Text | undefined; readonly rejectedAt: Timestamp };
+            readonly events: { readonly InterviewRejected: InterviewRejected };
+        };
+    }, FacilitatorOnly>;
+};
+
+/**
+ * The first requirement of Interview.reject that does not hold, in declaration order; `undefined` when all hold.
+ * @see contexts/collaboration/model/interview.dt:145
+ */
+export function checkRejectInterviewRequires(_interview: BriefedInterview, params: RejectInterviewParams): 'facilitatorRejects' | undefined {
+    if (!(params.rejectedByRole === 'Facilitator')) return 'facilitatorRejects';
     return undefined;
 }
 
 /**
  * The parameters of Interview.stop, by name.
- * @see contexts/collaboration/model/interview.dt:134
+ * @see contexts/collaboration/model/interview.dt:153
  */
 export interface StopInterviewParams {
     /** 参加者ID */
     readonly stoppedBy: ParticipantId;
+    /** 役割 */
+    readonly stoppedByRole: ParticipantRole;
     readonly stoppedAt: Timestamp;
 }
 
 /**
  * Interview.stop (Asking | Briefed -> Stopped)
  * 聞き取りを中止する
- * 始めた人が聞き取りを中止する。
- * @requires starterStops (始めた人が中止する) else NotTheInterviewer: stoppedBy == startedBy
+ * 始めた人かファシリテーターが聞き取りを中止する。
+ * @requires starterOrFacilitatorStops (始めた人かファシリテーターが中止する) else NotTheInterviewer: stoppedBy == startedBy or stoppedByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * @emits InterviewStopped — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:134
+ * @see contexts/collaboration/model/interview.dt:153
  */
 export type StopInterview = (
     interview: AskingInterview | BriefedInterview,
@@ -3876,11 +3940,11 @@ export type StopInterview = (
 /**
  * Interview.stop, decided per source state; implement it with `decide(InterviewShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires starterStops (始めた人が中止する) else NotTheInterviewer: stoppedBy == startedBy
+ * @requires starterOrFacilitatorStops (始めた人かファシリテーターが中止する) else NotTheInterviewer: stoppedBy == startedBy or stoppedByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * Asking -> Stopped — set: stoppedBy (new in Stopped), stoppedAt (new in Stopped); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: awaiting, asked
  * Briefed -> Stopped — set: stoppedBy (new in Stopped), stoppedAt (new in Stopped); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: brief, answered, briefedAt
- * @see contexts/collaboration/model/interview.dt:134
+ * @see contexts/collaboration/model/interview.dt:153
  */
 export type StopInterviewDecision = {
     /** @emits InterviewStopped — exactly once when the command succeeds */
@@ -3901,17 +3965,17 @@ export type StopInterviewDecision = {
 
 /**
  * The first requirement of Interview.stop that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/interview.dt:134
+ * @see contexts/collaboration/model/interview.dt:153
  */
-export function checkStopInterviewRequires(interview: AskingInterview | BriefedInterview, params: StopInterviewParams): 'starterStops' | undefined {
-    if (!(params.stoppedBy === interview.startedBy)) return 'starterStops';
+export function checkStopInterviewRequires(interview: AskingInterview | BriefedInterview, params: StopInterviewParams): 'starterOrFacilitatorStops' | undefined {
+    if (!((params.stoppedBy === interview.startedBy) || (params.stoppedByRole === 'Facilitator'))) return 'starterOrFacilitatorStops';
     return undefined;
 }
 
 /**
  * Command contracts of Interview. Implement this interface by hand.
  * Commands are pure functions of the aggregate and their parameters: no I/O, no clock, no randomness. IDs and times are passed in as parameters.
- * @see contexts/collaboration/model/interview.dt:59
+ * @see contexts/collaboration/model/interview.dt:60
  */
 export interface InterviewCommands {
     /** 聞き取りを始める */
@@ -3924,20 +3988,22 @@ export interface InterviewCommands {
     readonly summarize: SummarizeInterview;
     /** 要約を確定する */
     readonly confirm: ConfirmInterview;
+    /** 要約を却下する */
+    readonly reject: RejectInterview;
     /** 聞き取りを中止する */
     readonly stop: StopInterview;
 }
 
 /**
  * Events that the commands of Interview may emit.
- * @see contexts/collaboration/model/interview.dt:59
+ * @see contexts/collaboration/model/interview.dt:60
  */
-export type InterviewEvent = InterviewStarted | InterviewAnswered | InterviewQuestionAsked | InterviewBriefed | InterviewConfirmed | InterviewStopped;
+export type InterviewEvent = InterviewStarted | InterviewAnswered | InterviewQuestionAsked | InterviewBriefed | InterviewConfirmed | InterviewRejected | InterviewStopped;
 
 /**
  * 聞き取りの開始
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/interview.dt:140
+ * @see contexts/collaboration/model/interview.dt:161
  */
 export interface InterviewStarted {
     readonly type: 'InterviewStarted';
@@ -3961,7 +4027,7 @@ export interface InterviewStarted {
 /**
  * 聞き取りへの答え
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/interview.dt:151
+ * @see contexts/collaboration/model/interview.dt:172
  */
 export interface InterviewAnswered {
     readonly type: 'InterviewAnswered';
@@ -3975,7 +4041,7 @@ export interface InterviewAnswered {
 /**
  * 聞き取りの問い
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/interview.dt:157
+ * @see contexts/collaboration/model/interview.dt:178
  */
 export interface InterviewQuestionAsked {
     readonly type: 'InterviewQuestionAsked';
@@ -3992,7 +4058,7 @@ export interface InterviewQuestionAsked {
 /**
  * 聞き取りの要約
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/interview.dt:166
+ * @see contexts/collaboration/model/interview.dt:187
  */
 export interface InterviewBriefed {
     readonly type: 'InterviewBriefed';
@@ -4008,7 +4074,7 @@ export interface InterviewBriefed {
 /**
  * 聞き取りの確定
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/interview.dt:173
+ * @see contexts/collaboration/model/interview.dt:194
  */
 export interface InterviewConfirmed {
     readonly type: 'InterviewConfirmed';
@@ -4017,6 +4083,8 @@ export interface InterviewConfirmed {
     /** 要約 */
     readonly brief: InterviewBrief;
     readonly edited: boolean;
+    /** 確定した人 — 前のイベントにはない（始めた人が確定した）。 */
+    readonly confirmedBy?: ParticipantId;
     /** エージェント実行ID */
     readonly run: AgentRunId;
     readonly confirmedAt: Timestamp;
@@ -4025,7 +4093,7 @@ export interface InterviewConfirmed {
 /**
  * 聞き取りの中止
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/interview.dt:181
+ * @see contexts/collaboration/model/interview.dt:204
  */
 export interface InterviewStopped {
     readonly type: 'InterviewStopped';
@@ -4037,9 +4105,25 @@ export interface InterviewStopped {
 }
 
 /**
+ * 聞き取りの要約の却下
+ * @persistent Persisted: storing this event is part of its contract.
+ * @see contexts/collaboration/model/interview.dt:210
+ */
+export interface InterviewRejected {
+    readonly type: 'InterviewRejected';
+    /** 聞き取りID */
+    readonly interviewId: InterviewId;
+    /** 参加者ID */
+    readonly rejectedBy: ParticipantId;
+    /** ひとこと */
+    readonly note?: Text;
+    readonly rejectedAt: Timestamp;
+}
+
+/**
  * 聞き取りを始めた人でない
- * 聞き取りを確定・中止できるのは、始めた人だけ。
- * @see contexts/collaboration/model/interview.dt:188
+ * 聞き取りを中止できるのは、始めた人かファシリテーターだけ。
+ * @see contexts/collaboration/model/interview.dt:218
  */
 export interface NotTheInterviewer {
     readonly type: 'NotTheInterviewer';
@@ -4048,7 +4132,7 @@ export interface NotTheInterviewer {
 /**
  * 聞き取りは先に進んだ
  * AI の問いや要約が答えたメッセージを、聞き取りはもう待っていない（そのあいだに始めた人が続けて書いた）。
- * @see contexts/collaboration/model/interview.dt:191
+ * @see contexts/collaboration/model/interview.dt:221
  */
 export interface InterviewMovedOn {
     readonly type: 'InterviewMovedOn';
@@ -4057,7 +4141,7 @@ export interface InterviewMovedOn {
 /**
  * 走っている聞き取りがある
  * セッションには走っている聞き取りがある（1つまで）。
- * @see contexts/collaboration/model/interview.dt:194
+ * @see contexts/collaboration/model/interview.dt:224
  */
 export interface InterviewAlreadyRunning {
     readonly type: 'InterviewAlreadyRunning';
@@ -7262,7 +7346,7 @@ export interface CollabSessionOpen {
 
 /**
  * ファシリテーターだけの操作
- * ファシリテーターだけができる操作（実行の登録と中止・打ち消し、スナップショット、リビジョンの復元、変更案の承認と却下、AI への送り直し、セッションの終了）を、参加者が求めた。
+ * ファシリテーターだけができる操作（実行の登録と中止・打ち消し、スナップショット、リビジョンの復元、変更案の承認と却下、聞き取りの要約の確定と却下、コマンドの候補の反映、AI への送り直し、セッションの終了）を、参加者が求めた。
  * @see contexts/collaboration/model/session.dt:119
  */
 export interface FacilitatorOnly {
@@ -9009,10 +9093,10 @@ export function equalViewedAt(a: ViewedAt, b: ViewedAt): boolean {
 }
 
 /** Events of Collaboration that are persisted (declared `persistent`). */
-export type PersistentEvent = RunQueued | RunReverted | RevertLeftToAgent | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | SlashCommandStarted | CandidatesListed | SlashCommandAnswered | CandidatesApplied | SlashCommandStopped | InterviewStarted | InterviewAnswered | InterviewQuestionAsked | InterviewBriefed | InterviewConfirmed | InterviewStopped | MarkPlaced | MarkRemoved | ChangeProposed | ProposalApproved | ProposalRejected | ProposalWithdrawn | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | SessionStarted | SessionCollaborated | ParticipantJoined | SessionClosed | TriageOpened | TriageStepRecorded | TriageDecided | TriageOverridden | TriageReaddressed | TriageConcluded;
+export type PersistentEvent = RunQueued | RunReverted | RevertLeftToAgent | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | SlashCommandStarted | CandidatesListed | SlashCommandAnswered | CandidatesApplied | SlashCommandStopped | InterviewStarted | InterviewAnswered | InterviewQuestionAsked | InterviewBriefed | InterviewConfirmed | InterviewStopped | InterviewRejected | MarkPlaced | MarkRemoved | ChangeProposed | ProposalApproved | ProposalRejected | ProposalWithdrawn | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | SessionStarted | SessionCollaborated | ParticipantJoined | SessionClosed | TriageOpened | TriageStepRecorded | TriageDecided | TriageOverridden | TriageReaddressed | TriageConcluded;
 
 /** Events of Collaboration. */
-export type DomainEvent = RunQueued | RunReverted | RevertLeftToAgent | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | SlashCommandStarted | CandidatesListed | SlashCommandAnswered | CandidatesApplied | SlashCommandStopped | InterviewStarted | InterviewAnswered | InterviewQuestionAsked | InterviewBriefed | InterviewConfirmed | InterviewStopped | MarkPlaced | MarkRemoved | ChangeProposed | ProposalApproved | ProposalRejected | ProposalWithdrawn | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | SessionStarted | SessionCollaborated | ParticipantJoined | SessionClosed | TriageOpened | TriageStepRecorded | TriageDecided | TriageOverridden | TriageReaddressed | TriageConcluded;
+export type DomainEvent = RunQueued | RunReverted | RevertLeftToAgent | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | SlashCommandStarted | CandidatesListed | SlashCommandAnswered | CandidatesApplied | SlashCommandStopped | InterviewStarted | InterviewAnswered | InterviewQuestionAsked | InterviewBriefed | InterviewConfirmed | InterviewStopped | InterviewRejected | MarkPlaced | MarkRemoved | ChangeProposed | ProposalApproved | ProposalRejected | ProposalWithdrawn | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | SessionStarted | SessionCollaborated | ParticipantJoined | SessionClosed | TriageOpened | TriageStepRecorded | TriageDecided | TriageOverridden | TriageReaddressed | TriageConcluded;
 
 /** Aggregates of Collaboration. */
 export type Aggregate = AgentRun | AssumptionApproval | SlashCommand | Interview | Mark | ChangeProposal | Request | Revision | Session | Triage;

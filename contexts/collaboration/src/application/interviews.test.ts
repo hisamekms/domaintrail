@@ -1,7 +1,7 @@
-// The use cases of the `/` commands' interviews (the plan's round 5) over the real store (in-memory SQLite): start (the
-// facilitator only, one at a time), the starter's messages going to the interview without triage while others are
-// triaged, the interviewer's questions and brief, confirm (a run whose input carries the brief) and stop, and what the
-// session so far says of them.
+// The use cases of the `/` commands' interviews (the plan's round 5) over the real store (in-memory SQLite): start
+// (anyone, one at a time), the starter's messages going to the interview without triage while others are triaged, the
+// interviewer's questions and brief, confirm (the facilitator: a run whose input carries the brief; for a participant's
+// interview, the approval), reject and stop, and what the session so far says of them.
 import { describe, expect, test } from 'bun:test';
 import { Collaboration as C, type Result } from '../generated/index.js';
 import { AI_PARTICIPANT_ID } from '../domain/ai.js';
@@ -23,8 +23,10 @@ const error = <T, E>(r: Result<T, E>): E => {
 const text = (t: string): C.Text => value(C.makeText(t));
 const facilitatorId = value(C.makeParticipantId('local:facilitator'));
 const bobId = value(C.makeParticipantId('dev:bob'));
+const carolId = value(C.makeParticipantId('dev:carol'));
 const facilitator: Actor = { kind: 'participant', participant: facilitatorId, role: 'Facilitator' };
 const bob: Actor = { kind: 'participant', participant: bobId, role: 'Participant' };
+const carol: Actor = { kind: 'participant', participant: carolId, role: 'Participant' };
 const name = value(C.makeDisplayName('Ada'));
 
 function collaboration(): { use: CollaborationUseCases; db: ReturnType<typeof openDatabase> } {
@@ -52,12 +54,13 @@ function collaboration(): { use: CollaborationUseCases; db: ReturnType<typeof op
     return { use: createCollaboration(deps), db };
 }
 
-/** A Collab session with Bob joined. */
-async function collab(): Promise<{ use: CollaborationUseCases; session: C.SessionId }> {
-    const { use } = collaboration();
+/** A Collab session with Bob and Carol joined. */
+async function collab(): Promise<{ use: CollaborationUseCases; session: C.SessionId; db: ReturnType<typeof openDatabase> }> {
+    const { use, db } = collaboration();
     const opened = value(await use.openSession({ mode: 'Collab', facilitator: facilitatorId, name }));
     value(await use.joinSession({ session: opened.session.id, participant: bobId, name: value(C.makeDisplayName('Bob')) }));
-    return { use, session: opened.session.id };
+    value(await use.joinSession({ session: opened.session.id, participant: carolId, name: value(C.makeDisplayName('Carol')) }));
+    return { use, session: opened.session.id, db };
 }
 
 const say = (
@@ -87,7 +90,7 @@ const start = (use: CollaborationUseCases, session: C.SessionId, actor: Actor = 
     use.startInterview({ session, actor, command: 'Es', body: text('ES を始める'), language: 'Ja' });
 
 describe('interviews', () => {
-    test('start: the opening message without triage, the first question due; one at a time; Collab: the facilitator only', async () => {
+    test('start: the opening message without triage, the first question due; one at a time; Collab: anyone', async () => {
         const { use, session } = await solo();
         const started = value(await start(use, session));
         expect(started.request).toMatchObject({ author: facilitatorId, body: 'ES を始める' });
@@ -97,10 +100,11 @@ describe('interviews', () => {
         expect(value(await use.interviewJobs({ session })).map((j) => [j.request.id, j.transcript.length])).toEqual([[started.request.id, 1]]);
         expect(error(await start(use, session))).toEqual({ type: 'InterviewAlreadyRunning' });
 
+        // a participant starts one too; then it is the one running
         const c = await collab();
-        expect(error(await start(c.use, c.session, bob))).toEqual({ type: 'FacilitatorOnly' });
-        expect(value(await c.use.sessionState({ session: c.session })).requests).toEqual([]);
-        value(await start(c.use, c.session));
+        const bobs = value(await start(c.use, c.session, bob));
+        expect(bobs.interview).toMatchObject({ state: 'Asking', startedBy: bobId });
+        expect(error(await start(c.use, c.session))).toEqual({ type: 'InterviewAlreadyRunning' });
     });
 
     test('while it runs the starter answers it without triage; the others are triaged as usual', async () => {
@@ -143,15 +147,15 @@ describe('interviews', () => {
         expect(q2.interview.asked).toEqual({ question: q2.question.id, choices: [], multiple: false });
     });
 
-    test('brief, then confirm: a run whose input carries the brief (edited); the starter only', async () => {
+    test('brief, then confirm: a run whose input carries the brief (edited); the facilitator only', async () => {
         const { use, session } = await collab();
         const started = value(await start(use, session));
         const briefed = value(await use.briefInterview({ interview: started.interview.id, answered: started.request.id, brief: brief() }));
         expect(briefed).toMatchObject({ state: 'Briefed', answered: started.request.id });
-        expect(error(await use.confirmInterview({ interview: started.interview.id, actor: bob }))).toEqual({ type: 'NotTheInterviewer' });
+        expect(error(await use.confirmInterview({ interview: started.interview.id, actor: bob }))).toEqual({ type: 'FacilitatorOnly' });
         const edited = value(C.makeBriefText('目的: 返金を3日以内に\n範囲: 申請から返金まで'));
         const confirmed = value(await use.confirmInterview({ interview: started.interview.id, actor: facilitator, text: edited }));
-        expect(confirmed.interview).toMatchObject({ state: 'Confirmed', edited: true, run: confirmed.run.id });
+        expect(confirmed.interview).toMatchObject({ state: 'Confirmed', edited: true, confirmedBy: facilitatorId, run: confirmed.run.id });
         expect(confirmed.run.input.requests.map((r) => r.request)).toEqual([started.request.id]);
         expect(confirmed.run.input.brief).toEqual({ interview: started.interview.id, command: 'Es', brief: { ...brief(), text: edited } });
         // ended: the starter's messages are triaged again
@@ -176,6 +180,64 @@ describe('interviews', () => {
         const again = await createUnitOfWork(db).transaction((s) => s.interviews.listBySession(session));
         expect(again.map((i) => i.state)).toEqual(['Stopped']);
         expect(value(await say(use, session, facilitator, '注文は取り消せる？')).triage).toBeDefined();
+    });
+});
+
+describe('an interview a participant started', () => {
+    /** Bob's interview, briefed after one answer of his. */
+    async function briefedByBob() {
+        const c = await collab();
+        const started = value(await start(c.use, c.session, bob));
+        const q1 = value(await c.use.askInInterview({ interview: started.interview.id, answered: started.request.id, question: text('どの業務？') }));
+        // Bob answers (a choice is a message as any): heard; Carol's reply is triaged
+        const answer = value(await say(c.use, c.session, bob, '返品', { replyTo: { kind: 'Message', request: q1.question.id } }));
+        expect(answer.interview).toMatchObject({ state: 'Asking', awaiting: answer.request.id });
+        expect(value(await say(c.use, c.session, carol, 'それって何？', { replyTo: { kind: 'Message', request: q1.question.id } })).interview).toBeUndefined();
+        const briefed = value(await c.use.briefInterview({ interview: started.interview.id, answered: answer.request.id, brief: brief() }));
+        return { ...c, started, answer, briefed };
+    }
+
+    test('its brief waits for the facilitator: the starter cannot confirm it; the facilitator approves it (edited)', async () => {
+        const { use, session, started, answer } = await briefedByBob();
+        expect(error(await use.confirmInterview({ interview: started.interview.id, actor: bob }))).toEqual({ type: 'FacilitatorOnly' });
+        expect(error(await use.rejectInterview({ interview: started.interview.id, actor: bob }))).toEqual({ type: 'FacilitatorOnly' });
+        expect(value(await use.sessionSoFar({ session })).open).toContainEqual(expect.stringContaining("awaits the facilitator's confirmation"));
+        const edited = value(C.makeBriefText('目的: 返金を3日以内に'));
+        const approved = value(await use.confirmInterview({ interview: started.interview.id, actor: facilitator, text: edited }));
+        expect(approved.interview).toMatchObject({ state: 'Confirmed', startedBy: bobId, confirmedBy: facilitatorId, edited: true });
+        // the run is queued by the facilitator, on the message the brief answered
+        expect(approved.run).toMatchObject({ queuedBy: facilitatorId });
+        expect(approved.run.input.requests.map((r) => r.request)).toEqual([answer.request.id]);
+        expect(value(await use.sessionSoFar({ session })).text).toContain("Ada approved Bob's brief of the interview /es:start after editing it");
+    });
+
+    test('the facilitator rejects its brief with a note: it ends, recorded; a reload reads it back', async () => {
+        const { use, session, db, started } = await briefedByBob();
+        const note = text('範囲が広すぎます');
+        const rejected = value(await use.rejectInterview({ interview: started.interview.id, actor: facilitator, note }));
+        expect(rejected).toMatchObject({ state: 'Rejected', rejectedBy: facilitatorId, note: '範囲が広すぎます', brief: brief() });
+        expect(error(await use.rejectInterview({ interview: started.interview.id, actor: facilitator }))).toMatchObject({ type: 'NotAllowed' });
+        expect(error(await use.confirmInterview({ interview: started.interview.id, actor: facilitator }))).toMatchObject({ type: 'NotAllowed' });
+        const soFar = value(await use.sessionSoFar({ session }));
+        expect(soFar.text).toContain("Ada rejected Bob's brief of the interview /es:start for Returns: 範囲が広すぎます");
+        expect(soFar.open.filter((o) => o.includes('interview'))).toEqual([]);
+        const again = await createUnitOfWork(db).transaction((s) => s.interviews.listBySession(session));
+        expect(again).toMatchObject([{ state: 'Rejected', note: '範囲が広すぎます' }]);
+        // ended: Bob's messages are triaged again, and another interview may start
+        expect(value(await say(use, session, bob, '注文は取り消せる？')).interview).toBeUndefined();
+        value(await start(use, session, carol));
+    });
+
+    test('stop: its starter or the facilitator, no one else', async () => {
+        const { use, session } = await collab();
+        const started = value(await start(use, session, bob));
+        expect(error(await use.stopInterview({ interview: started.interview.id, actor: carol }))).toEqual({ type: 'NotTheInterviewer' });
+        expect(value(await use.stopInterview({ interview: started.interview.id, actor: facilitator }))).toMatchObject({
+            state: 'Stopped',
+            stoppedBy: facilitatorId,
+        });
+        const second = value(await start(use, session, bob));
+        expect(value(await use.stopInterview({ interview: second.interview.id, actor: bob }))).toMatchObject({ state: 'Stopped', stoppedBy: bobId });
     });
 });
 

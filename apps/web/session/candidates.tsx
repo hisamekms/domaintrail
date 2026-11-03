@@ -2,8 +2,9 @@
 // "Built-in ES commands", phases 1 and 2): on the AI's bubble under the opening message, the command's name, then —
 // while the AI works — that it thinks; once it listed them, the candidates (a label, the elements it touches that exist
 // as chips — one to be added is named by the label and how, not by its identifier —, how in a line, why), each with a
-// checkbox for its starter, none checked at first, and 「採用したものを反映」 / 中止; the others read them with
-// 「始めた人の選択待ち」.
+// checkbox for the facilitator (whoever started it: applying is the approval), none checked at first, and
+// 「採用したものを反映」 / 中止; the others read them with 「ファシリテーターが選んで反映します」. Its starter or the facilitator
+// stops it.
 // Applied, the ones chosen stay checked, the others dimmed, with a link to the run. Nothing to work on (no storming in
 // view) or no candidate: one short line, an answer command's too (a hint
 // stored from when `/hint` was `/es:next` and needed a storming). An answer command (`/es:recap`) has a card
@@ -42,7 +43,9 @@ export function CandidatesCard({ command: c, continues }: { command: SlashComman
     const { tx, session, onNavigate } = useChat();
     const t = tx.chat.candidates;
     const live = session.status === 'live' && session.state.session.state === 'Open';
-    const mine = live && c.startedBy === session.me.participant.id;
+    const facilitator = live && session.me.participant.role === 'facilitator';
+    // stops it: its starter, or the facilitator
+    const mine = facilitator || (live && c.startedBy === session.me.participant.id);
     const name = slashCommandName(c.kind);
     const [checked, setChecked] = useState<ReadonlySet<number>>(new Set());
     const [busy, setBusy] = useState(false);
@@ -67,7 +70,7 @@ export function CandidatesCard({ command: c, continues }: { command: SlashComman
         });
     const candidates = c.state === 'Listed' || c.state === 'Applied' ? c.candidates : [];
     const chosen = new Set<number>(c.state === 'Applied' ? c.chosen : []);
-    const choosing = c.state === 'Listed' && mine;
+    const choosing = c.state === 'Listed' && facilitator;
     const empty = c.state === 'Listed' && candidates.length === 0;
     const stop = (label: string) => (
         <button type="button" className="chat-small ghost" disabled={busy} onClick={() => void act(() => sessionApi.stopCommand(c.id))}>
@@ -145,8 +148,9 @@ export function CandidatesCard({ command: c, continues }: { command: SlashComman
                     )}
                     {mine && c.state === 'Working' && <div className="reply-actions">{stop(t.stop)}</div>}
                     {mine && empty && <div className="reply-actions">{stop(t.close)}</div>}
-                    {c.state === 'Listed' && !mine && !empty && <p className="proposal-waiting">{t.waiting}</p>}
-                    {c.state === 'Applied' && <DecidedLine label={t.applied(c.chosen.length)} by={c.startedBy} at={c.appliedAt} run={c.run} />}
+                    {c.state === 'Listed' && !facilitator && !empty && <p className="candidates-line muted">{t.waiting}</p>}
+                    {c.state === 'Listed' && !facilitator && !empty && mine && <div className="reply-actions">{stop(t.stop)}</div>}
+                    {c.state === 'Applied' && <DecidedLine label={t.applied(c.chosen.length)} by={c.appliedBy ?? c.startedBy} at={c.appliedAt} run={c.run} />}
                     {error && (
                         <p className="session-note session-error">
                             <X size={12} aria-hidden /> {tx.error(error)}

@@ -3,8 +3,7 @@ context Collaboration {
   id SlashCommandId "コマンドID": UUID
 
   /// 候補型・答え型の `/` コマンド（聞き取りは `Interview`）。`/` のあとに打つ ID（`es:exceptions`、`es:recap`、`hint`）は
-  /// 英語のまま、名前は画面の言語で出す。どちらの型か、ファシリテーターだけが始めるかはコード（`domain/slash-commands.ts` の
-  /// `SLASH_COMMANDS`）が決める。`Hint` は以前 `EsNext`（`/es:next`）だった: 保存済みのものは読むときに `Hint` になる。
+  /// 英語のまま、名前は画面の言語で出す。どちらの型かはコード（`domain/slash-commands.ts` の `SLASH_COMMANDS`）が決める。`Hint` は以前 `EsNext`（`/es:next`）だった: 保存済みのものは読むときに `Hint` になる。
   enum SlashCommandKind "コマンドの種類" {
     EsExceptions "例外を洗い出す（/es:exceptions）"
     EsRecap "ここまでのまとめ（/es:recap）"
@@ -63,8 +62,8 @@ context Collaboration {
   }
 
   /// 候補型（`/es:exceptions` など）と答え型（`/es:recap`、`/hint`）の `/` コマンド。始めた人のメッセージ（コマンドの名前）は仕分けを
-  /// 経ずに、回答役（読むだけの AI）がコマンドの指示で受け持つ。候補型は候補を挙げ、始めた人が選んだものを1つの実行が
-  /// 反映する。答え型は AI のメッセージで答える。
+  /// 経ずに、回答役（読むだけの AI）がコマンドの指示で受け持つ。コラボでは誰でも始められる。候補型は候補を挙げ、
+  /// ファシリテーターが選んだものを1つの実行が反映する（反映が承認になる）。答え型は AI のメッセージで答える。
   aggregate SlashCommand "コマンド" {
     id: SlashCommandId
     references session: SessionId -> Session
@@ -84,8 +83,10 @@ context Collaboration {
     }
     state Applied "反映" {
       candidates: CommandCandidate[0..20] "候補"
-      /// 始めた人が採用した候補の番号。
+      /// ファシリテーターが採用した候補の番号。
       chosen: CandidateIndex[1..20] "採用した候補"
+      /// 反映したファシリテーター。前の行にはない（始めた人が反映した）。
+      appliedBy: ParticipantId? "反映した人"
       appliedAt: Timestamp "反映日時"
       references run: AgentRunId -> AgentRun "実行"
     }
@@ -101,13 +102,9 @@ context Collaboration {
       stoppedAt: Timestamp "中止日時"
     }
 
-    /// コマンドを始める。ファシリテーターだけのコマンドは、コラボではファシリテーターだけ（ひとりのセッションでは、その人が
-    /// ファシリテーター）。
-    create command start(id: SlashCommandId, session: ActiveSession, kind: SlashCommandKind, facilitatorOnly: Bool, startedBy: ParticipantId, startedByRole: ParticipantRole, opening: RequestId, scope: StormingName?, language: UiLanguage, startedAt: Timestamp) "コマンドを始める"
+    /// コマンドを始める。コラボでは誰でも。
+    create command start(id: SlashCommandId, session: ActiveSession, kind: SlashCommandKind, startedBy: ParticipantId, opening: RequestId, scope: StormingName?, language: UiLanguage, startedAt: Timestamp) "コマンドを始める"
       -> Working
-      requires facilitatorStarts "ファシリテーターだけのコマンドは、ファシリテーターが始める" {
-        not facilitatorOnly or startedByRole == ParticipantRole.Facilitator
-      } else FacilitatorOnly
       emits SlashCommandStarted
 
     /// AI が候補を挙げる（候補型）。見ているストーミングがなければ、候補なしで。
@@ -120,17 +117,22 @@ context Collaboration {
       Working -> Answered
       emits SlashCommandAnswered
 
-    /// 始めた人が候補を選んで反映する。実行の登録と同じ取引で、その実行を記録する。
-    command apply(appliedBy: ParticipantId, chosen: CandidateIndex[1..20], run: AgentRunId, appliedAt: Timestamp) "採用したものを反映する"
+    /// ファシリテーターが候補を選んで反映する（誰が始めたコマンドでも。反映が承認になる）。実行の登録と同じ取引で、その
+    /// 実行を記録する。
+    command apply(appliedBy: ParticipantId, appliedByRole: ParticipantRole, chosen: CandidateIndex[1..20], run: AgentRunId, appliedAt: Timestamp) "採用したものを反映する"
       Listed -> Applied
-      requires starterApplies "始めた人が反映する" { appliedBy == startedBy } else NotTheStarter
+      requires facilitatorApplies "ファシリテーターが反映する" {
+        appliedByRole == ParticipantRole.Facilitator
+      } else FacilitatorOnly
       requires chosenOfList "挙げた候補から選ぶ" { all(chosen, c => c < count(candidates)) } else NoSuchCandidate
       emits CandidatesApplied
 
-    /// 始めた人がコマンドを中止する（考えているあいだか、候補の選択待ち）。
-    command stop(stoppedBy: ParticipantId, stoppedAt: Timestamp) "コマンドを中止する"
+    /// 始めた人かファシリテーターがコマンドを中止する（考えているあいだか、候補の選択待ち）。
+    command stop(stoppedBy: ParticipantId, stoppedByRole: ParticipantRole, stoppedAt: Timestamp) "コマンドを中止する"
       Working | Listed -> Stopped
-      requires starterStops "始めた人が中止する" { stoppedBy == startedBy } else NotTheStarter
+      requires starterOrFacilitatorStops "始めた人かファシリテーターが中止する" {
+        stoppedBy == startedBy or stoppedByRole == ParticipantRole.Facilitator
+      } else NotTheStarter
       emits SlashCommandStopped
   }
 
@@ -161,6 +163,8 @@ context Collaboration {
   persistent event CandidatesApplied "候補の反映" {
     commandId: SlashCommandId
     chosen: CandidateIndex[1..20]
+    /// 前のイベントにはない（始めた人が反映した）。
+    appliedBy: ParticipantId? "反映した人"
     run: AgentRunId
     appliedAt: Timestamp
   }
@@ -171,7 +175,7 @@ context Collaboration {
     stoppedAt: Timestamp
   }
 
-  /// コマンドを反映・中止できるのは、始めた人だけ。
+  /// コマンドを中止できるのは、始めた人かファシリテーターだけ。
   error NotTheStarter "コマンドを始めた人でない"
 
   /// 採用した候補の番号が、挙げた候補にない。

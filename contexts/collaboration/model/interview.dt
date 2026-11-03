@@ -54,8 +54,9 @@ context Collaboration {
 
   /// `/es`・`/model` で始める聞き取り。AI（回答役、読むだけ）が1つずつ問い、あいまいな答えを掘り下げ、最後に要約を出す。
   /// 聞き取りのあいだ、始めた人のメッセージは仕分けを経ずに聞き取りに入る（ほかの人のメッセージはふだんどおり仕分ける）。
-  /// 要約を確定すると、実行がそれを行き先の説明として書く。コラボではファシリテーターだけが始める。セッションに走っている
-  /// 聞き取りは1つまで（ユースケースが確かめる）。
+  /// 要約を確定すると、実行がそれを行き先の説明として書く。コラボでは誰でも始められ、要約を確定するのはファシリテーター
+  /// （参加者が始めた聞き取りでは、それが承認になる。却下もできる）。セッションに走っている聞き取りは1つまで（ユースケースが
+  /// 確かめる）。
   aggregate Interview "聞き取り" {
     id: InterviewId
     references session: SessionId -> Session
@@ -82,8 +83,10 @@ context Collaboration {
     }
     state Confirmed "確定" {
       brief: InterviewBrief "確定した要約"
-      /// 始めた人が要約を編集して確定した。
+      /// 要約を編集して確定した。
       edited: Bool "編集した"
+      /// 確定したファシリテーター。始めた人でなければ、参加者の要約を承認した。前の行にはない（始めた人が確定した）。
+      confirmedBy: ParticipantId? "確定した人"
       confirmedAt: Timestamp "確定日時"
       references run: AgentRunId -> AgentRun "実行"
     }
@@ -91,13 +94,18 @@ context Collaboration {
       stoppedBy: ParticipantId "中止した人"
       stoppedAt: Timestamp "中止日時"
     }
+    state Rejected "却下" {
+      /// 却下した要約。
+      brief: InterviewBrief "要約"
+      rejectedBy: ParticipantId "却下した人"
+      /// 始めた人へのひとこと。
+      note: Text? "ひとこと"
+      rejectedAt: Timestamp "却下日時"
+    }
 
-    /// 聞き取りを始める。コラボではファシリテーターだけ（ひとりのセッションでは、その人がファシリテーター）。
-    create command start(id: InterviewId, session: ActiveSession, command: InterviewCommand, startedBy: ParticipantId, startedByRole: ParticipantRole, opening: RequestId, focus: ModelTarget?, language: UiLanguage, startedAt: Timestamp) "聞き取りを始める"
+    /// 聞き取りを始める。コラボでは誰でも（参加者が始めたら、その人が答え、要約はファシリテーターの承認を待つ）。
+    create command start(id: InterviewId, session: ActiveSession, command: InterviewCommand, startedBy: ParticipantId, opening: RequestId, focus: ModelTarget?, language: UiLanguage, startedAt: Timestamp) "聞き取りを始める"
       -> Asking
-      requires facilitatorStarts "ファシリテーターが始める" {
-        startedByRole == ParticipantRole.Facilitator
-      } else FacilitatorOnly
       emits InterviewStarted
 
     /// 始めた人のメッセージが聞き取りに入る（答え、または要約への注文: 要約は取り下げて聞き取りに戻る）。
@@ -115,7 +123,7 @@ context Collaboration {
       changes awaiting, asked
       emits InterviewQuestionAsked
 
-    /// AI が要約を出す。始めた人が確定・編集して確定・中止を選ぶ。
+    /// AI が要約を出す。ファシリテーターが確定（承認）・編集して確定・却下を選ぶ。始めた人は中止もできる。
     command summarize(answered: RequestId "答えたメッセージ", summary: InterviewBrief "要約", briefedAt: Timestamp) "要約を出す"
       Asking -> Briefed
       requires stillAwaited "そのメッセージをまだ待っている" {
@@ -123,17 +131,30 @@ context Collaboration {
       } else InterviewMovedOn
       emits InterviewBriefed
 
-    /// 始めた人が要約を確定する（編集してもよい）。実行の登録と同じ取引で、その実行を記録する。
-    command confirm(confirmedBy: ParticipantId, confirmedBrief: InterviewBrief "確定する要約", edited: Bool, run: AgentRunId, confirmedAt: Timestamp) "要約を確定する"
+    /// ファシリテーターが要約を確定する（編集してもよい）。参加者が始めた聞き取りでは、それが承認になる。実行の登録と同じ
+    /// 取引で、その実行を記録する。
+    command confirm(confirmedBy: ParticipantId, confirmedByRole: ParticipantRole, confirmedBrief: InterviewBrief "確定する要約", edited: Bool, run: AgentRunId, confirmedAt: Timestamp) "要約を確定する"
       Briefed -> Confirmed
-      requires starterConfirms "始めた人が確定する" { confirmedBy == startedBy } else NotTheInterviewer
+      requires facilitatorConfirms "ファシリテーターが確定する" {
+        confirmedByRole == ParticipantRole.Facilitator
+      } else FacilitatorOnly
       changes brief
       emits InterviewConfirmed
 
-    /// 始めた人が聞き取りを中止する。
-    command stop(stoppedBy: ParticipantId, stoppedAt: Timestamp) "聞き取りを中止する"
+    /// ファシリテーターが要約を却下する（ひとことを添えてもよい）。聞き取りはそこで終わる。
+    command reject(rejectedBy: ParticipantId, rejectedByRole: ParticipantRole, note: Text?, rejectedAt: Timestamp) "要約を却下する"
+      Briefed -> Rejected
+      requires facilitatorRejects "ファシリテーターが却下する" {
+        rejectedByRole == ParticipantRole.Facilitator
+      } else FacilitatorOnly
+      emits InterviewRejected
+
+    /// 始めた人かファシリテーターが聞き取りを中止する。
+    command stop(stoppedBy: ParticipantId, stoppedByRole: ParticipantRole, stoppedAt: Timestamp) "聞き取りを中止する"
       Asking | Briefed -> Stopped
-      requires starterStops "始めた人が中止する" { stoppedBy == startedBy } else NotTheInterviewer
+      requires starterOrFacilitatorStops "始めた人かファシリテーターが中止する" {
+        stoppedBy == startedBy or stoppedByRole == ParticipantRole.Facilitator
+      } else NotTheInterviewer
       emits InterviewStopped
   }
 
@@ -174,6 +195,8 @@ context Collaboration {
     interviewId: InterviewId
     brief: InterviewBrief
     edited: Bool
+    /// 前のイベントにはない（始めた人が確定した）。
+    confirmedBy: ParticipantId? "確定した人"
     run: AgentRunId
     confirmedAt: Timestamp
   }
@@ -184,7 +207,14 @@ context Collaboration {
     stoppedAt: Timestamp
   }
 
-  /// 聞き取りを確定・中止できるのは、始めた人だけ。
+  persistent event InterviewRejected "聞き取りの要約の却下" {
+    interviewId: InterviewId
+    rejectedBy: ParticipantId
+    note: Text? "ひとこと"
+    rejectedAt: Timestamp
+  }
+
+  /// 聞き取りを中止できるのは、始めた人かファシリテーターだけ。
   error NotTheInterviewer "聞き取りを始めた人でない"
 
   /// AI の問いや要約が答えたメッセージを、聞き取りはもう待っていない（そのあいだに始めた人が続けて書いた）。

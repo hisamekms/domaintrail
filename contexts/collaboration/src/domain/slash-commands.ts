@@ -1,13 +1,14 @@
 // The `/` commands that are not interviews (the plan's "`/` commands: ways of working with the AI", round 5, and its
 // "Built-in ES commands", phases 1 and 2): a candidate command (`/es:exceptions`, `/es:gaps`, `/es:levels`,
 // `/es:names`) has the read-only answerer list candidate changes — each a short label, the elements it touches, how in
-// one line, why — of which the person who started it checks some and applies them as one run; an answer command
+// one line, why — of which the facilitator checks some and applies them as one run (whoever started it: applying is
+// the approval); an answer command
 // (`/es:recap`, `/hint`) has it answer in the chat. `/hint` (ヒントをもらう, formerly `/es:next`) coaches the person
 // through event storming and modeling alike, in a shape of its own (`NextAnswer`: a status and one to three steps,
 // each maybe with a command the page offers as a button), from which the server writes the message. Either way the starter's message (the command's name) goes to the answerer with the command's prompt,
 // without triage.
 //
-// Here: the commands' table (their stable English IDs, their type, who may start one, what they need), the
+// Here: the commands' table (their stable English IDs, their type, what they need), the
 // decisions, and the answerer's output (candidates or an answer: AI output, untrusted, validated against its shape and
 // limits before anything is kept; candidates past the limit are dropped rather than refused, as a proposal's options).
 // A new command is a row of the table, an entry of the enum in `command.dt`, its prompt and, for a candidate command,
@@ -25,13 +26,12 @@ export type SlashCommandType = 'candidates' | 'answer';
  */
 export type CommandReplyShape = SlashCommandType | 'next';
 
-/** A command's row: what it is in the model, its type, whether only the facilitator starts it, what it is about. */
+/** A command's row: what it is in the model, its type, what it is about. */
 export interface SlashCommandSpec {
     readonly kind: Collaboration.SlashCommandKind;
     readonly type: SlashCommandType;
     /** What the answerer writes: its type's shape, or the next steps (an answer command). */
     readonly reply: CommandReplyShape;
-    readonly facilitatorOnly: boolean;
     /**
      * It is about the storming in view: without one, it lists no candidates at once (an answer command too: nothing is
      * asked, and the card says so).
@@ -45,12 +45,12 @@ export interface SlashCommandSpec {
  * prefix (it is about the event storming and the modeling alike). Where `/` lists them is the page's.
  */
 export const SLASH_COMMANDS = {
-    'es:exceptions': { kind: 'EsExceptions', type: 'candidates', reply: 'candidates', facilitatorOnly: true, needsStorming: true },
-    'es:gaps': { kind: 'EsGaps', type: 'candidates', reply: 'candidates', facilitatorOnly: true, needsStorming: true },
-    'es:levels': { kind: 'EsLevels', type: 'candidates', reply: 'candidates', facilitatorOnly: true, needsStorming: true },
-    'es:names': { kind: 'EsNames', type: 'candidates', reply: 'candidates', facilitatorOnly: true, needsStorming: true },
-    'es:recap': { kind: 'EsRecap', type: 'answer', reply: 'answer', facilitatorOnly: false, needsStorming: false },
-    hint: { kind: 'Hint', type: 'answer', reply: 'next', facilitatorOnly: false, needsStorming: false },
+    'es:exceptions': { kind: 'EsExceptions', type: 'candidates', reply: 'candidates', needsStorming: true },
+    'es:gaps': { kind: 'EsGaps', type: 'candidates', reply: 'candidates', needsStorming: true },
+    'es:levels': { kind: 'EsLevels', type: 'candidates', reply: 'candidates', needsStorming: true },
+    'es:names': { kind: 'EsNames', type: 'candidates', reply: 'candidates', needsStorming: true },
+    'es:recap': { kind: 'EsRecap', type: 'answer', reply: 'answer', needsStorming: false },
+    hint: { kind: 'Hint', type: 'answer', reply: 'next', needsStorming: false },
 } as const satisfies Record<string, SlashCommandSpec>;
 
 export type SlashCommandName = keyof typeof SLASH_COMMANDS;
@@ -387,7 +387,6 @@ export function chosenIndices(
 
 export const slashCommandCommands: Collaboration.SlashCommandCommands = {
     start: decide<Collaboration.StartSlashCommandDecision>(Collaboration.SlashCommandShape, (params) => {
-        if (Collaboration.checkStartSlashCommandRequires(params) === 'facilitatorStarts') return err({ type: 'FacilitatorOnly' });
         const { id, kind, startedBy, opening, scope, language, startedAt } = params;
         // the session without its evidence: the aggregate stores the base type
         const session: Collaboration.SessionId = params.session;
@@ -436,13 +435,13 @@ export const slashCommandCommands: Collaboration.SlashCommandCommands = {
     apply: decide<Collaboration.ApplySlashCommandDecision>(Collaboration.SlashCommandShape, {
         Listed: (command, params) => {
             const failed = Collaboration.checkApplySlashCommandRequires(command, params);
-            if (failed === 'starterApplies') return err({ type: 'NotTheStarter' });
+            if (failed === 'facilitatorApplies') return err({ type: 'FacilitatorOnly' });
             if (failed === 'chosenOfList') return err({ type: 'NoSuchCandidate' });
-            const { chosen, run, appliedAt } = params;
+            const { appliedBy, chosen, run, appliedAt } = params;
             return ok({
                 Applied: {
-                    set: { chosen, run, appliedAt },
-                    events: { CandidatesApplied: { type: 'CandidatesApplied', commandId: command.id, chosen, run, appliedAt } },
+                    set: { chosen, appliedBy, run, appliedAt },
+                    events: { CandidatesApplied: { type: 'CandidatesApplied', commandId: command.id, chosen, appliedBy, run, appliedAt } },
                 },
             });
         },
@@ -466,7 +465,7 @@ function stopped(
     },
     Collaboration.NotTheStarter
 > {
-    if (Collaboration.checkStopSlashCommandRequires(command, params) === 'starterStops') return err({ type: 'NotTheStarter' });
+    if (Collaboration.checkStopSlashCommandRequires(command, params) === 'starterOrFacilitatorStops') return err({ type: 'NotTheStarter' });
     const { stoppedBy, stoppedAt } = params;
     return ok({
         Stopped: {

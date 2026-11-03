@@ -1,6 +1,7 @@
-// The use cases of the `/` commands that are not interviews (`domain/slash-commands.ts`): start one (the starter's
-// message, the command's name, sent without triage), the answerer's candidates or answer (through the agent API),
-// apply the candidates checked (one run, on the opening message), stop one, and the command jobs that wait for the
+// The use cases of the `/` commands that are not interviews (`domain/slash-commands.ts`): start one (anyone: the
+// starter's message, the command's name, sent without triage), the answerer's candidates or answer (through the agent
+// API), apply the candidates checked (the facilitator: one run, on the opening message), stop one (its starter or the
+// facilitator), and the command jobs that wait for the
 // answerer. As the other use cases: the aggregates loaded and saved in one transaction with their events, the
 // commands deciding.
 import { Collaboration, err, ok, type Result } from '../generated/index.js';
@@ -42,8 +43,8 @@ export interface WrongCommandType {
 export interface SlashCommandUseCases {
     /**
      * Starts a candidate or answer command (`/es:exceptions`, `/es:recap`): the starter's opening message (the command's
-     * name), sent without triage, and the command waiting for the answerer. A command for the facilitator only refuses
-     * the others (`FacilitatorOnly`); one of each kind runs at a time (`CommandAlreadyRunning`). A command about the
+     * name), sent without triage, and the command waiting for the answerer. Anyone; one of each kind runs at a time
+     * (`CommandAlreadyRunning`). A command about the
      * storming in view, with none in view, lists no candidates at once (the AI is not asked): its card then says so.
      * `/hint` needs none: the AI reads where the person is from the session and the view.
      */
@@ -56,8 +57,8 @@ export interface SlashCommandUseCases {
         readonly focus?: Collaboration.ModelTarget;
         /** Where the starter was looking: kept on the opening message, and what the command is about. */
         readonly viewedAt?: Collaboration.ViewedAt;
-    }): Promise<Result<SlashCommandStartedResult, SendMessageError | Collaboration.FacilitatorOnly | Collaboration.CommandAlreadyRunning | Closed>>;
-    /** The answerer's candidates (a candidate command): they wait for the starter to check some and apply them. */
+    }): Promise<Result<SlashCommandStartedResult, SendMessageError | Collaboration.CommandAlreadyRunning | Closed>>;
+    /** The answerer's candidates (a candidate command): they wait for the facilitator to check some and apply them. */
     listCandidates(input: {
         readonly command: SlashCommandId;
         readonly candidates: readonly Collaboration.CommandCandidate[];
@@ -76,7 +77,10 @@ export interface SlashCommandUseCases {
             NotFound | NotAllowed | WrongCommandType | Closed
         >
     >;
-    /** Its starter applies the candidates checked (their numbers): one run is queued on the opening message, its input carrying them. */
+    /**
+     * The facilitator applies the candidates checked (their numbers), whoever started the command — applying is the
+     * approval: one run is queued on the opening message, its input carrying them.
+     */
     applyCandidates(input: {
         readonly command: SlashCommandId;
         readonly actor: Actor;
@@ -84,10 +88,10 @@ export interface SlashCommandUseCases {
     }): Promise<
         Result<
             { readonly command: Collaboration.AppliedSlashCommand; readonly run: Collaboration.QueuedAgentRun },
-            NotFound | NotAllowed | Collaboration.NotTheStarter | Collaboration.NoSuchCandidate | Closed | QueueError
+            NotFound | NotAllowed | Collaboration.NoSuchCandidate | Closed | QueueError
         >
     >;
-    /** Its starter stops it (中止), the AI working or its candidates waiting. */
+    /** Its starter or the facilitator stops it (中止), the AI working or its candidates waiting. */
     stopCommand(input: {
         readonly command: SlashCommandId;
         readonly actor: Actor;
@@ -112,8 +116,6 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
     return {
         async startCommand({ session, actor, kind, body, language, focus, viewedAt }) {
             const spec = slashCommandSpec(kind);
-            // asked first, so that nothing is sent for a refused start
-            if (spec.facilitatorOnly && actor.role !== 'Facilitator') return err({ type: 'FacilitatorOnly' });
             return uow.transaction(async (stores) => {
                 if (runningCommand(stores.slashCommands.listBySession(session), kind)) return err({ type: 'CommandAlreadyRunning' });
                 const sent = await sendIn(stores, { clock, ids }, { session, actor, targets: [], body, ...(viewedAt && { viewedAt }) });
@@ -126,9 +128,7 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
                     id: knownSlashCommandId(ids.newId()),
                     session: active.value,
                     kind,
-                    facilitatorOnly: spec.facilitatorOnly,
                     startedBy: actor.participant,
-                    startedByRole: actor.role,
                     opening: sent.value.id,
                     scope,
                     language,
@@ -190,7 +190,8 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
                 if (!found.ok) return found;
                 const c = found.value;
                 if (c.state !== 'Listed') return err(notAllowed('apply', c.state));
-                if (actor.participant !== c.startedBy) return err({ type: 'NotTheStarter' });
+                // asked before the run is queued (which asks it too), so that the refusal is the command's
+                if (actor.role !== 'Facilitator') return err({ type: 'FacilitatorOnly' });
                 const indices = chosenIndices(c.candidates, chosen);
                 if (!indices) return err({ type: 'NoSuchCandidate' });
                 const active = await storeVerifications(stores).makeActiveSession(c.session);
@@ -207,7 +208,13 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
                     at,
                 });
                 if (!run.ok) return run;
-                const applied = slashCommandCommands.apply(c, { appliedBy: actor.participant, chosen: indices, run: run.value.id, appliedAt: at });
+                const applied = slashCommandCommands.apply(c, {
+                    appliedBy: actor.participant,
+                    appliedByRole: actor.role,
+                    chosen: indices,
+                    run: run.value.id,
+                    appliedAt: at,
+                });
                 if (!applied.ok) return applied;
                 save(stores, applied.value.Applied.aggregate, applied.value.Applied.events, at);
                 return ok({ command: applied.value.Applied.aggregate, run: run.value });
@@ -223,7 +230,7 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
                 const active = await storeVerifications(stores).makeActiveSession(c.session);
                 if (!active.ok) return active;
                 const at = clock.now();
-                const stopped = slashCommandCommands.stop(c, { stoppedBy: actor.participant, stoppedAt: at });
+                const stopped = slashCommandCommands.stop(c, { stoppedBy: actor.participant, stoppedByRole: actor.role, stoppedAt: at });
                 if (!stopped.ok) return stopped;
                 save(stores, stopped.value.Stopped.aggregate, stopped.value.Stopped.events, at);
                 return ok(stopped.value.Stopped.aggregate);

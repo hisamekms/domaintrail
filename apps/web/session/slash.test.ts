@@ -1,6 +1,6 @@
-// What `/` lists in the composer: the commands first (for who may start one), the templates by what is open and
+// What `/` lists in the composer: the commands first (all, for everyone; one of a running kind disabled), the templates by what is open and
 // selected, filtered by ID and by the name in the UI language; a template picked; a running interview's messages in Solo;
-// who may start which command; the hint's button and the marks of what it suggests.
+// which command may start now; the hint's button and the marks of what it suggests.
 import { describe, expect, test } from 'bun:test';
 import type { MessageTemplateBody } from '@domaintrail/collaboration/protocol';
 import { interviewSlot } from './interview';
@@ -68,7 +68,11 @@ describe('/ in the composer', () => {
             'template:commands',
             'template:explain',
         ]);
+        // one that cannot start now (one of its kind runs) is still listed, disabled
+        const none = slashItems({ query: '', lang: 'ja', scope: { view: { kind: 'model' } }, commandNames, canStart: (id) => id !== 'es:gaps' });
+        expect(none.filter((i) => i.kind === 'command' && i.disabled).map((i) => i.id)).toEqual(['es:gaps']);
         expect(ids({ scope: { view: { kind: 'model' }, selected: aggregate }, canStart: () => false })).toEqual([
+            ...COMMANDS,
             'template:invariants',
             'template:states',
             'template:explain',
@@ -145,22 +149,20 @@ describe('/ in the composer', () => {
     });
 });
 
-describe('who may start a command', () => {
-    const can = (state: object, facilitator: boolean): readonly CommandId[] => COMMAND_IDS.filter((id) => canStartCommand(state as never, facilitator, id));
+describe('which command may start now', () => {
+    const can = (state: object): readonly CommandId[] => COMMAND_IDS.filter((id) => canStartCommand(state as never, id));
 
-    test("the interviews and the candidate commands are the facilitator's; /hint and /es:recap anyone's", () => {
-        expect(can({}, true)).toEqual(COMMAND_IDS);
-        expect(can({}, false)).toEqual(['hint', 'es:recap']);
+    test('any command, for everyone, while none of its kind runs', () => {
+        expect(can({})).toEqual(COMMAND_IDS);
     });
 
     test('the hint button: hidden with no answerer, disabled while a hint runs (anyone may press it)', () => {
-        expect(hintButton({}, false, true)).toBe('ready');
-        expect(hintButton({}, true, true)).toBe('ready');
-        expect(hintButton({}, false, false)).toBe('hidden');
-        expect(hintButton({ slashCommands: [{ kind: 'Hint', state: 'Working' }] } as never, false, true)).toBe('disabled');
-        expect(hintButton({ slashCommands: [{ kind: 'Hint', state: 'Answered' }] } as never, false, true)).toBe('ready');
+        expect(hintButton({}, true)).toBe('ready');
+        expect(hintButton({}, false)).toBe('hidden');
+        expect(hintButton({ slashCommands: [{ kind: 'Hint', state: 'Working' }] } as never, true)).toBe('disabled');
+        expect(hintButton({ slashCommands: [{ kind: 'Hint', state: 'Answered' }] } as never, true)).toBe('ready');
         // an interview running does not hold it up
-        expect(hintButton({ interviews: [{ state: 'Asking' }] } as never, false, true)).toBe('ready');
+        expect(hintButton({ interviews: [{ state: 'Asking' }] } as never, true)).toBe('ready');
     });
 
     test('the commands the latest answered hint suggests: by their IDs, until another hint is answered', () => {
@@ -184,18 +186,15 @@ describe('who may start a command', () => {
     });
 
     test('none while an interview runs; a command not while one of its kind runs', () => {
-        expect(can({ interviews: [{ state: 'Asking' }] }, true)).toEqual(COMMAND_IDS.filter((id) => !id.endsWith(':start')));
-        expect(can({ slashCommands: [{ kind: 'EsExceptions', state: 'Listed' }] }, true)).toEqual(COMMAND_IDS.filter((id) => id !== 'es:exceptions'));
+        expect(can({ interviews: [{ state: 'Asking' }] })).toEqual(COMMAND_IDS.filter((id) => !id.endsWith(':start')));
+        expect(can({ slashCommands: [{ kind: 'EsExceptions', state: 'Listed' }] })).toEqual(COMMAND_IDS.filter((id) => id !== 'es:exceptions'));
         expect(
-            can(
-                {
-                    slashCommands: [
-                        { kind: 'EsExceptions', state: 'Applied' },
-                        { kind: 'EsRecap', state: 'Working' },
-                    ],
-                },
-                true,
-            ),
+            can({
+                slashCommands: [
+                    { kind: 'EsExceptions', state: 'Applied' },
+                    { kind: 'EsRecap', state: 'Working' },
+                ],
+            }),
         ).toEqual(COMMAND_IDS.filter((id) => id !== 'es:recap'));
     });
 });

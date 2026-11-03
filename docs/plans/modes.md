@@ -1470,7 +1470,7 @@ told the view was); the canvas's controls, how it is looked at.
   third was denied; `dt collab link` and `dt collab invite` printed links on the public URL; Ctrl+C left no
   cloudflared.
 
-## Who may run the `/` commands in Collab (decided 2026-11-03)
+## Who may run the `/` commands in Collab (decided 2026-11-03, as built)
 
 - **Everyone may run every command**, participants included. There is still one running command of each kind per
   session.
@@ -1483,3 +1483,30 @@ told the view was); the canvas's controls, how it is looked at.
     the brief.
 - **Answer commands** (`/hint`, `/es:recap`): anyone, and the answer is an ordinary AI message everyone sees.
 - **The facilitator's own commands** go on without approval, as before.
+
+### As built
+
+- **Model**: `start` of `Interview` and `SlashCommand` lost `startedByRole` (and the command's `facilitatorOnly`, and
+  `SLASH_COMMANDS` its column): anyone starts any command; one running per kind per session stays
+  (`InterviewAlreadyRunning`, `CommandAlreadyRunning`). `SlashCommand.apply` requires the facilitator
+  (`appliedByRole`, `FacilitatorOnly`) instead of the starter, and `Applied` records `appliedBy` (optional: an older
+  row has none, its starter applied it). `Interview.confirm` requires the facilitator (`confirmedByRole`,
+  `FacilitatorOnly`), `Confirmed` records `confirmedBy` (optional likewise): not the starter, it is an approval.
+  `Interview.reject` (the facilitator, `note: Text?`) ends a briefed interview in a new state `Rejected { brief,
+  rejectedBy, note?, rejectedAt }` (`InterviewRejected`, wire `interview.rejected`). Both `stop`s take the stopper's
+  role: its starter or the facilitator (`NotTheInterviewer`, `NotTheStarter`, 403). No new error type: the refusals are
+  `FacilitatorOnly` (403) and the stop errors; the rows are JSON, so no migration. Answering stays the starter's: only
+  their messages are heard by the interview (`hearIn`), a choice being a message; anyone else's is triaged.
+- **Routes**: `POST /api/session/interviews` and `…/:id/stop` are any participant's; `…/:id/confirm`, the new
+  `…/:id/reject` (`{ note? }`, as a proposal's) and `POST /api/session/commands/:id/apply` the facilitator's (answered
+  first by the route's role, then by the use case and the command). The errors snapshot records the three refusals.
+- **Session so far**: a brief waits for the facilitator's confirmation, candidates for the facilitator's choice; 「Ada
+  approved Bob's brief of the interview /es:start」 when the confirmer is not the starter, 「Ada rejected Bob's brief …
+  : note」, and who applied candidates.
+- **The page**: `/` lists every command to everyone; one of a kind already running is listed disabled (dimmed, not
+  picked). The empty view points to `/es:start` / `/model:start` for everyone with an AI connected; `/hint`'s step
+  buttons show every command. A candidate card has checkboxes and 採用したものを反映 for the facilitator only; everyone
+  else (its starter included) reads it with one muted line, 「ファシリテーターが選んで反映します」, and its starter keeps
+  中止. The interview bar's 中止 is its starter's and the facilitator's. The brief: the facilitator's own, 確定 /
+  編集して確定 / 中止 as before; a participant's, 承認 / 編集して承認 / 却下 (a note, optional) for the facilitator, 承認待ち
+  for everyone else (its starter keeps 中止). A rejected brief tells its starter 却下されました with the note, until 閉じる.

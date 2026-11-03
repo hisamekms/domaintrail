@@ -246,6 +246,7 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
         case 'InterviewBriefed':
         case 'InterviewConfirmed':
         case 'InterviewStopped':
+        case 'InterviewRejected':
         // the candidate and answer commands of the `/` list: the state holds them whole
         case 'SlashCommandStarted':
         case 'CandidatesListed':

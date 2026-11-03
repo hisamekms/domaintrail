@@ -7,8 +7,9 @@
 //   failed, declined, cancelled, reverted), its title and summary, what it changed (elements when known, else files;
 //   never the diff), its assumptions and how each was decided;
 // - events: proposals made, approved (edited), rejected (with the note) or withdrawn; interviews (`/es:start`,
-//   `/model:start`) started, their brief, confirmed (with its run) or stopped; the other `/` commands started, their
-//   candidates, those applied (with the run) or the command stopped; restores; files changed outside the session (a
+//   `/model:start`) started, their brief, confirmed or approved by the facilitator (with its run), rejected (with the
+//   note) or stopped; the other `/` commands started, their candidates, those applied (by whom, with the run) or the
+//   command stopped; restores; files changed outside the session (a
 //   snapshot whose content differs from the revision before it);
 // - what is open now: the AI's questions awaiting an answer, the proposals awaiting approval, a running interview or
 //   command, the messages waiting for the AI, the queue.
@@ -211,19 +212,33 @@ function numbered(records: TimelineRecords): { readonly entries: TimelineEntry[]
                 kind: 'interview',
                 key: `interview-brief:${i.id}`,
                 render: () => ({
-                    full: `${AI_NAME} wrote the brief of ${what}, waiting for ${nameOf(i.startedBy)} to confirm it:\n${indent(briefOf(brief))}`,
+                    full: `${AI_NAME} wrote the brief of ${what}, waiting for the facilitator to confirm it:\n${indent(briefOf(brief))}`,
                     line: cut(`${AI_NAME} wrote the brief of ${what} for ${brief.name}`, LINE_CHARS),
                 }),
             });
-        if (i.state === 'Confirmed')
+        if (i.state === 'Confirmed') {
+            // a row from before the facilitator confirmed has no confirmer: its starter confirmed it
+            const by = i.confirmedBy ?? i.startedBy;
+            const did = by === i.startedBy ? 'confirmed the' : `approved ${nameOf(i.startedBy)}'s`;
             drafts.push({
                 at: i.confirmedAt,
                 kind: 'interview',
                 key: `interview-confirmed:${i.id}`,
                 render: (ref) => ({
-                    full: `${nameOf(i.startedBy)} confirmed the brief of ${what}${i.edited ? ' after editing it' : ''} (${ref(`run:${i.run}`) ?? 'its run is in the queue'}):\n${indent(briefOf(i.brief))}`,
-                    line: cut(`${nameOf(i.startedBy)} confirmed the brief of ${what} for ${i.brief.name}`, LINE_CHARS),
+                    full: `${nameOf(by)} ${did} brief of ${what}${i.edited ? ' after editing it' : ''} (${ref(`run:${i.run}`) ?? 'its run is in the queue'}):\n${indent(briefOf(i.brief))}`,
+                    line: cut(`${nameOf(by)} ${did} brief of ${what} for ${i.brief.name}`, LINE_CHARS),
                 }),
+            });
+        }
+        if (i.state === 'Rejected')
+            drafts.push({
+                at: i.rejectedAt,
+                kind: 'interview',
+                key: `interview-rejected:${i.id}`,
+                render: () => {
+                    const line = `${nameOf(i.rejectedBy)} rejected ${nameOf(i.startedBy)}'s brief of ${what} for ${i.brief.name}${i.note ? `: ${oneLine(i.note)}` : ''}`;
+                    return { full: `${line}\n${indent(briefOf(i.brief))}`, line: cut(line, LINE_CHARS) };
+                },
             });
         if (i.state === 'Stopped')
             drafts.push({
@@ -255,19 +270,21 @@ function numbered(records: TimelineRecords): { readonly entries: TimelineEntry[]
                 kind: 'command',
                 key: `command-listed:${c.id}`,
                 render: () => ({
-                    full: `${AI_NAME} listed ${candidates.length} candidate(s) for ${what}, waiting for ${nameOf(c.startedBy)} to choose:${candidates.length ? `\n${indent(candidates.map(candidateOf).join('\n'))}` : ''}`,
+                    full: `${AI_NAME} listed ${candidates.length} candidate(s) for ${what}, waiting for the facilitator to choose:${candidates.length ? `\n${indent(candidates.map(candidateOf).join('\n'))}` : ''}`,
                     line: cut(`${AI_NAME} listed ${candidates.length} candidate(s) for ${what}`, LINE_CHARS),
                 }),
             });
         if (c.state === 'Applied') {
             const chosen = c.chosen.flatMap((i) => c.candidates[i] ?? []);
+            // a row from before the facilitator applied has no one: its starter applied them
+            const by = nameOf(c.appliedBy ?? c.startedBy);
             drafts.push({
                 at: c.appliedAt,
                 kind: 'command',
                 key: `command-applied:${c.id}`,
                 render: (ref) => ({
-                    full: `${nameOf(c.startedBy)} applied ${chosen.length} of the ${c.candidates.length} candidates of ${what} (${ref(`run:${c.run}`) ?? 'its run is in the queue'}):\n${indent(chosen.map(candidateOf).join('\n'))}`,
-                    line: cut(`${nameOf(c.startedBy)} applied ${chosen.map((x) => x.label).join(', ')} from ${what}`, LINE_CHARS),
+                    full: `${by} applied ${chosen.length} of the ${c.candidates.length} candidates of ${what} (${ref(`run:${c.run}`) ?? 'its run is in the queue'}):\n${indent(chosen.map(candidateOf).join('\n'))}`,
+                    line: cut(`${by} applied ${chosen.map((x) => x.label).join(', ')} from ${what}`, LINE_CHARS),
                 }),
             });
         }
@@ -498,12 +515,13 @@ export function openNow(records: TimelineRecords): string[] {
             open.push(
                 `The interview /${commandId(i.command)} ${ref(`interview:${i.id}`)} runs: ${i.awaiting ? 'the AI is to ask its next question' : 'the AI asked, the answer is awaited'}`,
             );
-        if (i.state === 'Briefed') open.push(`The brief of the interview /${commandId(i.command)} ${ref(`interview:${i.id}`)} awaits confirmation`);
+        if (i.state === 'Briefed')
+            open.push(`The brief of the interview /${commandId(i.command)} ${ref(`interview:${i.id}`)} awaits the facilitator's confirmation`);
     }
     for (const c of records.slashCommands ?? []) {
         const what = `/${slashCommandName(c.kind)} ${ref(`command:${c.id}`)}`;
         if (c.state === 'Working') open.push(`The command ${what} runs: the AI is working on it`);
-        if (c.state === 'Listed' && c.candidates.length) open.push(`The candidates of the command ${what} await a choice`);
+        if (c.state === 'Listed' && c.candidates.length) open.push(`The candidates of the command ${what} await the facilitator's choice`);
     }
     for (const t of records.triages) {
         if (t.state === 'Pending') open.push(`${ref(`request:${t.request}`)} waits for the AI (being triaged)`);

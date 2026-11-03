@@ -185,6 +185,7 @@ export const EVENT_MESSAGE_TYPES = {
     InterviewBriefed: 'interview.briefed',
     InterviewConfirmed: 'interview.confirmed',
     InterviewStopped: 'interview.stopped',
+    InterviewRejected: 'interview.rejected',
     SlashCommandStarted: 'command.started',
     CandidatesListed: 'command.candidates_listed',
     SlashCommandAnswered: 'command.answered',
@@ -374,11 +375,12 @@ export interface RejectProposalBody {
 }
 
 /**
- * `POST /api/session/interviews` (the facilitator; in Solo, the person): starts the `/es:start` or `/model:start`
+ * `POST /api/session/interviews` (any participant): starts the `/es:start` or `/model:start`
  * interview (`command`: its stable ID; the former `es` and `model` are read too). `body` is the opening message the starter sends with it (the command's name in the UI
  * language, `ja` or `en`, which the interviewer follows unless the person writes in another); `focus` the element
  * selected then (a storming for `/es`, an element of a context for `/model`). → 201 `{ interview, request }`;
- * `InterviewAlreadyRunning` (409) while one runs, `FacilitatorOnly` (403) for a participant of a Collab session.
+ * `InterviewAlreadyRunning` (409) while one runs. A participant who starts one answers it; its brief waits for the
+ * facilitator.
  */
 export interface StartInterviewBody {
     readonly command: 'es:start' | 'model:start' | 'es' | 'model';
@@ -390,17 +392,25 @@ export interface StartInterviewBody {
 }
 
 /**
- * `POST /api/session/interviews/:id/confirm` (its starter): the brief confirmed, as is or with its text edited
- * (`text`); a run is queued that writes it. → 201 `{ interview, run }`. `POST /api/session/interviews/:id/stop` (its
- * starter, an empty body) → 200 `{ interview }`.
+ * `POST /api/session/interviews/:id/confirm` (the facilitator; for an interview a participant started, the approval):
+ * the brief confirmed, as is or with its text edited (`text`); a run is queued that writes it. → 201
+ * `{ interview, run }`. `POST /api/session/interviews/:id/stop` (its starter or the facilitator, an empty body) → 200
+ * `{ interview }` (`NotTheInterviewer` 403 for anyone else).
  */
 export interface ConfirmInterviewBody {
     readonly text?: string;
 }
 
 /**
- * `POST /api/session/commands` (any participant; a command for the facilitator only refuses the others with
- * `FacilitatorOnly`, 403): starts a candidate or answer command of the `/` list (`command`: its stable ID,
+ * `POST /api/session/interviews/:id/reject` (the facilitator): the brief rejected, with an optional note to its
+ * starter; the interview ends. → 200 `{ interview }`.
+ */
+export interface RejectInterviewBody {
+    readonly note?: string;
+}
+
+/**
+ * `POST /api/session/commands` (any participant): starts a candidate or answer command of the `/` list (`command`: its stable ID,
  * `es:exceptions`, `hint`, …). `body` is the opening message (the command's name in the UI language); `viewedAt` and
  * `focus` say what it is about (the storming in view). → 201 `{ command, request }`; `CommandAlreadyRunning` (409)
  * while one of the same kind runs.
@@ -414,8 +424,10 @@ export interface StartCommandBody {
 }
 
 /**
- * `POST /api/session/commands/:id/apply` (its starter): the candidates checked (their numbers in the list) become one
- * run. → 201 `{ command, run }`. `POST /api/session/commands/:id/stop` (its starter, an empty body) → 200 `{ command }`.
+ * `POST /api/session/commands/:id/apply` (the facilitator, whoever started it: applying is the approval): the
+ * candidates checked (their numbers in the list) become one run. → 201 `{ command, run }`.
+ * `POST /api/session/commands/:id/stop` (its starter or the facilitator, an empty body) → 200 `{ command }`
+ * (`NotTheStarter` 403 for anyone else).
  */
 export interface ApplyCandidatesBody {
     readonly chosen: readonly number[];
