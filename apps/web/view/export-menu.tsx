@@ -4,7 +4,7 @@ import { useT } from '../i18n';
 import { useDismiss } from '../shared/layout';
 import { exportDiagram, type ExportOptions, type ExportTarget } from './export';
 import type { View } from './navigation';
-import { useMenuInside } from './toolbar';
+import { useLabelHidden, useMenuInside } from './toolbar';
 
 /**
  * What the view toolbar offers to take the view out of the page, at its right end: a canvas view, the 書き出し menu (印刷,
@@ -94,18 +94,24 @@ export function ExportButton({ control }: { control: ExportControl }): ReactNode
     const root = useRef<HTMLDivElement>(null);
     const close = useCallback(() => setOpen(false), []);
     useDismiss(open, root, close);
+    const text = useRef<HTMLSpanElement>(null);
+    const iconOnly = useLabelHidden(text);
     const preparing = control.print?.preparing === true;
+    const label = preparing ? t.exportMenu.printing : t.exportMenu.label;
     return (
         <div className="export-popover" ref={root}>
             <button
                 className="toolbar-button export-button"
                 aria-haspopup="menu"
                 aria-expanded={open}
-                aria-label={preparing ? t.exportMenu.printing : t.exportMenu.label}
+                aria-label={label}
+                data-tooltip={iconOnly && !open ? label : undefined}
                 onClick={() => setOpen(!open)}
             >
                 {preparing ? <LoaderCircle size={13} className="spin" aria-hidden /> : <Download size={13} aria-hidden />}
-                <span className="toolbar-button-text">{t.exportMenu.label}</span>
+                <span ref={text} className="toolbar-button-text toolbar-end-label">
+                    {t.exportMenu.label}
+                </span>
                 <span className="toolbar-caret" aria-hidden>
                     ▾
                 </span>
@@ -118,10 +124,19 @@ export function ExportButton({ control }: { control: ExportControl }): ReactNode
 /** The catalog's 印刷 button: the page as it is (as Ctrl+P prints it). */
 export function PrintButton({ onPrint }: { onPrint: () => void }): ReactNode {
     const t = useT();
+    const text = useRef<HTMLSpanElement>(null);
+    const iconOnly = useLabelHidden(text);
     return (
-        <button className="toolbar-button print-button" onClick={onPrint}>
+        <button
+            className="toolbar-button print-button"
+            aria-label={t.exportMenu.print}
+            data-tooltip={iconOnly ? t.exportMenu.print : undefined}
+            onClick={onPrint}
+        >
             <Printer size={13} aria-hidden />
-            <span className="toolbar-button-text">{t.exportMenu.print}</span>
+            <span ref={text} className="toolbar-button-text toolbar-end-label">
+                {t.exportMenu.print}
+            </span>
         </button>
     );
 }

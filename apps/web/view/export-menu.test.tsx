@@ -1,11 +1,14 @@
 // The view toolbar's 書き出し and 印刷 (view/export-menu.tsx), and the canvas's controls without them (view/canvas-controls.tsx).
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { I18nProvider } from '../i18n';
 import { CanvasControls } from './canvas-controls';
 import type { DiagramCanvas } from './diagram';
 import { ExportButton, ExportMenu, PrintButton, toolbarOutput, type ExportControl } from './export-menu';
+import { FilterPopover } from './toolbar';
 
 const render = (node: ReactNode): string => renderToStaticMarkup(<I18nProvider lang="ja">{node}</I18nProvider>);
 const control = (print?: ExportControl['print']): ExportControl => ({
@@ -32,6 +35,26 @@ describe("the view toolbar's right end", () => {
         expect(html).toContain('aria-label="書き出し"');
         expect(render(<ExportButton control={control({ preparing: true, onPrint: () => {} })} />)).toContain('aria-label="印刷の準備中…"');
         expect(render(<PrintButton onPrint={() => {}} />)).toContain('印刷');
+    });
+
+    test('on a narrow toolbar its buttons are icons: their labels hidden by a container query, their names kept', () => {
+        const styles = readFileSync(join(import.meta.dir, '..', 'styles.css'), 'utf8');
+        expect(styles).toMatch(/\.view-toolbar \{\n\s+container: view-toolbar \/ inline-size;/);
+        expect(styles).toMatch(/@container view-toolbar \(max-width: 40rem\) \{\s+\.toolbar-end-label \{\s+display: none;/);
+        const buttons = [
+            render(<ExportButton control={control()} />),
+            render(<PrintButton onPrint={() => {}} />),
+            render(
+                <FilterPopover count={1} onClear={() => {}}>
+                    {null}
+                </FilterPopover>,
+            ),
+        ];
+        for (const html of buttons) {
+            expect(html).toContain('toolbar-end-label');
+            expect(html).toMatch(/<button[^>]* aria-label="[^"]+"/);
+        }
+        expect(buttons[2]).toContain('<span class="filter-count">1</span>');
     });
 
     test('its menu: 印刷, PDF, PNG, SVG, then what they include; the inspector’s (no printing), PNG and SVG opening upward', () => {

@@ -2628,6 +2628,7 @@ svg.chat-launcher-mark {
  * one (a .toolbar-button and the padding: the box is border-box), so the tabs do not move.
  */
 .view-toolbar {
+    container: view-toolbar / inline-size;
     flex-basis: 100%;
     min-width: 0;
     min-height: calc(1.625rem + 8px);
@@ -2655,6 +2656,12 @@ svg.chat-launcher-mark {
     display: flex;
     align-items: center;
     gap: 6px;
+}
+/* a narrow toolbar: the right end's buttons as icons (their names as tooltips), so that the subject keeps its room */
+@container view-toolbar (max-width: 40rem) {
+    .toolbar-end-label {
+        display: none;
+    }
 }
 .toolbar-button {
     display: flex;

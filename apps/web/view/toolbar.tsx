@@ -25,6 +25,26 @@ export function useClipped(ref: RefObject<HTMLElement | null>, text: string): bo
 }
 
 /**
+ * Whether a button's text label is hidden (a narrow view toolbar shows its right end's buttons as icons: styles.css),
+ * so that its name is then its tooltip.
+ */
+export function useLabelHidden(ref: RefObject<HTMLElement | null>): boolean {
+    const [hidden, setHidden] = useState(false);
+    useLayoutEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        const check = (): void => setHidden(el.getClientRects().length === 0);
+        check();
+        const observer = new ResizeObserver(check);
+        observer.observe(el);
+        const bar = el.closest('.view-toolbar');
+        if (bar) observer.observe(bar);
+        return () => observer.disconnect();
+    }, [ref]);
+    return hidden;
+}
+
+/**
  * Keeps an open menu of the toolbar within the toolbar's width (the pane's), moving it left when it would stick out at
  * the right, and narrowing it (its items cut short) when the pane is narrower than it.
  */
@@ -214,17 +234,23 @@ export function FilterPopover(props: { count: number; onClear: () => void; child
         useCallback(() => setOpen(false), []),
     );
     useMenuInside(open, menu);
+    const text = useRef<HTMLSpanElement>(null);
+    const iconOnly = useLabelHidden(text);
+    const label = count ? t.filters.active(count) : t.filters.label;
     return (
         <div className="filter-popover" ref={root}>
             <button
                 className={`toolbar-button filter-button${count ? ' active' : ''}`}
                 aria-haspopup="dialog"
                 aria-expanded={open}
-                aria-label={count ? t.filters.active(count) : t.filters.label}
+                aria-label={label}
+                data-tooltip={iconOnly && !open ? label : undefined}
                 onClick={() => setOpen(!open)}
             >
                 <Funnel size={13} aria-hidden />
-                <span className="filter-button-text">{t.filters.label}</span>
+                <span ref={text} className="filter-button-text toolbar-end-label">
+                    {t.filters.label}
+                </span>
                 {count > 0 && <span className="filter-count">{count}</span>}
             </button>
             {open && (

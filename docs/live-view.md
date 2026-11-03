@@ -50,7 +50,8 @@ timeline) and then the level (how much of it is drawn: icons, named in their too
 the button shows how many narrowings are active, e.g. 「絞り込み 2」, and the popover clears them all with すべて解除),
 then 「⤓ 書き出し」 (a menu: 印刷, PDF, PNG, SVG; see [Printing and exporting](#printing-and-exporting)) — the
 catalog has 「印刷」 there instead. The toolbar says what is shown (what an AI is told the view was); the canvas's
-controls, how it is looked at. On a narrow canvas the subject's names are cut short first (the whole name in a
+controls, how it is looked at. On a narrow canvas (a toolbar under 40rem) the right end's buttons drop their text
+(icons, named in their tooltips; the count stays) and the subject's names are cut short (the whole name in a
 tooltip); the right end stays, and goes onto a second row only when even that is not enough. Notices — the connection lost, a syntax error that keeps the last diagram, a revision that cannot be compared,
 a storming that stopped parsing — are a strip over the canvas. Anything about one selected item is in the inspector.
 See [ADR 0007](adr/0007-pane-roles.md).
