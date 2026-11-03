@@ -22,6 +22,9 @@ DomainTrail never creates, changes or deletes anything in Cloudflare: the tunnel
 - Node.js 22.13 or later and the `dt` of the version under test; a workspace with `.dt` and `.dtes` sources (e.g.
   `examples/shop`), committed to git so a restore can be checked against `git diff`.
 - For the run step: `dt session subscribe --agent claude` and Claude Code, as for a local session.
+- **No secret in the workspace that git does not ignore.** The AI reads any file of the workspace that `.gitignore`
+  does not ignore (never `.domaintrail/`, `.git/` or anything outside it) and answers every participant in the chat:
+  keeping secrets out of the repository, or ignored, is the facilitator's responsibility.
 
 ## Configuration
 

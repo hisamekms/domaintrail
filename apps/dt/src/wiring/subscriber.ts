@@ -34,11 +34,14 @@ import {
     type SubscriberEnd,
     systemClock,
     type TriageConfig,
+    userClaudeDefaults,
+    createWorkspaceView,
+    ignoredEntries,
 } from '@domaintrail/agent';
 import { AGENT_FILE, type AgentCredential, readAgentCredential, SESSION_DIR } from '@domaintrail/collaboration';
 import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/analysis';
 import { SessionError } from '../cli/ports.js';
-import { findDomainFiles } from '@domaintrail/workspace';
+import { findDomainFiles, GitIgnore } from '@domaintrail/workspace';
 import { processAlive } from './process.js';
 
 export type { SubscriberEnd };
@@ -128,33 +131,47 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             .slice(0, 100) || 'localhost'
     }`;
 
-    // the answerer: read-only, no lease, beside the runs (it never waits for them, nor they for it)
+    // `claude` loads no settings file (it could allow reading anywhere): a role without its own model or effort gets the user's
+    const user = userClaudeDefaults();
     const answerConfig = options.answer ?? resolveAnswerConfig();
     const triageConfig = options.triage ?? resolveTriageConfig();
-    const answerer = roles.has('answer')
-        ? startAnswerer(
-              {
-                  api,
-                  agent: createClaudeAnswerer({
-                      root,
-                      ...((options.answerCommand ?? options.agentCommand) && { command: options.answerCommand ?? options.agentCommand }),
-                      answer: {
-                          warm: answerConfig.warm,
-                          restartAfter: answerConfig.restartAfter,
-                          ...(answerConfig.model !== undefined && { model: answerConfig.model }),
-                          ...(answerConfig.effort !== undefined && { effort: answerConfig.effort }),
-                      },
-                      triage: { model: triageConfig.model, warm: triageConfig.warm },
+    // the answerer reads a view of the workspace: the files git does not ignore, without .domaintrail/ and .git/
+    let gitignore = new GitIgnore(root);
+    const view = roles.has('answer') ? createWorkspaceView({ root, ignores: (p, directory) => gitignore.ignores(p, directory) }) : undefined;
+    const viewDir = await view?.refresh();
+    const prepare = async (): Promise<void> => {
+        gitignore = new GitIgnore(root);
+        await view?.refresh();
+    };
+    // the answerer: read-only, no lease, beside the runs (it never waits for them, nor they for it)
+    const answerer =
+        view && viewDir
+            ? startAnswerer(
+                  {
+                      api,
+                      agent: createClaudeAnswerer({
+                          root: viewDir,
+                          prepare,
+                          ...((options.answerCommand ?? options.agentCommand) && { command: options.answerCommand ?? options.agentCommand }),
+                          answer: {
+                              warm: answerConfig.warm,
+                              restartAfter: answerConfig.restartAfter,
+                              ...((answerConfig.model ?? user.model) !== undefined && { model: answerConfig.model ?? user.model }),
+                              ...((answerConfig.effort ?? user.effort) !== undefined && { effort: answerConfig.effort ?? user.effort }),
+                          },
+                          triage: { model: triageConfig.model, warm: triageConfig.warm },
+                          log,
+                      }),
+                      workspace: { scan },
+                      clock: systemClock,
+                      nonce: randomNonce,
                       log,
-                  }),
-                  workspace: { scan },
-                  clock: systemClock,
-                  nonce: randomNonce,
-                  log,
-              },
-              { timeoutMs: answerConfig.timeout * 1000, ...(options.reconnect && { reconnect: options.reconnect }) },
-          )
-        : undefined;
+                  },
+                  { timeoutMs: answerConfig.timeout * 1000, ...(options.reconnect && { reconnect: options.reconnect }) },
+              )
+            : undefined;
+    // the view goes with the answerer
+    void answerer?.done.then(() => view?.dispose());
     if (!roles.has('run')) {
         const done = answerer?.done ?? Promise.resolve<SubscriberEnd>('stopped');
         return { session: session.value.session, done, stop: async () => (await answerer?.stop()) ?? 'stopped' };
@@ -170,8 +187,13 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             root,
             command: options.agentCommand,
             dt,
-            ...(run?.model !== undefined && { model: run.model }),
-            ...(run?.effort !== undefined && { effort: run.effort }),
+            // what git ignores, kept from the runner (it works in the workspace itself; ADR 0030 as built in M4)
+            deniedPaths: () => {
+                const now = new GitIgnore(root);
+                return ignoredEntries(root, (p, d) => now.ignores(p, d));
+            },
+            ...((run?.model ?? user.model) !== undefined && { model: run?.model ?? user.model }),
+            ...((run?.effort ?? user.effort) !== undefined && { effort: run?.effort ?? user.effort }),
         };
         runner =
             (run?.warm ?? true)

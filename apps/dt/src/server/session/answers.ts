@@ -51,6 +51,8 @@ export interface AnswerDispatcherDeps {
     readonly pump: () => Promise<void>;
     /** The number of connected answerers changed. */
     readonly onConnections?: () => void;
+    /** The agent API's credential: a result that contains it is refused (defense in depth: no agent should be able to read it). */
+    readonly token?: string;
     readonly log: (line: string) => void;
 }
 
@@ -269,6 +271,13 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
     /** A job's result as a step, a message, an override or a proposal; the HTTP answer. */
     const take = async (res: ServerResponse, h: Handed, raw: unknown): Promise<void> => {
         if (!isObject(raw)) return sendError(res, 400, 'InvalidInput', 'Expected a JSON object.', { field: 'body' });
+        // the agent's credential in an answer or a proposal would be posted to the chat: refused, and told
+        if (deps.token && JSON.stringify(raw).includes(deps.token)) {
+            log(`answer job ${h.kind} of triage ${h.triage}: refused, its result contains the agent credential`);
+            if (h.kind === 'triage') await recordFailedTriage(h, 'refused: the output contained a credential', durationOf(raw.durationMs));
+            else failedOnce(h, 'refused: the output contained a credential');
+            return sendError(res, 400, 'CredentialInOutput', 'The result contains the agent credential.');
+        }
         const durationMs = durationOf(raw.durationMs);
         const model = shortText(raw.model, 200);
         const error = shortText(raw.error, 500);

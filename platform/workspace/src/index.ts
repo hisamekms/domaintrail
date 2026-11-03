@@ -7,4 +7,6 @@ export { createWorkspaceReader, findDomainFiles, loadWorkspace, readSources, Sou
 export { createGeneratedOutput } from './infrastructure/generated-output.js';
 export { hasCastLintRule, LINT_HINT } from './infrastructure/lint-hint.js';
 export { createWorkspaceSnapshot } from './infrastructure/snapshot.js';
+// the `.gitignore` rules of a workspace (git's semantics), for what an agent may read
+export { GitIgnore } from './infrastructure/gitignore.js';
 export { createGitRefWatcher, createWorkspaceWatcher } from './infrastructure/watchers.js';

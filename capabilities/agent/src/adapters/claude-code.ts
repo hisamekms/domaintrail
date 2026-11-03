@@ -34,6 +34,46 @@ export interface ClaudeRunOptions {
     readonly streamInput?: boolean;
     /** The structured output's JSON schema instead of a run's reply (the answerer role's). */
     readonly schema?: Readonly<Record<string, unknown>>;
+    /** Paths of the working directory (relative, `/`-separated) the agent may neither read nor edit: e.g. those git ignores. */
+    readonly deniedPaths?: readonly string[];
+}
+
+/**
+ * What no agent reads or edits inside its working directory, whatever its tools: the session's own state (the agent
+ * API's credential is in `.domaintrail/session/agent.json`) and git's.
+ */
+export const READ_DENIED: readonly string[] = ['Read(./.domaintrail/**)', 'Edit(./.domaintrail/**)', 'Read(./.git/**)', 'Edit(./.git/**)'];
+
+/** A path as a permission rule's (gitignore syntax): its special characters escaped. */
+const rulePath = (p: string): string => p.replace(/[\\*?[\]!#]/g, (c) => `\\${c}`);
+
+/** The deny rules of `paths` (relative to the working directory): neither read nor edited, nor anything below them. */
+export function deniedRules(paths: readonly string[]): string[] {
+    return paths.flatMap((p) => {
+        if (!p || p.startsWith('/') || p.split('/').includes('..') || /[\0\r\n]/.test(p)) return [];
+        const r = `./${rulePath(p)}`;
+        return [`Read(${r})`, `Edit(${r})`, `Read(${r}/**)`, `Edit(${r}/**)`];
+    });
+}
+
+/** The tools that read files: inside the working directory Claude Code lets them read without a rule. */
+const READ_TOOLS: ReadonlySet<string> = new Set(['Read', 'Grep', 'Glob', 'LS', 'NotebookRead']);
+/** The tools that write files: `Edit` rules cover them all. */
+const EDIT_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+
+/**
+ * The permission rules as given to `--allowedTools`, scoped to the working directory: a bare reading tool is no rule
+ * at all (reading inside the working directory needs none, and a bare `Read` rule would allow reading anywhere); a bare
+ * editing tool is `Edit(./**)`. A rule with its own scope (`Bash(dt fmt:*)`, `Read(docs/**)`) stays as the facilitator
+ * wrote it.
+ */
+export function scopedRules(rules: readonly string[]): string[] {
+    const out: string[] = [];
+    for (const rule of rules) {
+        const scoped = READ_TOOLS.has(rule) ? undefined : EDIT_TOOLS.has(rule) ? 'Edit(./**)' : rule;
+        if (scoped !== undefined && !out.includes(scoped)) out.push(scoped);
+    }
+    return out;
 }
 
 /** A value that must not become a flag of `claude`. */
@@ -55,10 +95,17 @@ export function toolNames(rules: readonly string[]): string[] {
  * reply's JSON schema for that many requests as the structured output; the model and effort when given, and stream-json
  * input for a warm process. A rule (or a model) that looks like an option is refused: the configuration comes from
  * the facilitator, but no value may become a flag.
+ *
+ * What it may read (ADR 0030, as built in M4): **no settings file is loaded** (`--setting-sources ""`): neither the
+ * workspace's `.claude/` (files the agent can write) nor the user's, whose allow rules (a plain `Read`, say) would let it
+ * read anywhere. In `dontAsk` mode Claude Code then reads only inside its working directory, and refuses any path
+ * outside it; `READ_DENIED` keeps it out of `.domaintrail/` (the agent credential) and `.git/` there too (deny rules win).
+ * The user's model and effort still apply when the role has none (`userClaudeDefaults`).
  */
 export function claudeArguments(allowedTools: readonly string[], requests?: number, options: ClaudeRunOptions = {}): string[] {
     for (const rule of allowedTools) checkValue('a tool rule', rule);
     const tools = toolNames(allowedTools);
+    const allowed = scopedRules(allowedTools);
     return [
         '--print',
         ...(options.streamInput ? ['--input-format', 'stream-json'] : []),
@@ -67,9 +114,9 @@ export function claudeArguments(allowedTools: readonly string[], requests?: numb
         '--verbose',
         '--no-session-persistence',
         '--strict-mcp-config',
-        // the user's settings only: the workspace's project and local settings (`.claude/`) are files the agent can write
+        // no settings file: the workspace's (`.claude/`) are files the agent can write, the user's may allow reading anywhere
         '--setting-sources',
-        'user',
+        '',
         '--permission-mode',
         'dontAsk',
         '--tools',
@@ -81,11 +128,19 @@ export function claudeArguments(allowedTools: readonly string[], requests?: numb
             : requests === undefined
               ? []
               : ['--json-schema', JSON.stringify(replyJsonSchema(requests))]),
-        ...(allowedTools.length ? ['--allowedTools', ...allowedTools] : []),
+        '--disallowedTools',
+        ...READ_DENIED,
+        ...deniedRules(options.deniedPaths ?? []),
+        ...(allowed.length ? ['--allowedTools', ...allowed] : []),
     ];
 }
 
 export interface ClaudeCodeOptions {
+    /**
+     * The paths of the workspace the agent may neither read nor edit besides `READ_DENIED` (those git ignores), asked
+     * before each run.
+     */
+    readonly deniedPaths?: () => Promise<readonly string[]>;
     /** The workspace root: the agent's working directory. */
     readonly root: string;
     /** The program (default `claude` on the PATH); the tests start a fake agent. */
@@ -159,12 +214,15 @@ export async function createClaudeCodeRunner(options: ClaudeCodeOptions): Promis
         run(invocation: AgentInvocation): Promise<AgentOutcome> {
             const { signal } = invocation;
             if (signal.aborted) return Promise.resolve({ exitCode: -1, outcome: 'done', summary: '' });
-            const args = [...command.args, ...claudeArguments(invocation.allowedTools, invocation.requests, flags)];
-            return shimFor().then((shim) => {
-                const ran = spawnAgent(shim && withPathFirst(process.env, shim.dir));
-                return shim ? ran.finally(() => shim.dispose()) : ran;
+            return (options.deniedPaths?.() ?? Promise.resolve([])).then((deniedPaths) => {
+                const args = [...command.args, ...claudeArguments(invocation.allowedTools, invocation.requests, { ...flags, deniedPaths })];
+                return shimFor().then((shim) => spawnWithShim(shim, args));
             });
-            function spawnAgent(env: NodeJS.ProcessEnv | undefined): Promise<AgentOutcome> {
+            function spawnWithShim(shim: DtShim | undefined, args: string[]): Promise<AgentOutcome> {
+                const ran = spawnAgent(shim && withPathFirst(process.env, shim.dir), args);
+                return shim ? ran.finally(() => shim.dispose()) : ran;
+            }
+            function spawnAgent(env: NodeJS.ProcessEnv | undefined, args: string[]): Promise<AgentOutcome> {
                 // cancelled while the shim was written
                 if (signal.aborted) return Promise.resolve({ exitCode: -1, outcome: 'done', summary: '' });
                 return new Promise<AgentOutcome>((resolve, reject) => {

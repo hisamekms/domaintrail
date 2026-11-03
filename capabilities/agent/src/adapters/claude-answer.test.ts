@@ -71,7 +71,8 @@ describe("the answerer role's Claude Code", () => {
         expect(valueOf(a.args, '--model')).toBe('haiku');
         expect(JSON.parse(valueOf(a.args, '--json-schema') ?? '{}')).toEqual(triageJsonSchema());
         expect(valueOf(a.args, '--permission-mode')).toBe('dontAsk');
-        expect(valueOf(a.args, '--setting-sources')).toBe('user');
+        // no settings file: the user's allow rules could let it read anywhere
+        expect(valueOf(a.args, '--setting-sources')).toBe('');
     });
 
     test('answers: Read, Grep and Glob only, by the arguments; one warm process, the continued prompt on its next turn', async () => {
@@ -83,8 +84,16 @@ describe("the answerer role's Claude Code", () => {
         expect(b.pid).toBe(a.pid);
         expect([a.prompt, b.prompt]).toEqual(['a1', 'c2']);
         expect(valueOf(a.args, '--tools')).toBe('Read,Grep,Glob');
-        expect(a.args.slice(a.args.indexOf('--allowedTools'))).toEqual(['--allowedTools', 'Read', 'Grep', 'Glob']);
-        for (const tool of ['Edit', 'Write', 'Bash', 'MultiEdit', 'NotebookEdit']) expect(a.args.join(' ')).not.toContain(tool);
+        // no allow rule (a bare Read would allow reading anywhere): reading inside the working directory needs none
+        expect(a.args).not.toContain('--allowedTools');
+        expect(a.args.slice(a.args.indexOf('--disallowedTools') + 1)).toEqual([
+            'Read(./.domaintrail/**)',
+            'Edit(./.domaintrail/**)',
+            'Read(./.git/**)',
+            'Edit(./.git/**)',
+        ]);
+        expect(valueOf(a.args, '--setting-sources')).toBe('');
+        for (const tool of ['Edit', 'Write', 'Bash', 'MultiEdit', 'NotebookEdit']) expect(valueOf(a.args, '--tools')?.split(',')).not.toContain(tool);
         expect(valueOf(a.args, '--input-format')).toBe('stream-json');
         expect([valueOf(a.args, '--model'), valueOf(a.args, '--effort')]).toEqual(['sonnet', 'low']);
         expect(JSON.parse(valueOf(a.args, '--json-schema') ?? '{}')).toEqual(answererJsonSchema());

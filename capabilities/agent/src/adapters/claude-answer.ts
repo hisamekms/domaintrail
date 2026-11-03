@@ -4,14 +4,16 @@
 //
 // - stage 3 (`triage`): the light model (`--model`, default `haiku`), **no tools at all** (`--tools ""`), stage 3's JSON
 //   schema; a fresh `claude -p` per turn by default, or one warm process (`triageWarm`; plan Q12);
-// - answers and proposals (`answer`): the read-only tools only — `--tools Read,Grep,Glob` and `--allowedTools Read Grep
-//   Glob` with `--permission-mode dontAsk`: no edit, write or shell tool exists in the process, whatever the prompt or
-//   the message says (the guarantee is here, not configurable) — the answerer's JSON schema (one for answers and
+// - answers and proposals (`answer`): the read-only tools only — `--tools Read,Grep,Glob` with `--permission-mode
+//   dontAsk` and no settings file loaded: no edit, write or shell tool exists in the process, whatever the prompt or the
+//   message says, and it reads only inside its working directory (the guarantee is here, not configurable) — the
+//   answerer's JSON schema (one for answers and
 //   proposals, so that one warm process takes both), its own model and effort; warm by default (`warm`), replaced after
 //   `restartAfter` turns (default 50), past 150k tokens of context, after `reset` (a restored revision), and ended after
 //   `idleTimeoutMs` without a turn.
 //
-// A warm process that misbehaves falls back to a fresh process for the turn, and for good after repeated failures, as
+// The working directory (`root`) is the answerer's view of the workspace (`workspace-view.ts`: the files git does not
+// ignore, without `.domaintrail/` and `.git/`), brought up to date before each turn (`prepare`). A warm process that misbehaves falls back to a fresh process for the turn, and for good after repeated failures, as
 // the runner does (`warm-claude.ts`). The model that answered is read from the process's `init` event. Neither a prompt
 // nor the agent's output is logged.
 import { spawn } from 'node:child_process';
@@ -29,8 +31,10 @@ export interface ClaudeAnswererOptions extends Pick<
     WarmClaudeOptions,
     'contextLimit' | 'maxFailures' | 'startTimeoutMs' | 'interruptGraceMs' | 'closeGraceMs' | 'log'
 > {
-    /** The workspace root: the agent's working directory. */
+    /** The agent's working directory: the answerer's view of the workspace (all it can read). */
     readonly root: string;
+    /** Called before each turn: brings the view up to date. A failure fails the turn. */
+    readonly prepare?: () => Promise<void>;
     /** The program (default `claude` on the PATH); the tests start a fake agent. */
     readonly command?: AgentCommand;
     /** Answers and proposals (`agent.answer.*`): model and effort (unset: the user's Claude Code settings), warm, restart. */
@@ -197,14 +201,24 @@ export function createClaudeAnswerer(options: ClaudeAnswererOptions): AnswerAgen
         }
     };
 
+    /** Brings the view up to date before a turn: a failure is the turn's. */
+    const prepared = async (run: () => Promise<AnswerTurnResult>): Promise<AnswerTurnResult> => {
+        try {
+            await options.prepare?.();
+        } catch (e) {
+            return { text: '', error: `the workspace could not be prepared: ${e instanceof Error ? e.message : String(e)}` };
+        }
+        return run();
+    };
+
     return {
         triage(turn) {
-            if (!warmTriage) return cold(triageArguments({ model: triageModel }), turn, triageModel);
-            return warmTurn(warmTriage, triageArguments({ model: triageModel, streamInput: true }), turn, triageModel);
+            if (!warmTriage) return prepared(() => cold(triageArguments({ model: triageModel }), turn, triageModel));
+            return prepared(() => warmTurn(warmTriage, triageArguments({ model: triageModel, streamInput: true }), turn, triageModel));
         },
         answer(turn) {
-            if (!warmAnswerer) return cold(answererArguments(answerFlags), turn, answer.model);
-            return warmTurn(warmAnswerer, answererArguments({ ...answerFlags, streamInput: true }), turn, answer.model);
+            if (!warmAnswerer) return prepared(() => cold(answererArguments(answerFlags), turn, answer.model));
+            return prepared(() => warmTurn(warmAnswerer, answererArguments({ ...answerFlags, streamInput: true }), turn, answer.model));
         },
         reset(reason) {
             warmAnswerer?.reset(reason);

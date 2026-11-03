@@ -6,7 +6,7 @@
 import { describe, expect, test } from 'bun:test';
 import { buildPrompt, MAX_CHANGED_SHOWN, MAX_QUESTION, OUTCOME_MARKER, parseReply } from './prompt.js';
 import { changedPaths, changesOutsideSources, showPaths } from './subscriber.js';
-import { claudeArguments, toolNames } from '../adapters/claude-code.js';
+import { claudeArguments, READ_DENIED, scopedRules, toolNames } from '../adapters/claude-code.js';
 import { resultOf } from '../adapters/claude-stream.js';
 import { type Collaboration, REPLY_LIMITS, replyJsonSchema } from '@domaintrail/collaboration';
 import { parseSse } from '../adapters/http-agent-api.js';
@@ -404,21 +404,32 @@ describe('the Claude Code arguments', () => {
             '--no-session-persistence',
             '--strict-mcp-config',
             '--setting-sources',
-            'user',
+            '',
             '--permission-mode',
             'dontAsk',
             '--tools',
             'Read,Edit,Write,Glob,Grep,Bash',
+            '--disallowedTools',
+            ...READ_DENIED,
+            // reading inside the working directory needs no rule; editing is scoped to it
             '--allowedTools',
-            ...DEFAULT_AGENT_TOOLS,
+            'Edit(./**)',
+            'Bash(dt fmt:*)',
+            'Bash(dt check:*)',
         ]);
+        expect(scopedRules(['Read', 'Grep', 'Glob', 'Write', 'Edit', 'MultiEdit', 'Read(docs/**)', 'Bash(dt check:*)'])).toEqual([
+            'Edit(./**)',
+            'Read(docs/**)',
+            'Bash(dt check:*)',
+        ]);
+        expect(READ_DENIED).toEqual(['Read(./.domaintrail/**)', 'Edit(./.domaintrail/**)', 'Read(./.git/**)', 'Edit(./.git/**)']);
         expect(toolNames(['Bash(dt fmt:*)', 'Bash(dt check:*)', 'mcp__x__y'])).toEqual(['Bash', 'mcp__x__y']);
-        expect(claudeArguments([]).slice(-2)).toEqual(['--tools', '']);
+        expect(claudeArguments([]).slice(-7)).toEqual(['--tools', '', '--disallowedTools', ...READ_DENIED]);
         // with the number of requests: the reply's JSON schema as the structured output
         const withSchema = claudeArguments(DEFAULT_AGENT_TOOLS, 2);
         const at = withSchema.indexOf('--json-schema');
         expect(JSON.parse(withSchema[at + 1] ?? '')).toEqual(replyJsonSchema(2));
-        expect(withSchema.slice(at + 2, at + 3)).toEqual(['--allowedTools']);
+        expect(withSchema.slice(at + 2, at + 3)).toEqual(['--disallowedTools']);
     });
 
     test('a rule that would become an option or another line is refused', () => {

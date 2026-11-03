@@ -2927,9 +2927,9 @@ around it (its ⋯ → 変更を見る).
 ### The agent and its security
 
 `dt session subscribe --agent claude` runs `claude` from the `PATH` in the workspace's root, for each run, as
-`claude --print --output-format json --no-session-persistence --strict-mcp-config --setting-sources user
---permission-mode dontAsk --tools … --allowedTools …`, with the rules of `session.agent.allowedTools` only (any other
-tool is refused without asking, and no MCP server is loaded). The prompt tells it to read the related files, edit only
+`claude --print --output-format stream-json --no-session-persistence --strict-mcp-config --setting-sources ""
+--permission-mode dontAsk --tools … --disallowedTools … --allowedTools …`, with the rules of `session.agent.allowedTools`
+only (any other tool is refused without asking, and no MCP server is loaded). The prompt tells it to read the related files, edit only
 the `.dt` and `.dtes` sources, keep a storming exploratory, and change no `.dt` when the requests are only about
 stormings, and lets it answer instead (status `answered`) a request that turns out to be a question; then `dt fmt` and
 `dt check` run when the run changed files (else both are skipped), and the server records the result.
@@ -2948,9 +2948,18 @@ stormings, and lets it answer instead (status `answered`) a request that turns o
 - **Request text is untrusted.** Any participant writes it, and the agent reads it: the prompt puts the requests (and,
   for replies and answers, the earlier run's messages, reply and diff) in a delimited block of JSON marked as data, but admit only people you trust, and keep `allowedTools` narrow (never a
   plain `Bash`).
-- **Your own settings still apply.** `--setting-sources user` keeps the workspace's `.claude/settings.json` and
-  `.claude/settings.local.json` out (the agent could write them), but loads `~/.claude/settings.json` of whoever runs
-  the subscriber: check that its allow rules, hooks and `apiKeyHelper` allow nothing more than you want for a run.
+- **What the agents can read: the workspace, minus what git ignores.** Both roles may read any file inside the
+  workspace's root — the model, READMEs, notes, code — and nothing else: no path outside the root (your home, `..`,
+  absolute paths), never `.domaintrail/` (the session's state) nor `.git/`, and no file `.gitignore` ignores (`.env`,
+  build outputs, `node_modules`). **Keeping secrets out of the repository is your responsibility**: a secret committed
+  or merely not ignored can be read by the agents and quoted in the chat to every participant. `claude` is started
+  without any settings file (`--setting-sources ""`): neither the workspace's `.claude/` (the agent could write it) nor
+  your `~/.claude/settings.json` (its allow rules could let it read anywhere) is loaded; only its `model` and
+  `effortLevel` are taken as the agents' when they have none of their own. Your hooks and `apiKeyHelper` do not run
+  for the agents (sign in to Claude Code, or set `ANTHROPIC_API_KEY`). The answerer reads a private copy of the
+  readable files (refreshed before each job, outside the workspace); the runner, which edits the workspace, has deny
+  rules for `.domaintrail/`, `.git/` and the ignored files and directories present when its run starts. As defense in
+  depth, the server refuses an answer, a proposal or a run's reply that contains the agent API's credential.
 - **A change outside the DSL stops the subscriber.** The workspace is scanned before and after the agent; if any file
   other than a `.dt` or `.dtes` source was added, changed or removed (`.claude/` included, and files that `.gitignore`
   ignores), the run fails (`AgentError`) and the subscriber claims no further run. Its log names the files (`not

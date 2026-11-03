@@ -104,6 +104,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         maxStreams: deps.maxStreams,
         pump: deps.pump,
         ...(deps.onPresence && { onConnections: deps.onPresence }),
+        token: deps.token,
         log: deps.log ?? (() => {}),
     });
 
@@ -215,6 +216,13 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         sendJson(res, 200, body(result.value));
     };
 
+    /** Whether a reply of the agent carries the agent's own credential (it would reach the pages). */
+    const leaks = (v: unknown): boolean => v !== undefined && JSON.stringify(v).includes(deps.token);
+    const refuseLeak = (res: ServerResponse, run: Collaboration.AgentRunId): void => {
+        deps.log?.(`run ${run}: refused a reply that contains the agent credential`);
+        sendError(res, 400, 'CredentialInOutput', 'The reply contains the agent credential.');
+    };
+
     const runRoute = async (req: IncomingMessage, res: ServerResponse, rawId: string, action: string): Promise<void> => {
         const id = uuid(rawId, 'id');
         if (!id.ok) return sendError(res, 400, 'InvalidInput', id.error.message, { field: 'id' });
@@ -282,6 +290,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
             case 'finish': {
                 const b = await input(req, res, ['token', 'exitCode', 'formatted', 'checked', 'reply']);
                 if (!b) return;
+                if (leaks(b.reply)) return refuseLeak(res, run);
                 const { exitCode, formatted, checked } = b;
                 if (typeof exitCode !== 'number' || !Number.isInteger(exitCode) || exitCode < -1024 || exitCode > 1024)
                     return sendError(res, 400, 'InvalidInput', 'Expected the exit code.', { field: 'exitCode' });
@@ -306,6 +315,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
             case 'clarification': {
                 const b = await input(req, res, ['token', 'question', 'reply']);
                 if (!b) return;
+                if (leaks(b.question) || leaks(b.reply)) return refuseLeak(res, run);
                 const question = text(b.question, 'question', MAX_NOTE);
                 if (!question.ok) return sendError(res, 400, 'InvalidInput', question.error.message, { field: 'question' });
                 const reply = b.reply === undefined ? undefined : agentReply(b.reply, 'clarification');
@@ -319,6 +329,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
             case 'decline': {
                 const b = await input(req, res, ['token', 'reply']);
                 if (!b) return;
+                if (leaks(b.reply)) return refuseLeak(res, run);
                 const reply = agentReply(b.reply, 'declined');
                 if (!reply.ok) return sendError(res, 400, 'InvalidInput', reply.error.message, { field: reply.error.field });
                 return answer(res, await use.declineRun({ run, token: String(b.token), reply: reply.value }), (v) => v);

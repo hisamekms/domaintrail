@@ -162,6 +162,21 @@ model are reached through Claude Code only, the triage cold by default, the answ
 proposals; the session so far is given whole and since the last entry the same process saw (the runner asks for it at
 the start, the server tracks it per answer stream); `dt fmt` and `dt check` are skipped when a run changed no file.
 
+*Decided by the maintainer* (2026-11-03, after a security review of M4): the agents may read any file inside the
+workspace's root — not only the model — and nothing outside it, never `.domaintrail/` (our credential and session data,
+our responsibility) nor `.git/`, and no file `.gitignore` ignores; keeping secrets out of the repository is the user's
+responsibility. *Proposed* (how): `claude` loads no settings file, so that the user's allow rules cannot widen what it
+reads, and in `dontAsk` mode it then reads only inside its working directory (measured with Claude Code 2.1.317), with
+deny rules for `.domaintrail/` and `.git/`. Claude Code's rules cannot express "not ignored by git", so the answerer
+(whose input is any participant's message, without the facilitator) works in a private **view** of the workspace — a
+copy of the readable files only, refreshed before each turn — rather than with rules over the workspace: nothing it
+should not read exists where it can read. The runner must edit the workspace, so it works there, with the ignored
+entries present at its start as deny rules. The server refuses an output that contains the agent API's credential.
+*Residual risk*: the runner's deny list is computed when a run starts (a file ignored and created during the run is not
+in it) and capped at 500 entries; Claude Code's rule matching is best effort for `Grep`/`Glob` (measured to hold for
+these paths); a secret the user keeps in a file git does not ignore is readable by design; and the user's hooks and
+`apiKeyHelper` no longer run for the agents.
+
 ## Alternatives considered
 
 - **The user marks 相談 or 依頼** (a choice at send time, or a prefix). The kind would be known for certain, but it is a

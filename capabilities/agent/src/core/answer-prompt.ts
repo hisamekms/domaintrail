@@ -103,10 +103,11 @@ const PROPOSAL_FIELDS = `proposal: { what (at most ${PROPOSAL_LIMITS.what} chara
 most ${PROPOSAL_LIMITS.where}: the elements and files), how (at most ${PROPOSAL_LIMITS.how}: how, as text, no diff) }`;
 
 /** The rules both read-only prompts share. */
-const READ_ONLY_RULES = `- You can only read: Read, Grep and Glob are your only tools. You change nothing, and you never say or suggest
-  that you changed anything: a change is carried out later, by another agent, once the facilitator agrees.
-- Read the \`.dt\` (DomainTrail's modeling DSL) and \`.dtes\` (Event Storming) files you need: the current files are the
-  truth. \`previousRuns\`, when present, are the AI's earlier turns the message replies to; \`sessionSoFar\` is the
+const READ_ONLY_RULES = `- You can only read: Read, Grep and Glob are your only tools, on the workspace's files in your working directory.
+  You change nothing, and you never say or suggest that you changed anything: a change is carried out later, by
+  another agent, once the facilitator agrees.
+- Read the \`.dt\` (DomainTrail's modeling DSL) and \`.dtes\` (Event Storming) files you need, and any other file of the
+  workspace that helps (a README, notes): the current files are the truth. \`previousRuns\`, when present, are the AI's earlier turns the message replies to; \`sessionSoFar\` is the
   session's timeline as text (people's messages, the AI's turns and answers, proposals, what is open now) — when this
   conversation continues your earlier jobs it holds only what was added since. \`changedSinceYourLastAnswer\`, when
   present: these files changed since your last job; what you remember of them is out of date, read them again.

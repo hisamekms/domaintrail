@@ -541,6 +541,20 @@ M4 landed the triage and the answers end to end on the server and in `capabiliti
   takes both), warm by default, replaced after 50 turns, ended after 30 minutes without one; a warm process that fails
   falls back to a fresh one as the runner's does. The model that answered is read from Claude Code's `init` event.
   Answers and proposals name elements as the runs' replies do (`@{Sales.Order}`).
+- **What the agents may read** (security review and the maintainer's decision, 2026-11-03): any file inside the
+  workspace's root, never outside it, never `.domaintrail/` nor `.git/`, and no file `.gitignore` ignores; keeping
+  secrets out of the repository is the user's. `claude` loads no settings file (`--setting-sources ""`; measured: the
+  user's own `Read` allow rule let it read anywhere), so in `dontAsk` it reads only inside its working directory; bare
+  reading tools are no allow rule (a bare `Read` allows reading anywhere), bare editing tools become `Edit(./**)`;
+  `Read`/`Edit` of `./.domaintrail/**` and `./.git/**` are denied. The answerer and stage 3 run in a **view**: a
+  private copy (0700, outside the workspace) of the files git does not ignore, refreshed before each turn
+  (`workspace-view.ts`), since permission rules cannot say "not ignored". The runner edits the workspace itself, so the
+  ignored files and directories present when a run starts are deny rules (at most 500). The user's `model` and
+  `effortLevel` are read from `~/.claude/settings.json` for a role without its own. The server refuses (400
+  `CredentialInOutput`, logged) an answer, a proposal or a run's reply that contains the agent API's credential.
+  Checked once with Claude Code 2.1.317: from the view, a README is readable; `.env` (ignored), `.domaintrail/`, the
+  workspace by its absolute path and a file outside it are not; the runner cannot read or edit a denied `.env` nor
+  write outside its directory.
 - **Config**: no key was added. `resolveAnswerConfig`, `validateAnswerConfig`, `resolveTriageConfig`,
   `validateTriageConfig` and their defaults are exported by `@domaintrail/agent` for M5 to place under `agent.answer` /
   `agent.triage`. Until then `dt session subscribe` starts both roles with the defaults (the wiring's `startSubscriber`

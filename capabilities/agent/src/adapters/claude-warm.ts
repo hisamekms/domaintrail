@@ -51,7 +51,9 @@ export async function createWarmClaudeRunner(options: WarmRunnerOptions): Promis
         // a file of the agent's dt changed: the run fails to start, as a cold one does
         await agentDt.check();
         if (invocation.requests > schemaRequests) schemaRequests = invocation.requests;
-        const args = claudeArguments(invocation.allowedTools, schemaRequests, flags);
+        // what git ignores now: a change of it replaces the process (its arguments are its key)
+        const deniedPaths = (await options.deniedPaths?.()) ?? [];
+        const args = claudeArguments(invocation.allowedTools, schemaRequests, { ...flags, deniedPaths });
         const end = await warm.turn({
             profile: { args, key: JSON.stringify(args) },
             prompt: (continuing) => (continuing && invocation.continuedPrompt !== undefined ? invocation.continuedPrompt : invocation.prompt),
