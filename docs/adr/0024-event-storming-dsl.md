@@ -237,7 +237,7 @@ These are pure functions of the storming IR (T5), with the types in `src/dtes/ir
   IR. Its node kinds are `esEvent`, `esCommand`, `esPolicy`, `esActor`, `esExternal`, `esAggregate`, `esReadModel`,
   `esHotspot` and `esGroup` (a container whose children are its event nodes). Its edge kinds are `esCausal` (solid,
   directed), `esRelated` (dotted), `esHotspot` (dotted, undirected: a hotspot's `on`) and `esSequence` (dashed). Notes
-  are squares whose label wraps. These kinds are added to `NodeKind`/`EdgeKind` in
+  are squares of one size (`STICKY_NOTE`) whose label wraps and shrinks to fit, cut short with «…» below a floor. These kinds are added to `NodeKind`/`EdgeKind` in
   `src/graph/ir.ts`. The label is the element's label, its ID in name mode, and both in both mode. The stereotype is
   the kind. The `.dt` `ref` and the occurrences with their timelines go to the inspector (§6, §8.4).
 - Layout uses the existing `ElkLayoutEngine`, with direction `RIGHT` for graph IDs with the prefix `storming`

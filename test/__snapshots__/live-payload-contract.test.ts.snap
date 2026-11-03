@@ -8,7 +8,7 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
     "nodes": 5,
     "sha": "e071f5575a6c3fc9",
   },
-  "all": "7e843d9ad829790f",
+  "all": "a5891f3ba73b739a",
   "base": null,
   "baseline": {
     "kind": "previous",
@@ -145,7 +145,7 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
             "edges": 12,
             "id": "storming:OrderToCash:big-picture:*",
             "nodes": 12,
-            "sha": "aff49bf0f21aff63",
+            "sha": "9a346e164c814a23",
           },
           "render": {
             "edges": 11,
@@ -158,7 +158,7 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
             "edges": 5,
             "id": "storming:OrderToCash:big-picture:CancelAfterConfirm",
             "nodes": 8,
-            "sha": "c776c217498efa77",
+            "sha": "1ef6e20fe176e611",
           },
           "render": {
             "edges": 5,
@@ -171,7 +171,7 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
             "edges": 6,
             "id": "storming:OrderToCash:big-picture:Normal",
             "nodes": 7,
-            "sha": "94b965e9a9108ac0",
+            "sha": "7405b43bd66be969",
           },
           "render": {
             "edges": 6,
@@ -184,7 +184,7 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
             "edges": 8,
             "id": "storming:OrderToCash:big-picture:PaymentRetry",
             "nodes": 9,
-            "sha": "f3ecf1cffacc0fa9",
+            "sha": "810dfd6f3be69e92",
           },
           "render": {
             "edges": 8,
@@ -197,7 +197,7 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
             "edges": 36,
             "id": "storming:OrderToCash:design-level:*",
             "nodes": 25,
-            "sha": "649a80b85d0bc046",
+            "sha": "03042d3c78c8d618",
           },
           "render": {
             "edges": 36,
@@ -210,7 +210,7 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
             "edges": 5,
             "id": "storming:OrderToCash:design-level:CancelAfterConfirm",
             "nodes": 8,
-            "sha": "b95b66c485efeaad",
+            "sha": "7ac4212412946301",
           },
           "render": {
             "edges": 5,
@@ -223,7 +223,7 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
             "edges": 11,
             "id": "storming:OrderToCash:design-level:Normal",
             "nodes": 11,
-            "sha": "d2337a09857815be",
+            "sha": "f22f75cfa0fb8897",
           },
           "render": {
             "edges": 11,
@@ -236,7 +236,7 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
             "edges": 13,
             "id": "storming:OrderToCash:design-level:PaymentRetry",
             "nodes": 13,
-            "sha": "a641095cac6bbadd",
+            "sha": "7baac546944d9ec5",
           },
           "render": {
             "edges": 13,
@@ -267,7 +267,7 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
             "edges": 6,
             "id": "storming:Returns:big-picture:*",
             "nodes": 8,
-            "sha": "2fbab52d30db3133",
+            "sha": "863a36595de83103",
           },
           "render": {
             "edges": 5,
@@ -306,7 +306,7 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
             "edges": 6,
             "id": "storming:Returns:design-level:*",
             "nodes": 8,
-            "sha": "ad12a93214cab92e",
+            "sha": "334907fa1b588eaa",
           },
           "render": {
             "edges": 5,
@@ -487,7 +487,7 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
     "nodes": 5,
     "sha": "e071f5575a6c3fc9",
   },
-  "all": "6250d3b339bd4030",
+  "all": "953d2b4998497bf1",
   "base": {
     "aggregates": {
       "edges": 2,
@@ -659,7 +659,7 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
             "edges": 12,
             "id": "storming:OrderToCash:big-picture:*",
             "nodes": 12,
-            "sha": "aff49bf0f21aff63",
+            "sha": "9a346e164c814a23",
           },
           "render": {
             "edges": 11,
@@ -672,7 +672,7 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
             "edges": 5,
             "id": "storming:OrderToCash:big-picture:CancelAfterConfirm",
             "nodes": 8,
-            "sha": "c776c217498efa77",
+            "sha": "1ef6e20fe176e611",
           },
           "render": {
             "edges": 5,
@@ -685,7 +685,7 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
             "edges": 6,
             "id": "storming:OrderToCash:big-picture:Normal",
             "nodes": 7,
-            "sha": "94b965e9a9108ac0",
+            "sha": "7405b43bd66be969",
           },
           "render": {
             "edges": 6,
@@ -698,7 +698,7 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
             "edges": 8,
             "id": "storming:OrderToCash:big-picture:PaymentRetry",
             "nodes": 9,
-            "sha": "f3ecf1cffacc0fa9",
+            "sha": "810dfd6f3be69e92",
           },
           "render": {
             "edges": 8,
@@ -711,7 +711,7 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
             "edges": 36,
             "id": "storming:OrderToCash:design-level:*",
             "nodes": 25,
-            "sha": "649a80b85d0bc046",
+            "sha": "03042d3c78c8d618",
           },
           "render": {
             "edges": 36,
@@ -724,7 +724,7 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
             "edges": 5,
             "id": "storming:OrderToCash:design-level:CancelAfterConfirm",
             "nodes": 8,
-            "sha": "b95b66c485efeaad",
+            "sha": "7ac4212412946301",
           },
           "render": {
             "edges": 5,
@@ -737,7 +737,7 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
             "edges": 11,
             "id": "storming:OrderToCash:design-level:Normal",
             "nodes": 11,
-            "sha": "d2337a09857815be",
+            "sha": "f22f75cfa0fb8897",
           },
           "render": {
             "edges": 11,
@@ -750,7 +750,7 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
             "edges": 13,
             "id": "storming:OrderToCash:design-level:PaymentRetry",
             "nodes": 13,
-            "sha": "a641095cac6bbadd",
+            "sha": "7baac546944d9ec5",
           },
           "render": {
             "edges": 13,
@@ -781,7 +781,7 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
             "edges": 6,
             "id": "storming:Returns:big-picture:*",
             "nodes": 8,
-            "sha": "2fbab52d30db3133",
+            "sha": "863a36595de83103",
           },
           "render": {
             "edges": 5,
@@ -820,7 +820,7 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
             "edges": 6,
             "id": "storming:Returns:design-level:*",
             "nodes": 8,
-            "sha": "ad12a93214cab92e",
+            "sha": "334907fa1b588eaa",
           },
           "render": {
             "edges": 5,

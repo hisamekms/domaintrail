@@ -1159,7 +1159,7 @@ a.field-origin {
     color: var(--es-external-text);
     border-style: dashed;
 }
-/* the notes are squares with no body: the label wraps and sits in the middle */
+/* the notes are squares of one size with no body: the label wraps, sits in the middle and shrinks to fit (note-fit.ts) */
 .dn-esEvent .dn-head,
 .dn-esCommand .dn-head,
 .dn-esPolicy .dn-head,
@@ -1186,6 +1186,12 @@ a.field-origin {
 .dn-esReadModel .dn-stereo,
 .dn-esHotspot .dn-stereo {
     color: inherit;
+}
+/* a label too long for its note even at the floor size: the lines that fit, the last ending with «…» */
+.dn-label-clamped {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 .dn-change-added {
     box-shadow: 0 0 0 3px var(--added);
