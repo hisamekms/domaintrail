@@ -351,7 +351,6 @@ describe('the requests route and the agent API with replies', () => {
                 agent: {
                     port: 0,
                     allowedTools: [...DEFAULT_AGENT_TOOLS],
-                    run: { warm: true, restartAfter: 20, idleTimeout: 30 },
                     maxPreviousRunDiff: 20 * 1024,
                 },
                 maxParticipants: 50,

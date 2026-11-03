@@ -1,5 +1,5 @@
 // One emoji, as a reaction of a collaboration session holds it (ADR 0026, appendix "Votes and reactions"): what counts
-// as one emoji, and the one form it is kept in. Pure (no DOM, no node:*), so that the config (`session.quickReactions`),
+// as one emoji, and the one form it is kept in. Pure (no DOM, no node:*), so that the config (`collab.quickReactions`),
 // the server (the `Emoji` primitive of the collaboration model) and the page decide alike.
 //
 // One emoji is one grapheme (`Intl.Segmenter`) made only of emoji characters and their components — a pictograph
@@ -12,7 +12,7 @@
 // skin tone follows it. So ❤ (U+2764) and ❤️ (U+2764 U+FE0F) are the same reaction, ❤️, the form emoji pickers insert
 // and every platform draws as an emoji.
 
-/** The emoji the add-reaction popover of a session's chat offers first (`session.quickReactions`; any other can be typed there). */
+/** The emoji the add-reaction popover of a session's chat offers first (`collab.quickReactions`; any other can be typed there). */
 export const DEFAULT_QUICK_REACTIONS: readonly string[] = ['👍', '👀', '🤔', '🎉', '❤️', '🙏'];
 
 /** The most UTF-8 bytes an emoji may take (the longest RGI sequences take about 35). */

@@ -326,7 +326,6 @@ describe('the marks route and its broadcast', () => {
                 agent: {
                     port: 0,
                     allowedTools: [...DEFAULT_AGENT_TOOLS],
-                    run: { warm: true, restartAfter: 20, idleTimeout: 30 },
                     maxPreviousRunDiff: 20 * 1024,
                 },
                 maxParticipants: 50,

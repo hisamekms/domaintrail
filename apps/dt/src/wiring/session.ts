@@ -47,8 +47,7 @@ import { createSessionHttp, meOf, stateBody } from '../server/session/routes.js'
 import { createSessionIdentities } from '../server/session/identities.js';
 import { createViewHttpServer } from '../server/http/server.js';
 import { isLoopbackBind, sessionHostPolicy } from '../server/http/access.js';
-import { SessionError } from '../cli/ports.js';
-import { type ResolvedSessionConfig } from '../config/config.js';
+import { SessionError, type SessionSettings } from '../cli/ports.js';
 import type { ViewService } from '@domaintrail/visualization';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 import { processAlive } from './process.js';
@@ -79,8 +78,8 @@ export const CLASSIFIER_URL_ENV = 'DOMAINTRAIL_CLASSIFIER_URL';
 const MAX_TIMER_MS = 2 ** 31 - 1;
 
 export interface SessionServerOptions extends ViewServerOptions {
-    /** The `session` section of the configuration, resolved. */
-    session: ResolvedSessionConfig;
+    /** What the session server reads of the configuration (`collab`, `agent.port`, `agent.run`'s tools, `classifier`). */
+    session: SessionSettings;
     /** `access` mode: a stand-in for the JWKS check of the tokens' signature (tests); default: the team's JWKS. */
     accessVerifier?: AccessTokenVerifier;
     /** `access` mode: where the JWKS and the Identity API are and their timings (tests point them at a local mock). */
@@ -151,15 +150,15 @@ function identityProvider(options: SessionServerOptions, clock: Clock, log: (lin
         return undefined;
     }
     const access = config.access;
-    if (!access?.teamDomain.trim() || !access.audience.trim()) throw new SessionError('The access identity mode needs session.access (teamDomain, audience).');
+    if (!access?.teamDomain.trim() || !access.audience.trim()) throw new SessionError('The access identity mode needs collab.access (teamDomain, audience).');
     if (access.publicUrl !== undefined) {
         const url = URL.canParse(access.publicUrl) ? new URL(access.publicUrl) : undefined;
         if (url?.protocol !== 'https:')
-            throw new SessionError(`session.access.publicUrl must be an https URL (Cloudflare Access serves https): ${access.publicUrl}`);
+            throw new SessionError(`collab.access.publicUrl must be an https URL (Cloudflare Access serves https): ${access.publicUrl}`);
         if (!access.allowedHosts.some((h) => h.toLowerCase() === url.hostname))
-            throw new SessionError(`session.access.allowedHosts must include the host of publicUrl (${url.hostname}), or the tunnel's requests are refused.`);
+            throw new SessionError(`collab.access.allowedHosts must include the host of publicUrl (${url.hostname}), or the tunnel's requests are refused.`);
         if (!access.allowedOrigins.includes(url.origin))
-            throw new SessionError(`session.access.allowedOrigins must include the origin of publicUrl (${url.origin}), or the pages' requests are refused.`);
+            throw new SessionError(`collab.access.allowedOrigins must include the origin of publicUrl (${url.origin}), or the pages' requests are refused.`);
     }
     if (!isLoopbackBind(config.host))
         log(`Bound to ${config.host}: reachable without the tunnel (an Access token is still required). Bind to 127.0.0.1 behind cloudflared.`);
@@ -175,7 +174,7 @@ function identityProvider(options: SessionServerOptions, clock: Clock, log: (lin
 }
 
 /**
- * The classifier of the chat's messages, when `session.classifier` is enabled and its token is in the environment;
+ * The classifier of the chat's messages, when `classifier` is enabled and its token is in the environment;
  * otherwise none (every message is applicable).
  */
 function messageClassifier(options: SessionServerOptions, log: (line: string) => void): MessageClassifier | undefined {
@@ -184,7 +183,7 @@ function messageClassifier(options: SessionServerOptions, log: (line: string) =>
     if (!c.enabled || !c.accountId) return undefined;
     const token = process.env[c.apiTokenEnv];
     if (!token) {
-        log(`session.classifier is enabled but ${c.apiTokenEnv} is not set: every message can be applied.`);
+        log(`classifier is enabled but ${c.apiTokenEnv} is not set: every message can be applied.`);
         return undefined;
     }
     const baseUrl = process.env[CLASSIFIER_URL_ENV];

@@ -46,7 +46,7 @@ export function inside(root: string, p: string): boolean {
 }
 
 /**
- * Refuses a configured `session.agent.dt` (as written, `dir` the config file's directory) that runs a file of the
+ * Refuses a configured `agent.run.dt` (as written, `dir` the config file's directory) that runs a file of the
  * workspace (that directory), symbolic links followed and compared by path segments: the agent writes there during a
  * run. The configuration's check (the app runs it after validating the section); the subscriber checks again when it
  * starts, with the runtime found on the PATH (`pinDt`).
@@ -56,7 +56,7 @@ export function checkDtOutsideWorkspace(dt: readonly string[] | undefined, dir: 
     const within = resolveCommand(dt, dir).filter((p) => path.isAbsolute(p) && inside(dir, p));
     if (within.length)
         fail(
-            `'session.agent.dt' may not run anything inside the workspace (${within.join(', ')}): the agent can write there during a run. Use a dt outside the workspace (e.g. a clone next to it).`,
+            `'agent.run.dt' may not run anything inside the workspace (${within.join(', ')}): the agent can write there during a run. Use a dt outside the workspace (e.g. a clone next to it).`,
         );
 }
 

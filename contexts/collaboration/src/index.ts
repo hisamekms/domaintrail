@@ -165,16 +165,19 @@ export {
 // kept for today's page until M4/M6 remove it
 export { createClassifications, type Classifications, type MessageClassifier } from './application/classifier.js';
 export { createRunActivities, RUN_ENDING_EVENTS, type RunActivities } from './application/activities.js';
-// its settings in the `session` section of domaintrail.jsonc (T6), composed by the app
+// its settings in domaintrail.jsonc (`collab`, `classifier`, `agent.run.maxPreviousRunDiff`), composed by the app
 export {
     ACCESS_CHECKS,
     COLLABORATION_CONFIG_KEYS,
     resolveCollaborationConfig,
     validateAccessNeeded,
+    validateClassifierConfig,
     validateCollaborationConfig,
     validateIdentityConfig,
     validatePreviousRunsConfig,
+    type ClassifierConfigFile,
     type ClefModel,
+    type CollabConfigFile,
     type CollaborationConfigFile,
     type ResolvedCollaborationConfig,
 } from './application/config.js';

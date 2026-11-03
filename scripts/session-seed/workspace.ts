@@ -1,5 +1,5 @@
 // The scratch workspace a seed runs in: a fresh copy of examples/shop (without its layout cache, session or generated
-// code), its config with the session's port and the mock classifier, committed to a git repository of its own so that
+// code), its config with the session's port (`collab`) and the mock classifier, committed to a git repository of its own so that
 // `git diff` shows what the runs changed. A directory is wiped only when it is one a seed made (`--reset`).
 import { spawnSync } from 'node:child_process';
 import { access, chmod, cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -49,13 +49,14 @@ export async function prepareDir(dir: string, reset: boolean): Promise<void> {
     await rm(dir, { recursive: true, force: true });
 }
 
-/** `config` with the `session` section added (the file is JSONC: the section goes before its last brace). */
-export function withSession(config: string, session: object): string {
+/** `config` with `sections` added (the file is JSONC: they go before its last brace). */
+export function withSections(config: string, sections: Record<string, object>): string {
     const end = config.lastIndexOf('}');
     if (end < 0) throw new Error('The workspace config is not an object');
     const before = config.slice(0, end).trimEnd();
     const comma = before.endsWith(',') || before.endsWith('{') ? '' : ',';
-    return `${before}${comma}\n  // added by scripts/session-seed.ts\n  "session": ${JSON.stringify(session)},\n}\n`;
+    const added = Object.entries(sections).map(([key, value]) => `  ${JSON.stringify(key)}: ${JSON.stringify(value)},\n`);
+    return `${before}${comma}\n  // added by scripts/session-seed.ts\n${added.join('')}}\n`;
 }
 
 function git(dir: string, args: string[]): void {
@@ -78,11 +79,11 @@ export async function copyWorkspace(source: string, dir: string, options: { port
         },
     });
     const file = path.join(dir, 'domaintrail.jsonc');
-    const session = {
-        port: options.port,
+    const sections = {
+        collab: { port: options.port },
         ...(options.classifier && { classifier: { enabled: true, accountId: MOCK_ACCOUNT, apiTokenEnv: SEED_TOKEN_ENV } }),
     };
-    await writeFile(file, withSession(await readFile(file, 'utf8'), session));
+    await writeFile(file, withSections(await readFile(file, 'utf8'), sections));
     await writeFile(path.join(dir, '.gitignore'), '.domaintrail/\ngenerated/\n');
     await writeFile(path.join(dir, SEED_MARKER), 'Made by scripts/session-seed.ts; `--reset` may wipe this directory.\n');
     git(dir, ['init', '-q']);

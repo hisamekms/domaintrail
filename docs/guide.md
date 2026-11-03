@@ -2432,11 +2432,12 @@ relative to the config file, and its directory becomes the root. Without a confi
       }
     }
   },
-  "view": { "port": 4321, "host": "127.0.0.1" }             // defaults shown
+  "open": { "port": 4321, "host": "127.0.0.1" }             // dt open; defaults shown
+  // collab, agent and classifier: see dt guide session-config
 }
 ```
 
-CLI options win over the file: `generate ts --out`, `view --port`, `view --host`. `--out` replaces `generate.ts.out`
+CLI options win over the file: `generate ts --out`, `open --port`, `open --host` (and `collab --port`, `collab --host`). `--out` replaces `generate.ts.out`
 only; contexts listed in `generate.ts.contexts` keep their own directories. Sources and output directories, `--out`
 included, must stay inside the config file's directory (the root without a config file): an absolute path or one with
 `..` is a config error, and an output directory reached through a symlink stops generation. A name in
@@ -2448,7 +2449,7 @@ are `generate.ts.contexts.<Context>.policies` if given, else `generate.ts.polici
 [Reactions to events](#reactions-to-events-policies)).
 
 **Sources and `.gitignore`.** The sources are the files below the root that match `sources`, outside `node_modules`,
-`.git` and `.domaintrail`, and not ignored by git: every command that finds them (`check`, `generate`, `view`, `fmt`,
+`.git` and `.domaintrail`, and not ignored by git: every command that finds them (`check`, `generate`, `open`, `collab`, `fmt`,
 `show`, `lsp`) skips the files and directories that the `.gitignore` files ignore, with git's rules (`!` negation,
 `dir/` for directories only, a leading or inner `/` anchoring to the file's directory, a deeper file winning). The
 `.gitignore` files that count are those of the root and its subdirectories, those of the directories above the root up
@@ -2821,11 +2822,18 @@ one open session per workspace.
 <!-- topic: session-config -->
 ### Session configuration
 
-The `session` section of `domaintrail.jsonc`; every key is optional, and the defaults are shown:
+The sections `open`, `collab`, `agent` and `classifier` of `domaintrail.jsonc`; every key is optional, and the defaults
+are shown. The old sections `session` and `view` are refused when the file is loaded, with where each key went.
 
 ```jsonc
 {
-  "session": {
+  // dt open (one person, the Live View with the chat)
+  "open": {
+    "port": 4321,
+    "host": "127.0.0.1"        // a non-loopback address serves the Live View read-only (no chat, no agent)
+  },
+  // dt collab and dt collab link
+  "collab": {
     "port": 4321,              // the page and its API
     "host": "127.0.0.1",       // the dev identity refuses a non-loopback address
     "identity": "dev",         // "dev" or "access"
@@ -2839,37 +2847,52 @@ The `session` section of `domaintrail.jsonc`; every key is optional, and the def
       "acceptCookie": false,   // also accept the CF_Authorization cookie when the header is missing
       "avatarHosts": []        // hosts an https avatar may come from; default: none, initials
     },
-    "agent": {
-      "port": 0,               // the agent API, on 127.0.0.1 only; 0 = any free port (written to agent.json)
+    "maxParticipants": 50,
+    // the emoji ☺+ offers first in the chat (1 to 8, each one emoji, distinct); any other can be typed there
+    "quickReactions": ["👍", "👀", "🤔", "🎉", "❤️", "🙏"]
+  },
+  // the agent (dt agent, or the one dt open and dt collab start in process), in both modes
+  "agent": {
+    "port": 0,                 // the agent API, on 127.0.0.1 only; 0 = any free port (written to agent.json)
+    // the runner: the runs that edit the workspace
+    "run": {
       // Claude Code permission rules; this is the default
       "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)"],
-      // how Claude Code carries out the runs
-      "run": {
-        "warm": true,          // one Claude Code process across runs (each run a turn); false: one process per run
-        "restartAfter": 20,    // runs of one warm process before a fresh one replaces it
-        "idleTimeout": 30      // minutes without a run before the warm process ends (its memory freed); 0 = never
-        // "model": "sonnet",  // claude --model; default: your Claude Code settings' model
-        // "effort": "medium"  // claude --effort (low, medium, high, xhigh, max); default: your settings'
-      }
+      "warm": true,            // one Claude Code process across runs (each run a turn); false: one process per run
+      "restartAfter": 20,      // runs of one warm process before a fresh one replaces it
+      "idleTimeout": 30        // minutes without a run before the warm process ends (its memory freed); 0 = never
+      // "model": "sonnet",    // claude --model; default: your Claude Code settings' model
+      // "effort": "medium",   // claude --effort (low, medium, high, xhigh, max); default: your settings'
       // the dt the agent runs (and dt fmt / dt check after it); default: the running dt itself.
       // ["node" | "bun" | "deno", "<script>"] or ["<dt executable>"], relative to this file, outside the workspace:
-      // "dt": ["node", "../domaintrail/dist/dt.js"]
+      // "dt": ["node", "../domaintrail/dist/dt.js"],
       // the most characters of diff given to the agent of the runs a run replies to or answers, all together;
       // past it, only their changed files (default 20480)
       // "maxPreviousRunDiff": 20480
     },
-    "maxParticipants": 50,
-    // the emoji ☺+ offers first in the chat (1 to 8, each one emoji, distinct); any other can be typed there
-    "quickReactions": ["👍", "👀", "🤔", "🎉", "❤️", "🙏"],
-    // opt-in: messages classified by Cloudflare Workers AI (their text is sent to Cloudflare)
-    "classifier": {
-      "enabled": false,
-      "provider": "cloudflare-clef",
-      "model": "clef-flash",   // or "clef"
-      // "accountId": "<your Cloudflare account ID, 32 hex digits>", // required when enabled
-      "apiTokenEnv": "CLOUDFLARE_API_TOKEN",       // the NAME of the variable holding a Workers AI token
-      "threshold": 0.5         // from this probability a message is a request
+    // the answerer: read-only answers to questions (its tools are Read, Grep and Glob, not configurable)
+    "answer": {
+      "warm": true,
+      "restartAfter": 50,      // answers of one warm process before a fresh one replaces it
+      "idleTimeout": 30,
+      "timeout": 120           // the most seconds an answer may take
+      // "model": "sonnet",    // default: your Claude Code settings' model (never the runner's)
+      // "effort": "low"
+    },
+    // the light model that sorts the messages addressed to the AI (question, change request or neither)
+    "triage": {
+      "model": "haiku",
+      "warm": false            // true: one long-lived process; false: a fresh claude -p per message
     }
+  },
+  // opt-in: messages classified by Cloudflare Workers AI (their text is sent to Cloudflare)
+  "classifier": {
+    "enabled": false,
+    "provider": "cloudflare-clef",
+    "model": "clef-flash",     // or "clef"
+    // "accountId": "<your Cloudflare account ID, 32 hex digits>", // required when enabled
+    "apiTokenEnv": "CLOUDFLARE_API_TOKEN",       // the NAME of the variable holding a Workers AI token
+    "threshold": 0.5           // from this probability a message is a request
   }
 }
 ```

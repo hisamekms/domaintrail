@@ -8,7 +8,7 @@ import { type Analysis, analyze } from '@domaintrail/analysis';
 import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/kernel';
 import { checkTestsTypes, checkTsContexts, ConfigError, type ResolvedConfig } from '../config/config.js';
 import { guideTopic, parseGuide, quickReference } from './guide.js';
-import { SessionError, type CliDeps } from './ports.js';
+import { SessionError, type CliDeps, type SessionSettings } from './ports.js';
 import { lookup, showJson, showText } from './show.js';
 import guide from '../../../../docs/guide.md' with { type: 'text' };
 
@@ -325,8 +325,8 @@ Examples:
         .action(async (opts: { port?: number; host?: string; base?: string }) => {
             const cfg = await config();
             const { UnknownRevisionError } = await import('@domaintrail/visualization');
-            const port = opts.port ?? cfg.view.port;
-            const host = opts.host ?? cfg.view.host;
+            const port = opts.port ?? cfg.open.port;
+            const host = opts.host ?? cfg.open.host;
             const server = await deps
                 .startViewServer({
                     root: cfg.root,
@@ -372,7 +372,7 @@ Examples:
         .action(async (opts: { port?: number; host?: string; base?: string }) => {
             const cfg = await config();
             const { UnknownRevisionError } = await import('@domaintrail/visualization');
-            const settings = { ...cfg.session, port: opts.port ?? cfg.session.port, host: opts.host ?? cfg.session.host };
+            const settings = sessionSettings(cfg, opts);
             const server = await deps
                 .startSessionServer({
                     root: cfg.root,
@@ -449,8 +449,8 @@ Examples:
                     respectGitignore: cfg.respectGitignore,
                     configPath: configPath === undefined ? undefined : path.resolve(configPath),
                     agent: opts.agent,
-                    ...(cfg.session.agent.dt && { dt: cfg.session.agent.dt }),
-                    run: cfg.session.agent.run,
+                    ...(cfg.agent.run.dt && { dt: cfg.agent.run.dt }),
+                    run: cfg.agent.run,
                     once: opts.once ?? false,
                     log: io.out,
                 })
@@ -595,6 +595,18 @@ Examples:
     }
     if (report) io.out(JSON.stringify(report, null, 2));
     return exitCode;
+}
+
+/** What the session server reads of `cfg`, with `--port` and `--host` applied. */
+function sessionSettings(cfg: ResolvedConfig, opts: { port?: number; host?: string }): SessionSettings {
+    const { run } = cfg.agent;
+    return {
+        ...cfg.collab,
+        port: opts.port ?? cfg.collab.port,
+        host: opts.host ?? cfg.collab.host,
+        agent: { port: cfg.agent.port, allowedTools: run.allowedTools, maxPreviousRunDiff: run.maxPreviousRunDiff },
+        classifier: cfg.classifier,
+    };
 }
 
 function noSourcesMessage(cfg: ResolvedConfig): string {

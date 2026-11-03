@@ -24,7 +24,7 @@ import {
     SessionError,
 } from '@domaintrail/dt';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
-import type { ResolvedSessionConfig } from '@domaintrail/dt';
+import type { SessionSettings } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 
 const DT = `context Shop {
@@ -78,18 +78,18 @@ async function workspace(): Promise<string> {
     return dir;
 }
 
-const sessionConfig = (overrides: Partial<ResolvedSessionConfig> = {}): ResolvedSessionConfig => ({
+const sessionConfig = (overrides: Partial<SessionSettings> = {}): SessionSettings => ({
     port: 0,
     host: '127.0.0.1',
     identity: 'dev',
-    agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS], run: { warm: true, restartAfter: 20, idleTimeout: 30 }, maxPreviousRunDiff: 20 * 1024 },
+    agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS], maxPreviousRunDiff: 20 * 1024 },
     maxParticipants: 50,
     quickReactions: ['👍', '👀', '🤔', '🎉', '❤️', '🙏'],
     classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
     ...overrides,
 });
 
-const accessConfig = (overrides: Partial<NonNullable<ResolvedSessionConfig['access']>> = {}): NonNullable<ResolvedSessionConfig['access']> => ({
+const accessConfig = (overrides: Partial<NonNullable<SessionSettings['access']>> = {}): NonNullable<SessionSettings['access']> => ({
     teamDomain: 'team.cloudflareaccess.com',
     audience: 'aud-tag',
     allowedHosts: [],

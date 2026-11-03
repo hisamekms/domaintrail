@@ -106,7 +106,7 @@ export interface SourceScope {
  * `NearestConfig`). There is one workspace per session.
  */
 export class DomainWorkspace {
-    config: ResolvedConfig = { ...defaultConfig(process.cwd()), tsOut: '', view: { port: 0, host: '' } };
+    config: ResolvedConfig = { ...defaultConfig(process.cwd()), tsOut: '', open: { port: 0, host: '' } };
     /** Where the config was searched from: the nearest config of a document is only searched up to it. */
     start = process.cwd();
     /** Whether the search found no config file, so that the nearest config of an opened document may replace it. */

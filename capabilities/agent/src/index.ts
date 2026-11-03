@@ -12,16 +12,22 @@ export { checkClaudeCode, type ClaudeUsability } from './adapters/claude-usable.
 // the warm process itself, for a role other than the runs (its own tools, prompt and schema)
 export { createWarmClaude, type WarmClaude, type WarmClaudeOptions, type WarmProfile, type WarmTurn, type WarmTurnEnd } from './adapters/warm-claude.js';
 export { checkDtOutsideWorkspace, dtCommandOf, pinDt, type PinnedDt } from './adapters/dt-shim.js';
-// the adapters' settings in domaintrail.jsonc, `session.agent.allowedTools`, `session.agent.dt` (T6) and
-// `session.agent.run` (the warm agent), composed by the app
+// the adapters' settings in domaintrail.jsonc, `agent.run` (the runner: tools, `dt`, the warm agent), `agent.answer`
+// (the answerer) and `agent.triage` (stage 3), composed by the app
 export {
     AGENT_CONFIG_KEYS,
     AGENT_EFFORTS,
     type AgentEffort,
+    type AnswerConfig,
     DEFAULT_AGENT_TOOLS,
+    DEFAULT_ANSWER_RESTART_AFTER,
+    DEFAULT_ANSWER_TIMEOUT,
     DEFAULT_IDLE_TIMEOUT,
     DEFAULT_RESTART_AFTER,
+    DEFAULT_TRIAGE_MODEL,
+    type ResolvedRunConfig,
     type RunConfig,
+    type TriageConfig,
     resolveAgentConfig,
     validateAgentConfig,
     type AgentConfigFile,

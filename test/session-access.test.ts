@@ -15,7 +15,7 @@ import { type AccessAdapterOptions } from '@domaintrail/collaboration';
 import type { Me } from '@domaintrail/collaboration/protocol';
 import { cliDeps, type SessionServer, type SessionServerOptions, startSessionServer, WS_EXPIRED, WS_REVOKED, runCli, SessionError } from '@domaintrail/dt';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
-import type { ResolvedSessionConfig } from '@domaintrail/dt';
+import type { SessionSettings } from '@domaintrail/dt';
 
 const TEAM = 'team.cloudflareaccess.com';
 const ISSUER = `https://${TEAM}`;
@@ -140,7 +140,7 @@ async function workspace(): Promise<string> {
     return dir;
 }
 
-type AccessConfig = NonNullable<ResolvedSessionConfig['access']>;
+type AccessConfig = NonNullable<SessionSettings['access']>;
 
 const accessConfig = (over: Partial<AccessConfig> = {}): AccessConfig => ({
     teamDomain: TEAM,
@@ -153,12 +153,12 @@ const accessConfig = (over: Partial<AccessConfig> = {}): AccessConfig => ({
     ...over,
 });
 
-const sessionConfig = (access: AccessConfig): ResolvedSessionConfig => ({
+const sessionConfig = (access: AccessConfig): SessionSettings => ({
     port: 0,
     host: '127.0.0.1',
     identity: 'access',
     access,
-    agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS], run: { warm: true, restartAfter: 20, idleTimeout: 30 }, maxPreviousRunDiff: 20 * 1024 },
+    agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS], maxPreviousRunDiff: 20 * 1024 },
     maxParticipants: 50,
     quickReactions: ['👍', '👀', '🤔', '🎉', '❤️', '🙏'],
     classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
@@ -250,7 +250,7 @@ describe('a session in access mode (against a mock of Cloudflare)', () => {
         const dir = await workspace();
         await writeFile(
             path.join(dir, 'domaintrail.json'),
-            JSON.stringify({ session: { identity: 'access', access: { teamDomain: TEAM, audience: AUD, publicUrl: 'https://session.example.com' } } }),
+            JSON.stringify({ collab: { identity: 'access', access: { teamDomain: TEAM, audience: AUD, publicUrl: 'https://session.example.com' } } }),
         );
         const out: string[] = [];
         const err: string[] = [];

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { seed } from '../scripts/session-seed/seed';
 import { scenariosOf } from '../scripts/session-seed/scenarios';
-import { withSession } from '../scripts/session-seed/workspace';
+import { withSections } from '../scripts/session-seed/workspace';
 
 const ROOT = path.join(import.meta.dir, '..');
 const dirs: string[] = [];
@@ -33,9 +33,11 @@ describe('the session seed', () => {
         expect(() => scenariosOf(['nope'])).toThrow('Unknown scenario nope');
     });
 
-    test('the session section goes into the JSONC config, with or without a trailing comma', () => {
-        expect(withSession('{\n  "a": 1,\n}\n', { port: 1 })).toContain('"a": 1,\n  // added by scripts/session-seed.ts\n  "session": {"port":1},\n}');
-        expect(withSession('{ "a": 1 }', { port: 1 })).toContain('"a": 1,\n');
+    test('the sections go into the JSONC config, with or without a trailing comma', () => {
+        expect(withSections('{\n  "a": 1,\n}\n', { collab: { port: 1 }, classifier: {} })).toContain(
+            '"a": 1,\n  // added by scripts/session-seed.ts\n  "collab": {"port":1},\n  "classifier": {},\n}',
+        );
+        expect(withSections('{ "a": 1 }', { collab: { port: 1 } })).toContain('"a": 1,\n');
     });
 
     test('reactions on a free port: messages, one completed run, marks; the agent holds nothing afterwards', async () => {

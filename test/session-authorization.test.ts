@@ -10,7 +10,7 @@ import * as path from 'node:path';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { type SessionServer, startSessionServer } from '@domaintrail/dt';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
-import type { ResolvedSessionConfig } from '@domaintrail/dt';
+import type { SessionSettings } from '@domaintrail/dt';
 
 const DT = `context Shop {
   id OrderId: UUID
@@ -34,11 +34,11 @@ const DT = `context Shop {
 }
 `;
 
-const sessionConfig: ResolvedSessionConfig = {
+const sessionConfig: SessionSettings = {
     port: 0,
     host: '127.0.0.1',
     identity: 'dev',
-    agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS], run: { warm: true, restartAfter: 20, idleTimeout: 30 }, maxPreviousRunDiff: 20 * 1024 },
+    agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS], maxPreviousRunDiff: 20 * 1024 },
     maxParticipants: 50,
     quickReactions: ['👍'],
     classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },

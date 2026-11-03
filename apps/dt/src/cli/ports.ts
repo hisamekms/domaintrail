@@ -1,5 +1,6 @@
 import type { SourceFile } from '@domaintrail/kernel';
-import type { ResolvedConfig, ResolvedSessionConfig } from '../config/config.js';
+import type { RunConfig } from '@domaintrail/agent';
+import type { ResolvedClassifierConfig, ResolvedCollabConfig, ResolvedConfig } from '../config/config.js';
 import type { LanguageServerOptions } from '../lsp/server.js';
 
 /**
@@ -53,9 +54,19 @@ export interface SessionServerOptions {
     sources: readonly string[];
     respectGitignore: boolean;
     base?: string;
-    /** The `session` section, with `--port` and `--host` applied. */
-    session: ResolvedSessionConfig;
+    /** What the session server is given of the configuration, with `--port` and `--host` applied. */
+    session: SessionSettings;
     log: (line: string) => void;
+}
+
+/**
+ * What the session server reads of the configuration: `collab` (its port and host, the identity mode, Access, the
+ * participants, the quick reactions), the agent API's port with the runner's tools and previous-run diff (`agent`),
+ * and the `classifier`.
+ */
+export interface SessionSettings extends ResolvedCollabConfig {
+    agent: { port: number; allowedTools: string[]; maxPreviousRunDiff: number };
+    classifier: ResolvedClassifierConfig;
 }
 
 /** A running session server, as the CLI reports it. */
@@ -78,12 +89,12 @@ export interface SubscribeOptions {
     /** The config file given with `-c` (for `dt fmt` and `dt check` after the agent). */
     configPath?: string;
     agent: 'claude';
-    /** `session.agent.dt`: the command `dt` runs for the agent and after it; absent, the running CLI itself. */
+    /** `agent.run.dt`: the command `dt` runs for the agent and after it; absent, the running CLI itself. */
     dt?: readonly string[];
     /** Handle one run (waiting for one if none is queued), then end. */
     once: boolean;
-    /** `session.agent.run`: how Claude Code carries out the runs (warm or one process per run, model, effort). */
-    run?: ResolvedSessionConfig['agent']['run'];
+    /** `agent.run`: how Claude Code carries out the runs (warm or one process per run, model, effort). */
+    run?: RunConfig;
     log: (line: string) => void;
 }
 

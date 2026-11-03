@@ -1,6 +1,6 @@
 // `dt session subscribe --agent claude` (ADR 0026, S6): the subscriber of the session server running on the
 // workspace, wired to its agent API (`.domaintrail/session/agent.json`), Claude Code (a warm process across runs, or
-// one per run: `session.agent.run`), `dt fmt`/`dt check` (this CLI, or `session.agent.dt`, for the agent too) and the
+// one per run: `agent.run`), `dt fmt`/`dt check` (this CLI, or `agent.run.dt`, for the agent too) and the
 // workspace's files.
 import { lstat } from 'node:fs/promises';
 import { hostname } from 'node:os';
@@ -47,10 +47,10 @@ export interface SubscriberOptions {
     once?: boolean;
     /**
      * How `dt` is started for `dt fmt` and `dt check` after the agent, and by the agent itself (its `dt`): the CLI passes
-     * `session.agent.dt` when configured, else its own runtime and entry.
+     * `agent.run.dt` when configured, else its own runtime and entry.
      */
     dt: DtCommand;
-    /** How Claude Code carries out the runs (`session.agent.run`); default: warm, with its default restart. */
+    /** How Claude Code carries out the runs (`agent.run`); default: warm, with its default restart. */
     run?: RunConfig;
     log?: (line: string) => void;
     /** The agent's program instead of `claude` on the PATH: for the tests only, not a CLI option. */

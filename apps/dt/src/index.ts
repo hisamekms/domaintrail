@@ -21,7 +21,7 @@ export { createModelValidator, createSourceFormatter } from './wiring/validator.
 
 // ---- the CLI ---------------------------------------------------------------------------------------------------
 export { consoleIO, runCli, type CliIO } from './cli/main.js';
-export { SessionError, type CliDeps } from './cli/ports.js';
+export { SessionError, type CliDeps, type SessionSettings } from './cli/ports.js';
 
 // ---- the configuration: domaintrail.jsonc composed from its sections' owners (T6) -------------------------------
 export {
@@ -31,8 +31,10 @@ export {
     ConfigError,
     defaultConfig,
     resolveConfig,
+    type ResolvedAgentSection,
+    type ResolvedClassifierConfig,
+    type ResolvedCollabConfig,
     type ResolvedConfig,
-    type ResolvedSessionConfig,
 } from './config/config.js';
 
 // ---- the language server (loaded only by `dt lsp`) -------------------------------------------------------------

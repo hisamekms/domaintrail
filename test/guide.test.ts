@@ -147,12 +147,16 @@ describe('dt guide', () => {
     });
 
     test('its session config example is a valid config, with the defaults it says', () => {
-        const example = blocks('jsonc').find((b) => b.includes('"session"'))!;
-        const session = resolveConfig(example, path.join(ROOT, 'domaintrail.jsonc')).session;
-        const defaults = resolveConfig('{}', path.join(ROOT, 'domaintrail.jsonc')).session;
-        expect({ ...session, access: undefined }).toEqual({ ...defaults, access: undefined });
-        expect(session.agent.allowedTools).toEqual([...DEFAULT_AGENT_TOOLS]);
-        expect(session.access).toMatchObject({ acceptCookie: false, avatarHosts: [] });
+        const example = blocks('jsonc').find((b) => b.includes('"collab"'))!;
+        const file = path.join(ROOT, 'domaintrail.jsonc');
+        const { open, collab, agent, classifier } = resolveConfig(example, file);
+        const defaults = resolveConfig('{}', file);
+        expect(open).toEqual(defaults.open);
+        expect({ ...collab, access: undefined }).toEqual({ ...defaults.collab, access: undefined });
+        expect(agent).toEqual(defaults.agent);
+        expect(classifier).toEqual(defaults.classifier);
+        expect(agent.run.allowedTools).toEqual([...DEFAULT_AGENT_TOOLS]);
+        expect(collab.access).toMatchObject({ acceptCookie: false, avatarHosts: [] });
     });
 
     test('its JSON output example has the properties of the schema', async () => {

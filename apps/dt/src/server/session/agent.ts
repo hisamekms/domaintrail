@@ -40,7 +40,7 @@ export interface AgentApiDeps {
     readonly allowedTools: readonly string[];
     /** How long a claim or a heartbeat holds the lease. */
     readonly leaseMs: number;
-    /** The most characters of diff a started run is given of the runs it continues, together (`session.agent.maxPreviousRunDiff`). */
+    /** The most characters of diff a started run is given of the runs it continues, together (`agent.run.maxPreviousRunDiff`). */
     readonly maxPreviousRunDiff: number;
     /** Most SSE streams open at once. */
     readonly maxStreams: number;
