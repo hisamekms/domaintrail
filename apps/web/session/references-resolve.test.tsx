@@ -1,6 +1,6 @@
 // Element references of the AI as the chat resolves and shows them (references.ts, targets.ts `resolveTarget`): every
 // kind of storming declaration — notes, timelines, exceptions, groups, stages — and the storming itself, by ID or label;
-// the forms the AI writes besides the canonical one; inside each Markdown construct of an answer (code stays code); the
+// the forms the AI writes besides the canonical one; inside each Markdown construct of an answer (code stays code, unless a span is one reference); the
 // views a click opens; and the other places that show the AI's words (the triage record, the proposal chips).
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -207,9 +207,11 @@ describe('references inside the Markdown of an answer', () => {
         expect(out).toContain(`<td>${link('給食当番')}（${link('白衣を着る')} で頼む側）</td>`);
     });
 
-    test('inside code (a span or a block) a reference stays code, as written', () => {
-        const out = html('`@{es:Kyushoku/Normal}` と\n\n```\n@{es:Kyushoku/Normal}\n```');
-        expect(out).toContain('<code>@{es:Kyushoku/Normal}</code>');
+    test('a code span that is one reference is the reference; other code (a span or a block) stays code, as written', () => {
+        expect(html('`@{es:Kyushoku/Normal}` と')).toContain(`${link('いつもの流れ')} と`);
+        expect(html('` @{es:Kyushoku/Normal} `')).toContain(link('いつもの流れ'));
+        const out = html('`x = @{es:Kyushoku/Normal}` と\n\n```\n@{es:Kyushoku/Normal}\n```');
+        expect(out).toContain('<code>x = @{es:Kyushoku/Normal}</code>');
         expect(out).toContain('<pre class="chat-md-code"><code>@{es:Kyushoku/Normal}</code></pre>');
         expect(out).not.toContain('reply-element');
     });

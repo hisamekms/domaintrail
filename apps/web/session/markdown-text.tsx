@@ -8,13 +8,18 @@ import type { ModelTarget } from './targets';
 
 type Navigate = (target: ModelTarget) => void;
 
+/** A code span's text that is exactly one element reference (`@{…}`), spaces around it aside. */
+const ONE_REFERENCE = /^\s*@\{[^{}\n]+\}\s*$/;
+
 function Inlines({ content, onNavigate }: { content: readonly Inline[]; onNavigate: Navigate }): ReactNode {
     return content.map((n, i) => {
         switch (n.kind) {
             case 'text':
                 return <ReplyText key={i} text={n.text} onNavigate={onNavigate} />;
             case 'code':
-                return <code key={i}>{n.text}</code>;
+                // a code span that is one element reference and nothing else is the reference: the AI often puts its
+                // references in backticks, and a reference is meant to be read as the element's name
+                return ONE_REFERENCE.test(n.text) ? <ReplyText key={i} text={n.text.trim()} onNavigate={onNavigate} /> : <code key={i}>{n.text}</code>;
             case 'strong':
                 return (
                     <strong key={i}>
