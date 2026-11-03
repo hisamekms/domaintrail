@@ -43,7 +43,7 @@ Collapsed, the column keeps the health and the gear at the bottom of the activit
 
 ### 木 (tree)
 
-The navigator follows the world. In the domain model, the model tree — shared contexts first, then each context grouped by kind; aggregates expand to their states and
+The navigator follows the world. In the domain model, the model tree — shared contexts first, then each context grouped by kind (a folded group says how many it holds, 「集約 (1)」; an open one lists them, so it does not); aggregates expand to their states and
 commands — and the `.dt` and `.dtes` files with error/warning counts. Click selects (a file too); double-click opens the item in
 the view or inspector tab that suits it.
 
@@ -147,6 +147,15 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   step it branches off at (the exceptions' dashed arrows a quieter red, a dotted arrow back for `then`). The タイムライン
   picker then also lists each stage (「…（例外を含む）」), and the 絞り込み has 「例外を表示」 (on by default,
   remembered per browser; off counts as one narrowing) to draw the integrated canvas and the stages without their exceptions.
+  Selecting a note keeps it and what it is joined to in full view and dims the rest (a short fade; none with reduced
+  motion): the steps before and after it in the timelines shown (an exception's first step and its `then` included),
+  the command that causes an event with its actor or external system, read model and aggregate, the policies that
+  react to it and its hotspots, and the edges between them; a command, policy or actor selected keeps the notes its
+  edges join. An element drawn once per use (an actor beside each command) counts as one: selecting one of its notes
+  keeps every copy. An event in a group is joined through its group's time order, and a group joined to the selection
+  keeps its events; the stages' and groups' frames are never dimmed. Clicking the empty canvas (or `Escape`) clears the
+  selection and brings everything back. Both drawings do it, the integrated canvas and a timeline laid out by ELK and
+  the stages' grid.
 
 The modeling views (Context Map, Structure, Catalog, the inspector, the explorer) use the same hues for the same
 concepts, on smaller areas: the cards are neutral, and the kind is on their edge, their stereotype («集約ルート») and
@@ -222,11 +231,28 @@ explorer.
 - **状態遷移**: states and command transitions of the aggregate (`new` marks factory commands), for the aggregate and
   its states and commands; it pans and zooms like the main canvas and shows the selected state or command.
 - **振る舞い**: what a command takes, requires, changes, emits and returns, and the policies that trigger it.
-- **A storming's element** (selected in the Event Storming view): its kind, label, ID, `///` description, file and
-  line (ファイルを開く), and diagnostics; for an event, aggregate or command, its `.dt` との対応 (the `ref`, a link to the
-  `.dt` element, or 「.dt にありません」 when it does not resolve); for a hotspot, its 状態 and 結論; its 関係 (きっかけ,
-  発行, 発生, 対象, 実行者, 参照, 論点), as links; for an event, where it appears in the timelines (タイムラインでの出現)
-  and which notes of the view draw it; for a timeline or group, its events.
+- **A storming's element** (selected in the Event Storming view) is read next to the canvas: it shows only what the
+  canvas does not, and its connections are what the canvas keeps in full view. Its kind, a grey microscope badge for
+  an event shown at Design Level only, its name with the 💬 that targets it in the chat, and its `///` description in
+  full. Then rows, each named by a grey icon (its name in the tooltip and `aria-label`), each only when it has
+  something: its problems on top (a soft warning: the checker's message in plain words — 「戻り先が本流にない」 —
+  the code in the tooltip, with a 🔧 to have the AI fix it); ほかの場所 (`MapPin`: the timelines it occurs in outside
+  the view shown — another stage or timeline, an exception hidden by the filter — each a link that shows that
+  timeline with the event selected); 今は隠れているつながり at Big Picture (`EyeOff`: the command that causes it with
+  who issues it → ここ → the policies reacting, as links, and a microscope to see it at Design Level); in a session,
+  話題 (`MessageSquare`: how many messages target it or an occurrence of it, a link to the latest in the chat, and
+  that message on one line), AI の作業 (`Bot`: how many runs its messages target or its changes touched, a link to
+  the latest in AI の作業) and このセッションで追加 / 変更 (`CirclePlus` / `PencilLine`: the first message of the run
+  that added it, else of the latest that changed it, a link to the run's card); its `.dt` counterpart (`Blocks`: an
+  event's, command's or aggregate's `ref`, a link while the model has it), and a resolved hotspot's conclusion
+  (`CircleCheck`). Last, the actions, brand-coloured icons on a pale wash: AI に聞く (filled), 問いを足す (an event),
+  解決を伝える (an open hotspot). Each action, and 🔧, only puts the beginning of a message in the composer with the
+  element as its `#` target (「#暗証番号を忘れた について、」), opens the chat and puts the caret there: the person
+  writes the rest and sends it. Outside a session, or once it ended, there are no actions. Its file and line, the DSL's
+  words (on, issues, emits) and the list of its relations are not shown (the canvas draws them; the AI edits the
+  files). A stage shows the stage it comes after, its main flows and its exceptions, a timeline its steps (a group's
+  events in braces) and where an exception returns to, a group its events — each row an icon — and a stage or a
+  timeline has an eye that shows its view.
 - **ソース**: the whole file, read-only, syntax-coloured, diagnostics in the gutter, scrolled to the declaration, which
   is highlighted with a button that copies its code (to paste into feedback for an AI agent); clicking a declaration
   selects it. A selected file shows here the same way.
