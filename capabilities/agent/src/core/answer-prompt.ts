@@ -137,7 +137,9 @@ ${READ_ONLY_RULES}
 
 Reply with one JSON object (structured output), its "kind" one of:
 - "answer": { kind, answer } — your answer about the model as it is in the files (at most ${REPLY_LIMITS.answer}
-  characters). Say what you are unsure of rather than guess.
+  characters). Say what you are unsure of rather than guess. Keep it short: the chat column is narrow. It is shown as
+  Markdown (paragraphs, lists, \`code\`, code blocks, tables): use at most one heading level (\`#\`), and no links or
+  images (they are shown as plain text).
 - "proposal": { kind, ${PROPOSAL_FIELDS}, reason } — the message asks for a change after all: describe the change,
   grounded in the files you read, instead of describing it as done; reason (at most ${TRIAGE_REASON_LIMIT}) says why it is
   a request.
