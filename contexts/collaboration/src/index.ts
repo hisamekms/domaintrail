@@ -161,9 +161,8 @@ export {
     type IdentityMode,
     type IdentityProvider,
 } from './application/identity.js';
-// the classification of every message for the facilitator's 「AI に送る」 (superseded by the triage's stage 2, ADR 0030):
-// kept for today's page until M4/M6 remove it
-export { createClassifications, type Classifications, type MessageClassifier } from './application/classifier.js';
+// stage 2 of the triage (ADR 0030): Clef's step for a message addressed to the AI
+export { CLEF_NOT_CONFIGURED, clefStep, type MessageClassifier } from './application/classifier.js';
 export { createRunActivities, RUN_ENDING_EVENTS, type RunActivities } from './application/activities.js';
 // its settings in the `session` section of domaintrail.jsonc (T6), composed by the app
 export {

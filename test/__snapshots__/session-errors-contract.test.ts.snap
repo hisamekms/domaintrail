@@ -146,12 +146,13 @@ exports[`refused requests of a session in dev mode status and body of each refus
       },
     },
   ],
-  "POST requests apply, participant": [
-    403,
+  "POST requests apply (gone), participant": [
+    400,
     {
       "error": {
-        "message": "Only the facilitator applies messages.",
-        "type": "FacilitatorOnly",
+        "field": "apply",
+        "message": "Unknown field.",
+        "type": "InvalidInput",
       },
     },
   ],
@@ -207,6 +208,15 @@ exports[`refused requests of a session in dev mode status and body of each refus
       "error": {
         "message": "Sign in to the session first.",
         "type": "Unauthenticated",
+      },
+    },
+  ],
+  "POST requests/address, participant": [
+    403,
+    {
+      "error": {
+        "message": "Only the facilitator may do this.",
+        "type": "FacilitatorOnly",
       },
     },
   ],

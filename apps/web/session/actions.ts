@@ -50,6 +50,8 @@ export function answerBody(
 export const requestsOf = (run: RunJson): string[] => run.input.requests.map((r) => r.request);
 
 export interface ChatActions {
+    /** The facilitator's 「AI に送る」 (ADR 0030): addresses the messages to the AI; each one's triage decides what follows. */
+    address(requests: readonly string[]): Promise<boolean>;
     /** Queues the messages as one run, with the note if any; the undo is offered then. */
     apply(requests: readonly string[], note?: string): Promise<boolean>;
     /** Queues the run's requests again with the answer to its questions. */
@@ -103,6 +105,7 @@ export function useChatActions(): ChatActions {
         [act, offerUndo],
     );
     return {
+        address: (requests) => act(() => sessionApi.address([...requests])),
         apply: (requests, note) => queue({ requests: [...requests], ...(note?.trim() && { note: note.trim() }) }),
         answer: (run, answer) => queue({ requests: requestsOf(run), answerTo: run.id, answer }),
         pick: (run, assumption, alternative, note) => queue({ requests: requestsOf(run), note, pick: { pickOf: run.id, assumption, alternative } }),

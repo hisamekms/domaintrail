@@ -338,7 +338,6 @@ export function SessionChat(props: {
         revisions,
         marks,
         marking,
-        classifications: me.participant.role === 'facilitator' ? session.classifications : undefined,
         selection,
         jump,
         showPerson,
@@ -669,7 +668,7 @@ function streamRows(items: readonly StreamItem[], tx: Tx): Row[] {
  * tools to send it to the AI; ↩ and ☺+.
  */
 function MessageRow({ request: r, continues }: { request: RequestJson; continues: boolean }) {
-    const { session, tx, nameOf, avatarOf, onNavigate, control, marks, classifications, selection, actions, showPerson } = useChat();
+    const { session, tx, nameOf, avatarOf, onNavigate, control, marks, selection, actions, showPerson } = useChat();
     const author = nameOf(r.author);
     const avatarUrl = avatarOf(r.author);
     // it mentions me, or replies to my message: a faint background in my stream only (it asks for my attention)
@@ -678,8 +677,6 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
     const facilitator = isFacilitator(session.state, r.author);
     const statuses = session.targets?.statuses[r.id];
     const mark = marks.get(r.id);
-    // read as talk: no AI に送る button in the row (still in the … menu)
-    const talk = classifications?.[r.id]?.kind === 'chat';
     const selected = selection.ids.has(r.id);
     const [note, setNote] = useState<string | undefined>();
     const choose = (e: React.MouseEvent): void => {
@@ -703,18 +700,18 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
         <RowActions>
             {control && (
                 <span className="chat-apply">
-                    {!mark && !talk && (
+                    {!mark && (
                         <button
                             className="icon-button chat-apply-button"
                             disabled={actions.busy}
-                            onClick={() => void actions.apply([r.id])}
+                            onClick={() => void actions.address([r.id])}
                             aria-label={tx.chat.apply}
                             data-tooltip={tx.chat.apply}
                         >
                             <Bot size={14} aria-hidden />
                         </button>
                     )}
-                    <MessageMenu id={r.id} applied={mark !== undefined} talk={talk} onNote={() => setNote('')} />
+                    <MessageMenu id={r.id} applied={mark !== undefined} onNote={() => setNote('')} />
                 </span>
             )}
             {/* ↩ just before ☺+, as on an AI turn */}
@@ -831,10 +828,10 @@ function MessageReferenceLine({ request }: { request: string }) {
 }
 
 /**
- * A message's menu (the facilitator's, …): send it again (once sent) or anyway (classified as chat, where the button is
- * not shown), send it with a comment, choose it among several to send together.
+ * A message's menu (the facilitator's, …): send it again (once sent), send it with a comment, choose it among several
+ * to send together.
  */
-function MessageMenu({ id, applied, talk, onNote }: { id: string; applied: boolean; talk: boolean; onNote: () => void }) {
+function MessageMenu({ id, applied, onNote }: { id: string; applied: boolean; onNote: () => void }) {
     const { tx, actions, selection } = useChat();
     const [open, setOpen] = useState(false);
     const root = useRef<HTMLDivElement>(null);
@@ -857,9 +854,9 @@ function MessageMenu({ id, applied, talk, onNote }: { id: string; applied: boole
             </button>
             {open && (
                 <div className="pane-menu-list" role="menu">
-                    {(applied || talk) && (
+                    {applied && (
                         <button role="menuitem" onClick={pick(() => void actions.apply([id]))}>
-                            {applied ? tx.chat.applyAgain : tx.chat.applyAnyway}
+                            {tx.chat.applyAgain}
                         </button>
                     )}
                     <button role="menuitem" onClick={pick(onNote)}>
@@ -885,7 +882,8 @@ function SelectionBar() {
         const ids = [...document.querySelectorAll<HTMLElement>('.chat-stream [data-item^="message:"]')]
             .map((el) => el.dataset.item?.slice('message:'.length) ?? '')
             .filter((id) => selection.ids.has(id));
-        if (await actions.apply(ids, note)) {
+        // without a comment, addressed to the AI (its triage decides); with one, queued as one run as before
+        if (await (note.trim() ? actions.apply(ids, note) : actions.address(ids))) {
             selection.clear();
             setNote('');
             setNoting(false);

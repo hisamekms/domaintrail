@@ -2,7 +2,7 @@
 // the drafts in IndexedDB. The page is in a session only once the socket sent `session.state`; under `dt view` it never
 // does, so nothing here calls the session API or sends anything there.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Classification, Cursor, Me, RunActivity, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
+import type { Cursor, Me, RunActivity, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import type { ViewSocket } from '../app/useViewSocket';
 import type { DiagramCanvas } from '../view/diagram';
@@ -46,8 +46,6 @@ export interface SessionData {
     readonly epoch: number;
     /** The last failure of a call the page made by itself (state, targets, me). */
     readonly error: string | undefined;
-    /** The facilitator's: how each message reads, when the session classifies them (else undefined: all applicable). */
-    readonly classifications: Readonly<Record<string, Classification>> | undefined;
     /** What the running runs are doing, by run ID (the latest each reported; shown only while a run is running). */
     readonly activities: Readonly<Record<string, RunActivity>>;
 }
@@ -65,14 +63,11 @@ export function useSession(socket: ViewSocket, current: ViewPayload | null): Ses
     const [epoch, setEpoch] = useState(0);
     const [targets, setTargets] = useState<TargetStatuses | undefined>();
     const [error, setError] = useState<string | undefined>();
-    const [classifications, setClassifications] = useState<Readonly<Record<string, Classification>> | undefined>();
     const [activities, setActivities] = useState<Readonly<Record<string, RunActivity>>>(NO_ACTIVITIES);
 
     useEffect(
         () =>
             subscribe((m) => {
-                if (m.type === 'session.classifications') return setClassifications(m.classifications);
-                if (m.type === 'session.classification') return setClassifications((c) => ({ ...c, [m.request]: m.classification }));
                 if (m.type === 'session.activities') return setActivities(m.activities);
                 if (m.type === 'run.activity') return setActivities((a) => ({ ...a, [m.run]: m.activity }));
                 if (m.type === 'session.state') {
@@ -137,8 +132,8 @@ export function useSession(socket: ViewSocket, current: ViewPayload | null): Ses
     }, [inSession, requestCount, current]);
 
     return useMemo(
-        () => (model.state && model.me ? { me: model.me, state: model.state, peers, status, targets, epoch, error, classifications, activities } : undefined),
-        [model.state, model.me, peers, status, targets, epoch, error, classifications, activities],
+        () => (model.state && model.me ? { me: model.me, state: model.state, peers, status, targets, epoch, error, activities } : undefined),
+        [model.state, model.me, peers, status, targets, epoch, error, activities],
     );
 }
 

@@ -2,7 +2,6 @@
 // actions and revision tools, and the selection of messages to apply together. A message and its quote are not marked
 // together on hover: each row reacts only to itself, and a link leads from one to the other.
 import { createContext, useContext } from 'react';
-import type { Classification } from '@domaintrail/collaboration/protocol';
 import type { Messages } from '../i18n';
 import type { ChatActions, QuestionChoice } from './actions';
 import type { MessageMark } from './cards';
@@ -44,8 +43,6 @@ export interface ChatContextValue {
         /** A mark being set (its sign and target key): not clickable again until the server answered. */
         readonly pending: ReadonlySet<string>;
     };
-    /** The facilitator's: how each message reads (undefined: not classified, every message applicable). */
-    readonly classifications: Readonly<Record<string, Classification>> | undefined;
     /** The messages chosen to apply together (selection mode while any is chosen or the mode was entered). */
     readonly selection: { readonly active: boolean; readonly ids: ReadonlySet<string>; toggle(id: string): void; start(id: string): void; clear(): void };
     /** Scrolls the stream to an item (`message:<id>`, `card:<key>`) and marks it for a moment. */

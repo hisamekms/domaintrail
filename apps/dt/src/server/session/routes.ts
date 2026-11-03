@@ -1,8 +1,11 @@
 // The browser's side of a session (ADR 0026, S4): the REST API under `/api/session/`, the pages under `/session/` (the
 // join form, the facilitator link) and the sign-in answer for a page without an identity. Every input is checked at
 // the boundary (`input.ts`); every error is typed JSON (`{ "error": { "type": … } }`). Participants read, send
-// requests, react to messages and AI turns and vote on a question's options or an assumption's choices; only the
-// facilitator queues, cancels and reverts runs, takes and restores revisions, hands the role over and closes the session. Who
+// messages (addressed to the AI by a mention of it or a reply to it, ADR 0030), react to messages and AI turns, vote on
+// a question's options or an assumption's choices and withdraw their change proposals; only the facilitator addresses
+// any message to the AI (「AI に送る」), approves and rejects proposals, queues, cancels and reverts runs, takes and
+// restores revisions, hands the role over and closes the session. A participant sees the triages' outcomes only, the
+// facilitator their record (`views.ts`). Who
 // may do what is the collaboration's (ADR 0027): each use case takes the `Actor` of the identity and its commands
 // refuse what the role does not allow; the role of each route below is a hint that answers first, with the same
 // status and body as the refusal of the domain.
@@ -13,10 +16,14 @@ import {
     type CollaborationUseCases,
     type IdentityKey,
     knownAgentRunId,
+    knownChangeProposalId,
+    knownRequestId,
     type PickData,
+    PROPOSAL_LIMITS,
+    readProposal,
     type SessionState,
 } from '@domaintrail/collaboration';
-import type { Me, ModelChangesBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import type { AgentPresence, Me, ModelChangesBody, Role, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import type { AccessPolicy, Authorization } from '../http/access.js';
 import { BodyError, mediaType, readJson, readText, sendError, sendJson } from '../http/json.js';
 import type { SessionSurface } from '../http/server.js';
@@ -31,6 +38,7 @@ import {
     markTarget,
     MAX_NOTE,
     MAX_REQUEST_TEXT,
+    MAX_RUN_REQUESTS,
     requestIds,
     mentionIds,
     replyTarget,
@@ -41,6 +49,7 @@ import {
 } from './input.js';
 import { joinPage, messagePage, nameCookie, pageLanguage, rememberedName, safeNext } from './pages.js';
 import { publicParticipant } from './presence.js';
+import { stateFor, triageFor } from './views.js';
 
 /** Largest body of a session API request (a request's text is at most 10,000 characters). */
 export const MAX_SESSION_BODY = 64 * 1024;
@@ -80,6 +89,10 @@ export interface SessionHttpDeps {
     readonly secureCookie: boolean;
     /** The emoji the add-reaction popover offers first (`session.quickReactions`), sent with the state. */
     readonly quickReactions: readonly string[];
+    /** Messages were addressed to the AI: the server's stage of their triage (Clef) takes them. */
+    readonly triaged: () => void;
+    /** The agents connected per role and the work waiting for one, sent with the state. */
+    readonly agentPresence: () => Promise<AgentPresence>;
     readonly log: (line: string) => void;
 }
 
@@ -108,6 +121,7 @@ export function statusOf(type: string): number {
         case 'InvalidTriageStep':
         case 'InvalidTriageInput':
         case 'AnswerTooLong':
+        case 'InvalidProposal':
             return 400;
         case 'Unauthenticated':
             return 401;
@@ -168,15 +182,21 @@ export function meOf(session: Collaboration.SessionId, who: Identified): Me {
     };
 }
 
-/** The state for the pages: the session's aggregates at `seq`, the quick reactions, and the participant holding the facilitator's role, if any. */
+/**
+ * The state for a page of `role`: the session's aggregates at `seq` (a participant gets the triages' outcomes only), the
+ * quick reactions, the agents connected and the work waiting, and the participant holding the facilitator's role, if any.
+ */
 export function stateBody(
     state: SessionState,
     seq: number,
     quickReactions: readonly string[],
-    facilitatorHolder?: Collaboration.ParticipantId,
+    facilitatorHolder: Collaboration.ParticipantId | undefined,
+    role: Role,
+    agent?: AgentPresence,
 ): SessionStateBody {
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the aggregates become their JSON when encoded (dates as ISO strings)
-    return { ...state, seq, quickReactions, ...(facilitatorHolder && { facilitatorHolder }) } as unknown as SessionStateBody;
+    const body = { ...state, seq, quickReactions, ...(agent && { agent }), ...(facilitatorHolder && { facilitatorHolder }) } as unknown as SessionStateBody;
+    return stateFor(role, body);
 }
 
 /** The cookie that signs a browser in (dev), or out (`secret` undefined). */
@@ -194,18 +214,10 @@ interface Route {
     readonly handle: (ctx: { req: IncomingMessage; res: ServerResponse; auth: Admitted; params: string[] }) => Promise<void>;
 }
 
-/**
- * `apply` of a sent message: absent or false (only sent), true, or `{ note }` (queued at once as a run of its own, with
- * the facilitator's note). `false` here is "do not apply", `undefined` an invalid input already answered.
- */
-function applyInput(raw: unknown): { ok: true; value: false | { note?: Collaboration.Text } } | { ok: false; error: InvalidInput } {
-    if (raw === undefined || raw === false) return { ok: true, value: false };
-    if (raw === true) return { ok: true, value: {} };
-    if (typeof raw !== 'object' || raw === null || Array.isArray(raw) || Object.keys(raw).some((k) => k !== 'note'))
-        return { ok: false, error: { type: 'InvalidInput', field: 'apply', message: 'Expected true, or { "note": … }.' } };
-    if (!('note' in raw) || raw.note === undefined) return { ok: true, value: {} };
-    const note = text(raw.note, 'apply.note', MAX_NOTE);
-    return note.ok ? { ok: true, value: { note: note.value } } : note;
+/** A change proposal's text as the facilitator edits it (`{ what, where, how }`, `PROPOSAL_LIMITS`). */
+function proposalInput(raw: unknown, field: string): { ok: true; value: Collaboration.ProposalContent } | { ok: false; error: InvalidInput } {
+    const read = readProposal(raw, field);
+    return read.ok ? read : { ok: false, error: { type: 'InvalidInput', field: read.error.path, message: read.error.message } };
 }
 
 /** The participant of a route that needs one (checked before the route is called). */
@@ -254,6 +266,13 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
         if (!result.ok) return fail(res, result.error);
         await deps.pump();
         sendJson(res, status, body(result.value));
+    };
+
+    /** Whether the proposal is one of this session's (answered with `NotFound` otherwise). */
+    const proposalOfSession = async (res: ServerResponse, id: string): Promise<boolean> => {
+        if ((await state()).proposals.some((p) => p.id === id)) return true;
+        fail(res, { type: 'NotFound', aggregate: 'ChangeProposal', id });
+        return false;
     };
 
     const signIn = async (
@@ -328,9 +347,10 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             method: 'GET',
             path: /^\/api\/session\/state$/,
             role: 'participant',
-            handle: async ({ res }) => {
+            handle: async ({ res, auth }) => {
                 const seq = deps.cursor();
-                sendJson(res, 200, stateBody(await state(), seq, deps.quickReactions, await identities.facilitatorParticipant()));
+                const [s, holder, agent] = await Promise.all([state(), identities.facilitatorParticipant(), deps.agentPresence()]);
+                sendJson(res, 200, stateBody(s, seq, deps.quickReactions, holder, who(auth).role, agent));
             },
         },
         {
@@ -344,13 +364,10 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             path: /^\/api\/session\/requests$/,
             role: 'participant',
             handle: async ({ req, res, auth }) => {
-                // `target` (one) is the former body, still taken; `apply` (the facilitator's): queued as a run at once
-                const raw = await input(req, res, ['targets', 'target', 'body', 'apply', 'replyTo', 'mentions']);
+                // `target` (one) is the former body, still taken; the former `apply` is gone (addressing, ADR 0030)
+                const raw = await input(req, res, ['targets', 'target', 'body', 'replyTo', 'mentions']);
                 if (!raw) return;
                 const me = who(auth);
-                const apply = checked(res, applyInput(raw.apply));
-                if (apply === undefined) return;
-                if (apply && me.role !== 'facilitator') return fail(res, { type: 'FacilitatorOnly', message: 'Only the facilitator applies messages.' });
                 const targets = checked(res, requestTargets(raw));
                 if (!targets) return;
                 const t = checked(res, text(raw.body, 'body', MAX_REQUEST_TEXT));
@@ -372,11 +389,102 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                         field: raw.target === undefined ? `targets[${unknown}].sourceRevision` : 'target.sourceRevision',
                         message: 'Not a revision of this session.',
                     });
-                const sent = await use.sendRequest({ session, actor: me.actor, targets, body: t, ...(replyTo && { replyTo }), mentions });
-                if (!sent.ok || !apply) return answer(res, sent, 201, (request) => ({ request }));
-                // sent and applied: the message is in the stream whatever the run's fate
-                const queued = await use.queueRun({ session, requests: [sent.value.id], actor: me.actor, ...(apply.note && { note: apply.note }) });
-                await answer(res, queued, 201, (run) => ({ request: sent.value, run }));
+                // addressed to the AI (a mention of it, a reply to it, a Solo session): its triage opens with stage 1
+                const sent = await use.sendMessage({ session, actor: me.actor, targets, body: t, ...(replyTo && { replyTo }), mentions });
+                if (sent.ok && sent.value.triage) deps.triaged();
+                await answer(res, sent, 201, (v) => ({ request: v.request, ...(v.triage && { triage: triageFor(me.role, v.triage) }) }));
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/requests\/address$/,
+            role: 'facilitator',
+            handle: async ({ req, res, auth }) => {
+                // the facilitator's 「AI に送る」, one message or several (ADR 0030)
+                const raw = await input(req, res, ['requests']);
+                if (!raw) return;
+                const ids = checked(res, requestIds(raw.requests));
+                if (!ids) return;
+                const addressed = await use.addressMessages({ session, actor: who(auth).actor, requests: ids });
+                if (addressed.ok) deps.triaged();
+                await answer(res, addressed, 201, (triages) => ({ triages }));
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/requests\/([^/]+)\/address$/,
+            role: 'facilitator',
+            handle: async ({ req, res, auth, params }) => {
+                const id = checked(res, uuid(params[0], 'id'));
+                if (!id) return;
+                if (!(await input(req, res, []))) return;
+                const addressed = await use.addressMessages({ session, actor: who(auth).actor, requests: [knownRequestId(id)] });
+                if (addressed.ok) deps.triaged();
+                await answer(res, addressed, 201, (triages) => ({ triages }));
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/proposals\/approve$/,
+            role: 'facilitator',
+            handle: async ({ req, res, auth }) => {
+                // open proposals, each as is or edited; approved together, one run (plan Q2)
+                const raw = await input(req, res, ['proposals', 'note']);
+                if (!raw) return;
+                if (!Array.isArray(raw.proposals) || raw.proposals.length === 0 || raw.proposals.length > MAX_RUN_REQUESTS)
+                    return fail(res, { type: 'InvalidInput', field: 'proposals', message: `Expected 1 to ${MAX_RUN_REQUESTS} proposals.` });
+                const proposals: { proposal: Collaboration.ChangeProposalId; edited?: Collaboration.ProposalContent }[] = [];
+                for (const [i, p] of raw.proposals.entries()) {
+                    const one = checked(res, body(p, ['proposal', 'edited']));
+                    if (!one) return;
+                    const id = checked(res, uuid(one.proposal, `proposals[${i}].proposal`));
+                    if (!id) return;
+                    let edited: Collaboration.ProposalContent | undefined;
+                    if (one.edited !== undefined) {
+                        edited = checked(res, proposalInput(one.edited, `proposals[${i}].edited`));
+                        if (!edited) return;
+                    }
+                    proposals.push({ proposal: knownChangeProposalId(id), ...(edited && { edited }) });
+                }
+                let note: Collaboration.Text | undefined;
+                if (raw.note !== undefined) {
+                    note = checked(res, text(raw.note, 'note', MAX_NOTE));
+                    if (!note) return;
+                }
+                const approved = await use.approveProposals({ session, actor: who(auth).actor, proposals, ...(note && { note }) });
+                await answer(res, approved, 201, (v) => ({ run: v.run, proposals: v.proposals }));
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/proposals\/([^/]+)\/reject$/,
+            role: 'facilitator',
+            handle: async ({ req, res, auth, params }) => {
+                const id = checked(res, uuid(params[0], 'id'));
+                if (!id) return;
+                const raw = await input(req, res, ['note']);
+                if (!raw) return;
+                let note: Collaboration.Text | undefined;
+                if (raw.note !== undefined) {
+                    note = checked(res, text(raw.note, 'note', PROPOSAL_LIMITS.note));
+                    if (!note) return;
+                }
+                if (!(await proposalOfSession(res, id))) return;
+                const rejected = await use.rejectProposal({ proposal: knownChangeProposalId(id), actor: who(auth).actor, ...(note && { note }) });
+                await answer(res, rejected, 200, (proposal) => ({ proposal }));
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/proposals\/([^/]+)\/withdraw$/,
+            role: 'participant',
+            handle: async ({ req, res, auth, params }) => {
+                const id = checked(res, uuid(params[0], 'id'));
+                if (!id) return;
+                if (!(await input(req, res, []))) return;
+                if (!(await proposalOfSession(res, id))) return;
+                const withdrawn = await use.withdrawProposal({ proposal: knownChangeProposalId(id), actor: who(auth).actor });
+                await answer(res, withdrawn, 200, (proposal) => ({ proposal }));
             },
         },
         {

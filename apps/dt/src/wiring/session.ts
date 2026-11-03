@@ -1,14 +1,14 @@
 // `dt session start` (ADR 0026, S4): the Live View exactly as `dt view` serves it, plus a collaboration session in the
 // same HTTP process (its REST API, its WebSocket messages, its identities), and the agent API on a listener of its
-// own bound to 127.0.0.1. One open session per workspace: an open session is resumed, else one is started.
+// own bound to 127.0.0.1. One open session per workspace: an open session is resumed, else one is started. The server
+// runs the triage's stage 2 (Clef, `classifier`) on the messages addressed to the AI, hands the answerer role its jobs
+// (the agent API's answers entry point) and tells the pages which agents are connected (ADR 0030).
 import {
     type AccessAdapterOptions,
     type AccessTokenVerifier,
-    type Classifications,
     type Clock,
     type Collaboration,
     type CollaborationUseCases,
-    createClassifications,
     createClefClassifier,
     createCloudflareAccess,
     createCollaboration,
@@ -22,7 +22,6 @@ import {
     type MessageClassifier,
     openSessionBlobs,
     openSessionDatabase,
-    plainBody,
     randomIds,
     randomSecrets,
     readServerAddress,
@@ -34,6 +33,7 @@ import {
     writeAgentCredential,
     writeServerAddress,
 } from '@domaintrail/collaboration';
+import type { AgentPresence, EventMessage } from '@domaintrail/collaboration/protocol';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/analysis';
@@ -45,6 +45,8 @@ import { createPresenceRelay, type SessionConnection } from '../server/session/p
 import { createRevertQueue } from '../server/session/reverts.js';
 import { createSessionHttp, meOf, stateBody } from '../server/session/routes.js';
 import { createSessionIdentities } from '../server/session/identities.js';
+import { createTriageStage } from '../server/session/triage.js';
+import { eventFor } from '../server/session/views.js';
 import { createViewHttpServer } from '../server/http/server.js';
 import { isLoopbackBind, sessionHostPolicy } from '../server/http/access.js';
 import { SessionError } from '../cli/ports.js';
@@ -73,6 +75,10 @@ export const WS_REVOKED = 4001;
 export const WS_EXPIRED = 4002;
 /** How long the classifier of a message may take. */
 const CLASSIFY_TIMEOUT_MS = 8_000;
+/** The most an answer job may take, unless given (`agent.answer.timeout`, default 120 s). */
+export const ANSWER_TIMEOUT_MS = 120_000;
+/** Where the server's one line per triage goes when no `debug` log is given: printed when this variable is set. */
+export const DEBUG_ENV = 'DOMAINTRAIL_DEBUG';
 /** Where the Clef classifier is asked instead of Cloudflare's API (a local mock, for tests and demos). */
 export const CLASSIFIER_URL_ENV = 'DOMAINTRAIL_CLASSIFIER_URL';
 /** Longest delay `setTimeout` keeps (about 24.8 days). */
@@ -92,6 +98,10 @@ export interface SessionServerOptions extends ViewServerOptions {
     expireEveryMs?: number;
     /** A classifier instead of the configured one (tests). */
     classifier?: MessageClassifier;
+    /** The most an answer job may take (default `ANSWER_TIMEOUT_MS`). */
+    answerTimeoutMs?: number;
+    /** The debug log: one line per triage decided, without the message's text (default: the log when `DOMAINTRAIL_DEBUG` is set). */
+    debug?: (line: string) => void;
 }
 
 export interface SessionServer {
@@ -175,8 +185,8 @@ function identityProvider(options: SessionServerOptions, clock: Clock, log: (lin
 }
 
 /**
- * The classifier of the chat's messages, when `session.classifier` is enabled and its token is in the environment;
- * otherwise none (every message is applicable).
+ * Stage 2 of the triage: Clef, when `session.classifier` is enabled and its token is in the environment; otherwise none
+ * (the stage is recorded as not configured, and the light model of the answerer role decides).
  */
 function messageClassifier(options: SessionServerOptions, log: (line: string) => void): MessageClassifier | undefined {
     if (options.classifier) return options.classifier;
@@ -184,11 +194,11 @@ function messageClassifier(options: SessionServerOptions, log: (line: string) =>
     if (!c.enabled || !c.accountId) return undefined;
     const token = process.env[c.apiTokenEnv];
     if (!token) {
-        log(`session.classifier is enabled but ${c.apiTokenEnv} is not set: every message can be applied.`);
+        log(`session.classifier is enabled but ${c.apiTokenEnv} is not set: the triage goes without Clef.`);
         return undefined;
     }
     const baseUrl = process.env[CLASSIFIER_URL_ENV];
-    log(`Classifying the chat's messages with Cloudflare Workers AI (${c.model}): their text is sent to Cloudflare.`);
+    log(`Triaging the messages addressed to the AI with Cloudflare Workers AI (${c.model}) first: their text is sent to Cloudflare.`);
     return createClefClassifier({ accountId: c.accountId, model: c.model, token, ...(baseUrl && { baseUrl }) });
 }
 
@@ -260,14 +270,18 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         const expiries = new Map<string, ReturnType<typeof setTimeout>>();
         /** The pages connected, by connection: each is sent the state again when the facilitator's role changes hands. */
         const pages = new Map<string, Connection<SessionConnection>>();
-        /** Sends a page the session's state as of now (with who holds the facilitator's role). */
+        /** Sends a page the session's state as of now (with who holds the facilitator's role), as its role sees it. */
         const sendState = async (connection: Connection<SessionConnection>): Promise<void> => {
             const seq = cursor();
-            const [state, holder] = await Promise.all([collaboration.sessionState({ session }), identities.facilitatorParticipant()]);
+            const [state, holder, agentNow] = await Promise.all([
+                collaboration.sessionState({ session }),
+                identities.facilitatorParticipant(),
+                agentPresence(),
+            ]);
             if (state.ok)
                 connection.send({
                     type: 'session.state',
-                    state: stateBody(state.value, seq, config.quickReactions, holder),
+                    state: stateBody(state.value, seq, config.quickReactions, holder, connection.data.role, agentNow),
                     me: meOf(session, connection.data),
                 });
         };
@@ -284,9 +298,6 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 }
                 pages.set(connection.id, connection);
                 void sendState(connection).then(() => {
-                    // the facilitator's: whether messages are classified, and how those so far were
-                    if (classifications && connection.data.role === 'facilitator')
-                        connection.send({ type: 'session.classifications', classifications: classifications.all() });
                     // what the running runs are doing now (a page that reloads gets the latest)
                     connection.send({ type: 'session.activities', activities: activities.all() });
                     presence.connected(connection);
@@ -317,18 +328,36 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             resolveClosed();
         };
 
-        // the chat's messages classified for the facilitator, as they are sent (opt-in)
+        // stage 2 of the triage of the messages addressed to the AI: Clef when configured (ADR 0030)
         const classifier = messageClassifier(options, log);
-        const classifications: Classifications | undefined =
-            classifier &&
-            createClassifications({
-                classifier,
-                threshold: config.classifier.threshold,
-                timeoutMs: CLASSIFY_TIMEOUT_MS,
-                log,
-                onClassified: (request, classification) =>
-                    hub.publishWhere((c) => c.data.role === 'facilitator', { type: 'session.classification', request, classification }),
-            });
+        const debug = options.debug ?? (process.env[DEBUG_ENV] ? log : undefined);
+
+        /** Sends a session's event to every page as its role sees it (a participant: the triages' outcomes only). */
+        const publishEvent = (message: EventMessage): void => {
+            hub.publishWhere((c) => c.data.role === 'facilitator', message);
+            const shown = eventFor('participant', message);
+            if (shown) hub.publishWhere((c) => c.data.role !== 'facilitator', shown);
+        };
+
+        // the agents connected per role and the work waiting for one: on connect (with the state), then on each change
+        let presenceShown = '';
+        const agentPresence = async (): Promise<AgentPresence> => {
+            const [state, answersWaiting] = await Promise.all([collaboration.sessionState({ session }), agent.answers.waiting()]);
+            const queued = state.ok ? state.value.runs.filter((r) => r.state === 'Queued').length : 0;
+            return { connected: agent.connected(), waiting: answersWaiting + queued };
+        };
+        let presenceTail: Promise<void> = Promise.resolve();
+        const presenceChanged = (): void => {
+            presenceTail = presenceTail
+                .then(async () => {
+                    const now = await agentPresence();
+                    const key = JSON.stringify(now);
+                    if (key === presenceShown) return;
+                    presenceShown = key;
+                    hub.publish({ type: 'agent.presence', agent: now });
+                })
+                .catch((e: unknown) => log(`agent presence failed: ${e instanceof Error ? e.message : String(e)}`));
+        };
 
         // what the running runs are doing (ADR 0026, amendment): in memory, never stored; dropped once a run ends
         const activities = createRunActivities();
@@ -339,20 +368,26 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             collaboration,
             session,
             from: await lastSeq(collaboration, session),
-            publish: (message) => hub.publish(message),
+            publish: publishEvent,
             after: (entries) => {
                 agent.wake();
                 // the queue may have moved: a revert at its head is the server's to try
                 void reverts.kick();
-                // the classifier reads the body with its mentions as names (`#注文[1]` → `注文`, `@佐藤[p1]` → `佐藤`)
-                for (const e of entries)
-                    if (e.event.type === 'RequestSent')
-                        classifications?.classify(
-                            e.event.requestId,
-                            plainBody(e.event.body, { targets: e.event.targets.length, people: e.event.mentions.length }, true),
-                        );
+                // messages addressed to the AI: stage 2 on the server, then the answerer role's jobs
+                if (entries.some((e) => e.event.type === 'TriageOpened' || e.event.type === 'TriageReaddressed')) stage.kick();
+                agent.answers.kick();
+                if (entries.some((e) => e.event.type === 'RevisionRestored')) agent.answers.restored();
+                for (const e of entries) {
+                    // one line per triage decided (and per override), without the message's text
+                    if (e.event.type === 'TriageDecided') debug?.(`triage ${e.event.triageId}: ${e.event.kind} (decided by ${e.event.decidedBy})`);
+                    if (e.event.type === 'TriageOverridden') debug?.(`triage ${e.event.triageId}: ${e.event.kind} (overridden by ${e.event.step.stage})`);
+                }
                 for (const e of entries) if (ending.has(e.event.type) && 'runId' in e.event) activities.end(e.event.runId);
-                if (entries.some((e) => e.event.type === 'SessionClosed')) void onClosed();
+                presenceChanged();
+                if (entries.some((e) => e.event.type === 'SessionClosed')) {
+                    agent.answers.close(true);
+                    void onClosed();
+                }
             },
         });
         cursor = () => relay.cursor();
@@ -370,6 +405,18 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 if (activities.set(run, activity)) hub.publish({ type: 'run.activity', run, activity });
             },
             reverts: () => void reverts.kick(),
+            answerTimeoutMs: options.answerTimeoutMs ?? ANSWER_TIMEOUT_MS,
+            onPresence: () => presenceChanged(),
+            log,
+        });
+        const stage = createTriageStage({
+            session,
+            collaboration,
+            ...(classifier && { classifier }),
+            threshold: config.classifier.threshold,
+            timeoutMs: CLASSIFY_TIMEOUT_MS,
+            pump,
+            log,
         });
 
         // a restore writes the sources: the watcher holds, then refreshes once
@@ -417,6 +464,8 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             },
             secureCookie: accessConfig?.publicUrl?.startsWith('https://') ?? false,
             quickReactions: config.quickReactions,
+            triaged: () => stage.kick(),
+            agentPresence,
             log,
         });
         const http = createViewHttpServer({
@@ -461,8 +510,9 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 );
         }, options.expireEveryMs ?? EXPIRE_EVERY_MS);
         expiring.unref();
-        // a revert left at the head of the queue when the server last stopped
+        // a revert left at the head of the queue when the server last stopped; triages left waiting for stage 2
         void reverts.kick();
+        stage.kick();
 
         let stopped: Promise<void> | undefined;
         return {
@@ -485,7 +535,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                     expiries.clear();
                     presence.dispose();
                     agent.close();
-                    await classifications?.settled();
+                    await stage.settled();
                     await watch?.stop();
                     hub.close();
                     await Promise.all([close(http), close(agent.server)]);
