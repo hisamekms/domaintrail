@@ -27,19 +27,25 @@ export type Baseline =
 export type BaseView = Pick<ViewPayload, 'model' | 'structure' | 'overview' | 'aggregates' | 'contextMap' | 'contextMapAll' | 'states'>;
 
 /**
- * A storming of the workspace with every view of it laid out (ADR 0024): the level and the timeline filter are the page's
+ * A storming of the workspace with every view of it laid out (ADR 0024): the level and the timeline or stage are the page's
  * state, so switching between them needs no request and never touches the `.dtes` (spec §6, R11, R12).
  */
 export interface StormingView {
     id: string;
     label?: string;
     file: string;
-    timelines: { id: string; label?: string }[];
+    /** Its timelines, with the stage each one is in (a storming with stages) and whether it is an `exception`. */
+    timelines: { id: string; label?: string; stageId?: string; exception?: true }[];
+    /**
+     * Its stages in time order (spec §3.7), each with a view of its own (`@<stage ID>`) besides the integrated one;
+     * absent for a storming without stages.
+     */
+    stages?: { id: string; label?: string }[];
     /** The storming as written, for the inspector (`ref`s, clauses, timelines). */
     storming: Storming;
     /**
-     * Keyed by `stormingViewKey` (`<level>|<timelineId or empty>`): the render graph (the occurrences each event node
-     * stands for) and its drawing.
+     * Keyed by `stormingViewKey` (`<level>|<timelineId, @stageId or empty>`, then `-exceptions` for a view without the
+     * exceptions): the render graph (the occurrences each event node stands for) and its drawing.
      */
     views: Record<string, { render: RenderGraph; graph: LaidOutGraph }>;
     /** True when its file no longer parses and this is the storming as it last did. */

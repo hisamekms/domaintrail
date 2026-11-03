@@ -31,8 +31,18 @@ export const stepOf = (s: TimelineStep): Step =>
 /** The two independent axes of a view; neither changes the `.dtes`. */
 export interface ViewOptions {
     level: 'big-picture' | 'design-level';
-    /** Absent: the integrated canvas (every timeline, and the events and elements of none). */
+    /**
+     * Absent, with no `stageId`: the integrated canvas (every timeline, and the events and elements of none); of a
+     * storming with stages, its stages in time order.
+     */
     timelineId?: string;
+    /** One stage of a storming with stages: its main flows and its exceptions (never with `timelineId`). */
+    stageId?: string;
+    /**
+     * Without the exceptions (the integrated canvas and a stage of a storming drawn in sections only): their steps, the
+     * events only they have and the hotspots on those events are not drawn.
+     */
+    hideExceptions?: true;
 }
 
 export type ViewLevel = ViewOptions['level'];
@@ -80,13 +90,50 @@ export interface RenderElementNode {
     kind: Exclude<NodeElementKind, 'event'>;
 }
 
-export type RenderNode = RenderEventNode | RenderGroupNode | RenderElementNode;
+/** A stage, drawn as a frame around its main flow and its exceptions (views of a storming with stages, spec §3.7). */
+export interface RenderStageNode {
+    type: 'stage';
+    /** `st:<stage ID>`. */
+    id: string;
+    stageId: string;
+}
+
+export type RenderNode = RenderEventNode | RenderGroupNode | RenderElementNode | RenderStageNode;
 
 export type RenderEdge =
     /** The drawing of a semantic edge; one semantic edge may be drawn several times when its event is. */
     | { type: 'semantic'; id: string; kind: SemanticEdgeKind; source: string; target: string; semantic: string }
-    /** Time order between consecutive steps of timelines (from or to a group node, never inside it). */
-    | { type: 'sequence'; id: string; source: string; target: string; timelineIds: string[] };
+    /**
+     * Time order between consecutive steps of timelines (from or to a group node, never inside it); `exception` when
+     * every one of them is an exception (a view of sections only).
+     */
+    | { type: 'sequence'; id: string; source: string; target: string; timelineIds: string[]; exception?: true }
+    /** `then <Event>`: from the last step of exceptions back to the step of a main flow they return to. */
+    | { type: 'rejoin'; id: string; source: string; target: string; timelineIds: string[] }
+    /** `after`: from the last step of a stage's main flow to the first step of the next stage's. */
+    | { type: 'stage'; id: string; source: string; target: string; stageId: string };
+
+/** A cell of a view of stages: a column (left to right, in time order) and a row (0: the main flows, below: exceptions). */
+export interface GridCell {
+    col: number;
+    row: number;
+}
+
+/**
+ * Where a view of stages puts its nodes (spec §3.7, §10): every column is a step later than the one on its left, the
+ * main flows run along row 0 through every stage, an exception hangs below the step it branches off from, and the
+ * other elements stand above the event they belong to (negative rows). The layout turns cells into coordinates.
+ */
+export interface StageGrid {
+    /** The cell of each event, group and element node (a group's members are inside it). */
+    cells: Record<string, GridCell>;
+    /** The columns of each stage's frame, by stage node ID. */
+    frames: Record<string, { from: number; to: number }>;
+    /** The first row of the nodes outside every stage (events of no stage, elements of no step), if there are some. */
+    looseRow?: number;
+    /** The edges into the first step of an exception's lane, with the exceptions they start (their labels caption it). */
+    captions: Record<string, string[]>;
+}
 
 /** One view of a storming. Canonical: the same storming and options give the same graph, whatever the declaration order. */
 export interface RenderGraph {
@@ -96,4 +143,6 @@ export interface RenderGraph {
     nodes: RenderNode[];
     /** Sorted by ID. */
     edges: RenderEdge[];
+    /** A view of stages: the cells of its nodes. */
+    grid?: StageGrid;
 }

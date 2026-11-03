@@ -1,0 +1,534 @@
+// The views of a storming with stages (docs/dtes-v0.1.md §3.7, §6, §10): the projection of the user's storming in
+// stages, its grid and the layout of the grid (`layoutGrid`), and the same storming without stages, unchanged.
+import { describe, expect, test } from 'bun:test';
+import { readFile } from 'node:fs/promises';
+import * as path from 'node:path';
+import { analyzeStormings, type Storming } from '@domaintrail/storming';
+import { layoutGrid } from '../graph/grid.js';
+import type { LaidOutGraph, NodeLayout } from '../graph/ir.js';
+import type { RenderEventNode, RenderGraph, ViewOptions } from './ir.js';
+import { renderToGraph, stormingGraphId, stormingViewKey } from './graph.js';
+import { projectView } from './render.js';
+
+const FIXTURES = path.join(import.meta.dir, '..', '..', '..', '..', '..', 'test', 'fixtures', 'stages');
+const read = (name: string): Promise<string> => readFile(path.join(FIXTURES, name), 'utf8');
+
+async function parse(text: string): Promise<Storming> {
+    const a = await analyzeStormings([{ path: 's.dtes', text }], undefined);
+    expect(a.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    return a.stormings[0]!;
+}
+
+const STAGED = await parse(await read('convenience-store-stages.dtes'));
+const ORIGINAL = await parse(await read('convenience-store.dtes'));
+
+const BP: ViewOptions = { level: 'big-picture' };
+const DL: ViewOptions = { level: 'design-level' };
+
+const eventNodes = (g: RenderGraph): RenderEventNode[] => g.nodes.filter((n): n is RenderEventNode => n.type === 'event');
+const nodesOf = (g: RenderGraph, eventId: string): RenderEventNode[] => eventNodes(g).filter((n) => n.eventId === eventId);
+const only = (g: RenderGraph, eventId: string): RenderEventNode => {
+    const list = nodesOf(g, eventId);
+    expect(list.map((n) => n.eventId)).toEqual([eventId]);
+    return list[0]!;
+};
+const eventOf = (g: RenderGraph, id: string): string => {
+    const n = g.nodes.find((x) => x.id === id);
+    return n?.type === 'event' ? n.eventId : id;
+};
+const edgesOf = (g: RenderGraph, type: 'rejoin' | 'stage'): string[] =>
+    g.edges
+        .filter((e) => e.type === type)
+        .map((e) => `${eventOf(g, e.source)} -> ${eventOf(g, e.target)}`)
+        .sort();
+
+const laidOut = (render: RenderGraph, storming: Storming): LaidOutGraph => layoutGrid(renderToGraph(render, storming));
+
+/** The main flows of the stages in time order. */
+const MAIN = [
+    'ResidentCertificateRequested',
+    'IssuanceMethodResearched',
+    'RequiredContentConfirmed',
+    'RequiredCopiesConfirmed',
+    'LeftWithMyNumberCard',
+    'ConvenienceStoreVisited',
+    'GovernmentServiceMenuSelected',
+    'MyNumberCardRead',
+    'PinEntered',
+    'IssuingMunicipalitySelected',
+    'CertificateOptionsSelected',
+    'RequestDetailsConfirmed',
+    'FeePaid',
+    'CertificateDataCreated',
+    'IssuanceRecorded',
+    'CertificateIssuedAtMultiCopier',
+    'MyNumberCardCollected',
+    'CertificateContentChecked',
+    'CertificateSubmitted',
+    'CertificateAccepted',
+];
+
+const inside = (a: NodeLayout, b: NodeLayout): boolean => a.x >= b.x && a.y >= b.y && a.x + a.width <= b.x + b.width && a.y + a.height <= b.y + b.height;
+
+describe('the integrated canvas of a storming with stages', () => {
+    const render = projectView(STAGED, BP);
+    const laid = laidOut(render, STAGED);
+    const at = (eventId: string): NodeLayout => laid.nodeLayout[only(render, eventId).id]!;
+
+    test('the stages in time order, each a frame; the main flows one straight row, strictly left to right through every stage', () => {
+        expect(render.nodes.filter((n) => n.type === 'stage').map((n) => n.id)).toEqual(['st:Issuance', 'st:Preparation', 'st:Submission']);
+        const frames = ['st:Preparation', 'st:Issuance', 'st:Submission'].map((id) => laid.nodeLayout[id]!);
+        for (let i = 1; i < frames.length; i++) expect(frames[i - 1]!.x + frames[i - 1]!.width).toBeLessThan(frames[i]!.x);
+        const main = MAIN.map(at);
+        for (let i = 1; i < main.length; i++) {
+            expect(main[i]!.y).toBe(main[0]!.y);
+            expect(main[i - 1]!.x + main[i - 1]!.width).toBeLessThan(main[i]!.x);
+        }
+        // every step of a main flow in its stage's frame, on row 0
+        for (const id of MAIN.slice(0, 5)) expect(inside(at(id), frames[0]!)).toBe(true);
+        for (const id of MAIN.slice(17)) expect(inside(at(id), frames[2]!)).toBe(true);
+        for (const id of MAIN) expect(render.grid!.cells[only(render, id).id]!.row).toBe(0);
+    });
+
+    test('an exception hangs below the step it branches off from, flows right and stays in its stage’s frame', () => {
+        const mainY = at('ConvenienceStoreVisited').y;
+        const issuance = laid.nodeLayout['st:Issuance']!;
+        const exceptions = eventNodes(render).filter((n) => !MAIN.includes(n.eventId));
+        expect(exceptions.length).toBeGreaterThan(0);
+        for (const n of exceptions) {
+            const l = laid.nodeLayout[n.id]!;
+            expect(l.y).toBeGreaterThan(mainY);
+            const stage = n.id.startsWith('s:Submission:') ? 'st:Submission' : 'st:Issuance';
+            expect(inside(l, laid.nodeLayout[stage]!)).toBe(true);
+        }
+        // PinLocked branches off MyNumberCardRead: one column to its right, below it
+        const read = at('MyNumberCardRead');
+        const locked = at('PinLocked');
+        expect(locked.x).toBeGreaterThan(read.x + read.width);
+        expect(locked.x).toBeLessThan(at('IssuingMunicipalitySelected').x);
+        expect(inside(locked, issuance)).toBe(true);
+    });
+
+    test('an exception from the middle of a main flow shares its branch step: the event is drawn once, for both timelines', () => {
+        const read = only(render, 'MyNumberCardRead');
+        expect(read.occurrences.map((o) => `${o.timelineId}[${o.stepPath.join('.')}]`)).toEqual([
+            'IssuanceFlow[2]',
+            'PinForgottenBranch[0]',
+            'PinLockedBranch[0]',
+        ]);
+        expect(only(render, 'ConvenienceStoreVisited').occurrences.map((o) => o.timelineId)).toEqual([
+            'IssuanceFlow',
+            'MaintenanceDayBranch',
+            'MultiCopierNotSupportedBranch',
+            'OutsideServiceHoursBranch',
+        ]);
+        // what the exceptions go on to is theirs: each drawn on its own lane
+        expect(nodesOf(render, 'PinResetAtCityOffice')).toHaveLength(2);
+        expect(nodesOf(render, 'VisitPostponed')).toHaveLength(2);
+    });
+
+    test('`after` joins the end of a stage’s main flow to the start of the next one’s', () => {
+        expect(edgesOf(render, 'stage')).toEqual(['LeftWithMyNumberCard -> ConvenienceStoreVisited', 'MyNumberCardCollected -> CertificateContentChecked']);
+    });
+
+    test('`then` returns from an exception’s last step to a step of a main flow: of its stage, a later one or an earlier one', () => {
+        expect(edgesOf(render, 'rejoin')).toEqual([
+            'HeadedToSupportedStore -> ConvenienceStoreVisited',
+            'PinResetAtCityOffice -> PinEntered',
+            'PinResetAtCityOffice -> PinEntered',
+            'ReissueDecided -> ConvenienceStoreVisited',
+            'RequestedFromDomicileOffice -> CertificateContentChecked',
+            'VisitPostponed -> ConvenienceStoreVisited',
+            'VisitPostponed -> ConvenienceStoreVisited',
+        ]);
+        // the rejoin's route ends at the bottom of its target
+        const e = render.edges.find((x) => x.type === 'rejoin' && eventOf(render, x.source) === 'RequestedFromDomicileOffice')!;
+        const end = laid.edgeLayout[e.id]!.points.at(-1)!;
+        const target = at('CertificateContentChecked');
+        expect(end).toEqual({ x: target.x + target.width / 2, y: target.y + target.height });
+    });
+
+    test('each exception’s lane is captioned with its label, and its time order drawn as an exception’s, on the edge into its first step', () => {
+        const graph = renderToGraph(render, STAGED);
+        const captions = graph.edges.filter((e) => e.label).map((e) => e.label!.ja.label);
+        const kindOf = (from: string, to: string): string | undefined =>
+            graph.edges.find((e) => e.kind !== 'esRejoin' && eventOf(render, e.source) === from && eventOf(render, e.target) === to)?.kind;
+        expect(kindOf('MyNumberCardRead', 'PinLocked')).toBe('esException');
+        // an exception's lane is entered from the left, its caption above its first note
+        const laid = layoutGrid(graph);
+        const into = graph.edges.find((e) => e.kind === 'esException' && e.label?.ja.label === '暗証番号のロック')!;
+        const first = laid.nodeLayout[into.target]!;
+        expect(laid.edgeLayout[into.id]!.label).toMatchObject({ x: first.x });
+        expect(laid.edgeLayout[into.id]!.label!.y).toBeLessThan(first.y);
+        expect(laid.edgeLayout[into.id]!.points.at(-1)).toEqual({ x: first.x, y: first.y + first.height / 2 });
+        expect(kindOf('MyNumberCardRead', 'PinEntered')).toBe('esSequence');
+        expect(kindOf('LeftWithMyNumberCard', 'ConvenienceStoreVisited')).toBe('esSequence');
+        expect(captions.sort()).toEqual(
+            [
+                '利用時間外',
+                'メンテナンス日',
+                'コピー機が非対応',
+                'カードの期限切れ',
+                'カードの破損（チップ）',
+                '暗証番号を忘れた',
+                '暗証番号のロック',
+                '交付先が対象外',
+                '提出先で受け取ってもらえない',
+            ].sort(),
+        );
+    });
+
+    test('no edge crosses a note: every route runs through the gutters between the cells', () => {
+        for (const options of [BP, DL]) {
+            const g = laidOut(projectView(STAGED, options), STAGED);
+            expect(crossings(g)).toEqual([]);
+        }
+    });
+
+    test('canonical: the order the exceptions are written in changes nothing (R06)', async () => {
+        const reordered: Storming = {
+            ...STAGED,
+            elements: STAGED.elements.map((el) => (el.kind === 'stage' ? { ...el, timelines: [el.timelines[0]!, ...el.timelines.slice(1).reverse()] } : el)),
+        };
+        const strip = (g: RenderGraph): unknown => JSON.parse(JSON.stringify(g));
+        expect(strip(projectView(reordered, BP))).toEqual(strip(render));
+        expect(laidOut(projectView(reordered, BP), reordered).nodeLayout).toEqual(laid.nodeLayout);
+    });
+
+    test('its graph ID and view key are those of the integrated canvas', () => {
+        expect(stormingGraphId(STAGED.id, render.options)).toBe('storming:ConvenienceStoreIssuance:big-picture:*');
+        expect(stormingViewKey(render.options)).toBe('big-picture|');
+    });
+});
+
+describe('the view of one stage', () => {
+    const render = projectView(STAGED, { level: 'big-picture', stageId: 'Issuance' });
+    const laid = laidOut(render, STAGED);
+
+    test('its main flow and its exceptions, in its frame, from column 0', () => {
+        expect(render.options).toEqual({ level: 'big-picture', stageId: 'Issuance' });
+        expect(render.nodes.filter((n) => n.type === 'stage').map((n) => n.id)).toEqual(['st:Issuance']);
+        expect(eventNodes(render).every((n) => n.id.startsWith('s:Issuance:'))).toBe(true);
+        expect(nodesOf(render, 'LeftWithMyNumberCard')).toEqual([]);
+        expect(render.grid!.cells[only(render, 'ConvenienceStoreVisited').id]).toEqual({ col: 0, row: 0 });
+        for (const n of eventNodes(render)) expect(inside(laid.nodeLayout[n.id]!, laid.nodeLayout['st:Issuance']!)).toBe(true);
+        expect(crossings(laid)).toEqual([]);
+    });
+
+    test('no `after`; a `then` to another stage is not drawn, one within it is', () => {
+        expect(edgesOf(render, 'stage')).toEqual([]);
+        expect(edgesOf(render, 'rejoin')).not.toContain('RequestedFromDomicileOffice -> CertificateContentChecked');
+        expect(edgesOf(render, 'rejoin')).toContain('PinResetAtCityOffice -> PinEntered');
+    });
+
+    test('its graph ID and view key name the stage', () => {
+        expect(stormingGraphId(STAGED.id, render.options)).toBe('storming:ConvenienceStoreIssuance:big-picture:@Issuance');
+        expect(stormingViewKey(render.options)).toBe('big-picture|@Issuance');
+    });
+
+    test('a timeline of a stage is viewed as any timeline: its occurrences and their order, without a grid', () => {
+        const one = projectView(STAGED, { level: 'big-picture', timelineId: 'PinLockedBranch' });
+        expect(one.grid).toBeUndefined();
+        expect(eventNodes(one).map((n) => n.eventId)).toEqual(['MyNumberCardRead', 'PinLocked', 'PinResetAtCityOffice']);
+    });
+});
+
+describe('a storming without stages is drawn as before', () => {
+    test('no grid, no frame, the prefix-merged canvas', () => {
+        const render = projectView(ORIGINAL, BP);
+        expect(render.grid).toBeUndefined();
+        expect(render.nodes.some((n) => n.type === 'stage')).toBe(false);
+        expect(renderToGraph(render, ORIGINAL).grid).toBeUndefined();
+    });
+});
+
+describe('stages and `level design`', () => {
+    const text = `storming L {
+  event A
+  event B {
+    level design
+  }
+  event C
+  event D {
+    level design
+  }
+  event E
+  event X
+  event Y
+  stage P {
+    timeline Main {
+      A
+      B
+      C
+      D
+      E
+    }
+    exception FromHidden {
+      B
+      X
+      then D
+    }
+    exception Hidden {
+      C
+      Y
+    }
+  }
+}
+`;
+    test('at Big Picture a hidden branch step branches off from the nearest visible step before it; a hidden `then` target returns to the next visible one', async () => {
+        const s = await parse(text);
+        const bp = projectView(s, BP);
+        expect(nodesOf(bp, 'B')).toEqual([]);
+        expect(nodesOf(bp, 'D')).toEqual([]);
+        const seq = bp.edges.filter((e) => e.type === 'sequence').map((e) => `${eventOf(bp, e.source)}->${eventOf(bp, e.target)}`);
+        expect(seq.sort()).toEqual(['A->C', 'A->X', 'C->E', 'C->Y'].sort());
+        expect(edgesOf(bp, 'rejoin')).toEqual(['X -> E']);
+        const laid = laidOut(bp, s);
+        expect(crossings(laid)).toEqual([]);
+        // at Design Level, as written
+        const dl = projectView(s, DL);
+        expect(edgesOf(dl, 'rejoin')).toEqual(['X -> D']);
+        const dlSeq = dl.edges.filter((e) => e.type === 'sequence').map((e) => `${eventOf(dl, e.source)}->${eventOf(dl, e.target)}`);
+        expect(dlSeq.sort()).toEqual(['A->B', 'B->C', 'B->X', 'C->D', 'C->Y', 'D->E'].sort());
+    });
+});
+
+describe('Design Level elements in a view of stages', () => {
+    const text = `storming D {
+  event Placed
+  event Paid
+  event Failed
+  event Retried
+  actor Customer
+  aggregate Order
+  command Pay {
+    actor Customer
+    target Order
+    emits Paid
+    emits Failed
+  }
+  command Retry {
+    emits Retried
+  }
+  policy RetryFailed {
+    on Failed
+    issues Retry
+  }
+  hotspot Limit "何回まで？" {
+    on Failed
+  }
+  readmodel Lonely
+  stage Ordering {
+    timeline Main {
+      Placed
+      Paid
+    }
+    exception Failure {
+      Placed
+      Failed
+      Retried
+      then Paid
+    }
+  }
+}
+`;
+    test('stand above the main row, at the column of the event they belong to; the others below every stage', async () => {
+        const s = await parse(text);
+        const render = projectView(s, DL);
+        const cells = render.grid!.cells;
+        const col = (eventId: string): number => cells[only(render, eventId).id]!.col;
+        // a hotspot nearest to its event, then the command
+        expect(cells['n:Pay']).toEqual({ col: col('Paid'), row: -2 });
+        expect(cells['n:Order']!.row).toBeLessThan(0);
+        expect(cells['n:Customer']!.row).toBeLessThan(0);
+        expect(cells['n:Limit']).toEqual({ col: col('Failed'), row: -1 });
+        expect(cells['n:RetryFailed']!.col).toBe(col('Failed'));
+        expect(cells['n:Retry']!.col).toBe(col('Retried'));
+        expect(cells['n:Lonely']!.row).toBe(render.grid!.looseRow!);
+        expect(crossings(laidOut(render, s))).toEqual([]);
+        // Big Picture: the hotspot only
+        const bp = projectView(s, BP);
+        expect(Object.keys(bp.grid!.cells).filter((id) => id.startsWith('n:'))).toEqual(['n:Limit']);
+    });
+});
+
+/** The segments of edge routes that pass through a note other than the edge's own ends (and their groups). */
+function crossings(g: LaidOutGraph): string[] {
+    const parent = new Map(g.nodes.map((n) => [n.id, n.parent]));
+    const notes = g.nodes.filter((n) => n.kind !== 'esStage' && n.kind !== 'esGroup');
+    const out: string[] = [];
+    for (const e of g.edges) {
+        const own = new Set([e.source, e.target, parent.get(e.source), parent.get(e.target)]);
+        const points = g.edgeLayout[e.id]?.points ?? [];
+        for (let i = 1; i < points.length; i++) {
+            const [p, q] = [points[i - 1]!, points[i]!];
+            for (const n of notes) {
+                if (own.has(n.id)) continue;
+                const r = g.nodeLayout[n.id]!;
+                const [x0, x1] = [Math.min(p.x, q.x), Math.max(p.x, q.x)];
+                const [y0, y1] = [Math.min(p.y, q.y), Math.max(p.y, q.y)];
+                if (x1 > r.x && x0 < r.x + r.width && y1 > r.y && y0 < r.y + r.height) out.push(`${e.id} crosses ${n.id}`);
+            }
+        }
+    }
+    return out;
+}
+
+describe('without the exceptions (「例外を表示」 off)', () => {
+    const text = `storming T {
+  event A
+  event B
+  event C
+  event X
+  event Y
+  hotspot OnX "X は？" {
+    on X
+  }
+  hotspot OnB "B は？" {
+    on B
+  }
+  stage P {
+    timeline Main {
+      A
+      B
+      C
+    }
+    exception Fail {
+      B
+      X
+      then C
+    }
+    exception AlsoMain {
+      A
+      C
+    }
+  }
+}
+`;
+    test('their steps, the events only they have and the hotspots on those events are not drawn; nor their `then`s', async () => {
+        const s = await parse(text);
+        const all = projectView(s, BP);
+        const without = projectView(s, { level: 'big-picture', hideExceptions: true });
+        expect(without.options).toEqual({ level: 'big-picture', hideExceptions: true });
+        // Y is in no timeline: shown either way, below the stages
+        expect(
+            eventNodes(all)
+                .map((n) => n.eventId)
+                .sort(),
+        ).toEqual(['A', 'B', 'C', 'C', 'X', 'Y']);
+        expect(
+            eventNodes(without)
+                .map((n) => n.eventId)
+                .sort(),
+        ).toEqual(['A', 'B', 'C', 'Y']);
+        expect(without.nodes.some((n) => n.id === 'n:OnX')).toBe(false);
+        expect(without.nodes.some((n) => n.id === 'n:OnB')).toBe(true);
+        expect(edgesOf(all, 'rejoin')).toEqual(['X -> C']);
+        expect(edgesOf(without, 'rejoin')).toEqual([]);
+        expect(stormingViewKey(without.options)).toBe('big-picture|-exceptions');
+        expect(stormingGraphId('T', { level: 'big-picture', stageId: 'P', hideExceptions: true })).toBe('storming:T:big-picture:@P-exceptions');
+        // a stage's view alike
+        const stage = projectView(s, { level: 'big-picture', stageId: 'P', hideExceptions: true });
+        expect(
+            eventNodes(stage)
+                .map((n) => n.eventId)
+                .sort(),
+        ).toEqual(['A', 'B', 'C']);
+        // an exception's own view is as ever
+        expect(eventNodes(projectView(s, { level: 'big-picture', timelineId: 'Fail' })).map((n) => n.eventId)).toEqual(['B', 'X']);
+    });
+
+    test('the user’s storming: the main flows only, still one straight row', () => {
+        const without = projectView(STAGED, { level: 'big-picture', hideExceptions: true });
+        expect(
+            eventNodes(without)
+                .map((n) => n.eventId)
+                .sort(),
+        ).toEqual([...MAIN].sort());
+        expect(Object.values(without.grid!.cells).every((c) => c.row === 0)).toBe(true);
+        expect(without.edges.filter((e) => e.type === 'rejoin')).toEqual([]);
+    });
+});
+
+describe('several main flows', () => {
+    const text = `storming M {
+  event A
+  event B
+  event C
+  event D
+  event E
+  event X
+  stage P {
+    exception Fail {
+      A
+      X
+    }
+    timeline Trunk {
+      A
+      B
+      C
+    }
+    timeline Shortcut "近道" {
+      A
+      D
+      C
+    }
+    timeline Late {
+      B
+      E
+    }
+  }
+}
+`;
+    test('the first is the trunk, straight; another branches off it as a flow (not an exception), above the exceptions', async () => {
+        const s = await parse(text);
+        const render = projectView(s, BP);
+        const cell = (eventId: string, i = 0) => render.grid!.cells[nodesOf(render, eventId)[i]!.id]!;
+        expect([cell('A'), cell('B')].map((c) => c.row)).toEqual([0, 0]);
+        // C twice: on the trunk and on the shortcut (what follows a branch is its own)
+        expect(
+            nodesOf(render, 'C')
+                .map((n) => render.grid!.cells[n.id]!.row)
+                .sort((a, b) => a - b),
+        ).toEqual([0, 1]);
+        expect(cell('D')).toEqual({ col: 1, row: 1 });
+        expect(cell('X').row).toBeGreaterThan(cell('D').row);
+        expect(cell('E')).toEqual({ col: 2, row: cell('E').row });
+        expect(cell('E').row).toBeLessThan(cell('X').row);
+        const graph = renderToGraph(render, s);
+        const into = (eventId: string) => graph.edges.find((e) => e.target === nodesOf(render, eventId)[0]!.id)!;
+        expect(into('D')).toMatchObject({ kind: 'esSequence', label: { ja: { label: '近道' } } });
+        expect(into('X').kind).toBe('esException');
+        expect(crossings(laidOut(render, s))).toEqual([]);
+    });
+});
+
+describe('exceptions without stages', () => {
+    const text = `storming N {
+  event A
+  event B
+  event C
+  event X
+  timeline Main {
+    A
+    B
+    C
+  }
+  exception Fail {
+    B
+    X
+    then C
+  }
+}
+`;
+    test('the top-level timelines are one section, without a frame: the trunk straight, the exception below', async () => {
+        const s = await parse(text);
+        const render = projectView(s, BP);
+        expect(render.nodes.some((n) => n.type === 'stage')).toBe(false);
+        expect(render.grid!.frames).toEqual({});
+        expect(only(render, 'B').occurrences.map((o) => o.timelineId)).toEqual(['Fail', 'Main']);
+        expect(render.grid!.cells[only(render, 'X').id]).toEqual({ col: 2, row: 1 });
+        expect(edgesOf(render, 'rejoin')).toEqual(['X -> C']);
+        expect(crossings(laidOut(render, s))).toEqual([]);
+    });
+});

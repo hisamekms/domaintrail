@@ -1,5 +1,5 @@
 import { contextNames, diffModels, type DomainModel, elementOf, EMPTY_DIFF, fingerprints, type ModelDiff, supportingContexts } from '@domaintrail/modeling';
-import { type Storming, type StormingAnalysis, stormingTimelines } from '@domaintrail/storming';
+import { hasExceptions, orderStages, type Storming, type StormingAnalysis, stormingStages, stormingTimelines } from '@domaintrail/storming';
 import { analyze, DEFAULT_SOURCES } from '@domaintrail/analysis';
 import { VIEW_LEVELS, type RenderGraph, type ViewOptions } from '../core/storming/ir.js';
 import { matchRenderNodes, projectView } from '../core/storming/render.js';
@@ -7,6 +7,7 @@ import { renderToGraph, stormingViewKey } from '../core/storming/graph.js';
 import { buildStateGraph, buildStructureGraph } from '../core/graph/build.js';
 import { buildContextMapGraph } from '../core/graph/context-map.js';
 import { markLineChanges } from '../core/graph/line-changes.js';
+import { layoutGrid } from '../core/graph/grid.js';
 import { TRANSITION_LABELS, graphSignature, type Graph, type LaidOutGraph, type Point, type StructureLevel, type TransitionLabels } from '../core/graph/ir.js';
 import type { LayoutEngine, LayoutOptions } from './layout-engine.js';
 import type { GitCommit, GitRevisions, LayoutCache, LayoutStore, WorkspaceReader } from './ports.js';
@@ -127,7 +128,8 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
         if (cached && cached.signature === signature) {
             return { ...graph, nodeLayout: cached.nodeLayout, edgeLayout: cached.edgeLayout, signature };
         }
-        const laid = await engine.layout(graph, cached && incremental ? incremental(cached) : {});
+        // a view of stages is placed on its grid, the same way every time: nothing to carry over from the cached one
+        const laid = graph.grid ? layoutGrid(graph) : await engine.layout(graph, cached && incremental ? incremental(cached) : {});
         cache.set(graph.id, laid);
         return laid;
     };
@@ -305,11 +307,25 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
             for (const storming of list) {
                 if (ids.has(storming.id)) continue;
                 ids.add(storming.id);
-                const timelines = stormingTimelines(storming).map((t) => ({ id: t.id, ...(t.label !== undefined && { label: t.label }) }));
+                const stageOf = new Map(stormingStages(storming).flatMap((st) => st.timelines.map((t) => [t.id, st.id] as const)));
+                const timelines = stormingTimelines(storming).map((t) => ({
+                    id: t.id,
+                    ...(t.label !== undefined && { label: t.label }),
+                    ...(stageOf.has(t.id) && { stageId: stageOf.get(t.id) }),
+                    ...(t.exception && { exception: true as const }),
+                }));
+                const withExceptions = hasExceptions(storming);
+                const stages = orderStages(storming).stages.map((st) => ({ id: st.id, ...(st.label !== undefined && { label: st.label }) }));
                 const byKey: StormingView['views'] = {};
                 for (const level of VIEW_LEVELS) {
-                    for (const timelineId of [undefined, ...timelines.map((t) => t.id)]) {
-                        const options: ViewOptions = timelineId === undefined ? { level } : { level, timelineId };
+                    const whole: ViewOptions[] = [{ level }, ...stages.map((st) => ({ level, stageId: st.id }))];
+                    const scopes: ViewOptions[] = [
+                        ...whole,
+                        ...timelines.map((t) => ({ level, timelineId: t.id })),
+                        // the integrated canvas and the stages without their exceptions (「例外を表示」 off)
+                        ...(withExceptions ? whole.map((o): ViewOptions => ({ ...o, hideExceptions: true })) : []),
+                    ];
+                    for (const options of scopes) {
                         const render = projectView(storming, options);
                         byKey[stormingViewKey(options)] = { render, graph: await layoutStorming(render, storming) };
                     }
@@ -319,6 +335,7 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
                     ...(storming.label !== undefined && { label: storming.label }),
                     file,
                     timelines,
+                    ...(stages.length > 0 && { stages }),
                     storming,
                     views: byKey,
                     stale: broken.has(file),

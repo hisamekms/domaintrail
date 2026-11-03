@@ -109,3 +109,51 @@ describe('the Live View of a workspace with stormings', () => {
         }
     });
 });
+
+describe('the Live View of a storming with stages', () => {
+    let dir: string;
+    beforeAll(async () => {
+        dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-dtes-stages-'));
+        await writeFile(
+            path.join(dir, 'issuance.dtes'),
+            await readFile(path.join(import.meta.dir, 'fixtures', 'stages', 'convenience-store-stages.dtes'), 'utf8'),
+        );
+    });
+    afterAll(() => rm(dir, { recursive: true, force: true }));
+
+    test('pushes its stages in time order, a view of each, and places the views of stages on their grid, the same on every refresh', async () => {
+        const [view] = (await viewService(dir).refresh()).stormings;
+        expect(view.stages).toEqual([
+            { id: 'Preparation', label: '依頼・準備' },
+            { id: 'Issuance', label: 'コンビニでの発行' },
+            { id: 'Submission', label: '提出' },
+        ]);
+        expect(view.timelines.find((t) => t.id === 'PinLockedBranch')).toEqual({
+            id: 'PinLockedBranch',
+            label: '暗証番号のロック',
+            stageId: 'Issuance',
+            exception: true,
+        });
+        const keys = Object.keys(view.views);
+        for (const key of [
+            'big-picture|',
+            'big-picture|@Issuance',
+            'design-level|@Submission',
+            'big-picture|PinLockedBranch',
+            'big-picture|-exceptions',
+            'design-level|@Issuance-exceptions',
+        ])
+            expect(keys).toContain(key);
+        // a timeline's view is never without its exceptions
+        expect(keys).not.toContain('big-picture|PinLockedBranch-exceptions');
+        for (const [key, { render, graph }] of Object.entries(view.views)) {
+            expect(stormingViewKey(render.options)).toBe(key);
+            expect(Object.keys(graph.nodeLayout).sort()).toEqual(graph.nodes.map((n) => n.id).sort());
+            // the integrated canvas and the stages on a grid; a timeline laid out as ever
+            expect(!!graph.grid).toBe(render.options.timelineId === undefined);
+        }
+        const again = (await viewService(dir).refresh()).stormings[0]!;
+        expect(again.views['big-picture|'].graph.nodeLayout).toEqual(view.views['big-picture|'].graph.nodeLayout);
+        expect(again.views['big-picture|@Issuance'].graph.edgeLayout).toEqual(view.views['big-picture|@Issuance'].graph.edgeLayout);
+    });
+});

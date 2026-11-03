@@ -532,7 +532,7 @@ describe('§12.3 properties', () => {
                         return n?.type === 'event' ? n.eventId : n?.type === 'element' ? n.elementId : undefined;
                     };
                     for (const e of g.edges) {
-                        if (e.type === 'sequence') continue;
+                        if (e.type !== 'semantic') continue;
                         const edge = keys.get(e.semantic);
                         expect(edge).toBeDefined();
                         expect([e.kind, elementOf(e.source), elementOf(e.target)]).toEqual([edge!.kind, edge!.sourceId, edge!.targetId]);
