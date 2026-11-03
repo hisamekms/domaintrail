@@ -270,6 +270,15 @@ function RunSection({
                     ↳ {tx.chat.note} {nameOf(run.run.queuedBy)}: <span className="run-line-text">{run.note}</span>
                 </p>
             )}
+            {/* the option of each approved proposal the facilitator chose (ADR 0030): what the run was asked to do */}
+            {(run.run.input.proposals?.approved ?? []).map(
+                (a) =>
+                    a.instruction.label !== undefined && (
+                        <p key={a.proposal} className="run-line">
+                            ↳ {tx.chat.proposal.chosen}: <span className="run-line-text">{a.instruction.label}</span>
+                        </p>
+                    ),
+            )}
             {display.quotes && (
                 <ul className="run-quotes">
                     {run.quotes.map((q) => (

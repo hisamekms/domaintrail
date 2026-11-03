@@ -62,6 +62,7 @@ import { useTargetNaming } from './naming';
 import { CollabMenu, CollabSummaryDialog, openPeople, useCollabSummary } from './collab-menu';
 import { Avatar, failure, MentionedText, TargetChips } from './parts';
 import { AiAvatar, ProposalCard } from './proposal';
+import { chosenIndex } from './proposal-view';
 import { parseReplyText, referenceText } from './references';
 import { TriageRecordPanel } from './triage-record';
 import { isReplyable, messageReference, messageReplyTargets, repliesToMe, replyReference, replyTargetOf, replyTargets, type ReplyDraft } from './replies';
@@ -174,6 +175,8 @@ export function SessionChat(props: {
         const open = new Set(openKey.split(','));
         return new Set([...picks].filter((id) => open.has(id)));
     }, [picks, openKey]);
+    // the option picked of each proposal with options, kept here so that approving several takes each one's pick
+    const [options, setOptions] = useState<ReadonlyMap<string, number>>(new Map());
     const proposalPicks = useMemo(
         () => ({
             ids: picked,
@@ -185,8 +188,10 @@ export function SessionChat(props: {
                     return next;
                 }),
             clear: () => setPicks(new Set()),
+            options,
+            choose: (id: string, option: number) => setOptions((m) => new Map(m).set(id, option)),
         }),
-        [picked],
+        [picked, options],
     );
     const status = agentStatus(state.runs);
     const items = useMemo(() => streamItems(state), [state]);
@@ -1016,7 +1021,7 @@ function SelectionBar() {
 
 /** The bar of the change proposals chosen to approve together: one run. */
 function ProposalsBar() {
-    const { tx, proposalPicks, actions } = useChat();
+    const { tx, proposalPicks, actions, session } = useChat();
     const n = proposalPicks.ids.size;
     const t = tx.chat.proposal;
     const approve = async (): Promise<void> => {
@@ -1024,7 +1029,13 @@ function ProposalsBar() {
         const ids = [...document.querySelectorAll<HTMLElement>('.chat-stream [data-item^="proposal:"]')]
             .map((el) => el.dataset.item?.slice('proposal:'.length) ?? '')
             .filter((id) => proposalPicks.ids.has(id));
-        if (await actions.approveProposals(ids.map((proposal) => ({ proposal })))) proposalPicks.clear();
+        // each with the option picked on its card (the recommended one when the proposal has options and none was picked)
+        const proposals = ids.map((proposal) => {
+            const p = session.state.proposals?.find((x) => x.id === proposal);
+            const option = p && chosenIndex(p, proposalPicks.options.get(proposal));
+            return { proposal, ...(option !== undefined && { option }) };
+        });
+        if (await actions.approveProposals(proposals)) proposalPicks.clear();
     };
     return (
         <div className="chat-selection-bar" role="toolbar" aria-label={t.selected(n)}>

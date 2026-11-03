@@ -30,8 +30,17 @@ export interface ChatContextValue {
     readonly triages: ReadonlyMap<string, TriageJson>;
     /** The messages whose answer or proposal the server gave up. */
     readonly givenUp: ReadonlySet<string>;
-    /** The open change proposals the facilitator chose to approve together (one run). */
-    readonly proposalPicks: { readonly ids: ReadonlySet<string>; toggle(id: string): void; clear(): void };
+    /**
+     * The open change proposals the facilitator chose to approve together (one run), and the option the facilitator
+     * picked of each proposal with options (by its ID; none: the AI's recommendation).
+     */
+    readonly proposalPicks: {
+        readonly ids: ReadonlySet<string>;
+        toggle(id: string): void;
+        clear(): void;
+        readonly options: ReadonlyMap<string, number>;
+        choose(id: string, option: number): void;
+    };
     readonly actions: ChatActions;
     /** The facilitator cancels a unit's running or queued run (`ChangeUnit.key`): a dialog asks first. */
     readonly confirmCancel: (unit: string) => void;

@@ -2,7 +2,7 @@
 // presence, whether a draft reaches the AI, the proposals; and how the page's state takes the agents' presence.
 import { describe, expect, test } from 'bun:test';
 import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { aiPresence, givenUpRequests, isSolo, messageAi, openProposals, proposalContent, triagesByRequest, willAddress, type TriageJson } from './ai';
+import { aiPresence, givenUpRequests, isSolo, messageAi, openProposals, triagesByRequest, willAddress, type TriageJson } from './ai';
 import { messageMarks } from './cards';
 import { collabMenuItems } from './collab';
 import { changeUnits } from './history';
@@ -45,7 +45,7 @@ const proposal = (id: string, state: string, extra: object = {}): ProposalJson =
         triage: `t-${id}`,
         request: `m-${id}`,
         requestedBy: 'p',
-        content: { what: 'what', where: 'where', how: 'how' },
+        content: { targets: [], how: 'how', options: [] },
         proposedAt: at(2),
         state,
         ...extra,
@@ -150,17 +150,14 @@ describe('the AI in the header and the composer', () => {
 });
 
 describe('change proposals', () => {
-    test('in the stream where they were made; the open ones; an approval with an edit stands for the edit', () => {
-        const edited = { what: 'w2', where: 'x2', how: 'h2' };
+    test('in the stream where they were made; the open ones', () => {
         const proposals = [
             proposal('a', 'Open'),
-            proposal('b', 'Approved', { edited, approvedBy: 'f', approvedAt: at(3), run: 'r' }),
+            proposal('b', 'Approved', { editedHow: 'h2', approvedBy: 'f', approvedAt: at(3), run: 'r' }),
             proposal('c', 'Rejected'),
         ];
         const s = state({ proposals });
         expect(openProposals(s).map((p) => p.id)).toEqual(['a']);
-        expect(proposalContent(proposals[1])).toEqual(edited);
-        expect(proposalContent(proposals[0])).toEqual(proposals[0].content);
         const items = streamItems(s).map((i) => i.key);
         expect(items).toEqual(['message:mf', 'message:mp', 'proposal:a', 'proposal:b', 'proposal:c']);
     });

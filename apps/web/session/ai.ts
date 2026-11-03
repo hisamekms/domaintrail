@@ -92,6 +92,3 @@ export function willAddress(
 
 /** The change proposals still waiting for the facilitator, in the order they were made. */
 export const openProposals = (state: Pick<SessionStateBody, 'proposals'>): ProposalJson[] => (state.proposals ?? []).filter((p) => p.state === 'Open');
-
-/** The text a proposal stands for now: the facilitator's edit once approved with one, else the AI's. */
-export const proposalContent = (p: ProposalJson): ProposalJson['content'] => (p.state === 'Approved' && p.edited ? p.edited : p.content);

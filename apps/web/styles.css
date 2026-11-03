@@ -7307,7 +7307,8 @@ button.add-to-request.added:hover {
     color: var(--status-warning-ink);
     font-size: var(--fs-small);
 }
-/* a change proposal: the AI's bubble holding a faint surface, headed small and strong, its fields as label and text */
+/* a change proposal: the AI's bubble holding a faint surface, headed small and strong; its targets as chips, then how
+   (no field labels) */
 .proposal {
     display: flex;
     flex-direction: column;
@@ -7323,23 +7324,92 @@ button.add-to-request.added:hover {
     line-height: var(--lh-small);
     font-weight: var(--fw-strong);
 }
-.proposal-fields {
+/* a target: `#注文` and, after it, what it is and where (集約・販売) muted; one that does not resolve, plain */
+.proposal-target {
+    background: var(--surface);
+}
+/* the name stays whole; what it is and where gives way first */
+.proposal-target > .chat-chip-name {
+    flex: none;
+    max-width: 100%;
+}
+.proposal-target-detail {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+}
+.proposal-target.unresolved {
+    color: var(--text-secondary);
+}
+.proposal-more {
+    color: var(--muted);
+    background: var(--surface);
+}
+/* the options: a bordered row each, the chosen one in the selection's tint; the AI's recommendation said small */
+.proposal-options {
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
-    margin: 0;
 }
-.proposal-field {
+.proposal-option {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+label.proposal-option {
+    cursor: pointer;
+}
+.proposal-option.chosen {
+    border-color: var(--selected-ring);
+    background: var(--selected-bg);
+}
+.proposal-option input[type='radio'] {
+    flex: none;
+    width: 13px;
+    height: 13px;
+    margin: calc((1.5em - 13px) / 2) 0 0;
+}
+.proposal-option-mark {
+    flex: none;
+    display: inline-flex;
+    margin-top: calc((1.5em - 12px) / 2);
+    color: var(--accent);
+}
+.proposal-option-body {
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
     gap: 2px;
+    min-width: 0;
 }
-.proposal-field > dd {
-    margin: 0;
-    white-space: pre-wrap;
+.proposal-option-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2);
 }
-.proposal-key {
+.proposal-recommended {
     color: var(--muted);
+    font-size: var(--fs-small);
+}
+.proposal-option-how {
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+/* the others' line while it waits: the facilitator decides */
+.proposal-waiting {
+    margin: 0;
+    color: var(--status-warning-ink);
     font-size: var(--fs-small);
     line-height: var(--lh-small);
 }
