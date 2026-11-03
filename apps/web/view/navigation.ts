@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useValue, type Editor } from 'tldraw';
 import type { StormingView, ViewPayload } from '@domaintrail/visualization/protocol';
 import type { RevealTarget } from '../inspector';
 import { resolve, selectedFile } from '../model-utils';
-import { shapeElementId } from '../render';
 import { locationOf, type SourceFocus } from '../source';
 import { isStormingSelection, stormingExists, stormingLocation } from '../storming';
 import { highlightElement } from './canvas';
+import { useCanvasValue, type DiagramCanvas } from './diagram';
 import { backIndex, popHistory, pushHistory, type History } from './history';
 
 export type View = { kind: 'contextMap' } | { kind: 'structure' } | { kind: 'catalog' } | { kind: 'storming' };
@@ -30,7 +29,7 @@ export interface Navigation {
     reveal: (target: RevealTarget, id: string) => void;
 }
 
-export function useNavigation(editor: Editor | null, current: ViewPayload | null, stormings: readonly StormingView[]): Navigation {
+export function useNavigation(canvas: DiagramCanvas | null, current: ViewPayload | null, stormings: readonly StormingView[]): Navigation {
     const model = current?.model ?? null;
     const base = current?.base ?? null;
     const [view, setView] = useState<View>({ kind: 'structure' });
@@ -43,9 +42,9 @@ export function useNavigation(editor: Editor | null, current: ViewPayload | null
     /** Highlights `id` in the current view if it is shown there; never switches views. */
     const highlight = useCallback(
         (id: string, v: View = view) => {
-            if (editor && isCanvas(v)) highlightElement(editor, id);
+            if (canvas && isCanvas(v)) highlightElement(canvas, id);
         },
-        [editor, view],
+        [canvas, view],
     );
 
     const focusSource = useCallback(
@@ -101,18 +100,17 @@ export function useOpenOnStormings(current: ViewPayload | null, setView: (v: Vie
     }, [current, setView]);
 }
 
-/** Clicking a shape on the canvas selects it (without moving the camera). */
-export function useSelectOnCanvas(editor: Editor | null, select: Navigation['select']): void {
-    const selectedOnCanvas = useValue(
-        'selected element',
-        () => {
-            const only = editor?.getOnlySelectedShape();
-            return only && editor ? shapeElementId(editor, only.id) : undefined;
-        },
-        [editor],
-    );
+/** Clicking an item on the canvas selects its element (without moving the camera). */
+export function useSelectOnCanvas(canvas: DiagramCanvas | null, select: Navigation['select']): void {
+    const selectedOnCanvas = useCanvasValue(canvas, selectedElement, []);
     useEffect(() => {
         if (selectedOnCanvas) select(selectedOnCanvas, { highlight: false });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedOnCanvas]);
+}
+
+/** The element of the only item selected on the canvas, if any. */
+export function selectedElement(canvas: DiagramCanvas | null): string | undefined {
+    const only = canvas?.onlySelectedId();
+    return only && canvas ? canvas.item(only)?.elementId : undefined;
 }

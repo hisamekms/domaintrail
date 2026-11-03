@@ -1,7 +1,6 @@
 // The session's part of the page (ADR 0026): computed on every page, shown only in a session. Under `dt view` no
 // `session.state` ever arrives, so `useSessionPage` gives nothing to draw, sends nothing and calls no session API.
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { createShapeId, useValue } from 'tldraw';
 import { firstDeclarations } from '@domaintrail/storming';
 import { type DisplayMode, LEVEL_KINDS } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
@@ -12,8 +11,9 @@ import type { ViewSocket } from '../app/useViewSocket';
 import { useT } from '../i18n';
 import { contextLabels } from '../model-utils';
 import { stormingGraph, type StormingChoice } from '../storming';
-import { shapeElementId } from '../render';
-import { highlightElement } from '../view/canvas';
+import { graphNodeOf, nodeItemId } from '../scene';
+import { highlightElement, showItem } from '../view/canvas';
+import { useCanvasValue } from '../view/diagram';
 import type { Workspace } from '../view/workspace';
 import { ChatLauncher, SessionChat } from './chat';
 import { PeerCursors } from './cursors';
@@ -28,9 +28,6 @@ import type { ViewScope, ViewTarget } from './views';
 import { occurrenceNode, targetKey, targetOfSelection, type ModelTarget, type NamingContext, type TargetDraft } from './targets';
 import { agentStatus, latestAt, streamItems, unreadCount, unreadMentions } from './stream';
 import { defaultDraftStorage, useComposerDraft, usePresence, useSession } from './useSession';
-
-/** The graph node of a shape on the canvas (`render.ts`: `n:<graph node ID>`). */
-const NODE_SHAPE = 'shape:n:';
 
 export interface SessionPage {
     /** The session's chat for `AppShell`'s `conversation`, for everyone; undefined outside a session. */
@@ -56,7 +53,7 @@ export function useSessionPage(input: {
     openBest: (id: string) => void;
 }): SessionPage {
     const { socket, current, workspace, panes } = input;
-    const { editor, stormings, nav, settings, viewGraph } = workspace;
+    const { canvas, stormings, nav, settings, viewGraph } = workspace;
     const { view } = nav;
     const session = useSession(socket, current);
     const model = current?.model ?? null;
@@ -69,8 +66,8 @@ export function useSessionPage(input: {
         graph: viewGraph.graph,
         storming: viewGraph.shown && { id: viewGraph.shown.storming.id, options: viewGraph.shown.options },
     });
-    const selectedShape = useValue('selected shape', () => editor?.getOnlySelectedShapeId() ?? undefined, [editor]);
-    const selectedNode = selectedShape?.startsWith(NODE_SHAPE) ? selectedShape.slice(NODE_SHAPE.length) : undefined;
+    const selectedItem = useCanvasValue(canvas, (c) => c?.onlySelectedId(), []);
+    const selectedNode = selectedItem && graphNodeOf(selectedItem);
     const timelineId = viewGraph.shown?.options.timelineId;
     const timelineView =
         view.kind === 'storming' && viewGraph.shown && timelineId !== undefined && viewGraph.stormingShown
@@ -84,23 +81,23 @@ export function useSessionPage(input: {
         ...(timelineView && { timelineView }),
         ...(selectedNode && { selectedNode }),
     });
-    usePresence(socket, session, editor, location, selectionTarget?.target);
+    usePresence(socket, session, canvas, location, selectionTarget?.target);
 
-    // a selection of several shapes on the canvas: each targetable element once (the composer's `+` adds them all)
-    const selectedKey = useValue(
-        'selected shapes',
-        () => {
-            if (!editor) return '';
-            const shapes = editor.getSelectedShapeIds();
-            if (shapes.length < 2) return '';
+    // a selection of several items on the canvas: each targetable element once (the composer's `+` adds them all)
+    const selectedKey = useCanvasValue(
+        canvas,
+        (c) => {
+            if (!c) return '';
+            const items = c.selectedIds();
+            if (items.length < 2) return '';
             return JSON.stringify(
-                shapes.flatMap((id) => {
-                    const element = shapeElementId(editor, id);
-                    return element ? [[element, id.startsWith(NODE_SHAPE) ? id.slice(NODE_SHAPE.length) : '']] : [];
+                items.flatMap((id) => {
+                    const element = c.item(id)?.elementId;
+                    return element ? [[element, graphNodeOf(id) ?? '']] : [];
                 }),
             );
         },
-        [editor],
+        [],
     );
     const sources = current?.sources;
     const selectionTargets = useMemo((): TargetDraft[] => {
@@ -157,7 +154,7 @@ export function useSessionPage(input: {
             e.stopPropagation();
             confirm(selectionTargets);
         };
-        // before tldraw's own shortcuts (it binds no plain `c`, but the key is ours here)
+        // before the canvas's own shortcuts (it binds no plain `c`, but the key is ours here)
         document.addEventListener('keydown', onKey, true);
         return () => document.removeEventListener('keydown', onKey, true);
     }, [live, selectionTargets, confirm]);
@@ -213,7 +210,7 @@ export function useSessionPage(input: {
                 const id = `es/${target.storming}/${target.local}`;
                 setView({ kind: 'storming' });
                 select(id, { highlight: false });
-                requestAnimationFrame(() => requestAnimationFrame(() => editor && highlightElement(editor, id)));
+                requestAnimationFrame(() => requestAnimationFrame(() => canvas && highlightElement(canvas, id)));
                 return;
             }
             // an occurrence: its timeline's view, and the note of that step
@@ -227,18 +224,15 @@ export function useSessionPage(input: {
             select(`es/${target.storming}/${target.eventName}`, { highlight: false });
             const render = stormingGraph(stormings, choice)?.render;
             const node = render && occurrenceNode(render, target);
-            if (!editor || !node) return;
+            if (!canvas || !node) return;
             requestAnimationFrame(() =>
                 requestAnimationFrame(() => {
-                    const shape = createShapeId(`n:${node}`);
-                    if (!editor.getShape(shape)) return;
-                    editor.select(shape);
-                    const b = editor.getShapePageBounds(shape);
-                    if (b && !editor.getViewportPageBounds().contains(b)) editor.centerOnPoint(b.center, { animation: { duration: 200 } });
+                    const item = nodeItemId(node);
+                    if (canvas.item(item)) showItem(canvas, item);
                 }),
             );
         },
-        [editor, stormings, stormingChoice, setStormingChoice, select, setView, openBest],
+        [canvas, stormings, stormingChoice, setStormingChoice, select, setView, openBest],
     );
 
     // another participant's view, opened here as it is (the view, not their camera)
@@ -286,8 +280,8 @@ export function useSessionPage(input: {
         ended,
         canvasOverlay: (
             <>
-                <PeerCursors editor={editor} cursors={cursorsOn(session.peers, location)} />
-                <SelectionAction editor={editor} action={addAction(selectionTargets)} />
+                <PeerCursors canvas={canvas} cursors={cursorsOn(session.peers, location)} />
+                <SelectionAction canvas={canvas} action={addAction(selectionTargets)} />
             </>
         ),
         inspectorAction: inspectorAdd && <AddButton action={inspectorAdd} />,
