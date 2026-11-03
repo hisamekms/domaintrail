@@ -724,6 +724,8 @@ const ja = {
                 pending: '確認中',
                 toAnswer: 'AI の回答へ',
                 toProposal: '変更案へ',
+                // an answer that arrived while the reader was scrolled up: the pill that goes to its head
+                answerArrived: 'AI が回答しました',
                 givenUp: 'AI が答えられませんでした',
                 retry: 'もう一度',
                 willRead: 'AI に届きます',
@@ -1540,6 +1542,7 @@ const en: Messages = {
                 pending: 'Checking',
                 toAnswer: "To the AI's answer",
                 toProposal: 'To the proposal',
+                answerArrived: 'The AI answered',
                 givenUp: 'The AI could not answer',
                 retry: 'Try again',
                 willRead: 'The AI reads this',

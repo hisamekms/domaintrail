@@ -107,7 +107,10 @@ export type AiSlot =
 
 /**
  * The AI's card under a message (see `AiSlot`): from its triage on the server, so that it is the same after a reload;
- * `sent`: this page has just sent it, so that the card shows at once, before the server's triage reaches the page.
+ * `sent`: this page has just sent it, so that the card shows at once, before the server's triage reaches the page;
+ * `answeredBy`: the AI's message replying to it, which takes the pending card's place at once when it reaches the page
+ * before the triage naming it the answer (the server's two events come one after the other: else it would show on
+ * its own row for a moment, under the card, then move into it).
  */
 export function aiSlot(
     solo: boolean,
@@ -115,13 +118,15 @@ export function aiSlot(
     triage: TriageJson | undefined,
     givenUp: ReadonlySet<string>,
     sent: boolean,
+    answeredBy?: string,
 ): AiSlot | undefined {
     if (!solo || isAiAuthor(request.author)) return undefined;
-    if (!triage) return sent ? { kind: 'pending' } : undefined;
+    const pending: AiSlot = answeredBy === undefined ? { kind: 'pending' } : { kind: 'answer', answer: answeredBy };
+    if (!triage) return sent ? pending : undefined;
     const ai = messageAi(triage, givenUp);
     switch (ai.kind) {
         case 'working':
-            return { kind: 'pending' };
+            return pending;
         case 'given-up':
             return { kind: 'given-up' };
         case 'answer':

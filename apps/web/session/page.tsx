@@ -17,6 +17,7 @@ import { useCanvasValue } from '../view/diagram';
 import type { Workspace } from '../view/workspace';
 import { aiPresence } from './ai';
 import { ChatLauncher, SessionChat } from './chat';
+import { PAGE_REVEAL, revealKeys } from './reveal';
 import { PeerCursors } from './cursors';
 import { TargetNamingProvider } from './naming';
 import { viewLocation } from './location';
@@ -59,6 +60,8 @@ export function useSessionPage(input: {
     const { canvas, stormings, nav, settings, viewGraph } = workspace;
     const { view } = nav;
     const session = useSession(socket, current);
+    // what the chat holds when the page first has the session is its history (clamped), even with the chat closed
+    if (session) PAGE_REVEAL.history(session.state.session.id, () => revealKeys(session.state));
     const model = current?.model ?? null;
     const naming = useMemo((): NamingContext => ({ mode: input.mode, model, stormings }), [input.mode, model, stormings]);
     const t = useT();
