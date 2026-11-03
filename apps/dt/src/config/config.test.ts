@@ -48,7 +48,7 @@ const COLLAB_DEFAULTS: ResolvedCollabConfig = {
 const AGENT_DEFAULTS: ResolvedAgentSection = {
     port: 0,
     run: {
-        allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'],
+        allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)', 'Bash(dt guide:*)'],
         warm: true,
         restartAfter: 20,
         idleTimeout: 30,

@@ -16,7 +16,7 @@ const refusal = (agent: Record<string, unknown>): string | undefined => {
 };
 
 const RUN_DEFAULTS = {
-    allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'],
+    allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)', 'Bash(dt guide:*)'],
     warm: true,
     restartAfter: 20,
     idleTimeout: 30,

@@ -678,6 +678,17 @@ The maintainer's second design of the change proposal (2026-11-03; it replaces M
   「ファシリテーターの承認待ち」, and the requester 取り下げ. Approving several together takes each card's pick. Solo is
   unchanged (no proposals).
 
+### As built: the ways of working in the prompts
+
+- **Guide**: two topics, `storming-practice` (under `storming`) and `modeling-practice` (under `dsl`), with the
+  maintainer's text; `workflow` points to both.
+- **Push**: the runner's prompt and the answerer's answer and propose prompts give the topics of the languages the
+  request is about, as the guide has them (the CLI reads them from the guide it embeds and hands them to the agent;
+  no copy in the prompts): `.dtes` targets the storming's, `.dt` targets the modeling's, both or no target both. The
+  runner's prompt puts its rules first where they differ; the answerer's stays read-only.
+- **Pull**: the runner may run `dt guide` (alone, one topic or rule, or `--all`): `Bash(dt guide:*)` in the default
+  `allowedTools`, and the agent's `dt` takes it besides `fmt` and `check`. The answerer has no `dt`.
+
 ## The page
 
 - **Mode**: in solo the collab menu, invite, hand-over, leave, participants and reactions-of-others are hidden; the chat
@@ -948,9 +959,10 @@ A template only puts text in the composer.
   the answerer's read-only agent answers it in a warm process of its own (another JSON schema): `{ kind: 'question' }`
   or `{ kind: 'brief', brief: { name, label?, isNew, replaces, lines[3..6] } }`, read again by the server. Its prompt
   lists each command's items, asks one question at a time, digs into vague answers, reads the stormings' `///` and the
-  model first, follows the UI language unless the person writes in another.
+  model first, follows the UI language unless the person writes in another. It is given the guide's way of working of
+  its command's DSL (`/es`: storming-practice, `/model`: modeling-practice), as the answerer is.
 - **Confirm → run**: `confirmInterview` queues a run on the message the brief answered whose input carries
-  `brief: BriefInstruction { interview, command, brief }` (the text as edited); the runner's rule 15 writes the lines as
+  `brief: BriefInstruction { interview, command, brief }` (the text as edited); the runner's rule 16 writes the lines as
   the `///` description above `storming <name>` / `context <name>`, creating it when `create`, replacing an existing
   description only when the card said so. A proposal was not reused: it needs a triage, and the starter's confirmation
   is the approval.

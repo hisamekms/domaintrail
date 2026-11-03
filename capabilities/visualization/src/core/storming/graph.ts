@@ -3,9 +3,9 @@
  * existing layout and Live View. In a timeline's view every render node becomes one graph node, keeping its path-derived
  * ID, and every render edge one graph edge. The integrated view merges the render nodes of each event into one note.
  */
-import { named, sized } from '../graph/build.js';
-import { mapTexts, maxUnits, perLang, type EdgeKind, type Graph, type GraphEdge, type GraphNode, type NodeKind, type Texts } from '../graph/ir.js';
-import { esElementId, firstDeclarations, type NodeElementKind, type Storming } from '@domaintrail/storming';
+import { named } from '../graph/build.js';
+import { mapTexts, perLang, type EdgeKind, type Graph, type GraphEdge, type GraphNode, type NodeKind, type Texts } from '../graph/ir.js';
+import { esElementId, firstDeclarations, STICKY_NOTE, type NodeElementKind, type Storming } from '@domaintrail/storming';
 import { isCausal, type RenderEdge, type RenderGraph, type RenderNode, type ViewOptions } from './ir.js';
 
 /** Graph ID of a view: `storming:<StormingId>:<level>:<timelineId or *>` (the `storming` prefix lays it out left to right). */
@@ -24,23 +24,6 @@ const NODE_KINDS: Record<NodeElementKind, NodeKind> = {
     readmodel: 'esReadModel',
     hotspot: 'esHotspot',
 };
-
-/** Width of one ASCII character of a node's label (17px bold sans-serif). */
-const LABEL_CHAR_WIDTH = 10.5;
-/** A note is a square at least this wide: its label wraps, and a label too long for it makes it larger. */
-const NOTE_SIDE = 150;
-/** Of a note: the horizontal padding, the height of its stereotype and vertical padding, and of one line of its label. */
-const NOTE_PADDING_X = 28;
-const NOTE_CHROME_HEIGHT = 40;
-const NOTE_LINE_HEIGHT = 24;
-
-/** The side of a note whose wrapped label fits in it (lines wrap short of the full width, hence the margin). */
-function noteSide(label: Texts): number {
-    const width = maxUnits(label) * LABEL_CHAR_WIDTH * 1.15;
-    let side = NOTE_SIDE;
-    while (NOTE_CHROME_HEIGHT + Math.ceil(width / (side - NOTE_PADDING_X)) * NOTE_LINE_HEIGHT > side) side += 10;
-    return side;
-}
 
 const stereotype = (ja: string, en: string): Texts => perLang({ ja: `«${ja}»`, en: `«${en}»` });
 const STEREOTYPES: Record<NodeElementKind, Texts> = {
@@ -76,7 +59,8 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
         }
         const [elementId, kind] = n.type === 'event' ? [n.eventId, 'event' as const] : [n.elementId, n.kind];
         const parent = parentOf.get(n.id);
-        const note = sized({
+        // every note is the same square, whatever its label: the canvas shrinks the label to fit it (`STICKY_NOTE`)
+        return {
             id: n.id,
             kind: NODE_KINDS[kind],
             label: label(elementId),
@@ -84,9 +68,9 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
             lines: [],
             elementId: esElementId(storming.id, elementId),
             ...(parent !== undefined ? { parent } : {}),
-        });
-        const side = noteSide(note.label);
-        return { ...note, width: side, height: side };
+            width: STICKY_NOTE.side,
+            height: STICKY_NOTE.side,
+        };
     };
     const timelinesOf = (ids: readonly string[]): Texts => {
         const texts = ids.map(label);

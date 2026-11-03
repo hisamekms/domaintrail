@@ -46,7 +46,7 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
     const settings = useViewSettings();
     const viewGraph = useViewGraph(current, nav.view, settings, stormings);
     useOpenOnStormings(current, nav.setView);
-    useViewCamera(canvas, current, nav.view, settings, viewGraph, { mode, lang });
+    useViewCamera(canvas, current, nav.view, settings, viewGraph, { mode, lang }, current !== null && isEmptyView(nav.view.kind, current));
 
     useEffect(() => {
         applyTheme(theme, canvas);

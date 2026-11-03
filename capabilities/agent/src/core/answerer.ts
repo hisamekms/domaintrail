@@ -18,6 +18,7 @@ import type { AgentAnswerStreamJob, AgentInterviewJobBody } from '@domaintrail/c
 import { buildAnswerPrompt, buildInterviewPrompt, buildProposePrompt, buildTriagePrompt } from './answer-prompt.js';
 import { AgentApiError, type AgentApi, type AnswerAgent, type AnswerTurnResult, type Clock, type WorkspaceFiles } from './ports.js';
 import { changedPaths } from './subscriber.js';
+import type { Practice } from './prompt.js';
 
 export interface AnswererDeps {
     readonly api: AgentApi;
@@ -37,6 +38,8 @@ export interface AnswererOptions {
     readonly timeoutMs?: number;
     /** Reconnection delays of the stream: from `minMs`, doubling up to `maxMs`; ends when none opens for `giveUpMs`. */
     readonly reconnect?: { readonly minMs: number; readonly maxMs: number; readonly giveUpMs: number };
+    /** The ways of working the answer and propose prompts give for the DSLs a message is about (the guide's); none without it. */
+    readonly practice?: Practice;
 }
 
 /** Why an answerer ended. */
@@ -68,6 +71,7 @@ export function startAnswerer(deps: AnswererDeps, options: AnswererOptions = {})
     const { api, clock, log } = deps;
     const now = deps.now ?? Date.now;
     const reconnect = options.reconnect ?? DEFAULT_RECONNECT;
+    const practice = options.practice && { practice: options.practice };
     const stopping = new AbortController();
     let end: AnswererEnd | undefined;
     let resolveDone: (end: AnswererEnd) => void = () => {};
@@ -85,11 +89,10 @@ export function startAnswerer(deps: AnswererDeps, options: AnswererOptions = {})
         wakeWorker();
     };
 
-    /** The result of a job as the server takes it (`AgentTriageResultBody`, `AgentAnswerResultBody`, `AgentProposeResultBody`). */
     /** An interview's turn: the interviewer's question or brief, as the server takes it (`AgentInterviewResultBody`). */
     const interviewResultOf = async (job: AgentInterviewJobBody, signal: AbortSignal, started: number): Promise<Record<string, unknown>> => {
         const elapsed = (): number => Math.max(0, Math.round(now() - started));
-        const result = await deps.agent.interview({ prompt: buildInterviewPrompt(job, deps.nonce()), signal });
+        const result = await deps.agent.interview({ prompt: buildInterviewPrompt(job, deps.nonce(), practice ?? {}), signal });
         const meta = { ...(result.model && { model: result.model }), durationMs: elapsed() };
         if (result.error !== undefined) return { error: result.error, ...meta };
         const read = readInterviewerReply(outputOf(result));
@@ -98,6 +101,7 @@ export function startAnswerer(deps: AnswererDeps, options: AnswererOptions = {})
         return reply.kind === 'question' ? { kind: 'question', question: reply.question, ...meta } : { kind: 'brief', brief: briefData(reply.brief), ...meta };
     };
 
+    /** The result of a job as the server takes it (`AgentTriageResultBody`, `AgentAnswerResultBody`, `AgentProposeResultBody`). */
     const resultOf = async (job: AgentAnswerStreamJob, signal: AbortSignal): Promise<Record<string, unknown>> => {
         const started = now();
         if (job.kind === 'interview') return interviewResultOf(job, signal, started);
@@ -123,8 +127,10 @@ export function startAnswerer(deps: AnswererDeps, options: AnswererOptions = {})
         const build = job.kind === 'answer' ? buildAnswerPrompt : buildProposePrompt;
         const since = job.sessionSoFarSince ?? job.sessionSoFar;
         const result = await deps.agent.answer({
-            prompt: build(job, nonce, { ...(job.sessionSoFar && { sessionSoFar: job.sessionSoFar.text }) }),
-            ...(changed && { continuedPrompt: build(job, nonce, { changedSinceYourLastAnswer: changed, ...(since && { sessionSoFar: since.text }) }) }),
+            prompt: build(job, nonce, { ...(job.sessionSoFar && { sessionSoFar: job.sessionSoFar.text }), ...practice }),
+            ...(changed && {
+                continuedPrompt: build(job, nonce, { ...practice, changedSinceYourLastAnswer: changed, ...(since && { sessionSoFar: since.text }) }),
+            }),
             signal,
         });
         lastScan = await deps.workspace.scan().catch(() => undefined);

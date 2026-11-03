@@ -88,6 +88,19 @@ export function ruleText(guide: Guide, code: string): string | undefined {
     ].join('\n\n');
 }
 
+/**
+ * The ways of working of the two DSLs, the `storming-practice` and `modeling-practice` topics as `dt guide` prints
+ * them: what the agent's prompts give (one text for both). Throws when the guide lacks one.
+ */
+export function practiceOf(guide: Guide): { storming: string; modeling: string } {
+    const text = (name: string): string => {
+        const topic = guide.topics.find((t) => t.name === name);
+        if (!topic) throw new Error(`guide: no topic '${name}'`);
+        return topic.text;
+    };
+    return { storming: text('storming-practice'), modeling: text('modeling-practice') };
+}
+
 /** What `dt guide <name>` prints: a topic or a rule; an unknown name gets an error with suggestions. */
 export function guideTopic(guide: Guide, name: string): { text: string } | { error: string } {
     const topic = guide.topics.find((t) => t.name === name.toLowerCase());

@@ -189,6 +189,8 @@ const ja = {
     } as Record<EsElementKind, string>,
     notInStorming: (id: string) => `${id} はストーミングにありません`,
     inStorming: 'ストーミング',
+    /** An event marked `level design`: hidden at Big Picture. */
+    designLevelOnly: 'デザインレベルのみ',
     dtRef: '.dt との対応',
     noDtRef: 'なし（.dt との対応はまだ書かれていません）',
     unresolvedRef: '.dt にありません',
@@ -1026,6 +1028,7 @@ const en: Messages = {
     },
     notInStorming: (id) => `${id} is not in the storming`,
     inStorming: 'Storming',
+    designLevelOnly: 'Design Level only',
     dtRef: 'In .dt',
     noDtRef: 'None (no ref to .dt yet)',
     unresolvedRef: 'not in .dt',

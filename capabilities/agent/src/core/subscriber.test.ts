@@ -13,7 +13,7 @@ import { parseSse } from '../adapters/http-agent-api.js';
 import type { AgentPreviousRun, Json } from '@domaintrail/collaboration/protocol';
 
 /** The default tools of the agent (`session.agent.allowedTools`; the configuration's default is tested with it). */
-const DEFAULT_AGENT_TOOLS: readonly string[] = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'];
+const DEFAULT_AGENT_TOOLS: readonly string[] = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)', 'Bash(dt guide:*)'];
 
 const REVISION = '00000000-0000-4000-8000-000000000000';
 
@@ -171,13 +171,49 @@ describe('the prompt', () => {
             'A plain `@name` mentions a participant (a person), not an',
             'Edit only `.dt` and `.dtes` source files',
             'Never copy or sync `.dtes` content into `.dt`',
-            // the subscriber runs dt fmt and dt check after the turn: the agent runs dt check only for its diagnostics
-            'Run no command except `dt check`, and that only when you need its diagnostics to fix your edit',
+            // the subscriber runs dt fmt and dt check after the turn: the agent runs dt check only for its diagnostics,
+            // and dt guide to look the languages up
+            'Run no command except `dt check` and `dt guide`: `dt check` only when you need its diagnostics to fix your edit',
             'are run on the workspace after your turn anyway',
+            '`dt guide <topic>` to look up the',
             'do not guess',
         ]) {
             expect(both).toContain(rule);
         }
+    });
+
+    test('the ways of working follow the DSLs the requests are about: .dtes the storming, .dt the modeling, both or none both', () => {
+        const practice = { storming: '### Event Storming with DomainTrail\n\nSTORMING', modeling: '### Modeling with DomainTrail\n\nMODELING' };
+        const prompt = (...requests: Json<Collaboration.FrozenRequest>[]): string => buildPrompt(input(requests), names, 'n', [], [], { practice });
+        const dtes = prompt(frozen({ kind: 'DtesElement', storming: 'Returns', local: 'ReturnRequested' }, 'x'));
+        const dt = prompt(frozen({ kind: 'DtElement', element: 'Sales.Order' }, 'x'));
+        const both = prompt(frozen({ kind: 'DtesStorming', storming: 'Returns' }, 'x'), frozen({ kind: 'DtElement', element: 'Sales.Order' }, 'y'));
+        const none = prompt(frozen({ kind: 'Workspace' }, 'x'));
+        expect([dtes.includes('STORMING'), dtes.includes('MODELING')]).toEqual([true, false]);
+        expect([dt.includes('STORMING'), dt.includes('MODELING')]).toEqual([false, true]);
+        for (const p of [both, none]) expect(p.indexOf('STORMING')).toBeLessThan(p.indexOf('MODELING'));
+        expect(none).toContain(`${practice.storming}\n\n${practice.modeling}`);
+        // after the rules, which win, and before the reply; outside the block of data
+        expect(none.indexOf('14. `sessionSoFar`')).toBeLessThan(none.indexOf('How to work'));
+        expect(none).toContain('The rules above win\nwhere they differ');
+        expect(none.indexOf('MODELING')).toBeLessThan(none.indexOf('Your final answer is the reply'));
+        expect(none.indexOf('MODELING')).toBeLessThan(none.indexOf('<requests-n>'));
+        // without the guide's text, no section
+        expect(buildPrompt(input([frozen({ kind: 'Workspace' }, 'x')]), names, 'n')).not.toContain('How to work');
+    });
+});
+
+describe('events at Design Level only', () => {
+    test('rule 15 gives the syntax of `level design`; when to mark an event is the practice, not repeated in the rules', () => {
+        const prompt = buildPrompt(input([frozen({ kind: 'DtesStorming', storming: 'S' }, 'x')]), new Map(), 'n');
+        expect(prompt).toContain(
+            "15. `level design` is the last clause of a `.dtes` event's body and shows the event at Design Level only; removing\n   it shows the event at Big Picture too.",
+        );
+        expect(prompt).toContain('There is no other level (`level big-picture` is an error, S016). Never put\n   it on a business event of the Big Picture.');
+        expect(prompt).not.toContain('(a reservation, an authorisation');
+        // short labels: one clause citing the warning; the practice says how short
+        expect(prompt).toContain('Keep its\n   labels short (`dt check` warns, S015).');
+        expect(prompt).not.toContain('12 Japanese characters');
     });
 });
 
@@ -217,7 +253,7 @@ describe('the session so far, approved proposals and answering instead of editin
 });
 
 describe("an interview's confirmed brief (the `/` commands)", () => {
-    test('the brief is data in the block, its lines as they go above the storming; rule 15 says where and when to replace', () => {
+    test('the brief is data in the block, its lines as they go above the storming; rule 16 says where and when to replace', () => {
         const message = frozen({ kind: 'DtElement', element: 'Sales.Order' }, 'まずビッグピクチャーで');
         const run: Json<Collaboration.RunInput> = {
             ...input([{ ...message, targets: [] }]),
@@ -236,7 +272,7 @@ describe("an interview's confirmed brief (the `/` commands)", () => {
             replaceExistingDescription: false,
             lines: ['目的: 返金を早める', '範囲: 申請から返金まで'],
         });
-        expect(prompt).toContain('15. `confirmedBrief`, when present');
+        expect(prompt).toContain('16. `confirmedBrief`, when present');
         expect(prompt).toContain('Replace an existing description only when');
         expect(block(buildPrompt(input([message]), new Map(), 'n'), 'n')).not.toHaveProperty('confirmedBrief');
     });
@@ -443,6 +479,7 @@ describe('the Claude Code arguments', () => {
             'Edit(./**)',
             'Bash(dt fmt:*)',
             'Bash(dt check:*)',
+            'Bash(dt guide:*)',
         ]);
         expect(scopedRules(['Read', 'Grep', 'Glob', 'Write', 'Edit', 'MultiEdit', 'Read(docs/**)', 'Bash(dt check:*)'])).toEqual([
             'Edit(./**)',

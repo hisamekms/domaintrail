@@ -127,6 +127,10 @@ background, or use `dt check` for a result.
 Event Storming files (`.dtes`) go through the same loop: `dt fmt`, then `dt check` until it exits 0 (see [Event
 Storming](#event-storming-dtes)). They are not generated: `dt generate ts` writes the `.dt` model only.
 
+How to work, beyond the rules of the languages: `dt guide storming-practice` for running a storming (Big Picture, then
+Design Level) and `dt guide modeling-practice` for growing the `.dt` model (terms, aggregates by their invariants,
+commands as contracts, small steps).
+
 `dt --help` and `dt <command> --help` list the options with examples.
 
 ```bash
@@ -1150,6 +1154,43 @@ export function billingPolicies({ loadOrder, newInvoiceId }: PolicyDeps): Billin
 }
 ```
 
+<!-- topic: modeling-practice -->
+### Modeling with DomainTrail
+
+How to grow the `.dt` model, for people and AI agents. The rules of the language are in [DSL](#dsl); this is the way
+of working.
+
+**Start from the brief.** The `///` description above a `context` says its purpose, scope, what the generated code is
+for and how far to go (`/model` in the chat writes it). Keep to that context; ask before changing another one.
+
+**One context at a time, terms first.**
+- Agree on the words before the structure: the context's `terms` with their labels, and a `///` for any term people
+  could read two ways.
+- Name things in the business's words. A label is what people say; the ID is its stable English name.
+
+**Aggregates by their invariants.**
+- An aggregate is what must stay consistent in one decision. Draw its boundary around an invariant you can state,
+  not around a screen, a table or a noun.
+- Write the invariants as expressions where the DSL can (see [Invariant expressions](#invariant-expressions)), and as
+  a label or `///` where it cannot. Keep aggregates small; refer to another aggregate by its ID.
+- States (a union of states) when the allowed commands depend on where the thing is in its life.
+
+**Commands as contracts.**
+- A command says what it needs (`requires`), what it changes, and exactly which events it emits (`emits` is exhaustive:
+  see [Command events](#command-events)). A failure is a named error, and it emits nothing.
+- Reactions between aggregates or contexts are `policy`s on events, not commands calling commands.
+- The DSL holds structure and contracts only. Business logic is written by hand in `decide` against the generated
+  types; do not try to encode it in the model.
+
+**From a storming.** When a storming feeds the context (its brief says so), take the Design Level's commands,
+aggregates and events as the starting point, not as the answer: the model has to state invariants the storming did
+not. Then add `ref`s in the `.dtes` to the new `.dt` symbols that resolve. Open hotspots are questions to ask, not
+gaps to fill by guessing.
+
+**Small steps.** Change a little, run `dt fmt` and `dt check` until it exits 0, and keep the model valid between
+steps. Do not rename or remove what the people did not ask to change: other files, generated code and the chat refer
+to the IDs.
+
 <!-- topic: generated -->
 ## Generated TypeScript
 
@@ -1852,6 +1893,9 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
     ref Billing.InvoicePaid
   }
   event PaymentFailed "支払に失敗した"
+  event PaymentAuthorized "与信が通った" {
+    level design // a detail of the mechanism: shown at Design Level only
+  }
 
   actor Customer "顧客"
   external PaymentService "決済サービス" // an external system that issues a command, not one that is called
@@ -1893,6 +1937,7 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
     OrderPlaced
     OrderConfirmed
     InvoiceIssued
+    PaymentAuthorized // hidden at Big Picture: InvoiceIssued is then followed by InvoicePaid
     InvoicePaid
   }
   timeline PaymentRetry "支払の再試行" {
@@ -1925,7 +1970,7 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
 
 | Element | What it is | Its clauses |
 |---|---|---|
-| `event` | something that happened in the business, a fact in the past tense | `ref Context.Event` |
+| `event` | something that happened in the business, a fact in the past tense | `ref Context.Event`, `level design` |
 | `actor` | a person or role that may issue commands | none |
 | `external` | an external system that may issue commands | none |
 | `command` | an operation someone attempts | `ref Context.Aggregate.command`, `actor`, `reads`, `target` (at most one), `emits` |
@@ -1948,6 +1993,10 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
 - **Timelines** hold event IDs and groups only. A timeline is partial and proves no causality; an event may appear in
   several timelines and several times in one, each an occurrence of its own; timelines are never merged into one global
   order. A group is a set: its order and ID carry no meaning. An event in no timeline is fine.
+- **Design Level only.** An event with `level design` is a detail of the mechanism (a reservation, an authorisation,
+  an internal failure or retry) rather than a business fact: Big Picture leaves it out, and Design Level shows it.
+  Without the clause, an event is shown at both levels; `level design` is the only level (S016), on events only, and
+  its place is the last clause, after the `ref`. To show such an event at Big Picture too, remove the clause.
 - **Hotspots** are `open` unless `status resolved`, which needs a `resolution "…"`. Resolved means the business agreed,
   not that the `.dt` model has it. Keep the resolved hotspots that matter (an exception, a boundary, an invariant) and
   delete the trivial ones: git keeps the history.
@@ -1955,7 +2004,7 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
   completeness (events in no timeline or not referenced, commands without `emits`, elements without `ref`), timeline
   order against the causal relations, and policies across contexts.
 - `dt fmt` formats a storming: 2 spaces per level, each element, clause, timeline step and group event on its own line,
-  an element without clauses on one line, comments kept.
+  an element without clauses on one line, comments kept. It never reorders clauses.
 
 <!-- topic: storming-refs -->
 ### References to the model (`ref`)
@@ -1995,8 +2044,11 @@ hotspot is a decision to model (an error, a requirement, an invariant). Then add
 A storming is viewed along two independent axes, neither of which changes the `.dtes`:
 
 - **Level.** *Big Picture* shows the events, the timelines' order, groups and hotspots. *Design Level* adds actors,
-  external systems, commands, policies, aggregates, read models and the relations. Big Picture hides the details of
-  the same file; it is not an earlier version, and the events are all there.
+  external systems, commands, policies, aggregates, read models and the relations, and the events marked
+  `level design`. Big Picture hides the details of the same file; it is not an earlier version, and every event
+  without `level design` is there. A timeline's order there skips the hidden events (their neighbours are joined),
+  a group of hidden events only is not drawn, timelines that differ only in hidden events share their start, and a
+  hotspot on a hidden event is shown without its line.
 - **Scope.** The *integrated canvas* shows every timeline, the events in no timeline and every element. *One timeline*
   shows its events, plus each one-hop path event → policy → command → event whose two events are both in that timeline
   (with the command's actors, read models and target), and the hotspots on its events. Longer chains are not followed,
@@ -2008,14 +2060,17 @@ to its note. One timeline draws each occurrence of an event, and a group as a fr
 make two occurrences the same happening, so read a path along one timeline's name. Solid arrows are type-level causal
 relations (`on`, `issues`, `emits`: possible, not "happened"), dotted lines the other relations (`actor`, `reads`,
 `target`; a hotspot's `on` without an arrowhead), dashed arrows the order of a timeline.
+Every note is a square of the same size: a long label is drawn smaller, and one too long even then is cut short with
+«…» (hovering it shows the whole label; S015 warns about it), so keep labels short (about 12 Japanese characters).
 The layout is automatic, left to right; positions are kept in `.domaintrail/layout.json`, never in the `.dtes`. In
 `dt open`, the イベントストーミング tab shows one storming at a time, with the storming and the timeline picked as
-its toolbar's subject (a breadcrumb at the left) and the level next to them; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in.
+its toolbar's subject (a breadcrumb at the left) and the level next to them; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in (and
+デザインレベルのみ for an event marked `level design`).
 
 <!-- topic: storming-rules -->
 ### Diagnostics of a storming
 
-S001–S009 and S014 need only the storming, S010–S013 check its `ref`s against the model. Each example below is a whole
+S001–S009 and S014–S016 need only the storming, S010–S013 check its `ref`s against the model. Each example below is a whole
 file with that one problem. Syntax errors are `SYNTAX`: an unknown keyword or clause, a `ref` or clause in a timeline or
 group, a declaration outside a storming or inside a body, a nested group, an empty group, a keyword used as an ID.
 
@@ -2061,7 +2116,7 @@ storming Checkout {
 }
 ```
 
-**S004**: more than one `target`, `ref`, hotspot `on`, `status` or `resolution`. Keep one; a command with two main
+**S004**: more than one `target`, `ref`, hotspot `on`, `status`, `resolution` or `level`. Keep one; a command with two main
 aggregates is two commands, or a hotspot.
 
 ```dtes
@@ -2093,7 +2148,7 @@ storming Checkout {
 ```
 
 **S006**: a clause the element does not take: relations belong to commands (`actor`, `reads`, `target`, `emits`),
-policies (`on`, `issues`) and hotspots (`on`), `status` and `resolution` to hotspots. Move it to the element it
+policies (`on`, `issues`) and hotspots (`on`), `status` and `resolution` to hotspots, `level` to events. Move it to the element it
 belongs to (an event's outcome is the command's `emits`).
 
 ```dtes
@@ -2219,6 +2274,69 @@ storming Checkout {
 }
 ```
 
+**S015** (warning): a label too long for its sticky note. Every note is the same size; its label is drawn smaller to
+fit, down to a floor, and one that does not fit even then is cut short with «…» (the whole label shows on hover and in
+the inspector). Shorten it, to about 12 Japanese characters (an event in the past tense), and put the details in a
+`///` comment. An element without a label shows its ID, which is checked the same way.
+
+```dtes
+// S015
+storming Errands {
+  event CertificateReissued "マイナンバーカードの暗証番号を三回間違えてロックされたので市役所の窓口で再設定の手続きをしてから改めてコンビニのマルチコピー機で住民票の写しを発行し直した"
+}
+```
+
+**S016**: a `level` other than `design`. `level big-picture` is not written: an event without `level` is already shown
+at both levels. Remove it, or write `level design` for an event to show at Design Level only.
+
+```dtes
+// S016
+storming Checkout {
+  event PaymentAuthorized {
+    level big-picture
+  }
+}
+```
+
+<!-- topic: storming-practice -->
+### Event Storming with DomainTrail
+
+How to run a storming in `.dtes` files, for people and AI agents. The rules of the language are in [Event
+Storming](#event-storming-dtes); this is the way of working.
+
+**Start from the brief.** The `///` description above a `storming` says its purpose, scope, what the result is for
+and how far to go (`/es` in the chat writes it). Keep to that scope; ask before going beyond it. With no brief, ask
+for the purpose and the first and last events before writing much.
+
+**Big Picture first.**
+- Events first, and mostly events: what happened in the business, in the past tense, in the words the business uses
+  (「注文を受け付けた」, not 「注文受付処理」 or 「OrderService が保存した」). One fact per event.
+- Short labels: about 12 Japanese characters or 4–5 English words. A long label is usually two events or a
+  description; put the detail in `///`.
+- Order them in `timeline`s: the usual flow first, then the variations (failures, cancellations, exceptions) as their
+  own timelines rather than one tangled line. A step that happens together goes in a `group`.
+- Anything unclear, disputed or risky becomes a `hotspot` on the events it concerns, worded as a question. Do not
+  settle it by guessing; an open hotspot is a good result.
+- No commands, policies, aggregates or read models yet, and no `ref`s.
+
+**Design Level next**, once the flow is agreed (the brief says how far to go):
+- For each event, what caused it: a `command` (and the `actor` or `external` system that issues it), or a `policy`
+  reacting to an earlier event (「〜したら〜する」).
+- What a command needs to decide: the `readmodel` it `reads`, and the `aggregate` it `target`s, which decides and
+  emits the events.
+- Fine-grained events found here (reservations, authorisations, internal failures, retries) get `level design`, so
+  that Big Picture keeps the flow people agreed on. An event the people want to see at Big Picture loses it.
+- Keep hotspots for what is still open; set `status resolved` with its `resolution "…"` only when the people settle
+  one.
+
+**Model references.** Add `ref` only to an element that has a counterpart in the `.dt` model and resolves; never
+invent a `.dt` symbol to make a `ref` work. A storming does not change the `.dt` files: moving from a storming to the
+model is modeling (see [Modeling with DomainTrail](#modeling-with-domaintrail)).
+
+**Keep it a storming.** It records what people found, including the doubts: do not tidy it into a design document,
+do not delete hotspots or events because they look redundant, and keep the IDs stable (people and the chat refer to
+them).
+
 <!-- topic: rules -->
 ## Rules
 
@@ -2259,9 +2377,9 @@ storming](#diagnostics-of-a-storming).
 | S001 | `.dtes`: the IDs of a storming's declarations are unique across kinds (groups and timelines included), and storming IDs are unique in the workspace |
 | S002 | `.dtes`: a relation target or timeline step names a declaration of its storming |
 | S003 | `.dtes`: a reference names a declaration of the right kind (`target` an aggregate, `reads` a read model, `actor` an actor or external, `emits` / `on` and timeline steps an event, `issues` a command) |
-| S004 | `.dtes`: at most one `target`, `ref`, hotspot `on`, `status` and `resolution` per element |
+| S004 | `.dtes`: at most one `target`, `ref`, hotspot `on`, `status`, `resolution` and `level` per element |
 | S005 | `.dtes`: only events, aggregates and commands have a `ref` |
-| S006 | `.dtes`: an element has only the clauses of its kind: relations in commands, policies and hotspots, `status` / `resolution` in hotspots |
+| S006 | `.dtes`: an element has only the clauses of its kind: relations in commands, policies and hotspots, `status` / `resolution` in hotspots, `level` in events |
 | S007 | `.dtes`: an event appears at most once in a group |
 | S008 | `.dtes`: a policy has at least one `on` and one `issues` |
 | S009 | `.dtes`: a hotspot's `status` is `open` or `resolved`; `resolved` needs a `resolution`, `open` has none |
@@ -2270,6 +2388,8 @@ storming](#diagnostics-of-a-storming).
 | S012 | (warning) `.dtes`: a command's `ref` is a command of the aggregate that its `target`'s `ref` names |
 | S013 | (warning) `.dtes`: a command `emits` no event whose `ref` its `.dt` command never emits (`.dt` `emits` is exhaustive) |
 | S014 | (warning) `.dtes`: a type-level cycle policy → command → event → policy (possible, not an infinite loop) |
+| S015 | (warning) `.dtes`: a label fits its sticky note (one too long even at the smallest font is cut short with «…») |
+| S016 | `.dtes`: an event's `level` is `design` (Design Level only); without `level`, it is shown at both levels |
 
 <!-- topic: show -->
 ## Looking up one element
@@ -2897,7 +3017,7 @@ are shown. The old sections `session` and `view` are refused when the file is lo
     // the runner: the runs that edit the workspace
     "run": {
       // Claude Code permission rules; this is the default
-      "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)"],
+      "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)", "Bash(dt guide:*)"],
       "warm": true,            // one Claude Code process across runs (each run a turn); false: one process per run
       "restartAfter": 20,      // runs of one warm process before a fresh one replaces it
       "idleTimeout": 30        // minutes without a run before the warm process ends (its memory freed); 0 = never
@@ -2985,17 +3105,21 @@ The agent (`dt agent`, or in process) runs `claude` from the `PATH` in the works
 --permission-mode dontAsk --tools … --disallowedTools … --allowedTools …`, with the rules of `agent.run.allowedTools`
 only (any other tool is refused without asking, and no MCP server is loaded). The prompt tells it to read the related files, edit only
 the `.dt` and `.dtes` sources, keep a storming exploratory, and change no `.dt` when the requests are only about
-stormings, and lets it answer instead (status `answered`) a request that turns out to be a question; then `dt fmt` and
-`dt check` run when the run changed files (else both are skipped), and the server records the result.
+stormings, and lets it answer instead (status `answered`) a request that turns out to be a question. It also gives the
+ways of working of the languages the requests are about, as `dt guide storming-practice` and `dt guide
+modeling-practice` print them (both for a request about the whole workspace); the answerer's prompts give them too.
+Then `dt fmt` and `dt check` run when the run changed files (else both are skipped), and the server records the
+result.
 
-- **The agent's `dt`.** The agent may run `dt fmt` and `dt check` (the default `allowedTools`), whatever is installed:
-  for each run the subscriber puts a `dt` first on the agent's `PATH`, in a private temporary directory (0700) outside
-  the workspace. It runs `agent.run.dt` — `["node" | "bun" | "deno", "<script>"]` or `["<dt executable>"]`, e.g. a
-  clone of DomainTrail next to the workspace while developing it — or, unset, the very `dt` running the subscriber.
-  That command is read once when the subscriber starts (never again from the config file, which is in the workspace),
-  pinned to absolute real paths (the runtime found on the `PATH`), refused when the script or executable is inside the
-  workspace (symbolic links followed), and fingerprinted: a run does not start once either file changed. The agent's
-  `dt` takes `fmt` or `check` and then `.dt` / `.dtes` files of the workspace only; any option or other argument is
+- **The agent's `dt`.** The agent may run `dt fmt`, `dt check` and `dt guide` (the default `allowedTools`), whatever
+  is installed: for each run the subscriber puts a `dt` first on the agent's `PATH`, in a private temporary directory
+  (0700) outside the workspace. It runs `agent.run.dt` — `["node" | "bun" | "deno", "<script>"]` or
+  `["<dt executable>"]`, e.g. a clone of DomainTrail next to the workspace while developing it — or, unset, the very
+  `dt` running the subscriber. That command is read once when the subscriber starts (never again from the config file,
+  which is in the workspace), pinned to absolute real paths (the runtime found on the `PATH`), refused when the script
+  or executable is inside the workspace (symbolic links followed), and fingerprinted: a run does not start once either
+  file changed. The agent's `dt` takes `fmt` or `check` and then `.dt` / `.dtes` files of the workspace only, or
+  `guide` alone, with one topic or rule name, or with `--all` (it only prints); any other option or argument is
   refused with a message to the agent, and `-r <workspace>` is always added by the shim. Both the agent's `dt` and the
   `dt fmt` / `dt check` after the agent run with a private working directory, never the workspace.
 

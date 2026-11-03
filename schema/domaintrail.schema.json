@@ -263,7 +263,7 @@
                 "type": "string",
                 "minLength": 1
               },
-              "default": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)"]
+              "default": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)", "Bash(dt guide:*)"]
             },
             "dt": {
               "description": "The command the agent's dt runs (and the dt fmt / dt check after it), as an argument array, e.g. [\"node\", \"../clone/dist/dt.js\"]. An element with a path separator that is not absolute is relative to this file. Default: the running dt itself.",

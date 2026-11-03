@@ -14,9 +14,9 @@ import * as path from 'node:path';
 
 /**
  * The tools the agent of a session may use unless the facilitator chooses others (ADR 0026), as Claude Code permission
- * rules: reading, editing and writing files, finding them, and `dt fmt` and `dt check`.
+ * rules: reading, editing and writing files, finding them, `dt fmt` and `dt check`, and `dt guide` (it only prints).
  */
-export const DEFAULT_AGENT_TOOLS: readonly string[] = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'];
+export const DEFAULT_AGENT_TOOLS: readonly string[] = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)', 'Bash(dt guide:*)'];
 
 /** The runtimes the agent's `dt` may be started with, as `[<runtime>, <script>]`. */
 export const DT_RUNTIMES = ['node', 'bun', 'deno'] as const;

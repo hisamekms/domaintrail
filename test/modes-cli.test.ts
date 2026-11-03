@@ -96,6 +96,8 @@ interface Calls {
     sessions: SessionServerOptionsLike[];
     agents: { roles: readonly string[]; once: boolean }[];
     connects: unknown[];
+    /** The ways of working each agent was given for its prompts. */
+    practices: unknown[];
     stopped: number;
 }
 type SessionServerOptionsLike = Parameters<CliDeps['startSessionServer']>[0];
@@ -105,7 +107,7 @@ function fakeDeps(
     usable: Awaited<ReturnType<CliDeps['checkAgent']>>,
     opened: 'started' | 'resumed' | 'collaborated' = 'started',
 ): { deps: CliDeps; calls: Calls } {
-    const calls: Calls = { view: [], sessions: [], agents: [], connects: [], stopped: 0 };
+    const calls: Calls = { view: [], sessions: [], agents: [], connects: [], practices: [], stopped: 0 };
     const deps: CliDeps = {
         ...cliDeps(),
         startViewServer: async (options) => {
@@ -132,6 +134,7 @@ function fakeDeps(
         startAgent: async (options) => {
             calls.agents.push({ roles: options.roles, once: options.once });
             calls.connects.push(options.connect);
+            calls.practices.push(options.practice);
             return {
                 session: 's1',
                 roles: options.roles,
@@ -210,6 +213,14 @@ describe('dt open and dt collab: the agent in process', () => {
         expect(r.out).toContain('AI: started in this process (claude 9.9.9 (Claude Code); roles answer, run)');
         expect(r.out.join('\n')).not.toContain('Facilitator link');
         expect(r.out.at(-1)).toBe('Session closed.');
+    });
+
+    test("the agent's prompts get the ways of working as `dt guide` prints them: one source, the embedded guide", async () => {
+        const dir = await copy();
+        const { deps, calls } = fakeDeps(USABLE);
+        expect((await run(deps, '-r', dir, 'open')).code).toBe(0);
+        const guide = async (topic: string): Promise<string> => (await run(cliDeps(), 'guide', topic)).out.join('\n');
+        expect(calls.practices).toEqual([{ storming: await guide('storming-practice'), modeling: await guide('modeling-practice') }]);
     });
 
     test('dt collab: a Collab session on collab.port with its link; continuing a dt open session says so', async () => {

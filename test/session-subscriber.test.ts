@@ -347,7 +347,12 @@ describe('a run from the browser to the Live View (the plan’s acceptance, with
                 '--permission-mode',
                 'dontAsk',
             ]);
-            expect(invocation.args.slice(invocation.args.indexOf('--allowedTools') + 1)).toEqual(['Edit(./**)', 'Bash(dt fmt:*)', 'Bash(dt check:*)']);
+            expect(invocation.args.slice(invocation.args.indexOf('--allowedTools') + 1)).toEqual([
+                'Edit(./**)',
+                'Bash(dt fmt:*)',
+                'Bash(dt check:*)',
+                'Bash(dt guide:*)',
+            ]);
             expect(invocation.args).toContain('Read(./.domaintrail/**)');
             expect(invocation.args[invocation.args.indexOf('--tools') + 1]).toBe('Read,Edit,Write,Glob,Grep,Bash');
             const prompt = invocation.prompt;
