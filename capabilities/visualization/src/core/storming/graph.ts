@@ -5,7 +5,7 @@
  */
 import { named } from '../graph/build.js';
 import { mapTexts, perLang, type EdgeKind, type Graph, type GraphEdge, type GraphNode, type NodeKind, type Texts } from '../graph/ir.js';
-import { esElementId, firstDeclarations, STICKY_NOTE, type NodeElementKind, type Storming } from '@domaintrail/storming';
+import { esElementId, firstDeclarations, STICKY_NOTE, type AnyDeclaration, type NodeElementKind, type Storming } from '@domaintrail/storming';
 import { isCausal, type RenderEdge, type RenderGraph, type RenderNode, type ViewOptions } from './ir.js';
 
 /**
@@ -73,6 +73,7 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
         }
         const [elementId, kind] = n.type === 'event' ? [n.eventId, 'event' as const] : [n.elementId, n.kind];
         const parent = parentOf.get(n.id);
+        const settled = kind === 'hotspot' ? resolution(declared.get(elementId)) : undefined;
         // every note is the same square, whatever its label: the canvas shrinks the label to fit it (`STICKY_NOTE`)
         return {
             id: n.id,
@@ -82,6 +83,7 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
             lines: [],
             elementId: esElementId(storming.id, elementId),
             ...(parent !== undefined ? { parent } : {}),
+            ...(settled !== undefined && { status: 'resolved' as const, resolution: settled }),
             width: STICKY_NOTE.side,
             height: STICKY_NOTE.side,
         };
@@ -149,6 +151,12 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
         edges.set(id, { id, kind: 'esSequence', source: s.source, target: s.target, ...(ids.length < every.size ? { label: timelinesOf(ids) } : {}) });
     }
     return { id: stormingGraphId(storming.id, render.options), nodes: [...nodes.values()], edges: [...edges.values()] };
+}
+
+/** What a resolved hotspot's team agreed (§3.5; empty when its `resolution` is missing); none while it is open. */
+function resolution(declaration: AnyDeclaration | undefined): string | undefined {
+    if (declaration?.kind !== 'hotspot' || declaration.clauses.find((c) => c.type === 'status')?.value !== 'resolved') return undefined;
+    return declaration.clauses.find((c) => c.type === 'resolution')?.text ?? '';
 }
 
 /** §9.4: causal edges solid and directed, the time order dashed, other relations dotted; a hotspot's `on` has no direction. */

@@ -29,6 +29,8 @@ export interface NodeProps {
     /** The change badge's text (in the Live View's language), empty without one. */
     badge: string;
     diag: DiagMark;
+    /** A resolved hotspot (`.dtes` §3.5): what was agreed, empty when not written. Absent while open and on other nodes. */
+    resolution?: string;
 }
 
 /** What a container shows: a bounded context, an aggregate boundary, a storming group. */
@@ -74,6 +76,8 @@ export interface EdgeProps {
     lw: number;
     lh: number;
     tone: EdgeTone;
+    /** A resolved hotspot's `on`: drawn quieter, as its note is. */
+    resolved?: true;
 }
 
 /** What every item has: a stable ID (unchanged items keep their identity and selection), its origin and its element. */

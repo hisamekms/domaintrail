@@ -111,7 +111,10 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   dotted lines the other relations (without an arrowhead for a hotspot's event). The notes take the convention's
   colours, and the legend shows each kind with its colour and name: event orange, command blue, policy purple,
   aggregate yellow, read model green, hotspot pink, actor pale yellow (rounded), external system lilac (dashed edge),
-  and a group a dashed frame tinted with the event's orange. Every note also names its kind above its label
+  and a group a dashed frame tinted with the event's orange. A resolved hotspot (`status resolved`) is a paler,
+  greyer pink with a green ✓ in its top-right corner and a fainter dotted `on`; hovering it shows its `resolution`, and
+  the legend has it as 解決済みのホットスポット next to ホットスポット (the canvas, the printed sheet and the exported
+  SVG and PNG alike). Every note also names its kind above its label
   («イベント»), so the colour is never the only cue. Light: soft pastel paper, a coloured edge and dark text; dark:
   muted deep paper of the same hue, a coloured edge and pale text. A storming whose file stops parsing stays as it last parsed, with a banner.
   A storming with stages or exceptions (`stage`, `exception`) is drawn in time order: the stages as labelled frames

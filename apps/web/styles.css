@@ -156,6 +156,13 @@
     --p-note-cream-night-edge: #e0c050;
     --p-note-lilac-night: #44204c;
     --p-note-lilac-night-edge: #d65fe0;
+    /* a resolved hotspot's paper, edge and text: the hotspot's pink, paler and greyer (its text still AA on its paper) */
+    --p-note-pink-faded: #fbf1f5;
+    --p-note-pink-faded-edge: #e3a1b9;
+    --p-note-pink-faded-ink: #8f3a5e;
+    --p-note-pink-faded-night: #2e2229;
+    --p-note-pink-faded-night-edge: #9a5b76;
+    --p-note-pink-faded-night-ink: #d9bfcc;
     /* the participants' identity hues (issue #33 §4.3), the same in both themes */
     --p-person-teal: #0f766e;
     --p-person-violet: #7c3aed;
@@ -248,6 +255,14 @@
     --es-hotspot: var(--p-note-pink);
     --es-hotspot-border: var(--p-note-pink-edge);
     --es-hotspot-text: var(--p-pink-900);
+    /* a resolved hotspot (`status resolved`): toned down, so that the open ones stand out; its `on` quieter too, and a
+       green check in its corner (white on emerald, 5.5:1) */
+    --es-hotspot-resolved: var(--p-note-pink-faded);
+    --es-hotspot-resolved-border: var(--p-note-pink-faded-edge);
+    --es-hotspot-resolved-text: var(--p-note-pink-faded-ink);
+    --es-hotspot-resolved-edge: var(--p-slate-350);
+    --es-resolved-mark: var(--p-emerald-700);
+    --es-resolved-mark-ink: var(--p-white);
     --es-actor: var(--p-note-cream);
     --es-actor-border: var(--p-note-cream-edge);
     --es-actor-text: var(--p-yellow-900);
@@ -449,6 +464,12 @@
     --es-hotspot: var(--p-note-pink-night);
     --es-hotspot-border: var(--p-note-pink-night-edge);
     --es-hotspot-text: var(--p-pink-100);
+    --es-hotspot-resolved: var(--p-note-pink-faded-night);
+    --es-hotspot-resolved-border: var(--p-note-pink-faded-night-edge);
+    --es-hotspot-resolved-text: var(--p-note-pink-faded-night-ink);
+    --es-hotspot-resolved-edge: var(--p-night-600);
+    --es-resolved-mark: var(--p-emerald-300);
+    --es-resolved-mark-ink: var(--p-night-950);
     --es-actor: var(--p-note-cream-night);
     --es-actor-border: var(--p-note-cream-night-edge);
     --es-actor-text: var(--p-yellow-100);
@@ -828,6 +849,17 @@ code.block {
     border: 1px solid var(--es-hotspot-border);
     color: var(--es-hotspot-text);
 }
+.kind-es-resolvedHotspot {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--es-hotspot-resolved);
+    border: 1px solid var(--es-hotspot-resolved-border);
+    color: var(--es-hotspot-resolved-text);
+}
+.dn-resolved-mark-chip .dn-resolved-check {
+    stroke-width: 1.6;
+}
 .kind-es-actor {
     background: var(--es-actor);
     border: 1px solid var(--es-actor-border);
@@ -1159,6 +1191,28 @@ a.field-origin {
     background: var(--es-hotspot);
     color: var(--es-hotspot-text);
 }
+.dn-esHotspot.dn-resolved {
+    border-color: var(--es-hotspot-resolved-border);
+    background: var(--es-hotspot-resolved);
+    color: var(--es-hotspot-resolved-text);
+}
+/* a resolved hotspot's check, inside its top-right corner (RESOLVED_MARK), under the diagnostic mark if any */
+.dn-resolved-mark {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    pointer-events: none;
+}
+.dn-resolved-disc {
+    fill: var(--es-resolved-mark);
+}
+.dn-resolved-check {
+    fill: none;
+    stroke: var(--es-resolved-mark-ink);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
 .dn-esActor {
     border-color: var(--es-actor-border);
     background: var(--es-actor);
@@ -1424,6 +1478,9 @@ a.field-origin {
 }
 .de-esRelated .de-head {
     fill: var(--model-edge-quiet);
+}
+.de-esHotspot.de-resolved .de-line {
+    stroke: var(--es-hotspot-resolved-edge);
 }
 .de-label {
     font: 13px var(--sans);

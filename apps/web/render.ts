@@ -119,12 +119,14 @@ export function buildScene(graph: LaidOutGraph, opts: RenderOptions): Scene {
     // an Event Storming edge belongs to the element it starts from (its IDs name render nodes, not elements)
     const storming = graph.id.startsWith('storming');
     const elementOf = new Map(graph.nodes.map((n) => [n.id, n.elementId]));
+    // a resolved hotspot's `on` starts from its note
+    const resolved = new Set(graph.nodes.filter((n) => n.status === 'resolved').map((n) => n.id));
     const edges: SceneEdge[] = [];
     for (const e of graph.edges) {
         const owner = storming ? (elementOf.get(e.source) ?? e.source) : edgeOwner(e, structure);
         // an element's error is told by its mark and text (issue #33 §5); its lines keep their kind's colour
         const item = edgeItem(graph, e, opts, owner, toneOf(change(owner)));
-        if (item) edges.push(item);
+        if (item) edges.push(e.kind === 'esHotspot' && resolved.has(e.source) ? { ...item, props: { ...item.props, resolved: true } } : item);
     }
 
     return { groups, nodes, ghosts, internal, edges };
@@ -144,6 +146,7 @@ function nodeProps(graph: LaidOutGraph, n: GraphNode, l: NodeLayout, v: Variant)
         rows: rowsIn(n, v),
         // the compartment of internal transitions takes the bottom of the box, as laid out
         compartment: n.internal?.length ? compartmentHeight(n, graph.transitionLabels ?? 'both') : 0,
+        ...(n.status === 'resolved' && { resolution: n.resolution ?? '' }),
     };
 }
 

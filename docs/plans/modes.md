@@ -1160,6 +1160,32 @@ Decided by the user (2026-11-03), after printing:
   カート and 請求書 ×2), the same edges; its Normal and PaymentRetry timelines keep their counts, the copies renamed
   (`n:Invoice` → `n:Invoice@IssueInvoice`).
 
+### As built: resolved hotspots marked on the diagram
+
+- **Decided by the user** (variant A): a hotspot with `status resolved` (`docs/dtes-v0.1.md` §3.5) was drawn like an
+  open one; only the inspector said 解決済み. It is now toned down so that the open ones stand out: a paler, greyer
+  pink paper and edge, a green check disc inside its top-right corner (under the diagnostic mark, which sits on the
+  corner), and its `on` a fainter dotted line. Hovering the note shows 解決済み: <resolution> (the app's tooltip; a
+  clamped label shows its full text and then the resolution). The inspector shows 状態 and 結論 as before. No toggle
+  to hide resolved hotspots, and no action to resolve one (the AI in the chat edits the `.dtes`).
+- **Projection** (`core/storming/graph.ts`): the graph node of a resolved hotspot carries `status: 'resolved'` and its
+  `resolution` (empty when missing, an S009 error), in every view (integrated, timeline, stage grid; both levels); an
+  open one carries neither. `graphSignature` includes the status, since the page keeps compact layouts by signature with
+  the nodes they came with; resolving a hotspot does not move anything.
+- **The page**: `NodeProps.resolution` and `EdgeProps.resolved` (`render.ts`), the classes `dn-resolved` and
+  `de-resolved` and the `ResolvedMark` in `NodeContent` (`diagram-items.tsx`), so the canvas and the print sheet draw it
+  alike; the portable SVG (and so the PNG) draws the toned colours as attributes and the check as a circle and a path.
+  The storming legend has a 解決済みのホットスポット chip, with the check, right after ホットスポット (`LegendKind`,
+  `legendKindNames`).
+- **Tokens** (`styles.css`): `--es-hotspot-resolved` / `-border` / `-text` (light `#fbf1f5` / `#e3a1b9` / `#8f3a5e`,
+  dark `#2e2229` / `#9a5b76` / `#d9bfcc`), `--es-hotspot-resolved-edge` (slate-350, night-600), `--es-resolved-mark`
+  and `-ink` (emerald-700 with white, emerald-300 with night-950). The label on the toned paper: 6.47:1 (APCA Lc 77.4)
+  light, 8.91:1 (Lc −69.0) dark; the check on its disc 5.48:1 light, 12.21:1 dark. Pinned in `palette.test.ts`, with
+  the resolved paper, edge and `on` nearer the surface than the open hotspot's.
+- **Payload**: `examples/shop`'s OrderToCash has a resolved hotspot (MixedCurrencies), so its storming graphs' hashes in
+  `test/__snapshots__/live-payload-contract.test.ts.snap` change (the node's two fields and the signature); the counts
+  of nodes and edges do not.
+
 ### As built: the neutrals tinted to the brand's hue
 
 - **Decided by the user**: the Live View's neutrals read cold blue-grey beside the indigo brand. Every neutral primitive

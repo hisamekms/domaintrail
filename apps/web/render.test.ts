@@ -233,3 +233,32 @@ describe('an element of a storming drawn once per use (Design Level)', () => {
         expect([...sameElementNodes(items, new Set([edge.id]))]).toEqual([]);
     });
 });
+
+describe('a resolved hotspot in a storming’s scene', () => {
+    test('carries its resolution on its note and quiets its `on`; an open hotspot and its `on` stay as they are', async () => {
+        const [payload] = await viewPayloads([
+            {
+                path: 'es.dtes',
+                text: `storming S {
+  event Placed
+  hotspot Open { on Placed }
+  hotspot Settled {
+    on Placed
+    status resolved
+    resolution "決めた"
+  }
+}
+`,
+            },
+        ]);
+        for (const view of ['design-level|', 'big-picture|']) {
+            const scene = buildScene(payload!.stormings[0]!.views[view]!.graph, optionsOf(payload!));
+            const note = (id: string) => scene.nodes.find((n) => n.elementId === `es/S/${id}`)!.props;
+            expect(note('Settled').resolution).toBe('決めた');
+            expect(note('Open').resolution).toBeUndefined();
+            const on = (id: string) => scene.edges.find((e) => e.elementId === `es/S/${id}`)!.props;
+            expect(on('Settled')).toMatchObject({ kind: 'esHotspot', resolved: true });
+            expect(on('Open').resolved).toBeUndefined();
+        }
+    });
+});
