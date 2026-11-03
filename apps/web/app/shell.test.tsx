@@ -90,3 +90,41 @@ describe('the left column', () => {
         );
     });
 });
+
+describe('the right column', () => {
+    const withChat = renderToStaticMarkup(
+        <I18nProvider lang="ja">
+            <AppShell
+                // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- what the shell reads of the panes
+                panes={{ ...panes, conversationOpen: true } as Panes}
+                workspaceName="shop"
+                world={null}
+                sessionSlot={() => {}}
+                lists={{ tree: { count: 0, content: null }, problems: { count: 0, content: null }, changes: { count: 0, content: null } }}
+                health={null}
+                settings={null}
+                banners={null}
+                workspace={null}
+                inspector={<div className="inspector-slot" />}
+                conversation={{ content: <div className="chat-slot" />, launcher: <div className="launcher" /> }}
+                overlays={null}
+            />
+        </I18nProvider>,
+    );
+
+    test('the chat is a column of its own after the canvas, with the detail still in the left column', () => {
+        const order = ['inspector-slot', 'class="main"', 'aria-label="チャットの幅', 'class="conversation open" style="width:380px"', 'chat-slot'].map((c) =>
+            withChat.indexOf(c),
+        );
+        expect(order.every((at) => at >= 0)).toBe(true);
+        expect([...order].sort((a, b) => a - b)).toEqual(order);
+        // open, it needs no launcher over the canvas
+        expect(withChat).not.toContain('class="launcher"');
+    });
+
+    test('its edge is a focusable vertical separator with its width', () => {
+        expect(withChat).toMatch(
+            /<div class="resizer resizer-x" role="separator" tabindex="0" aria-label="チャットの幅[^"]*" aria-orientation="vertical" aria-valuenow="380"/,
+        );
+    });
+});

@@ -9,6 +9,10 @@ describe('the layout on a narrow window', () => {
         expect(effectiveLayout({ ...saved, width: 800, conversationOpen: false })).toMatchObject({ left: true });
     });
 
+    test('the detail (in the left column) and the chat are seen together on the usual widths, down to 1024px', () => {
+        for (const width of [1800, 1400, 1180, 1024]) expect(effectiveLayout({ ...saved, width, conversationOpen: true })).toMatchObject({ left: true });
+    });
+
     test('with the conversation open: the left column collapsed below the threshold', () => {
         expect(effectiveLayout({ ...saved, width: COLLAPSE_LEFT_BELOW, conversationOpen: true })).toMatchObject({ left: true });
         expect(effectiveLayout({ ...saved, width: COLLAPSE_LEFT_BELOW - 1, conversationOpen: true })).toEqual({ left: false, forced: { left: true } });
@@ -79,9 +83,9 @@ describe('the text size (文字の大きさ)', () => {
 
     test('the narrow-window threshold grows with the UI scale', () => {
         const saved = { left: true, overrides: NO_OVERRIDES, conversationOpen: true };
-        // 1400px fits the left column beside the conversation at 標準, not at 特大
-        expect(effectiveLayout({ ...saved, width: 1400 })).toMatchObject({ left: true });
-        expect(effectiveLayout({ ...saved, width: 1400, scale: 1.3 })).toMatchObject({ left: false });
+        // 1300px fits the left column beside the conversation at 標準, not at 特大
+        expect(effectiveLayout({ ...saved, width: 1300 })).toMatchObject({ left: true });
+        expect(effectiveLayout({ ...saved, width: 1300, scale: 1.3 })).toMatchObject({ left: false });
     });
 
     test("the UI's font sizes in styles.css are in rem (the canvas's shapes keep px: the zoom scales them)", async () => {

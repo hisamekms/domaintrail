@@ -204,6 +204,7 @@ export function AppShell(props: {
                                 collapsed={0}
                                 onResize={setConversationWidth}
                                 onOpenChange={setConversationOpen}
+                                onReset={() => setConversationWidth(null)}
                                 label={t.resizeConversation}
                             />
                         )}
