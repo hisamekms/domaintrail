@@ -405,9 +405,13 @@ The chat has two views:
   storming or context, or that it replaces the current description), four or five lines with heads (目的 / 範囲 / 使い道 /
   レベル for `/es:start`), and for the facilitator 確定 / 編集して確定 / 中止. A participant's brief waits for the
   facilitator: they see 承認 / 編集して承認 / 却下 (with an optional note, which its starter then reads), everyone else
-  承認待ち. A message instead of confirming takes it back to the questions. Confirmed, a run writes the brief as
-  the `///` description right above the `storming` (or the `context`), creating it when new; the inspector shows it
-  when the storming is selected. A question with natural candidates shows them as buttons under it for its starter
+  承認待ち. A message instead of confirming takes it back to the questions. Confirmed, dt writes the journey into
+  `domaintrail.journey.json` (a run only creates a new storming's block) and posts a **note** under the AI's name as
+  the last reply in the interview's thread, with no AI call: what was decided (「旅程に「…」を加えました（ゴール：…）」,
+  the revised fields, who approved a participant's brief; for a new storming once its run ended, or that it could not
+  be created), then where the journey is and the next step (「いまは「例外」の段階です。次は「依頼・準備」の例外を
+  出しましょう。」), with the next command's button (into the composer), the source storming to show when that is the
+  step, and 旅程を開く. A question with natural candidates shows them as buttons under it for its starter
   (one sends it at once; several are checked and sent with 送る; その他 goes to the composer). The interview survives a reload. `/es:exceptions` (例外を洗い出す) has
   the AI list, for the storming in view (its stage or timeline when one is shown), the exceptions its main flow does
   not model yet: a card in the chat with each candidate (its label, the events as chips, how in a line, why), none
