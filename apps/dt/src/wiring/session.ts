@@ -28,12 +28,12 @@ import {
     randomIds,
     randomSecrets,
     readServerAddress,
+    removeLegacyAgentFile,
     removeSessionFiles,
     RUN_ENDING_EVENTS,
     sameIdentity,
     type SessionAccess,
     systemClock,
-    writeAgentCredential,
     writeServerAddress,
 } from '@domaintrail/collaboration';
 import type { AddressInfo } from 'node:net';
@@ -65,6 +65,8 @@ export const AGENT_LEASE_MS = 60_000;
 const EXPIRE_EVERY_MS = 5_000;
 /** How long a facilitator link works. */
 export const FACILITATOR_LINK_TTL_MS = 10 * 60_000;
+/** How long an agent pairing code (`dt collab agent-link`) works. */
+export const AGENT_CODE_TTL_MS = 10 * 60_000;
 /** Largest WebSocket message from a page. */
 export const MAX_WS_PAYLOAD = 16 * 1024;
 /** Most agent SSE streams at once. */
@@ -104,8 +106,10 @@ export interface SessionServerOptions extends ViewServerOptions {
 export interface SessionServer {
     /** The page and the session's API. */
     url: string;
-    /** The agent API, on 127.0.0.1 (also in `.domaintrail/session/agent.json` with its credential). */
+    /** The agent API, on 127.0.0.1 (also in `.domaintrail/session/server.json`, without its credential). */
     agentUrl: string;
+    /** The agent API's bearer token, in memory only: for the agent in process (a standalone one pairs with a code). */
+    agentToken: string;
     session: Collaboration.SessionId;
     /** The session's mode as served. */
     mode: Collaboration.SessionMode;
@@ -215,7 +219,7 @@ function messageClassifier(options: SessionServerOptions, log: (line: string) =>
 /**
  * Starts the session server of a workspace: resumes its open session or starts one (with a revision of every source),
  * serves the Live View and the session on `session.host:session.port`, the agent API on 127.0.0.1, writes
- * `agent.json` and `server.json` and makes a facilitator link.
+ * `server.json` (no secret) and makes a facilitator link.
  */
 export async function startSessionServer(options: SessionServerOptions): Promise<SessionServer> {
     const log = options.log ?? (() => {});
@@ -420,6 +424,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 if (activities.set(run, activity)) hub.publish({ type: 'run.activity', run, activity });
             },
             reverts: () => void reverts.kick(),
+            pair: (code) => access.redeemAgentCode({ session, code }),
         });
 
         // a restore writes the sources: the watcher holds, then refreshes once
@@ -488,8 +493,9 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         const agentUrl = serverUrl('127.0.0.1', agentPort);
 
         watch = await watchLiveView(options, live, (payload) => hub.publish(payload), watcherHold);
-        await writeAgentCredential(options.root, { url: agentUrl, token: agentToken, session, pid: process.pid });
-        await writeServerAddress(options.root, { url, session, pid: process.pid });
+        // the credential is never on disk: an older version's agent.json goes
+        if (await removeLegacyAgentFile(options.root)) log('Removed .domaintrail/session/agent.json (an agent credential an older version wrote).');
+        await writeServerAddress(options.root, { url, agentUrl, session, pid: process.pid });
 
         const issueFacilitatorLink = async (): Promise<string> => {
             const link = await access.issueFacilitatorLink({ session, ttlMs: FACILITATOR_LINK_TTL_MS });
@@ -521,6 +527,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         return {
             url,
             agentUrl,
+            agentToken,
             session,
             mode,
             resumed: sessionOpened.opened !== 'started',
@@ -536,6 +543,8 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 stopped ??= (async () => {
                     soloSignIn.revoke();
                     clearInterval(expiring);
+                    // the links and pairing codes not used yet die with the server
+                    await access.revokeLinks(session).catch(() => undefined);
                     await reverts.stop();
                     for (const timer of expiries.values()) clearTimeout(timer);
                     expiries.clear();
@@ -584,6 +593,30 @@ export async function issueFacilitatorLink(root: string): Promise<{ link: string
         const link = await access.issueFacilitatorLink({ session: collaboration, ttlMs: FACILITATOR_LINK_TTL_MS });
         if (!link.ok) throw new SessionError('The session is not open.');
         return { link: linkOf(address.url, link.value.code), expiresAt: link.value.expiresAt };
+    } finally {
+        db.close();
+    }
+}
+
+/**
+ * A one-time agent pairing code for the session server running on the workspace at `root` (`dt collab agent-link`,
+ * `dt open agent-link`): `dt agent --code` exchanges it for the agent API's credential. Written (as a hash) to the
+ * session's database, so the running server accepts it; never a facilitator link. Rejects with `SessionError` when no
+ * server runs.
+ */
+export async function issueAgentLink(root: string): Promise<{ code: string; agentUrl: string; expiresAt: Date }> {
+    const address = await readServerAddress(root);
+    if (!address || !processAlive(address.pid))
+        throw new SessionError('No session server is running for this workspace (start one with `dt open` or `dt collab`).');
+    if (!address.agentUrl) throw new SessionError('The running session server is of an older version: restart it.');
+    const db = await openSessionDatabase(root);
+    try {
+        const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
+        const open = await openSessionOf(db);
+        if (open?.id !== address.session) throw new SessionError('The running session server serves a session that is no longer open.');
+        const code = await access.issueAgentCode({ session: open.id, ttlMs: AGENT_CODE_TTL_MS });
+        if (!code.ok) throw new SessionError('The session is not open.');
+        return { code: code.value.code, agentUrl: address.agentUrl, expiresAt: code.value.expiresAt };
     } finally {
         db.close();
     }

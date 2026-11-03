@@ -37,7 +37,8 @@ cd /tmp/dt-session && git init -q && git add -A && git commit -qm 'before the se
    facilitator link. The chat opens at the right end; its participants (the collab menu in its head, the avatars ▾) list you once, as
    *Facilitator*.
 3. **A second participant**: a private window, the same URL, another name (*Bob*). Each lists the other.
-4. **Start the agent** (terminal 2): `dt -r /tmp/dt-session agent --once`. It prints
+4. **Start the agent** (terminal 2): `dt -r /tmp/dt-session collab agent-link` prints a one-time code, then
+   `dt -r /tmp/dt-session agent --code <code> --once`. It prints
    `Agent on session … with claude (role run) (one run); waiting.` (Without `--no-agent` in step 1, `dt collab` starts
    the agent in its own process instead, and keeps it running.)
 5. **Messages** (as Bob): in the Event Storming view, pick the storming `Returns`, one timeline and Design Level, select

@@ -337,7 +337,7 @@ describe('the marks route and its broadcast', () => {
         ada = await join('Ada');
         bob = await join('Bob');
         expect((await fetch(server.facilitatorLink, { headers: { cookie: ada }, redirect: 'manual' })).status).toBe(303);
-        cred = JSON.parse(await Bun.file(path.join(root, '.domaintrail', 'session', 'agent.json')).text());
+        cred = { url: server.agentUrl, token: server.agentToken };
     });
     afterAll(() => server?.stop());
 

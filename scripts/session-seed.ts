@@ -74,7 +74,7 @@ Seeded ${scenarios.join(', ')}: ${state.requests.length} messages, ${state.runs.
                Another link: node ${path.relative(process.cwd(), path.join(ROOT, 'dist', 'dt.js'))} -r ${seeded.dir} collab link
   Participant: a private window, the same URL, any name (a new participant). The seeded ones
                (${seeded.participants.map((p) => p.name).join(', ')}) and their cookies are in ${seeded.seedFile}.
-  Agent:       ${values['leave-running'] ? "the seed's agent holds the run left running and the queued ones (cancel them to move on)" : "the seed's agent is stopped"}. For real runs: node ${path.relative(process.cwd(), path.join(ROOT, 'dist', 'dt.js'))} -r ${seeded.dir} agent
+  Agent:       ${values['leave-running'] ? "the seed's agent holds the run left running and the queued ones (cancel them to move on)" : "the seed's agent is stopped"}. For real runs: node ${path.relative(process.cwd(), path.join(ROOT, 'dist', 'dt.js'))} -r ${seeded.dir} collab agent-link, then agent --code <code>
 `);
     if (values.exit) {
         await seeded.stop();

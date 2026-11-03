@@ -197,13 +197,13 @@ export { createClefClassifier } from './infrastructure/clef.js';
 export { createCloudflareAccess, type AccessAdapterOptions, type AccessClaims, type AccessTokenVerifier } from './infrastructure/identity.js';
 export { SESSION_DIR } from './infrastructure/session-dir.js';
 export {
-    AGENT_FILE,
-    readAgentCredential,
+    LEGACY_AGENT_FILE,
     readServerAddress,
+    removeLegacyAgentFile,
     removeSessionFiles,
-    writeAgentCredential,
     writeServerAddress,
     type AgentCredential,
+    type ServerAddress,
 } from './infrastructure/session-files.js';
 export { createUnitOfWork, openSessionDatabase } from './infrastructure/sqlite.js';
 export { randomIds, randomSecrets, systemClock } from './infrastructure/system.js';

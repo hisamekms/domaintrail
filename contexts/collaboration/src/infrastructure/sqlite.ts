@@ -695,6 +695,7 @@ function access(db: DatabaseSync): AccessStore {
     const useLink = db.prepare(
         'UPDATE facilitator_links SET used_at = :now WHERE code_hash = :hash AND used_at IS NULL AND expires_at > :now RETURNING session_id',
     );
+    const revokeLinks = db.prepare('UPDATE facilitator_links SET used_at = :now WHERE session_id = :session AND used_at IS NULL');
     const facilitator = db.prepare('SELECT provider, subject FROM facilitators WHERE session_id = :session');
     const setFacilitator = db.prepare(
         `INSERT INTO facilitators (session_id, provider, subject, bound_at) VALUES (:session, :provider, :subject, :at)
@@ -713,6 +714,9 @@ function access(db: DatabaseSync): AccessStore {
         useLink(codeHash, now) {
             const r = useLink.get(params({ hash: codeHash, now: now.getTime() }));
             return r ? sessionOf(r) : undefined;
+        },
+        revokeLinks(session, now) {
+            revokeLinks.run(params({ session, now: now.getTime() }));
         },
         facilitator(session) {
             const r = facilitator.get(params({ session }));

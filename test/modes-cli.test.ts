@@ -5,14 +5,16 @@
  * not with `--no-agent`), and the removed commands and config sections.
  */
 import { afterAll, describe, expect, test } from 'bun:test';
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import {
     type CliDeps,
     cliDeps,
+    issueAgentLink,
     issueFacilitatorLink,
+    pairAgent,
     runCli,
     SessionError,
     type SessionServer,
@@ -20,7 +22,15 @@ import {
     startSessionServer,
 } from '@domaintrail/dt';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
-import { FACILITATOR_NAME, FACILITATOR_PARTICIPANT } from '@domaintrail/collaboration';
+import {
+    createSessionAccess,
+    createUnitOfWork,
+    FACILITATOR_NAME,
+    FACILITATOR_PARTICIPANT,
+    openSessionDatabase,
+    randomSecrets,
+    systemClock,
+} from '@domaintrail/collaboration';
 import { tempCopyOfExamples } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
@@ -84,6 +94,7 @@ interface Calls {
     view: unknown[];
     sessions: SessionServerOptionsLike[];
     agents: { roles: readonly string[]; once: boolean }[];
+    connects: unknown[];
     stopped: number;
 }
 type SessionServerOptionsLike = Parameters<CliDeps['startSessionServer']>[0];
@@ -93,7 +104,7 @@ function fakeDeps(
     usable: Awaited<ReturnType<CliDeps['checkAgent']>>,
     opened: 'started' | 'resumed' | 'collaborated' = 'started',
 ): { deps: CliDeps; calls: Calls } {
-    const calls: Calls = { view: [], sessions: [], agents: [], stopped: 0 };
+    const calls: Calls = { view: [], sessions: [], agents: [], connects: [], stopped: 0 };
     const deps: CliDeps = {
         ...cliDeps(),
         startViewServer: async (options) => {
@@ -106,6 +117,7 @@ function fakeDeps(
             return {
                 url: 'http://127.0.0.1:1/',
                 agentUrl: 'http://127.0.0.1:2/',
+                agentToken: 'in-memory-token',
                 session: 's1',
                 opened,
                 facilitatorLink: options.mode === 'Collab' ? 'http://127.0.0.1:1/session/facilitator?code=x' : 'http://127.0.0.1:1/session/open?code=y',
@@ -118,6 +130,7 @@ function fakeDeps(
         checkAgent: async () => usable,
         startAgent: async (options) => {
             calls.agents.push({ roles: options.roles, once: options.once });
+            calls.connects.push(options.connect);
             return {
                 session: 's1',
                 roles: options.roles.filter((r) => r === 'run'),
@@ -165,7 +178,7 @@ describe('removed commands and sections', () => {
     test('a config with session or view is refused at load, by every command that reads it (exit 2)', async () => {
         const dir = await copy();
         await writeFile(path.join(dir, 'domaintrail.jsonc'), JSON.stringify({ session: { port: 5000, agent: { allowedTools: ['Read'] } } }));
-        for (const args of [['check'], ['open'], ['collab'], ['agent']]) {
+        for (const args of [['check'], ['open'], ['collab'], ['agent', '--code', 'x']]) {
             const r = await run(cliDeps(), '-r', dir, ...args);
             expect(r.code).toBe(2);
             expect(r.err).toEqual([
@@ -264,22 +277,102 @@ describe('dt agent', () => {
     test('both roles by default, one with --role; the answerer alone is not available yet', async () => {
         const dir = await copy();
         const { deps, calls } = fakeDeps(USABLE);
-        const both = await run(deps, '-r', dir, 'agent', '--once');
+        const both = await run(deps, '-r', dir, 'agent', '--code', 'c1', '--once');
         expect(both.code).toBe(0);
         expect(both.out).toEqual(['Agent on session s1 with claude (role run) (one run); waiting.', 'Done.']);
-        expect((await run(deps, '-r', dir, 'agent', '--role', 'run')).out.at(-1)).toBe('Session closed.');
+        expect((await run(deps, '-r', dir, 'agent', '--code', 'c2', '--url', 'http://127.0.0.1:9/', '--role', 'run')).out.at(-1)).toBe('Session closed.');
+        expect(calls.connects).toEqual([{ code: 'c1' }, { code: 'c2', url: 'http://127.0.0.1:9/' }]);
+        // a standalone agent pairs with a code: there is no credential file to read
+        const without = await run(deps, '-r', dir, 'agent');
+        expect(without.code).toBe(1);
+        expect(without.err.join('\n')).toContain("required option '--code <code>' not specified");
         expect(calls.agents).toEqual([
             { roles: ['answer', 'run'], once: true },
             { roles: ['run'], once: false },
         ]);
-        expect((await run(deps, '-r', dir, 'agent', '--role', 'judge')).code).toBe(1);
+        expect((await run(deps, '-r', dir, 'agent', '--code', 'c', '--role', 'judge')).code).toBe(1);
 
-        const answer = await run(cliDeps(), '-r', dir, 'agent', '--role', 'answer');
+        const answer = await run(cliDeps(), '-r', dir, 'agent', '--code', 'c', '--role', 'answer');
         expect(answer.code).toBe(1);
         expect(answer.err).toEqual(['The answerer role is not available yet: run `dt agent` or `dt agent --role run`.']);
-        const none = await run(cliDeps(), '-r', dir, 'agent');
+        const none = await run(cliDeps(), '-r', dir, 'agent', '--code', 'c');
         expect(none.code).toBe(1);
         expect(none.err).toEqual(['No session server is running for this workspace (start one with `dt open` or `dt collab`).']);
+    });
+});
+
+describe('pairing a standalone dt agent (the credential never on disk)', () => {
+    test('dt collab agent-link prints a one-time code that pairs once; expired, reused and facilitator codes are refused', async () => {
+        const root = await copy();
+        // what an older version left: removed when a server starts
+        await mkdir(path.join(root, '.domaintrail', 'session'), { recursive: true });
+        await writeFile(path.join(root, '.domaintrail', 'session', 'agent.json'), JSON.stringify({ url: 'http://127.0.0.1:1/', token: 'old' }));
+        const lines: string[] = [];
+        const server = await startSessionServer({ root, debounceMs: 30, mode: 'Collab', session: settings, log: (l) => lines.push(l) });
+        try {
+            expect(await readFile(path.join(root, '.domaintrail', 'session', 'agent.json'), 'utf8').catch(() => 'gone')).toBe('gone');
+            expect(lines).toContain('Removed .domaintrail/session/agent.json (an agent credential an older version wrote).');
+            const printed = await run(cliDeps(), '-r', root, 'collab', 'agent-link');
+            expect(printed.code).toBe(0);
+            const code = /^Agent code \(single use, expires in 10 minutes\): (\S+)$/.exec(printed.out[0])?.[1] ?? '';
+            expect(printed.out.slice(1)).toEqual([`Agent API: ${server.agentUrl}`, `Run: dt agent --code ${code}`]);
+
+            const credential = await pairAgent(root, code);
+            expect(credential).toEqual({ url: server.agentUrl, token: server.agentToken, session: server.session });
+            const reused = await pairAgent(root, code).catch((e: unknown) => e);
+            expect(reused).toBeInstanceOf(SessionError);
+            expect(String(reused)).toContain('The pairing code is unknown, used or expired');
+
+            // a facilitator link's code is not an agent code, nor the reverse
+            const facilitator = new URL(server.facilitatorLink).searchParams.get('code') ?? '';
+            expect(await pairAgent(root, facilitator).catch((e: unknown) => e)).toBeInstanceOf(SessionError);
+            const { code: agentCode } = await issueAgentLink(root);
+            const ada = await fetch(`${server.url}api/session/join`, { method: 'POST', headers: json, body: JSON.stringify({ name: 'Ada' }) });
+            const cookie = (ada.headers.get('set-cookie') ?? '').split(';')[0];
+            await fetch(`${server.url}session/facilitator?code=${agentCode}`, { headers: { cookie }, redirect: 'manual' });
+            expect(((await (await api(server, 'me', undefined, cookie)).json()) as Me).participant.role).toBe('participant');
+            expect((await pairAgent(root, agentCode, server.agentUrl)).token).toBe(server.agentToken);
+
+            // expired
+            const db = await openSessionDatabase(root);
+            const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
+            const short = await access.issueAgentCode({ session: server.session, ttlMs: 1 });
+            db.close();
+            await Bun.sleep(10);
+            expect(await pairAgent(root, short.ok ? short.value.code : '').catch((e: unknown) => e)).toBeInstanceOf(SessionError);
+            // only to the agent API on this machine
+            expect(String(await pairAgent(root, 'x', 'http://example.com:1/').catch((e: unknown) => e))).toContain('on this machine only');
+            // nothing secret on disk
+            expect(await readFile(path.join(root, '.domaintrail', 'session', 'agent.json'), 'utf8').catch(() => 'gone')).toBe('gone');
+            expect(await readFile(path.join(root, '.domaintrail', 'session', 'server.json'), 'utf8')).not.toContain(server.agentToken);
+        } finally {
+            await server.stop();
+        }
+        // unused codes die with the server
+        const again = await startSessionServer({ root, debounceMs: 30, mode: 'Collab', session: settings });
+        const { code: left } = await issueAgentLink(root);
+        await again.stop();
+        const third = await startSessionServer({ root, debounceMs: 30, mode: 'Collab', session: settings });
+        try {
+            expect(await pairAgent(root, left).catch((e: unknown) => e)).toBeInstanceOf(SessionError);
+        } finally {
+            await third.stop();
+        }
+    }, 30_000);
+
+    test('dt open agent-link pairs with a dt open server too; no server, no code', async () => {
+        const root = await copy();
+        expect((await run(cliDeps(), '-r', root, 'open', 'agent-link')).err).toEqual([
+            'No session server is running for this workspace (start one with `dt open` or `dt collab`).',
+        ]);
+        const server = await start(root, 'Solo');
+        try {
+            const printed = await run(cliDeps(), '-r', root, 'open', 'agent-link');
+            const code = /: (\S+)$/.exec(printed.out[0])?.[1] ?? '';
+            expect((await pairAgent(root, code)).session).toBe(server.session);
+        } finally {
+            await server.stop();
+        }
     });
 });
 

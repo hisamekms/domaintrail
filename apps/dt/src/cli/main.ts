@@ -321,7 +321,7 @@ Examples:
             .addOption(new Option('--agent <agent>', 'the agent to start in this process (an error if it cannot start)').choices(['claude']))
             .option('--no-agent', 'do not start the agent in this process (start one later with `dt agent`)');
 
-    serveOptions(
+    const open = serveOptions(
         program
             .command('open')
             .description('Open the Live View with the chat for you alone, the AI included (runs until Ctrl+C).')
@@ -401,7 +401,8 @@ elements of the model, and address the AI with @AI; the facilitator decides what
 an open session is resumed, and a \`dt open\` session is continued with you as its facilitator. Prints a one-time
 facilitator link: open it in your browser to become the facilitator (\`dt collab link\` prints another). The agent
 (Claude Code) starts in this process when \`claude\` is usable; otherwise the server starts without it and says why.
-The agent API listens on 127.0.0.1 only; its address and credential are in .domaintrail/session/agent.json.
+The agent API listens on 127.0.0.1 only; its credential is in memory, never on disk (\`dt collab agent-link\` pairs
+another agent).
 
 Examples:
   dt collab
@@ -438,7 +439,7 @@ Examples:
         io.out(`Session: ${server.session} (${opened}, identity ${settings.identity})`);
         io.out(`Live View: ${server.url}`);
         if (server.facilitatorLink) io.out(`Facilitator link (single use, expires in 10 minutes): ${server.facilitatorLink}`);
-        io.out(`Agent API: ${server.agentUrl} (credential in .domaintrail/session/agent.json)`);
+        io.out(`Agent API: ${server.agentUrl} (another agent pairs with a code: dt collab agent-link)`);
         await serveWithAgent(cfg, opts, server);
     });
     collab
@@ -463,17 +464,52 @@ Examples:
             io.out(`Facilitator link (single use, expires in 10 minutes): ${link}`);
         });
 
+    // a one-time code for a standalone `dt agent` (the credential itself is never written to disk)
+    for (const [parent, name] of [
+        [open, 'open'],
+        [collab, 'collab'],
+    ] as const) {
+        parent
+            .command('agent-link')
+            .description(
+                `Print a one-time code that pairs a standalone \`dt agent\` with the ${name === 'open' ? '`dt open`' : 'collaboration'} server running on the workspace.`,
+            )
+            .addHelpText(
+                'after',
+                `
+\`dt agent --code <code>\` exchanges the code for the agent API's credential, which it keeps in memory: the credential
+is never written to disk. The code works once, for 10 minutes, and dies with the server.
+
+Examples:
+  dt ${name} agent-link
+  dt agent --code <code>`,
+            )
+            .action(async () => {
+                const cfg = await config();
+                const { code, agentUrl } = await deps.issueAgentLink(cfg.root).catch((e: unknown) => {
+                    if (e instanceof SessionError) throw new CliError(e.message);
+                    throw e;
+                });
+                io.out(`Agent code (single use, expires in 10 minutes): ${code}`);
+                io.out(`Agent API: ${agentUrl}`);
+                io.out(`Run: dt agent --code ${code}`);
+            });
+    }
+
     program
         .command('agent')
         .description('Run the AI on the session running on the workspace: its answers and its runs (runs until Ctrl+C or the session closes).')
         .addOption(new Option('--agent <agent>', 'the agent').choices(['claude']).default('claude'))
         .addOption(new Option('--role <role>', 'take on one role only: answer (read-only answers) or run (the runs); default: both').choices([...AGENT_ROLES]))
         .option('--once', 'handle one run (waiting for one if none is queued), then exit')
+        .requiredOption('--code <code>', 'the one-time pairing code of `dt collab agent-link` (or `dt open agent-link`)')
+        .option('--url <url>', "the agent API's address (default: the running server's, from .domaintrail/session/server.json)")
         .addHelpText(
             'after',
             `
 Connects to the session server running on the workspace (\`dt open\` or \`dt collab\`, e.g. started with --no-agent)
-through its agent API, with the credential in .domaintrail/session/agent.json. The runner takes the runs one at a
+through its agent API: the code printed by \`dt collab agent-link\` is exchanged once for the agent API's credential,
+kept in memory (never on disk). The runner takes the runs one at a
 time: Claude Code (\`claude\` on the PATH, with the tools of agent.run.allowedTools only) edits the .dt and .dtes files
 (its \`dt\` is agent.run.dt, else this very CLI), then \`dt fmt\` and \`dt check\` run and the server records the result
 as a revision. A run that changes any other file fails. The answerer answers the questions addressed to the AI with
@@ -481,15 +517,17 @@ read-only tools. Ctrl+C stops the agent and fails its run as interrupted. Anothe
 process is allowed.
 
 Examples:
-  dt agent
-  dt agent --role run           the runs only (the answers from another dt agent --role answer)
-  dt agent --once
-  dt -r examples/shop agent`,
+  dt collab agent-link          prints the code
+  dt agent --code <code>
+  dt agent --code <code> --role run   the runs only (the answers from another dt agent --role answer)
+  dt agent --code <code> --once
+  dt -r examples/shop agent --code <code>`,
         )
-        .action(async (opts: { agent: 'claude'; role?: AgentRole; once?: boolean }) => {
+        .action(async (opts: { agent: 'claude'; role?: AgentRole; once?: boolean; code: string; url?: string }) => {
             const cfg = await config();
+            const connect = { code: opts.code, ...(opts.url !== undefined && { url: opts.url }) };
             const agent = await deps
-                .startAgent({ ...agentOptions(cfg, opts.agent), roles: opts.role ? [opts.role] : AGENT_ROLES, once: opts.once ?? false, log: io.out })
+                .startAgent({ ...agentOptions(cfg, opts.agent), connect, roles: opts.role ? [opts.role] : AGENT_ROLES, once: opts.once ?? false, log: io.out })
                 .catch((e: unknown) => {
                     if (e instanceof SessionError) throw new CliError(e.message);
                     throw e;
@@ -616,7 +654,7 @@ Examples:
         });
 
     /** The agent's settings for `dt agent` or the agent in process. */
-    const agentOptions = (cfg: ResolvedConfig, agent: 'claude'): Omit<AgentOptions, 'roles' | 'once' | 'log'> => {
+    const agentOptions = (cfg: ResolvedConfig, agent: 'claude'): Omit<AgentOptions, 'roles' | 'once' | 'log' | 'connect'> => {
         const configPath = program.opts<{ config?: string }>().config;
         return {
             root: cfg.root,
@@ -645,7 +683,14 @@ Examples:
                     io.out(`AI: not started (${usable.reason}); start it later with \`dt agent\``);
                 } else {
                     agent = await deps
-                        .startAgent({ ...agentOptions(cfg, 'claude'), roles: AGENT_ROLES, once: false, log: (line) => io.out(`AI: ${line}`) })
+                        .startAgent({
+                            ...agentOptions(cfg, 'claude'),
+                            // the credential in memory: never on disk
+                            connect: { credential: { url: server.agentUrl, token: server.agentToken, session: server.session } },
+                            roles: AGENT_ROLES,
+                            once: false,
+                            log: (line) => io.out(`AI: ${line}`),
+                        })
                         .catch((e: unknown) => {
                             if (!(e instanceof SessionError)) throw e;
                             if (opts.agent === 'claude') throw new CliError(`AI: cannot start: ${e.message}`);

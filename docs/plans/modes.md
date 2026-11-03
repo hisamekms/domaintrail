@@ -524,8 +524,16 @@ M5 landed the commands and the config, with these details settled or changed:
   Solo (`dt collab` continuing it); `startSessionServer` refuses to start while another live server (`server.json`
   with its process alive, or a server of the same process) serves the workspace, so a session's mode never changes
   under a running server.
-- **The agent in process**: `checkClaudeCode` decides; the subscriber is the same as `dt agent`'s (loopback HTTP with
-  `agent.json`'s credential); Ctrl+C stops the agent before its server.
+- **The agent in process**: `checkClaudeCode` decides; the subscriber is the same as `dt agent`'s (loopback HTTP),
+  handed the agent API's URL and bearer token in memory; Ctrl+C stops the agent before its server.
+- **The agent credential is never on disk** (maintainer, 2026-11-03): `agent.json` is gone. A standalone `dt agent`
+  pairs: `dt collab agent-link` (or `dt open agent-link` for a running `dt open`) prints a one-time code (random, single
+  use, 10 minutes, stored as a hash beside the facilitator links but in a hash domain of its own, so neither kind is
+  accepted as the other) and the agent API's address; `dt agent --code <code> [--url <agent API>]` exchanges it at
+  `POST /agent/pair` (loopback, no `Origin`) for the token and keeps it in memory. The server revokes every unused
+  link and code when it stops. `server.json` keeps the page's and the agent API's addresses (no secret); a leftover
+  `agent.json` of an older version is removed when a server starts; `.domaintrail/` gets a `.gitignore` (`*`) when it
+  has none.
 - **Roles**: `--role` is parsed and passed on, both by default; the answerer is not in the agent yet (M4), so the
   wiring takes on the runner only, and `--role answer` alone is an error until M4's answerer is connected there
   (`wiring/subscriber.ts`).

@@ -1,6 +1,9 @@
-// Who may act in a session, outside the model (ADR 0026, S4): the one-time facilitator link printed by `dt session
-// start` (or issued again locally), the identity it binds to the facilitator, and the sign-ins of the `dev` identity
-// mode (an opaque cookie mapped to a picked name). Secrets leave here once, to the caller; only their SHA-256 is kept.
+// Who may act in a session, outside the model (ADR 0026, S4; ADR 0030, M5): the one-time facilitator link printed by
+// `dt collab` (or issued again locally), the identity it binds to the facilitator, the one-time agent pairing codes
+// (`dt collab agent-link`: exchanged by `dt agent --code` for the agent API's credential), and the sign-ins of the `dev`
+// identity mode (an opaque cookie mapped to a picked name). Secrets leave here once, to the caller; only their SHA-256
+// is kept. A pairing code is stored beside the facilitator links under a hash of its own domain (`AGENT_CODE_DOMAIN`):
+// neither kind is accepted as the other.
 import { err, ok, type Collaboration, type Result } from '../generated/index.js';
 import { sha256Hex } from '../domain/sha256.js';
 import type { Identity, IdentityKey } from './identity.js';
@@ -33,6 +36,12 @@ export interface SessionAccess {
         readonly code: string;
         readonly identity: IdentityKey;
     }): Promise<Result<{ readonly previous: IdentityKey | undefined }, LinkInvalid>>;
+    /** A new one-time agent pairing code for the open session, valid for `ttlMs`: not a facilitator link. */
+    issueAgentCode(input: { readonly session: SessionId; readonly ttlMs: number }): Promise<Result<FacilitatorLink, SessionNotOpen>>;
+    /** Uses an agent pairing code of the session: whether it was valid (unused, unexpired, an agent code of this session). */
+    redeemAgentCode(input: { readonly session: SessionId; readonly code: string }): Promise<boolean>;
+    /** Revokes every unused link of the session: facilitator links and agent pairing codes (its server stops). */
+    revokeLinks(session: SessionId): Promise<void>;
     /** The identity holding the facilitator role, if one claimed it. */
     facilitator(session: SessionId): Promise<IdentityKey | undefined>;
     /** Signs `identity` in (dev mode): the cookie's secret, returned once. */
@@ -49,6 +58,10 @@ const encoder = new TextEncoder();
 
 /** What is stored of a secret. */
 export const secretHash = (secret: string): string => sha256Hex(encoder.encode(secret));
+
+/** The domain an agent pairing code is hashed in, apart from the facilitator links'. */
+const AGENT_CODE_DOMAIN = 'dt-agent-pairing:';
+const agentCodeHash = (code: string): string => secretHash(`${AGENT_CODE_DOMAIN}${code}`);
 
 export function createSessionAccess(deps: { readonly uow: UnitOfWork; readonly clock: Clock; readonly secrets: SecretGenerator }): SessionAccess {
     const { uow, clock, secrets } = deps;
@@ -73,6 +86,24 @@ export function createSessionAccess(deps: { readonly uow: UnitOfWork; readonly c
                 stores.access.setFacilitator(session, { provider: identity.provider, subject: identity.subject }, now);
                 return ok({ previous });
             });
+        },
+
+        async issueAgentCode({ session, ttlMs }) {
+            return uow.transaction((stores) => {
+                if (stores.sessions.load(session)?.state !== 'Open') return err({ type: 'SessionNotOpen' });
+                const code = secrets.newSecret();
+                const expiresAt = new Date(clock.now().getTime() + ttlMs);
+                stores.access.addLink(agentCodeHash(code), session, expiresAt);
+                return ok({ code, expiresAt });
+            });
+        },
+
+        async redeemAgentCode({ session, code }) {
+            return uow.transaction((stores) => stores.access.useLink(agentCodeHash(code), clock.now()) === session);
+        },
+
+        async revokeLinks(session) {
+            await uow.transaction((stores) => stores.access.revokeLinks(session, clock.now()));
         },
 
         async facilitator(session) {

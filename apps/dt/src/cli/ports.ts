@@ -31,6 +31,8 @@ export interface CliDeps {
     startSessionServer(options: SessionServerOptions): Promise<StartedSession>;
     /** Another facilitator link for the session server running on the workspace; rejects with `SessionError` when none runs. */
     issueFacilitatorLink(root: string): Promise<{ link: string; expiresAt: Date }>;
+    /** A one-time agent pairing code for the session server running on the workspace; rejects with `SessionError` when none runs. */
+    issueAgentLink(root: string): Promise<{ code: string; agentUrl: string; expiresAt: Date }>;
     /** Whether the agent can run here (`claude` on the PATH, answering, with the flags the adapters need), or why not. */
     checkAgent(agent: 'claude'): Promise<AgentUsability>;
     /**
@@ -80,6 +82,8 @@ export interface SessionSettings extends ResolvedCollabConfig {
 export interface StartedSession {
     url: string;
     agentUrl: string;
+    /** The agent API's bearer token, in memory only: for the agent in process. */
+    agentToken: string;
     session: string;
     /** `started`, `resumed`, or `collaborated` (a `dt open` session continued by `dt collab`). */
     opened: 'started' | 'resumed' | 'collaborated';
@@ -105,6 +109,11 @@ export interface AgentOptions {
     /** The config file given with `-c` (for `dt fmt` and `dt check` after the agent). */
     configPath?: string;
     agent: 'claude';
+    /**
+     * How to reach the agent API: the credential in memory (the agent in process), or a one-time pairing code to
+     * exchange for it at `url` (default: the running server's).
+     */
+    connect: { readonly credential: { url: string; token: string; session: string } } | { readonly code: string; readonly url?: string };
     /** The roles to take on. */
     roles: readonly AgentRole[];
     /** `agent.run.dt`: the command `dt` runs for the agent and after it; absent, the running CLI itself. */

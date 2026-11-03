@@ -48,7 +48,7 @@ tags, see below).
 - **As a participant**: a private window, the same URL, another name. Your browser is a new participant, so none of the
   seeded messages are yours; the seeded people's cookies (`dt_session`) are in `<dir>/.domaintrail/seed.json`, for a
   browser (or a test) that should be one of them.
-- **With the real agent**: `node dist/dt.js -r <dir> agent` takes the runs queued from then
+- **With the real agent**: `node dist/dt.js -r <dir> collab agent-link`, then `node dist/dt.js -r <dir> agent --code <code>`, takes the runs queued from then
   on (and the one `--leave-queued` left).
 
 ## What the scenarios show

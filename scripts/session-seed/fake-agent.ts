@@ -16,7 +16,7 @@ import {
     type Subscriber,
     systemClock,
 } from '@domaintrail/agent';
-import { readCredential } from '@domaintrail/dt';
+import { issueAgentLink, pairAgent } from '@domaintrail/dt';
 import { plainQuestion, readReply, type ReplyData, requestNumber, type RunActivity } from '@domaintrail/collaboration';
 import { sourceSelection } from '@domaintrail/analysis';
 import { findDomainFiles } from '@domaintrail/workspace';
@@ -117,7 +117,8 @@ function scriptedRunner(steps: Step[], root: string): AgentRunner {
 
 /** Subscribes the scripted agent to the session server running on `root`. */
 export async function startFakeAgent(options: FakeAgentOptions): Promise<FakeAgent> {
-    const credential = await readCredential(options.root);
+    // paired as a standalone `dt agent` is: a one-time code for the credential, kept in memory
+    const credential = await pairAgent(options.root, (await issueAgentLink(options.root)).code);
     const api = createHttpAgentApi({ url: credential.url, token: credential.token });
     const session = await api.session();
     if (!session.ok) throw new Error(`The agent API refused the credential (${session.status} ${session.type})`);

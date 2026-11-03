@@ -127,9 +127,8 @@ const api = (server: SessionServer, cookie: string, p: string, body?: unknown): 
         ...(body !== undefined && { body: JSON.stringify(body) }),
     });
 
-async function agentCredential(root: string): Promise<{ url: string; token: string }> {
-    return JSON.parse(await readFile(path.join(root, '.domaintrail', 'session', 'agent.json'), 'utf8'));
-}
+/** The agent API's credential, in memory (never on disk): as the agent in process gets it. */
+const agentCredential = (server: SessionServer): { url: string; token: string } => ({ url: server.agentUrl, token: server.agentToken });
 
 const agent = (cred: { url: string; token: string }, p: string, body?: unknown, headers: Record<string, string> = {}): Promise<Response> =>
     fetch(`${cred.url}agent/${p}`, {
@@ -529,13 +528,17 @@ describe('the agent API', () => {
         ada = await join(server, 'Ada');
         bob = await join(server, 'Bob');
         await claim(server, ada);
-        cred = await agentCredential(root);
+        cred = agentCredential(server);
     });
     afterAll(() => server?.stop());
 
-    test('agent.json is the credential, private to the user; the listener is on 127.0.0.1 only', async () => {
-        const file = path.join(root, '.domaintrail', 'session', 'agent.json');
-        expect((await stat(file)).mode & 0o777).toBe(0o600);
+    test('the credential is never on disk; server.json has the addresses only; the listener is on 127.0.0.1 only', async () => {
+        expect(await readFile(path.join(root, '.domaintrail', 'session', 'agent.json'), 'utf8').catch(() => 'gone')).toBe('gone');
+        const address = await readFile(path.join(root, '.domaintrail', 'session', 'server.json'), 'utf8');
+        expect((await stat(path.join(root, '.domaintrail', 'session', 'server.json'))).mode & 0o777).toBe(0o600);
+        expect(address).not.toContain(cred.token);
+        expect(JSON.parse(address)).toMatchObject({ agentUrl: server.agentUrl });
+        expect(await readFile(path.join(root, '.domaintrail', '.gitignore'), 'utf8')).toBe('*\n');
         expect(new URL(cred.url).hostname).toBe('127.0.0.1');
         expect(cred.url).toBe(server.agentUrl);
         expect(new URL(cred.url).port).not.toBe(new URL(server.url).port);
@@ -969,7 +972,7 @@ describe('revisions: comparison and restore (S7)', () => {
             await server.ready;
             const ada = await join(server, 'Ada');
             await claim(server, ada);
-            const cred = await agentCredential(root);
+            const cred = agentCredential(server);
             const [first] = await revisions(server, ada);
             const target = { target: { kind: 'Workspace' }, sourceRevision: first.id };
             const request = ((await (await api(server, ada, 'requests', { target, body: 'Ship it.' })).json()) as { request: { id: string } }).request;
@@ -1010,7 +1013,7 @@ describe('closing and resuming', () => {
         const id = first.session;
         expect(first.resumed).toBe(false);
         await first.stop();
-        expect(await readFile(path.join(root, '.domaintrail', 'session', 'agent.json'), 'utf8').catch(() => 'gone')).toBe('gone');
+        expect(await readFile(path.join(root, '.domaintrail', 'session', 'server.json'), 'utf8').catch(() => 'gone')).toBe('gone');
 
         const second = await start(root);
         try {
@@ -1021,7 +1024,7 @@ describe('closing and resuming', () => {
             expect(another.link.startsWith(`${second.url}session/facilitator?code=`)).toBe(true);
             const bob = await join(second, 'Bob');
             const s = await socket(second, bob);
-            const cred = await agentCredential(root);
+            const cred = agentCredential(second);
             const stream = sse(cred, undefined, ['session.closed']);
             const closed = await api(second, ada, 'close', {});
             expect(closed.status).toBe(200);

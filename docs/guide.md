@@ -2568,7 +2568,8 @@ Sessions need Node.js 22.13 or later (for `node:sqlite`). In the repository,
   prints the page's URL, a one-time **facilitator link** and the agent API's address.
 - `dt collab link` — another facilitator link, for the collab server running on the workspace (each link works once,
   for 10 minutes).
-- `dt agent` — the agent alone: it connects to the running server (`dt open` or `dt collab`) through its agent API and
+- `dt agent --code <code>` — the agent alone: it pairs with the running server (`dt open` or `dt collab`) with the
+  one-time code `dt collab agent-link` (or `dt open agent-link`) prints, keeps the agent API's credential in memory, and
   runs the queued runs one after another, until Ctrl+C or the session closes; `--once` handles one run and exits.
   `--role run` or `--role answer` takes on one of its two roles (the runner, the read-only answerer); both by default.
 
@@ -2828,8 +2829,12 @@ agent.
 **What is stored where.** Everything of the session is in `.domaintrail/session/` of the workspace, beside a
 `.gitignore` that ignores it all: `session.db` (SQLite: the session, requests, runs, revisions, the event outbox,
 sign-ins and facilitator links as hashes, the log of restores), `blobs/` (the revisions' file contents, by SHA-256),
-`agent.json` (the agent API's address and credential, mode 0600, removed when the server stops) and `server.json`
-(the page's URL, for `dt collab link`). Drafts are in each browser; presence only in memory.
+and `server.json` (the page's and the agent API's addresses, no secret, mode 0600, removed when the server stops; for
+`dt collab link`, `dt collab agent-link` and `dt agent`). The agent API's credential is never written to disk: the
+agent in process is handed it in memory, and a standalone `dt agent` exchanges the one-time code of `dt collab
+agent-link` (or `dt open agent-link`; single use, 10 minutes, revoked when the server stops) for it and keeps it in
+memory. An `agent.json` an older version left is removed when a server starts. `.domaintrail/` gets a `.gitignore`
+(`*`) when it has none. Drafts are in each browser; presence only in memory.
 
 **Limitations.** The log of restores is in `session.db` only, not served over HTTP. In the `access` mode, leaving the
 session sends the page to Access's logout, but the server cannot see a sign-out made elsewhere: the person's other
@@ -2870,7 +2875,7 @@ are shown. The old sections `session` and `view` are refused when the file is lo
   },
   // the agent (dt agent, or the one dt open and dt collab start in process), in both modes
   "agent": {
-    "port": 0,                 // the agent API, on 127.0.0.1 only; 0 = any free port (written to agent.json)
+    "port": 0,                 // the agent API, on 127.0.0.1 only; 0 = any free port (written to server.json)
     // the runner: the runs that edit the workspace
     "run": {
       // Claude Code permission rules; this is the default
@@ -2987,8 +2992,8 @@ stormings; then `dt fmt` and `dt check` run, and the server records the result.
   claiming further runs: review … then restart the subscriber`). Review them and undo what you do not want, then start
   `dt agent` (or `dt open` / `dt collab`) again and queue the requests in a new run. A scan that fails stops it the same
   way.
-- **The agent API** listens on 127.0.0.1 only, on its own port, with a bearer token in `.domaintrail/session/agent.json`
-  (mode 0600); it refuses a request with an `Origin` or a `Host` other than loopback, and is never reachable through the page's port.
+- **The agent API** listens on 127.0.0.1 only, on its own port, with a bearer token held in memory only (paired for
+  with a one-time code by a standalone `dt agent`); it refuses a request with an `Origin` or a `Host` other than loopback, and is never reachable through the page's port.
 - **One run at a time.** Each run is claimed with a lease kept alive by heartbeats. If the subscriber dies, the run's
   lease expires and a running run fails (`LeaseExpired`) rather than run twice; a run only claimed goes back to the
   queue. Ctrl+C fails the running run as `Interrupted`.

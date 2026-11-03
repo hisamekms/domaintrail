@@ -7,6 +7,8 @@
 export { cliDeps, runDt } from './main.js';
 export { startViewServer, type ViewServer, type ViewServerOptions } from './wiring/view.js';
 export {
+    AGENT_CODE_TTL_MS,
+    issueAgentLink,
     issueFacilitatorLink,
     startSessionServer,
     WS_EXPIRED,
@@ -15,7 +17,7 @@ export {
     type SessionServer,
     type SessionServerOptions,
 } from './wiring/session.js';
-export { readCredential, startSubscriber, type RunningSubscriber, type SubscriberOptions } from './wiring/subscriber.js';
+export { pairAgent, startSubscriber, type RunningSubscriber, type SubscriberOptions } from './wiring/subscriber.js';
 export { createWatcherHold, ECHO_MS, type WatcherHold } from './wiring/watcher-hold.js';
 export { createModelValidator, createSourceFormatter } from './wiring/validator.js';
 

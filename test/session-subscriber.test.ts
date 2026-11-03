@@ -9,7 +9,7 @@
  */
 import { afterAll, afterEach, describe, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import {
@@ -25,15 +25,7 @@ import {
     type WorkspaceFiles,
 } from '@domaintrail/agent';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import {
-    readCredential,
-    type RunningSubscriber,
-    type SessionServer,
-    startSessionServer,
-    startSubscriber,
-    type SubscriberOptions,
-    SessionError,
-} from '@domaintrail/dt';
+import { issueAgentLink, type RunningSubscriber, type SessionServer, startSessionServer, startSubscriber, type SubscriberOptions } from '@domaintrail/dt';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import type { SessionSettings } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
@@ -225,12 +217,20 @@ async function waitFor<T>(what: string, probe: () => Promise<T | undefined> | T 
     }
 }
 
+/** The agent API's credential of the context's server, in memory (as the agent in process gets it). */
+const credentialOf = (ctx: Context): { url: string; token: string; session: string } => ({
+    url: ctx.server.agentUrl,
+    token: ctx.server.agentToken,
+    session: ctx.server.session,
+});
+
 /** The app's subscriber (`startSubscriber`) on the context's workspace, with the fake agent following `plan` (cold, unless `extra` says). */
 async function subscribe(ctx: Context, planFile: string, extra: Partial<SubscriberOptions> = {}): Promise<{ subscriber: RunningSubscriber; log: string[] }> {
     const log: string[] = [];
     const subscriber = await startSubscriber({
         root: ctx.root,
         agent: 'claude',
+        connect: { credential: credentialOf(ctx) },
         dt: DT,
         agentCommand: { command: process.execPath, args: [FAKE, planFile] },
         run: { warm: false, restartAfter: 20, idleTimeout: 30 },
@@ -856,7 +856,7 @@ describe('reverting a run', () => {
         expect(await read(ctx, RETURNS)).toBe(before);
 
         // an older subscriber names no capability: the revert is not given to it, and stays queued
-        const credential = await readCredential(ctx.root);
+        const credential = credentialOf(ctx);
         const claim = (b: unknown): Promise<Response> =>
             fetch(`${credential.url}agent/runs/claim`, {
                 method: 'POST',
@@ -887,7 +887,7 @@ describe('the stream and the completions', () => {
         wrap: (api: AgentApi) => AgentApi,
         wrapWorkspace: (workspace: WorkspaceFiles) => WorkspaceFiles = (w) => w,
     ): Promise<{ done: Promise<SubscriberEnd>; log: string[] }> {
-        const credential = await readCredential(ctx.root);
+        const credential = credentialOf(ctx);
         const real = createHttpAgentApi({ url: credential.url, token: credential.token });
         const log: string[] = [];
         const subscriber = startApplicationSubscriber(
@@ -1003,9 +1003,15 @@ async function fakeClaudeOnPath(planFile: string): Promise<string> {
     return bin;
 }
 
-/** Runs `dt agent` in a child process with the fake `claude` first on the PATH. */
-function cli(runtime: string[], root: string, bin: string, extra: string[] = []): { child: ChildProcess; output: () => string; exit: Promise<number | null> } {
-    const child = spawn(runtime[0], [...runtime.slice(1), '-r', root, 'agent', ...extra], {
+/** Runs `dt agent --code <a fresh pairing code>` in a child process with the fake `claude` first on the PATH. */
+async function cli(
+    runtime: string[],
+    root: string,
+    bin: string,
+    extra: string[] = [],
+): Promise<{ child: ChildProcess; output: () => string; exit: Promise<number | null> }> {
+    const { code } = await issueAgentLink(root);
+    const child = spawn(runtime[0], [...runtime.slice(1), '-r', root, 'agent', '--code', code, ...extra], {
         env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ''}` },
         stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -1020,22 +1026,12 @@ function cli(runtime: string[], root: string, bin: string, extra: string[] = [])
     return { child, output: () => output, exit };
 }
 
-/** The error `readCredential` refuses with (fails when it accepts). */
-async function refusal(root: string): Promise<Error> {
-    const e = await readCredential(root).then(
-        () => undefined,
-        (x: unknown) => x,
-    );
-    if (!(e instanceof Error)) throw new Error('expected readCredential to refuse');
-    return e;
-}
-
 describe('the CLI', () => {
     integration('on Node (dist/dt.js): --once runs the queued run with `claude` from the PATH, and dt fmt / dt check with itself', async () => {
         const ctx = await setup();
         const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Node.')]);
         const bin = await fakeClaudeOnPath(await ctx.plan([{ edits: ADD_RETURN_CANCELLED }]));
-        const { output, exit } = cli(['node', path.join(ROOT, 'dist', 'dt.js')], ctx.root, bin, ['--once']);
+        const { output, exit } = await cli(['node', path.join(ROOT, 'dist', 'dt.js')], ctx.root, bin, ['--once']);
         expect(await exit).toBe(0);
         expect(output()).toContain(`Agent on session ${ctx.server.session} with claude (role run) (one run); waiting.`);
         expect(output()).toContain('Done.');
@@ -1050,7 +1046,7 @@ describe('the CLI', () => {
         const ctx = await setup();
         const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Long.')]);
         const planFile = await ctx.plan([{ hang: true }]);
-        const { child, exit } = cli([process.execPath, path.join(ROOT, 'bin', 'dt.ts')], ctx.root, await fakeClaudeOnPath(planFile));
+        const { child, exit } = await cli([process.execPath, path.join(ROOT, 'bin', 'dt.ts')], ctx.root, await fakeClaudeOnPath(planFile));
         const [invocation] = await waitFor('the agent', async () => (await ctx.invocations())[0] && ctx.invocations());
         child.kill('SIGINT');
         expect(await exit).toBe(130);
@@ -1063,7 +1059,7 @@ describe('the CLI', () => {
         const ctx = await setup();
         const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Long.')]);
         const planFile = await ctx.plan([{ hang: true }]);
-        const { child, exit } = cli([process.execPath, path.join(ROOT, 'bin', 'dt.ts')], ctx.root, await fakeClaudeOnPath(planFile));
+        const { child, exit } = await cli([process.execPath, path.join(ROOT, 'bin', 'dt.ts')], ctx.root, await fakeClaudeOnPath(planFile));
         const [invocation] = await waitFor('the agent', async () => (await ctx.invocations())[0] && ctx.invocations());
         expect((await until(ctx, run, ['Running'])).state).toBe('Running');
         // the subscriber dies without a word, its agent with it
@@ -1077,28 +1073,5 @@ describe('the CLI', () => {
         const found = await restarted.collaboration.sessionState({ session: restarted.session });
         const failed = found.ok ? found.value.runs.find((r) => r.id === run) : undefined;
         expect(failed?.state === 'Failed' && failed.reason).toBe('LeaseExpired');
-    });
-
-    integration('refuses a missing, linked, shared or orphaned agent.json', async () => {
-        const root = await scratch('domaintrail-agent-cred-');
-        expect(await refusal(root)).toBeInstanceOf(SessionError);
-        const dir = path.join(root, '.domaintrail', 'session');
-        await mkdir(dir, { recursive: true });
-        const file = path.join(dir, 'agent.json');
-        const target = path.join(root, 'elsewhere.json');
-        const credential = { url: 'http://127.0.0.1:1/', token: 't', session: 's', pid: process.pid };
-        await writeFile(target, JSON.stringify(credential), { mode: 0o600 });
-        await symlink(target, file);
-        expect((await refusal(root)).message).toContain('not a plain file');
-        await rm(file);
-        await writeFile(file, JSON.stringify(credential), { mode: 0o644 });
-        await chmod(file, 0o644);
-        expect((await refusal(root)).message).toContain('mode 600');
-        await chmod(file, 0o600);
-        expect(await readCredential(root)).toEqual(credential);
-        const gone = spawn(process.execPath, ['-e', '0']);
-        await new Promise((resolve) => gone.once('close', resolve));
-        await writeFile(file, JSON.stringify({ ...credential, pid: gone.pid }));
-        expect((await refusal(root)).message).toContain('no longer running');
     });
 });

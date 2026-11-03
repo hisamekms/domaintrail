@@ -48,7 +48,7 @@ export interface CollabSectionFile extends Omit<CollabConfigFile, 'access'> {
 
 /** The `agent` section of the config file: what `dt agent` (or the agent in process) and the agent API read. */
 export interface AgentSectionFile extends AgentConfigFile {
-    /** Port of the agent API, on 127.0.0.1 only. Default: 0 (any free port, written to `.domaintrail/session/agent.json`). */
+    /** Port of the agent API, on 127.0.0.1 only. Default: 0 (any free port, written to `.domaintrail/session/server.json`; never its credential). */
     port?: number;
     run?: NonNullable<AgentConfigFile['run']> & { maxPreviousRunDiff?: number };
 }

@@ -162,6 +162,10 @@ not identified, so another local process or OS user is not the facilitator, and 
 server on the same host. `dt open` answers loopback Hosts and Origins only, never `collab.access`'s. Its identities fail
 closed once the session is no longer Solo, and a workspace has one live session server (`server.json`, its process
 alive): another `dt open` / `dt collab` refuses to start rather than open or change the session under it.
+The agent API's credential is never written to disk (decided by the maintainer, 2026-11-03): the agent in process gets
+it in memory; a standalone `dt agent` exchanges a one-time pairing code (`dt collab agent-link` / `dt open agent-link`:
+single use, 10 minutes, its own kind, revoked when the server stops) for it and keeps it in memory. `agent.json` is
+removed when found; `.domaintrail/` gets a `.gitignore` (`*`).
 
 ## Alternatives considered
 

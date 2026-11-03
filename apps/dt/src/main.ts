@@ -66,6 +66,7 @@ export function cliDeps(): CliDeps {
             return server;
         },
         issueFacilitatorLink: async (root) => (await import('./wiring/session.js')).issueFacilitatorLink(root),
+        issueAgentLink: async (root) => (await import('./wiring/session.js')).issueAgentLink(root),
         checkAgent: async () => (await import('@domaintrail/agent')).checkClaudeCode(),
         startAgent: async (options) => {
             // the agent's `dt` and `dt fmt` / `dt check` after it: `agent.run.dt`, else this very CLI, with the runtime

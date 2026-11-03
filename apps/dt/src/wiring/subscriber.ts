@@ -1,8 +1,8 @@
 // `dt agent` (ADR 0026, S6; ADR 0030), and the agent `dt open` and `dt collab` start in process over the same loopback
-// HTTP: the subscriber of the session server running on the workspace, wired to its agent API (`.domaintrail/session/agent.json`), Claude Code (a warm process across runs, or
+// HTTP: the subscriber of the session server running on the workspace, wired to its agent API (its credential in memory:
+// handed over by the server in process, or paired for with a one-time code), Claude Code (a warm process across runs, or
 // one per run: `agent.run`), `dt fmt`/`dt check` (this CLI, or `agent.run.dt`, for the agent too) and the
 // workspace's files.
-import { lstat } from 'node:fs/promises';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
 import {
@@ -24,7 +24,7 @@ import {
     type SubscriberEnd,
     systemClock,
 } from '@domaintrail/agent';
-import { AGENT_FILE, type AgentCredential, readAgentCredential, SESSION_DIR } from '@domaintrail/collaboration';
+import { type AgentCredential, readServerAddress } from '@domaintrail/collaboration';
 import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/analysis';
 import { SessionError } from '../cli/ports.js';
 import { findDomainFiles } from '@domaintrail/workspace';
@@ -50,6 +50,11 @@ export interface SubscriberOptions {
     /** The config file given with `-c`, passed on to `dt fmt` and `dt check`. */
     configPath?: string;
     agent: AgentName;
+    /**
+     * How to reach the agent API: its credential (the agent in process, handed over in memory), or a one-time pairing
+     * code (`dt collab agent-link`) to exchange for it at `url` (default: the running server's, from `server.json`).
+     */
+    connect: { readonly credential: AgentCredential } | { readonly code: string; readonly url?: string };
     /** The roles to take on. Default: both. */
     roles?: readonly AgentRole[];
     /** Handle one run, then end. */
@@ -78,25 +83,38 @@ export interface RunningSubscriber {
     stop(): Promise<SubscriberEnd>;
 }
 
+const isLoopbackUrl = (url: string): boolean => {
+    if (!URL.canParse(url)) return false;
+    const u = new URL(url);
+    return u.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(u.hostname);
+};
+
 /**
- * The credential of the session server running on the workspace. Refused (`SessionError`) when `agent.json` is
- * missing, a symbolic link, readable by others (not 0600), or written by a process that is gone.
+ * Exchanges a one-time pairing code for the agent API's credential (kept in memory by the caller), at `url` or the
+ * agent API of the server running on the workspace. Refused (`SessionError`) when no server runs, the URL is not a
+ * loopback one, or the code is unknown, used or expired.
  */
-export async function readCredential(root: string): Promise<AgentCredential> {
-    const file = path.join(path.resolve(root), SESSION_DIR, AGENT_FILE);
-    const stat = await lstat(file).catch((e: unknown) => {
-        if (e instanceof Error && 'code' in e && e.code === 'ENOENT') return undefined;
-        throw e;
-    });
-    if (!stat) throw new SessionError('No session server is running for this workspace (start one with `dt open` or `dt collab`).');
-    if (stat.isSymbolicLink() || !stat.isFile()) throw new SessionError(`${file} is not a plain file: refusing to read the agent credential through it.`);
-    if (process.platform !== 'win32' && (stat.mode & 0o777) !== 0o600)
-        throw new SessionError(`${file} must be private to you (mode 600), not ${(stat.mode & 0o777).toString(8)}: refusing the agent credential.`);
-    const credential = await readAgentCredential(root);
-    if (!credential) throw new SessionError(`${file} is not an agent credential.`);
-    if (!processAlive(credential.pid))
-        throw new SessionError('The session server that wrote the agent credential is no longer running (start one with `dt open` or `dt collab`).');
-    return credential;
+export async function pairAgent(root: string, code: string, url?: string): Promise<AgentCredential> {
+    let at = url;
+    if (at === undefined) {
+        const address = await readServerAddress(root);
+        if (!address || !processAlive(address.pid))
+            throw new SessionError('No session server is running for this workspace (start one with `dt open` or `dt collab`).');
+        if (!address.agentUrl) throw new SessionError('The running session server is of an older version: restart it, or pass --url.');
+        at = address.agentUrl;
+    }
+    const base = at.endsWith('/') ? at : `${at}/`;
+    if (!isLoopbackUrl(base)) throw new SessionError(`The agent API is on this machine only (http://127.0.0.1:…): not ${at}.`);
+    const res = await fetch(`${base}agent/pair`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code }) }).catch(
+        (e: unknown) => {
+            throw new SessionError(`The session server's agent API does not answer (${e instanceof Error ? e.message : String(e)}).`);
+        },
+    );
+    const body: unknown = await res.json().catch(() => undefined);
+    const ok = typeof body === 'object' && body !== null && 'token' in body && 'session' in body;
+    if (res.status !== 200 || !ok || typeof body.token !== 'string' || typeof body.session !== 'string')
+        throw new SessionError('The pairing code is unknown, used or expired: print another with `dt collab agent-link` (or `dt open agent-link`).');
+    return { url: base, token: body.token, session: body.session };
 }
 
 /** Subscribes to the session server running on the workspace at `options.root` and runs its agent runs. */
@@ -107,7 +125,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     const roles: readonly AgentRole[] = (options.roles ?? AGENT_ROLES).filter((r) => r === 'run');
     if (roles.length === 0) throw new SessionError('The answerer role is not available yet: run `dt agent` or `dt agent --role run`.');
     const root = path.resolve(options.root);
-    const credential = await readCredential(root);
+    const credential = 'credential' in options.connect ? options.connect.credential : await pairAgent(root, options.connect.code, options.connect.url);
     const api = createHttpAgentApi({ url: credential.url, token: credential.token });
     const session = await api.session().catch((e: unknown) => {
         throw new SessionError(`The session server's agent API does not answer (${e instanceof Error ? e.message : String(e)}).`);

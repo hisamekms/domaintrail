@@ -59,14 +59,14 @@ In the workspace's `domaintrail.jsonc`:
 
 1. Start the tunnel: `cloudflared tunnel run <tunnel>` (or the service you installed).
 2. Start the session in the workspace: `dt collab`. It prints the Live View URL (`http://127.0.0.1:4321/`), the
-   facilitator link and the agent API's address (on 127.0.0.1, credential in `.domaintrail/session/agent.json`).
+   facilitator link and the agent API's address (on 127.0.0.1; its credential stays in memory, `dt collab agent-link` pairs another agent).
    A line `Cloudflare Access keys are not fetched yet` means the JWKS
    (`https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`) could not be fetched: check the team domain and the
    machine's network before going on.
 3. Claim the facilitator role: open `https://session.example.com/` in your browser and sign in through Access, then
    open the facilitator link, with its host changed to `session.example.com` (the path and the code stay). The link
    works once, for 10 minutes; `dt collab link` prints another. The role is never given by Access.
-4. The agent: `dt collab` starts it in its process when Claude Code is usable (it prints `AI: started …`, or why not); otherwise `dt agent` in the workspace.
+4. The agent: `dt collab` starts it in its process when Claude Code is usable (it prints `AI: started …`, or why not); otherwise `dt collab agent-link`, then `dt agent --code <code>` in the workspace.
 
 ## Checklist
 
@@ -102,7 +102,7 @@ Tick each line; for a failure, record what is listed under [When something fails
 - [ ] `https://session.example.com/agent/events` does not reach the agent API: signed out, Access answers; signed in
       (open it in the participant's browser), the session server answers 404 (`curl` to `http://127.0.0.1:4321/agent/events`
       without a token: 401).
-- [ ] The agent API's port (from `agent.json`) is bound to 127.0.0.1 only: `lsof -nP -iTCP -sTCP:LISTEN | grep <port>`.
+- [ ] The agent API's port (printed by `dt collab`, also in `server.json`) is bound to 127.0.0.1 only: `lsof -nP -iTCP -sTCP:LISTEN | grep <port>`.
 
 **Expiry and leaving**
 
