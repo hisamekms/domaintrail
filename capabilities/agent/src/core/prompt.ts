@@ -337,7 +337,10 @@ Rules:
    element. A request without targets is about the workspace as a whole.
 2. Edit only \`.dt\` and \`.dtes\` source files of this workspace. Create, change or delete no other file.
 3. \`.dtes\` stormings are exploratory: keep them so (open questions, hotspots and events without a model counterpart
-   are fine). Never copy or sync \`.dtes\` content into \`.dt\` files by yourself.
+   are fine). Never copy or sync \`.dtes\` content into \`.dt\` files by yourself. Keep the label of a storming
+   element short, about 12 Japanese characters or fewer (an event in the past tense, e.g. "注文が確定した"): every
+   sticky note is the same size, and a longer label is shrunk or cut short (\`dt check\` warns, S015). Put the
+   details in a \`///\` comment.
 4. ${scope}
 5. Run no command except \`dt check\`, and that only when you need its diagnostics to fix your edit: \`dt fmt\` and
    \`dt check\` are run on the workspace after your turn anyway. No network, no package installs, no git.
