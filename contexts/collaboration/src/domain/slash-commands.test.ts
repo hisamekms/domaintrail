@@ -33,17 +33,17 @@ describe('the commands and their IDs', () => {
         ]);
     });
 
-    test('the other commands: their type and who starts them', () => {
+    test('the other commands: their type and what they need', () => {
         // the work on a storming in its order (the flow, then its details), then the session's; the hint, of no prefix
         expect(SLASH_COMMAND_NAMES).toEqual(['es:exceptions', 'es:gaps', 'es:levels', 'es:names', 'es:recap', 'hint']);
-        const candidates = { type: 'candidates', reply: 'candidates', facilitatorOnly: true, needsStorming: true } as const;
+        const candidates = { type: 'candidates', reply: 'candidates', needsStorming: true } as const;
         expect(slashCommandOf('es:exceptions')).toEqual({ kind: 'EsExceptions', ...candidates });
         expect(slashCommandOf('es:gaps')).toEqual({ kind: 'EsGaps', ...candidates });
         expect(slashCommandOf('es:levels')).toEqual({ kind: 'EsLevels', ...candidates });
         expect(slashCommandOf('es:names')).toEqual({ kind: 'EsNames', ...candidates });
-        expect(slashCommandOf('es:recap')).toEqual({ kind: 'EsRecap', type: 'answer', reply: 'answer', facilitatorOnly: false, needsStorming: false });
+        expect(slashCommandOf('es:recap')).toEqual({ kind: 'EsRecap', type: 'answer', reply: 'answer', needsStorming: false });
         // anyone's, about the event storming and the modeling alike (no storming needed), answered in a shape of its own
-        expect(slashCommandOf('hint')).toEqual({ kind: 'Hint', type: 'answer', reply: 'next', facilitatorOnly: false, needsStorming: false });
+        expect(slashCommandOf('hint')).toEqual({ kind: 'Hint', type: 'answer', reply: 'next', needsStorming: false });
         expect(slashCommandName('Hint')).toBe('hint');
         // the former ID is no command any more (a stored one reads as a Hint: `legacy.ts`)
         expect(slashCommandOf('es:next')).toBeUndefined();

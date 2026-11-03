@@ -93,6 +93,7 @@ export interface Arbitraries {
     readonly BriefedInterview: fc.Arbitrary<Collaboration.BriefedInterview>;
     readonly ConfirmedInterview: fc.Arbitrary<Collaboration.ConfirmedInterview>;
     readonly StoppedInterview: fc.Arbitrary<Collaboration.StoppedInterview>;
+    readonly RejectedInterview: fc.Arbitrary<Collaboration.RejectedInterview>;
     readonly Interview: fc.Arbitrary<Collaboration.Interview>;
     readonly InterviewStarted: fc.Arbitrary<Collaboration.InterviewStarted>;
     readonly InterviewAnswered: fc.Arbitrary<Collaboration.InterviewAnswered>;
@@ -100,6 +101,7 @@ export interface Arbitraries {
     readonly InterviewBriefed: fc.Arbitrary<Collaboration.InterviewBriefed>;
     readonly InterviewConfirmed: fc.Arbitrary<Collaboration.InterviewConfirmed>;
     readonly InterviewStopped: fc.Arbitrary<Collaboration.InterviewStopped>;
+    readonly InterviewRejected: fc.Arbitrary<Collaboration.InterviewRejected>;
     readonly MarkId: fc.Arbitrary<Collaboration.MarkId>;
     readonly Emoji: fc.Arbitrary<Collaboration.Emoji>;
     readonly MarkSign: fc.Arbitrary<Collaboration.MarkSign>;
@@ -227,8 +229,8 @@ export interface Examples {
         readonly commands?: { readonly start?: readonly Parameters<Collaboration.SlashCommandCommands['start']>[]; readonly list?: readonly Parameters<Collaboration.SlashCommandCommands['list']>[]; readonly answer?: readonly Parameters<Collaboration.SlashCommandCommands['answer']>[]; readonly apply?: readonly Parameters<Collaboration.SlashCommandCommands['apply']>[]; readonly stop?: readonly Parameters<Collaboration.SlashCommandCommands['stop']>[] };
     };
     readonly Interview?: {
-        readonly states?: { readonly Asking?: readonly Collaboration.AskingInterview[]; readonly Briefed?: readonly Collaboration.BriefedInterview[]; readonly Confirmed?: readonly Collaboration.ConfirmedInterview[]; readonly Stopped?: readonly Collaboration.StoppedInterview[] };
-        readonly commands?: { readonly start?: readonly Parameters<Collaboration.InterviewCommands['start']>[]; readonly hear?: readonly Parameters<Collaboration.InterviewCommands['hear']>[]; readonly ask?: readonly Parameters<Collaboration.InterviewCommands['ask']>[]; readonly summarize?: readonly Parameters<Collaboration.InterviewCommands['summarize']>[]; readonly confirm?: readonly Parameters<Collaboration.InterviewCommands['confirm']>[]; readonly stop?: readonly Parameters<Collaboration.InterviewCommands['stop']>[] };
+        readonly states?: { readonly Asking?: readonly Collaboration.AskingInterview[]; readonly Briefed?: readonly Collaboration.BriefedInterview[]; readonly Confirmed?: readonly Collaboration.ConfirmedInterview[]; readonly Stopped?: readonly Collaboration.StoppedInterview[]; readonly Rejected?: readonly Collaboration.RejectedInterview[] };
+        readonly commands?: { readonly start?: readonly Parameters<Collaboration.InterviewCommands['start']>[]; readonly hear?: readonly Parameters<Collaboration.InterviewCommands['hear']>[]; readonly ask?: readonly Parameters<Collaboration.InterviewCommands['ask']>[]; readonly summarize?: readonly Parameters<Collaboration.InterviewCommands['summarize']>[]; readonly confirm?: readonly Parameters<Collaboration.InterviewCommands['confirm']>[]; readonly reject?: readonly Parameters<Collaboration.InterviewCommands['reject']>[]; readonly stop?: readonly Parameters<Collaboration.InterviewCommands['stop']>[] };
     };
     readonly Mark?: {
         readonly states?: { readonly Placed?: readonly Collaboration.PlacedMark[]; readonly Removed?: readonly Collaboration.RemovedMark[] };
@@ -344,14 +346,14 @@ export function arbitraries(options: Options = {}): Arbitraries {
         CandidatesInstruction: () => given.CandidatesInstruction ?? testing.cast<Collaboration.CandidatesInstruction>(fc.record({ command: a.SlashCommandId, kind: a.SlashCommandKind, scope: a.StormingName, chosen: testing.many(a.CommandCandidate, 1, 20) }, { requiredKeys: ['command', 'kind', 'chosen'] })),
         WorkingSlashCommand: () => testing.withExamples(given.WorkingSlashCommand ?? testing.cast<Collaboration.WorkingSlashCommand>(fc.record({ state: fc.constant('Working' as const), id: a.SlashCommandId, session: a.SessionId, kind: a.SlashCommandKind, startedBy: a.ParticipantId, opening: a.RequestId, scope: a.StormingName, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'kind', 'startedBy', 'opening', 'language', 'startedAt'] })), options.examples?.SlashCommand?.states?.Working, () => [], 'Collaboration.WorkingSlashCommand'),
         ListedSlashCommand: () => testing.withExamples(given.ListedSlashCommand ?? testing.cast<Collaboration.ListedSlashCommand>(fc.record({ state: fc.constant('Listed' as const), id: a.SlashCommandId, session: a.SessionId, kind: a.SlashCommandKind, startedBy: a.ParticipantId, opening: a.RequestId, scope: a.StormingName, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), candidates: testing.many(a.CommandCandidate, 0, 20), listedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'kind', 'startedBy', 'opening', 'language', 'startedAt', 'candidates', 'listedAt'] })), options.examples?.SlashCommand?.states?.Listed, () => [], 'Collaboration.ListedSlashCommand'),
-        AppliedSlashCommand: () => testing.withExamples(given.AppliedSlashCommand ?? testing.cast<Collaboration.AppliedSlashCommand>(fc.record({ state: fc.constant('Applied' as const), id: a.SlashCommandId, session: a.SessionId, kind: a.SlashCommandKind, startedBy: a.ParticipantId, opening: a.RequestId, scope: a.StormingName, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), candidates: testing.many(a.CommandCandidate, 0, 20), chosen: testing.many(a.CandidateIndex, 1, 20), appliedAt: testing.cast<Date>(scalar.Timestamp), run: a.AgentRunId }, { requiredKeys: ['state', 'id', 'session', 'kind', 'startedBy', 'opening', 'language', 'startedAt', 'candidates', 'chosen', 'appliedAt', 'run'] })), options.examples?.SlashCommand?.states?.Applied, () => [], 'Collaboration.AppliedSlashCommand'),
+        AppliedSlashCommand: () => testing.withExamples(given.AppliedSlashCommand ?? testing.cast<Collaboration.AppliedSlashCommand>(fc.record({ state: fc.constant('Applied' as const), id: a.SlashCommandId, session: a.SessionId, kind: a.SlashCommandKind, startedBy: a.ParticipantId, opening: a.RequestId, scope: a.StormingName, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), candidates: testing.many(a.CommandCandidate, 0, 20), chosen: testing.many(a.CandidateIndex, 1, 20), appliedBy: a.ParticipantId, appliedAt: testing.cast<Date>(scalar.Timestamp), run: a.AgentRunId }, { requiredKeys: ['state', 'id', 'session', 'kind', 'startedBy', 'opening', 'language', 'startedAt', 'candidates', 'chosen', 'appliedAt', 'run'] })), options.examples?.SlashCommand?.states?.Applied, () => [], 'Collaboration.AppliedSlashCommand'),
         AnsweredSlashCommand: () => testing.withExamples(given.AnsweredSlashCommand ?? testing.cast<Collaboration.AnsweredSlashCommand>(fc.record({ state: fc.constant('Answered' as const), id: a.SlashCommandId, session: a.SessionId, kind: a.SlashCommandKind, startedBy: a.ParticipantId, opening: a.RequestId, scope: a.StormingName, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), answer: a.RequestId, next: a.NextAnswer, answeredAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'kind', 'startedBy', 'opening', 'language', 'startedAt', 'answer', 'answeredAt'] })), options.examples?.SlashCommand?.states?.Answered, () => [], 'Collaboration.AnsweredSlashCommand'),
         StoppedSlashCommand: () => testing.withExamples(given.StoppedSlashCommand ?? testing.cast<Collaboration.StoppedSlashCommand>(fc.record({ state: fc.constant('Stopped' as const), id: a.SlashCommandId, session: a.SessionId, kind: a.SlashCommandKind, startedBy: a.ParticipantId, opening: a.RequestId, scope: a.StormingName, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), stoppedBy: a.ParticipantId, stoppedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'kind', 'startedBy', 'opening', 'language', 'startedAt', 'stoppedBy', 'stoppedAt'] })), options.examples?.SlashCommand?.states?.Stopped, () => [], 'Collaboration.StoppedSlashCommand'),
         SlashCommand: () => given.SlashCommand ?? fc.oneof(a.WorkingSlashCommand, a.ListedSlashCommand, a.AppliedSlashCommand, a.AnsweredSlashCommand, a.StoppedSlashCommand),
         SlashCommandStarted: () => given.SlashCommandStarted ?? testing.cast<Collaboration.SlashCommandStarted>(fc.record({ type: fc.constant('SlashCommandStarted' as const), commandId: a.SlashCommandId, session: a.SessionId, kind: a.SlashCommandKind, startedBy: a.ParticipantId, opening: a.RequestId, scope: a.StormingName, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'commandId', 'session', 'kind', 'startedBy', 'opening', 'language', 'startedAt'] })),
         CandidatesListed: () => given.CandidatesListed ?? testing.cast<Collaboration.CandidatesListed>(fc.record({ type: fc.constant('CandidatesListed' as const), commandId: a.SlashCommandId, candidates: testing.many(a.CommandCandidate, 0, 20), listedAt: testing.cast<Date>(scalar.Timestamp) })),
         SlashCommandAnswered: () => given.SlashCommandAnswered ?? testing.cast<Collaboration.SlashCommandAnswered>(fc.record({ type: fc.constant('SlashCommandAnswered' as const), commandId: a.SlashCommandId, answer: a.RequestId, next: a.NextAnswer, answeredAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'commandId', 'answer', 'answeredAt'] })),
-        CandidatesApplied: () => given.CandidatesApplied ?? testing.cast<Collaboration.CandidatesApplied>(fc.record({ type: fc.constant('CandidatesApplied' as const), commandId: a.SlashCommandId, chosen: testing.many(a.CandidateIndex, 1, 20), run: a.AgentRunId, appliedAt: testing.cast<Date>(scalar.Timestamp) })),
+        CandidatesApplied: () => given.CandidatesApplied ?? testing.cast<Collaboration.CandidatesApplied>(fc.record({ type: fc.constant('CandidatesApplied' as const), commandId: a.SlashCommandId, chosen: testing.many(a.CandidateIndex, 1, 20), appliedBy: a.ParticipantId, run: a.AgentRunId, appliedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'commandId', 'chosen', 'run', 'appliedAt'] })),
         SlashCommandStopped: () => given.SlashCommandStopped ?? testing.cast<Collaboration.SlashCommandStopped>(fc.record({ type: fc.constant('SlashCommandStopped' as const), commandId: a.SlashCommandId, stoppedBy: a.ParticipantId, stoppedAt: testing.cast<Date>(scalar.Timestamp) })),
         Text: () => testing.valid(given.Text ?? testing.collide(testing.cast<Collaboration.Text>(testing.base('String', { minLength: 1, maxLength: 20000 })), seed), (v) => Collaboration.checkText(v).length === 0, 'Collaboration.Text'),
         LineNumber: () => testing.valid(given.LineNumber ?? testing.collide(testing.cast<Collaboration.LineNumber>(testing.base('Int', { ge: 1 })), seed), (v) => Collaboration.checkLineNumber(v).length === 0, 'Collaboration.LineNumber'),
@@ -372,15 +374,17 @@ export function arbitraries(options: Options = {}): Arbitraries {
         BriefInstruction: () => given.BriefInstruction ?? testing.cast<Collaboration.BriefInstruction>(fc.record({ interview: a.InterviewId, command: a.InterviewCommand, brief: a.InterviewBrief })),
         AskingInterview: () => testing.withExamples(given.AskingInterview ?? testing.cast<Collaboration.AskingInterview>(fc.record({ state: fc.constant('Asking' as const), id: a.InterviewId, session: a.SessionId, command: a.InterviewCommand, startedBy: a.ParticipantId, opening: a.RequestId, focus: a.ModelTarget, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), awaiting: a.RequestId, asked: a.AskedQuestion }, { requiredKeys: ['state', 'id', 'session', 'command', 'startedBy', 'opening', 'language', 'startedAt'] })), options.examples?.Interview?.states?.Asking, () => [], 'Collaboration.AskingInterview'),
         BriefedInterview: () => testing.withExamples(given.BriefedInterview ?? testing.cast<Collaboration.BriefedInterview>(fc.record({ state: fc.constant('Briefed' as const), id: a.InterviewId, session: a.SessionId, command: a.InterviewCommand, startedBy: a.ParticipantId, opening: a.RequestId, focus: a.ModelTarget, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), brief: a.InterviewBrief, answered: a.RequestId, briefedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'command', 'startedBy', 'opening', 'language', 'startedAt', 'brief', 'answered', 'briefedAt'] })), options.examples?.Interview?.states?.Briefed, () => [], 'Collaboration.BriefedInterview'),
-        ConfirmedInterview: () => testing.withExamples(given.ConfirmedInterview ?? testing.cast<Collaboration.ConfirmedInterview>(fc.record({ state: fc.constant('Confirmed' as const), id: a.InterviewId, session: a.SessionId, command: a.InterviewCommand, startedBy: a.ParticipantId, opening: a.RequestId, focus: a.ModelTarget, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), brief: a.InterviewBrief, edited: testing.cast<boolean>(scalar.Bool), confirmedAt: testing.cast<Date>(scalar.Timestamp), run: a.AgentRunId }, { requiredKeys: ['state', 'id', 'session', 'command', 'startedBy', 'opening', 'language', 'startedAt', 'brief', 'edited', 'confirmedAt', 'run'] })), options.examples?.Interview?.states?.Confirmed, () => [], 'Collaboration.ConfirmedInterview'),
+        ConfirmedInterview: () => testing.withExamples(given.ConfirmedInterview ?? testing.cast<Collaboration.ConfirmedInterview>(fc.record({ state: fc.constant('Confirmed' as const), id: a.InterviewId, session: a.SessionId, command: a.InterviewCommand, startedBy: a.ParticipantId, opening: a.RequestId, focus: a.ModelTarget, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), brief: a.InterviewBrief, edited: testing.cast<boolean>(scalar.Bool), confirmedBy: a.ParticipantId, confirmedAt: testing.cast<Date>(scalar.Timestamp), run: a.AgentRunId }, { requiredKeys: ['state', 'id', 'session', 'command', 'startedBy', 'opening', 'language', 'startedAt', 'brief', 'edited', 'confirmedAt', 'run'] })), options.examples?.Interview?.states?.Confirmed, () => [], 'Collaboration.ConfirmedInterview'),
         StoppedInterview: () => testing.withExamples(given.StoppedInterview ?? testing.cast<Collaboration.StoppedInterview>(fc.record({ state: fc.constant('Stopped' as const), id: a.InterviewId, session: a.SessionId, command: a.InterviewCommand, startedBy: a.ParticipantId, opening: a.RequestId, focus: a.ModelTarget, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), stoppedBy: a.ParticipantId, stoppedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'command', 'startedBy', 'opening', 'language', 'startedAt', 'stoppedBy', 'stoppedAt'] })), options.examples?.Interview?.states?.Stopped, () => [], 'Collaboration.StoppedInterview'),
-        Interview: () => given.Interview ?? fc.oneof(a.AskingInterview, a.BriefedInterview, a.ConfirmedInterview, a.StoppedInterview),
+        RejectedInterview: () => testing.withExamples(given.RejectedInterview ?? testing.cast<Collaboration.RejectedInterview>(fc.record({ state: fc.constant('Rejected' as const), id: a.InterviewId, session: a.SessionId, command: a.InterviewCommand, startedBy: a.ParticipantId, opening: a.RequestId, focus: a.ModelTarget, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), brief: a.InterviewBrief, rejectedBy: a.ParticipantId, note: a.Text, rejectedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'command', 'startedBy', 'opening', 'language', 'startedAt', 'brief', 'rejectedBy', 'rejectedAt'] })), options.examples?.Interview?.states?.Rejected, () => [], 'Collaboration.RejectedInterview'),
+        Interview: () => given.Interview ?? fc.oneof(a.AskingInterview, a.BriefedInterview, a.ConfirmedInterview, a.StoppedInterview, a.RejectedInterview),
         InterviewStarted: () => given.InterviewStarted ?? testing.cast<Collaboration.InterviewStarted>(fc.record({ type: fc.constant('InterviewStarted' as const), interviewId: a.InterviewId, session: a.SessionId, command: a.InterviewCommand, startedBy: a.ParticipantId, opening: a.RequestId, focus: a.ModelTarget, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'interviewId', 'session', 'command', 'startedBy', 'opening', 'language', 'startedAt'] })),
         InterviewAnswered: () => given.InterviewAnswered ?? testing.cast<Collaboration.InterviewAnswered>(fc.record({ type: fc.constant('InterviewAnswered' as const), interviewId: a.InterviewId, message: a.RequestId, heardAt: testing.cast<Date>(scalar.Timestamp) })),
         InterviewQuestionAsked: () => given.InterviewQuestionAsked ?? testing.cast<Collaboration.InterviewQuestionAsked>(fc.record({ type: fc.constant('InterviewQuestionAsked' as const), interviewId: a.InterviewId, question: a.RequestId, choices: testing.many(a.AnswerChoice, 0, 6), multiple: testing.cast<boolean>(scalar.Bool), askedAt: testing.cast<Date>(scalar.Timestamp) })),
         InterviewBriefed: () => given.InterviewBriefed ?? testing.cast<Collaboration.InterviewBriefed>(fc.record({ type: fc.constant('InterviewBriefed' as const), interviewId: a.InterviewId, brief: a.InterviewBrief, answered: a.RequestId, briefedAt: testing.cast<Date>(scalar.Timestamp) })),
-        InterviewConfirmed: () => given.InterviewConfirmed ?? testing.cast<Collaboration.InterviewConfirmed>(fc.record({ type: fc.constant('InterviewConfirmed' as const), interviewId: a.InterviewId, brief: a.InterviewBrief, edited: testing.cast<boolean>(scalar.Bool), run: a.AgentRunId, confirmedAt: testing.cast<Date>(scalar.Timestamp) })),
+        InterviewConfirmed: () => given.InterviewConfirmed ?? testing.cast<Collaboration.InterviewConfirmed>(fc.record({ type: fc.constant('InterviewConfirmed' as const), interviewId: a.InterviewId, brief: a.InterviewBrief, edited: testing.cast<boolean>(scalar.Bool), confirmedBy: a.ParticipantId, run: a.AgentRunId, confirmedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'interviewId', 'brief', 'edited', 'run', 'confirmedAt'] })),
         InterviewStopped: () => given.InterviewStopped ?? testing.cast<Collaboration.InterviewStopped>(fc.record({ type: fc.constant('InterviewStopped' as const), interviewId: a.InterviewId, stoppedBy: a.ParticipantId, stoppedAt: testing.cast<Date>(scalar.Timestamp) })),
+        InterviewRejected: () => given.InterviewRejected ?? testing.cast<Collaboration.InterviewRejected>(fc.record({ type: fc.constant('InterviewRejected' as const), interviewId: a.InterviewId, rejectedBy: a.ParticipantId, note: a.Text, rejectedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'interviewId', 'rejectedBy', 'rejectedAt'] })),
         MarkId: () => testing.valid(given.MarkId ?? testing.collide(testing.cast<Collaboration.MarkId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkMarkId(v).length === 0, 'Collaboration.MarkId'),
         Emoji: () => testing.valid(given.Emoji ?? testing.collide(testing.cast<Collaboration.Emoji>(testing.base('String', { minLength: 1, maxLength: 64 })), seed), (v) => Collaboration.checkEmojiWith(testing.declared<Collaboration.EmojiDeclaredChecks>(['singleEmoji'], declared.Emoji))(v).length === 0, 'Collaboration.Emoji'),
         MarkSign: () => given.MarkSign ?? testing.cast<Collaboration.MarkSign>(fc.oneof(fc.record({ kind: fc.constant('Vote' as const) }), fc.record({ kind: fc.constant('Reaction' as const), emoji: a.Emoji }))),
@@ -1022,12 +1026,11 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'SlashCommand.start',
                 run: impl.SlashCommand.start,
-                input: () => fc.tuple(fc.record({ id: a.SlashCommandId, session: a.ActiveSession, kind: a.SlashCommandKind, facilitatorOnly: testing.cast<boolean>(scalar.Bool), startedBy: a.ParticipantId, startedByRole: a.ParticipantRole, opening: a.RequestId, scope: a.StormingName, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['id', 'session', 'kind', 'facilitatorOnly', 'startedBy', 'startedByRole', 'opening', 'language', 'startedAt'] })),
+                input: () => fc.tuple(fc.record({ id: a.SlashCommandId, session: a.ActiveSession, kind: a.SlashCommandKind, startedBy: a.ParticipantId, opening: a.RequestId, scope: a.StormingName, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['id', 'session', 'kind', 'startedBy', 'opening', 'language', 'startedAt'] })),
                 examples: options.examples?.SlashCommand?.commands?.start ?? [],
                 factory: true,
-                requires: [{ name: 'facilitatorStarts', error: 'FacilitatorOnly' }],
+                requires: [],
                 declaredRequires: [],
-                firstFailing: () => Collaboration.checkStartSlashCommandRequires,
                 declaredInvariants: [],
                 stateful: true,
                 counted: [],
@@ -1059,10 +1062,10 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'SlashCommand.apply',
                 run: impl.SlashCommand.apply,
-                input: () => fc.tuple(fc.oneof(a.ListedSlashCommand), fc.record({ appliedBy: a.ParticipantId, chosen: testing.many(a.CandidateIndex, 1, 20), run: a.AgentRunId, appliedAt: testing.cast<Date>(scalar.Timestamp) })),
+                input: () => fc.tuple(fc.oneof(a.ListedSlashCommand), fc.record({ appliedBy: a.ParticipantId, appliedByRole: a.ParticipantRole, chosen: testing.many(a.CandidateIndex, 1, 20), run: a.AgentRunId, appliedAt: testing.cast<Date>(scalar.Timestamp) })),
                 examples: options.examples?.SlashCommand?.commands?.apply ?? [],
                 factory: false,
-                requires: [{ name: 'starterApplies', error: 'NotTheStarter' }, { name: 'chosenOfList', error: 'NoSuchCandidate' }],
+                requires: [{ name: 'facilitatorApplies', error: 'FacilitatorOnly' }, { name: 'chosenOfList', error: 'NoSuchCandidate' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkApplySlashCommandRequires,
                 declaredInvariants: [],
@@ -1072,10 +1075,10 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'SlashCommand.stop',
                 run: impl.SlashCommand.stop,
-                input: () => fc.tuple(fc.oneof(a.WorkingSlashCommand, a.ListedSlashCommand), fc.record({ stoppedBy: a.ParticipantId, stoppedAt: testing.cast<Date>(scalar.Timestamp) })),
+                input: () => fc.tuple(fc.oneof(a.WorkingSlashCommand, a.ListedSlashCommand), fc.record({ stoppedBy: a.ParticipantId, stoppedByRole: a.ParticipantRole, stoppedAt: testing.cast<Date>(scalar.Timestamp) })),
                 examples: options.examples?.SlashCommand?.commands?.stop ?? [],
                 factory: false,
-                requires: [{ name: 'starterStops', error: 'NotTheStarter' }],
+                requires: [{ name: 'starterOrFacilitatorStops', error: 'NotTheStarter' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkStopSlashCommandRequires,
                 declaredInvariants: [],
@@ -1087,12 +1090,11 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Interview.start',
                 run: impl.Interview.start,
-                input: () => fc.tuple(fc.record({ id: a.InterviewId, session: a.ActiveSession, command: a.InterviewCommand, startedBy: a.ParticipantId, startedByRole: a.ParticipantRole, opening: a.RequestId, focus: a.ModelTarget, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['id', 'session', 'command', 'startedBy', 'startedByRole', 'opening', 'language', 'startedAt'] })),
+                input: () => fc.tuple(fc.record({ id: a.InterviewId, session: a.ActiveSession, command: a.InterviewCommand, startedBy: a.ParticipantId, opening: a.RequestId, focus: a.ModelTarget, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['id', 'session', 'command', 'startedBy', 'opening', 'language', 'startedAt'] })),
                 examples: options.examples?.Interview?.commands?.start ?? [],
                 factory: true,
-                requires: [{ name: 'facilitatorStarts', error: 'FacilitatorOnly' }],
+                requires: [],
                 declaredRequires: [],
-                firstFailing: () => Collaboration.checkStartInterviewRequires,
                 declaredInvariants: [],
                 stateful: true,
                 counted: [],
@@ -1138,10 +1140,10 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Interview.confirm',
                 run: impl.Interview.confirm,
-                input: () => fc.tuple(fc.oneof(a.BriefedInterview), fc.record({ confirmedBy: a.ParticipantId, confirmedBrief: a.InterviewBrief, edited: testing.cast<boolean>(scalar.Bool), run: a.AgentRunId, confirmedAt: testing.cast<Date>(scalar.Timestamp) })),
+                input: () => fc.tuple(fc.oneof(a.BriefedInterview), fc.record({ confirmedBy: a.ParticipantId, confirmedByRole: a.ParticipantRole, confirmedBrief: a.InterviewBrief, edited: testing.cast<boolean>(scalar.Bool), run: a.AgentRunId, confirmedAt: testing.cast<Date>(scalar.Timestamp) })),
                 examples: options.examples?.Interview?.commands?.confirm ?? [],
                 factory: false,
-                requires: [{ name: 'starterConfirms', error: 'NotTheInterviewer' }],
+                requires: [{ name: 'facilitatorConfirms', error: 'FacilitatorOnly' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkConfirmInterviewRequires,
                 declaredInvariants: [],
@@ -1149,12 +1151,25 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 counted: [],
             }, options),
             ...testing.commandCases({
+                name: 'Interview.reject',
+                run: impl.Interview.reject,
+                input: () => fc.tuple(fc.oneof(a.BriefedInterview), fc.record({ rejectedBy: a.ParticipantId, rejectedByRole: a.ParticipantRole, note: a.Text, rejectedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['rejectedBy', 'rejectedByRole', 'rejectedAt'] })),
+                examples: options.examples?.Interview?.commands?.reject ?? [],
+                factory: false,
+                requires: [{ name: 'facilitatorRejects', error: 'FacilitatorOnly' }],
+                declaredRequires: [],
+                firstFailing: () => Collaboration.checkRejectInterviewRequires,
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
                 name: 'Interview.stop',
                 run: impl.Interview.stop,
-                input: () => fc.tuple(fc.oneof(a.AskingInterview, a.BriefedInterview), fc.record({ stoppedBy: a.ParticipantId, stoppedAt: testing.cast<Date>(scalar.Timestamp) })),
+                input: () => fc.tuple(fc.oneof(a.AskingInterview, a.BriefedInterview), fc.record({ stoppedBy: a.ParticipantId, stoppedByRole: a.ParticipantRole, stoppedAt: testing.cast<Date>(scalar.Timestamp) })),
                 examples: options.examples?.Interview?.commands?.stop ?? [],
                 factory: false,
-                requires: [{ name: 'starterStops', error: 'NotTheInterviewer' }],
+                requires: [{ name: 'starterOrFacilitatorStops', error: 'NotTheInterviewer' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkStopInterviewRequires,
                 declaredInvariants: [],

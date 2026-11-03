@@ -1,7 +1,8 @@
 // The interviews of the `/` commands (the plan's "`/` commands: ways of working with the AI", round 5): `/es:start`
 // starts an event storming, `/model:start` the modeling of a context. The AI (the answerer role, read-only) asks one question at a time
-// and ends with a brief — four or five lines with conventional heads — that the person who started it confirms (as is
-// or edited) or drops; confirmed, a run writes it as the `///` description right above the `storming` or the `context`.
+// and ends with a brief — four or five lines with conventional heads — that the facilitator confirms (as is or edited:
+// for an interview a participant started, that is the approval) or rejects, or its starter drops; confirmed, a run writes
+// it as the `///` description right above the `storming` or the `context`.
 // While an interview runs, its starter's messages go to it without triage (`interviewOf` in the use cases).
 //
 // Here: the commands' decisions, the stable English IDs of the commands, the interviewer's output (a question or a
@@ -66,10 +67,11 @@ export function runningInterview(interviews: readonly Collaboration.Interview[])
 /** The message an interview waits for the interviewer to answer: its job is due (none once it asked or briefed). */
 export const awaitedMessage = (i: Collaboration.Interview): Collaboration.RequestId | undefined => (i.state === 'Asking' ? i.awaiting : undefined);
 
-/** When an interview ended (confirmed or stopped), if it did. */
+/** When an interview ended (confirmed, stopped or rejected), if it did. */
 function endedAt(i: Collaboration.Interview): Date | undefined {
     if (i.state === 'Confirmed') return i.confirmedAt;
     if (i.state === 'Stopped') return i.stoppedAt;
+    if (i.state === 'Rejected') return i.rejectedAt;
     return undefined;
 }
 
@@ -344,7 +346,6 @@ export function interviewerJsonSchema(): Record<string, unknown> {
 
 export const interviewCommands: Collaboration.InterviewCommands = {
     start: decide<Collaboration.StartInterviewDecision>(Collaboration.InterviewShape, (params) => {
-        if (Collaboration.checkStartInterviewRequires(params) === 'facilitatorStarts') return err({ type: 'FacilitatorOnly' });
         const { id, command, startedBy, opening, focus, language, startedAt } = params;
         // the session without its evidence: the aggregate stores the base type
         const session: Collaboration.SessionId = params.session;
@@ -423,14 +424,35 @@ export const interviewCommands: Collaboration.InterviewCommands = {
 
     confirm: decide<Collaboration.ConfirmInterviewDecision>(Collaboration.InterviewShape, {
         Briefed: (interview, params) => {
-            if (Collaboration.checkConfirmInterviewRequires(interview, params) === 'starterConfirms') return err({ type: 'NotTheInterviewer' });
-            const { confirmedBrief, edited, run, confirmedAt } = params;
+            if (Collaboration.checkConfirmInterviewRequires(interview, params) === 'facilitatorConfirms') return err({ type: 'FacilitatorOnly' });
+            const { confirmedBy, confirmedBrief, edited, run, confirmedAt } = params;
             return ok({
                 Confirmed: {
-                    set: { brief: confirmedBrief, edited, run, confirmedAt },
+                    set: { brief: confirmedBrief, edited, confirmedBy, run, confirmedAt },
                     events: {
-                        InterviewConfirmed: { type: 'InterviewConfirmed', interviewId: interview.id, brief: confirmedBrief, edited, run, confirmedAt },
+                        InterviewConfirmed: {
+                            type: 'InterviewConfirmed',
+                            interviewId: interview.id,
+                            brief: confirmedBrief,
+                            edited,
+                            confirmedBy,
+                            run,
+                            confirmedAt,
+                        },
                     },
+                },
+            });
+        },
+    }),
+
+    reject: decide<Collaboration.RejectInterviewDecision>(Collaboration.InterviewShape, {
+        Briefed: (interview, params) => {
+            if (Collaboration.checkRejectInterviewRequires(interview, params) === 'facilitatorRejects') return err({ type: 'FacilitatorOnly' });
+            const { rejectedBy, note, rejectedAt } = params;
+            return ok({
+                Rejected: {
+                    set: { rejectedBy, note, rejectedAt },
+                    events: { InterviewRejected: { type: 'InterviewRejected', interviewId: interview.id, rejectedBy, ...(note && { note }), rejectedAt } },
                 },
             });
         },
@@ -454,7 +476,7 @@ function stopped(
     },
     Collaboration.NotTheInterviewer
 > {
-    if (Collaboration.checkStopInterviewRequires(interview, params) === 'starterStops') return err({ type: 'NotTheInterviewer' });
+    if (Collaboration.checkStopInterviewRequires(interview, params) === 'starterOrFacilitatorStops') return err({ type: 'NotTheInterviewer' });
     const { stoppedBy, stoppedAt } = params;
     return ok({
         Stopped: {

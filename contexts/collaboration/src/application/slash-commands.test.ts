@@ -23,8 +23,10 @@ const error = <T, E>(r: Result<T, E>): E => {
 const text = (t: string): C.Text => value(C.makeText(t));
 const facilitatorId = value(C.makeParticipantId('local:facilitator'));
 const bobId = value(C.makeParticipantId('dev:bob'));
+const carolId = value(C.makeParticipantId('dev:carol'));
 const facilitator: Actor = { kind: 'participant', participant: facilitatorId, role: 'Facilitator' };
 const bob: Actor = { kind: 'participant', participant: bobId, role: 'Participant' };
+const carol: Actor = { kind: 'participant', participant: carolId, role: 'Participant' };
 const name = value(C.makeDisplayName('Ada'));
 
 function collaboration(): { use: CollaborationUseCases; db: ReturnType<typeof openDatabase> } {
@@ -52,12 +54,13 @@ function collaboration(): { use: CollaborationUseCases; db: ReturnType<typeof op
     return { use: createCollaboration(deps), db };
 }
 
-/** A Collab session with Bob joined. */
-async function collab(): Promise<{ use: CollaborationUseCases; session: C.SessionId }> {
-    const { use } = collaboration();
+/** A Collab session with Bob and Carol joined. */
+async function collab(): Promise<{ use: CollaborationUseCases; session: C.SessionId; db: ReturnType<typeof openDatabase> }> {
+    const { use, db } = collaboration();
     const opened = value(await use.openSession({ mode: 'Collab', facilitator: facilitatorId, name }));
     value(await use.joinSession({ session: opened.session.id, participant: bobId, name: value(C.makeDisplayName('Bob')) }));
-    return { use, session: opened.session.id };
+    value(await use.joinSession({ session: opened.session.id, participant: carolId, name: value(C.makeDisplayName('Carol')) }));
+    return { use, session: opened.session.id, db };
 }
 
 async function solo(): Promise<{ use: CollaborationUseCases; session: C.SessionId; db: ReturnType<typeof openDatabase> }> {
@@ -88,7 +91,7 @@ const candidate = (label: string): C.CommandCandidate => ({
 });
 
 describe('candidate commands', () => {
-    test('start: the opening message without triage, its job due, about the storming in view; one of a kind; Collab: the facilitator only', async () => {
+    test('start: the opening message without triage, its job due, about the storming in view; one of a kind; Collab: anyone', async () => {
         const { use, session } = await solo();
         const started = value(await start(use, session));
         expect(started.request).toMatchObject({ author: facilitatorId, body: '例外を洗い出す', viewedAt: inView });
@@ -98,9 +101,8 @@ describe('candidate commands', () => {
         expect(error(await start(use, session))).toEqual({ type: 'CommandAlreadyRunning' });
 
         const c = await collab();
-        expect(error(await start(c.use, c.session, bob))).toEqual({ type: 'FacilitatorOnly' });
-        expect(value(await c.use.sessionState({ session: c.session })).requests).toEqual([]);
-        value(await start(c.use, c.session));
+        expect(value(await start(c.use, c.session, bob)).command).toMatchObject({ state: 'Working', startedBy: bobId });
+        expect(error(await start(c.use, c.session))).toEqual({ type: 'CommandAlreadyRunning' });
     });
 
     test('no storming in view: no candidates at once, no job; its starter closes it', async () => {
@@ -112,7 +114,7 @@ describe('candidate commands', () => {
         expect(value(await use.stopCommand({ command: started.command.id, actor: facilitator }))).toMatchObject({ state: 'Stopped' });
     });
 
-    test('listed, then a subset applied: one run on the opening whose input carries the chosen; the starter only', async () => {
+    test('listed, then a subset applied: one run on the opening whose input carries the chosen; the facilitator only', async () => {
         const { use, session } = await collab();
         const started = value(await start(use, session));
         const id = started.command.id;
@@ -120,11 +122,11 @@ describe('candidate commands', () => {
         const listed = value(await use.listCandidates({ command: id, candidates: ['A', 'B', 'C'].map(candidate) }));
         expect(listed).toMatchObject({ state: 'Listed' });
         expect(value(await use.commandJobs({ session }))).toEqual([]);
-        expect(error(await use.applyCandidates({ command: id, actor: bob, chosen: [0] }))).toEqual({ type: 'NotTheStarter' });
+        expect(error(await use.applyCandidates({ command: id, actor: bob, chosen: [0] }))).toEqual({ type: 'FacilitatorOnly' });
         expect(error(await use.applyCandidates({ command: id, actor: facilitator, chosen: [3] }))).toEqual({ type: 'NoSuchCandidate' });
         expect(error(await use.applyCandidates({ command: id, actor: facilitator, chosen: [] }))).toEqual({ type: 'NoSuchCandidate' });
         const applied = value(await use.applyCandidates({ command: id, actor: facilitator, chosen: [2, 0, 2] }));
-        expect(applied.command).toMatchObject({ state: 'Applied', chosen: [0, 2], run: applied.run.id });
+        expect(applied.command).toMatchObject({ state: 'Applied', chosen: [0, 2], appliedBy: facilitatorId, run: applied.run.id });
         expect(applied.run.input.requests.map((r) => r.request)).toEqual([started.request.id]);
         expect(applied.run.input.candidates as unknown).toEqual({
             command: id,
@@ -140,7 +142,7 @@ describe('candidate commands', () => {
         value(await start(use, session));
     });
 
-    test('stop (the starter only) while the AI works; a reload reads it back; the session so far tells what is open', async () => {
+    test('stop while the AI works; a reload reads it back; the session so far tells what is open', async () => {
         const { use, session, db } = await solo();
         const started = value(await start(use, session));
         expect(value(await use.sessionSoFar({ session })).open).toEqual([expect.stringContaining('The command /es:exceptions')]);
@@ -151,6 +153,34 @@ describe('candidate commands', () => {
         const again = await createUnitOfWork(db).transaction((s) => s.slashCommands.listBySession(session));
         expect(again.map((c) => c.state)).toEqual(['Stopped']);
         expect(value(await use.sessionState({ session })).slashCommands.map((c) => c.state)).toEqual(['Stopped']);
+    });
+});
+
+describe('a candidate command a participant started', () => {
+    test('only the facilitator applies it (the approval); the starter cannot; a reload reads who applied', async () => {
+        const { use, session, db } = await collab();
+        const started = value(await start(use, session, bob));
+        const id = started.command.id;
+        value(await use.listCandidates({ command: id, candidates: ['A', 'B'].map(candidate) }));
+        expect(value(await use.sessionSoFar({ session })).open).toContainEqual(expect.stringContaining("await the facilitator's choice"));
+        expect(error(await use.applyCandidates({ command: id, actor: bob, chosen: [0] }))).toEqual({ type: 'FacilitatorOnly' });
+        expect(error(await use.applyCandidates({ command: id, actor: carol, chosen: [0] }))).toEqual({ type: 'FacilitatorOnly' });
+        const applied = value(await use.applyCandidates({ command: id, actor: facilitator, chosen: [1] }));
+        expect(applied.command).toMatchObject({ state: 'Applied', startedBy: bobId, appliedBy: facilitatorId, chosen: [1] });
+        expect(applied.run).toMatchObject({ queuedBy: facilitatorId });
+        expect(value(await use.sessionSoFar({ session })).text).toContain('Ada applied 1 of the 2 candidates of /es:exceptions');
+        const back = await createUnitOfWork(db).transaction((s) => s.slashCommands.listBySession(session));
+        expect(back[0]).toMatchObject({ state: 'Applied', appliedBy: facilitatorId });
+    });
+
+    test('stop: its starter or the facilitator, no one else', async () => {
+        const { use, session } = await collab();
+        const first = value(await start(use, session, bob));
+        expect(error(await use.stopCommand({ command: first.command.id, actor: carol }))).toEqual({ type: 'NotTheStarter' });
+        expect(value(await use.stopCommand({ command: first.command.id, actor: facilitator }))).toMatchObject({ state: 'Stopped', stoppedBy: facilitatorId });
+        const second = value(await start(use, session, bob));
+        value(await use.listCandidates({ command: second.command.id, candidates: [candidate('A')] }));
+        expect(value(await use.stopCommand({ command: second.command.id, actor: bob }))).toMatchObject({ state: 'Stopped', stoppedBy: bobId });
     });
 });
 
@@ -205,13 +235,10 @@ describe('answer commands', () => {
 });
 
 describe('the candidate commands of phase 2', () => {
-    test("/es:gaps, /es:levels and /es:names: the facilitator's, about the storming in view, applied as /es:exceptions is", async () => {
+    test('/es:gaps, /es:levels and /es:names: anyone starts them, about the storming in view, applied as /es:exceptions is', async () => {
         for (const kind of ['EsGaps', 'EsLevels', 'EsNames'] as const) {
             const { use, session } = await collab();
-            expect(error(await use.startCommand({ session, actor: bob, kind, body: text('x'), language: 'Ja', viewedAt: inView }))).toEqual({
-                type: 'FacilitatorOnly',
-            });
-            const started = value(await use.startCommand({ session, actor: facilitator, kind, body: text('x'), language: 'Ja', viewedAt: inView }));
+            const started = value(await use.startCommand({ session, actor: bob, kind, body: text('x'), language: 'Ja', viewedAt: inView }));
             expect(started.command).toMatchObject({ state: 'Working', kind, scope: 'Orders' });
             value(await use.listCandidates({ command: started.command.id, candidates: [candidate('A')] }));
             const applied = value(await use.applyCandidates({ command: started.command.id, actor: facilitator, chosen: [0] }));
