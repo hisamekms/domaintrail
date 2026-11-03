@@ -12,6 +12,11 @@
 // root its repository ignores) the tree is walked with `ignores` (`GitIgnore` with the user's excludes file). Symbolic
 // links (the file or a directory above it) and special files are never copied; a file larger than `maxFileBytes` is
 // left out, and a workspace with more than `maxFiles` readable files is refused (as the scan of runs).
+//
+// On a case-insensitive file system (macOS by default) `.GIT/config` opens `.git/config`: the names of `NEVER` are
+// compared case-insensitively after NFC normalization (`neverName`), and a listed path is copied only when each of its
+// names is one `readdir` returns as is (the case comes from the file system, not from git's index). A directory holding
+// a `.git` (a nested repository, a submodule) is never walked into: git does not list its files either.
 import { constants } from 'node:fs';
 import { chmod, lstat, mkdir, mkdtemp, open, readdir, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -19,6 +24,24 @@ import * as path from 'node:path';
 
 /** Names never in the view, at any depth: as a directory or as a file (a submodule's `.git` is one). */
 const NEVER = new Set(['.domaintrail', '.git', 'node_modules']);
+
+/** A name as a case-insensitive file system may take it: NFC, lower case. */
+export const foldedName = (name: string): string => name.normalize('NFC').toLowerCase();
+
+/** Whether `name` is one of `NEVER` in any case or Unicode form. */
+const neverName = (name: string): boolean => NEVER.has(foldedName(name));
+
+/** Whether `name` is `.git` or `.domaintrail` (git's or ours) in any case or Unicode form: never given to the runner. */
+export const ownName = (name: string): boolean => {
+    const folded = foldedName(name);
+    return folded === '.git' || folded === '.domaintrail';
+};
+
+/** Whether the directory `dir` holds a `.git` (a nested repository, a submodule, a worktree), in any case. */
+async function holdsRepository(dir: string): Promise<boolean> {
+    const names = await readdir(dir).catch(() => [] as string[]);
+    return names.some((n) => foldedName(n) === '.git');
+}
 
 export interface WorkspaceViewOptions {
     readonly root: string;
@@ -47,7 +70,7 @@ export interface WorkspaceView {
 /** A listed path that stays below the root, names a file (no trailing `/`), and has no part in `NEVER`. */
 const listedFile = (p: string): boolean => {
     if (!p || p.endsWith('/') || path.isAbsolute(p) || /[\0]/.test(p)) return false;
-    return !p.split('/').some((s) => s === '' || s === '.' || s === '..' || NEVER.has(s));
+    return !p.split('/').some((s) => s === '' || s === '.' || s === '..' || neverName(s));
 };
 
 export function createWorkspaceView(options: WorkspaceViewOptions): WorkspaceView {
@@ -73,11 +96,11 @@ export function createWorkspaceView(options: WorkspaceViewOptions): WorkspaceVie
         const out: string[] = [];
         const walk = async (from: string, rel: string): Promise<void> => {
             for (const entry of await readdir(from, { withFileTypes: true })) {
-                if (NEVER.has(entry.name)) continue;
+                if (neverName(entry.name)) continue;
                 const full = path.join(from, entry.name);
                 const relPath = rel ? `${rel}/${entry.name}` : entry.name;
                 if (entry.isDirectory()) {
-                    if (!options.ignores?.(full, true)) await walk(full, relPath);
+                    if (!options.ignores?.(full, true) && !(await holdsRepository(full))) await walk(full, relPath);
                 } else if (entry.isFile() && !options.ignores?.(full, false)) out.push(relPath);
             }
         };
@@ -88,20 +111,40 @@ export function createWorkspaceView(options: WorkspaceViewOptions): WorkspaceVie
     const update = async (): Promise<string> => {
         const view = await make();
         const seen = new Set<string>();
-        /** Directories below the root known to be real ones (no link) during this refresh. */
+        /** The names in each directory below the root (relative), as `readdir` returns them, during this refresh. */
+        const names = new Map<string, Promise<ReadonlySet<string>>>();
+        const namesIn = (rel: string): Promise<ReadonlySet<string>> => {
+            let known = names.get(rel);
+            if (!known) {
+                known = readdir(path.join(root, ...rel.split('/').filter(Boolean)))
+                    .then((n) => new Set(n))
+                    .catch(() => new Set<string>());
+                names.set(rel, known);
+            }
+            return known;
+        };
+        /** Whether the last name of `rel` is in its directory exactly as written (its case from the file system). */
+        const onDisk = async (rel: string): Promise<boolean> => {
+            const at = rel.lastIndexOf('/');
+            return (await namesIn(at < 0 ? '' : rel.slice(0, at))).has(at < 0 ? rel : rel.slice(at + 1));
+        };
+        /** Directories below the root known to be real ones (no link), named as on disk, during this refresh. */
         const realDirs = new Map<string, boolean>();
         const realDir = async (rel: string): Promise<boolean> => {
             if (!rel) return true;
             const known = realDirs.get(rel);
             if (known !== undefined) return known;
             const parent = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
-            const ok = (await realDir(parent)) && ((await lstat(path.join(root, ...rel.split('/'))).catch(() => undefined))?.isDirectory() ?? false);
+            const ok =
+                (await realDir(parent)) &&
+                (await onDisk(rel)) &&
+                ((await lstat(path.join(root, ...rel.split('/'))).catch(() => undefined))?.isDirectory() ?? false);
             realDirs.set(rel, ok);
             return ok;
         };
         for (const relPath of await readable()) {
             const dirRel = relPath.includes('/') ? relPath.slice(0, relPath.lastIndexOf('/')) : '';
-            if (!(await realDir(dirRel))) continue;
+            if (!(await realDir(dirRel)) || !(await onDisk(relPath))) continue;
             const full = path.join(root, ...relPath.split('/'));
             const s = await lstat(full, { bigint: true }).catch(() => undefined);
             // regular files only: a link may point anywhere
@@ -162,34 +205,36 @@ export const MAX_IGNORED_ENTRIES = 500;
 
 /** Where the runner's ignored entries come from: git's list when it speaks for the root, else a walk with `ignores`. */
 export interface IgnoredSource {
-    /** The ignored entries, relative and `/`-separated (git's); `undefined`: git does not speak for the root. */
+    /**
+     * The nested repositories and submodules, then the ignored entries, relative and `/`-separated (git's); `undefined`:
+     * git does not speak for the root.
+     */
     readonly list?: () => Promise<readonly string[] | undefined>;
     readonly ignores: (absolutePath: string, directory: boolean) => boolean;
 }
 
 /**
  * The runner works in the workspace itself (it edits it), so what git ignores is kept from it by deny rules
- * (`deniedRules`): the topmost ignored files and directories present now (relative, `/`-separated; nothing below an
- * ignored directory, nor anything in `.domaintrail` and `.git`, which are always denied at any depth). Past
+ * (`deniedRules`): the nested repositories and submodules as a whole (git does not apply their own ignores for us), then
+ * the topmost ignored files and directories present now (relative, `/`-separated; nothing below an ignored directory,
+ * nor anything in `.domaintrail` and `.git`, in any case, which are always denied at any depth). Past
  * `MAX_IGNORED_ENTRIES`, the rest is left out (the ADR's residual risk).
  */
 export async function ignoredEntries(root: string, source: IgnoredSource): Promise<string[]> {
     const listed = await source.list?.();
     if (listed) {
-        return listed
-            .map((p) => p.replace(/\/$/, ''))
-            .filter((p) => p && !p.split('/').some((s) => s === '.git' || s === '.domaintrail'))
-            .slice(0, MAX_IGNORED_ENTRIES);
+        return [...new Set(listed.map((p) => p.replace(/\/$/, '')))].filter((p) => p && !p.split('/').some(ownName)).slice(0, MAX_IGNORED_ENTRIES);
     }
     const out: string[] = [];
     const walk = async (from: string, rel: string): Promise<void> => {
         for (const entry of await readdir(from, { withFileTypes: true })) {
             if (out.length >= MAX_IGNORED_ENTRIES) return;
-            if (entry.name === '.domaintrail' || entry.name === '.git') continue;
+            if (ownName(entry.name)) continue;
             const full = path.join(from, entry.name);
             const relPath = rel ? `${rel}/${entry.name}` : entry.name;
             const directory = entry.isDirectory();
-            if (source.ignores(full, directory)) {
+            // a nested repository or a submodule as a whole: its own ignores are not ours to read
+            if (source.ignores(full, directory) || (directory && (await holdsRepository(full)))) {
                 out.push(relPath);
                 continue;
             }

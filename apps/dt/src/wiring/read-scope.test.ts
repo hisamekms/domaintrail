@@ -2,7 +2,7 @@
 // answerer's view and the runner's deny list come from git itself, so a file the user ignores globally
 // (`core.excludesFile`) or in `.git/info/exclude` is out of the view and denied to the runner; a nested `.git` or
 // `.domaintrail` is never in the view; a workspace that is no git repository falls back to `GitIgnore` with the user's
-// excludes file.
+// excludes file. A nested repository or a submodule is out of the view and denied to the runner as a whole.
 import { afterEach, describe, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
@@ -82,16 +82,37 @@ describe('the read scope of the agents, as wired', () => {
         expect((await runnerDeniedPaths(root, env)).sort()).toEqual(['.env.local', 'dist', 'scratch.txt']);
     });
 
+    test("nested repositories and submodules: out of the view, and denied to the runner as a whole (their ignores are not git's for us)", async () => {
+        const root = await scratch();
+        const env = await userGit('');
+        const git = (cwd: string, ...args: string[]): string => execFileSync('git', args, { cwd, env, encoding: 'utf8' }).trim();
+        git(root, 'init', '-q');
+        await put(root, { 'README.md': 'r', 'vendor/lib/.gitignore': '.env\n', 'vendor/lib/.env': 'NESTED_ENV_CANARY', 'vendor/lib/a.md': 'a' });
+        // an untracked repository inside the workspace: git lists it as vendor/lib/ and does not descend
+        git(path.join(root, 'vendor', 'lib'), 'init', '-q');
+        // a submodule: a gitlink (mode 160000) in the index, its directory checked out with a .git file
+        await put(root, { 'mod/.git': 'gitdir: ../.git/modules/mod', 'mod/.env': 'SUBMODULE_ENV_CANARY', 'mod/b.md': 'b' });
+        git(root, 'update-index', '--add', '--cacheinfo', `160000,${'1'.repeat(40)},mod`);
+        const view = answererView(root, env);
+        try {
+            expect(await listed(await view.refresh())).toEqual(['README.md']);
+        } finally {
+            await view.dispose();
+        }
+        expect((await runnerDeniedPaths(root, env)).sort()).toEqual(['mod', 'vendor/lib']);
+    });
+
     test('no git repository: GitIgnore with the user excludes file; nested .git and .domaintrail never in the view', async () => {
         const root = await scratch();
         const env = await userGit('.env.local\n');
         await put(root, WORKSPACE);
         const view = answererView(root, env);
         try {
-            expect(await listed(await view.refresh())).toEqual(['.gitignore', 'README.md', 'scratch.txt', 'shop.dt', 'sub/notes.md']);
+            // sub/ and mod/ hold a .git: kept out as git keeps a nested repository out
+            expect(await listed(await view.refresh())).toEqual(['.gitignore', 'README.md', 'scratch.txt', 'shop.dt']);
         } finally {
             await view.dispose();
         }
-        expect((await runnerDeniedPaths(root, env)).sort()).toEqual(['.env.local', 'dist']);
+        expect((await runnerDeniedPaths(root, env)).sort()).toEqual(['.env.local', 'dist', 'mod', 'sub']);
     });
 });

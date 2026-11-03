@@ -43,7 +43,7 @@ import {
 import { type AgentCredential, readServerAddress } from '@domaintrail/collaboration';
 import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/analysis';
 import { SessionError } from '../cli/ports.js';
-import { findDomainFiles, GitIgnore, gitIgnoredEntries, gitReadableFiles } from '@domaintrail/workspace';
+import { findDomainFiles, GitIgnore, gitIgnoredEntries, gitNestedRepositories, gitReadableFiles } from '@domaintrail/workspace';
 import { processAlive } from './process.js';
 
 export type { SubscriberEnd };
@@ -288,13 +288,17 @@ export function answererView(root: string, env?: NodeJS.ProcessEnv): WorkspaceVi
 
 /**
  * What git ignores, kept from the runner (it works in the workspace itself) as deny rules, asked at each run's start:
- * git's list (`git ls-files -o -i --exclude-standard --directory`) where it speaks for the root, else a walk with
- * `GitIgnore` and the user's excludes file; at most `MAX_IGNORED_ENTRIES` (the ADR's residual risk).
+ * the nested repositories and submodules as a whole, then git's ignored entries (`git ls-files -o -i --exclude-standard
+ * --directory`) where it speaks for the root, else a walk with `GitIgnore` and the user's excludes file (a directory
+ * holding a `.git` denied as a whole); at most `MAX_IGNORED_ENTRIES` (the ADR's residual risk).
  */
 export function runnerDeniedPaths(root: string, env?: NodeJS.ProcessEnv): Promise<string[]> {
     let gitignore: GitIgnore | undefined;
     return ignoredEntries(root, {
-        list: () => gitIgnoredEntries(root, { env }),
+        list: async () => {
+            const [nested, ignored] = await Promise.all([gitNestedRepositories(root, { env }), gitIgnoredEntries(root, { env })]);
+            return nested && ignored && [...nested, ...ignored];
+        },
         ignores: (p, d) => (gitignore ??= new GitIgnore(root, { userExcludes: true, env })).ignores(p, d),
     });
 }

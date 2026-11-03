@@ -194,6 +194,20 @@ by an allow rule, so "deny all but git's list" cannot be said); the files of an 
 submodule are left out of the view, but the runner can read them, and their own ignores are not applied; Claude Code's
 own `git status` at a session's start shows the runner the names (not the contents) of untracked files.
 
+*As built after M4b* (a review of M4b): on a case-insensitive file system (macOS by default) `.GIT/config` opens
+`.git/config`, so `.git`, `.domaintrail` (and, for the view, `node_modules`) are recognised in any case and Unicode
+form (NFC, lower case) in git's lists and in the walks, and the view copies a listed file only when each name of its
+path is one `readdir` returns as is (the case comes from the file system, never from git's index). Claude Code's deny
+rules already hold for case variants on such a file system (measured with Claude Code 2.1.317 on macOS: `.GIT/x`,
+`.DomainTrail/x`, `.ENV` against a `.env` rule and `SUB/.env` against a `sub` rule were refused), so no rule is added
+for them. Nested repositories and submodules are denied to the runner **as a whole** — the gitlinks of the index (`git
+ls-files --stage`, mode 160000) and the untracked repositories git does not descend into (`git ls-files -o
+--exclude-standard`, a trailing `/`), first in the deny list; when git does not speak for the root, every directory
+holding a `.git` — since git applies none of their own ignores for the root's repository (a submodule's `.env` would
+otherwise be readable). They were already out of the view (git lists none of their files; the walk no longer descends
+into them). This replaces the residual risk above that the runner can read their files; a directory with a `.git` that
+is no valid repository is, to git, part of the root's and is treated as such.
+
 ### 11. The CLI and the config as built (M5)
 
 *Proposed* (M5; see the plan's "As built in M5"): `dt open`'s one person is bound to a secret only the launching user

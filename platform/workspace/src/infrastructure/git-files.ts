@@ -60,13 +60,18 @@ async function lsFiles(root: string, args: readonly string[], options: GitFilesO
         .filter((p) => p !== '');
 }
 
-/** Paths below the root that are git's own or ours (`.git`, `.domaintrail` at any depth): never listed. */
+/**
+ * Paths below the root that are git's own or ours (`.git`, `.domaintrail` at any depth): never listed. Compared in any
+ * case and Unicode form (NFC, lower case): on a case-insensitive file system `.GIT/config`, an index entry git may
+ * hold, opens `.git/config`.
+ */
 const OWN = new Set(['.git', '.domaintrail']);
+const own = (name: string): boolean => OWN.has(name.normalize('NFC').toLowerCase());
 
 /** A relative path git gave that stays below the root and is neither git's nor ours. */
 const listable = (p: string): boolean => {
     const parts = p.replace(/\/$/, '').split('/');
-    return !path.isAbsolute(p) && !parts.some((s) => s === '' || s === '.' || s === '..' || OWN.has(s));
+    return !path.isAbsolute(p) && !parts.some((s) => s === '' || s === '.' || s === '..' || own(s));
 };
 
 /**
@@ -98,4 +103,21 @@ export async function gitIgnoredEntries(root: string, options: GitFilesOptions =
         return false;
     };
     return [...listed].filter((p) => !covered(p));
+}
+
+/**
+ * The nested repositories below `root`, relative, `/`-separated, without a trailing `/`: the submodules (gitlinks,
+ * mode 160000 in `git ls-files --stage`) and the untracked repositories git does not descend into (given by `git
+ * ls-files -o --exclude-standard` with a trailing `/`). git applies none of their own ignores for the root's
+ * repository, so the runner is denied each as a whole (the answerer's view has none of their files already). An
+ * ignored one is among `gitIgnoredEntries`. `undefined`: git does not speak for the root.
+ */
+export async function gitNestedRepositories(root: string, options: GitFilesOptions = {}): Promise<string[] | undefined> {
+    root = path.resolve(root);
+    if (!(await gitSpeaksFor(root, options))) return undefined;
+    const gitlinks = (await lsFiles(root, ['--stage'], options))
+        .map((line) => /^160000 [0-9a-f]+ \d+\t(.+)$/.exec(line)?.[1])
+        .filter((p): p is string => p !== undefined);
+    const untracked = (await lsFiles(root, ['-o', '--exclude-standard'], options)).filter((p) => p.endsWith('/')).map((p) => p.replace(/\/$/, ''));
+    return [...new Set([...gitlinks, ...untracked])].filter(listable);
 }

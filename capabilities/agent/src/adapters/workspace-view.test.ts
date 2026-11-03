@@ -117,6 +117,22 @@ describe("the answerer's view of the workspace", () => {
         await view.dispose();
     });
 
+    test("git's allowlist on a case-insensitive file system: .GIT, .DomainTrail never copied; a name only as readdir gives it", async () => {
+        const root = await scratch();
+        await writeFile(path.join(root, 'README.md'), 'readme');
+        await mkdir(path.join(root, '.git'));
+        await writeFile(path.join(root, '.git', 'config'), 'GIT_CANARY');
+        await mkdir(path.join(root, 'sub', '.domaintrail'), { recursive: true });
+        await writeFile(path.join(root, 'sub', '.domaintrail', 'x'), 'DT_CANARY');
+        await mkdir(path.join(root, 'Docs'));
+        await writeFile(path.join(root, 'Docs', 'a.md'), 'a');
+        // index entries in another case or Unicode form than the disk's (on macOS they open the same files)
+        const listed = ['README.md', '.GIT/config', '.Git/config', 'sub/.DomainTrail/x', 'sub/.DOMAINTRAI\u004C/x', 'readme.md', 'docs/a.md', 'Docs/a.md'];
+        const view = createWorkspaceView({ root, list: async () => listed, parent: await scratch() });
+        expect(await files(await view.refresh())).toEqual(['Docs/a.md', 'README.md']);
+        await view.dispose();
+    });
+
     test('walked (git does not speak for the root): a nested .git file or directory and .domaintrail/ are never copied', async () => {
         const root = await scratch();
         await writeFile(path.join(root, 'README.md'), 'readme');
@@ -127,8 +143,12 @@ describe("the answerer's view of the workspace", () => {
         await mkdir(path.join(root, 'sub', '.domaintrail'), { recursive: true });
         await writeFile(path.join(root, 'sub', '.domaintrail', 'x'), 'x');
         await writeFile(path.join(root, 'sub', 'notes.md'), 'n');
+        await mkdir(path.join(root, 'plain', '.DomainTrail'), { recursive: true });
+        await writeFile(path.join(root, 'plain', '.DomainTrail', 'x'), 'x');
+        await writeFile(path.join(root, 'plain', 'notes.md'), 'n');
         const view = createWorkspaceView({ root, list: async () => undefined, parent: await scratch() });
-        expect(await files(await view.refresh())).toEqual(['README.md', 'sub/notes.md']);
+        // a directory holding a .git (a nested repository, a submodule) is not walked into, as git does not list it
+        expect(await files(await view.refresh())).toEqual(['README.md', 'plain/notes.md']);
         await view.dispose();
     });
 
@@ -163,18 +183,29 @@ describe('what git ignores, kept from the runner by deny rules', () => {
         // .domaintrail at any depth, at most MAX_IGNORED_ENTRIES
         const { MAX_IGNORED_ENTRIES } = await import('./workspace-view.js');
         const fromGit = await ignoredEntries(root, {
-            list: async () => ['.env', 'dist/', 'sub/.git/', 'sub/.domaintrail/', ...Array.from({ length: 600 }, (_, i) => `f${i}`)],
+            list: async () => [
+                '.env',
+                'dist/',
+                'sub/.git/',
+                'sub/.domaintrail/',
+                '.GIT/x',
+                'Sub/.DomainTrail/',
+                ...Array.from({ length: 600 }, (_, i) => `f${i}`),
+            ],
             ignores: () => {
                 throw new Error('not walked');
             },
         });
         expect(fromGit.slice(0, 3)).toEqual(['.env', 'dist', 'f0']);
         expect(fromGit).toHaveLength(MAX_IGNORED_ENTRIES);
-        // git does not speak for the root: walked
+        // git does not speak for the root: walked; a directory holding a .git (in any case) denied as a whole
+        await mkdir(path.join(root, 'vendor', 'lib', '.GIT'), { recursive: true });
+        await writeFile(path.join(root, 'vendor', 'lib', '.env'), 'NESTED_CANARY');
         expect((await ignoredEntries(root, { list: async () => undefined, ignores: (p) => ignored.has(path.relative(root, p)) })).sort()).toEqual([
             '.env',
             'a*.log',
             'dist',
+            'vendor/lib',
         ]);
         expect(deniedRules(['.env', 'a*.log', '../x', '/abs'])).toEqual([
             'Read(./.env)',

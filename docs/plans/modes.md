@@ -560,6 +560,9 @@ M4 landed the triage and the answers end to end on the server and in `capabiliti
   `core.excludesFile` and `.git/info/exclude` apply; elsewhere `GitIgnore` plus the user's excludes file.
   `.git` and `.domaintrail` are kept out at any depth (`**/.git/**`, `**/.git`, `**/.domaintrail/**`,
   `**/.domaintrail` deny rules; never in the view). Checked with Claude Code 2.1.317 against canaries.
+- **After M4b** (its review; ADR 0030 "As built after M4b"): `.git` / `.domaintrail` recognised in any case and
+  Unicode form, the view copying a listed file only under the names `readdir` gives; nested repositories and
+  submodules (gitlinks, untracked repositories; walked: a directory holding a `.git`) denied to the runner as a whole.
 - **Config**: no key was added in M4. `resolveAnswerConfig`, `validateAnswerConfig`, `resolveTriageConfig`,
   `validateTriageConfig` and their defaults are exported by `@domaintrail/agent`; M5's config module places them under
   `agent.answer` / `agent.triage` (see "Connected after M4 and M5").
