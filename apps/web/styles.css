@@ -1593,7 +1593,8 @@ select,
     color: var(--text-secondary);
     background: var(--neutral-tint);
 }
-.persistence-badge {
+.persistence-badge,
+.level-badge {
     margin-left: 6px;
     padding: 1px 7px;
     border-radius: 999px;
@@ -1602,7 +1603,8 @@ select,
     color: var(--muted);
     border: 1px solid var(--border);
 }
-.inspector-row .persistence-badge {
+.inspector-row .persistence-badge,
+.inspector-row .level-badge {
     margin-left: 0;
     padding: 2px 8px;
     font-size: 0.75rem;
