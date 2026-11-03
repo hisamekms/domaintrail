@@ -1644,3 +1644,8 @@ This replaces where the guide's goal is read from (above) and where the intervie
 - **No author or time in the file.** Git's history records them.
 - **Renames.** A journey naming a missing storming or context is a warning (`dt check`) and shown as missing.
   `dt guide` tells the AI to update the journey's keys when it renames a storming or a context.
+- **Name and place:** `domaintrail.journey.json` at the workspace root, the directory of `domaintrail.jsonc` (what
+  `dt -r` names). In a monorepo each workspace has its own. Never inside `.domaintrail/`, the older versions' state
+  directory, which is moved away and kept from the AI.
+- **The AI reads it.** It is added to the agent's read scope, next to the `.dt` and `.dtes` files and the config. Only
+  dt writes it.
