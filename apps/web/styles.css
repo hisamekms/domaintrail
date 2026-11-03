@@ -8210,6 +8210,11 @@ label.proposal-option {
 .chat-brief .chat-apply-note {
     margin: var(--space-2) 0 0;
 }
+/* the note of a rejected brief, to its starter */
+.chat-brief-note {
+    margin: 0;
+    white-space: pre-wrap;
+}
 
 /* ---------- printing (view/print.tsx) ---------- */
 

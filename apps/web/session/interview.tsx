@@ -91,7 +91,11 @@ export function InterviewPanel(props: { session: SessionData; live: boolean }) {
                         {t.close}
                     </button>
                 </div>
-                {rejected.note && <p className="chat-brief-waiting">{rejected.note}</p>}
+                {rejected.note && (
+                    <div className="chat-brief">
+                        <p className="chat-brief-note">{rejected.note}</p>
+                    </div>
+                )}
             </div>
         );
     if (!interview) return null;
