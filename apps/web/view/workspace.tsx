@@ -12,6 +12,7 @@ import { applyTheme, type Theme } from '../theme';
 import { useViewCamera } from './camera';
 import { useCenterOnResize } from './center';
 import { CanvasControls, EdgeHint } from './canvas-controls';
+import { emptyLine, isEmptyView, VIEW_TABS } from './empty';
 import { FlowCanvas } from './flow-canvas';
 import { fitAll } from './canvas';
 import type { DiagramCanvas } from './diagram';
@@ -68,6 +69,8 @@ export function ViewWorkspace(props: {
     onLegendToggle: () => void;
     /** Drawn over the canvas (a session's cursors of the others). */
     overlay?: ReactNode;
+    /** An AI is connected to the chat: an empty view says that asking there makes it. */
+    aiReady?: boolean;
 }) {
     const { workspace, current, mode, legendOpen, onLegendToggle } = props;
     const { canvas, onMount, stormings, nav, settings, viewGraph } = workspace;
@@ -79,6 +82,10 @@ export function ViewWorkspace(props: {
     const { filter: catalogFilter, setFilter: setCatalogFilter } = useCatalogFilter();
     const t = useT();
     const empty = { added: [], changed: [], removed: [] };
+    /** The view has nothing yet: it shows one line, and no control that would have nothing to act on. */
+    const nothing = current !== null && isEmptyView(view.kind, current);
+    /** The view whose controls the toolbar shows: none for an empty view (they would have nothing to act on). */
+    const bar = nothing ? undefined : view.kind;
     const legendView: LegendView | null =
         !graph || !isCanvas(view)
             ? null
@@ -98,22 +105,20 @@ export function ViewWorkspace(props: {
         <section className="center">
             <div className="view-tabs">
                 <div className="view-tab-list" role="tablist">
-                    {(['contextMap', 'structure', 'catalog', 'storming'] as const)
-                        .filter((k) => k !== 'storming' || stormings.length > 0 || view.kind === 'storming')
-                        .map((k) => (
-                            <button
-                                key={k}
-                                role="tab"
-                                aria-selected={view.kind === k}
-                                className={view.kind === k ? 'active' : ''}
-                                onClick={() => setView({ kind: k })}
-                            >
-                                {t.views[k]}
-                            </button>
-                        ))}
+                    {VIEW_TABS.map((k) => (
+                        <button
+                            key={k}
+                            role="tab"
+                            aria-selected={view.kind === k}
+                            className={view.kind === k ? 'active' : ''}
+                            onClick={() => setView({ kind: k })}
+                        >
+                            {t.views[k]}
+                        </button>
+                    ))}
                 </div>
                 <div className="view-toolbar">
-                    {view.kind === 'structure' && (
+                    {bar === 'structure' && (
                         <ToolbarSubject>
                             <LevelSwitch
                                 label={t.structureMode}
@@ -125,14 +130,14 @@ export function ViewWorkspace(props: {
                             />
                         </ToolbarSubject>
                     )}
-                    {view.kind === 'catalog' && (
+                    {bar === 'catalog' && (
                         <ToolbarSubject>
                             <CatalogSearch filter={catalogFilter} onChange={setCatalogFilter} />
                         </ToolbarSubject>
                     )}
-                    {view.kind === 'storming' && <StormingToolbar stormings={stormings} choice={stormingChoice} mode={mode} onChange={setStormingChoice} />}
+                    {bar === 'storming' && <StormingToolbar stormings={stormings} choice={stormingChoice} mode={mode} onChange={setStormingChoice} />}
                     <ToolbarEnd>
-                        {view.kind === 'contextMap' && (
+                        {bar === 'contextMap' && (
                             <FilterPopover count={activeFilterCount({ view: 'contextMap', mapAll })} onClear={() => setMapAll(false)}>
                                 <FilterSection title={t.filters.contexts}>
                                     <label className="check">
@@ -142,9 +147,14 @@ export function ViewWorkspace(props: {
                                 </FilterSection>
                             </FilterPopover>
                         )}
-                        {view.kind === 'structure' && (
+                        {bar === 'structure' && (
                             <FilterPopover
-                                count={activeFilterCount({ view: 'structure', contexts: focusContexts.length, checked: checked.length, hidden: hidden.length })}
+                                count={activeFilterCount({
+                                    view: 'structure',
+                                    contexts: focusContexts.length,
+                                    checked: checked.length,
+                                    hidden: hidden.length,
+                                })}
                                 onClear={() => {
                                     setStructureContexts(null);
                                     setHiddenContexts([]);
@@ -163,7 +173,7 @@ export function ViewWorkspace(props: {
                                 </FilterSection>
                             </FilterPopover>
                         )}
-                        {view.kind === 'catalog' && model && (
+                        {bar === 'catalog' && model && (
                             <FilterPopover
                                 count={activeFilterCount({ view: 'catalog', contexts: catalogFilter.contexts, kinds: catalogFilter.sections })}
                                 onClear={() => setCatalogFilter({ ...catalogFilter, contexts: null, sections: [] })}
@@ -177,7 +187,7 @@ export function ViewWorkspace(props: {
             <div className="view-area">
                 <FlowCanvas onMount={onMount} />
                 {isCanvas(view) && props.overlay}
-                {isCanvas(view) && (
+                {isCanvas(view) && !nothing && (
                     <CanvasControls
                         canvas={canvas}
                         fitAll={fitView}
@@ -186,20 +196,24 @@ export function ViewWorkspace(props: {
                     />
                 )}
                 <EdgeHint canvas={canvas} view={legendView} />
-                {current && !graph && isCanvas(view) && (
-                    <div className="empty">
-                        {current.status === 'empty'
-                            ? t.noDtFiles
-                            : view.kind === 'storming'
-                              ? t.noStormings
-                              : noneChecked && view.kind === 'structure'
-                                ? t.pickContexts
-                                : focusKey && view.kind === 'structure'
-                                  ? t.loading
-                                  : t.noDiagram}
-                    </div>
+                {nothing ? (
+                    <div className="empty">{emptyLine(t, props.aiReady === true)}</div>
+                ) : (
+                    current &&
+                    !graph &&
+                    isCanvas(view) && (
+                        <div className="empty">
+                            {view.kind === 'storming'
+                                ? t.noStormings
+                                : noneChecked && view.kind === 'structure'
+                                  ? t.pickContexts
+                                  : focusKey && view.kind === 'structure'
+                                    ? t.loading
+                                    : t.noDiagram}
+                        </div>
+                    )
                 )}
-                {view.kind === 'catalog' && model && (
+                {view.kind === 'catalog' && model && !nothing && (
                     <Catalog
                         model={model}
                         mode={mode}
