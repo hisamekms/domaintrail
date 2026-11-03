@@ -3,8 +3,10 @@
 // alternative of one of its assumptions, or neither (they were left as they were). Who decided and when are that run's
 // `queuedBy` and `queuedAt`. Both are recorded in that run's input: an answer as `answer`, a picked alternative as
 // `pick` (the note the page writes with it is for the agent and the people, never read back here). An assumption can
-// also be approved (amendment "Assumptions approved"): an approval of its own, with who and when, and no run.
-import { approvalOf, laterRunOf } from '@domaintrail/collaboration';
+// also be approved (amendment "Assumptions approved"): an approval of its own, with who and when, and no run. And the
+// assumptions of a run whose changes were reverted are closed as reverted (amendment "revert a run"): the revert that did it,
+// who asked for it and when.
+import { approvalOf, laterRunOf, revertStatus } from '@domaintrail/collaboration';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 
 type RunJson = SessionStateBody['runs'][number];
@@ -87,13 +89,15 @@ export function pickedAlternative(run: RunJson, runs: readonly RunJson[]): Picke
 /**
  * What became of one assumption of `run` (a completed one, by its index in the reply): `approved` by the facilitator
  * (who and when), `picked` (one of its alternatives, sent again: who, when and the run it queued), `left` when a later run
- * took over the run's requests without deciding it (another assumption picked, the messages applied again), `open`
- * otherwise. One decision per assumption: the server refuses the other once one is made.
+ * took over the run's requests without deciding it (another assumption picked, the messages applied again), `reverted`
+ * when the run's changes were reverted (by the revert `by.run`, asked by `by.by` at `by.at`), `open` otherwise. One decision
+ * per assumption: the server refuses the other once one is made; a revert closes those still open.
  */
 export type AssumptionDecision =
     | { readonly kind: 'open' }
     | { readonly kind: 'approved'; readonly by: string; readonly at: string }
     | { readonly kind: 'picked'; readonly alternative: string; readonly by: Decider }
+    | { readonly kind: 'reverted'; readonly by: Decider }
     | { readonly kind: 'left' };
 
 export function assumptionDecision(
@@ -106,5 +110,7 @@ export function assumptionDecision(
     if (approval) return { kind: 'approved', by: approval.approvedBy, at: approval.approvedAt };
     const picked = pickedAlternative(run, runs);
     if (picked?.assumption === assumption) return { kind: 'picked', alternative: picked.alternative, by: picked.by };
+    const revert = revertStatus(run, runs);
+    if (revert.kind === 'reverted') return { kind: 'reverted', by: deciderOf(revert.by, runs) };
     return takenOverBy(run, runs) ? { kind: 'left' } : { kind: 'open' };
 }

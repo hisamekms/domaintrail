@@ -249,7 +249,8 @@ These are pure functions of the storming IR (T5), with the types in `src/dtes/ir
   timeline order (§10.2's first priority), v0.1 ships canonical layout only and records incremental layout as a
   follow-up. Positions are never written to `.dtes`, only to `.domaintrail/layout.json` like every layout.
 - No new drawing library. tldraw shapes in `web/shapes.tsx` get the new kinds. The spec's colours are defaults, with
-  sufficient contrast in both themes.
+  sufficient contrast in both themes. (Amended by [ADR 0029](0029-react-flow-canvas.md): the kinds are drawn by
+  `diagram-items.tsx` on a React Flow canvas.)
 - Server: `ViewPayload.stormings` holds per storming its ID, label, file, timelines (ID, label), the `Storming` IR
   for the inspector, and a graph for every view (`VIEW_LEVELS` × (integrated + each timeline)), all precomputed like
   the state views. The key is `<level>|<timelineId or empty>`. There are few views, and toggling then needs no round

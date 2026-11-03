@@ -65,6 +65,39 @@ export function timeline(state: Pick<SessionStateBody, 'revisions' | 'runs'>): T
         .reverse();
 }
 
+/** An earlier state the collab menu offers to restore, worded by what it was: its revision, and the run or person behind it. */
+export interface RestorePointEntry {
+    readonly revision: string;
+    /** Its number in the session (for the tooltip). */
+    readonly number: number;
+    readonly kind: RevisionJson['origin']['kind'];
+    readonly takenAt: string;
+    /** The run it was taken before or after (RunBase, RunResult). */
+    readonly run?: string;
+    /** Who recorded it (Manual). */
+    readonly by?: string;
+}
+
+/**
+ * The states the facilitator can restore from the collab menu, newest first: every revision of the session but those
+ * with the sources of the last one (restoring them would change nothing).
+ */
+export function restorePoints(state: Pick<SessionStateBody, 'revisions' | 'runs'>): RestorePointEntry[] {
+    return timeline(state)
+        .filter((e) => !e.sameAsLatest)
+        .map((e) => {
+            const o = e.revision.origin;
+            return {
+                revision: e.revision.id,
+                number: e.number,
+                kind: o.kind,
+                takenAt: e.revision.takenAt,
+                ...((o.kind === 'RunBase' || o.kind === 'RunResult') && { run: o.run }),
+                ...(o.kind === 'Manual' && { by: o.takenBy }),
+            };
+        });
+}
+
 /** The revisions chosen for a comparison after (un)checking `id`: at most two, the earlier choice dropped for a third. */
 export function chooseForComparison(chosen: readonly string[], id: string, on: boolean): string[] {
     const others = chosen.filter((c) => c !== id);

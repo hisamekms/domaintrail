@@ -2544,7 +2544,7 @@ A **session** is the Live View shared by several people while an AI agent edits 
 **messages** in a chat, about elements of the `.dt` model or the `.dtes` stormings; the facilitator applies messages as
 **runs** (requests to the agent), and `dt session subscribe --agent claude` runs Claude Code on the facilitator's workspace, one run at a
 time. The edits reach every page through the Live View, and every run leaves a **revision** of all the `.dt` and
-`.dtes` sources that can be compared, marked confirmed or restored. `dt view` is unchanged: it has no session, and its
+`.dtes` sources that can be compared or restored. `dt view` is unchanged: it has no session, and its
 page no session chat. Sessions need Node.js 22.13 or later (for `node:sqlite`). In the repository,
 `docs/session-first-run.md` walks through a first run with Claude Code, and ADR 0026 has the decisions behind them.
 
@@ -2566,17 +2566,16 @@ awaiting an answer, running, queued and finished — and post messages. Closed, 
 agent is running or waiting for an answer and how many messages and cards are new. The **facilitator** is whoever
 opened the facilitator link while signed in (never derived from Cloudflare Access); a new link moves the role (the
 collab menu's ファシリテーターを引き継ぐ issues one, as `dt session link` does), and the previous holder's pages reconnect as a participant. Only the
-facilitator applies messages, answers the agent, cancels runs, records, confirms and restores revisions, changes the
-shared 比較対象 (baseline) and closes the session (the collab menu's コラボを終える…). The server checks every role; the page
+facilitator applies messages, answers the agent, stops and reverts runs, records and restores revisions, changes the
+shared 比較対象 (baseline) and closes the session (the collab menu's コラボを終える). The server checks every role; the page
 only hides what is not yours.
 
 **The collab menu.** The page calls a session a *collab* (コラボ). The chat's head has one button — the avatars and how
 many are online ▾ — that opens the participants (where each is, and → to open the view another is on) and
 the collab's actions: 招待リンクをコピー for everyone (the address of the page: the Live View's URL, the public URL
 behind Access in `access` mode), and 退出 for a participant (it signs out). The facilitator has いまの状態を記録,
-ファシリテーターを引き継ぐ and コラボを終える… instead of 退出: they hand the role over first to leave. Ending asks first and
-lists what is not finished — runs queued or running, questions waiting for an answer, and the results recorded since
-the last revision confirmed — then 終える. Every page then shows コラボを終えました: the changes (the runs that changed
+以前の状態に復元 (below), ファシリテーターを引き継ぐ and コラボを終える instead of 退出: they hand the role over first to leave. Ending asks first and
+lists what is not finished — runs queued or running and questions waiting for an answer — then 終える. Every page then shows コラボを終えました: the changes (the runs that changed
 files, with how many files and who asked), the participants and how long it lasted, computed from what the page held
 when it ended; the session's record stays in the workspace's `.domaintrail`.
 
@@ -2586,7 +2585,7 @@ as the input). On each message the facilitator has the robot button, AI に送�
 runs are serial, so it waits as 実行待ち while another runs), and … (その他の操作): もう一度送る once it was sent, AI に送る
 on a message read as talk (where the button is not shown), コメントをつけて送る (a comment for the agent first) and
 まとめて送る (choose several). Shift- or ⌘-click chooses messages too; a bar then offers コメント… and まとめて送る, one
-run of all of them, and Esc leaves it. Right after sending, AI に送りました offers 取り消す, which cancels the run while it
+run of all of them, and Esc leaves it. Right after sending, AI に送りました offers 実行を中止, which stops the run while it
 is still queued. Participants see a run once it is in the stream, and the queue in AI の作業. Every message and
 AI turn has a status slot at the right end of its name row, there only when the row has a status and then as wide on
 every row (the longest state of the language), so what is there lines up in one column down the chat. The row's
@@ -2635,10 +2634,44 @@ answer is one option or the own words, never both; choosing an option deselects 
 it again brings them back. In a multiple-choice question it is a checkbox, sent together with the options chosen. Words
 under an unselected その他 are not sent. On a
 done card, an alternative of an assumption queues them again with that pick and a note asking for it; the facilitator's ✕ (a bordered
-button first among a queued or running card's actions, and at the end of its row in AI の作業) cancels it after a
-dialog asks: 実行を取り消しますか？ for a running run (its work so far is not applied), 依頼を取り消しますか？ for a queued
-one, with the card's name; やめる (or Esc) keeps it; the card's ⋯ marks the work's result as confirmed (この作業の結果を確認済みにする),
-restores the workspace as it was before the work (この作業の前に戻す…, asked first) or shows its changes (変更を見る).
+button first among a queued or running card's actions, and at the end of its row in AI の作業) stops it after a
+dialog asks: 実行を中止しますか？ for a running run (its work so far is not applied), 待ちの実行を中止しますか？ for a
+queued one, with the card's name; やめる (or Esc) keeps it, 実行を中止 stops it (its state reads 中止). The card's ⋯
+reverts the work (この作業を打ち消す, asked first, below) or shows its changes (変更を見る).
+
+Three operations look alike and are kept apart by their words: **stop** (実行を中止) a run that is queued or running;
+**revert** (この作業を打ち消す) a finished piece of work, by a new change that counteracts it, history and later
+changes kept; **restore** (以前の状態に復元) the whole workspace to an earlier state.
+
+**Reverting a piece of work.** On a card whose work changed files, the facilitator's ⋯ → この作業を打ち消す takes back
+what that work changed and nothing else: later work's changes stay. Asked first (〈作業名〉の変更を打ち消しますか？ —
+打ち消す or やめる), it sends the facilitator's message 「〈作業名〉の変更を打ち消す」 to the chat, so everyone sees what is
+reverted, and the page goes to it; the revert is then followed in the chat alone, like any request: that message and
+its card below it, whose state changes as it goes. It queues like any other change: behind the run in progress and the
+runs waiting (実行待ち, 前に n 件 beside the state, as on any queued card), stoppable with ✕ 実行を中止 while it waits —
+never refused because something is running. When its turn comes, the revert is done one of two ways:
+
+- **Mechanically** when it can, by the server itself (no agent needed, none needs to be connected): for each file the
+  work changed, the file is set back as it was before the work when nothing changed it since; otherwise the work's
+  change is reversed line by line around the later changes (as `git revert` does), against the workspace as it is
+  when its turn comes. The result is checked as a run's (`dt fmt`, no `.dt` error the workspace does not have now,
+  every `.dtes` parses) and written. Its card is an AI turn like any other (who did it, the server or the AI, does not
+  matter to the people in the collab), done, with the elements it changed and 変更を見る. When none of the work's
+  changes is left by then (they were edited away by hand, say), the revert ends without writing anything and its card
+  says 打ち消すものはありませんでした.
+- **By the AI** otherwise — a later change overlaps or touches what the work changed (a file it added and someone
+  edited, a file it changed and someone removed), or the reverted sources would not check: the revert stays queued
+  for the AI — its card shows it simply as 実行待ち, why only in the tooltip on the state — and runs as any run (running, done, stoppable), with the work's changes file by
+  file; the AI reverts only those, keeps the later ones and says what it could not revert and why.
+
+A revert stopped or failed reads as any run (中止, 失敗 and why); a call that fails (the network, say) is told under the
+chat as the other actions' failures are. A work being reverted (its revert waiting or running) or
+reverted already offers no second revert (a revert that failed or was stopped can be asked again); a revert is work
+too, and can be reverted in turn. What the AI assumed in a reverted work is closed as 打ち消し済み (no 承認待ち, no
+承認), with who reverted it and when, as the work's own card says (打ち消し済み 〈誰〉 · 〈時刻〉).
+**Restoring an earlier state** of the whole workspace is the collab menu's 以前の状態に復元, the last resort: it lists
+the earlier states by what they were (コラボの開始時, 〈作業名〉の前, 〈作業名〉の後, 〈作業名〉の打ち消しの前, a state
+someone recorded, 復元の前 or 復元の後), and the chosen one goes through the restore below.
 
 **Replies to an AI turn.** Hover an AI turn (on touch it is always there) and ↩ 返信 in its actions starts a
 reply to its latest run — when that run ended: done, failed, declined or cancelled (a question has its answer form, and
@@ -2858,7 +2891,7 @@ errors; `.dtes` errors and warnings; the warnings of `ref`s into the model). One
 before and after each run, when the facilitator records the current state (*Record the current state*), and around a
 restore; saves while a run is in progress make none. They are numbered in the order taken; the chat words them by the
 work (a card's result, the state before it) and keeps their numbers in tooltips, and a run's card reaches the two
-around it (its ⋯).
+around it (its ⋯ → 変更を見る).
 
 - **Changes**: a card (⋯ → 変更を見る, or 変更を見る on its line) lists the model's elements its revisions differ by —
   `.dt` elements, states and commands by their IDs, storming elements by their storming and local IDs — as added,
@@ -2867,12 +2900,12 @@ around it (its ⋯).
   does not parse, the model is not compared and the source diff is open. The work is bounded: a file over
   1 MiB, or of more than 10,000 lines or 1,000 edits, gets no diff; lines are cut at 1,000 characters; a comparison
   stops its diffs after 512 KiB (and a file's after 2,000 lines), and the files after that get none.
-- **Mark as confirmed**: the facilitator's mark on a revision. It blocks nothing.
-- **Restore**: the facilitator writes a past revision back: every source becomes that revision's, on everyone's page
-  at once. The current state is kept first as a *before a restore* revision, so a restore can itself be undone by
+- **Restore** (the collab menu's 以前の状態に復元): the facilitator writes a past revision back: every source becomes
+  that revision's, on everyone's page at once, later work's changes included — to take back one piece of work, revert it
+  from its card instead. The current state is kept first as a *before a restore* revision, so a restore can itself be taken back by
   restoring that one. A restore is refused, and nothing is written, when:
-  - a run is in progress: wait for it, or cancel it from the restore dialog, then restore again (files the agent
-    changed before it stopped count as external changes, below);
+  - a run is in progress (a revert the server is trying too): wait for it, or stop it from the restore dialog, then
+    restore again (files the agent changed before it stopped count as external changes, below);
   - the workspace changed since the last revision (an edit by hand, a `git checkout`): the dialog lists the files and
     offers *Record the current state, then restore*, which keeps the current state as a revision first;
   - a source is a symbolic link or outside the root.

@@ -41,13 +41,16 @@ exports[`the status of each error type every error of the collaboration model an
   "RestoreNeedsCheck": 409,
   "RevisionNotFound": 404,
   "RevisionOfAnotherSession": 404,
+  "RunInProgress": 409,
   "RunNotApprovable": 409,
   "RunNotFound": 404,
   "RunNotPickable": 409,
   "RunNotReplyable": 409,
+  "RunNotRevertable": 409,
   "RunOfAnotherSession": 404,
   "SessionAlreadyClosed": 409,
   "SessionNotFound": 404,
+  "SubscriberOutdated": 409,
   "SymlinkInWorkspace": 409,
   "TooManyMentions": 400,
   "TooManyTargets": 400,
@@ -194,25 +197,6 @@ exports[`refused requests of a session in dev mode status and body of each refus
     },
   ],
   "POST revisions, participant": [
-    403,
-    {
-      "error": {
-        "message": "Only the facilitator may do this.",
-        "type": "FacilitatorOnly",
-      },
-    },
-  ],
-  "POST revisions/:id/confirm of an unknown revision": [
-    404,
-    {
-      "error": {
-        "aggregate": "Revision",
-        "id": "<uuid>",
-        "type": "NotFound",
-      },
-    },
-  ],
-  "POST revisions/:id/confirm, participant": [
     403,
     {
       "error": {

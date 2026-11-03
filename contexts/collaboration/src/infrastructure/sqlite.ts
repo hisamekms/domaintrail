@@ -215,6 +215,24 @@ export const MIGRATIONS: readonly string[] = [
     ) STRICT;
     CREATE INDEX approvals_by_session ON approvals(session_id, seq);
     `,
+    // ---------- no confirmed revisions ----------
+    // a revision is no longer confirmed (ADR 0026, amendment "Revisions are not confirmed"): a confirmed revision
+    // becomes the recorded one it was, without who confirmed it and when, and the outbox's RevisionConfirmed events go
+    `
+    UPDATE revisions
+       SET state = 'Recorded',
+           data = json_remove(json_set(data, '$.state', 'Recorded'), '$.confirmedBy', '$.confirmedAt')
+     WHERE state = 'Confirmed';
+    DELETE FROM outbox WHERE type = 'RevisionConfirmed';
+    `,
+    // ---------- reverting a run ----------
+    // a request that reverts a run's changes (ADR 0026, amendment "Revert a run"): the run it names, kept next to the JSON
+    // so that the database refuses a revert of a run it does not hold. Rows written before revert none (NULL); their JSON
+    // has no `reverts` and loads unchanged. The mechanical revert is a run like the others (state `Reverted`)
+    `
+    ALTER TABLE requests ADD COLUMN reverts TEXT REFERENCES agent_runs(id);
+    CREATE INDEX requests_by_reverts ON requests(reverts) WHERE reverts IS NOT NULL;
+    `,
 ];
 
 /** The database was written by a newer DomainTrail: its schema is unknown here. */
@@ -349,8 +367,8 @@ function sessions(db: DatabaseSync): SessionRepository {
 function requests(db: DatabaseSync): RequestRepository {
     const load = db.prepare('SELECT data FROM requests WHERE id = :id');
     const save = db.prepare(
-        `INSERT INTO requests (id, session_id, seq, state, data, reply_to, reply_to_request)
-         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM requests), :state, :data, :replyTo, :replyToRequest)
+        `INSERT INTO requests (id, session_id, seq, state, data, reply_to, reply_to_request, reverts)
+         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM requests), :state, :data, :replyTo, :replyToRequest, :reverts)
          ON CONFLICT (id) DO UPDATE SET state = excluded.state, data = excluded.data`,
     );
     const list = db.prepare('SELECT data FROM requests WHERE session_id = :session ORDER BY seq');
@@ -369,6 +387,7 @@ function requests(db: DatabaseSync): RequestRepository {
                     data: encodeJson(request),
                     replyTo: to?.kind === 'Run' ? to.run : null,
                     replyToRequest: to?.kind === 'Message' ? to.request : null,
+                    reverts: request.reverts ?? null,
                 }),
             );
         },

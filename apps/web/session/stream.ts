@@ -46,7 +46,8 @@ export interface ReplyView {
 
 /** What the agent says about a run, from the run's state; `files`: how many sources the run changed (measured). */
 export type AgentMessage =
-    | { readonly kind: 'queued' }
+    /** Waiting its turn; a revert the server could not revert mechanically says why it waits for the AI. */
+    | { readonly kind: 'queued'; readonly revertObstacle?: NonNullable<Extract<RunJson, { state: 'Queued' }>['revertObstacle']> }
     | { readonly kind: 'running'; readonly since: string }
     | {
           readonly kind: 'clarification';
@@ -63,6 +64,8 @@ export type AgentMessage =
           readonly reply?: ReplyView;
       }
     | { readonly kind: 'declined'; readonly result: number | undefined; readonly files: number | undefined; readonly reply: ReplyView }
+    /** The changes of a run reverted mechanically, without the agent. */
+    | { readonly kind: 'reverted'; readonly changed: boolean; readonly result: number | undefined; readonly files: number | undefined }
     | { readonly kind: 'failed'; readonly reason: FailureReason }
     | { readonly kind: 'cancelled'; readonly by: string };
 
@@ -105,7 +108,6 @@ export type StreamItem =
     | { readonly kind: 'session-start'; readonly key: string; readonly at: string; readonly revision: number }
     | { readonly kind: 'message'; readonly key: string; readonly at: string; readonly request: RequestJson }
     | { readonly kind: 'card'; readonly key: string; readonly at: string; readonly updatedAt: string; readonly unit: ChangeUnit }
-    | { readonly kind: 'confirmed'; readonly key: string; readonly at: string; readonly revision: number; readonly by: string }
     | {
           readonly kind: 'restored';
           readonly key: string;
@@ -132,7 +134,7 @@ export function agentMessage(run: RunJson, lookup: ReturnType<typeof revisionLoo
     const files = (base: string, result: string): number | undefined => filesChanged(lookup.revision(base), lookup.revision(result));
     switch (run.state) {
         case 'Queued':
-            return { at: run.queuedAt, message: { kind: 'queued' } };
+            return { at: run.queuedAt, message: run.revertObstacle ? { kind: 'queued', revertObstacle: run.revertObstacle } : { kind: 'queued' } };
         case 'Running':
             return { at: run.startedAt, message: { kind: 'running', since: run.startedAt } };
         case 'NeedsClarification':
@@ -171,13 +173,22 @@ export function agentMessage(run: RunJson, lookup: ReturnType<typeof revisionLoo
             return { at: run.finishedAt, message: { kind: 'failed', reason: run.reason } };
         case 'Cancelled':
             return { at: run.cancelledAt, message: { kind: 'cancelled', by: run.cancelledBy } };
+        case 'Reverted':
+            return {
+                at: run.finishedAt,
+                message: {
+                    kind: 'reverted',
+                    changed: run.changed,
+                    result: revisionNumber(run.resultRevision),
+                    files: files(run.baseRevision, run.resultRevision),
+                },
+            };
     }
 }
 
 /**
  * The main stream, oldest first: the session's start, every message as it was sent (each is chat; the facilitator
- * applies some), one card per change unit where its first run was queued (`history.ts`), and the revisions confirmed
- * or restored.
+ * applies some), one card per change unit where its first run was queued (`history.ts`), and the revisions restored.
  */
 export function streamItems(state: Pick<SessionStateBody, 'runs' | 'revisions' | 'requests'>): StreamItem[] {
     const numbers = new Map(timeline(state).map((e) => [e.revision.id, e.number]));
@@ -191,7 +202,6 @@ export function streamItems(state: Pick<SessionStateBody, 'runs' | 'revisions' |
             const work = byId.get(from)?.origin.kind !== 'PreRestore';
             items.push({ kind: 'restored', key: `restored:${r.id}`, at: r.takenAt, revision, from: numbers.get(from), work });
         }
-        if (r.state === 'Confirmed') items.push({ kind: 'confirmed', key: `confirmed:${r.id}`, at: r.confirmedAt, revision, by: r.confirmedBy });
     }
     for (const request of state.requests) items.push({ kind: 'message', key: `message:${request.id}`, at: request.sentAt, request });
     for (const unit of changeUnits(state)) items.push({ kind: 'card', key: `card:${unit.key}`, at: unit.start, updatedAt: unit.at, unit });

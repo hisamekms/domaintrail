@@ -113,7 +113,7 @@ export function createHttpAgentApi(options: HttpAgentApiOptions): AgentApi {
                 yield { kind: 'event', id: e.id, type: e.event, message: parsed as unknown as EventMessage };
             }
         },
-        claim: (owner) => call<AgentClaimed>('POST', 'runs/claim', { owner }),
+        claim: (owner, capabilities) => call<AgentClaimed>('POST', 'runs/claim', { owner, capabilities }),
         start: (run, token) => call<Started>('POST', runPath(run, 'start'), { token }),
         heartbeat: (run, token) => call<{ lease: AgentLease }>('POST', runPath(run, 'heartbeat'), { token }),
         activity: (run, token, activity) => call('POST', runPath(run, 'activity'), { token, ...activity }),

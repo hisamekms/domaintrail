@@ -11,7 +11,7 @@ import { layoutKeyOf, NO_LAYOUT, sameLocation, shortHash, viewLocation } from '.
 import { cursorsOn, initials, listedParticipants, NO_PEERS, PARTICIPANT_HUES, participantColor, receivePresence, throttle, whereabouts } from './presence';
 import { adopt, applyEvent, disconnected, INITIAL_SESSION, latestRevision, receive } from './state';
 import { SessionApiError } from './api';
-import { chooseForComparison, comparisonPair, diffLines, restoreProblem, timeline } from './timeline';
+import { chooseForComparison, comparisonPair, diffLines, restorePoints, restoreProblem, timeline } from './timeline';
 import { occurrenceNode, selectionOf, targetKey, targetOfSelection, WORKSPACE_TARGET } from './targets';
 import { exampleSources, viewPayloads } from '../test-helpers';
 
@@ -299,6 +299,23 @@ describe('the session state from the socket', () => {
         expect(failed).toMatchObject({ refetch: false, state: { runs: [{ state: 'Failed', reason: 'AgentError' }] } });
         const cancelled = applyEvent(started.state, message(5, { type: 'RunCancelled', runId: 'run1', cancelledBy: 'local:facilitator', cancelledAt: at }));
         expect(cancelled.state.runs[0]).toMatchObject({ state: 'Cancelled', baseRevision: 'r1' });
+        // a queued revert the server took: left to the AI with why (still queued), or reverted mechanically
+        const obstacle = { kind: 'Conflict', paths: ['a.dt'] };
+        const left = applyEvent(held, message(5, { type: 'RevertLeftToAgent', runId: 'run1', obstacle }));
+        expect(left).toMatchObject({ refetch: false, state: { runs: [{ state: 'Queued', revertObstacle: obstacle }] } });
+        const reverted = applyEvent(
+            held,
+            message(5, { type: 'RunReverted', runId: 'run1', baseRevision: 'r1', resultRevision: 'r2', changed: true, finishedAt: at }),
+        );
+        expect(reverted).toMatchObject({
+            refetch: false,
+            state: { runs: [{ id: 'run1', state: 'Reverted', baseRevision: 'r1', resultRevision: 'r2', changed: true }] },
+        });
+        // one the page does not have yet is fetched
+        expect(
+            applyEvent(base, message(5, { type: 'RunReverted', runId: 'run2', baseRevision: 'r1', resultRevision: 'r1', changed: false, finishedAt: at }))
+                .refetch,
+        ).toBe(true);
         // a cancel after the run ended changes nothing
         expect(applyEvent(failed.state, message(6, { type: 'RunCancelled', runId: 'run1', cancelledBy: 'x', cancelledAt: at })).state.runs[0].state).toBe(
             'Failed',
@@ -462,6 +479,14 @@ describe('the revision timeline (S7)', () => {
             [3, { kind: 'RunResult', run: 1 }, false, false],
             [2, { kind: 'RunBase', run: 1 }, false, true],
             [1, { kind: 'SessionStart' }, false, true],
+        ]);
+    });
+
+    test("the collab menu's earlier states: newest first, without those with the latest's sources, each with its run or who recorded it", () => {
+        expect(restorePoints({ revisions, runs })).toEqual([
+            { revision: 'r5', number: 5, kind: 'PreRestore', takenAt: '2026-10-31T09:06:00.000Z' },
+            { revision: 'r4', number: 4, kind: 'Manual', takenAt: '2026-10-31T09:04:00.000Z', by: 'p' },
+            { revision: 'r3', number: 3, kind: 'RunResult', takenAt: '2026-10-31T09:03:00.000Z', run: 'run-a' },
         ]);
     });
 

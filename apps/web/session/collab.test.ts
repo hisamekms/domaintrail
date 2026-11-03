@@ -24,11 +24,8 @@ const rev = (id: string, minute: number, files: Record<string, string>, extra: o
         state: 'Recorded',
         ...extra,
     }) as unknown as RevisionJson;
-const result = (id: string, minute: number, files: Record<string, string>, run: string, confirmed = false): RevisionJson =>
-    rev(id, minute, files, {
-        origin: { kind: 'RunResult', run },
-        ...(confirmed && { state: 'Confirmed', confirmedBy: 'local:facilitator', confirmedAt: at(minute + 1) }),
-    });
+const result = (id: string, minute: number, files: Record<string, string>, run: string): RevisionJson =>
+    rev(id, minute, files, { origin: { kind: 'RunResult', run } });
 const target = { target: { kind: 'Workspace' }, label: '注文' };
 const request = (id: string, author: string, body = `body of ${id}`): RequestJson =>
     ({ id, session: 's', author, targets: body.includes('[1]') ? [target] : [], body, sentAt: at(0), state: 'Sent' }) as unknown as RequestJson;
@@ -67,7 +64,7 @@ const qc = request('qc', 'dev:a');
 const qd = request('qd', 'dev:b');
 const revisions = [
     rev('r0', 0, { 'a.dt': '1' }),
-    result('r1', 2, { 'a.dt': '2' }, 'run1', true),
+    result('r1', 2, { 'a.dt': '2' }, 'run1'),
     result('r2', 4, { 'a.dt': '2', 'b.dt': '1' }, 'run2'),
     result('r3', 6, { 'a.dt': '3', 'b.dt': '1' }, 'run3'),
 ];
@@ -90,8 +87,8 @@ const runs = [
 const state = (s: 'Open' | 'Closed'): SessionStateBody => ({ session: session(s), runs, revisions, requests: [] }) as unknown as SessionStateBody;
 
 describe('the collab menu', () => {
-    test('the facilitator copies the invite link, records, hands over and ends; no 退出', () => {
-        expect(collabMenuItems('facilitator', true)).toEqual(['invite', 'record', 'hand-over', 'end']);
+    test('the facilitator copies the invite link, records, restores an earlier state, hands over and ends; no 退出', () => {
+        expect(collabMenuItems('facilitator', true)).toEqual(['invite', 'record', 'restore', 'hand-over', 'end']);
     });
 
     test('a participant copies the invite link and leaves', () => {
@@ -110,9 +107,9 @@ describe('the collab menu', () => {
 });
 
 describe('ending a collab', () => {
-    test('counts the runs queued and running, the questions unanswered and the results since the last confirmed', () => {
+    test('counts the runs queued and running and the questions unanswered', () => {
         const u = unfinishedWork(state('Open'));
-        expect(u).toEqual({ queued: 2, running: 1, clarification: 1, unconfirmed: 2 });
+        expect(u).toEqual({ queued: 2, running: 1, clarification: 1 });
         expect(hasUnfinished(u)).toBe(true);
     });
 
@@ -123,11 +120,9 @@ describe('ending a collab', () => {
         expect(unfinishedWork(s).clarification).toBe(0);
     });
 
-    test('with no confirmed revision, every result counts; with nothing left, nothing is unfinished', () => {
-        const unconfirmedAll = revisions.map((r) => ({ ...r, state: 'Recorded' }) as RevisionJson);
-        expect(unfinishedWork({ runs: [], revisions: unconfirmedAll }).unconfirmed).toBe(3);
-        const done = unfinishedWork({ runs: runs.slice(0, 1), revisions: revisions.slice(0, 2) });
-        expect(done).toEqual({ queued: 0, running: 0, clarification: 0, unconfirmed: 0 });
+    test('with nothing left, nothing is unfinished: results of runs are not', () => {
+        const done = unfinishedWork({ runs: runs.slice(0, 3), revisions });
+        expect(done).toEqual({ queued: 0, running: 0, clarification: 0 });
         expect(hasUnfinished(done)).toBe(false);
     });
 });

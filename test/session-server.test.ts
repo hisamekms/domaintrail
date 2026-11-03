@@ -335,7 +335,6 @@ describe('a session in dev mode', () => {
             ['runs', { requests: [mine.request.id] }],
             [`runs/${mine.request.id}/cancel`, {}],
             ['revisions', {}],
-            [`revisions/${revision}/confirm`, {}],
             [`revisions/${revision}/restore`, {}],
             ['facilitator/link', {}],
             ['close', {}],
@@ -844,7 +843,7 @@ describe('revisions: comparison and restore (S7)', () => {
         ((await (await api(server, cookie, 'state')).json()) as SessionStateBody).revisions;
     const SHIPPED = DT.replace('state Placed', 'state Placed\n    state Shipped');
 
-    test('any participant compares two revisions: each file by DSL with a line diff, both validations; only the facilitator takes, confirms and restores', async () => {
+    test('any participant compares two revisions: each file by DSL with a line diff, both validations; only the facilitator takes and restores', async () => {
         const root = await workspace();
         const server = await start(root);
         try {
@@ -855,19 +854,18 @@ describe('revisions: comparison and restore (S7)', () => {
             const [first] = await revisions(server, bob);
             await writeFile(path.join(root, 'shop.dt'), SHIPPED);
             await writeFile(path.join(root, 'more.dtes'), 'storming More {\n  event Happened\n}\n');
-            for (const p of ['revisions', `revisions/${first.id}/confirm`, `revisions/${first.id}/restore`]) {
+            for (const p of ['revisions', `revisions/${first.id}/restore`]) {
                 const res = await api(server, bob, p, {});
                 expect([p, res.status, (await errorOf(res)).type]).toEqual([p, 403, 'FacilitatorOnly']);
             }
             expect((await api(server, ada, 'revisions', {})).status).toBe(201);
-            expect((await api(server, ada, `revisions/${first.id}/confirm`, {})).status).toBe(200);
             const second = (await revisions(server, bob)).at(-1);
             if (!second) throw new Error('no revision');
 
             const res = await api(server, bob, `revisions/${first.id}/compare/${second.id}`);
             expect(res.status).toBe(200);
             const c = (await res.json()) as ComparisonBody;
-            expect([c.before.id, c.before.state, c.after.id]).toEqual([first.id, 'Confirmed', second.id]);
+            expect([c.before.id, c.before.state, c.after.id]).toEqual([first.id, 'Recorded', second.id]);
             expect(c.files.map((f) => [f.path, f.language, f.status])).toEqual([
                 ['more.dtes', 'Dtes', 'added'],
                 ['ordering.dtes', 'Dtes', 'unchanged'],

@@ -42,6 +42,7 @@ import { createAgentApi } from '../server/session/agent.js';
 import { createApiRoutes } from '../server/http/routes.js';
 import { createEventRelay, lastSeq } from '../server/session/relay.js';
 import { createPresenceRelay, type SessionConnection } from '../server/session/presence.js';
+import { createRevertQueue } from '../server/session/reverts.js';
 import { createSessionHttp, meOf, stateBody } from '../server/session/routes.js';
 import { createSessionIdentities } from '../server/session/identities.js';
 import { createViewHttpServer } from '../server/http/server.js';
@@ -51,7 +52,7 @@ import { type ResolvedSessionConfig } from '../config/config.js';
 import type { ViewService } from '@domaintrail/visualization';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 import { processAlive } from './process.js';
-import { createModelValidator } from './validator.js';
+import { createModelValidator, createSourceFormatter } from './validator.js';
 import { prepareLiveView, serverUrl, watchLiveView, type ViewServerOptions } from './view.js';
 import { createWatcherHold, type WatcherHold } from './watcher-hold.js';
 
@@ -220,6 +221,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             workspace: snapshot,
             blobs: await openSessionBlobs(options.root),
             validator: createModelValidator(),
+            formatter: createSourceFormatter(),
             clock,
             ids: randomIds,
         });
@@ -340,6 +342,8 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             publish: (message) => hub.publish(message),
             after: (entries) => {
                 agent.wake();
+                // the queue may have moved: a revert at its head is the server's to try
+                void reverts.kick();
                 // the classifier reads the body with its mentions as names (`#注文[1]` → `注文`, `@佐藤[p1]` → `佐藤`)
                 for (const e of entries)
                     if (e.event.type === 'RequestSent')
@@ -365,6 +369,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             activity: (run, activity) => {
                 if (activities.set(run, activity)) hub.publish({ type: 'run.activity', run, activity });
             },
+            reverts: () => void reverts.kick(),
         });
 
         // a restore writes the sources: the watcher holds, then refreshes once
@@ -382,6 +387,16 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             },
         );
 
+        // the reverts at the head of the queue, tried by the server itself (no agent needed), behind the watcher hold
+        const reverts = createRevertQueue({
+            session,
+            collaboration,
+            leaseMs,
+            holdWatcher: (work, wrote) => watcherHold.aroundWrite(work, wrote),
+            pump,
+            log,
+        });
+
         const accessConfig = config.access;
         const surface = createSessionHttp({
             session,
@@ -391,6 +406,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             pump,
             cursor,
             holdWatcher: (work, wrote) => watcherHold.aroundWrite(work, wrote),
+            reverts: () => reverts.kick(),
             disconnect,
             facilitatorChanged,
             closed: onClosed,
@@ -432,12 +448,21 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         const facilitatorLink = await issueFacilitatorLink();
 
         const expiring = setInterval(() => {
-            collaboration.expireLeases().then(
-                (expired) => (expired.failed.length ? pump() : undefined),
-                (e: unknown) => log(`expiring leases failed: ${e instanceof Error ? e.message : String(e)}`),
-            );
+            collaboration
+                .expireLeases()
+                .then(
+                    (expired) => (expired.failed.length ? pump() : undefined),
+                    (e: unknown) => log(`expiring leases failed: ${e instanceof Error ? e.message : String(e)}`),
+                )
+                // a revert whose try was refused (or whose server lease expired) is tried again
+                .then(
+                    () => reverts.kick(),
+                    () => undefined,
+                );
         }, options.expireEveryMs ?? EXPIRE_EVERY_MS);
         expiring.unref();
+        // a revert left at the head of the queue when the server last stopped
+        void reverts.kick();
 
         let stopped: Promise<void> | undefined;
         return {
@@ -455,6 +480,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             stop() {
                 stopped ??= (async () => {
                     clearInterval(expiring);
+                    await reverts.stop();
                     for (const timer of expiries.values()) clearTimeout(timer);
                     expiries.clear();
                     presence.dispose();

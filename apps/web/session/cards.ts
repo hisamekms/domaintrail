@@ -3,6 +3,7 @@
 // it), the facilitator's note or answer, and the agent's message — and the latest run of each applied message, which
 // its link to the AI turn goes to (its state in the link's tooltip). Everything is derived from the session's state on the page.
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
+import { revertableChanges, revertStatus } from '@domaintrail/collaboration';
 import type { ChangeUnit } from './history';
 import { agentMessage, type AgentMessage, type RequestProgress, type revisionLookup } from './stream';
 
@@ -98,6 +99,8 @@ function markState(run: RunJson, request: string): MarkState {
             return line ? PROGRESS[line.status] : 'clarification';
         case 'Completed':
             return line ? PROGRESS[line.status] : 'done';
+        case 'Reverted':
+            return 'done';
         case 'Declined':
             return 'declined';
         case 'Failed':
@@ -117,6 +120,39 @@ export function messageMarks(units: readonly ChangeUnit[]): Map<string, MessageM
                 if (!seen || run.queuedAt >= seen.run.queuedAt) latest.set(r.request, { run, unit });
             }
     return new Map([...latest].map(([request, { run, unit }]) => [request, { state: markState(run, request), card: unit.key }]));
+}
+
+/** An item of a card's menu (the facilitator's): revert the unit's changes, see them. */
+export type CardMenuItem = 'revert' | 'changes';
+
+/**
+ * The items of a card's menu, from the unit's latest run: none unless it changed files; 変更を見る then, and first
+ * この作業を打ち消す while the collab is open (`live`) and its changes are not reverted nor being reverted.
+ */
+export function cardMenuItems(last: RunJson, runs: readonly RunJson[], live: boolean): CardMenuItem[] {
+    if (!revertableChanges(last)) return [];
+    return live && revertStatus(last, runs).kind === 'none' ? ['revert', 'changes'] : ['changes'];
+}
+
+/** Why a queued revert was left to the AI (the model's `RevertObstacle`, as JSON). */
+export type RevertObstacleJson = NonNullable<Extract<RunJson, { state: 'Queued' }>['revertObstacle']>;
+
+/**
+ * How many runs a queued run waits behind: the one in progress and the queued ones before it (the queue's order is the
+ * session's). `undefined` unless it is queued.
+ */
+export function queueAhead(run: string, runs: readonly RunJson[]): number | undefined {
+    const at = runs.findIndex((r) => r.id === run);
+    if (runs[at]?.state !== 'Queued') return undefined;
+    return runs.filter((o, i) => o.state === 'Running' || (o.state === 'Queued' && i < at)).length;
+}
+
+/** Why a queued revert was left to the AI, in words (the tooltip on its state, `tx.chat.revertObstacle`). */
+export function obstacleText(
+    o: RevertObstacleJson,
+    u: { readonly conflict: (paths: string) => string; readonly check: string; readonly unreadable: string },
+): string {
+    return o.kind === 'Conflict' ? u.conflict(o.paths.join(', ')) : o.kind === 'Check' ? u.check : u.unreadable;
 }
 
 /** The cards whose runs moved on since the reader last saw them (`seen`: each card's `updatedAt` then). */

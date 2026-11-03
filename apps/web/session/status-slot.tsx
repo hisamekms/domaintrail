@@ -97,8 +97,8 @@ export function CancelButton({ unit }: { unit: ChangeUnit }) {
 }
 
 /**
- * The confirmation before a cancel, over the page: running, 実行を取り消しますか？ (its work so far is lost); queued,
- * 依頼を取り消しますか？ — then the unit's name, and やめる (the focus starts there; Esc too) or 取り消す. It follows the run:
+ * The confirmation before a cancel, over the page: running, 実行を中止しますか？ (its work so far is lost); queued,
+ * 待ちの実行を中止しますか？ — then the unit's name, and やめる (the focus starts there; Esc too) or 実行を中止. It follows the run:
  * as it starts, the title changes; once it ended, the dialog closes.
  */
 export function CancelDialog({ unit, onClose }: { unit: ChangeUnit; onClose: () => void }) {
