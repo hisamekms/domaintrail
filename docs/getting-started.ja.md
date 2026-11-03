@@ -132,6 +132,9 @@ npm i -D domaintrail
 }
 ```
 
+自分だけの設定（ポート、AI のモデルなど）は、隣に置く `domaintrail.local.jsonc` に書き、git には含めません。
+`domaintrail.jsonc` にキーごとに重ねて読まれます（`dt guide config`）。
+
 推奨の構成は、境界づけられたコンテキストごとに 1 ディレクトリ、集約ごとに 1 ファイルです。
 
 ```text

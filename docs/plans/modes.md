@@ -689,6 +689,50 @@ The maintainer's second design of the change proposal (2026-11-03; it replaces M
 - **Pull**: the runner may run `dt guide` (alone, one topic or rule, or `--all`): `Bash(dt guide:*)` in the default
   `allowedTools`, and the agent's `dt` takes it besides `fmt` and `check`. The answerer has no `dt`.
 
+### As built: reading outside the workspace, and the local config
+
+Decided by the maintainer (2026-11-03): the AI may read paths outside the workspace, per project and per role, and
+each person keeps settings of their own in a local file.
+
+- **`agent.read.paths`** (both roles), **`agent.answer.read.paths`**, **`agent.run.read.paths`** (each added to the
+  common list): directories or files, absolute, `~/…` or relative to the config file (`resolveReadPaths`; the resolved
+  `agent.read` is `{ answer, run }`). The configuration's check (`checkReadPaths`, with `agent.run.dt`'s, after the pure
+  validation; links followed): a path inside the workspace, one holding it, or one in a `.git` / `.domaintrail`
+  directory (any case) is an **error**, not a warning — a config that names the workspace means something other than
+  what the AI would read. A missing path is not an error (a teammate may not have it): the agent skips it when it
+  starts and logs `not reading … (not found)`.
+- **Inside a path**, the workspace's semantics: in a git work tree, git's allowlist there (`core.excludesFile`,
+  `.git/info/exclude`; a path its repository ignores as a whole falls back to `GitIgnore`, as the workspace does);
+  elsewhere every file (a stray `.gitignore` outside a repository ignores nothing); never `.git` / `.domaintrail` at any
+  depth or case; a nested repository inside a path denied as a whole (the path itself may be one). A file path: read
+  unless git ignores it (`gitFileState`).
+- **Enforced per role** (`apps/dt/src/wiring/read-scope.ts`): paths are taken by their real paths when the agent starts
+  (`readTargets`, checked again). The answerer gets private views of them (`createWorkspaceView` with a `name`, in one
+  0700 directory, refreshed before each turn) added with `--add-dir`, and a note (`--append-system-prompt`) mapping
+  each view to its original path so that it quotes them by it; stage 3 gets nothing (no tools). The runner reads them in
+  place: `--add-dir` per directory, `Read(//<file>)` allowed per file, and deny rules `Edit(//<dir>)`,
+  `Edit(//<dir>/**)`, `Edit(//<file>)` (never written: deny wins over `Edit(./**)` and every allow rule),
+  `Read(//<dir>/**/.git[/**])`, `Read(//<dir>/**/.domaintrail[/**])` (the static rules are relative to the working
+  directory), and `Read(//<entry>[/**])` for what git ignores there, the nested repositories and the symbolic links
+  (Claude Code resolves a link's target, measured, but a link is denied anyway). Those entries count with the
+  workspace's against the 500 (`TooManyDeniedEntries`, now naming `agent.read.paths`). Measured with Claude Code
+  2.1.317 with the runner's own arguments: a file of an extra directory read; its git-ignored file, its `.git/config`
+  denied; Edit, Write and `Bash(echo > …)` there denied; a write in the workspace allowed.
+- **Startup lines**: `dt open`, `dt collab` and `dt agent` print, when any role reads outside the workspace, one line
+  per role (`AI answers read outside the workspace: …`, `AI runs read (never write) outside the workspace: …` or `…
+  the workspace only`; `dt agent --role` prints its role's). In Collab every participant can make the AI quote these
+  files (documented in `dt guide session-agent`).
+- **`domaintrail.local.jsonc`** (or `.local.json`; `<name>.local.<ext>` beside a `-c <name>.<ext>`, decided: yes):
+  read after the project's file and deep-merged (`mergeConfig`: objects key by key, arrays and scalars replaced;
+  `__proto__` is a key, never a prototype); every setting may be overridden. The project's file is validated on its own
+  (its errors name it), then the merge (its errors name the local file; its unknown keys included). The two files sit
+  in one directory, so relative paths resolve alike. A local file alone (no project file) is the configuration
+  (decided: yes; the search upwards stops at the first directory holding either). Every command loads both (`check`,
+  `generate`, `fmt`, `show`, `lsp`, `open`, `collab`, `agent`); the language server adopts a local file alone as a
+  nearest config, and watches no config file (it did not before either). `dt open` / `dt collab` / `dt agent` print
+  `Config: domaintrail.jsonc + domaintrail.local.jsonc` and warn (stderr) when git tracks the local file or does not
+  ignore it, with the line for `.gitignore` (never edited for them).
+
 ## The page
 
 - **Mode**: in solo the collab menu, invite, hand-over, leave, participants and reactions-of-others are hidden; the chat

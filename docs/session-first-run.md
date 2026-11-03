@@ -64,7 +64,9 @@ cd /tmp/dt-session && git init -q && git add -A && git commit -qm 'before the se
 **Developing DomainTrail itself?** Point the agent's `dt` at your clone in the workspace's `domaintrail.jsonc`, outside
 the workspace: `"agent": { "run": { "dt": ["node", "../domaintrail/dist/dt.js"] } }` (or `["bun",
 "../domaintrail/bin/dt.ts"]`). It is read when the agent starts (`dt agent`, or with `dt collab`); restart the subscriber after changing
-it, and after rebuilding the clone (a changed script stops the next run).
+it, and after rebuilding the clone (a changed script stops the next run). Since that path is yours, it fits in
+`domaintrail.local.jsonc` beside `domaintrail.jsonc` (merged into it, kept out of git), as does `"agent": { "read": {
+"paths": ["../specs"] } }` to let the AI read notes outside the workspace — every participant can have it quote them.
 
 If terminal 2 logs `not claiming further runs: review …`, the agent changed a file other than a `.dt` or `.dtes`
 source: look at those files (`git -C /tmp/dt-session status`), in particular anything under `.claude/`, before you
