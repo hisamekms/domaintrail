@@ -16,3 +16,4 @@ export const knownAgentRunId = (v: string): Collaboration.AgentRunId => known(Co
 export const knownTriageId = (v: string): Collaboration.TriageId => known(Collaboration.makeTriageId(v));
 export const knownChangeProposalId = (v: string): Collaboration.ChangeProposalId => known(Collaboration.makeChangeProposalId(v));
 export const knownInterviewId = (v: string): Collaboration.InterviewId => known(Collaboration.makeInterviewId(v));
+export const knownSlashCommandId = (v: string): Collaboration.SlashCommandId => known(Collaboration.makeSlashCommandId(v));

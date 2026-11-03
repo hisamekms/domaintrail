@@ -796,6 +796,7 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
                     proposals: stores.proposals.listBySession(session),
                     triages: stores.triages.listBySession(session),
                     interviews: stores.interviews.listBySession(session),
+                    slashCommands: stores.slashCommands.listBySession(session),
                 };
             });
             if (!records) return err(notFound('Session', session));

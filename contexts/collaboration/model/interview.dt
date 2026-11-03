@@ -2,10 +2,11 @@ context Collaboration {
   /// 聞き取りの識別子。
   id InterviewId "聞き取りID": UUID
 
-  /// 聞き取りのコマンド。`/` のあとに打つ ID（`es`、`model`）は英語のまま、名前は画面の言語で出す。
+  /// 聞き取りのコマンド。`/` のあとに打つ ID（`es:start`、`model:start`。前の `es`、`model` も読む）は英語のまま、名前は
+  /// 画面の言語で出す。
   enum InterviewCommand "聞き取りのコマンド" {
-    Es "イベントストーミングを始める（/es）"
-    Model "コンテキストのモデリングを始める（/model）"
+    Es "イベントストーミングを始める（/es:start）"
+    Model "コンテキストのモデリングを始める（/model:start）"
   }
 
   /// 画面の言語。聞き取りの問いと要約は、この言語か、人が書いた言語で書く。

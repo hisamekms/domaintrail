@@ -62,6 +62,8 @@ context Collaboration {
     proposals: ApprovedProposals? "承認した変更案"
     /// 始めた人が確定した聞き取りの要約。エージェントは要約を行き先の説明として書く。
     brief: BriefInstruction? "聞き取りの要約"
+    /// 始めた人が候補型の `/` コマンドで採用した候補。エージェントは候補をコマンドの規則に従って反映する。
+    candidates: CandidatesInstruction? "採用した候補"
 
     invariant distinctRequests "依頼は1件1回" { unique(requests, r => r.request) }
     invariant proposalsOfRequests "変更案は束ねた依頼のもの" {

@@ -132,10 +132,10 @@ export function elementReference(t: TargetLike): string {
 }
 
 /**
- * Element references as targets: malformed ones dropped, each once, at most `PROPOSAL_LIMITS.targets` (the rest
- * dropped). Only a value that is not a list of strings is refused.
+ * Element references as targets: malformed ones dropped, each once, at most `max` (`PROPOSAL_LIMITS.targets`; the rest
+ * dropped). Only a value that is not a list of strings is refused. The `/` commands' candidates read theirs the same.
  */
-function readTargets(v: unknown, path: string): Result<Collaboration.ModelTarget[], ProposalProblem> {
+export function readTargets(v: unknown, path: string, max: number = PROPOSAL_LIMITS.targets): Result<Collaboration.ModelTarget[], ProposalProblem> {
     if (!Array.isArray(v)) return err({ path, message: 'Expected a list of element references.' });
     const out: Collaboration.ModelTarget[] = [];
     const seen = new Set<string>();
@@ -146,7 +146,7 @@ function readTargets(v: unknown, path: string): Result<Collaboration.ModelTarget
         seen.add(elementReference(t));
         out.push(t);
     }
-    return ok(out.slice(0, PROPOSAL_LIMITS.targets));
+    return ok(out.slice(0, max));
 }
 
 /** One option: a label, its targets, its own how if any, whether recommended. */

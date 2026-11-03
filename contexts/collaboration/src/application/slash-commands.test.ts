@@ -1,0 +1,166 @@
+// The use cases of the candidate and answer commands of the `/` list over the real store (in-memory SQLite): start
+// (the facilitator only for a candidate command, anyone for an answer command; one of a kind at a time), no triage, the
+// answerer's candidates or answer, a subset applied as one run whose input carries them, stop, a reload, and what the
+// session so far says of them.
+import { describe, expect, test } from 'bun:test';
+import { Collaboration as C, type Result } from '../generated/index.js';
+import { AI_PARTICIPANT_ID } from '../domain/ai.js';
+import { sha256Hex } from '../domain/sha256.js';
+import { createUnitOfWork, openDatabase } from '../infrastructure/sqlite.js';
+import type { Actor } from './actor.js';
+import type { CollaborationDeps } from './ports.js';
+import { createCollaboration, type CollaborationUseCases } from './use-cases.js';
+
+const value = <T, E>(r: Result<T, E>): T => {
+    if (!r.ok) throw new Error(`unexpected error: ${JSON.stringify(r.error)}`);
+    return r.value;
+};
+const error = <T, E>(r: Result<T, E>): E => {
+    if (r.ok) throw new Error(`expected an error, got ${JSON.stringify(r.value)}`);
+    return r.error;
+};
+
+const text = (t: string): C.Text => value(C.makeText(t));
+const facilitatorId = value(C.makeParticipantId('local:facilitator'));
+const bobId = value(C.makeParticipantId('dev:bob'));
+const facilitator: Actor = { kind: 'participant', participant: facilitatorId, role: 'Facilitator' };
+const bob: Actor = { kind: 'participant', participant: bobId, role: 'Participant' };
+const name = value(C.makeDisplayName('Ada'));
+
+function collaboration(): { use: CollaborationUseCases; db: ReturnType<typeof openDatabase> } {
+    const files = new Map<string, Uint8Array>([['sales/order.dt', new TextEncoder().encode('context Sales {}\n')]]);
+    const blobs = new Map<string, Uint8Array>();
+    let t = Date.parse('2026-11-03T09:00:00Z');
+    let n = 0;
+    const db = openDatabase(':memory:');
+    const deps: CollaborationDeps = {
+        uow: createUnitOfWork(db),
+        workspace: {
+            read: async () => ({ files: [...files].map(([path, bytes]) => ({ path, bytes, hash: sha256Hex(bytes) })), symlinks: [] }),
+            write: async () => ({ ok: true }),
+        },
+        blobs: {
+            put: async (fs) => {
+                for (const f of fs) blobs.set(f.hash, f.bytes);
+            },
+            get: async (hash) => blobs.get(hash),
+        },
+        validator: { validate: async () => ({ diagnostics: [], model: undefined, stormings: [], stormingsComplete: true }) },
+        clock: { now: () => new Date((t += 1000)) },
+        ids: { newId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}` },
+    };
+    return { use: createCollaboration(deps), db };
+}
+
+/** A Collab session with Bob joined. */
+async function collab(): Promise<{ use: CollaborationUseCases; session: C.SessionId }> {
+    const { use } = collaboration();
+    const opened = value(await use.openSession({ mode: 'Collab', facilitator: facilitatorId, name }));
+    value(await use.joinSession({ session: opened.session.id, participant: bobId, name: value(C.makeDisplayName('Bob')) }));
+    return { use, session: opened.session.id };
+}
+
+async function solo(): Promise<{ use: CollaborationUseCases; session: C.SessionId; db: ReturnType<typeof openDatabase> }> {
+    const { use, db } = collaboration();
+    const session = value(await use.openSession({ mode: 'Solo', facilitator: facilitatorId, name })).session.id;
+    return { use, session, db };
+}
+
+const inView: C.ViewedAt = {
+    view: { kind: 'Storming', storming: value(C.makeStormingName('Orders')), level: 'BigPicture', stage: value(C.makeStageName('Payment')), exceptions: true },
+};
+
+const start = (use: CollaborationUseCases, session: C.SessionId, actor: Actor = facilitator, viewedAt: C.ViewedAt | null = inView) =>
+    use.startCommand({ session, actor, kind: 'EsExceptions', body: text('例外を洗い出す'), language: 'Ja', ...(viewedAt && { viewedAt }) });
+
+const candidate = (label: string): C.CommandCandidate => ({
+    label: value(C.makeCandidateLabel(label)),
+    targets: [{ kind: 'DtesElement', storming: value(C.makeStormingName('Orders')), local: value(C.makeStormingLocalName('OrderPaid')) }],
+    how: value(C.makeProposalText(`OrderPaid から: ${label}`)),
+});
+
+describe('candidate commands', () => {
+    test('start: the opening message without triage, its job due, about the storming in view; one of a kind; Collab: the facilitator only', async () => {
+        const { use, session } = await solo();
+        const started = value(await start(use, session));
+        expect(started.request).toMatchObject({ author: facilitatorId, body: '例外を洗い出す', viewedAt: inView });
+        expect(started.command).toMatchObject({ state: 'Working', kind: 'EsExceptions', scope: 'Orders', opening: started.request.id });
+        expect(value(await use.sessionState({ session })).triages).toEqual([]);
+        expect(value(await use.commandJobs({ session })).map((j) => j.request.id)).toEqual([started.request.id]);
+        expect(error(await start(use, session))).toEqual({ type: 'CommandAlreadyRunning' });
+
+        const c = await collab();
+        expect(error(await start(c.use, c.session, bob))).toEqual({ type: 'FacilitatorOnly' });
+        expect(value(await c.use.sessionState({ session: c.session })).requests).toEqual([]);
+        value(await start(c.use, c.session));
+    });
+
+    test('no storming in view: no candidates at once, no job; its starter closes it', async () => {
+        const { use, session } = await solo();
+        const started = value(await start(use, session, facilitator, null));
+        expect(started.command).toMatchObject({ state: 'Listed', candidates: [] });
+        expect(started.command.scope).toBeUndefined();
+        expect(value(await use.commandJobs({ session }))).toEqual([]);
+        expect(value(await use.stopCommand({ command: started.command.id, actor: facilitator }))).toMatchObject({ state: 'Stopped' });
+    });
+
+    test('listed, then a subset applied: one run on the opening whose input carries the chosen; the starter only', async () => {
+        const { use, session } = await collab();
+        const started = value(await start(use, session));
+        const id = started.command.id;
+        expect(error(await use.answerCommand({ command: id, answer: text('x') }))).toEqual({ type: 'WrongCommandType' });
+        const listed = value(await use.listCandidates({ command: id, candidates: ['A', 'B', 'C'].map(candidate) }));
+        expect(listed).toMatchObject({ state: 'Listed' });
+        expect(value(await use.commandJobs({ session }))).toEqual([]);
+        expect(error(await use.applyCandidates({ command: id, actor: bob, chosen: [0] }))).toEqual({ type: 'NotTheStarter' });
+        expect(error(await use.applyCandidates({ command: id, actor: facilitator, chosen: [3] }))).toEqual({ type: 'NoSuchCandidate' });
+        expect(error(await use.applyCandidates({ command: id, actor: facilitator, chosen: [] }))).toEqual({ type: 'NoSuchCandidate' });
+        const applied = value(await use.applyCandidates({ command: id, actor: facilitator, chosen: [2, 0, 2] }));
+        expect(applied.command).toMatchObject({ state: 'Applied', chosen: [0, 2], run: applied.run.id });
+        expect(applied.run.input.requests.map((r) => r.request)).toEqual([started.request.id]);
+        expect(applied.run.input.candidates as unknown).toEqual({
+            command: id,
+            kind: 'EsExceptions',
+            scope: 'Orders',
+            chosen: [candidate('A'), candidate('C')],
+        });
+        const soFar = value(await use.sessionSoFar({ session }));
+        expect(soFar.text).toContain('ran /es:exceptions on @{es:Orders}');
+        expect(soFar.text).toContain('applied 2 of the 3 candidates of /es:exceptions');
+        expect(soFar.text).toContain('- A (@{es:Orders/OrderPaid}): OrderPaid から: A');
+        // ended: another one may start
+        value(await start(use, session));
+    });
+
+    test('stop (the starter only) while the AI works; a reload reads it back; the session so far tells what is open', async () => {
+        const { use, session, db } = await solo();
+        const started = value(await start(use, session));
+        expect(value(await use.sessionSoFar({ session })).open).toEqual([expect.stringContaining('The command /es:exceptions')]);
+        const stopped = value(await use.stopCommand({ command: started.command.id, actor: facilitator }));
+        expect(stopped).toMatchObject({ state: 'Stopped', stoppedBy: facilitatorId });
+        expect(error(await use.stopCommand({ command: started.command.id, actor: facilitator }))).toMatchObject({ type: 'NotAllowed' });
+        expect(error(await use.listCandidates({ command: started.command.id, candidates: [] }))).toMatchObject({ type: 'NotAllowed' });
+        const again = await createUnitOfWork(db).transaction((s) => s.slashCommands.listBySession(session));
+        expect(again.map((c) => c.state)).toEqual(['Stopped']);
+        expect(value(await use.sessionState({ session })).slashCommands.map((c) => c.state)).toEqual(['Stopped']);
+    });
+});
+
+describe('answer commands', () => {
+    test('anyone starts one; its answer is a message of the AI replying to the opening', async () => {
+        const { use, session } = await collab();
+        const started = value(await use.startCommand({ session, actor: bob, kind: 'EsRecap', body: text('ここまでのまとめ'), language: 'Ja' }));
+        expect(started.command).toMatchObject({ state: 'Working', kind: 'EsRecap' });
+        expect(started.command.scope).toBeUndefined();
+        expect(value(await use.sessionState({ session })).triages).toEqual([]);
+        expect(error(await use.listCandidates({ command: started.command.id, candidates: [] }))).toEqual({ type: 'WrongCommandType' });
+        const answered = value(await use.answerCommand({ command: started.command.id, answer: text('**決まったこと**\n- なし') }));
+        expect(answered.answer).toMatchObject({
+            author: AI_PARTICIPANT_ID,
+            replyTo: { kind: 'Message', request: started.request.id },
+            body: '**決まったこと**\n- なし',
+        });
+        expect(answered.command).toMatchObject({ state: 'Answered', answer: answered.answer.id });
+        expect(value(await use.commandJobs({ session }))).toEqual([]);
+    });
+});

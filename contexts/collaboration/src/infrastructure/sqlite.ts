@@ -19,6 +19,7 @@ import type {
     RevisionStore,
     OperationLog,
     InterviewRepository,
+    SlashCommandRepository,
     ProposalRepository,
     RestoreOperation,
     TriageRepository,
@@ -289,6 +290,20 @@ export const MIGRATIONS: readonly string[] = [
         revoked_at INTEGER
     ) STRICT;
     CREATE INDEX invites_by_session ON invites(session_id) WHERE revoked_at IS NULL;
+    `,
+    // ---------- the candidate and answer commands of the `/` list ----------
+    // a command names its opening message and, once applied, its run. Sessions written before have none
+    `
+    CREATE TABLE slash_commands (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        seq INTEGER NOT NULL,
+        opening_id TEXT NOT NULL REFERENCES requests(id),
+        run_id TEXT REFERENCES agent_runs(id),
+        state TEXT NOT NULL,
+        data TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX slash_commands_by_session ON slash_commands(session_id, seq);
     `,
 ];
 
@@ -745,6 +760,37 @@ function interviews(db: DatabaseSync): InterviewRepository {
     };
 }
 
+function slashCommands(db: DatabaseSync): SlashCommandRepository {
+    const load = db.prepare('SELECT data FROM slash_commands WHERE id = :id');
+    const save = db.prepare(
+        `INSERT INTO slash_commands (id, session_id, seq, opening_id, run_id, state, data)
+         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM slash_commands), :opening, :run, :state, :data)
+         ON CONFLICT (id) DO UPDATE SET state = excluded.state, run_id = excluded.run_id, data = excluded.data`,
+    );
+    const list = db.prepare('SELECT data FROM slash_commands WHERE session_id = :session ORDER BY seq');
+    return {
+        load(id) {
+            const r = load.get(params({ id }));
+            return r ? decoded<Collaboration.SlashCommand>(text(r, 'data')) : undefined;
+        },
+        save(command) {
+            save.run(
+                params({
+                    id: command.id,
+                    session: command.session,
+                    opening: command.opening,
+                    run: command.state === 'Applied' ? command.run : null,
+                    state: command.state,
+                    data: encodeJson(command),
+                }),
+            );
+        },
+        listBySession(session) {
+            return list.all(params({ session })).map((r) => decoded<Collaboration.SlashCommand>(text(r, 'data')));
+        },
+    };
+}
+
 function outbox(db: DatabaseSync): EventOutbox {
     const append = db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (:session, :type, :payload, :at)');
     const all = db.prepare('SELECT seq, session_id, payload, recorded_at FROM outbox WHERE seq > :cursor ORDER BY seq LIMIT :limit');
@@ -934,6 +980,7 @@ export function createStores(db: DatabaseSync): Stores {
         triages: triages(db),
         proposals: proposals(db),
         interviews: interviews(db),
+        slashCommands: slashCommands(db),
         outbox: outbox(db),
         access: access(db),
         operations: operations(db),

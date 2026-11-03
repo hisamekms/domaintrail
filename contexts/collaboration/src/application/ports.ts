@@ -79,6 +79,15 @@ export interface InterviewRepository {
     listBySession(session: SessionId): Collaboration.Interview[];
 }
 
+/** The candidate and answer commands of the `/` list. */
+export interface SlashCommandRepository {
+    load(id: Collaboration.SlashCommandId): Collaboration.SlashCommand | undefined;
+    /** Inserts or replaces it. */
+    save(command: Collaboration.SlashCommand): void;
+    /** The commands of a session, in the order they were started. */
+    listBySession(session: SessionId): Collaboration.SlashCommand[];
+}
+
 /** The change proposals of the sessions. */
 export interface ProposalRepository {
     load(id: Collaboration.ChangeProposalId): Collaboration.ChangeProposal | undefined;
@@ -245,6 +254,7 @@ export interface Stores {
     readonly triages: TriageRepository;
     readonly proposals: ProposalRepository;
     readonly interviews: InterviewRepository;
+    readonly slashCommands: SlashCommandRepository;
     readonly outbox: EventOutbox;
     readonly access: AccessStore;
     readonly operations: OperationLog;

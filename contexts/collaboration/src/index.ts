@@ -135,6 +135,8 @@ export {
     interviewMessages,
     INTERVIEW_COMMANDS,
     INTERVIEW_LIMITS,
+    interviewCommandOf,
+    isInterviewCommandId,
     isRunning,
     readBrief,
     readBriefText,
@@ -147,6 +149,26 @@ export {
     type InterviewerReply,
     type InterviewProblem,
 } from './domain/interviews.js';
+// the candidate and answer commands of the `/` list (the plan's "Built-in ES commands, phase 1")
+export {
+    CANDIDATE_LIMITS,
+    candidateData,
+    commandJsonSchema,
+    isCommandRunning,
+    isSlashCommandName,
+    readCommandReply,
+    SLASH_COMMAND_NAMES,
+    SLASH_COMMANDS,
+    slashCommandName,
+    slashCommandOf,
+    slashCommandSpec,
+    type CandidateData,
+    type CommandProblem,
+    type CommandReply,
+    type SlashCommandName,
+    type SlashCommandSpec,
+    type SlashCommandType,
+} from './domain/slash-commands.js';
 export { checkTemplates, TEMPLATE_CONTEXTS, TEMPLATE_LIMITS, type MessageTemplateConfig, type TemplateContext } from './domain/templates.js';
 // where the requester was looking when they sent a message
 export {
@@ -169,6 +191,7 @@ export {
     knownRequestId,
     knownRevisionId,
     knownSessionId,
+    knownSlashCommandId,
     knownTriageId,
 } from './domain/ids.js';
 // the rule of the `Emoji` primitive: what counts as one emoji and the form it is kept in (the page decides alike)
@@ -198,6 +221,7 @@ export {
     type TriageProgress,
     type TriageStepInput,
 } from './application/conversation.js';
+export { type SlashCommandJob, type SlashCommandStartedResult, type SlashCommandUseCases, type WrongCommandType } from './application/slash-commands.js';
 export { type InterviewJob, type InterviewStarted as InterviewStartedResult, type InterviewUseCases } from './application/interviews.js';
 export { actorOf, type Actor } from './application/actor.js';
 export { createSessionAccess, secretHash, type LinkInvalid, type SessionAccess, type SessionNotOpen } from './application/access.js';
