@@ -13,7 +13,7 @@
 //   against `MAX_IGNORED_ENTRIES` (`TooManyDeniedEntries`: the run fails, never a list cut short).
 //
 // The paths are taken by their real paths when the agent starts (`readTargets`): one missing is skipped and said.
-import { chmod, lstat, mkdtemp, readdir, rm } from 'node:fs/promises';
+import { chmod, lstat, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import {
@@ -28,6 +28,7 @@ import {
     TooManyDeniedEntries,
     type WorkspaceView,
 } from '@domaintrail/agent';
+import { processAlive } from './process.js';
 import { GitIgnore, gitFileState, gitIgnoredEntries, gitNestedRepositories, gitReadableFiles, repositoryTop } from '@domaintrail/workspace';
 
 /** Whether a name is `.git` or `.domaintrail` in any case or Unicode form. */
@@ -43,13 +44,14 @@ async function fileReadable(file: string, env?: NodeJS.ProcessEnv): Promise<bool
  * A view of the directory `dir` (a real path): git's allowlist where git speaks for it, else, in a git work tree,
  * `GitIgnore` with the user's excludes file, else every file (never `.git`, `.domaintrail`, a nested repository, a link).
  */
-function directoryView(dir: string, parent: string, name: string, env?: NodeJS.ProcessEnv): WorkspaceView {
+function directoryView(dir: string, parent: string, name: string, maxTotalBytes: () => number, env?: NodeJS.ProcessEnv): WorkspaceView {
     const inRepository = repositoryTop(dir) !== undefined;
     let gitignore: GitIgnore | undefined;
     return createWorkspaceView({
         root: dir,
         parent,
         name,
+        maxTotalBytes,
         list: async () => {
             gitignore = undefined;
             return inRepository ? gitReadableFiles(dir, { env }) : undefined;
@@ -59,13 +61,45 @@ function directoryView(dir: string, parent: string, name: string, env?: NodeJS.P
 }
 
 /** A view of the one file `file` (a real path), in a directory named after the file's own. */
-function fileView(file: string, parent: string, name: string, env?: NodeJS.ProcessEnv): WorkspaceView {
+function fileView(file: string, parent: string, name: string, maxTotalBytes: () => number, env?: NodeJS.ProcessEnv): WorkspaceView {
     return createWorkspaceView({
         root: path.dirname(file),
         parent,
+        maxTotalBytes,
         name,
         list: async () => ((await fileReadable(file, env)) ? [path.basename(file)] : []),
     });
+}
+
+/** The most bytes the answerer's copies of what it reads outside the workspace come to, all together (200 MiB). */
+export const MAX_EXTRA_VIEW_BYTES = 200 * 1024 * 1024;
+
+/** The prefix of the private directories holding those copies, in the temporary directory. */
+const READ_VIEWS_PREFIX = 'dt-answerer-read-';
+/** The file in such a directory naming the process that made it. */
+const OWNER_FILE = '.owner';
+/** How long a directory without its owner file may be another agent's that is starting. */
+const STARTING_MS = 60_000;
+
+/**
+ * Removes the copies an agent that is gone left (its process killed before it could): this user's directories of
+ * `READ_VIEWS_PREFIX` in `tmp` whose owner process no longer runs, or that have no owner file past `STARTING_MS`.
+ */
+export async function sweepStaleReadViews(tmp: string = tmpdir(), alive: (pid: number) => boolean = processAlive): Promise<string[]> {
+    const removed: string[] = [];
+    const uid = process.getuid?.();
+    for (const name of await readdir(tmp).catch(() => [] as string[])) {
+        if (!name.startsWith(READ_VIEWS_PREFIX)) continue;
+        const dir = path.join(tmp, name);
+        const s = await lstat(dir).catch(() => undefined);
+        if (!s?.isDirectory() || (uid !== undefined && s.uid !== uid)) continue;
+        const owner = Number((await readFile(path.join(dir, OWNER_FILE), 'utf8').catch(() => '')).trim());
+        const stale = Number.isInteger(owner) && owner > 0 ? !alive(owner) : Date.now() - s.mtimeMs > STARTING_MS;
+        if (!stale) continue;
+        await rm(dir, { recursive: true, force: true });
+        removed.push(dir);
+    }
+    return removed;
 }
 
 /** What the answerer reads outside the workspace: its views, the `ExtraRead` that adds them, and their lifetime. */
@@ -80,10 +114,19 @@ export interface AnswererExtraViews {
  * The answerer's views of `targets` (none: undefined), in one private directory (0700, outside the workspace), each
  * named after the directory it copies (a file: after its own directory) and made at once.
  */
-export async function answererExtraViews(targets: readonly ReadTarget[], env?: NodeJS.ProcessEnv): Promise<AnswererExtraViews | undefined> {
+export async function answererExtraViews(
+    targets: readonly ReadTarget[],
+    env?: NodeJS.ProcessEnv,
+    options: { readonly maxTotalBytes?: number; readonly tmp?: string } = {},
+): Promise<AnswererExtraViews | undefined> {
     if (targets.length === 0) return undefined;
-    const parent = await mkdtemp(path.join(tmpdir(), 'dt-answerer-read-'));
+    const tmp = options.tmp ?? tmpdir();
+    const maxTotal = options.maxTotalBytes ?? MAX_EXTRA_VIEW_BYTES;
+    // what an agent that died left behind (its copies of files outside the workspace)
+    await sweepStaleReadViews(tmp);
+    const parent = await mkdtemp(path.join(tmp, READ_VIEWS_PREFIX));
     await chmod(parent, 0o700);
+    await writeFile(path.join(parent, OWNER_FILE), String(process.pid), { mode: 0o600 });
     const taken = new Set<string>();
     const unique = (base: string): string => {
         const clean = base.replace(/[^\w.@+-]/g, '_').replace(/^\.+/, '_') || 'read';
@@ -93,10 +136,16 @@ export async function answererExtraViews(targets: readonly ReadTarget[], env?: N
         return name;
     };
     const views: { view: WorkspaceView; dir: string; shown: string }[] = [];
+    /** What a view may still hold: the cap less what the others hold. */
+    const left = (self: () => WorkspaceView | undefined) => (): number =>
+        maxTotal - views.reduce((sum, v) => (v.view === self() ? sum : sum + v.view.bytes()), 0);
     try {
         for (const t of targets) {
             const name = unique(path.basename(t.directory ? t.real : path.dirname(t.real)));
-            const view = t.directory ? directoryView(t.real, parent, name, env) : fileView(t.real, parent, name, env);
+            let made: WorkspaceView | undefined;
+            const bound = left(() => made);
+            const view = t.directory ? directoryView(t.real, parent, name, bound, env) : fileView(t.real, parent, name, bound, env);
+            made = view;
             const dir = await view.refresh();
             views.push({ view, dir, shown: t.directory ? `${dir}${path.sep}` : path.join(dir, path.basename(t.real)) });
         }

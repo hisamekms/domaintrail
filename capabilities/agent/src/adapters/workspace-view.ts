@@ -57,6 +57,11 @@ export interface WorkspaceViewOptions {
     readonly maxFileBytes?: number;
     /** Most files in the view (default 20,000). */
     readonly maxFiles?: number;
+    /**
+     * The most bytes the view's files may come to, asked at each refresh (absent: no bound); more is refused before
+     * copying past it, never a view cut short.
+     */
+    readonly maxTotalBytes?: () => number;
     /** Where the view's directory is made (default the system's temporary directory). */
     readonly parent?: string;
     /**
@@ -69,6 +74,8 @@ export interface WorkspaceViewOptions {
 export interface WorkspaceView {
     /** Brings the view up to date with the workspace; its directory. */
     refresh(): Promise<string>;
+    /** The bytes its files came to at its last refresh. */
+    bytes(): number;
     /** Removes the view. */
     dispose(): Promise<void>;
 }
@@ -83,6 +90,7 @@ export function createWorkspaceView(options: WorkspaceViewOptions): WorkspaceVie
     const root = path.resolve(options.root);
     const maxFileBytes = options.maxFileBytes ?? 2 * 1024 * 1024;
     const maxFiles = options.maxFiles ?? 20_000;
+    let total = 0n;
     let dir: string | undefined;
     /** The fingerprint of each file copied, by relative path. */
     const copied = new Map<string, string>();
@@ -121,6 +129,8 @@ export function createWorkspaceView(options: WorkspaceViewOptions): WorkspaceVie
 
     const update = async (): Promise<string> => {
         const view = await make();
+        const maxBytes = options.maxTotalBytes?.();
+        let bytes = 0n;
         const seen = new Set<string>();
         /** The names in each directory below the root (relative), as `readdir` returns them, during this refresh. */
         const names = new Map<string, Promise<ReadonlySet<string>>>();
@@ -161,6 +171,11 @@ export function createWorkspaceView(options: WorkspaceViewOptions): WorkspaceVie
             // regular files only: a link may point anywhere
             if (!s?.isFile() || s.size > BigInt(maxFileBytes)) continue;
             if (seen.size >= maxFiles) throw new Error(`More than ${maxFiles} readable files below ${root}: too many for the answerer's view`);
+            bytes += s.size;
+            if (maxBytes !== undefined && bytes > BigInt(Math.max(0, Math.floor(maxBytes))))
+                throw new Error(
+                    `The readable files below ${root} come to more than the answerer's copies may hold (${maxBytes} bytes left): read fewer or smaller paths`,
+                );
             seen.add(relPath);
             const print = `${s.size}|${s.mtimeNs}|${s.ctimeNs}`;
             if (copied.get(relPath) === print) continue;
@@ -174,6 +189,7 @@ export function createWorkspaceView(options: WorkspaceViewOptions): WorkspaceVie
             await writeFile(target, content, { mode: 0o600 });
             copied.set(relPath, print);
         }
+        total = bytes;
         for (const rel of copied.keys()) {
             if (seen.has(rel)) continue;
             copied.delete(rel);
@@ -189,6 +205,7 @@ export function createWorkspaceView(options: WorkspaceViewOptions): WorkspaceVie
             tail = next.catch(() => undefined);
             return next;
         },
+        bytes: () => Number(total),
         async dispose() {
             await tail;
             if (dir) await rm(dir, { recursive: true, force: true });

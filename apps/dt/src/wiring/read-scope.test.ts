@@ -5,11 +5,11 @@
 // excludes file. A nested repository or a submodule is out of the view and denied to the runner as a whole.
 import { afterEach, describe, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { claudeArguments, MAX_IGNORED_ENTRIES, readTargets, TooManyDeniedEntries, UnexpressiblePath } from '@domaintrail/agent';
-import { answererExtraViews, runnerReadScope } from './read-scope.js';
+import { answererExtraViews, runnerReadScope, sweepStaleReadViews } from './read-scope.js';
 import { answererView, runnerDeniedPaths } from './subscriber.js';
 
 const dirs: string[] = [];
@@ -294,6 +294,60 @@ describe('what the agents read outside the workspace (agent.read.paths), as wire
             expect(await failure(runnerReadScope(async () => [], targets, env))).toContain('changed since the agent started');
         } finally {
             await views.dispose();
+        }
+    });
+
+    test("the answerer's copies are bounded in bytes, all paths together; more fails, never a copy cut short", async () => {
+        const { base, ws, env } = await beside();
+        await put(path.join(base, 'big'), { 'a.bin': 'x'.repeat(600), 'b.bin': 'y'.repeat(600) });
+        const { targets } = readTargets([path.join(base, 'loose'), path.join(base, 'big')], ws);
+        const tmp = await scratch();
+        // loose's files and big's first fit; its second does not
+        const refused = await answererExtraViews(targets, env, { maxTotalBytes: 1000, tmp }).catch((e: unknown) => String(e));
+        expect(refused).toContain("come to more than the answerer's copies may hold");
+        // nothing left behind
+        expect(await readdir(tmp)).toEqual([]);
+        const fits = await answererExtraViews(targets, env, { maxTotalBytes: 10_000, tmp });
+        try {
+            expect(fits?.extra.dirs).toHaveLength(2);
+            await writeFile(path.join(base, 'big', 'c.bin'), 'z'.repeat(9_000));
+            expect(
+                await fits!.refresh().then(
+                    () => 'refreshed',
+                    (e: unknown) => String(e),
+                ),
+            ).toContain('come to more than');
+        } finally {
+            await fits?.dispose();
+        }
+    });
+
+    test("stale copies of an agent that is gone are swept: this user's, by their owner process; a young one without its owner kept", async () => {
+        const tmp = await scratch();
+        const dir = async (name: string, owner?: string): Promise<string> => {
+            const d = path.join(tmp, name);
+            await mkdir(path.join(d, 'specs'), { recursive: true });
+            if (owner !== undefined) await writeFile(path.join(d, '.owner'), owner);
+            return d;
+        };
+        await dir('dt-answerer-read-dead', '111');
+        await dir('dt-answerer-read-alive', '222');
+        await dir('dt-answerer-read-young');
+        const old = await dir('dt-answerer-read-old');
+        await utimes(old, new Date(0), new Date(0));
+        await dir('dt-answerer-other', '111');
+        const removed = await sweepStaleReadViews(tmp, (pid) => pid === 222);
+        expect(removed.map((d) => path.basename(d)).sort()).toEqual(['dt-answerer-read-dead', 'dt-answerer-read-old']);
+        expect((await readdir(tmp)).sort()).toEqual(['dt-answerer-other', 'dt-answerer-read-alive', 'dt-answerer-read-young']);
+        // a new set of copies names its owner
+        const { base, ws, env } = await beside();
+        const views = await answererExtraViews(readTargets([path.join(base, 'loose')], ws).targets, env, { tmp });
+        try {
+            const parent = path.dirname(views!.extra.dirs[0]);
+            expect(await readFile(path.join(parent, '.owner'), 'utf8')).toBe(String(process.pid));
+            expect(views!.extra.dirs).not.toContain(parent);
+        } finally {
+            await views?.dispose();
         }
     });
 });
