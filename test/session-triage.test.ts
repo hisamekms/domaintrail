@@ -22,7 +22,7 @@ import {
     openSessionBlobs,
     openSessionDatabase,
 } from '@domaintrail/collaboration';
-import type { AgentAnswerJobBody, AgentInterviewJobBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import type { AgentAnswerJobBody, AgentCommandJobBody, AgentInterviewJobBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { type AnswerStreamItem, createHttpAgentApi, DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import { createModelValidator, type SessionServer, type SessionSettings, startSessionServer, startSubscriber } from '@domaintrail/dt';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
@@ -147,6 +147,7 @@ function answerStream(ctx: Ctx): {
     items: AnswerStreamItem[];
     job(kind: string): Promise<AgentAnswerJobBody>;
     interviewJob(): Promise<AgentInterviewJobBody>;
+    commandJob(): Promise<AgentCommandJobBody>;
     close(): void;
     post(job: string, body: unknown): Promise<Response>;
 } {
@@ -163,6 +164,7 @@ function answerStream(ctx: Ctx): {
     let seen = 0;
     // interview jobs are taken in their own order: a triage job may come before or after one
     let seenInterview = 0;
+    let seenCommand = 0;
     cleanups.push(async () => abort.abort());
     return {
         items,
@@ -172,7 +174,7 @@ function answerStream(ctx: Ctx): {
                 if (i < 0) return undefined;
                 seen = i + 1;
                 const it = items[i];
-                return it.kind === 'job' && it.job.kind !== 'interview' ? it.job : undefined;
+                return it.kind === 'job' && it.job.kind !== 'interview' && it.job.kind !== 'command' ? it.job : undefined;
             });
         },
         async interviewJob() {
@@ -182,6 +184,15 @@ function answerStream(ctx: Ctx): {
                 seenInterview = i + 1;
                 const it = items[i];
                 return it.kind === 'job' && it.job.kind === 'interview' ? it.job : undefined;
+            });
+        },
+        async commandJob() {
+            return until('a command job', async () => {
+                const i = items.findIndex((it, j) => j >= seenCommand && it.kind === 'job' && it.job.kind === 'command');
+                if (i < 0) return undefined;
+                seenCommand = i + 1;
+                const it = items[i];
+                return it.kind === 'job' && it.job.kind === 'command' ? it.job : undefined;
             });
         },
         close: () => abort.abort(),
@@ -457,20 +468,22 @@ describe('the answers entry point', () => {
     });
 });
 
-describe('the interviews of `/es` and `/model`', () => {
+describe('the interviews of `/es:start` and `/model:start`', () => {
     test("the facilitator only; the starter's answers go to the interviewer, others' are triaged; the brief confirmed is a run", async () => {
         const ctx = await setup();
-        const refused = await ctx.api(ctx.bob, 'interviews', { command: 'es', body: 'ES を始める', language: 'ja' });
+        const refused = await ctx.api(ctx.bob, 'interviews', { command: 'es:start', body: 'ES を始める', language: 'ja' });
         expect(refused.status).toBe(403);
-        const started = await ctx.api(ctx.ada, 'interviews', { command: 'es', body: 'ES を始める', language: 'ja' });
+        expect((await ctx.api(ctx.ada, 'interviews', { command: 'es:recap', body: 'x', language: 'ja' })).status).toBe(400);
+        const started = await ctx.api(ctx.ada, 'interviews', { command: 'es:start', body: 'ES を始める', language: 'ja' });
         expect(started.status).toBe(201);
         const { interview } = (await started.json()) as { interview: { id: string; opening: string } };
+        // the former IDs are still read
         expect((await ctx.api(ctx.ada, 'interviews', { command: 'model', body: 'x', language: 'ja' })).status).toBe(409);
         const stream = answerStream(ctx);
         const first = await stream.interviewJob();
         expect(first).toMatchObject({
             kind: 'interview',
-            command: 'es',
+            command: 'es:start',
             language: 'ja',
             author: 'Facilitator',
             transcript: [{ from: 'person', text: 'ES を始める' }],
@@ -564,6 +577,99 @@ describe('the view a message was sent from', () => {
         const started = await ctx.api(ctx.ada, 'interviews', { command: 'es', body: 'ES を始める', language: 'ja', viewedAt: { view: storming } });
         expect(started.status).toBe(201);
         expect((await stream.interviewJob()).request.viewedAt).toEqual({ view: storming });
+    });
+});
+
+describe('the candidate and answer commands of the `/` list', () => {
+    const STORMING = `storming Orders "注文" {
+  event OrderPlaced "注文を受け付けた"
+  event OrderPaid "支払われた"
+  timeline Normal "通常" {
+    OrderPlaced
+    OrderPaid
+  }
+}
+`;
+    const storming = { kind: 'Storming', storming: 'Orders', level: 'BigPicture', exceptions: true } as const;
+
+    test('/es:exceptions: the facilitator only, no triage; candidates validated, a subset applied as one run; reload keeps it', async () => {
+        const root = await scratch();
+        await writeFile(path.join(root, 'orders.dtes'), STORMING);
+        const ctx = await setup(root);
+        const body = { command: 'es:exceptions', body: '例外を洗い出す', language: 'ja', viewedAt: { view: storming } };
+        expect((await ctx.api(ctx.bob, 'commands', body)).status).toBe(403);
+        expect((await ctx.api(ctx.ada, 'commands', { ...body, command: 'es:start' })).status).toBe(400);
+        const started = await ctx.api(ctx.ada, 'commands', body);
+        expect(started.status).toBe(201);
+        const { command, request } = (await started.json()) as { command: { id: string; scope: string }; request: { id: string } };
+        expect(command.scope).toBe('Orders');
+        expect(triageOf(await ctx.state(), request.id)).toBeUndefined();
+        expect((await ctx.api(ctx.ada, 'commands', body)).status).toBe(409);
+
+        const stream = answerStream(ctx);
+        const job = await stream.commandJob();
+        expect(job).toMatchObject({ kind: 'command', name: 'es:exceptions', type: 'candidates', language: 'ja', author: 'Facilitator' });
+        expect(job.request.viewedAt).toEqual({ view: storming });
+        // an answer is not what it takes
+        expect((await stream.post(job.job, { kind: 'answer', answer: 'x', durationMs: 1 })).status).toBe(409);
+        const again = await stream.commandJob();
+        const candidate = (label: string): object => ({
+            label,
+            targets: ['@{es:Orders/OrderPaid}', 'a/path.dtes', `@{es:Orders/${label}}`],
+            how: `OrderPaid から: ${label}`,
+        });
+        const candidates = Array.from({ length: 14 }, (_, i) => candidate(`Failed${i}`));
+        expect((await stream.post(again.job, { kind: 'candidates', candidates, durationMs: 3 })).status).toBe(200);
+        const listed = (await ctx.state(ctx.bob)).slashCommands?.find((c) => c.id === command.id);
+        if (listed?.state !== 'Listed') throw new Error('listed');
+        // at most twelve; a malformed reference dropped
+        expect(listed.candidates).toHaveLength(12);
+        expect(listed.candidates[0]?.targets).toEqual([
+            { kind: 'DtesElement', storming: 'Orders', local: 'OrderPaid' },
+            { kind: 'DtesElement', storming: 'Orders', local: 'Failed0' },
+        ]);
+
+        expect((await ctx.api(ctx.bob, `commands/${command.id}/apply`, { chosen: [0] })).status).toBe(403);
+        expect((await ctx.api(ctx.ada, `commands/${command.id}/apply`, { chosen: [12] })).status).toBe(400);
+        const applied = await ctx.api(ctx.ada, `commands/${command.id}/apply`, { chosen: [3, 1] });
+        expect(applied.status).toBe(201);
+        const { run } = (await applied.json()) as { run: { id: string } };
+        const state = await ctx.state();
+        expect(state.runs.find((r) => r.id === run.id)?.input).toMatchObject({
+            requests: [{ request: request.id }],
+            candidates: { command: command.id, kind: 'EsExceptions', scope: 'Orders', chosen: [{ label: 'Failed1' }, { label: 'Failed3' }] },
+        });
+        expect(state.slashCommands?.find((c) => c.id === command.id)).toMatchObject({ state: 'Applied', chosen: [1, 3], run: run.id });
+        // the session so far tells it (a recap's job carries it)
+        expect((await ctx.api(ctx.ada, 'commands', { command: 'es:recap', body: 'まとめ', language: 'ja' })).status).toBe(201);
+        expect((await stream.commandJob()).sessionSoFar?.text).toContain('applied 2 of the 12 candidates of /es:exceptions');
+    });
+
+    test('/es:exceptions with no storming in view lists nothing at once; its starter closes it', async () => {
+        const ctx = await setup();
+        const started = await ctx.api(ctx.ada, 'commands', { command: 'es:exceptions', body: '例外を洗い出す', language: 'ja' });
+        const { command } = (await started.json()) as { command: { id: string; state: string; candidates: unknown[] } };
+        expect(command).toMatchObject({ state: 'Listed', candidates: [] });
+        expect((await ctx.api(ctx.bob, `commands/${command.id}/stop`, {})).status).toBe(403);
+        expect((await ctx.api(ctx.ada, `commands/${command.id}/stop`, {})).status).toBe(200);
+        expect((await ctx.state()).slashCommands?.find((c) => c.id === command.id)).toMatchObject({ state: 'Stopped' });
+    });
+
+    test('/es:recap: anyone, no triage; the answer is a message of the AI replying to the opening', async () => {
+        const ctx = await setup();
+        const started = await ctx.api(ctx.bob, 'commands', { command: 'es:recap', body: 'ここまでのまとめ', language: 'en' });
+        expect(started.status).toBe(201);
+        const { command, request } = (await started.json()) as { command: { id: string }; request: { id: string } };
+        expect(triageOf(await ctx.state(), request.id)).toBeUndefined();
+        const stream = answerStream(ctx);
+        const job = await stream.commandJob();
+        expect(job).toMatchObject({ kind: 'command', name: 'es:recap', type: 'answer', language: 'en', author: 'Bob' });
+        expect(job.sessionSoFar?.text).toContain('ran /es:recap');
+        expect((await stream.post(job.job, { kind: 'answer', answer: '**Decided**\n- nothing yet', durationMs: 2 })).status).toBe(200);
+        const state = await ctx.state(ctx.bob);
+        const answer = state.requests.find((r) => r.author === 'ai' && r.replyTo?.kind === 'Message' && r.replyTo.request === request.id);
+        expect(answer?.body).toBe('**Decided**\n- nothing yet');
+        expect(state.slashCommands?.find((c) => c.id === command.id)).toMatchObject({ state: 'Answered', answer: answer?.id });
     });
 });
 
