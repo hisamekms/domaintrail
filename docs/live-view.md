@@ -213,8 +213,8 @@ The chat has two views:
   `AI の作業へ（実行待ち）`, a click going to the turn). While
   a run runs, a small line under its quoted messages tells what the AI is doing, as it goes: `読んでいます order.dt`,
   `書き換えています`, `確かめています dt check`, `まとめています` (a file by its last segment, its path in the tooltip). The
-  facilitator sends messages to the AI from the stream (AI に送る, … to send with a comment, several
-  with Shift/⌘-click), answers questions and picks alternatives in the cards, stops runs (✕ right after a running or
+  facilitator sends messages to the AI from the stream (AI に送る on a message not addressed or judged to need nothing,
+  several with Shift/⌘-click or … → まとめて送る, each then triaged), answers questions and picks alternatives in the cards, stops runs (✕ right after a running or
   queued turn's state, always shown, after a dialog asks: 実行を中止), and reaches
   the revert and the changes from a card's ⋯ (この作業を打ち消す, 変更を見る; the revisions are
   in the tooltips only: a revert, once confirmed, is the facilitator's message 「〈作業名〉の変更を打ち消す」 and an AI
@@ -241,6 +241,21 @@ The chat has two views:
   The composer's text is 6 rows high to start. The handle on its top edge makes it taller (drag up) or shorter, from 2
   rows up to 60% of the chat's height — focused, ↑↓ change it by a row and Home/End go to the ends; a double click
   brings the default back. The height is in rows, so it follows the text size, and is remembered per browser.
+- **The AI as a participant** (ADR 0030): `@` offers `AI` first; a message mentioning it, replying to the AI or to an
+  AI turn, and every message under `dt open`, reaches the AI (the composer shows the AI's mark beside 送る in collab).
+  Such a message shows the AI's mark and a quiet `…` in its status slot while it is triaged and answered, then a link
+  (the AI's mark and ↓) to what came of it: the AI's answer (a message of the AI under it, its element names as links;
+  replying to it reaches the AI again), a change proposal (変更案, a participant's 依頼: 何を / どこを / どう, 承認待ち until
+  the facilitator approves it — as is, after 編集, or several chosen together, one run — or rejects it with an optional
+  note; its requester can 取り下げ it meanwhile), or its run's card; nothing when it needed nothing from the AI (the
+  facilitator can still AI に送る it). An answer the server gave up after its retries reads AI が答えられませんでした, with
+  もう一度 for the facilitator. The facilitator opens a message's 仕分けの記録 from its … (how it was addressed, each stage's
+  answer, confidence, model, time and reason). A run that answered a question instead of editing shows its answer,
+  flagged when it changed files all the same. The head says AI 接続なし (with n 件待ち) while no agent is connected, and
+  nothing once it is. Under `dt open` the collab menu is a ⋯ with the workspace's record and restore only, and
+  reactions, votes, `@` and AI に送る are gone: every message goes to the AI as it is sent. How long a run takes is
+  mostly the model and effort it runs with: `agent.run.model` / `agent.run.effort` (and `agent.answer.*` for answers)
+  are the biggest lever.
 - **AI の作業**: everything sent to the AI, from start to end; the tab's badge counts what is not finished (running and
   queued; not what awaits an answer). Each row is one card — a run with the runs that continue it — in groups:
   答え待ち (the AI asked a question), 実行中 (a pulsing dot, how long it has run, and the line of what the AI is doing), 待ち n (numbered in the order they

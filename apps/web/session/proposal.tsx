@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { Bot, Check, Pencil, X } from 'lucide-react';
 import type { ProposalBody } from '@domaintrail/collaboration/protocol';
 import { AI_NAME, openProposals, proposalContent, type ProposalJson } from './ai';
-import { Bubble } from './bubble';
+import { Bubble, Clamped } from './bubble';
 import { DecidedLine } from './card';
 import { useChat } from './chat-context';
 import { ReplyText } from './reply';
@@ -97,8 +97,10 @@ export function ProposalCard({ proposal: p, continues }: { proposal: ProposalJso
                             {FIELDS.map((f) => (
                                 <div key={f} className="proposal-field">
                                     <dt className="proposal-key">{t[f]}</dt>
-                                    <dd className="chat-text">
-                                        <ReplyText text={content[f]} onNavigate={onNavigate} />
+                                    <dd>
+                                        <Clamped tx={tx}>
+                                            <ReplyText text={content[f]} onNavigate={onNavigate} />
+                                        </Clamped>
                                     </dd>
                                 </div>
                             ))}
