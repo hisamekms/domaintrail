@@ -70,7 +70,8 @@ I/O; only composition imports infrastructure).
   the same run without recording anything, a stale token gets `LeaseLost`.
 - **Presence**: ephemeral, never stored. `ViewLocation` = `{ kind: 'dt', viewKey, layoutKey }` |
   `{ kind: 'dtes', stormingId, level, timelineId?, layoutKey }`, where `layoutKey` is the laid-out graph's ID and
-  signature; cursors (tldraw world coordinates, ≤ 20 Hz) are drawn only for an equal `ViewLocation`.
+  signature; cursors (page coordinates — tldraw's world coordinates, unchanged under React Flow by
+  [ADR 0029](0029-react-flow-canvas.md) —, ≤ 20 Hz) are drawn only for an equal `ViewLocation`.
 
 ### Server, transport, security
 

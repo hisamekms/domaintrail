@@ -189,6 +189,10 @@
     --selected-text: var(--p-indigo-900);
     /* the local selection on the canvas: a ring outside the node, apart from its kind's edge and the change's ring */
     --selected-ring: var(--action);
+    /* the canvas behind the diagrams, and the outline of the item under the pointer or selected (as they were with
+       tldraw: its background and selection colours) */
+    --canvas-bg: hsl(210, 20%, 98%);
+    --canvas-outline: hsl(214, 84%, 56%);
     /* a control that cannot be used now (not held to the contrast minimum, by WCAG's exception) */
     --disabled-bg: var(--p-slate-100);
     --disabled-text: var(--p-slate-400);
@@ -385,6 +389,8 @@
     color-scheme: dark;
 
     /* 2. theme */
+    --canvas-bg: hsl(240, 5%, 6.5%);
+    --canvas-outline: hsl(217, 89%, 61%);
     --brand-ink: var(--p-brand-indigo-dark);
     --bg: var(--p-night-950);
     --surface: var(--p-night-900);
@@ -524,8 +530,8 @@ input {
 }
 
 /* the keyboard focus of the page's own controls: one visible ring in the focus colour (zero specificity, so that a
-   control's own focus style wins; not inside tldraw's canvas, which draws its own) */
-:where(:is(button, a, select, summary, [role='tab'], [tabindex]):focus-visible:not(.tl-container *)) {
+   control's own focus style wins; not the canvas, which takes the focus on a click to have its keys) */
+:where(:is(button, a, select, summary, [role='tab'], [tabindex]):focus-visible:not(.diagram-canvas, .diagram-canvas *)) {
     outline: 2px solid var(--focus);
     outline-offset: 2px;
 }
@@ -1197,12 +1203,13 @@ a.field-origin {
     text-decoration: line-through;
 }
 /* the local selection (issue #33 §5): an indigo ring outside the node and the change's 3px ring, so that it never
-   recolours the kind's edge or paper (two classes: tldraw's container clears the outline) */
-.tl-html-container.dn-selected {
+   recolours the kind's edge or paper */
+.dn.dn-selected,
+.dg.dn-selected {
     outline: 2px solid var(--selected-ring);
     outline-offset: 5px;
 }
-/* on the top edge, where the selection outline goes around them (see `DomainNodeUtil.getIndicatorPath`) */
+/* on the top edge, where the selection outline goes around them (see `nodeOutlinePath`) */
 .dn-badge {
     position: absolute;
     top: -10px;
@@ -1368,7 +1375,7 @@ a.field-origin {
     font: 13px var(--sans);
     fill: var(--model-edge-label);
     paint-order: stroke;
-    stroke: var(--tl-color-background);
+    stroke: var(--canvas-bg);
     stroke-width: 4px;
     stroke-linejoin: round;
 }
@@ -1394,6 +1401,66 @@ a.field-origin {
     fill: var(--changed);
 }
 
+/* ---------- the canvas (view/flow-canvas.tsx, React Flow) ---------- */
+
+.diagram-canvas {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+.diagram-canvas:focus {
+    outline: none;
+}
+.diagram-canvas .react-flow {
+    --xy-background-color: var(--canvas-bg);
+    --xy-selection-background-color: color-mix(in srgb, var(--canvas-outline) 8%, transparent);
+    --xy-selection-border: 1px solid var(--canvas-outline);
+}
+/* the background shows the arrow, as it did; a drag on it pans */
+.diagram-canvas .react-flow__pane.draggable {
+    cursor: default;
+}
+.diagram-canvas .react-flow__pane.dragging {
+    cursor: grabbing;
+}
+/* the handles an edge needs (it draws its own route): never seen */
+.diagram-handle {
+    visibility: hidden;
+    pointer-events: none;
+}
+/* the outline of the item under the pointer or selected (tldraw's indicator): 1.5px on the screen at any zoom, over
+   the item */
+.diagram-outline {
+    position: absolute;
+    left: 0;
+    top: 0;
+    overflow: visible;
+    pointer-events: none;
+    display: none;
+}
+.diagram-outline path,
+.diagram-outline-line {
+    fill: none;
+    stroke: var(--canvas-outline);
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
+    pointer-events: none;
+}
+.diagram-outline-line {
+    display: none;
+}
+.react-flow__node.selected > .diagram-outline,
+.react-flow__node:not(.diagram-ghost):hover > .diagram-outline {
+    display: block;
+}
+.react-flow__edge.selected .diagram-outline-line,
+.react-flow__edge:hover .diagram-outline-line {
+    display: inline;
+}
+.diagram-anchor {
+    pointer-events: none !important;
+}
+
 /* ---------- cursors: everything that reacts to a click shows a pointer ---------- */
 
 .dn,
@@ -1402,7 +1469,8 @@ a.field-origin {
 .de-hit {
     cursor: pointer;
 }
-.dn-change-removed {
+.dn-change-removed,
+.diagram-ghost .di {
     cursor: default;
 }
 .de-hit {
@@ -2354,7 +2422,7 @@ select,
     display: flex;
     flex-direction: column;
 }
-/* the floating button opening it while it is closed, at the bottom right of the canvas (above tldraw's notice) */
+/* the floating button opening it while it is closed, at the bottom right of the canvas */
 .launcher-slot {
     position: absolute;
     right: 18px;

@@ -1,7 +1,6 @@
-import { useEffect } from 'react';
-import { Box, react, type Editor } from 'tldraw';
 import type { LaidOutGraph } from '@domaintrail/visualization';
-import { findShapeForElement } from '../render';
+import { rectCenter, rectContains, type Rect, type SceneId, unionRects } from '../scene';
+import type { DiagramCanvas } from './diagram';
 
 /**
  * Initial zoom never goes below this (in units of normal-size text), so text stays readable;
@@ -9,34 +8,35 @@ import { findShapeForElement } from '../render';
  */
 const MIN_INITIAL_ZOOM = 0.9;
 
-export function fitReadable(editor: Editor, textScale = 1): void {
+export function fitReadable(canvas: DiagramCanvas, textScale = 1): void {
     const minZoom = MIN_INITIAL_ZOOM / textScale;
-    editor.zoomToFit();
-    if (editor.getZoomLevel() >= minZoom) return;
-    const bounds = editor.getCurrentPageBounds();
+    canvas.fitContent();
+    if (canvas.getZoom() >= minZoom) return;
+    const bounds = canvas.contentBounds();
     if (!bounds) return;
-    const screen = editor.getViewportScreenBounds();
+    const screen = canvas.viewportScreenBounds();
     const margin = 24;
-    editor.setCamera({ ...editor.getCamera(), z: minZoom });
-    editor.centerOnPoint({
-        x: Math.min(bounds.center.x, bounds.x + screen.w / minZoom / 2 - margin),
-        y: Math.min(bounds.center.y, bounds.y + screen.h / minZoom / 2 - margin),
+    canvas.setCamera({ ...canvas.getCamera(), z: minZoom });
+    const center = rectCenter(bounds);
+    canvas.centerOn({
+        x: Math.min(center.x, bounds.x + screen.w / minZoom / 2 - margin),
+        y: Math.min(center.y, bounds.y + screen.h / minZoom / 2 - margin),
     });
 }
 
 /** Everything the graph draws, edge labels included (they stick out of the shapes' bounds). */
-function graphBounds(graph: LaidOutGraph): Box | undefined {
+export function graphBounds(graph: LaidOutGraph): Rect | undefined {
     const boxes = [
         ...Object.values(graph.nodeLayout),
         ...Object.values(graph.edgeLayout).flatMap((e) => [...(e.label ? [e.label] : []), ...e.points.map((p) => ({ ...p, width: 0, height: 0 }))]),
     ];
-    return boxes.length ? Box.Common(boxes.map((b) => new Box(b.x, b.y, b.width, b.height))) : undefined;
+    return unionRects(boxes.map((b) => ({ x: b.x, y: b.y, w: b.width, h: b.height })));
 }
 
 /** Fits the whole graph, zoomed in no further than normal size (for small panes, where `fitReadable` would crop). */
-export function fitAll(editor: Editor, graph: LaidOutGraph, animate = false): void {
+export function fitAll(canvas: DiagramCanvas, graph: LaidOutGraph, animate = false): void {
     const bounds = graphBounds(graph);
-    if (bounds) editor.zoomToBounds(bounds, { targetZoom: 1, inset: 16, animation: animate ? { duration: 200 } : undefined });
+    if (bounds) canvas.fitBounds(bounds, { maxZoom: 1, inset: 16, animate });
 }
 
 /** What the camera does when a view's graph is drawn. */
@@ -52,32 +52,19 @@ export function cameraMove(opts: { switched: boolean; storming: boolean; saved: 
     return opts.saved ? 'restore' : 'fitReadable';
 }
 
-/** Selects the shape of `id` if it is drawn, and brings it into view; otherwise clears the selection. */
-export function highlightElement(editor: Editor, id: string): void {
-    const shape = findShapeForElement(editor, id);
-    if (!shape) {
-        editor.selectNone();
+/** Selects the item of `id` if it is drawn, and brings it into view; otherwise clears the selection. */
+export function highlightElement(canvas: DiagramCanvas, id: string): void {
+    const item = canvas.findElement(id);
+    if (!item) {
+        canvas.selectNone();
         return;
     }
-    editor.select(shape);
-    const b = editor.getShapePageBounds(shape);
-    if (b && !editor.getViewportPageBounds().contains(b)) editor.centerOnPoint(b.center, { animation: { duration: 200 } });
+    showItem(canvas, item);
 }
 
-/**
- * tldraw hit-tests shapes itself (DOM hover never reaches them) and resets the cursor on its own state changes
- * (e.g. after a click), so the pointer cursor is re-derived whenever the hover target or the cursor changes.
- */
-export function usePointerCursor(editor: Editor | null): void {
-    useEffect(() => {
-        if (!editor) return;
-        return react('pointer cursor', () => {
-            const id = editor.getHoveredShapeId();
-            const shape = id ? editor.getShape(id) : undefined;
-            const clickable = !!shape && !(shape.meta as { ghost?: boolean }).ghost;
-            const cursor = editor.getInstanceState().cursor.type;
-            if (clickable && cursor === 'default') editor.setCursor({ type: 'pointer', rotation: 0 });
-            else if (!clickable && cursor === 'pointer') editor.setCursor({ type: 'default', rotation: 0 });
-        });
-    }, [editor]);
+/** Selects an item and, unless it is wholly in view, centers it (animated). */
+export function showItem(canvas: DiagramCanvas, item: SceneId): void {
+    canvas.select([item]);
+    const b = canvas.itemBounds(item);
+    if (b && !rectContains(canvas.viewportPageBounds(), b)) canvas.centerOn(rectCenter(b), { animate: true });
 }

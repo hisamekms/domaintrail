@@ -1,19 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Tldraw, react, useValue, type Editor, type TLCamera } from 'tldraw';
 import type { ModelDiff } from '@domaintrail/modeling';
 import type { Diagnostic } from '@domaintrail/kernel';
 import { type DisplayMode, type LaidOutGraph, type Lang, TRANSITION_LABELS, type TransitionLabels } from '@domaintrail/visualization';
-import { fitAll, highlightElement, usePointerCursor } from './view/canvas';
+import { fitAll, highlightElement } from './view/canvas';
 import { useT } from './i18n';
 import { usePersistentState } from './shared/layout';
-import { renderGraph, shapeElementId, withWriteAccess } from './render';
-import { shapeUtils } from './shapes';
+import { buildScene } from './render';
 import { applyTheme, type Theme } from './theme';
 import { CanvasControls, EdgeHint } from './view/canvas-controls';
 import { useCenterOnResize } from './view/center';
+import { useCanvasValue, type Camera, type DiagramCanvas } from './view/diagram';
+import { FlowCanvas } from './view/flow-canvas';
+import { selectedElement } from './view/navigation';
 
 /** Camera of each aggregate's diagram, kept while the page is open (the canvas unmounts with its inspector tab). */
-const cameras = new Map<string, TLCamera>();
+const cameras = new Map<string, Camera>();
 
 /**
  * State diagram of one aggregate, in the inspector. It stays on the aggregate while its states and commands are
@@ -37,7 +38,7 @@ export function StatesCanvas(props: {
 }) {
     const { aggregateId } = props;
     const t = useT();
-    const [editor, setEditor] = useState<Editor | null>(null);
+    const [canvas, setCanvas] = useState<DiagramCanvas | null>(null);
     const [savedLabels, setLabels] = usePersistentState<TransitionLabels>('domaintrail.states.transitionLabels', 'both');
     const labels = TRANSITION_LABELS.includes(savedLabels) ? savedLabels : 'both';
     const graph = props.graphs?.[labels];
@@ -45,73 +46,64 @@ export function StatesCanvas(props: {
     /** The aggregate whose camera is shown (set once it is restored or fitted). */
     const shown = useRef<string | null>(null);
 
-    usePointerCursor(editor);
-    useCenterOnResize(editor);
+    useCenterOnResize(canvas);
     useEffect(() => {
-        applyTheme(props.theme, editor);
-    }, [props.theme, editor]);
+        applyTheme(props.theme, canvas);
+    }, [props.theme, canvas]);
 
     useEffect(() => {
-        if (!editor) return;
-        return react('remember camera', () => {
-            const camera = editor.getCamera();
+        if (!canvas) return;
+        return canvas.watch(() => {
+            const camera = canvas.getCamera();
             if (shown.current === aggregateId) cameras.set(aggregateId, camera);
         });
-    }, [editor, aggregateId]);
+    }, [canvas, aggregateId]);
 
     // Draw the graph; restore the aggregate's camera, or fit the first time it is shown.
     useEffect(() => {
-        if (!editor) return;
+        if (!canvas) return;
         if (!graph) {
-            withWriteAccess(editor, () => editor.deleteShapes([...editor.getCurrentPageShapeIds()]));
+            canvas.clear();
             shown.current = null;
             return;
         }
-        renderGraph(editor, graph, {
-            diff: props.diff,
-            diagnostics: props.diagnostics,
-            previous,
-            mode: props.mode,
-            lang: props.lang,
-            transitionLabels: labels,
-        });
+        canvas.show(
+            buildScene(graph, {
+                diff: props.diff,
+                diagnostics: props.diagnostics,
+                previous,
+                mode: props.mode,
+                lang: props.lang,
+                transitionLabels: labels,
+            }),
+        );
         if (shown.current !== aggregateId) {
             const saved = cameras.get(aggregateId);
-            if (saved) editor.setCamera(saved);
-            else fitAll(editor, graph);
+            if (saved) canvas.setCamera(saved);
+            else fitAll(canvas, graph);
             shown.current = aggregateId;
-            if (props.selected) highlightElement(editor, props.selected);
+            if (props.selected) highlightElement(canvas, props.selected);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [editor, graph, previous, props.diff, props.diagnostics, props.mode, props.lang, labels, aggregateId]);
+    }, [canvas, graph, previous, props.diff, props.diagnostics, props.mode, props.lang, labels, aggregateId]);
 
     // Show a selection made elsewhere.
     useEffect(() => {
-        if (editor && props.selected && shown.current) highlightElement(editor, props.selected);
-    }, [editor, props.selected]);
+        if (canvas && props.selected && shown.current) highlightElement(canvas, props.selected);
+    }, [canvas, props.selected]);
 
-    // Clicking a shape selects it (without moving the camera).
-    const selectedOnCanvas = useValue(
-        'selected element',
-        () => {
-            const only = editor?.getOnlySelectedShape();
-            return only && editor ? shapeElementId(editor, only.id) : undefined;
-        },
-        [editor],
-    );
+    // Clicking an item selects its element (without moving the camera).
+    const selectedOnCanvas = useCanvasValue(canvas, selectedElement, []);
     useEffect(() => {
         if (selectedOnCanvas && selectedOnCanvas !== props.selected) props.onSelect(selectedOnCanvas);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedOnCanvas]);
 
-    const onMount = useCallback((e: Editor) => {
-        e.updateInstanceState({ isReadonly: true });
-        setEditor(e);
-    }, []);
+    const onMount = useCallback((c: DiagramCanvas) => setCanvas(c), []);
 
     return (
         <div className="states-canvas">
-            <Tldraw shapeUtils={shapeUtils} hideUi onMount={onMount} />
+            <FlowCanvas onMount={onMount} />
             {graph ? (
                 <>
                     <div className="canvas-toolbar">
@@ -130,11 +122,11 @@ export function StatesCanvas(props: {
                         </div>
                     </div>
                     <CanvasControls
-                        editor={editor}
-                        fitAll={() => editor && fitAll(editor, graph, true)}
+                        canvas={canvas}
+                        fitAll={() => canvas && fitAll(canvas, graph, true)}
                         legend={{ view: 'states', open: props.legendOpen, onToggle: props.onLegendToggle }}
                     />
-                    <EdgeHint editor={editor} view="states" />
+                    <EdgeHint canvas={canvas} view="states" />
                 </>
             ) : (
                 <div className="empty">{t.noDiagram}</div>

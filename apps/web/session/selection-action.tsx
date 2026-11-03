@@ -4,7 +4,7 @@
 // `C` key does; once every selected element is a chip it shows as added, and only opens the chat.
 import { Check, MessageSquarePlus } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
-import { useValue, type Editor } from 'tldraw';
+import { useCanvasValue, type DiagramCanvas } from '../view/diagram';
 
 /** Room between the selection's bounds and the button. */
 const GAP = 6;
@@ -28,7 +28,7 @@ export function AddButton({ action, style }: { action: AddAction; style?: CSSPro
             style={style}
             aria-label={label}
             data-tooltip={label}
-            // keeps the canvas's selection: the click must not reach tldraw
+            // keeps the canvas's selection: the click must not reach the canvas
             onPointerDown={(e) => e.stopPropagation()}
             onClick={action.onAdd}
         >
@@ -37,23 +37,23 @@ export function AddButton({ action, style }: { action: AddAction; style?: CSSPro
     );
 }
 
-export function SelectionAction({ editor, action }: { editor: Editor | null; action: AddAction | undefined }): ReactNode {
-    const at = useValue(
-        'selection action',
-        () => {
-            if (!editor || editor.getSelectedShapeIds().length === 0) return undefined;
-            if (editor.inputs.getIsDragging() || editor.inputs.getIsPanning() || editor.getCameraState() === 'moving') return undefined;
-            const bounds = editor.getSelectionPageBounds();
+export function SelectionAction({ canvas, action }: { canvas: DiagramCanvas | null; action: AddAction | undefined }): ReactNode {
+    const at = useCanvasValue(
+        canvas,
+        (c) => {
+            if (!c || c.selectedIds().length === 0) return undefined;
+            if (c.isMoving()) return undefined;
+            const bounds = c.selectionBounds();
             if (!bounds) return undefined;
-            // the top right corner, outside the shapes
-            const corner = editor.pageToViewport({ x: bounds.maxX, y: bounds.minY });
-            const { w, h } = editor.getViewportScreenBounds();
+            // the top right corner, outside the items
+            const corner = c.pageToViewport({ x: bounds.x + bounds.w, y: bounds.y });
+            const { w, h } = c.viewportScreenBounds();
             const x = Math.min(corner.x + GAP, w - SIZE - GAP);
             const y = Math.max(corner.y - SIZE - GAP, GAP);
             if (corner.x < 0 || corner.y > h || x < 0) return undefined;
             return { x, y };
         },
-        [editor],
+        [],
     );
     if (!action || !at) return null;
     return (

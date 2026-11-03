@@ -65,7 +65,7 @@ export type ViewLocation =
     | { readonly kind: 'dt'; readonly viewKey: string; readonly layoutKey: string }
     | { readonly kind: 'dtes'; readonly stormingId: string; readonly level: string; readonly timelineId?: string; readonly layoutKey: string };
 
-/** A cursor in tldraw world coordinates. */
+/** A cursor in page coordinates (the layout's space, whatever draws the canvas). */
 export interface Cursor {
     readonly x: number;
     readonly y: number;

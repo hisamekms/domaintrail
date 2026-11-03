@@ -1,4 +1,4 @@
-import 'tldraw/tldraw.css';
+import '@xyflow/react/dist/base.css';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 
