@@ -407,7 +407,8 @@ The chat has two views:
   stand and one to three next steps, each with its reason. The answer is the AI's message with a light bulb by its
   name; a step a command does has a button with the command (`/es:gaps`, `/model:start`) that puts it in the
   composer, `/`'s list open on it, for the person to send; in `/`'s list, the commands the latest hint suggests have a
-  star (ヒントのおすすめ). Then the **templates**: the beginnings of a message
+  star (ヒントのおすすめ). A command's opening message shows in its sender's row as the command's chip (its icon, as in
+  `/`'s list, `/id` and name; pressed, what it does), not as text. Then the **templates**: the beginnings of a message
   for what is open and selected (このあとを足す at Big Picture, 前後を詰める for a selected event, 不変条件を挙げる for an
   aggregate …), then the team's from `templates` in `domaintrail.jsonc`; picking one only puts its text in the composer
   (the selected element as its `#` target), to edit and send. An empty view says how to start its own world while an AI is

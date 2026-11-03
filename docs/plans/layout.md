@@ -186,3 +186,5 @@ A group heading's count (「集約 1」) shows only while the group is collapsed
   white; dark: indigo 300 on the indigo night 700 wash, night 950 on it), their contrast pinned in `palette.test.ts`
   (4.5:1 for the icon on the wash and the surface, and for the primary's icon).
 - **Tree counts.** A model-tree group heading shows its count only while collapsed, as a muted 「(1)」.
+- **Command chips.** A `/` command's opening message (a SlashCommand's or Interview's `opening`) shows as a chip — the
+  command's icon (`COMMAND_ICONS`, shared with `/`'s list), `/id`, name; pressed, its line from `/`'s list.

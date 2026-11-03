@@ -5275,6 +5275,61 @@ button.add-to-request.added:hover {
     display: inline-flex;
     color: var(--brand);
 }
+/* a `/` command's opening message (command-chip.tsx): a pill with the command's icon, its `/` ID in monospace and its
+   name, the brand on its pale wash; pressed, what the command does in a small note under it */
+.chat-command {
+    position: relative;
+    display: inline-flex;
+    max-width: 100%;
+    margin-top: 2px;
+}
+.session-chat button.chat-command-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    padding: 2px 8px;
+    border: 1px solid var(--brand-wash-border);
+    border-radius: 7px;
+    background: var(--brand-wash);
+    color: var(--text);
+    cursor: pointer;
+}
+.session-chat button.chat-command-chip:hover {
+    border-color: var(--brand);
+}
+.chat-command-chip .chat-slash-icon {
+    flex: none;
+    color: var(--brand);
+}
+.chat-command-id {
+    flex: none;
+    color: var(--brand);
+    font-family: var(--mono);
+    font-size: var(--fs-small);
+}
+.chat-command-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.chat-command-about {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 30;
+    padding: var(--space-1) var(--space-3);
+    background: var(--surface-raised);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px var(--shadow);
+    color: var(--text);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+    white-space: nowrap;
+}
 /* a command the latest hint suggests, in `/`'s list: a small filled star right after its name (in the name's cell) */
 .chat-slash-suggested {
     display: inline-flex;
