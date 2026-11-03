@@ -15,7 +15,14 @@ export const sessionCommands: Collaboration.SessionCommands = {
     start: decide<Collaboration.StartSessionDecision>(Collaboration.SessionShape, ({ id, facilitator, name, mode, startedAt }) =>
         ok({
             Open: {
-                set: { id, facilitator, mode, participants: [{ id: facilitator, name, role: 'Facilitator', joinedAt: startedAt }], startedAt },
+                set: {
+                    id,
+                    facilitator,
+                    mode,
+                    participants: [{ id: facilitator, name, role: 'Facilitator', joinedAt: startedAt }],
+                    startedAt,
+                    currentJourney: undefined,
+                },
                 events: { SessionStarted: { type: 'SessionStarted', sessionId: id, facilitator, name, mode, startedAt } },
             },
         }),
@@ -46,6 +53,20 @@ export const sessionCommands: Collaboration.SessionCommands = {
             const { collaboratedAt } = params;
             return ok({
                 Open: { set: { mode: 'Collab' }, events: { SessionCollaborated: { type: 'SessionCollaborated', sessionId: session.id, collaboratedAt } } },
+            });
+        },
+    }),
+
+    // the current journey (the guide's card and the app bar's chip): the facilitator's, the one person's in Solo
+    chooseJourney: decide<Collaboration.ChooseJourneySessionDecision>(Collaboration.SessionShape, {
+        Open: (session, params) => {
+            if (Collaboration.checkChooseJourneySessionRequires(session, params) === 'facilitatorChooses') return err({ type: 'FacilitatorOnly' });
+            const { journey, chosenAt } = params;
+            return ok({
+                Open: {
+                    set: { currentJourney: journey },
+                    events: { JourneyChosen: { type: 'JourneyChosen', sessionId: session.id, ...(journey !== undefined && { journey }), chosenAt } },
+                },
             });
         },
     }),

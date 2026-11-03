@@ -1,12 +1,16 @@
 // The use cases of the `/` commands' interviews (the plan's "`/` commands: ways of working with the AI", round 5): start
 // one (anyone), the interviewer's question or brief (the answerer role, through the agent API), confirm the brief (the
-// facilitator, as is or edited: a run is queued that writes it; the approval of a participant's brief) or reject it,
+// facilitator, as is or with its why edited; the approval of a participant's brief: dt writes the journey file, and a
+// run is queued only to create a new storming's block) or reject it,
 // stop one (its starter or the facilitator), and the interview jobs that wait for the interviewer. The starter's messages are heard by the interview in `sendMessage` (`hearIn`), without triage.
 // As the other use cases: the aggregates loaded and saved in one transaction with their events, the commands deciding.
 import { Collaboration, err, ok, type Result } from '../generated/index.js';
 import { requestCommands } from '../domain/commands.js';
 import { knownInterviewId, knownRequestId } from '../domain/ids.js';
-import { awaitedMessage, interviewCommands, interviewMessages, isRunning, runningInterview } from '../domain/interviews.js';
+import { awaitedMessage, interviewCommands, interviewMessages, isRunning, runningInterview, withEditedText } from '../domain/interviews.js';
+import { applyBrief, type JourneyActError } from '../domain/journey.js';
+import { sessionCommands } from '../domain/commands.js';
+import { journeyKeyOf, updateJourneys, type JourneyWriteError } from './journeys.js';
 import type { Actor } from './actor.js';
 import { notAllowed, notFound, type NotAllowed, type NotFound } from './errors.js';
 import type { CollaborationDeps, Stores } from './ports.js';
@@ -31,6 +35,13 @@ export interface InterviewJob {
 export interface InterviewStarted {
     readonly interview: Collaboration.AskingInterview;
     readonly request: Collaboration.SentRequest;
+}
+
+/** A brief's text edited so that its why cannot be read back (a line without a known head, no purpose). */
+export interface InvalidBriefText {
+    readonly type: 'InvalidBriefText';
+    readonly path: string;
+    readonly message: string;
 }
 
 type QueueError = FreezeError | Collaboration.FacilitatorOnly | Collaboration.DuplicateRequest | Collaboration.InputMismatch;
@@ -81,9 +92,11 @@ export interface InterviewUseCases {
         >
     >;
     /**
-     * The facilitator confirms the brief, as is or with its text edited — for an interview a participant started, that is
-     * the approval: a run is queued (on the message the brief answered) whose input carries the brief, to write it as the
-     * description of its storming or context.
+     * The facilitator confirms the brief, as is or with its why edited (its text, read back by its heads) — for an
+     * interview a participant started, that is the approval: dt writes the journey into the journey file (a storming's
+     * ES journey, created or revised; a modeling journey, continued or new) and makes it the session's current journey.
+     * Only a new storming queues a run (on the message the brief answered), to create its `storming` block with its
+     * short description.
      */
     confirmInterview(input: {
         readonly interview: InterviewId;
@@ -91,8 +104,15 @@ export interface InterviewUseCases {
         readonly text?: Collaboration.BriefText;
     }): Promise<
         Result<
-            { readonly interview: Collaboration.ConfirmedInterview; readonly run: Collaboration.QueuedAgentRun },
-            NotFound | NotAllowed | Collaboration.SessionNotFound | Collaboration.SessionAlreadyClosed | QueueError
+            { readonly interview: Collaboration.ConfirmedInterview; readonly run?: Collaboration.QueuedAgentRun; readonly journey: string },
+            | NotFound
+            | NotAllowed
+            | Collaboration.SessionNotFound
+            | Collaboration.SessionAlreadyClosed
+            | QueueError
+            | InvalidBriefText
+            | JourneyActError
+            | JourneyWriteError
         >
     >;
     /** The facilitator rejects the brief (却下), with an optional note to its starter: the interview ends. */
@@ -212,39 +232,89 @@ export function createInterviews(deps: CollaborationDeps): InterviewUseCases {
         },
 
         async confirmInterview({ interview, actor, text }) {
+            // the brief as confirmed, checked first (nothing written while the interview could not be confirmed)
+            type Checked = { readonly i: Collaboration.BriefedInterview; readonly brief: Collaboration.InterviewBrief; readonly edited: boolean };
+            const checked = await uow.transaction(
+                async (
+                    stores,
+                ): Promise<
+                    Result<
+                        Checked,
+                        | NotFound
+                        | NotAllowed
+                        | Collaboration.FacilitatorOnly
+                        | Collaboration.SessionNotFound
+                        | Collaboration.SessionAlreadyClosed
+                        | InvalidBriefText
+                    >
+                > => {
+                    const found = load(stores, interview);
+                    if (!found.ok) return found;
+                    const i = found.value;
+                    if (i.state !== 'Briefed') return err(notAllowed('confirm', i.state));
+                    if (actor.role !== 'Facilitator') return err({ type: 'FacilitatorOnly' as const });
+                    const active = await storeVerifications(stores).makeActiveSession(i.session);
+                    if (!active.ok) return active;
+                    const edited = text !== undefined && text !== i.brief.text;
+                    if (!edited) return ok({ i, brief: i.brief, edited });
+                    const read = withEditedText(i.brief, text);
+                    if (!read.ok) return err({ type: 'InvalidBriefText' as const, ...read.error });
+                    return ok({ i, brief: read.value, edited });
+                },
+            );
+            if (!checked.ok) return checked;
+            const { i, brief, edited } = checked.value;
+            // dt writes the journey itself: no AI run for the brief
+            const written = await updateJourneys<string, JourneyActError>(deps.journeys, (file) => {
+                const applied = applyBrief(file, i.command, brief);
+                return applied.ok ? ok({ file: applied.value.file, value: applied.value.key }) : applied;
+            });
+            if (!written.ok) return written;
+            const journey = written.value.value;
             return uow.transaction(async (stores) => {
                 const found = load(stores, interview);
                 if (!found.ok) return found;
-                const i = found.value;
-                if (i.state !== 'Briefed') return err(notAllowed('confirm', i.state));
-                // asked before the run is queued (which asks it too), so that the refusal is the interview's
-                if (actor.role !== 'Facilitator') return err({ type: 'FacilitatorOnly' });
-                const active = await storeVerifications(stores).makeActiveSession(i.session);
+                const now = found.value;
+                if (now.state !== 'Briefed') return err(notAllowed('confirm', now.state));
+                const active = await storeVerifications(stores).makeActiveSession(now.session);
                 if (!active.ok) return active;
                 const at = clock.now();
-                const edited = text !== undefined && text !== i.brief.text;
-                const brief: Collaboration.InterviewBrief = edited ? { ...i.brief, text } : i.brief;
-                const run = await queueRequests(stores, ids, {
-                    session: active.value,
-                    requests: [i.answered],
-                    extra: { brief: { interview: i.id, command: i.command, brief } },
-                    queuedBy: actor.participant,
-                    queuedByRole: actor.role,
-                    at,
-                });
-                if (!run.ok) return run;
-                const confirmed = interviewCommands.confirm(i, {
+                // a new storming still needs a run to create its block (its `///`: the short description only)
+                let run: Collaboration.QueuedAgentRun | undefined;
+                if (now.command === 'Es' && brief.isNew) {
+                    const queued = await queueRequests(stores, ids, {
+                        session: active.value,
+                        requests: [now.answered],
+                        extra: { brief: { interview: now.id, command: now.command, brief } },
+                        queuedBy: actor.participant,
+                        queuedByRole: actor.role,
+                        at,
+                    });
+                    if (!queued.ok) return queued;
+                    run = queued.value;
+                }
+                const confirmed = interviewCommands.confirm(now, {
                     confirmedBy: actor.participant,
                     confirmedByRole: actor.role,
                     confirmedBrief: brief,
                     edited,
-                    run: run.value.id,
+                    run: run?.id,
                     confirmedAt: at,
                 });
                 if (!confirmed.ok) return confirmed;
                 stores.interviews.save(confirmed.value.Confirmed.aggregate);
-                publish(stores, i.session, confirmed.value.Confirmed.events, at);
-                return ok({ interview: confirmed.value.Confirmed.aggregate, run: run.value });
+                publish(stores, now.session, confirmed.value.Confirmed.events, at);
+                // the journey just written is the one the session works on now
+                const session = stores.sessions.load(now.session);
+                const key = journeyKeyOf(journey);
+                if (session?.state === 'Open' && key && session.currentJourney !== key) {
+                    const chosen = sessionCommands.chooseJourney(session, { journey: key, chosenByRole: actor.role, chosenAt: at });
+                    if (chosen.ok) {
+                        stores.sessions.save(chosen.value.Open.aggregate);
+                        publish(stores, now.session, chosen.value.Open.events, at);
+                    }
+                }
+                return ok({ interview: confirmed.value.Confirmed.aggregate, ...(run && { run }), journey });
             });
         },
 

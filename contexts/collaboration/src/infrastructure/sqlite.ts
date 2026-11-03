@@ -819,7 +819,7 @@ function interviews(db: DatabaseSync): InterviewRepository {
                     id: interview.id,
                     session: interview.session,
                     opening: interview.opening,
-                    run: interview.state === 'Confirmed' ? interview.run : null,
+                    run: interview.state === 'Confirmed' ? (interview.run ?? null) : null,
                     state: interview.state,
                     data: encodeJson(interview),
                 }),

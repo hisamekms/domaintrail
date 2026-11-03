@@ -334,8 +334,21 @@ export interface SourceFormatter {
 }
 
 /** Everything the use cases need. */
+/**
+ * The journey file (`domaintrail.journey.json` at the workspace root): its text, and a whole new text written
+ * atomically unless the file changed since its text `expected` was read (undefined: there was no file).
+ */
+export interface JourneyFileStore {
+    /** The file's text now; undefined when there is none. */
+    read(): Promise<string | undefined>;
+    /** Writes `text` unless the file is no longer `expected` (then false, nothing written). */
+    write(text: string, expected: string | undefined): Promise<boolean>;
+}
+
 export interface CollaborationDeps {
     readonly uow: UnitOfWork;
+    /** The journey file the interviews' briefs and the journey acts write (absent: none, `NoJourneyFile`). */
+    readonly journeys?: JourneyFileStore;
     readonly workspace: WorkspaceSnapshot;
     readonly blobs: SnapshotBlobs;
     readonly validator: ModelValidator;

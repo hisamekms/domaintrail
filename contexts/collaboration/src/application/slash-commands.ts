@@ -7,8 +7,7 @@
 import { Collaboration, err, ok, type Result } from '../generated/index.js';
 import { requestCommands } from '../domain/commands.js';
 import { knownRequestId, knownSlashCommandId } from '../domain/ids.js';
-import { guideMarks, guideSnapshot, readGuideGoal, type GuideWorkspace } from '../domain/guide.js';
-import { guideMarksOf } from '../domain/marks.js';
+import { guideMarks, guideSnapshot, journeyMarks, readGuideGoal, type GuideWorkspace } from '../domain/guide.js';
 import { chosenIndices, isCommandRunning, runningCommand, slashCommandCommands, slashCommandSpec, stormingInView } from '../domain/slash-commands.js';
 import type { Actor } from './actor.js';
 import { notAllowed, notFound, type NotAllowed, type NotFound } from './errors.js';
@@ -49,7 +48,7 @@ export interface SlashCommandUseCases {
      * (`CommandAlreadyRunning`). A command about the
      * storming in view, with none in view, lists no candidates at once (the AI is not asked): its card then says so.
      * `/guide` needs none: the AI reads where the person is from the session and the view; it keeps the map and what is
-     * known at once as they are now (the goals of `readGuideGoal`, the session's marks of the guide).
+     * known at once as they are now (the journey file's goals and marks, the session's current journey first).
      */
     startCommand(input: {
         readonly session: SessionId;
@@ -132,13 +131,15 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
                 if (!active.ok) return active;
                 const at = clock.now();
                 const scope = spec.needsStorming ? stormingInView(viewedAt, focus) : undefined;
-                // the guide's snapshot: its marks are the session's for now (`sessionGuideMarks` reads them so)
+                // the guide's snapshot: the journey file's goals and marks, the session's current journey first
+                const current = stores.sessions.load(session)?.currentJourney;
                 const guide =
                     kind === 'Guide' && workspace
                         ? guideSnapshot({
                               workspace,
                               goal: readGuideGoal(workspace),
-                              marks: guideMarks(guideMarksOf(stores.marks.placedBySession(session))),
+                              marks: guideMarks(journeyMarks(workspace.journey)),
+                              ...(current !== undefined && { current }),
                               ...(viewedAt && { viewedAt }),
                               ...(focus && { focus }),
                           })

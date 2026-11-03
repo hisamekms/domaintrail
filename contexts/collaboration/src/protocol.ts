@@ -9,6 +9,7 @@ import type { RevertChanges, RevertFile } from './domain/revert.js';
 import type { Collaboration } from './generated/index.js';
 import type { RunActivity, RunActivityPhase } from './domain/activity.js';
 import type { TemplateContext } from './domain/templates.js';
+import type { JourneyAct, JourneyFile, JourneyProblem, JourneySummary } from './domain/journey.js';
 
 export type { RunActivity, RunActivityPhase, RevertChanges, RevertFile, TemplateContext };
 
@@ -153,6 +154,7 @@ export const EVENT_MESSAGE_TYPES = {
     ParticipantJoined: 'session.participant_joined',
     SessionClosed: 'session.closed',
     SessionCollaborated: 'session.collaborated',
+    JourneyChosen: 'session.journey_chosen',
     RequestSent: 'request.sent',
     RequestDismissed: 'request.dismissed',
     RunQueued: 'run.queued',
@@ -204,6 +206,44 @@ export type EventMessage = {
     };
 }[EventType];
 
+/** A participant's act on the journeys, waiting for the facilitator: an act on the file, or the current journey chosen. */
+export type JourneyRequestAct = JourneyAct | { readonly kind: 'choose'; readonly journey: string | null };
+
+/** A participant's request about the journeys (the plan's "The current journey"): who, what, when. In memory only. */
+export interface JourneyRequestBody {
+    readonly id: string;
+    readonly by: string;
+    readonly byName: string;
+    readonly act: JourneyRequestAct;
+    readonly at: string;
+}
+
+/**
+ * The journey file as the pages get it (`journey`): its valid journeys (null: no file), what is wrong with it
+ * (`dt check`'s J001 by path; the page says so and dt writes nothing over it), and the participants' requests waiting.
+ */
+export interface JourneyBody {
+    readonly file: JourneyFile | null;
+    readonly problems: readonly JourneyProblem[];
+    readonly requests: readonly JourneyRequestBody[];
+}
+
+/** `POST /api/session/journey/acts`: an act on the journey file (a participant's becomes a request). */
+export interface JourneyActBody {
+    readonly act: JourneyAct;
+}
+
+/** `POST /api/session/journey/current`: the session's current journey (null: the default). A participant's becomes a request. */
+export interface ChooseJourneyBody {
+    readonly journey: string | null;
+}
+
+/** What `…/journey/acts` and `…/journey/current` answer: done, or requested of the facilitator. */
+export interface JourneyActedBody {
+    readonly done: boolean;
+    readonly request?: JourneyRequestBody;
+}
+
 /** What the server sends over the WebSocket in a session, besides the Live View's `type: 'update'`. */
 export type SessionServerMessage =
     | EventMessage
@@ -215,6 +255,8 @@ export type SessionServerMessage =
     | ParticipantTriageMessage
     // the agents connected per role and the work waiting for one (ADR 0030): on connect, then on each change
     | { readonly type: 'agent.presence'; readonly agent: AgentPresence }
+    // the journey file and the requests about it: on connect, then on each change (a write of dt, git or another tool)
+    | { readonly type: 'journey'; readonly journey: JourneyBody }
     // what the running runs are doing (ADR 0026, amendment): transient, never an event; every activity held on connect,
     // then each change. A page shows a run's only while the run is `Running`
     | { readonly type: 'session.activities'; readonly activities: Readonly<Record<string, RunActivity>> }
@@ -838,6 +880,8 @@ export interface AgentCommandJobBody {
     /** The session so far, whole. */
     readonly sessionSoFar?: AgentSessionSoFar;
     readonly readRevision?: string;
+    /** The journeys (the current one first among them): what the work is for and how far it goes. */
+    readonly journeys?: AgentJourneysBody;
 }
 
 /**
@@ -862,6 +906,17 @@ export interface AgentInterviewJobBody {
     /** The session so far, whole. */
     readonly sessionSoFar?: AgentSessionSoFar;
     readonly readRevision?: string;
+    /** The journeys (the current one first among them): what the work is for and how far it goes. */
+    readonly journeys?: AgentJourneysBody;
+}
+
+/**
+ * The journeys as the answerer is given them (the journey file, read when the job is handed out): the session's
+ * current journey (its key; the default when none is chosen) and every journey but the archived.
+ */
+export interface AgentJourneysBody {
+    readonly current?: string;
+    readonly journeys: readonly JourneySummary[];
 }
 
 /** An answer job about a triage as the answerer gets it. */
@@ -891,6 +946,8 @@ export interface AgentAnswerJobBody {
     readonly readRevision?: string;
     /** An answer or propose job: the runs the message replies to, with what they changed. */
     readonly previousRuns?: readonly AgentPreviousRun[];
+    /** The journeys (the current one first among them): what the work is for and how far it goes. */
+    readonly journeys?: AgentJourneysBody;
 }
 
 /** `POST /agent/answers/:job` for a triage job: stage 3's answer (`readTriageAnswer` of `domain/answers.ts`), or why it failed. */
@@ -958,11 +1015,26 @@ export interface CandidateBody {
 
 /** A brief as the interviewer writes it (`BriefData` of `domain/interviews.ts`). */
 export interface BriefBody {
-    readonly name: string;
+    /** `/es:start`: the storming's ID; `/model:start`: the ID of the journey it continues (a new one's is derived). */
+    readonly name?: string;
     readonly label?: string;
     readonly isNew: boolean;
-    readonly replaces: boolean;
-    readonly lines: readonly { readonly head: string; readonly text: string }[];
+    /** A new storming's short description (`///`). */
+    readonly description?: string;
+    /** The journey (`JourneyBriefData` of `domain/interviews.ts`): its why, and how far. */
+    readonly journey: {
+        readonly purpose: string;
+        readonly scope?: string;
+        readonly constraints?: string;
+        readonly participants: readonly string[];
+        readonly use?: 'align' | 'modeling';
+        readonly level?: 'BigPicture' | 'DesignLevel';
+        readonly name?: string;
+        readonly pattern?: string;
+        readonly goal?: string;
+        readonly stormings?: readonly string[];
+        readonly context?: string;
+    };
 }
 
 /** `POST /agent/answers/:job` for any job that failed (the process crashed, timed out, gave no valid output). */

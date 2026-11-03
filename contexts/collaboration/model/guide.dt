@@ -3,16 +3,16 @@ context Collaboration {
   /// （`domain/guide.ts`）が決める。
   primitive GuideStepKey "ガイドの区切り": String { matches(value, "^[a-zA-Z]+$") and length(value) <= 40 }
 
-  /// ガイドの道のりの名前: ストーミングの ES の道のり（`es:` とストーミングの ID）か、名前の付いたモデリングの道のり。
-  /// どこに置くか（道のりのファイル）は、あとの段階で決まる。
+  /// ガイドの道のりの名前: ストーミングの ES の道のり（`es:` とストーミングの ID）か、名前の付いたモデリングの道のりの
+  /// ID（小文字・数字・ハイフンの短い名前）。道のりは道のりのファイル（`domaintrail.journey.json`）にある。
   primitive GuideJourneyKey "道のり": String { length(value) >= 1 and length(value) <= 100 }
 
   /// ガイドの地図の世界: まだ（ブリーフも見ているビューもない）、イベントストーミング、モデリング。
   enum GuideWorld "ガイドの世界" { None "まだ" Storming "イベントストーミング" Model "モデリング" }
 
-  /// モデリングの進め方（`/model:start` で選ぶ）。
+  /// モデリングの進め方（`/model:start` で選ぶ）。道のりのファイルにも、この英語の名前で書く。
   enum GuidePattern "モデリングの進め方" {
-    Strategic "全体から"
+    Whole "全体から"
     FromStorming "ES から"
     OneContext "1つの BC を深掘り"
     Review "既存モデルの見直し"
@@ -62,6 +62,8 @@ context Collaboration {
     contexts: GuideContextRow[0..40] "BC の行"
     /// BC の行を下に並べる区切り。
     contextsAt: GuideStepKey? "BC の行の区切り"
+    /// 道のりが名指すストーミングかコンテキストが、もうない（名前が変わった、消えた）。前の地図にはない（なかった）。
+    missing: Bool? "見つからない"
   }
 
   /// ファイルを見ればすぐ分かることの種類。

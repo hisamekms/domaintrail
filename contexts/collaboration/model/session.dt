@@ -26,6 +26,9 @@ context Collaboration {
     mode: SessionMode "形"
     owns participants: Participant[1..*] "参加者"
     startedAt: Timestamp "開始日時"
+    /// いまの道のり（ガイドのカードとアプリバーのチップが見せる）。コラボではファシリテーターが、ひとりではその人が決める。
+    /// ないときは、道のりのファイルのいちばん新しい進行中の道のり。前のセッションにはない。
+    currentJourney: GuideJourneyKey? "いまの道のり"
 
     invariant distinctParticipants "参加者は1人1回" { unique(participants) }
     invariant facilitatorListed "ファシリテーターは参加者の1人" {
@@ -58,6 +61,16 @@ context Collaboration {
       requires solo "ひとりのセッション" { mode == SessionMode.Solo } else NotSolo
       changes mode
       emits SessionCollaborated
+
+    /// いまの道のりを決める（ない: 決めない、いちばん新しい進行中の道のりになる）。決めるのはファシリテーター（参加者のは
+    /// ファシリテーターへのお願いになる）。
+    command chooseJourney(journey: GuideJourneyKey?, chosenByRole: ParticipantRole, chosenAt: Timestamp) "いまの道のりを決める"
+      Open -> Open
+      requires facilitatorChooses "ファシリテーターが決める" {
+        chosenByRole == ParticipantRole.Facilitator
+      } else FacilitatorOnly
+      changes currentJourney
+      emits JourneyChosen
 
     /// セッションを終えるのはファシリテーター。
     command close(closedByRole: ParticipantRole, closedAt: Timestamp) "セッションを終える"
@@ -93,6 +106,12 @@ context Collaboration {
     participant: ParticipantId
     name: DisplayName
     joinedAt: Timestamp
+  }
+
+  persistent event JourneyChosen "いまの道のりを決めた" {
+    sessionId: SessionId
+    journey: GuideJourneyKey? "道のり"
+    chosenAt: Timestamp
   }
 
   persistent event SessionClosed "セッション終了" {
