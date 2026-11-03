@@ -60,7 +60,7 @@ describe('an Event Storming view as a graph', () => {
         ).toEqual(['e:BikeReleased', 'e:ReleaseFailed', 'e:ShipmentCancelled', 'e:SlotReleased'].sort());
         expect(node('e:BikeReleased')).toMatchObject({ elementId: 'es/DeliveryCancellation/BikeReleased' });
         expect(node('e:BikeReleased').parent).toBeUndefined();
-        expect(node('n:PaymentGateway')).toMatchObject({ kind: 'esExternal', elementId: 'es/DeliveryCancellation/PaymentGateway' });
+        expect(node('n:PaymentGateway@ReceivePaymentNotice')).toMatchObject({ kind: 'esExternal', elementId: 'es/DeliveryCancellation/PaymentGateway' });
         expect(node('n:CancelShipment').label.en).toEqual({ label: '配送キャンセル', name: 'CancelShipment', both: '配送キャンセル (CancelShipment)' });
         expect(node('n:Compensation').stereotype).toEqual({
             ja: { label: '«ホットスポット»', name: '«ホットスポット»', both: '«ホットスポット»' },
@@ -70,8 +70,8 @@ describe('an Event Storming view as a graph', () => {
         const edge = (id: string) => graph.edges.find((e) => e.id === id);
         expect(edge('on:ShipmentCancelled->CleanupAfterCancel@e:ShipmentCancelled->n:CleanupAfterCancel')?.kind).toBe('esCausal');
         expect(edge('issues:CleanupAfterCancel->ReleaseBike@n:CleanupAfterCancel->n:ReleaseBike')?.kind).toBe('esCausal');
-        expect(edge('target:ReleaseSlot->ShipmentSlot@n:ReleaseSlot->n:ShipmentSlot')?.kind).toBe('esRelated');
-        expect(edge('actor:Customer->CancelShipment@n:Customer->n:CancelShipment')?.kind).toBe('esRelated');
+        expect(edge('target:ReleaseSlot->ShipmentSlot@n:ReleaseSlot->n:ShipmentSlot@ReleaseSlot')?.kind).toBe('esRelated');
+        expect(edge('actor:Customer->CancelShipment@n:Customer@CancelShipment->n:CancelShipment')?.kind).toBe('esRelated');
         expect(edge('hotspot-on:Compensation->ReleaseFailed@n:Compensation->e:ReleaseFailed')?.kind).toBe('esHotspot');
         // a step into a group is a time order to each of its events; each names the one timeline it is in
         for (const target of ['e:BikeReleased', 'e:SlotReleased']) {
@@ -183,6 +183,43 @@ describe('layout of an Event Storming view', () => {
             expect(again.nodeLayout).toEqual(first.nodeLayout);
             expect(again.edgeLayout).toEqual(first.edgeLayout);
             expect(reordered.nodeLayout).toEqual(first.nodeLayout);
+        }
+    });
+
+    test('draws an element used by several commands beside each of them: the actor on the left, the aggregate on the right, short edges', async () => {
+        const storming = await parse(`storming S {
+  event Opened event Approved event Shipped event Closed
+  actor Clerk
+  readmodel Board
+  aggregate Ticket
+  command Open { actor Clerk reads Board target Ticket emits Opened }
+  command Approve { emits Approved }
+  command Ship { emits Shipped }
+  command Close { actor Clerk reads Board target Ticket emits Closed }
+  policy P1 { on Opened issues Approve }
+  policy P2 { on Approved issues Ship }
+  policy P3 { on Shipped issues Close }
+  timeline T { Opened Approved Shipped Closed }
+}`);
+        for (const options of [{ level: 'design-level' }, { level: 'design-level', timelineId: 'T' }] satisfies ViewOptions[]) {
+            const laid = await engine.layout(graphOf(storming, options));
+            expectReadable(laid);
+            const box = (id: string): NodeLayout => laid.nodeLayout[id]!;
+            const centre = (id: string): number => box(id).x + box(id).width / 2;
+            // a timeline draws the commands of its 1-hop paths: not Open, which no policy issues
+            for (const command of options.timelineId === undefined ? ['Open', 'Close'] : ['Close']) {
+                const c = `n:${command}`;
+                expect(centre(`n:Clerk@${command}`)).toBeLessThan(centre(c));
+                expect(centre(`n:Board@${command}`)).toBeLessThan(centre(c));
+                expect(centre(`n:Ticket@${command}`)).toBeGreaterThan(centre(c));
+                // each copy's edge is short: no longer than a few notes, though the two commands lie far apart
+                for (const copy of ['Clerk', 'Board', 'Ticket']) {
+                    const points = laid.edgeLayout[laid.edges.find((e) => [e.source, e.target].includes(`n:${copy}@${command}`))!.id]!.points;
+                    const length = points.slice(1).reduce((sum, p, i) => sum + Math.abs(p.x - points[i]!.x) + Math.abs(p.y - points[i]!.y), 0);
+                    expect(length).toBeLessThan(3 * STICKY_NOTE.side);
+                }
+            }
+            if (options.timelineId === undefined) expect(centre('n:Close') - centre('n:Open')).toBeGreaterThan(6 * STICKY_NOTE.side);
         }
     });
 

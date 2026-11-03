@@ -14,9 +14,10 @@ const boxStyle = (p: { w: number; h: number; scale: number }): CSSProperties => 
 /**
  * The classes of a node's box. `selected` draws the local selection as a ring outside it (`.dn-selected`): an outline
  * on the node's edge would be lost against an edge of the same hue (an aggregate root's indigo, a command's blue).
+ * `same` marks another note of the selected element (`.dn-same`, a fainter dashed ring).
  */
-export const nodeClassName = (p: NodeProps, selected: boolean): string =>
-    `dn dn-${p.kind} dn-change-${p.change} dn-diag-${p.diag}${selected ? ' dn-selected' : ''}`;
+export const nodeClassName = (p: NodeProps, selected: boolean, same = false): string =>
+    `dn dn-${p.kind} dn-change-${p.change} dn-diag-${p.diag}${selected ? ' dn-selected' : same ? ' dn-same' : ''}`;
 export const nodeStyle = boxStyle;
 
 /** The change badge and the diagnostic mark on a node's edge, drawn by `EdgeMarks` (or a canvas's wrapper of it). */

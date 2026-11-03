@@ -1030,3 +1030,24 @@ A user asked to close up the gaps between sticky notes when printing (decided 20
   Ctrl+P draws the sheet synchronously in `beforeprint` (`flushSync`) with the compact layout if the page has it; the
   印刷 action waits for the compact layout (at most 5 s) and the fonts, then calls `window.print()`. The catalog prints
   as a page.
+
+### As built: actors, read models and aggregates once per use (Event Storming views)
+
+- **Decided by the user**: at Design Level an actor drawn once and linked to every command that used it ran lines across
+  the diagram. An actor or external system (a command's issuer), a read model (what it `reads`) and an aggregate (its
+  `target`) are now drawn once per command of the view that uses them, beside that command. View only: the `.dtes`
+  and the semantic graph do not change. Big Picture, policies, hotspots, the legend and the catalog are unchanged.
+- **Projection** (`core/storming/uses.ts`, `render.ts`, `stage-view.ts`): a copy is a render node
+  `n:<element>@<command>` with `use: <command>` and the element's ID; an element no command of the view uses keeps the
+  one note `n:<element>` where it was drawn. Each use's edge joins the copy and its command only, so each copy has one
+  short edge. The ELK drawings (the integrated canvas and a timeline) place the copy by that edge: the issuer and the
+  read model on the command's left, the aggregate on its right. The stage grid stacks it in its command's column,
+  above the command (aggregate, read model, actor, external, nearest first).
+- **The page**: everything resolves by element — the inspector (the element once, with all its relations), change marks
+  (every copy), references, presence and hotspot targets. Selecting a copy draws the selection on it and a fainter
+  dashed ring (`dn-same`) on the element's other notes (`sameElementNodes`); a jump to the element (the chat, the
+  catalog, a reference) picks the copy nearest the middle of the view, else the first in reading order
+  (`itemForElement`). Hovering does not mark the siblings (a hover does not redraw the canvas).
+- **Payload**: `examples/shop`'s OrderToCash at Design Level has 8 more notes on its integrated canvas (顧客 and 注文 ×4,
+  カート and 請求書 ×2), the same edges; its Normal and PaymentRetry timelines keep their counts, the copies renamed
+  (`n:Invoice` → `n:Invoice@IssueInvoice`).

@@ -2,7 +2,8 @@
 
 - Status: accepted. Three choices the spec leaves open were decided by the maintainer: storming IDs unique in the
   workspace, the hotspots of a timeline filter, and the default `sources` (marked *Decided by the maintainer*).
-  Amended 2026-11-03: events at Design Level only (`level design`, below).
+  Amended 2026-11-03: events at Design Level only (`level design`, below); stages and exceptions; actors, read models
+  and aggregates drawn once per use.
 - Date: 2026-10-31
 - Spec: [docs/dtes-v0.1.md](../dtes-v0.1.md). Its semantics, the sections marked 確定 in particular, are the reference.
   This ADR fixes only how they are implemented, plus the details the spec leaves to "実装調査" (§13, §14).
@@ -363,6 +364,19 @@ attach an exception that does not share the whole prefix, and its left-to-right 
   `then`.
 - **Agent**: the runner's rule 16: phases as `stage`s with `after`, the normal flow a `timeline` first, exceptions as
   `exception`s starting at their branch event, `then` to rejoin, another normal path another `timeline`.
+
+## Amendment (2026-11-03): actors, read models and aggregates drawn once per use
+
+At Design Level an actor drawn once and linked to every command that used it ran lines across the whole diagram. Now
+an actor or external system (a command's issuer), a read model (what it `reads`) and an aggregate (its `target`) get a
+note beside each command of the view that uses it: a render node `n:<element>@<command>` with `use: <command>` and the
+element's ID (`core/storming/uses.ts`); an element no command of the view uses is the one note `n:<element>` as
+before. Only the drawing changes: the `.dtes`, the semantic graph and the edges' semantic keys do not, and each use's
+edge joins the copy and its command only. The ELK drawings place a copy beside its command through that edge (the
+issuer and the read model on its left, the aggregate on its right); the grid stacks it in its command's column. The
+Live View resolves everything by element (selection, inspector, change marks, references, presence): selecting one
+note marks the element's other notes (`dn-same`, a fainter dashed ring), and a jump to the element picks the note
+nearest the middle of the view, else the first in reading order (`itemForElement`).
 
 ## Task interfaces
 

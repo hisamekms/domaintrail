@@ -81,13 +81,18 @@ export interface RenderGroupNode {
     groups: { timelineId: string; groupId: string }[];
 }
 
-/** Any other element, drawn once per view. */
+/**
+ * Any other element, drawn once per view; an actor, external system, read model or aggregate once per command of the
+ * view that uses it (`uses.ts`), beside that command.
+ */
 export interface RenderElementNode {
     type: 'element';
-    /** `n:<local ID>`. */
+    /** `n:<local ID>`, or `n:<local ID>@<command ID>` for a copy beside a command. */
     id: string;
     elementId: string;
     kind: Exclude<NodeElementKind, 'event'>;
+    /** The command a copy stands beside. */
+    use?: string;
 }
 
 /** A stage, drawn as a frame around its main flow and its exceptions (views of a storming with stages, spec §3.7). */

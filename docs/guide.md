@@ -2129,6 +2129,9 @@ to its note. One timeline draws each occurrence of an event, and a group as a fr
 make two occurrences the same happening, so read a path along one timeline's name. Solid arrows are type-level causal
 relations (`on`, `issues`, `emits`: possible, not "happened"), dotted lines the other relations (`actor`, `reads`,
 `target`; a hotspot's `on` without an arrowhead), dashed arrows the order of a timeline.
+At Design Level an actor or external system, a read model and an aggregate are drawn next to each command that uses
+them, one note per command, so their lines stay short (one that no command uses is drawn once); selecting any of these
+notes selects the element and marks its other notes with a fainter dashed ring.
 Every note is a square of the same size: a long label is drawn smaller, and one too long even then is cut short with
 «…» (hovering it shows the whole label; S015 warns about it), so keep labels short (about 12 Japanese characters).
 The layout is automatic, left to right; positions are kept in `.domaintrail/layout.json`, never in the `.dtes`.

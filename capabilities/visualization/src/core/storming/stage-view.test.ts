@@ -339,8 +339,9 @@ describe('Design Level elements in a view of stages', () => {
         const col = (eventId: string): number => cells[only(render, eventId).id]!.col;
         // a hotspot nearest to its event, then the command
         expect(cells['n:Pay']).toEqual({ col: col('Paid'), row: -2 });
-        expect(cells['n:Order']!.row).toBeLessThan(0);
-        expect(cells['n:Customer']!.row).toBeLessThan(0);
+        // the aggregate and the actor beside the command, in its column
+        expect(cells['n:Order@Pay']).toEqual({ col: col('Paid'), row: -4 });
+        expect(cells['n:Customer@Pay']).toEqual({ col: col('Paid'), row: -5 });
         expect(cells['n:Limit']).toEqual({ col: col('Failed'), row: -1 });
         expect(cells['n:RetryFailed']!.col).toBe(col('Failed'));
         expect(cells['n:Retry']!.col).toBe(col('Retried'));
@@ -349,6 +350,36 @@ describe('Design Level elements in a view of stages', () => {
         // Big Picture: the hotspot only
         const bp = projectView(s, BP);
         expect(Object.keys(bp.grid!.cells).filter((id) => id.startsWith('n:'))).toEqual(['n:Limit']);
+    });
+
+    test('an actor, read model or aggregate used by several commands: a note in each command’s stack, its edge within the column', async () => {
+        const s = await parse(
+            text.replace(
+                '  command Retry {\n    emits Retried\n  }',
+                '  readmodel Cart\n  command Retry {\n    actor Customer\n    reads Cart\n    target Order\n    emits Retried\n  }',
+            ),
+        );
+        const render = projectView(s, DL);
+        const cells = render.grid!.cells;
+        const col = (eventId: string): number => cells[only(render, eventId).id]!.col;
+        expect(col('Retried')).not.toBe(col('Paid'));
+        for (const [id, command] of [
+            ['n:Customer@Pay', 'n:Pay'],
+            ['n:Order@Pay', 'n:Pay'],
+            ['n:Customer@Retry', 'n:Retry'],
+            ['n:Order@Retry', 'n:Retry'],
+            ['n:Cart@Retry', 'n:Retry'],
+        ] as const) {
+            expect(cells[id]!.col).toBe(cells[command]!.col);
+            expect(cells[id]!.row).toBeLessThan(cells[command]!.row);
+        }
+        // the nearest first: the aggregate, the read model, the actor
+        expect([cells['n:Order@Retry']!.row, cells['n:Cart@Retry']!.row, cells['n:Customer@Retry']!.row]).toEqual([-2, -3, -4]);
+        expect(cells['n:Customer']).toBeUndefined();
+        const g = laidOut(render, s);
+        // every edge of a copy is the short one to its command, in the same column
+        for (const e of render.edges.filter((x) => x.source.includes('@') || x.target.includes('@'))) expect(cells[e.source]!.col).toBe(cells[e.target]!.col);
+        expect(crossings(g)).toEqual([]);
     });
 });
 

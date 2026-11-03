@@ -86,7 +86,10 @@ export interface DiagramCanvas {
     item(id: SceneId): CanvasItem | undefined;
     /** An item's bounds on the page. */
     itemBounds(id: SceneId): Rect | undefined;
-    /** The item drawing a model element: its node if it has one, else the first item that stands for it. */
+    /**
+     * The item drawing a model element: its node if it has one (of several, the one nearest the middle of the view), else
+     * the first item that stands for it.
+     */
     findElement(elementId: string): SceneId | undefined;
 
     selectedIds(): readonly SceneId[];
