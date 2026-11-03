@@ -27,4 +27,5 @@ export {
     type StateRoots,
     type WorkspaceDirs,
 } from './infrastructure/state-dirs.js';
+export { LEGACY_DIR } from './infrastructure/legacy-state.js';
 export { openWorkspaceState, type WorkspaceStateOptions } from './infrastructure/workspace-state.js';

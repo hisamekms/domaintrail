@@ -5,7 +5,7 @@
  * not with `--no-agent`), and the removed commands and config sections.
  */
 import { afterAll, describe, expect, test } from 'bun:test';
-import { chmod, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
@@ -353,9 +353,16 @@ describe('dt agent', () => {
 describe('pairing a standalone dt agent (the credential never on disk)', () => {
     test('dt collab agent-link prints a one-time code that pairs once; expired, reused and facilitator codes are refused', async () => {
         const root = await copy();
-        const server = await startSessionServer({ root, debounceMs: 30, mode: 'Collab', session: settings });
+        // what an older version left: deleted (never moved) with its .domaintrail/ when a server starts
+        await mkdir(path.join(root, '.domaintrail', 'session'), { recursive: true });
+        await writeFile(path.join(root, '.domaintrail', 'session', 'agent.json'), JSON.stringify({ url: 'http://127.0.0.1:1/', token: 'old' }));
+        const lines: string[] = [];
+        const server = await startSessionServer({ root, debounceMs: 30, mode: 'Collab', session: settings, log: (l) => lines.push(l) });
         const { state } = workspaceDirs(root);
         try {
+            expect(await readFile(path.join(root, '.domaintrail', 'session', 'agent.json'), 'utf8').catch(() => 'gone')).toBe('gone');
+            expect(await readFile(path.join(state, 'agent.json'), 'utf8').catch(() => 'gone')).toBe('gone');
+            expect(lines).toContain('Removed .domaintrail/ (nothing in it to keep).');
             const printed = await run(cliDeps(), '-r', root, 'collab', 'agent-link');
             expect(printed.code).toBe(0);
             const code = /^Agent code \(single use, expires in 10 minutes\): (\S+)$/.exec(printed.out[0])?.[1] ?? '';
