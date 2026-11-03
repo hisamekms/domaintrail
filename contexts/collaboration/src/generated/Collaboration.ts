@@ -3333,9 +3333,88 @@ export function equalInterviewBrief(a: InterviewBrief, b: InterviewBrief): boole
 }
 
 /**
+ * 答えの選択肢
+ * AI の問いの選択肢（短い1行）。始めた人が押すと、それが答えとして送られる。AI の出力で、文字として出すだけ。
+ * @invariant valid: length(value) >= 1 and length(value) <= 40
+ * Make it with `makeAnswerChoice`; never `as AnswerChoice` (see dt guide lint).
+ * @see contexts/collaboration/model/interview.dt:37
+ */
+export type AnswerChoice = string & { readonly __domain: 'Collaboration.AnswerChoice' };
+
+/**
+ * A value that violates an invariant of AnswerChoice.
+ * @see contexts/collaboration/model/interview.dt:37
+ */
+export interface InvalidAnswerChoice {
+    readonly type: 'InvalidAnswerChoice';
+    readonly value: string;
+    /** The violated invariant. */
+    readonly invariant: 'valid';
+}
+
+/**
+ * Creates a AnswerChoice, checking its invariants: generated as `makeAnswerChoice`, or written by hand.
+ * @see contexts/collaboration/model/interview.dt:37
+ */
+export type MakeAnswerChoice = (value: string) => Result<AnswerChoice, InvalidAnswerChoice>;
+
+/**
+ * The invariants of AnswerChoice that a value violates, in declaration order; empty when it is a AnswerChoice.
+ * @see contexts/collaboration/model/interview.dt:37
+ */
+export function checkAnswerChoice(value: string): readonly InvalidAnswerChoice['invariant'][] {
+    const violated: InvalidAnswerChoice['invariant'][] = [];
+    if (!((value.length >= 1) && (value.length <= 40))) violated.push('valid');
+    return violated;
+}
+
+/**
+ * Creates a AnswerChoice, checking its invariants with `checkAnswerChoice`: the first one violated is reported.
+ * @see contexts/collaboration/model/interview.dt:37
+ */
+export const makeAnswerChoice: MakeAnswerChoice = (value) => {
+    const [invariant] = checkAnswerChoice(value);
+    if (invariant === undefined) return ok(value as AnswerChoice);
+    return err({ type: 'InvalidAnswerChoice', value, invariant });
+};
+
+/**
+ * 答えを待つ問い
+ * 答えを待っている AI の問いと、その選択肢（ないこともある）。画面は、始めた人にだけ選択肢のボタンを出す。
+ * @invariant distinctChoices (同じ選択肢は1回): unique(choices)
+ * @see contexts/collaboration/model/interview.dt:40
+ */
+export interface AskedQuestion {
+    /** 問いのメッセージ */
+    readonly question: RequestId;
+    /** 選択肢 */
+    readonly choices: readonly AnswerChoice[];
+    /** 複数選べる — いくつも選べる（参加者、使い道など）。選んだものをまとめて1つの答えとして送る。 */
+    readonly multiple: boolean;
+}
+
+/**
+ * Whether two AskedQuestion values are equal: by all their fields (ADR 0016).
+ * @see contexts/collaboration/model/interview.dt:40
+ */
+export function equalAskedQuestion(a: AskedQuestion, b: AskedQuestion): boolean {
+    return a.question === b.question && sameList(a.choices, b.choices, ($32: AnswerChoice, $33: AnswerChoice) => $32 === $33) && a.multiple === b.multiple;
+}
+
+/**
+ * The invariants of AskedQuestion that a value violates, in declaration order; empty when it holds them all.
+ * @see contexts/collaboration/model/interview.dt:40
+ */
+export function checkAskedQuestion(askedQuestion: AskedQuestion): readonly 'distinctChoices'[] {
+    const violated: 'distinctChoices'[] = [];
+    if (!(distinct(askedQuestion.choices, ($34: AnswerChoice, $35: AnswerChoice) => $34 === $35))) violated.push('distinctChoices');
+    return violated;
+}
+
+/**
  * 要約の指示
  * 確定した要約が実行に求めること: どの聞き取りの、どのコマンドの要約か。
- * @see contexts/collaboration/model/interview.dt:37
+ * @see contexts/collaboration/model/interview.dt:49
  */
 export interface BriefInstruction {
     /** 聞き取り */
@@ -3348,7 +3427,7 @@ export interface BriefInstruction {
 
 /**
  * Whether two BriefInstruction values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/interview.dt:37
+ * @see contexts/collaboration/model/interview.dt:49
  */
 export function equalBriefInstruction(a: BriefInstruction, b: BriefInstruction): boolean {
     return a.interview === b.interview && a.command === b.command && equalInterviewBrief(a.brief, b.brief);
@@ -3356,7 +3435,7 @@ export function equalBriefInstruction(a: BriefInstruction, b: BriefInstruction):
 
 /**
  * Fields shared by every state of 聞き取り (Interview).
- * @see contexts/collaboration/model/interview.dt:47
+ * @see contexts/collaboration/model/interview.dt:59
  */
 export interface InterviewCommon {
     /** 聞き取りID */
@@ -3385,17 +3464,19 @@ export interface InterviewCommon {
 
 /**
  * 聞き取り中
- * @see contexts/collaboration/model/interview.dt:59
+ * @see contexts/collaboration/model/interview.dt:71
  */
 export interface AskingInterview extends InterviewCommon {
     readonly state: 'Asking';
     /** 答えを待つメッセージ — AI がまだ問いを返していない、始めた人の最後のメッセージ。AI が問うたあとはない。 */
     readonly awaiting?: RequestId;
+    /** 答えを待つ問い — AI の最後の問い（選択肢とともに）。始めた人が答えると、なくなる。 */
+    readonly asked?: AskedQuestion;
 }
 
 /**
  * 要約の確認待ち
- * @see contexts/collaboration/model/interview.dt:63
+ * @see contexts/collaboration/model/interview.dt:77
  */
 export interface BriefedInterview extends InterviewCommon {
     readonly state: 'Briefed';
@@ -3409,7 +3490,7 @@ export interface BriefedInterview extends InterviewCommon {
 
 /**
  * 確定
- * @see contexts/collaboration/model/interview.dt:69
+ * @see contexts/collaboration/model/interview.dt:83
  */
 export interface ConfirmedInterview extends InterviewCommon {
     readonly state: 'Confirmed';
@@ -3428,7 +3509,7 @@ export interface ConfirmedInterview extends InterviewCommon {
 
 /**
  * 中止
- * @see contexts/collaboration/model/interview.dt:76
+ * @see contexts/collaboration/model/interview.dt:90
  */
 export interface StoppedInterview extends InterviewCommon {
     readonly state: 'Stopped';
@@ -3444,22 +3525,22 @@ export interface StoppedInterview extends InterviewCommon {
  * 聞き取りのあいだ、始めた人のメッセージは仕分けを経ずに聞き取りに入る（ほかの人のメッセージはふだんどおり仕分ける）。
  * 要約を確定すると、実行がそれを行き先の説明として書く。コラボではファシリテーターだけが始める。セッションに走っている
  * 聞き取りは1つまで（ユースケースが確かめる）。
- * @see contexts/collaboration/model/interview.dt:47
+ * @see contexts/collaboration/model/interview.dt:59
  */
 export type Interview = AskingInterview | BriefedInterview | ConfirmedInterview | StoppedInterview;
 
 /**
  * The fields of Interview as data for `decide`: the common fields, and the fields of each state on top of them.
- * @see contexts/collaboration/model/interview.dt:47
+ * @see contexts/collaboration/model/interview.dt:59
  */
 export const InterviewShape: Shape = {
     fields: ['id', 'session', 'command', 'startedBy', 'opening', 'focus', 'language', 'startedAt'],
-    states: { Asking: ['awaiting'], Briefed: ['brief', 'answered', 'briefedAt'], Confirmed: ['brief', 'edited', 'confirmedAt', 'run'], Stopped: ['stoppedBy', 'stoppedAt'] },
+    states: { Asking: ['awaiting', 'asked'], Briefed: ['brief', 'answered', 'briefedAt'], Confirmed: ['brief', 'edited', 'confirmedAt', 'run'], Stopped: ['stoppedBy', 'stoppedAt'] },
 };
 
 /**
  * The invariants of Interview (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.
- * @see contexts/collaboration/model/interview.dt:47
+ * @see contexts/collaboration/model/interview.dt:59
  */
 export function checkInterviewCommon(_interview: InterviewCommon): readonly never[] {
     return [];
@@ -3467,7 +3548,7 @@ export function checkInterviewCommon(_interview: InterviewCommon): readonly neve
 
 /**
  * The parameters of Interview.start, by name.
- * @see contexts/collaboration/model/interview.dt:82
+ * @see contexts/collaboration/model/interview.dt:96
  */
 export interface StartInterviewParams {
     /** 聞き取りID */
@@ -3495,7 +3576,7 @@ export interface StartInterviewParams {
  * 聞き取りを始める。コラボではファシリテーターだけ（ひとりのセッションでは、その人がファシリテーター）。
  * @requires facilitatorStarts (ファシリテーターが始める) else FacilitatorOnly: startedByRole == ParticipantRole.Facilitator
  * @emits InterviewStarted — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:82
+ * @see contexts/collaboration/model/interview.dt:96
  */
 export type StartInterview = (
     params: StartInterviewParams,
@@ -3512,20 +3593,20 @@ export type StartInterview = (
  * @requires facilitatorStarts (ファシリテーターが始める) else FacilitatorOnly: startedByRole == ParticipantRole.Facilitator
  * new -> Asking — set: every field
  * @emits InterviewStarted — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:82
+ * @see contexts/collaboration/model/interview.dt:96
  */
 export type StartInterviewDecision = (
     params: StartInterviewParams,
 ) => Result<{
     readonly Asking: {
-        readonly set: { readonly id: InterviewId; readonly session: SessionId; readonly command: InterviewCommand; readonly startedBy: ParticipantId; readonly opening: RequestId; readonly focus: ModelTarget | undefined; readonly language: UiLanguage; readonly startedAt: Timestamp; readonly awaiting: RequestId | undefined };
+        readonly set: { readonly id: InterviewId; readonly session: SessionId; readonly command: InterviewCommand; readonly startedBy: ParticipantId; readonly opening: RequestId; readonly focus: ModelTarget | undefined; readonly language: UiLanguage; readonly startedAt: Timestamp; readonly awaiting: RequestId | undefined; readonly asked: AskedQuestion | undefined };
         readonly events: { readonly InterviewStarted: InterviewStarted };
     };
 }, FacilitatorOnly>;
 
 /**
  * The first requirement of Interview.start that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/interview.dt:82
+ * @see contexts/collaboration/model/interview.dt:96
  */
 export function checkStartInterviewRequires(params: StartInterviewParams): 'facilitatorStarts' | undefined {
     if (!(params.startedByRole === 'Facilitator')) return 'facilitatorStarts';
@@ -3534,7 +3615,7 @@ export function checkStartInterviewRequires(params: StartInterviewParams): 'faci
 
 /**
  * The parameters of Interview.hear, by name.
- * @see contexts/collaboration/model/interview.dt:90
+ * @see contexts/collaboration/model/interview.dt:104
  */
 export interface HearInterviewParams {
     /** 依頼ID */
@@ -3546,9 +3627,9 @@ export interface HearInterviewParams {
  * Interview.hear (Asking | Briefed -> Asking)
  * 答えを聞く
  * 始めた人のメッセージが聞き取りに入る（答え、または要約への注文: 要約は取り下げて聞き取りに戻る）。
- * @changes awaiting
+ * @changes awaiting, asked
  * @emits InterviewAnswered — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:90
+ * @see contexts/collaboration/model/interview.dt:104
  */
 export type HearInterview = (
     interview: AskingInterview | BriefedInterview,
@@ -3563,23 +3644,23 @@ export type HearInterview = (
 /**
  * Interview.hear, decided per source state; implement it with `decide(InterviewShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @changes awaiting
- * Asking -> Asking — set: awaiting; carried over: id, session, command, startedBy, opening, focus, language, startedAt
- * Briefed -> Asking — set: awaiting; carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: brief, answered, briefedAt
- * @see contexts/collaboration/model/interview.dt:90
+ * @changes awaiting, asked
+ * Asking -> Asking — set: awaiting, asked; carried over: id, session, command, startedBy, opening, focus, language, startedAt
+ * Briefed -> Asking — set: awaiting, asked; carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: brief, answered, briefedAt
+ * @see contexts/collaboration/model/interview.dt:104
  */
 export type HearInterviewDecision = {
     /** @emits InterviewAnswered — exactly once when the command succeeds */
     readonly Asking: (interview: AskingInterview, params: HearInterviewParams) => Result<{
         readonly Asking: {
-            readonly set: { readonly awaiting: RequestId | undefined };
+            readonly set: { readonly awaiting: RequestId | undefined; readonly asked: AskedQuestion | undefined };
             readonly events: { readonly InterviewAnswered: InterviewAnswered };
         };
     }, never>;
     /** @emits InterviewAnswered — exactly once when the command succeeds */
     readonly Briefed: (interview: BriefedInterview, params: HearInterviewParams) => Result<{
         readonly Asking: {
-            readonly set: { readonly awaiting: RequestId | undefined };
+            readonly set: { readonly awaiting: RequestId | undefined; readonly asked: AskedQuestion | undefined };
             readonly events: { readonly InterviewAnswered: InterviewAnswered };
         };
     }, never>;
@@ -3587,24 +3668,24 @@ export type HearInterviewDecision = {
 
 /**
  * The parameters of Interview.ask, by name.
- * @see contexts/collaboration/model/interview.dt:96
+ * @see contexts/collaboration/model/interview.dt:110
  */
 export interface AskInterviewParams {
     /** 答えたメッセージ */
     readonly answered: RequestId;
-    /** 問いのメッセージ */
-    readonly question: RequestId;
+    /** 問い */
+    readonly question: AskedQuestion;
     readonly askedAt: Timestamp;
 }
 
 /**
  * Interview.ask (Asking -> Asking)
  * 問う
- * AI が次の問いを返す（AI のメッセージとして）。答えを待っていたメッセージに答える。
+ * AI が次の問いを返す（AI のメッセージとして、選択肢があればそれも）。答えを待っていたメッセージに答える。
  * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: exists(awaiting) and awaiting == answered
- * @changes awaiting
+ * @changes awaiting, asked
  * @emits InterviewQuestionAsked — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:96
+ * @see contexts/collaboration/model/interview.dt:110
  */
 export type AskInterview = (
     interview: AskingInterview,
@@ -3620,15 +3701,15 @@ export type AskInterview = (
  * Interview.ask, decided per source state; implement it with `decide(InterviewShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: exists(awaiting) and awaiting == answered
- * @changes awaiting
- * Asking -> Asking — set: awaiting; carried over: id, session, command, startedBy, opening, focus, language, startedAt
- * @see contexts/collaboration/model/interview.dt:96
+ * @changes awaiting, asked
+ * Asking -> Asking — set: awaiting, asked; carried over: id, session, command, startedBy, opening, focus, language, startedAt
+ * @see contexts/collaboration/model/interview.dt:110
  */
 export type AskInterviewDecision = {
     /** @emits InterviewQuestionAsked — exactly once when the command succeeds */
     readonly Asking: (interview: AskingInterview, params: AskInterviewParams) => Result<{
         readonly Asking: {
-            readonly set: { readonly awaiting: RequestId | undefined };
+            readonly set: { readonly awaiting: RequestId | undefined; readonly asked: AskedQuestion | undefined };
             readonly events: { readonly InterviewQuestionAsked: InterviewQuestionAsked };
         };
     }, InterviewMovedOn>;
@@ -3636,7 +3717,7 @@ export type AskInterviewDecision = {
 
 /**
  * The first requirement of Interview.ask that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/interview.dt:96
+ * @see contexts/collaboration/model/interview.dt:110
  */
 export function checkAskInterviewRequires(interview: AskingInterview, params: AskInterviewParams): 'stillAwaited' | undefined {
     if (!((interview.awaiting !== undefined) && (interview.awaiting === params.answered))) return 'stillAwaited';
@@ -3645,7 +3726,7 @@ export function checkAskInterviewRequires(interview: AskingInterview, params: As
 
 /**
  * The parameters of Interview.summarize, by name.
- * @see contexts/collaboration/model/interview.dt:105
+ * @see contexts/collaboration/model/interview.dt:119
  */
 export interface SummarizeInterviewParams {
     /** 答えたメッセージ */
@@ -3662,7 +3743,7 @@ export interface SummarizeInterviewParams {
  * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: exists(awaiting) and awaiting == answered
  * @changes none — the command changes no common field
  * @emits InterviewBriefed — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:105
+ * @see contexts/collaboration/model/interview.dt:119
  */
 export type SummarizeInterview = (
     interview: AskingInterview,
@@ -3679,8 +3760,8 @@ export type SummarizeInterview = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: exists(awaiting) and awaiting == answered
  * @changes none — the command changes no common field
- * Asking -> Briefed — set: brief (new in Briefed), answered (new in Briefed), briefedAt (new in Briefed); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: awaiting
- * @see contexts/collaboration/model/interview.dt:105
+ * Asking -> Briefed — set: brief (new in Briefed), answered (new in Briefed), briefedAt (new in Briefed); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: awaiting, asked
+ * @see contexts/collaboration/model/interview.dt:119
  */
 export type SummarizeInterviewDecision = {
     /** @emits InterviewBriefed — exactly once when the command succeeds */
@@ -3694,7 +3775,7 @@ export type SummarizeInterviewDecision = {
 
 /**
  * The first requirement of Interview.summarize that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/interview.dt:105
+ * @see contexts/collaboration/model/interview.dt:119
  */
 export function checkSummarizeInterviewRequires(interview: AskingInterview, params: SummarizeInterviewParams): 'stillAwaited' | undefined {
     if (!((interview.awaiting !== undefined) && (interview.awaiting === params.answered))) return 'stillAwaited';
@@ -3703,7 +3784,7 @@ export function checkSummarizeInterviewRequires(interview: AskingInterview, para
 
 /**
  * The parameters of Interview.confirm, by name.
- * @see contexts/collaboration/model/interview.dt:113
+ * @see contexts/collaboration/model/interview.dt:127
  */
 export interface ConfirmInterviewParams {
     /** 参加者ID */
@@ -3723,7 +3804,7 @@ export interface ConfirmInterviewParams {
  * @requires starterConfirms (始めた人が確定する) else NotTheInterviewer: confirmedBy == startedBy
  * @changes brief
  * @emits InterviewConfirmed — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:113
+ * @see contexts/collaboration/model/interview.dt:127
  */
 export type ConfirmInterview = (
     interview: BriefedInterview,
@@ -3741,7 +3822,7 @@ export type ConfirmInterview = (
  * @requires starterConfirms (始めた人が確定する) else NotTheInterviewer: confirmedBy == startedBy
  * @changes brief
  * Briefed -> Confirmed — set: brief, edited (new in Confirmed), confirmedAt (new in Confirmed), run (new in Confirmed); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: answered, briefedAt
- * @see contexts/collaboration/model/interview.dt:113
+ * @see contexts/collaboration/model/interview.dt:127
  */
 export type ConfirmInterviewDecision = {
     /** @emits InterviewConfirmed — exactly once when the command succeeds */
@@ -3755,7 +3836,7 @@ export type ConfirmInterviewDecision = {
 
 /**
  * The first requirement of Interview.confirm that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/interview.dt:113
+ * @see contexts/collaboration/model/interview.dt:127
  */
 export function checkConfirmInterviewRequires(interview: BriefedInterview, params: ConfirmInterviewParams): 'starterConfirms' | undefined {
     if (!(params.confirmedBy === interview.startedBy)) return 'starterConfirms';
@@ -3764,7 +3845,7 @@ export function checkConfirmInterviewRequires(interview: BriefedInterview, param
 
 /**
  * The parameters of Interview.stop, by name.
- * @see contexts/collaboration/model/interview.dt:120
+ * @see contexts/collaboration/model/interview.dt:134
  */
 export interface StopInterviewParams {
     /** 参加者ID */
@@ -3779,7 +3860,7 @@ export interface StopInterviewParams {
  * @requires starterStops (始めた人が中止する) else NotTheInterviewer: stoppedBy == startedBy
  * @changes none — the command changes no common field
  * @emits InterviewStopped — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:120
+ * @see contexts/collaboration/model/interview.dt:134
  */
 export type StopInterview = (
     interview: AskingInterview | BriefedInterview,
@@ -3796,9 +3877,9 @@ export type StopInterview = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires starterStops (始めた人が中止する) else NotTheInterviewer: stoppedBy == startedBy
  * @changes none — the command changes no common field
- * Asking -> Stopped — set: stoppedBy (new in Stopped), stoppedAt (new in Stopped); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: awaiting
+ * Asking -> Stopped — set: stoppedBy (new in Stopped), stoppedAt (new in Stopped); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: awaiting, asked
  * Briefed -> Stopped — set: stoppedBy (new in Stopped), stoppedAt (new in Stopped); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: brief, answered, briefedAt
- * @see contexts/collaboration/model/interview.dt:120
+ * @see contexts/collaboration/model/interview.dt:134
  */
 export type StopInterviewDecision = {
     /** @emits InterviewStopped — exactly once when the command succeeds */
@@ -3819,7 +3900,7 @@ export type StopInterviewDecision = {
 
 /**
  * The first requirement of Interview.stop that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/interview.dt:120
+ * @see contexts/collaboration/model/interview.dt:134
  */
 export function checkStopInterviewRequires(interview: AskingInterview | BriefedInterview, params: StopInterviewParams): 'starterStops' | undefined {
     if (!(params.stoppedBy === interview.startedBy)) return 'starterStops';
@@ -3829,7 +3910,7 @@ export function checkStopInterviewRequires(interview: AskingInterview | BriefedI
 /**
  * Command contracts of Interview. Implement this interface by hand.
  * Commands are pure functions of the aggregate and their parameters: no I/O, no clock, no randomness. IDs and times are passed in as parameters.
- * @see contexts/collaboration/model/interview.dt:47
+ * @see contexts/collaboration/model/interview.dt:59
  */
 export interface InterviewCommands {
     /** 聞き取りを始める */
@@ -3848,14 +3929,14 @@ export interface InterviewCommands {
 
 /**
  * Events that the commands of Interview may emit.
- * @see contexts/collaboration/model/interview.dt:47
+ * @see contexts/collaboration/model/interview.dt:59
  */
 export type InterviewEvent = InterviewStarted | InterviewAnswered | InterviewQuestionAsked | InterviewBriefed | InterviewConfirmed | InterviewStopped;
 
 /**
  * 聞き取りの開始
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/interview.dt:126
+ * @see contexts/collaboration/model/interview.dt:140
  */
 export interface InterviewStarted {
     readonly type: 'InterviewStarted';
@@ -3879,7 +3960,7 @@ export interface InterviewStarted {
 /**
  * 聞き取りへの答え
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/interview.dt:137
+ * @see contexts/collaboration/model/interview.dt:151
  */
 export interface InterviewAnswered {
     readonly type: 'InterviewAnswered';
@@ -3893,7 +3974,7 @@ export interface InterviewAnswered {
 /**
  * 聞き取りの問い
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/interview.dt:143
+ * @see contexts/collaboration/model/interview.dt:157
  */
 export interface InterviewQuestionAsked {
     readonly type: 'InterviewQuestionAsked';
@@ -3901,13 +3982,16 @@ export interface InterviewQuestionAsked {
     readonly interviewId: InterviewId;
     /** 依頼ID */
     readonly question: RequestId;
+    /** 答えの選択肢 — 問いの選択肢（ないときは空）。 */
+    readonly choices: readonly AnswerChoice[];
+    readonly multiple: boolean;
     readonly askedAt: Timestamp;
 }
 
 /**
  * 聞き取りの要約
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/interview.dt:149
+ * @see contexts/collaboration/model/interview.dt:166
  */
 export interface InterviewBriefed {
     readonly type: 'InterviewBriefed';
@@ -3923,7 +4007,7 @@ export interface InterviewBriefed {
 /**
  * 聞き取りの確定
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/interview.dt:156
+ * @see contexts/collaboration/model/interview.dt:173
  */
 export interface InterviewConfirmed {
     readonly type: 'InterviewConfirmed';
@@ -3940,7 +4024,7 @@ export interface InterviewConfirmed {
 /**
  * 聞き取りの中止
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/interview.dt:164
+ * @see contexts/collaboration/model/interview.dt:181
  */
 export interface InterviewStopped {
     readonly type: 'InterviewStopped';
@@ -3954,7 +4038,7 @@ export interface InterviewStopped {
 /**
  * 聞き取りを始めた人でない
  * 聞き取りを確定・中止できるのは、始めた人だけ。
- * @see contexts/collaboration/model/interview.dt:171
+ * @see contexts/collaboration/model/interview.dt:188
  */
 export interface NotTheInterviewer {
     readonly type: 'NotTheInterviewer';
@@ -3963,7 +4047,7 @@ export interface NotTheInterviewer {
 /**
  * 聞き取りは先に進んだ
  * AI の問いや要約が答えたメッセージを、聞き取りはもう待っていない（そのあいだに始めた人が続けて書いた）。
- * @see contexts/collaboration/model/interview.dt:174
+ * @see contexts/collaboration/model/interview.dt:191
  */
 export interface InterviewMovedOn {
     readonly type: 'InterviewMovedOn';
@@ -3972,7 +4056,7 @@ export interface InterviewMovedOn {
 /**
  * 走っている聞き取りがある
  * セッションには走っている聞き取りがある（1つまで）。
- * @see contexts/collaboration/model/interview.dt:177
+ * @see contexts/collaboration/model/interview.dt:194
  */
 export interface InterviewAlreadyRunning {
     readonly type: 'InterviewAlreadyRunning';
@@ -4187,7 +4271,7 @@ export function equalMarkTarget(a: MarkTarget, b: MarkTarget): boolean {
     }
     if (a.kind === 'AssumptionChoice') {
         const y = b as Extract<MarkTarget, { readonly kind: 'AssumptionChoice' }>;
-        return a.run === y.run && a.assumption === y.assumption && sameOptional(a.alternative, y.alternative, ($32: ReplyKey, $33: ReplyKey) => $32 === $33);
+        return a.run === y.run && a.assumption === y.assumption && sameOptional(a.alternative, y.alternative, ($36: ReplyKey, $37: ReplyKey) => $36 === $37);
     }
     return true;
 }
@@ -4724,7 +4808,7 @@ export interface ProposalOption {
  * @see contexts/collaboration/model/proposal.dt:16
  */
 export function equalProposalOption(a: ProposalOption, b: ProposalOption): boolean {
-    return a.label === b.label && sameList(a.targets, b.targets, equalModelTarget) && sameOptional(a.how, b.how, ($34: ProposalText, $35: ProposalText) => $34 === $35) && a.recommended === b.recommended;
+    return a.label === b.label && sameList(a.targets, b.targets, equalModelTarget) && sameOptional(a.how, b.how, ($38: ProposalText, $39: ProposalText) => $38 === $39) && a.recommended === b.recommended;
 }
 
 /**
@@ -4791,7 +4875,7 @@ export interface ProposalInstruction {
  * @see contexts/collaboration/model/proposal.dt:38
  */
 export function equalProposalInstruction(a: ProposalInstruction, b: ProposalInstruction): boolean {
-    return sameOptional(a.label, b.label, ($36: ProposalLabel, $37: ProposalLabel) => $36 === $37) && sameList(a.targets, b.targets, equalModelTarget) && a.how === b.how;
+    return sameOptional(a.label, b.label, ($40: ProposalLabel, $41: ProposalLabel) => $40 === $41) && sameList(a.targets, b.targets, equalModelTarget) && a.how === b.how;
 }
 
 /**
@@ -5551,7 +5635,7 @@ export function checkRequestCommon(request: RequestCommon): readonly ('atMostTwe
     if (!(request.targets.length <= 20)) violated.push('atMostTwentyTargets');
     if (!(distinct(request.targets, (t, t2) => equalModelTarget(t.target, t2.target)))) violated.push('distinctTargets');
     if (!(request.mentions.length <= 20)) violated.push('atMostTwentyMentions');
-    if (!(distinct(request.mentions, ($38: ParticipantId, $39: ParticipantId) => $38 === $39))) violated.push('distinctMentions');
+    if (!(distinct(request.mentions, ($42: ParticipantId, $43: ParticipantId) => $42 === $43))) violated.push('distinctMentions');
     if (!(request.targets.every((t) => !(t.target.kind === 'Workspace')))) violated.push('noWorkspaceTarget');
     return violated;
 }
@@ -5657,7 +5741,7 @@ export function checkSendRequestRequires(params: SendRequestParams): 'atMostTwen
     if (!(distinct(params.targets, (t, t2) => equalModelTarget(t.target, t2.target)))) return 'distinctTargets';
     if (!(params.targets.every((t) => !(t.target.kind === 'Workspace')))) return 'noWorkspaceTarget';
     if (!(params.mentions.length <= 20)) return 'atMostTwentyMentions';
-    if (!(distinct(params.mentions, ($40: ParticipantId, $41: ParticipantId) => $40 === $41))) return 'distinctMentions';
+    if (!(distinct(params.mentions, ($44: ParticipantId, $45: ParticipantId) => $44 === $45))) return 'distinctMentions';
     return undefined;
 }
 
@@ -7546,7 +7630,7 @@ export function equalModelTarget(a: ModelTarget, b: ModelTarget): boolean {
     if (a.kind !== b.kind) return false;
     if (a.kind === 'Workspace') {
         const y = b as Extract<ModelTarget, { readonly kind: 'Workspace' }>;
-        return sameOptional(a.scope, y.scope, ($42: string, $43: string) => $42 === $43);
+        return sameOptional(a.scope, y.scope, ($46: string, $47: string) => $46 === $47);
     }
     if (a.kind === 'DtElement') {
         const y = b as Extract<ModelTarget, { readonly kind: 'DtElement' }>;
@@ -7626,7 +7710,7 @@ export interface TargetSnapshot {
  * @see contexts/collaboration/model/target.dt:60
  */
 export function equalTargetSnapshot(a: TargetSnapshot, b: TargetSnapshot): boolean {
-    return equalModelTarget(a.target, b.target) && a.sourceRevision === b.sourceRevision && sameOptional(a.label, b.label, ($44: string, $45: string) => $44 === $45) && sameOptional(a.range, b.range, equalSourceRange);
+    return equalModelTarget(a.target, b.target) && a.sourceRevision === b.sourceRevision && sameOptional(a.label, b.label, ($48: string, $49: string) => $48 === $49) && sameOptional(a.range, b.range, equalSourceRange);
 }
 
 /**
@@ -7843,7 +7927,7 @@ export interface TriageStep {
  * @see contexts/collaboration/model/triage.dt:39
  */
 export function equalTriageStep(a: TriageStep, b: TriageStep): boolean {
-    return a.stage === b.stage && a.verdict === b.verdict && sameOptional(a.confidence, b.confidence, ($46: Confidence, $47: Confidence) => Number($46) === Number($47)) && sameOptional(a.reason, b.reason, ($48: Text, $49: Text) => $48 === $49) && sameOptional(a.model, b.model, ($50: string, $51: string) => $50 === $51) && a.durationMs === b.durationMs && sameOptional(a.error, b.error, ($52: Text, $53: Text) => $52 === $53) && a.at.getTime() === b.at.getTime();
+    return a.stage === b.stage && a.verdict === b.verdict && sameOptional(a.confidence, b.confidence, ($50: Confidence, $51: Confidence) => Number($50) === Number($51)) && sameOptional(a.reason, b.reason, ($52: Text, $53: Text) => $52 === $53) && sameOptional(a.model, b.model, ($54: string, $55: string) => $54 === $55) && a.durationMs === b.durationMs && sameOptional(a.error, b.error, ($56: Text, $57: Text) => $56 === $57) && a.at.getTime() === b.at.getTime();
 }
 
 /**
@@ -7900,7 +7984,7 @@ export function equalTriageOutcome(a: TriageOutcome, b: TriageOutcome): boolean 
     if (a.kind !== b.kind) return false;
     if (a.kind === 'Answer') {
         const y = b as Extract<TriageOutcome, { readonly kind: 'Answer' }>;
-        return a.answer === y.answer && sameOptional(a.readRevision, y.readRevision, ($54: RevisionId, $55: RevisionId) => $54 === $55);
+        return a.answer === y.answer && sameOptional(a.readRevision, y.readRevision, ($58: RevisionId, $59: RevisionId) => $58 === $59);
     }
     if (a.kind === 'Proposal') {
         const y = b as Extract<TriageOutcome, { readonly kind: 'Proposal' }>;
@@ -8888,15 +8972,15 @@ export function equalViewShown(a: ViewShown, b: ViewShown): boolean {
     }
     if (a.kind === 'Structure') {
         const y = b as Extract<ViewShown, { readonly kind: 'Structure' }>;
-        return a.level === y.level && sameList(a.focus, y.focus, ($56: ContextName, $57: ContextName) => $56 === $57);
+        return a.level === y.level && sameList(a.focus, y.focus, ($60: ContextName, $61: ContextName) => $60 === $61);
     }
     if (a.kind === 'Catalog') {
         const y = b as Extract<ViewShown, { readonly kind: 'Catalog' }>;
-        return sameOptional(a.query, y.query, ($58: CatalogQuery, $59: CatalogQuery) => $58 === $59) && sameList(a.sections, y.sections, ($60: CatalogSection, $61: CatalogSection) => $60 === $61) && sameList(a.contexts, y.contexts, ($62: ContextName, $63: ContextName) => $62 === $63);
+        return sameOptional(a.query, y.query, ($62: CatalogQuery, $63: CatalogQuery) => $62 === $63) && sameList(a.sections, y.sections, ($64: CatalogSection, $65: CatalogSection) => $64 === $65) && sameList(a.contexts, y.contexts, ($66: ContextName, $67: ContextName) => $66 === $67);
     }
     if (a.kind === 'Storming') {
         const y = b as Extract<ViewShown, { readonly kind: 'Storming' }>;
-        return a.storming === y.storming && a.level === y.level && sameOptional(a.timeline, y.timeline, ($64: TimelineName, $65: TimelineName) => $64 === $65) && sameOptional(a.stage, y.stage, ($66: StageName, $67: StageName) => $66 === $67) && a.exceptions === y.exceptions;
+        return a.storming === y.storming && a.level === y.level && sameOptional(a.timeline, y.timeline, ($68: TimelineName, $69: TimelineName) => $68 === $69) && sameOptional(a.stage, y.stage, ($70: StageName, $71: StageName) => $70 === $71) && a.exceptions === y.exceptions;
     }
     return true;
 }
@@ -8920,7 +9004,7 @@ export interface ViewedAt {
  * @see contexts/collaboration/model/view.dt:51
  */
 export function equalViewedAt(a: ViewedAt, b: ViewedAt): boolean {
-    return equalViewShown(a.view, b.view) && sameOptional(a.states, b.states, ($68: ElementName, $69: ElementName) => $68 === $69);
+    return equalViewShown(a.view, b.view) && sameOptional(a.states, b.states, ($72: ElementName, $73: ElementName) => $72 === $73);
 }
 
 /** Events of Collaboration that are persisted (declared `persistent`). */

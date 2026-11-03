@@ -33,6 +33,18 @@ context Collaboration {
     text: BriefText "本文"
   }
 
+  /// AI の問いの選択肢（短い1行）。始めた人が押すと、それが答えとして送られる。AI の出力で、文字として出すだけ。
+  primitive AnswerChoice "答えの選択肢": String { length(value) >= 1 and length(value) <= 40 }
+
+  /// 答えを待っている AI の問いと、その選択肢（ないこともある）。画面は、始めた人にだけ選択肢のボタンを出す。
+  value AskedQuestion "答えを待つ問い" {
+    question: RequestId "問いのメッセージ"
+    choices: AnswerChoice[0..6] "選択肢"
+    /// いくつも選べる（参加者、使い道など）。選んだものをまとめて1つの答えとして送る。
+    multiple: Bool "複数選べる"
+    invariant distinctChoices "同じ選択肢は1回" { unique(choices) }
+  }
+
   /// 確定した要約が実行に求めること: どの聞き取りの、どのコマンドの要約か。
   value BriefInstruction "要約の指示" {
     interview: InterviewId "聞き取り"
@@ -59,6 +71,8 @@ context Collaboration {
     state Asking "聞き取り中" {
       /// AI がまだ問いを返していない、始めた人の最後のメッセージ。AI が問うたあとはない。
       awaiting: RequestId? "答えを待つメッセージ"
+      /// AI の最後の問い（選択肢とともに）。始めた人が答えると、なくなる。
+      asked: AskedQuestion? "答えを待つ問い"
     }
     state Briefed "要約の確認待ち" {
       brief: InterviewBrief "要約"
@@ -89,16 +103,16 @@ context Collaboration {
     /// 始めた人のメッセージが聞き取りに入る（答え、または要約への注文: 要約は取り下げて聞き取りに戻る）。
     command hear(message: RequestId, heardAt: Timestamp) "答えを聞く"
       Asking | Briefed -> Asking
-      changes awaiting
+      changes awaiting, asked
       emits InterviewAnswered
 
-    /// AI が次の問いを返す（AI のメッセージとして）。答えを待っていたメッセージに答える。
-    command ask(answered: RequestId "答えたメッセージ", question: RequestId "問いのメッセージ", askedAt: Timestamp) "問う"
+    /// AI が次の問いを返す（AI のメッセージとして、選択肢があればそれも）。答えを待っていたメッセージに答える。
+    command ask(answered: RequestId "答えたメッセージ", question: AskedQuestion "問い", askedAt: Timestamp) "問う"
       Asking -> Asking
       requires stillAwaited "そのメッセージをまだ待っている" {
         exists(awaiting) and awaiting == answered
       } else InterviewMovedOn
-      changes awaiting
+      changes awaiting, asked
       emits InterviewQuestionAsked
 
     /// AI が要約を出す。始めた人が確定・編集して確定・中止を選ぶ。
@@ -143,6 +157,9 @@ context Collaboration {
   persistent event InterviewQuestionAsked "聞き取りの問い" {
     interviewId: InterviewId
     question: RequestId
+    /// 問いの選択肢（ないときは空）。
+    choices: AnswerChoice[0..6]
+    multiple: Bool
     askedAt: Timestamp
   }
 

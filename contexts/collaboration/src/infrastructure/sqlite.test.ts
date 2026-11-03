@@ -23,7 +23,7 @@ import {
     openDatabase,
     openSessionDatabase,
 } from './sqlite.js';
-import { knownAgentRunId, knownRequestId, knownRevisionId, knownSessionId } from '../domain/ids.js';
+import { knownAgentRunId, knownInterviewId, knownRequestId, knownRevisionId, knownSessionId } from '../domain/ids.js';
 
 /** The error a promise rejects with (fails when it resolves). */
 async function thrown(p: Promise<unknown>): Promise<Error> {
@@ -450,6 +450,37 @@ describe('rows written before requests had several targets', () => {
             return st.requests.load(request);
         });
         expect(loaded?.viewedAt).toEqual(viewedAt);
+    });
+});
+
+describe("an interview's question with its choices", () => {
+    test('keeps them through the store, after the database is opened again; one stored without them loads as before', async () => {
+        const file = path.join(await tempDir(), 'session.db');
+        const interviewId = knownInterviewId('00000000-0000-4000-8000-000000000030');
+        const question = knownRequestId('00000000-0000-4000-8000-000000000011');
+        const asking = (asked?: C.AskedQuestion): C.AskingInterview => ({
+            state: 'Asking',
+            id: interviewId,
+            session: sessionId,
+            command: 'Es',
+            startedBy: facilitator,
+            opening: request,
+            language: 'Ja',
+            startedAt: at,
+            ...(asked && { asked }),
+        });
+        const asked: C.AskedQuestion = { question, choices: ['返品', '交換'].map((c) => value(C.makeAnswerChoice(c))), multiple: true };
+        const db = openDatabase(file);
+        await createUnitOfWork(db).transaction((st) => {
+            openSession(st, sessionId);
+            sendRequest(st);
+            st.interviews.save(asking(asked));
+        });
+        db.close();
+        const again = createUnitOfWork(openDatabase(file));
+        expect(await again.transaction((st) => st.interviews.load(interviewId))).toEqual(asking(asked));
+        await again.transaction((st) => st.interviews.save(asking()));
+        expect((await again.transaction((st) => st.interviews.load(interviewId))) as unknown).toEqual(asking());
     });
 });
 

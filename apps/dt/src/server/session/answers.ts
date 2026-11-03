@@ -431,7 +431,8 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
         if (read.value.kind === 'question') {
             const text = Collaboration.makeText(read.value.question);
             if (!text.ok) return r.fail(400, 'InvalidReply', 'Not a text.', { field: 'question' });
-            return r.done(await use.askInInterview({ interview, answered: h.request, question: text.value }));
+            const { choices, multiple } = read.value;
+            return r.done(await use.askInInterview({ interview, answered: h.request, question: text.value, choices, multiple }));
         }
         return r.done(await use.briefInterview({ interview, answered: h.request, brief: read.value.brief }));
     };
