@@ -686,3 +686,15 @@ What the agents are given about the session so far, besides the current files (w
   process gets the whole timeline each time (it remembers nothing); a warm one gets it in full when it starts and then
   only what was added since its previous turn, so the conversation does not grow twice. The triage stage gets a short
   window around the addressed message.
+
+## Later: message templates (decided, round 4)
+
+After M6 (the composer is reworked there), a separate task **M8** adds templates to the composer:
+
+- Typing `/` in the composer lists templates, the same gesture as `@` for people and the AI; nothing is shown on the
+  page otherwise.
+- A template is only the beginning of a message: picking it puts its text in the composer, to edit and send. It never
+  says whether the message is a 相談 or a 依頼; the triage decides as for any message.
+- The list depends on what is open and selected: Event Storming (Big Picture / Design Level), the structure or catalog
+  with an element selected, a state view, or nothing selected. A selected element goes in as the `#` target.
+- Built-in templates, plus a team's own in `domaintrail.jsonc` (a section to name in M8), shown after the built-in ones.
