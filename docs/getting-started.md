@@ -369,6 +369,12 @@ Open the printed link in the browser (it signs your browser in, once; afterwards
 - Change the file and save: the view follows. Break something: the problem appears at the bottom, and the last valid
   diagram stays.
 
+The session's record — the chat, the runs, the revisions — and the diagrams' layouts are kept outside the workspace
+(by default in `~/.local/state/domaintrail/<workspace>/` and `~/.cache/domaintrail/<workspace>/`, on macOS too): nothing
+is written into the workspace, and there is nothing to add to `.gitignore`. The `.domaintrail/` of an older version is
+moved there on the first run. `dt session prune` lists what is kept for workspaces that are gone, and removes it with
+`--yes` (`dt guide config`, Where dt keeps its files).
+
 The panes, the views and the settings are described in [The Live View](live-view.md).
 
 ## Generate, implement, test

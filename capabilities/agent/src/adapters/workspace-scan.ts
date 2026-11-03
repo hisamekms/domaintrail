@@ -1,7 +1,8 @@
 // What files an agent run changed (ADR 0026, S6: the agent edits DSL sources only): every file below the root with a
 // fingerprint of its metadata (type, size, mode, modification and change times in nanoseconds; a link's target),
-// scanned before and after the agent. Symbolic links are recorded, never followed. `.domaintrail/` (the session's own
-// state and the layout), `.git` and `node_modules` are skipped.
+// scanned before and after the agent. Symbolic links are recorded, never followed. `.domaintrail/` (where older
+// versions kept the session's state and the layout; dt keeps them outside the workspace now), `.git` and
+// `node_modules` are skipped.
 import { lstat, readdir, readlink } from 'node:fs/promises';
 import * as path from 'node:path';
 

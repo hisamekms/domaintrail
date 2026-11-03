@@ -1,4 +1,4 @@
-// The session's persistence on node:sqlite (ADR 0026): one database per workspace, `.domaintrail/session/session.db`.
+// The session's persistence on node:sqlite (ADR 0026): one database per workspace, `session.db` in its state directory.
 // Aggregates are stored whole as JSON next to the columns the queries and constraints need; the outbox is a table
 // appended in the transaction that saves the aggregates. Every transaction is BEGIN IMMEDIATE, one at a time.
 // Only node:sqlite's DatabaseSync is used (no Bun API), so the same code runs in the CLI under Node and in the tests under Bun as well.
@@ -346,13 +346,13 @@ export function openDatabase(file: string): DatabaseSync {
 }
 
 /**
- * Opens the session database of a workspace, `.domaintrail/session/session.db`, making the directory (with its
- * `.gitignore`) if needed. Refuses (`UnsafeSessionPath`) when the directory, the database or its WAL files are
+ * Opens the session database in the session's directory `sessionDir`, `session.db`, making the directory if needed
+ * (its parent must exist). Refuses (`UnsafeSessionPath`) when the directory, the database or its WAL files are
  * symbolic links. The database and its WAL files are 0600: an absent database is made empty (a valid one) 0600 before
  * SQLite opens it, since SQLite gives its WAL files the database's permissions; existing ones are tightened.
  */
-export async function openSessionDatabase(root: string): Promise<DatabaseSync> {
-    const dir = await sessionDirectory(root);
+export async function openSessionDatabase(sessionDir: string): Promise<DatabaseSync> {
+    const dir = await sessionDirectory(sessionDir);
     const file = path.join(dir, DATABASE_FILE);
     const files = [file, `${file}-wal`, `${file}-shm`];
     for (const f of files) await checkPlain(f, 'file');

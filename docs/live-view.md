@@ -94,8 +94,8 @@ with its own 書き出し (the download arrow: PNG and SVG, opening upward).
 stages' grid included), the Context Map, the Structure View (focused views included) and the inspector's 状態遷移 —
 is laid out again with narrower gaps between notes, boxes, layers and frames (arrowheads, edge labels, the exceptions'
 captions and the frames' titles keep their room). The page asks for a diagram's compact layout the first time it shows
-it and shows the normal one until it comes; both are kept (in `.domaintrail/layout.json`, under their own keys), so
-switching back and forth lays out nothing again. Each spacing keeps its own camera. A compact diagram draws no ghosts
+it and shows the normal one until it comes; both are kept (in `layout.json` in the workspace's cache directory, outside
+it, under their own keys), so switching back and forth lays out nothing again. Each spacing keeps its own camera. A compact diagram draws no ghosts
 of removed elements (they are where the baseline's normal layout had them), and the others' cursors are drawn only
 between viewers who see the same spacing.
 
@@ -295,8 +295,8 @@ neither baseline: their views are not marked.
   larger text does not wrap everywhere; a width you dragged is kept.
 - Names follow the 名前の表示 setting: ラベル (the default; the string after a declaration's name, falling back to
   the name when there is none or it is blank), 名前 or 両方 (the label and the name; the name alone without a label).
-  Layouts are cached in `<root>/.domaintrail/layout.json` (the compact ones of 詰めて表示 beside the normal ones). The
-  canvas is read-only.
+  Layouts are cached outside the workspace, in `~/.cache/domaintrail/<workspace>/layout.json` (`$XDG_CACHE_HOME`;
+  `dt guide config`), the compact ones of 詰めて表示 beside the normal ones. The canvas is read-only.
 
 See [ADR 0001](adr/0001-mvp-implementation-decisions.md) for the design decisions.
 

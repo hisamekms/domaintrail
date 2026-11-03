@@ -258,7 +258,7 @@
       "additionalProperties": false,
       "properties": {
         "port": {
-          "description": "Port of the agent API, bound to 127.0.0.1 only; 0 picks a free port (written to .domaintrail/session/server.json; its credential is never written to disk).",
+          "description": "Port of the agent API, bound to 127.0.0.1 only; 0 picks a free port (written to server.json in the workspace's state directory, outside it; its credential is never written to disk).",
           "type": "integer",
           "minimum": 0,
           "maximum": 65535,

@@ -37,7 +37,8 @@ place of Claude Code: it edits the workspace's `.dt` and `.dtes` files for real,
 server records the revisions. Once the scenarios are done the seed's agent is stopped: it holds no run.
 
 It then prints the Live View's URL, a fresh facilitator link and how to join, and leaves the session server running
-until Ctrl+C. The session stays in the directory: `dt -r <dir> collab` resumes it (without the classifier's
+until Ctrl+C. The session stays in the directory's state directory (outside it, `~/.local/state/domaintrail/<dir's
+name>-<hash>/`; `--reset` removes it with the directory): `dt -r <dir> collab` resumes it (without the classifier's
 tags, see below).
 
 ## Looking at it
@@ -46,8 +47,8 @@ tags, see below).
   10 minutes; `node dist/dt.js -r <dir> collab link` prints another). You then hold the role `ooyama_F` held: the
   facilitator's messages and reactions show as 「あなた」, and the AI に送る buttons and the menus are yours.
 - **As a participant**: a private window, the same URL, another name. Your browser is a new participant, so none of the
-  seeded messages are yours; the seeded people's cookies (`dt_session`) are in `<dir>/.domaintrail/seed.json`, for a
-  browser (or a test) that should be one of them.
+  seeded messages are yours; the seeded people's cookies (`dt_session`) are in `seed.json` in that state directory
+  (the seed prints where), for a browser (or a test) that should be one of them.
 - **With the real agent**: `node dist/dt.js -r <dir> collab agent-link`, then `node dist/dt.js -r <dir> agent --code <code>`, takes the runs queued from then
   on (and the one `--leave-queued` left).
 

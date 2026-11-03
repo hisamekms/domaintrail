@@ -3,7 +3,9 @@
 - Status: accepted
 - Date: 2026-10-17
 - Context: resolves the open items of the MVP spec v0.1 (§11) and records implementation choices.
-- Amended by: [ADR 0028](0028-generated-typescript-changes.md) (the constructor of an `id X: UUID` checks the form)
+- Amended by: [ADR 0028](0028-generated-typescript-changes.md) (the constructor of an `id X: UUID` checks the form);
+  [ADR 0026](0026-collaboration-sessions.md#appendix-state-outside-the-workspace-amendment) (the layouts are cached
+  outside the workspace)
 
 ## Decisions
 

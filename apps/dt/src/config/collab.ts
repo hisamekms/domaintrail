@@ -36,6 +36,8 @@ import {
     validateAgentApiConfig,
     validateCollabServerConfig,
 } from './server.js';
+import { homedir } from 'node:os';
+import { stateRoots } from '@domaintrail/workspace';
 
 /** The keys of `collab` and `agent` from their owners but the app (./server.ts), by where they sit in the file. */
 export const COLLAB_AGENT_CONFIG_KEYS: readonly Readonly<Record<string, readonly string[]>>[] = [COLLABORATION_CONFIG_KEYS, AGENT_CONFIG_KEYS];
@@ -51,7 +53,7 @@ export interface CollabSectionFile extends Omit<CollabConfigFile, 'access'> {
 
 /** The `agent` section of the config file: what `dt agent` (or the agent in process) and the agent API read. */
 export interface AgentSectionFile extends AgentConfigFile {
-    /** Port of the agent API, on 127.0.0.1 only. Default: 0 (any free port, written to `.domaintrail/session/server.json`; never its credential). */
+    /** Port of the agent API, on 127.0.0.1 only. Default: 0 (any free port, written to `server.json` in the workspace's state directory; never its credential). */
     port?: number;
     run?: NonNullable<AgentConfigFile['run']> & { maxPreviousRunDiff?: number };
 }
@@ -141,7 +143,9 @@ export function validateAgent(agent: unknown, keys: Readonly<Record<string, read
  */
 export function checkAgent(agent: AgentSectionFile | undefined, dir: string, fail: (msg: string) => never): void {
     checkDtOutsideWorkspace(agent?.run?.dt, dir, fail);
-    checkReadPaths(agent, dir, fail);
+    // never dt's own state and cache directories, where every workspace's session is kept
+    const roots = stateRoots();
+    checkReadPaths(agent, dir, fail, homedir(), [roots.state, roots.cache]);
 }
 
 /** `collab` with its defaults (validated). */

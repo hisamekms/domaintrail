@@ -68,8 +68,9 @@ export interface RunnerReadScope {
 }
 
 /**
- * What no agent reads or edits inside its working directory, whatever its tools: the session's own state (its
- * database, the seed's cookies; the agent API's credential is in memory only since M5) and git's, at any depth (a nested repository's `.git/`, a
+ * What no agent reads or edits inside its working directory, whatever its tools: `.domaintrail/`, where older versions
+ * kept the session's state (its database, the seed's cookies; dt keeps it outside the workspace now, ADR 0026, and the
+ * agent API's credential is in memory only since M5), and git's, at any depth (a nested repository's `.git/`, a
  * submodule's or worktree's `.git` file, a nested workspace's `.domaintrail/`). `**` matches at any depth, the top
  * included (measured with Claude Code 2.1.317: `sub/.git/config`, `deep/a/.git/HEAD`, `mod/.git` and
  * `sub/.domaintrail/x` refused); the `./` rules are kept as well.
@@ -219,7 +220,7 @@ export function toolNames(rules: readonly string[]): string[] {
  * What it may read (ADR 0030, as built in M4): **no settings file is loaded** (`--setting-sources ""`): neither the
  * workspace's `.claude/` (files the agent can write) nor the user's, whose allow rules (a plain `Read`, say) would let it
  * read anywhere. In `dontAsk` mode Claude Code then reads only inside its working directory, and refuses any path
- * outside it; `READ_DENIED` keeps it out of `.domaintrail/` (the agent credential) and `.git` there too, at any depth
+ * outside it; `READ_DENIED` keeps it out of `.domaintrail/` (an older version's session state) and `.git` there too, at any depth
  * (deny rules win).
  * The user's model and effort still apply when the role has none (`userClaudeDefaults`).
  */

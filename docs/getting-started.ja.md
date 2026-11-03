@@ -360,6 +360,12 @@ AI: started in this process (claude …; role run)
 - `confirm` を選び、**振る舞い** へ。要件 `roomFits`、エラー `RoomTooSmall`、イベントが出ます。
 - ファイルを変えて保存すると表示が追従します。わざと壊すと問題が画面下部に出て、最後に正しかった図は残ります。
 
+チャット、実行、リビジョンといったセッションの記録と図のレイアウトは、ワークスペースの外（既定では
+`~/.local/state/domaintrail/<ワークスペース>/` と `~/.cache/domaintrail/<ワークスペース>/`。macOS も同じ）に保存され、
+ワークスペースには何も書かれません。`.gitignore` に足すものはありません。以前のバージョンが作った `.domaintrail/` は
+最初の実行でそこへ移されます。消えたワークスペースの分は `dt session prune` で一覧し、`--yes` で消せます
+（`dt guide config` の Where dt keeps its files）。
+
 ペイン、ビュー、設定の詳細は [Live View](live-view.md)（英語）にあります。
 
 ## 生成、実装、テスト
