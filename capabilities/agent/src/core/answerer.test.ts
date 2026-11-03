@@ -406,14 +406,14 @@ describe('the candidate and answer commands of the `/` list', () => {
         'es:levels': ['EsLevels', 'candidates'],
         'es:names': ['EsNames', 'candidates'],
         'es:recap': ['EsRecap', 'answer'],
-        'es:next': ['EsNext', 'next'],
+        hint: ['Hint', 'next'],
     } as const;
     type Name = keyof typeof KINDS;
     const command = (name: Name, n = 1, language: 'ja' | 'en' = 'ja'): AgentCommandJobBody =>
         ({
             job: `job-${n}`,
             kind: 'command',
-            command: { id: 'c-1', kind: KINDS[name][0], ...(name !== 'es:recap' && { scope: 'Orders' }) },
+            command: { id: 'c-1', kind: KINDS[name][0], ...(name.startsWith('es:') && name !== 'es:recap' && { scope: 'Orders' }) },
             name,
             type: KINDS[name][1],
             request: { id: REQUEST, viewedAt },
@@ -528,25 +528,25 @@ describe('the candidate and answer commands of the `/` list', () => {
         expect(buildCommandPrompt(command('es:names'), 'n', { diagnostics: many })).toContain('"andMore": 5');
     });
 
-    test('/es:next: its prompt (the brief, the level, the coverage, hotspots, diagnostics), the steps sent as read; the diagnostics asked once', async () => {
+    test('/hint: its prompt (where the person is, both ways of working, the commands it may suggest), the steps sent as read; all the findings asked once', async () => {
         const { api, push, results } = fakeApi();
         const steps = [
             { text: '発行の例外を洗い出す', reason: '発行に例外がない', command: 'es:exceptions' },
-            { text: '専門家を呼ぶ', reason: '本籍地のホットスポットが未決' },
+            { text: 'モデリングを始める', reason: 'ストーミングが Design Level まで進んだ', command: 'model:start' },
             { text: '名前を揃える', reason: 'S015 が 3 件', command: 'es:names' },
             { text: '4つめ', reason: 'x' },
         ];
-        const agent = fakeAgent([{ structured: { kind: 'next', status: 'Big Picture: 3 ステージ', steps }, text: '' }]);
+        const agent = fakeAgent([{ structured: { kind: 'next', status: 'ES: Big Picture 3 ステージ', steps }, text: '' }]);
         const log: string[] = [];
-        let asked = 0;
+        const asked: string[] = [];
         const answerer = startAnswerer(
             {
                 api,
                 agent,
                 workspace: { scan: async () => new Map() },
-                diagnostics: async () => {
-                    asked += 1;
-                    return ['stormings/orders.dtes:3:9 warning S015: too long'];
+                diagnostics: async (scope) => {
+                    asked.push(scope);
+                    return ['stormings/orders.dtes:3:9 warning S015: too long', 'sales/order.dt:2:5 error E001: unknown type'];
                 },
                 clock: sleep,
                 nonce: () => 'n1',
@@ -554,34 +554,54 @@ describe('the candidate and answer commands of the `/` list', () => {
             },
             { reconnect: { minMs: 10, maxMs: 10, giveUpMs: 1_000 }, practice: { storming: 'STORMING', modeling: 'MODELING' } },
         );
-        push({ kind: 'job', job: command('es:next') });
+        push({ kind: 'job', job: command('hint') });
         await waitFor(() => results.length === 1);
         expect(agent.turns[0].kind).toBe('command:next');
-        expect(asked).toBe(1);
-        expect(results[0].result).toMatchObject({ kind: 'next', status: 'Big Picture: 3 ステージ', steps: steps.slice(0, 3) });
+        // the whole workspace's findings: the .dt files too
+        expect(asked).toEqual(['workspace']);
+        expect(results[0].result).toMatchObject({ kind: 'next', status: 'ES: Big Picture 3 ステージ', steps: steps.slice(0, 3) });
         const prompt = agent.turns[0].turn.prompt;
         for (const part of [
-            'ran `/es:next` on the storming in `storming`',
-            'its brief (the `///`\ndescription above `storming`',
+            'ran `/hint`',
+            "they want a coach's advice on what to do next",
+            'doing Event Storming (the\n`.dtes` stormings), modeling (the `.dt` contexts), moving from one to the other, or not started yet',
+            '`sessionSoFar` (their recent messages',
+            'the interviews and their briefs',
+            '`viewedAt`',
             'Big Picture only',
-            'how far the exceptions\ncover them',
-            'its open hotspots',
+            'their open hotspots',
+            'the model (its contexts and their `///`',
+            'No files at all: they have\n  not started',
+            'Be a coach: short, concrete, encouraging.',
             'A step may be for the people rather than a command',
-            'call in a domain expert',
             'at most one step per command',
-            '`es:gaps` (a flow jumps between two\n  events)',
-            'no Design Level for a Big Picture only storming',
-            '{ "kind": "next", "status", "steps": [{ text, reason, command? }] }',
-            '"diagnostics": [\n    "stormings/orders.dtes:3:9 warning S015: too long"',
+            '`model:start` (no model yet',
+            'no Design Level for a Big Picture only\n  storming',
+            'one of es:start, es:exceptions, es:gaps, es:levels, es:names, es:recap, model:start',
+            '"diagnostics": [\n    "stormings/orders.dtes:3:9 warning S015: too long",\n    "sales/order.dt:2:5 error E001: unknown type"',
+            '"stage": "Payment"',
             'STORMING',
+            'MODELING',
             'SO-FAR',
         ])
             expect(prompt).toContain(part);
-        // /es:recap reads no findings: not asked
+        // about no storming of its own: the view says where the person is
+        expect(prompt).not.toContain('"storming": "@{es:Orders}",\n  "viewedAt"');
+        // in English, the output follows
+        expect(buildCommandPrompt(command('hint', 1, 'en'), 'n')).toContain('Write in English');
+        // /es:recap reads no findings: not asked; /es:names, the stormings' only
         push({ kind: 'job', job: command('es:recap', 2) });
         await waitFor(() => results.length === 2);
-        expect(asked).toBe(1);
+        expect(asked).toEqual(['workspace']);
         await answerer.stop();
+    });
+
+    test('/hint with nothing in view: the prompt still asks where the person is, from the session and the files', () => {
+        const j = command('hint');
+        const prompt = buildCommandPrompt({ ...j, request: { id: REQUEST } } as AgentCommandJobBody, 'n');
+        expect(prompt).toContain('none: they have not\nopened one');
+        expect(prompt).not.toContain('"viewedAt"');
+        expect(prompt).not.toContain('"storming"');
     });
 
     test("a person's name and a storming's ID are data only: never in the instructions", () => {

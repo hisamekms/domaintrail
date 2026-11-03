@@ -2061,9 +2061,9 @@ export const makeSlashCommandId: MakeSlashCommandId = (value) => {
 
 /**
  * コマンドの種類
- * 候補型・答え型の `/` コマンド（聞き取りは `Interview`）。`/` のあとに打つ ID（`es:exceptions`、`es:recap`）は英語の
- * まま、名前は画面の言語で出す。どちらの型か、ファシリテーターだけが始めるかはコード（`domain/slash-commands.ts` の
- * `SLASH_COMMANDS`）が決める。
+ * 候補型・答え型の `/` コマンド（聞き取りは `Interview`）。`/` のあとに打つ ID（`es:exceptions`、`es:recap`、`hint`）は
+ * 英語のまま、名前は画面の言語で出す。どちらの型か、ファシリテーターだけが始めるかはコード（`domain/slash-commands.ts` の
+ * `SLASH_COMMANDS`）が決める。`Hint` は以前 `EsNext`（`/es:next`）だった: 保存済みのものは読むときに `Hint` になる。
  * @see contexts/collaboration/model/command.dt:8
  */
 export type SlashCommandKind =
@@ -2072,11 +2072,11 @@ export type SlashCommandKind =
     | 'EsLevels' // レベルを見直す（/es:levels）
     | 'EsNames' // 名前を揃える（/es:names）
     | 'EsGaps' // 間を埋める（/es:gaps）
-    | 'EsNext'; // 次にやること（/es:next）
+    | 'Hint'; // ヒントをもらう（/hint）
 
 /**
  * 勧めるコマンド
- * 「次にやること」の一手が勧める ES のコマンド（押すと入力欄にそのコマンドが入る。送るのは人）。
+ * ヒントの一手が勧めるコマンド（押すと入力欄にそのコマンドが入る。送るのは人）。
  * @see contexts/collaboration/model/command.dt:18
  */
 export type SuggestedCommand =
@@ -2085,13 +2085,14 @@ export type SuggestedCommand =
     | 'EsGaps' // 間を埋める（/es:gaps）
     | 'EsLevels' // レベルを見直す（/es:levels）
     | 'EsNames' // 名前を揃える（/es:names）
-    | 'EsRecap'; // ここまでのまとめ（/es:recap）
+    | 'EsRecap' // ここまでのまとめ（/es:recap）
+    | 'ModelStart'; // モデリングを始める（/model:start）
 
 /**
  * 次の一手
- * 次にやることの一手: 何をするか、なぜ（どちらも1行）、当てはまる ES のコマンド（あれば）。上限はコード
+ * ヒントの一手: 何をするか、なぜ（どちらも1行）、当てはまるコマンド（あれば）。上限はコード
  * （`NEXT_LIMITS`）が決める。
- * @see contexts/collaboration/model/command.dt:29
+ * @see contexts/collaboration/model/command.dt:30
  */
 export interface NextStep {
     /** 何をするか */
@@ -2104,16 +2105,16 @@ export interface NextStep {
 
 /**
  * Whether two NextStep values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/command.dt:29
+ * @see contexts/collaboration/model/command.dt:30
  */
 export function equalNextStep(a: NextStep, b: NextStep): boolean {
     return a.text === b.text && a.reason === b.reason && sameOptional(a.command, b.command, ($24: string, $25: string) => $24 === $25);
 }
 
 /**
- * 次にやること
- * `/es:next` の答えの中身: いまの状態を1行と、次の一手を1〜3。答えのメッセージ（Markdown）はこれから作る。
- * @see contexts/collaboration/model/command.dt:36
+ * ヒント
+ * `/hint` の答えの中身: いまの状態を1行と、次の一手を1〜3。答えのメッセージ（Markdown）はこれから作る。
+ * @see contexts/collaboration/model/command.dt:37
  */
 export interface NextAnswer {
     /** いまの状態 */
@@ -2124,7 +2125,7 @@ export interface NextAnswer {
 
 /**
  * Whether two NextAnswer values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/command.dt:36
+ * @see contexts/collaboration/model/command.dt:37
  */
 export function equalNextAnswer(a: NextAnswer, b: NextAnswer): boolean {
     return a.status === b.status && sameList(a.steps, b.steps, equalNextStep);
@@ -2135,13 +2136,13 @@ export function equalNextAnswer(a: NextAnswer, b: NextAnswer): boolean {
  * 候補の見出し（「支払いが失敗した」など）。上限はコード（`CANDIDATE_LIMITS`）が決める。
  * @invariant valid: length(value) >= 1 and length(value) <= 100
  * Make it with `makeCandidateLabel`; never `as CandidateLabel` (see dt guide lint).
- * @see contexts/collaboration/model/command.dt:42
+ * @see contexts/collaboration/model/command.dt:43
  */
 export type CandidateLabel = string & { readonly __domain: 'Collaboration.CandidateLabel' };
 
 /**
  * A value that violates an invariant of CandidateLabel.
- * @see contexts/collaboration/model/command.dt:42
+ * @see contexts/collaboration/model/command.dt:43
  */
 export interface InvalidCandidateLabel {
     readonly type: 'InvalidCandidateLabel';
@@ -2152,13 +2153,13 @@ export interface InvalidCandidateLabel {
 
 /**
  * Creates a CandidateLabel, checking its invariants: generated as `makeCandidateLabel`, or written by hand.
- * @see contexts/collaboration/model/command.dt:42
+ * @see contexts/collaboration/model/command.dt:43
  */
 export type MakeCandidateLabel = (value: string) => Result<CandidateLabel, InvalidCandidateLabel>;
 
 /**
  * The invariants of CandidateLabel that a value violates, in declaration order; empty when it is a CandidateLabel.
- * @see contexts/collaboration/model/command.dt:42
+ * @see contexts/collaboration/model/command.dt:43
  */
 export function checkCandidateLabel(value: string): readonly InvalidCandidateLabel['invariant'][] {
     const violated: InvalidCandidateLabel['invariant'][] = [];
@@ -2168,7 +2169,7 @@ export function checkCandidateLabel(value: string): readonly InvalidCandidateLab
 
 /**
  * Creates a CandidateLabel, checking its invariants with `checkCandidateLabel`: the first one violated is reported.
- * @see contexts/collaboration/model/command.dt:42
+ * @see contexts/collaboration/model/command.dt:43
  */
 export const makeCandidateLabel: MakeCandidateLabel = (value) => {
     const [invariant] = checkCandidateLabel(value);
@@ -2181,13 +2182,13 @@ export const makeCandidateLabel: MakeCandidateLabel = (value) => {
  * 候補の番号（0 から）。
  * @invariant valid: value >= 0 and value <= 19
  * Make it with `makeCandidateIndex`; never `as CandidateIndex` (see dt guide lint).
- * @see contexts/collaboration/model/command.dt:45
+ * @see contexts/collaboration/model/command.dt:46
  */
 export type CandidateIndex = number & { readonly __domain: 'Collaboration.CandidateIndex' };
 
 /**
  * A value that violates an invariant of CandidateIndex.
- * @see contexts/collaboration/model/command.dt:45
+ * @see contexts/collaboration/model/command.dt:46
  */
 export interface InvalidCandidateIndex {
     readonly type: 'InvalidCandidateIndex';
@@ -2198,13 +2199,13 @@ export interface InvalidCandidateIndex {
 
 /**
  * Creates a CandidateIndex, checking its invariants: generated as `makeCandidateIndex`, or written by hand.
- * @see contexts/collaboration/model/command.dt:45
+ * @see contexts/collaboration/model/command.dt:46
  */
 export type MakeCandidateIndex = (value: number) => Result<CandidateIndex, InvalidCandidateIndex>;
 
 /**
  * The invariants of CandidateIndex that a value violates, in declaration order; empty when it is a CandidateIndex.
- * @see contexts/collaboration/model/command.dt:45
+ * @see contexts/collaboration/model/command.dt:46
  */
 export function checkCandidateIndex(value: number): readonly InvalidCandidateIndex['invariant'][] {
     const violated: InvalidCandidateIndex['invariant'][] = [];
@@ -2214,7 +2215,7 @@ export function checkCandidateIndex(value: number): readonly InvalidCandidateInd
 
 /**
  * Creates a CandidateIndex, checking its invariants with `checkCandidateIndex`: the first one violated is reported.
- * @see contexts/collaboration/model/command.dt:45
+ * @see contexts/collaboration/model/command.dt:46
  */
 export const makeCandidateIndex: MakeCandidateIndex = (value) => {
     const [invariant] = checkCandidateIndex(value);
@@ -2225,7 +2226,7 @@ export const makeCandidateIndex: MakeCandidateIndex = (value) => {
 /**
  * 候補
  * AI が挙げた候補1つ: 見出し、対象の要素、どうするかを1行で、理由（あれば）。
- * @see contexts/collaboration/model/command.dt:48
+ * @see contexts/collaboration/model/command.dt:49
  */
 export interface CommandCandidate {
     /** 見出し */
@@ -2240,7 +2241,7 @@ export interface CommandCandidate {
 
 /**
  * Whether two CommandCandidate values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/command.dt:48
+ * @see contexts/collaboration/model/command.dt:49
  */
 export function equalCommandCandidate(a: CommandCandidate, b: CommandCandidate): boolean {
     return a.label === b.label && sameList(a.targets, b.targets, equalModelTarget) && a.how === b.how && sameOptional(a.reason, b.reason, ($26: ProposalText, $27: ProposalText) => $26 === $27);
@@ -2249,7 +2250,7 @@ export function equalCommandCandidate(a: CommandCandidate, b: CommandCandidate):
 /**
  * 採用した候補の指示
  * 採用した候補が実行に求めること: どのコマンドの、どのストーミングについての、どの候補か。
- * @see contexts/collaboration/model/command.dt:57
+ * @see contexts/collaboration/model/command.dt:58
  */
 export interface CandidatesInstruction {
     /** コマンド */
@@ -2264,7 +2265,7 @@ export interface CandidatesInstruction {
 
 /**
  * Whether two CandidatesInstruction values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/command.dt:57
+ * @see contexts/collaboration/model/command.dt:58
  */
 export function equalCandidatesInstruction(a: CandidatesInstruction, b: CandidatesInstruction): boolean {
     return a.command === b.command && a.kind === b.kind && sameOptional(a.scope, b.scope, ($28: StormingName, $29: StormingName) => $28 === $29) && sameList(a.chosen, b.chosen, equalCommandCandidate);
@@ -2272,7 +2273,7 @@ export function equalCandidatesInstruction(a: CandidatesInstruction, b: Candidat
 
 /**
  * Fields shared by every state of コマンド (SlashCommand).
- * @see contexts/collaboration/model/command.dt:67
+ * @see contexts/collaboration/model/command.dt:68
  */
 export interface SlashCommandCommon {
     /** コマンドID */
@@ -2301,7 +2302,7 @@ export interface SlashCommandCommon {
 
 /**
  * AI が考えている
- * @see contexts/collaboration/model/command.dt:79
+ * @see contexts/collaboration/model/command.dt:80
  */
 export interface WorkingSlashCommand extends SlashCommandCommon {
     readonly state: 'Working';
@@ -2309,7 +2310,7 @@ export interface WorkingSlashCommand extends SlashCommandCommon {
 
 /**
  * 候補の選択待ち
- * @see contexts/collaboration/model/command.dt:80
+ * @see contexts/collaboration/model/command.dt:81
  */
 export interface ListedSlashCommand extends SlashCommandCommon {
     readonly state: 'Listed';
@@ -2321,7 +2322,7 @@ export interface ListedSlashCommand extends SlashCommandCommon {
 
 /**
  * 反映
- * @see contexts/collaboration/model/command.dt:84
+ * @see contexts/collaboration/model/command.dt:85
  */
 export interface AppliedSlashCommand extends SlashCommandCommon {
     readonly state: 'Applied';
@@ -2340,7 +2341,7 @@ export interface AppliedSlashCommand extends SlashCommandCommon {
 
 /**
  * 回答済み
- * @see contexts/collaboration/model/command.dt:91
+ * @see contexts/collaboration/model/command.dt:92
  */
 export interface AnsweredSlashCommand extends SlashCommandCommon {
     readonly state: 'Answered';
@@ -2349,7 +2350,7 @@ export interface AnsweredSlashCommand extends SlashCommandCommon {
      * @see {@link Request}
      */
     readonly answer: RequestId;
-    /** 次にやること — 答えの中身（`/es:next`）: 画面はこれで一手ごとにコマンドのボタンを出す。 */
+    /** ヒント — 答えの中身（`/hint`）: 画面はこれで一手ごとにコマンドのボタンを出す。 */
     readonly next?: NextAnswer;
     /** 回答日時 */
     readonly answeredAt: Timestamp;
@@ -2357,7 +2358,7 @@ export interface AnsweredSlashCommand extends SlashCommandCommon {
 
 /**
  * 中止
- * @see contexts/collaboration/model/command.dt:98
+ * @see contexts/collaboration/model/command.dt:99
  */
 export interface StoppedSlashCommand extends SlashCommandCommon {
     readonly state: 'Stopped';
@@ -2369,16 +2370,16 @@ export interface StoppedSlashCommand extends SlashCommandCommon {
 
 /**
  * コマンド
- * 候補型（`/es:exceptions` など）と答え型（`/es:recap`、`/es:next`）の `/` コマンド。始めた人のメッセージ（コマンドの名前）は仕分けを
+ * 候補型（`/es:exceptions` など）と答え型（`/es:recap`、`/hint`）の `/` コマンド。始めた人のメッセージ（コマンドの名前）は仕分けを
  * 経ずに、回答役（読むだけの AI）がコマンドの指示で受け持つ。候補型は候補を挙げ、始めた人が選んだものを1つの実行が
  * 反映する。答え型は AI のメッセージで答える。
- * @see contexts/collaboration/model/command.dt:67
+ * @see contexts/collaboration/model/command.dt:68
  */
 export type SlashCommand = WorkingSlashCommand | ListedSlashCommand | AppliedSlashCommand | AnsweredSlashCommand | StoppedSlashCommand;
 
 /**
  * The fields of SlashCommand as data for `decide`: the common fields, and the fields of each state on top of them.
- * @see contexts/collaboration/model/command.dt:67
+ * @see contexts/collaboration/model/command.dt:68
  */
 export const SlashCommandShape: Shape = {
     fields: ['id', 'session', 'kind', 'startedBy', 'opening', 'scope', 'language', 'startedAt'],
@@ -2387,7 +2388,7 @@ export const SlashCommandShape: Shape = {
 
 /**
  * The invariants of SlashCommand (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.
- * @see contexts/collaboration/model/command.dt:67
+ * @see contexts/collaboration/model/command.dt:68
  */
 export function checkSlashCommandCommon(_slashCommand: SlashCommandCommon): readonly never[] {
     return [];
@@ -2395,7 +2396,7 @@ export function checkSlashCommandCommon(_slashCommand: SlashCommandCommon): read
 
 /**
  * The parameters of SlashCommand.start, by name.
- * @see contexts/collaboration/model/command.dt:105
+ * @see contexts/collaboration/model/command.dt:106
  */
 export interface StartSlashCommandParams {
     /** コマンドID */
@@ -2425,7 +2426,7 @@ export interface StartSlashCommandParams {
  * ファシリテーター）。
  * @requires facilitatorStarts (ファシリテーターだけのコマンドは、ファシリテーターが始める) else FacilitatorOnly: not facilitatorOnly or startedByRole == ParticipantRole.Facilitator
  * @emits SlashCommandStarted — exactly once when the command succeeds
- * @see contexts/collaboration/model/command.dt:105
+ * @see contexts/collaboration/model/command.dt:106
  */
 export type StartSlashCommand = (
     params: StartSlashCommandParams,
@@ -2442,7 +2443,7 @@ export type StartSlashCommand = (
  * @requires facilitatorStarts (ファシリテーターだけのコマンドは、ファシリテーターが始める) else FacilitatorOnly: not facilitatorOnly or startedByRole == ParticipantRole.Facilitator
  * new -> Working — set: every field
  * @emits SlashCommandStarted — exactly once when the command succeeds
- * @see contexts/collaboration/model/command.dt:105
+ * @see contexts/collaboration/model/command.dt:106
  */
 export type StartSlashCommandDecision = (
     params: StartSlashCommandParams,
@@ -2455,7 +2456,7 @@ export type StartSlashCommandDecision = (
 
 /**
  * The first requirement of SlashCommand.start that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/command.dt:105
+ * @see contexts/collaboration/model/command.dt:106
  */
 export function checkStartSlashCommandRequires(params: StartSlashCommandParams): 'facilitatorStarts' | undefined {
     if (!(!(params.facilitatorOnly) || (params.startedByRole === 'Facilitator'))) return 'facilitatorStarts';
@@ -2464,7 +2465,7 @@ export function checkStartSlashCommandRequires(params: StartSlashCommandParams):
 
 /**
  * The parameters of SlashCommand.list, by name.
- * @see contexts/collaboration/model/command.dt:113
+ * @see contexts/collaboration/model/command.dt:114
  */
 export interface ListSlashCommandParams {
     /** 候補 */
@@ -2478,7 +2479,7 @@ export interface ListSlashCommandParams {
  * AI が候補を挙げる（候補型）。見ているストーミングがなければ、候補なしで。
  * @changes none — the command changes no common field
  * @emits CandidatesListed — exactly once when the command succeeds
- * @see contexts/collaboration/model/command.dt:113
+ * @see contexts/collaboration/model/command.dt:114
  */
 export type ListSlashCommand = (
     slashCommand: WorkingSlashCommand,
@@ -2495,7 +2496,7 @@ export type ListSlashCommand = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @changes none — the command changes no common field
  * Working -> Listed — set: candidates (new in Listed), listedAt (new in Listed); carried over: id, session, kind, startedBy, opening, scope, language, startedAt
- * @see contexts/collaboration/model/command.dt:113
+ * @see contexts/collaboration/model/command.dt:114
  */
 export type ListSlashCommandDecision = {
     /** @emits CandidatesListed — exactly once when the command succeeds */
@@ -2509,12 +2510,12 @@ export type ListSlashCommandDecision = {
 
 /**
  * The parameters of SlashCommand.answer, by name.
- * @see contexts/collaboration/model/command.dt:118
+ * @see contexts/collaboration/model/command.dt:119
  */
 export interface AnswerSlashCommandParams {
     /** 依頼ID */
     readonly answer: RequestId;
-    /** 次にやること */
+    /** ヒント */
     readonly next?: NextAnswer;
     readonly answeredAt: Timestamp;
 }
@@ -2522,10 +2523,10 @@ export interface AnswerSlashCommandParams {
 /**
  * SlashCommand.answer (Working -> Answered)
  * 答える
- * AI が答える（答え型）。始めのメッセージに応える AI のメッセージとして。`/es:next` は、その中身も。
+ * AI が答える（答え型）。始めのメッセージに応える AI のメッセージとして。`/hint` は、その中身も。
  * @changes none — the command changes no common field
  * @emits SlashCommandAnswered — exactly once when the command succeeds
- * @see contexts/collaboration/model/command.dt:118
+ * @see contexts/collaboration/model/command.dt:119
  */
 export type AnswerSlashCommand = (
     slashCommand: WorkingSlashCommand,
@@ -2542,7 +2543,7 @@ export type AnswerSlashCommand = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @changes none — the command changes no common field
  * Working -> Answered — set: answer (new in Answered), next (new in Answered), answeredAt (new in Answered); carried over: id, session, kind, startedBy, opening, scope, language, startedAt
- * @see contexts/collaboration/model/command.dt:118
+ * @see contexts/collaboration/model/command.dt:119
  */
 export type AnswerSlashCommandDecision = {
     /** @emits SlashCommandAnswered — exactly once when the command succeeds */
@@ -2556,7 +2557,7 @@ export type AnswerSlashCommandDecision = {
 
 /**
  * The parameters of SlashCommand.apply, by name.
- * @see contexts/collaboration/model/command.dt:123
+ * @see contexts/collaboration/model/command.dt:124
  */
 export interface ApplySlashCommandParams {
     /** 参加者ID */
@@ -2576,7 +2577,7 @@ export interface ApplySlashCommandParams {
  * @requires chosenOfList (挙げた候補から選ぶ) else NoSuchCandidate: all(chosen, c => c < count(candidates))
  * @changes none — the command changes no common field
  * @emits CandidatesApplied — exactly once when the command succeeds
- * @see contexts/collaboration/model/command.dt:123
+ * @see contexts/collaboration/model/command.dt:124
  */
 export type ApplySlashCommand = (
     slashCommand: ListedSlashCommand,
@@ -2595,7 +2596,7 @@ export type ApplySlashCommand = (
  * @requires chosenOfList (挙げた候補から選ぶ) else NoSuchCandidate: all(chosen, c => c < count(candidates))
  * @changes none — the command changes no common field
  * Listed -> Applied — set: chosen (new in Applied), appliedAt (new in Applied), run (new in Applied); carried over: id, session, kind, startedBy, opening, scope, language, startedAt, candidates; dropped: listedAt
- * @see contexts/collaboration/model/command.dt:123
+ * @see contexts/collaboration/model/command.dt:124
  */
 export type ApplySlashCommandDecision = {
     /** @emits CandidatesApplied — exactly once when the command succeeds */
@@ -2609,7 +2610,7 @@ export type ApplySlashCommandDecision = {
 
 /**
  * The first requirement of SlashCommand.apply that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/command.dt:123
+ * @see contexts/collaboration/model/command.dt:124
  */
 export function checkApplySlashCommandRequires(slashCommand: ListedSlashCommand, params: ApplySlashCommandParams): 'starterApplies' | 'chosenOfList' | undefined {
     if (!(params.appliedBy === slashCommand.startedBy)) return 'starterApplies';
@@ -2619,7 +2620,7 @@ export function checkApplySlashCommandRequires(slashCommand: ListedSlashCommand,
 
 /**
  * The parameters of SlashCommand.stop, by name.
- * @see contexts/collaboration/model/command.dt:130
+ * @see contexts/collaboration/model/command.dt:131
  */
 export interface StopSlashCommandParams {
     /** 参加者ID */
@@ -2634,7 +2635,7 @@ export interface StopSlashCommandParams {
  * @requires starterStops (始めた人が中止する) else NotTheStarter: stoppedBy == startedBy
  * @changes none — the command changes no common field
  * @emits SlashCommandStopped — exactly once when the command succeeds
- * @see contexts/collaboration/model/command.dt:130
+ * @see contexts/collaboration/model/command.dt:131
  */
 export type StopSlashCommand = (
     slashCommand: WorkingSlashCommand | ListedSlashCommand,
@@ -2653,7 +2654,7 @@ export type StopSlashCommand = (
  * @changes none — the command changes no common field
  * Working -> Stopped — set: stoppedBy (new in Stopped), stoppedAt (new in Stopped); carried over: id, session, kind, startedBy, opening, scope, language, startedAt
  * Listed -> Stopped — set: stoppedBy (new in Stopped), stoppedAt (new in Stopped); carried over: id, session, kind, startedBy, opening, scope, language, startedAt; dropped: candidates, listedAt
- * @see contexts/collaboration/model/command.dt:130
+ * @see contexts/collaboration/model/command.dt:131
  */
 export type StopSlashCommandDecision = {
     /** @emits SlashCommandStopped — exactly once when the command succeeds */
@@ -2674,7 +2675,7 @@ export type StopSlashCommandDecision = {
 
 /**
  * The first requirement of SlashCommand.stop that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/command.dt:130
+ * @see contexts/collaboration/model/command.dt:131
  */
 export function checkStopSlashCommandRequires(slashCommand: WorkingSlashCommand | ListedSlashCommand, params: StopSlashCommandParams): 'starterStops' | undefined {
     if (!(params.stoppedBy === slashCommand.startedBy)) return 'starterStops';
@@ -2684,7 +2685,7 @@ export function checkStopSlashCommandRequires(slashCommand: WorkingSlashCommand 
 /**
  * Command contracts of SlashCommand. Implement this interface by hand.
  * Commands are pure functions of the aggregate and their parameters: no I/O, no clock, no randomness. IDs and times are passed in as parameters.
- * @see contexts/collaboration/model/command.dt:67
+ * @see contexts/collaboration/model/command.dt:68
  */
 export interface SlashCommandCommands {
     /** コマンドを始める */
@@ -2701,14 +2702,14 @@ export interface SlashCommandCommands {
 
 /**
  * Events that the commands of SlashCommand may emit.
- * @see contexts/collaboration/model/command.dt:67
+ * @see contexts/collaboration/model/command.dt:68
  */
 export type SlashCommandEvent = SlashCommandStarted | CandidatesListed | SlashCommandAnswered | CandidatesApplied | SlashCommandStopped;
 
 /**
  * コマンドの開始
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/command.dt:136
+ * @see contexts/collaboration/model/command.dt:137
  */
 export interface SlashCommandStarted {
     readonly type: 'SlashCommandStarted';
@@ -2732,7 +2733,7 @@ export interface SlashCommandStarted {
 /**
  * 候補を挙げた
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/command.dt:147
+ * @see contexts/collaboration/model/command.dt:148
  */
 export interface CandidatesListed {
     readonly type: 'CandidatesListed';
@@ -2746,7 +2747,7 @@ export interface CandidatesListed {
 /**
  * コマンドの答え
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/command.dt:153
+ * @see contexts/collaboration/model/command.dt:154
  */
 export interface SlashCommandAnswered {
     readonly type: 'SlashCommandAnswered';
@@ -2754,7 +2755,7 @@ export interface SlashCommandAnswered {
     readonly commandId: SlashCommandId;
     /** 依頼ID */
     readonly answer: RequestId;
-    /** 次にやること */
+    /** ヒント */
     readonly next?: NextAnswer;
     readonly answeredAt: Timestamp;
 }
@@ -2762,7 +2763,7 @@ export interface SlashCommandAnswered {
 /**
  * 候補の反映
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/command.dt:160
+ * @see contexts/collaboration/model/command.dt:161
  */
 export interface CandidatesApplied {
     readonly type: 'CandidatesApplied';
@@ -2778,7 +2779,7 @@ export interface CandidatesApplied {
 /**
  * コマンドの中止
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/command.dt:167
+ * @see contexts/collaboration/model/command.dt:168
  */
 export interface SlashCommandStopped {
     readonly type: 'SlashCommandStopped';
@@ -2792,7 +2793,7 @@ export interface SlashCommandStopped {
 /**
  * コマンドを始めた人でない
  * コマンドを反映・中止できるのは、始めた人だけ。
- * @see contexts/collaboration/model/command.dt:174
+ * @see contexts/collaboration/model/command.dt:175
  */
 export interface NotTheStarter {
     readonly type: 'NotTheStarter';
@@ -2801,7 +2802,7 @@ export interface NotTheStarter {
 /**
  * そんな候補はない
  * 採用した候補の番号が、挙げた候補にない。
- * @see contexts/collaboration/model/command.dt:177
+ * @see contexts/collaboration/model/command.dt:178
  */
 export interface NoSuchCandidate {
     readonly type: 'NoSuchCandidate';
@@ -2810,7 +2811,7 @@ export interface NoSuchCandidate {
 /**
  * 同じコマンドが走っている
  * セッションには、同じコマンドで走っているものがある（考えているか、候補の選択待ち）。
- * @see contexts/collaboration/model/command.dt:180
+ * @see contexts/collaboration/model/command.dt:181
  */
 export interface CommandAlreadyRunning {
     readonly type: 'CommandAlreadyRunning';

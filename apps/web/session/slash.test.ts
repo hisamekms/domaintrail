@@ -1,17 +1,29 @@
 // What `/` lists in the composer: the commands first (for who may start one), the templates by what is open and
 // selected, filtered by ID and by the name in the UI language; a template picked; a running interview's messages in Solo;
-// who may start which command.
+// who may start which command; the hint's button and the marks of what it suggests.
 import { describe, expect, test } from 'bun:test';
 import type { MessageTemplateBody } from '@domaintrail/collaboration/protocol';
 import { interviewSlot } from './interview';
 import { commandSlot } from './candidates';
 import { streamItems } from './stream';
 import { MESSAGES } from '../i18n';
-import { canStartCommand, COMMAND_IDS, slashItems, slashQuery, templateContexts, templateValue, type CommandId, type SlashScope } from './slash';
+import {
+    canStartCommand,
+    COMMAND_IDS,
+    hintButton,
+    hintSuggestions,
+    slashItems,
+    slashQuery,
+    templateContexts,
+    templateValue,
+    type CommandId,
+    type SlashScope,
+} from './slash';
 
 const commandNames = MESSAGES.ja.session.chat.slash.commands;
 const everyone = (): boolean => true;
-const ES = ['es:start', 'es:exceptions', 'es:gaps', 'es:levels', 'es:names', 'es:recap', 'es:next'].map((id) => `command:${id}`);
+const ES = ['es:start', 'es:exceptions', 'es:gaps', 'es:levels', 'es:names', 'es:recap'].map((id) => `command:${id}`);
+const COMMANDS = ['command:hint', ...ES, 'command:model:start'];
 const storming = (level: string): SlashScope['view'] => ({ kind: 'storming', level });
 const event: SlashScope['selected'] = {
     target: { target: { kind: 'DtesElement', storming: 'Returns', local: 'ReturnRequested' }, label: '返品が依頼された' },
@@ -44,13 +56,13 @@ describe('/ in the composer', () => {
         expect(templateContexts({ view: { kind: 'model' }, selected: state }).has('state')).toBe(true);
     });
 
-    test('commands first, grouped by prefix with :start first, then the templates of what is open and selected', () => {
-        // es:start, the other ES commands in the order of the work (the flow, its details, the session), model:start
-        expect(COMMAND_IDS).toEqual(['es:start', 'es:exceptions', 'es:gaps', 'es:levels', 'es:names', 'es:recap', 'es:next', 'model:start']);
-        expect(ids({ scope: { view: storming('big-picture') } })).toEqual([...ES, 'command:model:start', 'template:next-events', 'template:hotspots']);
+    test('commands first (the hint, then grouped by prefix with :start first), then the templates of what is open and selected', () => {
+        // the hint (where a beginner starts), es:start, the other ES commands in the order of the work (the flow, its
+        // details, the session), model:start
+        expect(COMMAND_IDS).toEqual(['hint', 'es:start', 'es:exceptions', 'es:gaps', 'es:levels', 'es:names', 'es:recap', 'model:start']);
+        expect(ids({ scope: { view: storming('big-picture') } })).toEqual([...COMMANDS, 'template:next-events', 'template:hotspots']);
         expect(ids({ scope: { view: storming('design-level'), selected: event } })).toEqual([
-            ...ES,
-            'command:model:start',
+            ...COMMANDS,
             'template:around',
             'template:hotspots',
             'template:commands',
@@ -71,13 +83,17 @@ describe('/ in the composer', () => {
         expect(ids({ query: 'モデ' })).toEqual(['command:model:start']);
         expect(ids({ query: 'まとめ' })).toEqual(['command:es:recap']);
         expect(ids({ query: '名前' })).toEqual(['command:es:names']);
-        expect(ids({ query: '次に' })).toEqual(['command:es:next']);
-        // a command put in the composer by a step of /es:next (`/es:gaps`): its query lists it alone
+        expect(ids({ query: 'ヒント' })).toEqual(['command:hint']);
+        expect(ids({ query: 'hint' })).toEqual(['command:hint']);
+        // the former ID lists nothing
+        expect(ids({ query: 'es:next' })).toEqual([]);
+        // a command put in the composer by a step of /hint (`/es:gaps`): its query lists it alone
         expect(ids({ query: slashQuery('/es:gaps') ?? '' })).toEqual(['command:es:gaps']);
         const en = MESSAGES.en.session.chat.slash.commands;
         expect(ids({ query: 'model', lang: 'en', commandNames: en })).toEqual(['command:model:start']);
         expect(ids({ query: 'exceptions', lang: 'en', commandNames: en })).toEqual(['command:es:exceptions']);
         expect(ids({ query: 'gaps', lang: 'en', commandNames: en })).toEqual(['command:es:gaps']);
+        expect(ids({ query: 'a hint', lang: 'en', commandNames: en })).toEqual(['command:hint']);
         expect(ids({ query: 'issues', lang: 'en' })).toEqual(['template:review']);
         expect(ids({ query: '気になる' })).toEqual(['template:review']);
         expect(ids({ query: 'zzz' })).toEqual([]);
@@ -88,7 +104,7 @@ describe('/ in the composer', () => {
             { id: 'glossary', name: { ja: '用語を確かめる', en: 'Check the terms' }, text: '用語集と食い違うところを挙げて', when: ['model'] },
             { id: 'es-only', name: 'ES only', text: 'x', when: ['storming'] },
         ];
-        expect(ids({ team })).toEqual([...ES, 'command:model:start', 'template:review', 'template:glossary']);
+        expect(ids({ team })).toEqual([...COMMANDS, 'template:review', 'template:glossary']);
         const [glossary] = slashItems({ query: 'glossary', lang: 'en', scope: { view: { kind: 'model' } }, commandNames, canStart: () => false, team });
         expect(glossary).toMatchObject({ kind: 'template', name: 'Check the terms', template: { team: true } });
     });
@@ -108,8 +124,7 @@ describe('/ in the composer', () => {
             people: [],
         });
         expect(templateValue(around.template, 'en', event).text).toBe('Fill in what happens before and after #返品が依頼された[1]');
-        // (`/es:next` matches it too, first, when it may start)
-        expect(ids({ query: 'next', scope: { view: storming('big-picture') } })).toEqual(['command:es:next', 'template:next-events']);
+        expect(ids({ query: 'next', scope: { view: storming('big-picture') } })).toEqual(['template:next-events']);
         const [next] = slashItems({ query: 'next', lang: 'ja', scope: { view: storming('big-picture') }, commandNames, canStart: () => false });
         if (next.kind !== 'template') throw new Error('a template');
         expect(templateValue(next.template, 'ja', undefined)).toEqual({ text: 'このあとに起きることを足して', chips: [], people: [] });
@@ -133,9 +148,39 @@ describe('/ in the composer', () => {
 describe('who may start a command', () => {
     const can = (state: object, facilitator: boolean): readonly CommandId[] => COMMAND_IDS.filter((id) => canStartCommand(state as never, facilitator, id));
 
-    test("the interviews and the candidate commands are the facilitator's; /es:recap and /es:next anyone's", () => {
+    test("the interviews and the candidate commands are the facilitator's; /hint and /es:recap anyone's", () => {
         expect(can({}, true)).toEqual(COMMAND_IDS);
-        expect(can({}, false)).toEqual(['es:recap', 'es:next']);
+        expect(can({}, false)).toEqual(['hint', 'es:recap']);
+    });
+
+    test('the hint button: hidden with no answerer, disabled while a hint runs (anyone may press it)', () => {
+        expect(hintButton({}, false, true)).toBe('ready');
+        expect(hintButton({}, true, true)).toBe('ready');
+        expect(hintButton({}, false, false)).toBe('hidden');
+        expect(hintButton({ slashCommands: [{ kind: 'Hint', state: 'Working' }] } as never, false, true)).toBe('disabled');
+        expect(hintButton({ slashCommands: [{ kind: 'Hint', state: 'Answered' }] } as never, false, true)).toBe('ready');
+        // an interview running does not hold it up
+        expect(hintButton({ interviews: [{ state: 'Asking' }] } as never, false, true)).toBe('ready');
+    });
+
+    test('the commands the latest answered hint suggests: by their IDs, until another hint is answered', () => {
+        const hint = (id: string, state: string, commands: (string | undefined)[] = []) =>
+            ({
+                id,
+                kind: 'Hint',
+                state,
+                ...(state === 'Answered' && {
+                    next: { status: 's', steps: commands.map((command) => ({ text: 't', reason: 'r', ...(command && { command }) })) },
+                }),
+            }) as never;
+        expect([...hintSuggestions({})]).toEqual([]);
+        expect([...hintSuggestions({ slashCommands: [hint('a', 'Answered', ['EsGaps', undefined, 'ModelStart'])] })]).toEqual(['es:gaps', 'model:start']);
+        // a newer hint answered takes over; one still working or stopped does not
+        const both = [hint('a', 'Answered', ['EsGaps']), hint('b', 'Answered', ['EsRecap'])];
+        expect([...hintSuggestions({ slashCommands: both })]).toEqual(['es:recap']);
+        expect([...hintSuggestions({ slashCommands: [...both, hint('c', 'Working'), hint('d', 'Stopped')] })]).toEqual(['es:recap']);
+        // another answer command's answer is no hint
+        expect([...hintSuggestions({ slashCommands: [{ id: 'r', kind: 'EsRecap', state: 'Answered', answer: 'x' } as never] })]).toEqual([]);
     });
 
     test('none while an interview runs; a command not while one of its kind runs', () => {
@@ -172,9 +217,10 @@ describe("a command's place in the chat", () => {
         expect(keys('Collab', [command('EsExceptions', 'Applied'), command('EsRecap', 'Working')])).toEqual(['command:c-EsExceptions', 'command:c-EsRecap']);
         expect(keys('Collab', [command('EsRecap', 'Answered')])).toEqual([]);
         expect(keys('Solo', [command('EsRecap', 'Working')])).toEqual([]);
-        // /es:next with no storming in view: listed with none, the card says so until its starter closes it
-        expect(keys('Solo', [command('EsNext', 'Listed', { candidates: [] })])).toEqual(['command:c-EsNext']);
-        expect(commandSlot({ slashCommands: [command('EsNext', 'Listed', { candidates: [] })] }, { id: 'o' })).toBe('none');
-        expect(keys('Solo', [command('EsNext', 'Stopped')])).toEqual([]);
+        // a hint stored listed with none (an `/es:next` started with no storming in view, read as a Hint): the card says
+        // so until its starter closes it
+        expect(keys('Solo', [command('Hint', 'Listed', { candidates: [] })])).toEqual(['command:c-Hint']);
+        expect(commandSlot({ slashCommands: [command('Hint', 'Listed', { candidates: [] })] }, { id: 'o' })).toBe('none');
+        expect(keys('Solo', [command('Hint', 'Stopped')])).toEqual([]);
     });
 });

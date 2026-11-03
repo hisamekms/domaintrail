@@ -24,6 +24,7 @@ import {
     dtCommandOf,
     pinDt,
     type PinnedDt,
+    type DiagnosticsScope,
     type Practice,
     randomNonce,
     resolveAnswerConfig,
@@ -218,7 +219,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
                           log,
                       }),
                       workspace: { scan },
-                      diagnostics: () => stormingDiagnostics(createWorkspaceReader(root, sourceSelection(sources, respectGitignore))),
+                      diagnostics: (scope) => workspaceDiagnostics(createWorkspaceReader(root, sourceSelection(sources, respectGitignore)), scope),
                       clock: systemClock,
                       nonce: randomNonce,
                       log,
@@ -310,12 +311,17 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
 }
 
 /**
- * `dt check`'s findings on the `.dtes` files of the workspace now, one line each (`file:line:column severity code:
- * message`): what `/es:names` and `/es:next` read.
+ * `dt check`'s findings on the workspace now, one line each (`file:line:column severity code: message`): on the `.dtes`
+ * files only (`stormings`: what `/es:names` reads) or on all of them (`workspace`: what `/hint` reads).
  */
-export async function stormingDiagnostics(reader: { readSources(): Promise<readonly { path: string; text: string }[]> }): Promise<readonly string[]> {
+export async function workspaceDiagnostics(
+    reader: { readSources(): Promise<readonly { path: string; text: string }[]> },
+    scope: DiagnosticsScope,
+): Promise<readonly string[]> {
     const a = await analyze(await reader.readSources());
-    return a.diagnostics.filter((d) => isStormingFile(d.file)).map((d) => `${d.file}:${d.start.line}:${d.start.column} ${d.severity} ${d.code}: ${d.message}`);
+    return a.diagnostics
+        .filter((d) => scope === 'workspace' || isStormingFile(d.file))
+        .map((d) => `${d.file}:${d.start.line}:${d.start.column} ${d.severity} ${d.code}: ${d.message}`);
 }
 
 /**

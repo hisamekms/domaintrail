@@ -823,13 +823,13 @@ const ja = {
             // what `/` lists in the composer: the commands (an interview) and the templates (text to edit)
             slash: {
                 commands: {
+                    hint: 'ヒントをもらう',
                     'es:start': 'ES を始める',
                     'es:exceptions': '例外を洗い出す',
                     'es:gaps': '間を埋める',
                     'es:levels': 'レベルを見直す',
                     'es:names': '名前を揃える',
                     'es:recap': 'ここまでのまとめ',
-                    'es:next': '次にやること',
                     'model:start': 'モデリングを始める',
                 } as Record<InterviewCommandId | SlashCommandName, string>,
                 // what each type of command does, beside its name
@@ -840,6 +840,13 @@ const ja = {
                 team: 'チーム',
                 noMatch: '一致するものがありません',
                 hint: '↑↓ で選び、Enter か Tab で決める（Esc で閉じる）',
+                // a command the latest hint suggests: its mark in the list
+                suggested: 'ヒントのおすすめ',
+            },
+            // `/hint` (ヒントをもらう): the composer's button that runs it, and the mark of its answer
+            hint: {
+                button: 'ヒントをもらう',
+                answer: 'ヒント',
             },
             // a candidate command's card in the chat (`/es:exceptions`): the candidates to check, applied as one run
             candidates: {
@@ -854,7 +861,7 @@ const ja = {
                 waiting: '始めた人の選択待ち',
                 chosen: '採用した候補',
                 toCard: '候補へ',
-                // `/es:next`'s steps: a command a step suggests, put in the composer (the person sends it)
+                // `/hint`'s steps: a command a step suggests, put in the composer (the person sends it)
                 putCommand: '入力欄に入れる',
             },
             // a `/es:start` or `/model:start` interview: the bar above the composer, and its brief
@@ -1743,19 +1750,24 @@ const en: Messages = {
             },
             slash: {
                 commands: {
+                    hint: 'Get a hint',
                     'es:start': 'Start event storming',
                     'es:exceptions': 'Find exceptions',
                     'es:gaps': 'Fill the gaps',
                     'es:levels': 'Review the levels',
                     'es:names': 'Align the names',
                     'es:recap': 'Recap so far',
-                    'es:next': 'What next',
                     'model:start': 'Start modeling',
                 },
                 types: { interview: 'The AI interviews you', candidates: 'The AI lists candidates', answer: 'The AI answers' },
                 team: 'Team',
                 noMatch: 'Nothing matches',
                 hint: 'Choose with ↑↓, pick with Enter or Tab (Esc closes)',
+                suggested: 'Suggested by the hint',
+            },
+            hint: {
+                button: 'Get a hint',
+                answer: 'Hint',
             },
             candidates: {
                 thinking: 'The AI is thinking',

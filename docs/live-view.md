@@ -398,10 +398,14 @@ The chat has two views:
   (`level design`) or back to Big Picture, and the labels to rename (not in the past tense, the same thing named
   differently, too long, technical) — the label only, the ID stays. A candidate's chips are the elements that exist;
   one to be added is named by its label and how. `/es:recap` (ここまでのまとめ, anyone's) has the AI answer in the chat
-  with a short recap of the session: what was decided, what was added or changed, what is still open. `/es:next`
-  (次にやること, anyone's) answers for the storming in view with one line on where it stands and one to three next
-  steps, each with its reason; a step an ES command does has a button with the command (`/es:gaps`) that puts it in
-  the composer, `/`'s list open on it, for the person to send. Then the **templates**: the beginnings of a message
+  with a short recap of the session: what was decided, what was added or changed, what is still open. `/hint`
+  (ヒントをもらう, anyone's; listed first, and a button with a light bulb at the left end of the composer's bar that
+  runs it at once, its label dropped when the chat is narrow) has the AI coach the person, in the event storming or
+  the modeling: from the session so far, the view they are on, the stormings and the model, one line on where they
+  stand and one to three next steps, each with its reason. The answer is the AI's message with a light bulb by its
+  name; a step a command does has a button with the command (`/es:gaps`, `/model:start`) that puts it in the
+  composer, `/`'s list open on it, for the person to send; in `/`'s list, the commands the latest hint suggests have a
+  star (ヒントのおすすめ). Then the **templates**: the beginnings of a message
   for what is open and selected (このあとを足す at Big Picture, 前後を詰める for a selected event, 不変条件を挙げる for an
   aggregate …), then the team's from `templates` in `domaintrail.jsonc`; picking one only puts its text in the composer
   (the selected element as its `#` target), to edit and send. An empty view says how to start its own world while an AI is

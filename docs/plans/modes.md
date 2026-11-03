@@ -1154,6 +1154,7 @@ Decided by the maintainer (2026-11-03): four more ES commands, each a row of `SL
 `SlashCommandKind`, a prompt in `COMMAND_PROMPTS` and, for a candidate command, a clause of rule 19. `/` lists them
 after `es:start` in the order of the work on a storming — the flow, then its details, then the session:
 `es:exceptions`, `es:gaps`, `es:levels`, `es:names`, `es:recap`, `es:next` —, then `model:start`, then the templates.
+(`/es:next` became `/hint`, listed first: "As built: ヒントをもらう" below.)
 
 - **`/es:gaps` 間を埋める** (candidates, the facilitator's, needs a storming): the events missing between two
   consecutive events of the flows in view (the timelines, and the exceptions when the view shows them), one candidate
@@ -1191,6 +1192,46 @@ after `es:start` in the order of the work on a storming — the flow, then its d
 - **Chips** (from the review of phase 1): a candidate's chips are only the targets that resolve now; one to be added
   (an exception's or a gap's new event) is named by the candidate's label and how rather than by an identifier
   nobody wrote (`#NoMyNumberCard`). Once applied, the new elements resolve and their chips appear.
+
+### As built: ヒントをもらう (`/hint`)
+
+Decided by the user (2026-11-03): `/es:next` became **`/hint` ヒントをもらう / "Get a hint"**, the AI coaching the person
+— a beginner especially — in the event storming and the modeling alike.
+
+- **The command**: ID `hint`, no prefix (it belongs to neither world); `SlashCommandKind.Hint` replaces `EsNext`. A
+  command stored as `EsNext`, and its `SlashCommandStarted`, are read as `Hint` (`legacy.ts`; nothing rewritten, no
+  migration), so an older session shows its answers with their steps as before. `POST /api/session/commands` no longer
+  takes `es:next` (400, as any unknown ID): the page and the server ship together. Anyone runs it, in Solo and Collab.
+  It needs no storming in view (`needsStorming: false`, no `scope`): it is always asked; the AI reads where the person
+  is. One at a time per session, as every command.
+- **The prompt** (`COMMAND_PROMPTS.hint`): first work out the world — doing Event Storming, modeling, moving from one
+  to the other, or not started — from `sessionSoFar` (recent messages, the AI's turns, interviews and their briefs,
+  the commands run), `viewedAt` (the view; none: nothing opened) and the files (Glob for `.dtes` and `.dt`): the
+  stormings' briefs, level, stages, exception coverage and open hotspots; the model's contexts, their `///`,
+  aggregates, states, invariants; `dt check`'s findings on **all** the files (`diagnostics`, scope `workspace`: the
+  `.dt` too, where `/es:names` reads the `.dtes` only). No files: they have not started — advise `es:start` or
+  `model:start`. Then the same shape as before: status (one line, which world and how far), one to three steps with
+  reasons, `command` one of `es:start`, `es:exceptions`, `es:gaps`, `es:levels`, `es:names`, `es:recap`,
+  `model:start` (`SuggestedCommand` gained `ModelStart`; the schema's enum is `SUGGESTED_COMMAND_IDS`, validation as
+  before: another is dropped, the step kept). An `es:` command advised from elsewhere says which storming to open.
+  Tone: a coach — short, concrete, encouraging, no unexplained jargon —, in the UI language unless the session is
+  written in another. Both ways of working (storming-practice and modeling-practice) are given; names, labels and
+  findings stay in the data block.
+- **The button**: ヒントをもらう at the left end of the composer's bar, as tall as the send button: a `Lightbulb` and the
+  label on the brand's pale wash (an action), the label dropped when the bar is narrow (a container query on
+  `.chat-composer-bar`, 18rem: the chat at its default width shows it, at its narrowest not), its tooltip and
+  aria-label always. Pressed, it starts `/hint` at once (the opening message is the command's name, with the view and
+  the selection); the composer keeps what it holds. Disabled while a
+  hint runs (or while the page starts one); hidden where commands cannot run: the composer is not shown (the session
+  not live), or no answerer is connected.
+- **The answer**: the AI's ordinary message (author AI) with a small `Lightbulb` by its name (role img, 「ヒント」); the
+  steps' command buttons put the command in the composer as before (`/model:start` too, for who may start it).
+- **`/`'s list**: `/hint` comes first, before `es:start` (decided: it is where a beginner starts; `/es` still lists
+  the ES commands alone). The commands the latest **answered** hint of the session suggests carry a small filled
+  amber `Star` (「ヒントのおすすめ」, `--chat-hint-star`) until another hint is answered (one still working, or
+  stopped, leaves them).
+- **Fixed with it**: an AI message in the history (clamped) faded its last line even when it fitted; the fade is now
+  only for a message taller than the clamp (`cut`).
 
 ## The view a message was sent from (as built)
 

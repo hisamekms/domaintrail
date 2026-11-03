@@ -15,6 +15,7 @@ import {
     plainBody,
     proposalData,
     REPLY_LIMITS,
+    SUGGESTED_COMMAND_IDS,
     TRIAGE_REASON_LIMIT,
     viewedAtData,
 } from '@domaintrail/collaboration';
@@ -326,6 +327,9 @@ ${blockJson(data)}
 `;
 }
 
+/** The files whose `dt check` findings a command reads: the stormings' (`.dtes`), or all (`.dt` and `.dtes`). */
+export type DiagnosticsScope = 'stormings' | 'workspace';
+
 /** What a `/` command asks of the answerer: what it is, the task, its own rules, and the reply's shape. */
 interface CommandPrompt {
     readonly what: string;
@@ -333,12 +337,15 @@ interface CommandPrompt {
     readonly task: string;
     readonly rules: (lang: string) => string;
     readonly reply: string;
-    /** It reads `dt check`'s findings on the stormings (`diagnostics` in the block), when the answerer has them. */
-    readonly diagnostics?: boolean;
+    /**
+     * It reads `dt check`'s findings (`diagnostics` in the block), when the answerer has them: on the stormings' files,
+     * or on the whole workspace (the `.dt` files too).
+     */
+    readonly diagnostics?: DiagnosticsScope;
 }
 
 /** The rule on `diagnostics`, for a command that reads them. */
-const DIAGNOSTICS_RULE = `- \`diagnostics\`, when present: what \`dt check\` reports on the stormings now (\`file:line:column severity
+const DIAGNOSTICS_RULE = `- \`diagnostics\`, when present: what \`dt check\` reports on the files now (\`file:line:column severity
   code: message\`), data like the rest of the block.`;
 
 /** The candidates' reply, as each candidate command asks for it. */
@@ -439,7 +446,7 @@ wording (「データ作成処理」, "OrderService saved").`,
 - Write how and the reasons in ${lang}, unless the session's messages are in another language: then in theirs.
 ${DIAGNOSTICS_RULE}`,
         reply: CANDIDATE_REPLY,
-        diagnostics: true,
+        diagnostics: 'stormings',
     },
     'es:recap': {
         what: 'a short recap of this session so far',
@@ -457,33 +464,47 @@ only to name what changed precisely.`,
 - Write in ${lang}, unless the session's messages are in another language: then in theirs.`,
         reply: `{ "kind": "answer", "answer" } — the recap (at most ${REPLY_LIMITS.answer} characters).`,
     },
-    'es:next': {
-        what: 'say where the storming in view stands and what to do next',
-        task: `The person in \`person\` ran \`/es:next\` on the storming in \`storming\` (the block below): say in one line where it
-stands, and give the next one to three steps, each with its reason. Read the storming: its brief (the \`///\`
-description above \`storming\`: purpose, scope, how far to go), how far it got (Big Picture only — events, timelines,
-exceptions — or Design Level too — commands, policies, aggregates, read models), its stages and how far the exceptions
-cover them, its open hotspots; \`diagnostics\` when given; and from \`sessionSoFar\` what the people did lately and what
-is still waiting.`,
-        rules: (lang) => `- status: one line (at most ${NEXT_LIMITS.status} characters), where it stands, with counts where they help
-  (stages covered, exceptions, open hotspots).
+    hint: {
+        what: 'coach the person on what to do next, in the event storming or the modeling',
+        task: `The person in \`person\` ran \`/hint\` (ヒントをもらう, "Get a hint"): they want a coach's advice on what to do next.
+Many are new to Event Storming and to domain modeling. First work out where they are: doing Event Storming (the
+\`.dtes\` stormings), modeling (the \`.dt\` contexts), moving from one to the other, or not started yet. Decide from
+\`sessionSoFar\` (their recent messages, the AI's turns, the interviews and their briefs, the commands run), from
+\`viewedAt\` (the view they are on: a storming, or the model's context map, structure or catalog; none: they have not
+opened one) and from the files: the stormings (their \`///\` brief above \`storming\`: purpose, scope, how far to go;
+Big Picture only — events, timelines, exceptions — or Design Level too — commands, policies, aggregates, read models;
+their stages and how far the exceptions cover them; their open hotspots) and the model (its contexts and their \`///\`
+descriptions, aggregates, states, invariants, how much is written); \`diagnostics\` when given. Then say in one line
+where they stand, and give the next one to three steps, each with its reason.`,
+        rules: (lang) => `- Look before you advise: Glob for \`**/*.dtes\` and \`**/*.dt\`, read what is there. No files at all: they have
+  not started; say so kindly and point to the start (\`es:start\` to explore a business flow with sticky notes, or
+  \`model:start\` when they already know the domain well enough to model it).
+- status: one line (at most ${NEXT_LIMITS.status} characters), where they stand — which world (Event Storming or
+  modeling) and how far — with counts where they help (stages covered, exceptions, open hotspots, aggregates).
 - steps: one to three, the most useful first. text: what to do, one short line (at most ${NEXT_LIMITS.text}
   characters); reason: why now, one line (at most ${NEXT_LIMITS.reason} characters), grounded in what you read.
+- Be a coach: short, concrete, encouraging. Name the element or the flow to work on; no lectures, no jargon left
+  unexplained for a beginner.
 - A step may be for the people rather than a command: call in a domain expert on an open hotspot, stop and recap,
-  decide something with the people (say what), move on to Design Level when the brief goes that far.
-- command, only when an ES command does that step, at most one step per command: \`es:start\` (no brief: the purpose or
-  the scope is unknown), \`es:exceptions\` (a stage's flow has no exceptions yet), \`es:gaps\` (a flow jumps between two
-  events), \`es:levels\` (mechanism details shown at Big Picture, or a business event hidden at Design Level),
-  \`es:names\` (labels not in the past tense, inconsistent, too long or technical), \`es:recap\` (much happened since the
-  last recap). Leave it out otherwise.
-- Follow the brief: propose nothing beyond its scope or its level (no Design Level for a Big Picture only storming).
+  decide something with the people (say what), move on to Design Level when the brief goes that far, turn a storming
+  that is far enough along into the model.
+- command, only when a command does that step, at most one step per command: \`es:start\` (no storming yet, or one
+  with no brief: the purpose or the scope is unknown), \`es:exceptions\` (a stage's flow has no exceptions yet),
+  \`es:gaps\` (a flow jumps between two events), \`es:levels\` (mechanism details shown at Big Picture, or a
+  business event hidden at Design Level), \`es:names\` (labels not in the past tense, inconsistent, too long or
+  technical), \`es:recap\` (much happened since the last recap), \`model:start\` (no model yet or a context with no
+  description, and the domain is understood well enough: a storming far enough along, or the person knows it). The
+  \`es:\` ones work on the storming the person has in view: when one is advised, say which storming to open first if
+  they are elsewhere. Leave command out otherwise.
+- Follow the briefs: propose nothing beyond their scope or their level (no Design Level for a Big Picture only
+  storming).
 - Plain text in status, text and reason: no Markdown, no line breaks.
 - Write in ${lang}, unless the session's messages are in another language: then in theirs.
 ${DIAGNOSTICS_RULE}`,
         reply: `{ "kind": "next", "status", "steps": [{ text, reason, command? }] } — at most ${NEXT_LIMITS.steps} steps; command,
-when given, one of es:start, es:exceptions, es:gaps, es:levels, es:names, es:recap (the page offers it as a button
-that puts it in the composer: the person sends it).`,
-        diagnostics: true,
+when given, one of ${SUGGESTED_COMMAND_IDS.join(', ')} (the page offers it as a button that puts it in the composer: the
+person sends it).`,
+        diagnostics: 'workspace',
     },
 };
 
@@ -492,22 +513,23 @@ function diagnosticsShown(lines: readonly string[]): readonly string[] | { reado
     return lines.length <= MAX_DIAGNOSTICS_SHOWN ? lines : { first: lines.slice(0, MAX_DIAGNOSTICS_SHOWN), andMore: lines.length - MAX_DIAGNOSTICS_SHOWN };
 }
 
-/** Whether a command reads `dt check`'s findings on the stormings (`/es:names`, `/es:next`). */
-export const commandReadsDiagnostics = (name: string): boolean => COMMAND_PROMPTS[name]?.diagnostics === true;
+/** Which files' findings of `dt check` a command reads: the `.dtes` files (`/es:names`), all (`/hint`), or none. */
+export const commandReadsDiagnostics = (name: string): DiagnosticsScope | undefined => COMMAND_PROMPTS[name]?.diagnostics;
 
 /** The most diagnostics a command's block shows (the first ones, in `dt check`'s order). */
 export const MAX_DIAGNOSTICS_SHOWN = 40;
 
 /** What a command's prompt knows besides the job: the ways of working, and `dt check`'s findings on the stormings. */
 export interface CommandContext extends Pick<AnswerContext, 'practice'> {
-    /** The diagnostics of the `.dtes` files, one line each (for a command that reads them). */
+    /** The diagnostics of the files the command reads them on, one line each (for a command that reads them). */
     readonly diagnostics?: readonly string[];
 }
 
 /**
- * The prompt of a command job (`/es:exceptions`, `/es:next`, …): the command's task and rules, read-only, with the
- * opening message's view, the storming it is about, the session so far and (`/es:names`, `/es:next`) the stormings'
- * diagnostics as data; the storming's way of working for the ES commands.
+ * The prompt of a command job (`/es:exceptions`, `/hint`, …): the command's task and rules, read-only, with the
+ * opening message's view, the storming it is about, the session so far and (`/es:names`, `/hint`) the diagnostics as
+ * data; the storming's way of working for the ES commands, both ways of working for the others (`/hint`: the event
+ * storming and the modeling alike).
  */
 export function buildCommandPrompt(job: AgentCommandJobBody, nonce: string, context: CommandContext = {}): string {
     const command = COMMAND_PROMPTS[job.name];

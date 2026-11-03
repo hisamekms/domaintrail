@@ -1,6 +1,6 @@
-// `/es:next`'s answer in the chat (the plan's "Built-in ES commands, phase 2"): the AI's message shows its status on
-// one line and its one to three steps as a numbered list, each its text, its reason muted and — when an ES command does
-// that step — a button with the command's ID in the brand's colour, which puts the command in the composer (`/`'s list
+// `/hint`'s answer in the chat (the plan's "Built-in ES commands, phase 2" and "ヒントをもらう"): the AI's message (a
+// light bulb by its name) shows its status on one line and its one to three steps as a numbered list, each its text,
+// its reason muted and — when a command does that step — a button with the command's ID in the brand's colour, which puts the command in the composer (`/`'s list
 // opens on it): the person sends it, nothing runs by itself. A command the person may not start (the facilitator's) has
 // no button; one of a kind already running is disabled. The message's text (Markdown, the same list) is what the
 // session so far and any other reader see.
@@ -12,10 +12,10 @@ import type { ComposerValue } from './mentions';
 import { ReplyText } from './reply';
 import { canStartCommand, isCommandAllowed, type SlashCommandJson } from './slash';
 
-/** `/es:next`'s answer as the page reads it. */
+/** `/hint`'s answer as the page reads it. */
 export type NextAnswerJson = NonNullable<Extract<SlashCommandJson, { state: 'Answered' }>['next']>;
 
-/** The next steps of the `/es:next` answered with this message of the AI, if it is one. */
+/** The next steps of the `/hint` answered with this message of the AI, if it is one. */
 export function nextAnswerOf(state: Pick<SessionStateBody, 'slashCommands'>, request: string): NextAnswerJson | undefined {
     const c = (state.slashCommands ?? []).find((x) => x.state === 'Answered' && x.answer === request);
     return c?.state === 'Answered' ? c.next : undefined;

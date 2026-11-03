@@ -2,19 +2,19 @@ context Collaboration {
   /// 候補型・答え型の `/` コマンドの識別子。
   id SlashCommandId "コマンドID": UUID
 
-  /// 候補型・答え型の `/` コマンド（聞き取りは `Interview`）。`/` のあとに打つ ID（`es:exceptions`、`es:recap`）は英語の
-  /// まま、名前は画面の言語で出す。どちらの型か、ファシリテーターだけが始めるかはコード（`domain/slash-commands.ts` の
-  /// `SLASH_COMMANDS`）が決める。
+  /// 候補型・答え型の `/` コマンド（聞き取りは `Interview`）。`/` のあとに打つ ID（`es:exceptions`、`es:recap`、`hint`）は
+  /// 英語のまま、名前は画面の言語で出す。どちらの型か、ファシリテーターだけが始めるかはコード（`domain/slash-commands.ts` の
+  /// `SLASH_COMMANDS`）が決める。`Hint` は以前 `EsNext`（`/es:next`）だった: 保存済みのものは読むときに `Hint` になる。
   enum SlashCommandKind "コマンドの種類" {
     EsExceptions "例外を洗い出す（/es:exceptions）"
     EsRecap "ここまでのまとめ（/es:recap）"
     EsLevels "レベルを見直す（/es:levels）"
     EsNames "名前を揃える（/es:names）"
     EsGaps "間を埋める（/es:gaps）"
-    EsNext "次にやること（/es:next）"
+    Hint "ヒントをもらう（/hint）"
   }
 
-  /// 「次にやること」の一手が勧める ES のコマンド（押すと入力欄にそのコマンドが入る。送るのは人）。
+  /// ヒントの一手が勧めるコマンド（押すと入力欄にそのコマンドが入る。送るのは人）。
   enum SuggestedCommand "勧めるコマンド" {
     EsStart "ES を始める（/es:start）"
     EsExceptions "例外を洗い出す（/es:exceptions）"
@@ -22,9 +22,10 @@ context Collaboration {
     EsLevels "レベルを見直す（/es:levels）"
     EsNames "名前を揃える（/es:names）"
     EsRecap "ここまでのまとめ（/es:recap）"
+    ModelStart "モデリングを始める（/model:start）"
   }
 
-  /// 次にやることの一手: 何をするか、なぜ（どちらも1行）、当てはまる ES のコマンド（あれば）。上限はコード
+  /// ヒントの一手: 何をするか、なぜ（どちらも1行）、当てはまるコマンド（あれば）。上限はコード
   /// （`NEXT_LIMITS`）が決める。
   value NextStep "次の一手" {
     text: ProposalText "何をするか"
@@ -32,8 +33,8 @@ context Collaboration {
     command: SuggestedCommand? "勧めるコマンド"
   }
 
-  /// `/es:next` の答えの中身: いまの状態を1行と、次の一手を1〜3。答えのメッセージ（Markdown）はこれから作る。
-  value NextAnswer "次にやること" {
+  /// `/hint` の答えの中身: いまの状態を1行と、次の一手を1〜3。答えのメッセージ（Markdown）はこれから作る。
+  value NextAnswer "ヒント" {
     status: ProposalText "いまの状態"
     steps: NextStep[1..3] "次の一手"
   }
@@ -61,7 +62,7 @@ context Collaboration {
     chosen: CommandCandidate[1..20] "採用した候補"
   }
 
-  /// 候補型（`/es:exceptions` など）と答え型（`/es:recap`、`/es:next`）の `/` コマンド。始めた人のメッセージ（コマンドの名前）は仕分けを
+  /// 候補型（`/es:exceptions` など）と答え型（`/es:recap`、`/hint`）の `/` コマンド。始めた人のメッセージ（コマンドの名前）は仕分けを
   /// 経ずに、回答役（読むだけの AI）がコマンドの指示で受け持つ。候補型は候補を挙げ、始めた人が選んだものを1つの実行が
   /// 反映する。答え型は AI のメッセージで答える。
   aggregate SlashCommand "コマンド" {
@@ -91,8 +92,8 @@ context Collaboration {
     state Answered "回答済み" {
       /// AI の答え（始めのメッセージに応える AI のメッセージ）。
       references answer: RequestId -> Request "答え"
-      /// 答えの中身（`/es:next`）: 画面はこれで一手ごとにコマンドのボタンを出す。
-      next: NextAnswer? "次にやること"
+      /// 答えの中身（`/hint`）: 画面はこれで一手ごとにコマンドのボタンを出す。
+      next: NextAnswer? "ヒント"
       answeredAt: Timestamp "回答日時"
     }
     state Stopped "中止" {
@@ -114,7 +115,7 @@ context Collaboration {
       Working -> Listed
       emits CandidatesListed
 
-    /// AI が答える（答え型）。始めのメッセージに応える AI のメッセージとして。`/es:next` は、その中身も。
+    /// AI が答える（答え型）。始めのメッセージに応える AI のメッセージとして。`/hint` は、その中身も。
     command answer(answer: RequestId, next: NextAnswer?, answeredAt: Timestamp) "答える"
       Working -> Answered
       emits SlashCommandAnswered

@@ -6,7 +6,7 @@
 // ---- core: the roles and their ports ---------------------------------------------------------------------------
 export { startSubscriber, type Subscriber, type SubscriberEnd, type SubscriberOptions } from './core/subscriber.js';
 export { startAnswerer, type Answerer, type AnswererDeps, type AnswererEnd, type AnswererOptions } from './core/answerer.js';
-export { buildAnswerPrompt, buildProposePrompt, buildTriagePrompt } from './core/answer-prompt.js';
+export { buildAnswerPrompt, buildProposePrompt, buildTriagePrompt, type DiagnosticsScope } from './core/answer-prompt.js';
 // the ways of working the prompts give, which the app takes from the guide it embeds
 export type { Practice } from './core/prompt.js';
 export {

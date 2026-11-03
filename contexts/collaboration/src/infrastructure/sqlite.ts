@@ -30,7 +30,7 @@ import type {
     Stores,
     UnitOfWork,
 } from '../application/ports.js';
-import { upgradeEvent, upgradeProposal, upgradeRequest, upgradeRun, upgradeSession } from './legacy.js';
+import { upgradeEvent, upgradeProposal, upgradeRequest, upgradeRun, upgradeSession, upgradeSlashCommand } from './legacy.js';
 import { DATABASE_FILE, PRIVATE_FILE, checkPlain, looserThan, restrict, sessionDirectory } from './session-dir.js';
 
 /**
@@ -842,7 +842,7 @@ function slashCommands(db: DatabaseSync): SlashCommandRepository {
     return {
         load(id) {
             const r = load.get(params({ id }));
-            return r ? decoded<Collaboration.SlashCommand>(text(r, 'data')) : undefined;
+            return r ? decoded<Collaboration.SlashCommand>(text(r, 'data'), upgradeSlashCommand) : undefined;
         },
         save(command) {
             save.run(
@@ -857,7 +857,7 @@ function slashCommands(db: DatabaseSync): SlashCommandRepository {
             );
         },
         listBySession(session) {
-            return list.all(params({ session })).map((r) => decoded<Collaboration.SlashCommand>(text(r, 'data')));
+            return list.all(params({ session })).map((r) => decoded<Collaboration.SlashCommand>(text(r, 'data'), upgradeSlashCommand));
         },
     };
 }

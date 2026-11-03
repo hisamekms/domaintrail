@@ -1190,7 +1190,8 @@ gaps to fill by guessing.
 
 **Small steps.** Change a little, run `dt fmt` and `dt check` until it exits 0, and keep the model valid between
 steps. Do not rename or remove what the people did not ask to change: other files, generated code and the chat refer
-to the IDs.
+to the IDs. Unsure what to do next? `/hint` (the composer's ヒントをもらう button) has the AI coach you, in the modeling
+as in the storming.
 
 <!-- topic: generated -->
 ## Generated TypeScript
@@ -2521,7 +2522,8 @@ for the purpose and the first and last events before writing much.
 
 In the chat, `/es:exceptions`, `/es:gaps` (events missing between two of a flow), `/es:levels` (which events show at Big
 Picture) and `/es:names` (labels not in the past tense, inconsistent, too long or technical) list candidate changes to
-check; `/es:next` says where the storming stands and what to do next.
+check. Unsure what to do next? `/hint` (the composer's ヒントをもらう button) has the AI coach you: where you stand and
+one to three next steps, with a button for the command that does a step.
 
 **Design Level next**, once the flow is agreed (the brief says how far to go):
 - For each event, what caused it: a `command` (and the `actor` or `external` system that issues it), or a `policy`
