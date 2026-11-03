@@ -695,7 +695,7 @@ Decided by the maintainer (2026-11-03): the AI may read paths outside the worksp
 each person keeps settings of their own in a local file.
 
 - **`agent.read.paths`** (both roles), **`agent.answer.read.paths`**, **`agent.run.read.paths`** (each added to the
-  common list): directories or files, absolute, `~/…` or relative to the config file (`resolveReadPaths`; the resolved
+  common list; since the review, from a git-ignored local file only, below): directories or files, absolute, `~/…` or relative to the config file (`resolveReadPaths`; the resolved
   `agent.read` is `{ answer, run }`). The configuration's check (`checkReadPaths`, with `agent.run.dt`'s, after the pure
   validation; links followed): a path inside the workspace, one holding it, or one in a `.git` / `.domaintrail`
   directory (any case) is an **error**, not a warning — a config that names the workspace means something other than
@@ -732,6 +732,40 @@ each person keeps settings of their own in a local file.
   nearest config, and watches no config file (it did not before either). `dt open` / `dt collab` / `dt agent` print
   `Config: domaintrail.jsonc + domaintrail.local.jsonc` and warn (stderr) when git tracks the local file or does not
   ignore it, with the line for `.gitignore` (never edited for them).
+
+#### After the security review of the read paths (2026-11-03)
+
+The review's findings, fixed, and the maintainer's two decisions:
+
+- **Config files never written** (high): `CONFIG_EDIT_DENIED` denies `Edit` of the four config file names at any
+  depth, each also with every letter bracketed (`[dD][oO]…`: case-insensitive by construction; measured: brackets are
+  honoured, `DOMAINTRAIL.LOCAL.JSONC` and `CONF/team.jsonc` refused); a `-c` file and its local override are denied as
+  given, by real path and relative to the workspace (`configFileRules`). The loader takes a config file only under its
+  exact name (`existsExactly`), and the files named like a config file in any case beside a `-c` file outside the
+  workspace join the runner's scan (`configGuardScan`), so creating one fails the run and stops the subscriber.
+- **Read paths only from a git-ignored local file** (decision): in the project's file an error ("move it to
+  domaintrail.local.jsonc (git-ignored)"); in a local file git tracks or does not ignore an error (asked of git when the
+  config loads, fail closed). Refused as well: `/`, the home directory, and a path that is or holds `~/.ssh`,
+  `~/.gnupg`, `~/.aws`, `~/.azure`, `~/.config`, `~/.kube`, `~/.docker`, `~/.netrc`, `~/Library`, `/etc`,
+  `/private/etc`, `/var`, `/private/var`; a path inside one of them too, but `~/Library` (iCloud Drive), `/var` and
+  `/private/var` (the temporary directories).
+- **Approval of the security-relevant settings** (decision; `apps/dt/src/cli/trust.ts`): `agent.read*` (resolved, per
+  role), `agent.run.allowedTools`, `agent.run.dt`, `collab.identity`, `collab.host`, `collab.access`, `open.host` and
+  `classifier` (but `threshold`), of the merged configuration, hashed (SHA-256 of canonical JSON). Not the defaults and
+  not the hash approved for the workspace's real path: printed and asked (y/N) on a terminal, `--yes` without one, else
+  refused (exit 1). Kept in `$XDG_CONFIG_HOME/domaintrail/trust.json` (default `~/.config/domaintrail/trust.json`, also
+  on macOS; 0700 / 0600, written whole then renamed). `answer` and `triage` have no tool or permission key (the
+  answerer's tools are fixed), so none is hashed. The tests keep theirs in a directory of the run's
+  (`test/preload.ts`); the session seed passes `--yes`.
+- **Case variants on Node** (medium): `realpathSync.native` in `real()` (`dt-shim.ts`, its launcher) and in
+  `readTargets` (Node's `realpathSync` keeps the written case); `test/read-paths-node.test.ts` runs the check on Node.
+- **Fail closed on names no rule can express** (low): `UnexpressiblePath` (a `ReadScopeTooLarge`) refuses the run for
+  a denied path or an extra directory or file with a line break or NUL, never a rule left out.
+- **Each read path checked again** (low): its real path and device/inode recorded at start (`ReadTarget.id`),
+  compared before each answerer turn and each run (`checkTarget`); a change fails that turn or run.
+- **The answerer's copies** (low): their directory names its owner process (`.owner`); at start, this user's
+  `dt-answerer-read-*` whose owner is gone (or without one past a minute) are removed; all together at most 200 MiB
+  (`MAX_EXTRA_VIEW_BYTES`), refused before copying past it.
 
 ## The page
 

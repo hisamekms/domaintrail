@@ -312,7 +312,7 @@
               "additionalProperties": false,
               "properties": {
                 "paths": {
-                  "description": "Directories or files outside the workspace: absolute, ~/..., or relative to this file. A path inside the workspace, or one holding it, is an error; one missing is skipped (the agent says so when it starts). In a git work tree the files git does not ignore there are readable, elsewhere every file; never .git nor .domaintrail, nor a nested repository inside the path. Nothing there is ever written.",
+                  "description": "Directories or files outside the workspace: absolute, ~/..., or relative to this file. Honoured only from domaintrail.local.jsonc when git ignores it (an error in the project's file), and approved when they change (dt open / collab / agent ask). A path inside the workspace, one holding it, /, the home directory, or one that is or holds ~/.ssh, ~/.gnupg, ~/.aws, ~/.azure, ~/.config, ~/.kube, ~/.docker, ~/.netrc, ~/Library, /etc or /var is an error; one missing is skipped (the agent says so when it starts). In a git work tree the files git does not ignore there are readable, elsewhere every file; never .git nor .domaintrail, nor a nested repository inside the path. Nothing there is ever written.",
                   "type": "array",
                   "items": {
                     "type": "string",
@@ -367,7 +367,7 @@
               "additionalProperties": false,
               "properties": {
                 "paths": {
-                  "description": "Directories or files outside the workspace: absolute, ~/..., or relative to this file. A path inside the workspace, or one holding it, is an error; one missing is skipped (the agent says so when it starts). In a git work tree the files git does not ignore there are readable, elsewhere every file; never .git nor .domaintrail, nor a nested repository inside the path. Nothing there is ever written.",
+                  "description": "Directories or files outside the workspace: absolute, ~/..., or relative to this file. Honoured only from domaintrail.local.jsonc when git ignores it (an error in the project's file), and approved when they change (dt open / collab / agent ask). A path inside the workspace, one holding it, /, the home directory, or one that is or holds ~/.ssh, ~/.gnupg, ~/.aws, ~/.azure, ~/.config, ~/.kube, ~/.docker, ~/.netrc, ~/Library, /etc or /var is an error; one missing is skipped (the agent says so when it starts). In a git work tree the files git does not ignore there are readable, elsewhere every file; never .git nor .domaintrail, nor a nested repository inside the path. Nothing there is ever written.",
                   "type": "array",
                   "items": {
                     "type": "string",
@@ -403,7 +403,7 @@
           "additionalProperties": false,
           "properties": {
             "paths": {
-              "description": "Directories or files outside the workspace: absolute, ~/..., or relative to this file. A path inside the workspace, or one holding it, is an error; one missing is skipped (the agent says so when it starts). In a git work tree the files git does not ignore there are readable, elsewhere every file; never .git nor .domaintrail, nor a nested repository inside the path. Nothing there is ever written.",
+              "description": "Directories or files outside the workspace: absolute, ~/..., or relative to this file. Honoured only from domaintrail.local.jsonc when git ignores it (an error in the project's file), and approved when they change (dt open / collab / agent ask). A path inside the workspace, one holding it, /, the home directory, or one that is or holds ~/.ssh, ~/.gnupg, ~/.aws, ~/.azure, ~/.config, ~/.kube, ~/.docker, ~/.netrc, ~/Library, /etc or /var is an error; one missing is skipped (the agent says so when it starts). In a git work tree the files git does not ignore there are readable, elsewhere every file; never .git nor .domaintrail, nor a nested repository inside the path. Nothing there is ever written.",
               "type": "array",
               "items": {
                 "type": "string",

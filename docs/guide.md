@@ -2535,7 +2535,21 @@ first (its errors name it), then the merge (its errors name the local file). Its
 own directory, the config file's. Without a project config file, a local file alone is the configuration. Every
 command loads both (`check`, `generate`, `fmt`, `show`, `lsp`, `open`, `collab`, `agent`); `dt open`, `dt collab` and
 `dt agent` print them (`Config: domaintrail.jsonc + domaintrail.local.jsonc`) and warn when git tracks the local file or
-does not ignore it, with the line to add to `.gitignore` (the file is never edited for you).
+does not ignore it, with the line to add to `.gitignore` (the file is never edited for you). A file is taken only under
+its exact name (`DomainTrail.Local.JSONC` is not it, even where the file system ignores case). The paths the AI reads
+outside the workspace (`agent.read.paths`, see `dt guide session-agent`) are honoured **only from a local file git
+ignores** (or outside any repository): in the project's file, or in a local file git tracks or does not ignore, they
+are a config error.
+
+**Approving the security-relevant settings.** `dt open`, `dt collab` and `dt agent` start only with security-relevant
+settings you approved for the workspace: what the AI reads outside the workspace (`agent.read.paths` and the roles'),
+`agent.run.allowedTools`, `agent.run.dt`, `collab.identity`, `collab.host`, `collab.access`, `open.host` and
+`classifier` (but its `threshold`), as they are after the local file is merged. When they differ from the defaults and
+from what you approved last for this workspace (by its real path), they are printed and asked about (`Start with
+these settings? [y/N]`); without a terminal, `--yes` approves them, else the command refuses to start. Approvals are
+kept outside the workspace, in `$XDG_CONFIG_HOME/domaintrail/trust.json` (by default `~/.config/domaintrail/trust.json`,
+on macOS too; private to you). So a commit, or anything that writes in the workspace, cannot widen what the AI may do
+without your seeing it.
 
 ```jsonc
 {
@@ -3040,8 +3054,8 @@ are shown. The old sections `session` and `view` are refused when the file is lo
       // the most characters of diff given to the agent of the runs a run replies to or answers, all together;
       // past it, only their changed files (default 20480)
       // "maxPreviousRunDiff": 20480
-      // what the runner also reads outside the workspace, besides agent.read (never writes there)
-      // "read": { "paths": ["../tools/notes.md"] }
+      // what the runner also reads outside the workspace, besides agent.read (never writes there);
+      // in domaintrail.local.jsonc only (git-ignored): "read": { "paths": ["../tools/notes.md"] }
     },
     // the answerer: read-only answers to questions and change proposals (its tools are Read, Grep and Glob, not configurable)
     "answer": {
@@ -3051,8 +3065,8 @@ are shown. The old sections `session` and `view` are refused when the file is lo
       "timeout": 120           // the most seconds an answer may take
       // "model": "sonnet",    // default: your Claude Code settings' model (never the runner's)
       // "effort": "low"
-      // what the answerer also reads outside the workspace, besides agent.read
-      // "read": { "paths": ["~/notes/glossary.md"] }
+      // what the answerer also reads outside the workspace, besides agent.read;
+      // in domaintrail.local.jsonc only (git-ignored): "read": { "paths": ["~/notes/glossary.md"] }
     },
     // the light model that sorts the messages addressed to the AI (question, change request or neither)
     "triage": {
@@ -3060,8 +3074,8 @@ are shown. The old sections `session` and `view` are refused when the file is lo
       "warm": false            // true: one long-lived process; false: a fresh claude -p per message
     },
     // what both roles may read outside the workspace, read-only: directories or files, absolute, ~/… or relative to
-    // this file (see dt guide session-agent); a path inside the workspace is an error
-    "read": { "paths": [] }    // e.g. ["../specs", "~/notes/glossary.md"]
+    // this file (see dt guide session-agent); in domaintrail.local.jsonc only (git-ignored), never in this file
+    // "read": { "paths": ["../specs", "~/notes/glossary.md"] }
   },
   // opt-in, stage 2 of the triage: the messages addressed to the AI classified by Cloudflare Workers AI (their text is sent to Cloudflare)
   "classifier": {
@@ -3162,18 +3176,30 @@ result.
   refuses an answer, a proposal or a run's reply that contains the agent API's credential.
 - **Reading outside the workspace: `agent.read.paths`.** You may let the AI read directories or files outside the
   workspace, read-only: `agent.read.paths` for both roles, `agent.answer.read.paths` and `agent.run.read.paths` added
-  for one (absolute, `~/…`, or relative to the config file; put your own in `domaintrail.local.jsonc`). A path inside the
-  workspace, one holding it, or one in a `.git` or `.domaintrail` directory is a config error; each path is taken by its
-  real path (symbolic links followed) when the agent starts, and one that is missing is skipped (its log says so). In
-  each, the workspace's rules apply: in a git work tree the files git does not ignore there, elsewhere every file;
-  never `.git` nor `.domaintrail` at any depth; a nested repository inside it denied as a whole (the path itself may be
-  one). The answerer reads private copies of them, as of the workspace; the runner reads them in place (`--add-dir`
-  for a directory, a `Read(//…)` rule for a file) and may never edit, write or remove anything there (`Edit(//…)`
-  deny rules, which win over every allow rule); what git ignores there, the nested repositories and the symbolic links
-  are denied to it as a whole, counted with the workspace's against the 500 entries. `dt open`, `dt collab` and `dt
-  agent` print what each role reads beyond the workspace when they start (`AI answers read outside the workspace: …`,
-  `AI runs read (never write) outside the workspace: …`). **In a collab session, any participant can make the AI
-  quote these files in the chat**: name only what every participant may read.
+  for one (absolute, `~/…`, or relative to the config file). They are yours to choose: honoured only from
+  `domaintrail.local.jsonc` when git ignores it (or outside any repository), an error in the project's file, and asked
+  about when they change (see the approval in `dt guide config`). A path inside the workspace, one holding it, one in a
+  `.git` or `.domaintrail` directory, `/`, your home directory, and a path that is or holds `~/.ssh`, `~/.gnupg`,
+  `~/.aws`, `~/.azure`, `~/.config`, `~/.kube`, `~/.docker`, `~/.netrc`, `~/Library`, `/etc`, `/private/etc`, `/var`
+  or `/private/var` (or is inside one of them, but `~/Library`, `/var` and `/private/var`) is a config error naming
+  its key. Each path is taken by its real path (symbolic links followed, the file system's case) when the agent starts,
+  and one that is missing is skipped (its log says so); before each answer and each run it must still be the same
+  directory or file (else that turn or run fails: restart the agent). In each, the workspace's rules apply: in a git
+  work tree the files git does not ignore there, elsewhere every file; never `.git` nor `.domaintrail` at any depth; a
+  nested repository inside it denied as a whole (the path itself may be one). The answerer reads private copies of
+  them, as of the workspace (200 MiB at most, all together; copies an agent that was killed left behind are removed
+  when the next starts); the runner reads them in place (`--add-dir` for a directory, a `Read(//…)` rule for a file)
+  and may never edit, write or remove anything there (`Edit(//…)` deny rules, which win over every allow rule); what
+  git ignores there, the nested repositories and the symbolic links are denied to it as a whole, counted with the
+  workspace's against the 500 entries; a name no permission rule can express (a line break in it) makes the run fail
+  rather than go without its rule. `dt open`, `dt collab` and `dt agent` print what each role reads beyond the
+  workspace when they start (`AI answers read outside the workspace: …`, `AI runs read (never write) outside the
+  workspace: …`). **In a collab session, any participant can make the AI quote these files in the chat**: name only
+  what every participant may read.
+- **The configuration files are never written by the agents.** Deny rules keep them from editing
+  `domaintrail.jsonc`, `domaintrail.json`, `domaintrail.local.jsonc` and `domaintrail.local.json` at any depth and in any
+  case, and a `-c` file and its local override by every path they may be reached by; a configuration-like file
+  created or changed beside a `-c` file outside the workspace fails the run as a change outside the DSL does.
 - **A change outside the DSL stops the subscriber.** The workspace is scanned before and after the agent; if any file
   other than a `.dt` or `.dtes` source was added, changed or removed (`.claude/` included, and files that `.gitignore`
   ignores), the run fails (`AgentError`) and the subscriber claims no further run. Its log names the files (`not
