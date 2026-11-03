@@ -15,7 +15,9 @@ export class FormatError extends Error {}
  * - Every element of a storming, every clause of an element's body, every step of a timeline and every event of a group
  *   on its own line. Up to one blank line the author wrote between them is kept, none after `{` or before `}`.
  * - An element without clauses is one line (`event SlotReleased "配送枠が解放された"`); with clauses, its body is a block.
- * - No space around the dots of a `ref` path.
+ * - No space around the dots of a `ref` path, nor around the hyphens of a `level` (`level big-picture`).
+ * - Clauses keep the order they are written in. The canonical place of `level design` is the last clause of an event,
+ *   after its `ref` (as the guide and the agent write it), but the formatter never moves a clause or its comments.
  * - A comment on the line of a token stays there, one space after it; other comments stay on their own line.
  */
 
@@ -47,7 +49,8 @@ interface Comment {
     end: number;
 }
 
-const inlineSep = (a: Token, b: Token): 'none' | 'space' => (a.text === '.' || b.text === '.' ? 'none' : 'space');
+const JOINERS = new Set(['.', '-']);
+const inlineSep = (a: Token, b: Token): 'none' | 'space' => (JOINERS.has(a.text) || JOINERS.has(b.text) ? 'none' : 'space');
 
 const leavesOf = (cst: CstNode): LeafCstNode[] =>
     CstUtils.streamCst(cst)

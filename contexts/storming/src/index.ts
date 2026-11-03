@@ -8,7 +8,9 @@
 // the sticky note its elements are drawn as
 export {
     declarations,
+    DESIGN_LEVEL,
     esElementId,
+    isDesignLevelOnly,
     RELATION_RULES,
     type AnyDeclaration,
     type Clause,

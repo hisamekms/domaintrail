@@ -181,6 +181,16 @@ describe('the prompt', () => {
     });
 });
 
+describe('events at Design Level only', () => {
+    test('the rules say when to mark an event `level design`, and that removing it promotes the event', () => {
+        const prompt = buildPrompt(input([frozen({ kind: 'DtesStorming', storming: 'S' }, 'x')]), new Map(), 'n');
+        expect(prompt).toContain('carries `level design` as the last clause of its');
+        expect(prompt).toContain('(a\n   reservation, an authorisation, an internal failure or retry)');
+        expect(prompt).toContain('To show an event at Big Picture too\n   ("promote" it), remove its `level design`');
+        expect(prompt).toContain('`level big-picture` is an error');
+    });
+});
+
 describe('the session so far, approved proposals and answering instead of editing (ADR 0030)', () => {
     const names = new Map([['dev:bob', 'Bob']]);
 

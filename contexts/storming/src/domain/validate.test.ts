@@ -44,6 +44,7 @@ function ir(text: string, file = 'cancel.dtes'): Storming[] {
             if (word === 'ref') clause = { type: 'ref', path: id, segments: id.split('.'), range: at(i) };
             else if (word === 'status') clause = { type: 'status', value: id, range: at(i) };
             else if (word === 'resolution') clause = { type: 'resolution', text: label ?? '', range: at(i) };
+            else if (word === 'level') clause = { type: 'level', value: id, range: at(i) };
             else if (RELATIONS.includes(word!)) clause = { type: 'relation', keyword: word as RelationKeyword, target: id, range: at(i), targetRange: at(i) };
             else throw new Error(`test IR: unknown clause '${l}'`);
             element.clauses.push(clause);
@@ -499,6 +500,74 @@ describe('validateStormings', () => {
             ['S006', "Policy 'Targeted' has `target Shipment`, but a policy takes `on`, `issues`.", 'remove the clause; `target` belongs in a command'],
             ['S006', "Command 'Opened' has a `status` clause, which only a hotspot takes.", 'remove the `status` clause'],
             ['S006', "Command 'Opened' has a `resolution` clause, which only a hotspot takes.", 'remove the `resolution` clause'],
+        ]);
+    });
+
+    test('S016 `level design` on an event is legal, before or after its `ref`', () => {
+        const text = cancel(`  event BikeLocked "車両がロックされた" {
+    level design
+  }
+  event SlotHeld "配送枠が仮押さえされた" {
+    ref Delivery.SlotHeld
+    level design
+  }
+  event SlotLocked "配送枠がロックされた" {
+    level design
+    ref Delivery.SlotLocked
+  }`);
+        expect(validate(text)).toEqual([]);
+    });
+
+    test('S016 `level big-picture` is an error that says no `level` already means both levels', () => {
+        const text = cancel(`  event BikeLocked {
+    level big-picture
+  }`);
+        const ds = validate(text);
+        expect(summary(ds)).toEqual([{ code: 'S016', severity: 'error', line: lineOf(text, 'level big-picture') }]);
+        expect(ds[0]!.message).toBe(
+            "Event 'BikeLocked' has `level big-picture`, but an event without `level` is already shown at both levels; the only level to write is `design`.",
+        );
+        expect(ds[0]!.hint).toBe('remove `level big-picture`');
+    });
+
+    test('S016 a level other than `design` is an error, with a suggestion', () => {
+        const text = cancel(`  event BikeLocked {
+    level desing
+  }
+  event SlotHeld {
+    level detail
+  }`);
+        const ds = validate(text);
+        expect(summary(ds)).toEqual([
+            { code: 'S016', severity: 'error', line: lineOf(text, 'level desing') },
+            { code: 'S016', severity: 'error', line: lineOf(text, 'level detail') },
+        ]);
+        expect(ds[0]!.message).toBe("Event 'BikeLocked' has level 'desing'; the only level is `design` (shown at Design Level only).");
+        expect(ds[0]!.hint).toBe("did you mean 'design'?");
+        expect(ds[1]!.hint).toBe('write `level design`, or remove the clause to show the event at both levels');
+    });
+
+    test('a second `level` is S004, and `level` on anything but an event is S006', () => {
+        const text = cancel(`  event BikeLocked {
+    level design
+    level design
+  }
+  command LockBike {
+    level design
+  }
+  hotspot Locking {
+    level design
+  }`);
+        const ds = validate(text);
+        expect(summary(ds)).toEqual([
+            { code: 'S004', severity: 'error', line: lineOf(text, 'level design', lineOf(text, 'level design', lineOf(text, 'BikeLocked'))) },
+            { code: 'S006', severity: 'error', line: lineOf(text, 'level design', lineOf(text, 'LockBike')) },
+            { code: 'S006', severity: 'error', line: lineOf(text, 'level design', lineOf(text, 'Locking')) },
+        ]);
+        expect(ds.map((d) => d.message)).toEqual([
+            "Event 'BikeLocked' has more than one `level`; it takes at most one.",
+            "Command 'LockBike' has a `level` clause, which only an event takes.",
+            "Hotspot 'Locking' has a `level` clause, which only an event takes.",
         ]);
     });
 

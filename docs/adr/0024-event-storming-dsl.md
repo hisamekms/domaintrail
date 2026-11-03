@@ -2,6 +2,7 @@
 
 - Status: accepted. Three choices the spec leaves open were decided by the maintainer: storming IDs unique in the
   workspace, the hotspots of a timeline filter, and the default `sources` (marked *Decided by the maintainer*).
+  Amended 2026-11-03: events at Design Level only (`level design`, below).
 - Date: 2026-10-31
 - Spec: [docs/dtes-v0.1.md](../dtes-v0.1.md). Its semantics, the sections marked 確定 in particular, are the reference.
   This ADR fixes only how they are implemented, plus the details the spec leaves to "実装調査" (§13, §14).
@@ -154,6 +155,7 @@ it; `dt guide S001` works). T6 changes the schema's `code` pattern to
 | S013 | `.dt` contract | A command `emits` an event that the `.dt` command provably never emits (below) | warning | T4 |
 | S014 | Graph | A type-level cycle Policy → Command → Event → Policy. The message says it is a cycle of possibilities, not an infinite loop | warning | T3 |
 | S015 | Label | A label too long for its sticky note even at the smallest font: the Live View cuts it short with «…» (every note is the same size) | warning | — |
+| S016 | Level | A `level` other than `design` on an event (`big-picture` included); see the amendment on events at Design Level only | error | — |
 
 - **Not implemented in v0.1:** the optional Info rule (a policy with ≥2 `on` and ≥2 `issues`). The spec marks it 任意,
   and it would need a third severity through `Diagnostic`, the schema, the CLI summary and the LSP. The guide states
@@ -229,7 +231,7 @@ These are pure functions of the storming IR (T5), with the types in `src/dtes/ir
   both levels. A hotspot without `on` is shown only on the integrated canvas. This includes everything §9.3 lists,
   keeps hotspots visible in Big Picture (§6) and adds no causal edge.
 - **Levels**: `LEVEL_KINDS`. Big Picture keeps events, timeline order, groups, hotspots and `hotspot-on` edges.
-  Design Level adds the rest, `external` included (R17). Events are never dropped (R14).
+  Design Level adds the rest, `external` included (R17). Events are never dropped (R14), but for those marked `level design` at Big Picture (amendment below).
 - The graph is cyclic-safe: every element is one node, and the trie is finite (R10).
 
 ### Rendering: the existing graph, layout and Live View
@@ -258,6 +260,34 @@ These are pure functions of the storming IR (T5), with the types in `src/dtes/ir
   trip. A workspace with `.dtes` files only is not `empty`.
 - Web: a fourth view kind `storming` (picker of stormings), with a level toggle and a timeline select as UI state,
   kept like the other view settings (local storage), never in the DSL (R11, R12).
+
+## Amendment (2026-11-03): events at Design Level only
+
+The spec gains `level design` (spec §3.6, §6, R18): an event so marked is a detail of the mechanism and is shown at
+Design Level only. R14 now reads "an event without `level design` never disappears at Big Picture".
+
+- **Grammar**: a fifth clause, `clause = … | "level" level-value ;` with `level-value = name { "-" name } ;` (`EsLevelClause`,
+  `EsLevelValue`). `level` is a keyword (also a `name` of a `ref` path). The value takes any word, hyphens included,
+  so that `level big-picture` parses and gets a message of its own instead of a `SYNTAX` error. The IR has a clause
+  `{ type: 'level'; value }`; `isDesignLevelOnly(element)` is true for an event whose first `level` is `design`.
+- **Rules**: S004 also counts `level` (at most one), S006 reports `level` on anything but an event, and a new rule
+  **S016** (error) reports a value other than `design`: for `big-picture`, that no `level` already means both levels;
+  otherwise, that `design` is the only level (with `did you mean`). An invalid `level` hides nothing.
+- **Formatter**: no space around the hyphens of a value. It never reorders clauses; the canonical place of
+  `level design` is the last clause, after `ref`, which the guide, the examples and the agent's rules follow.
+- **Projection**: at Big Picture, `projectView` builds the prefix trie with the hidden events left out, as
+  `buildTrie` already does for steps naming no event. So the order edges join the neighbours of a hidden event, a
+  group of hidden events only has no step, a group keeps its visible events (its step key is theirs), and timelines that
+  differ only in hidden events share their prefix; the occurrences keep their source step paths. An event in no
+  timeline is hidden too. Hotspots stay; their `on` edge to a hidden event has no render node to end at and is not
+  drawn. With a timeline filter, the hotspots are chosen by the timeline's events, hidden ones included. Design Level
+  is unchanged, and the timeline axis is unchanged.
+- **Live View**: the inspector shows デザインレベルのみ / "Design Level only" next to the kind of such an event.
+- **Agent**: the run's input does not say which view or level a participant has open (the presence's `ViewLocation`
+  is ephemeral and never reaches a run), so the runner's rule is phrased on the event's nature: mark the fine-grained
+  events it adds while detailing a storming, and remove the clause to promote one. The answerer's prompt describes no
+  `.dtes` syntax and is unchanged.
+- tree-sitter and Zed still do not know `.dtes` (above), so there is nothing to keep in sync.
 
 ## Task interfaces
 

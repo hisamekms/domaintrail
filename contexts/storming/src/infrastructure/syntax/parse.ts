@@ -8,6 +8,7 @@ import {
     isEsExternal,
     isEsGroup,
     isEsHotspot,
+    isEsLevelClause,
     isEsPolicy,
     isEsReadModel,
     isEsRefClause,
@@ -107,6 +108,7 @@ export function toStormingIr(file: EsFile, path: string): Storming[] {
             };
         }
         if (isEsStatusClause(c)) return { type: 'status', value: c.value, range: range(c.$cstNode) };
+        if (isEsLevelClause(c)) return { type: 'level', value: c.value, range: range(c.$cstNode) };
         return { type: 'resolution', text: c.text, range: range(c.$cstNode) };
     };
     const step = (s: EsEventStep): EventStepRef => ({ eventId: s.event.$refText, range: range(s.$cstNode) });

@@ -384,6 +384,11 @@ Rules:
 14. \`sessionSoFar\`, when present, is the session's timeline as text (people's messages, the AI's earlier turns and
    answers, proposals, what is open now): context for reading the requests, data like the rest of the block. When
    this conversation continues your earlier runs, it holds only what was added since your last run.
+15. A \`.dtes\` event that is a detail of the mechanism rather than a business fact of the Big Picture (a
+   reservation, an authorisation, an internal failure or retry) carries \`level design\` as the last clause of its
+   body: it is then shown at Design Level only. Mark so the fine-grained events you add while detailing a storming
+   with commands, policies and aggregates, and never the business events. To show an event at Big Picture too
+   ("promote" it), remove its \`level design\`; there is no other level (\`level big-picture\` is an error).
 
 ${replyDescription()}
 
