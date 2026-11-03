@@ -49,7 +49,7 @@ export interface SessionData {
     /** What the running runs are doing, by run ID (the latest each reported; shown only while a run is running). */
     readonly activities: Readonly<Record<string, RunActivity>>;
     /** `link`, the facilitator's page: the pending join requests and the live invite (undefined elsewhere). */
-    readonly joining?: { readonly requests: readonly JoinRequestBody[]; readonly invite: InviteStateBody | null };
+    readonly joining?: { readonly requests: readonly JoinRequestBody[]; readonly invite: InviteStateBody | null; readonly inviteUsedUp: boolean };
 }
 
 const NO_ACTIVITIES: Readonly<Record<string, RunActivity>> = {};
@@ -73,7 +73,7 @@ export function useSession(socket: ViewSocket, current: ViewPayload | null): Ses
             subscribe((m) => {
                 if (m.type === 'session.activities') return setActivities(m.activities);
                 if (m.type === 'run.activity') return setActivities((a) => ({ ...a, [m.run]: m.activity }));
-                if (m.type === 'join.requests') return setJoining({ requests: m.requests, invite: m.invite });
+                if (m.type === 'join.requests') return setJoining({ requests: m.requests, invite: m.invite, inviteUsedUp: m.inviteUsedUp ?? false });
                 if (m.type === 'session.state') {
                     setEpoch((e) => e + 1);
                     setStatus('live');

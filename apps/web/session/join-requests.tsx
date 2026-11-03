@@ -1,8 +1,8 @@
 // The join requests of the `link` identity mode, in the chat's head of the facilitator's page: one compact row per
-// person waiting (their name, 許可, 拒否), as the server pushes them (`join.requests`). Nothing for anyone else, nor
-// when no one waits.
+// person waiting (their name, marked when someone has the same name, when they asked, 許可, 拒否), as the server pushes
+// them (`join.requests`), and a line once the invite link is used up. Nothing for anyone else, nor when nothing waits.
 import { useState } from 'react';
-import { UserPlus } from 'lucide-react';
+import { Users, UserPlus } from 'lucide-react';
 import { sessionApi } from './api';
 import { useChat } from './chat-context';
 import { failure } from './parts';
@@ -13,7 +13,9 @@ export function JoinRequests(props: { session: SessionData }) {
     const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
     const [error, setError] = useState<string | undefined>();
     const requests = props.session.joining?.requests ?? [];
-    if (props.session.me.participant.role !== 'facilitator' || requests.length === 0) return null;
+    const usedUp = props.session.joining?.inviteUsedUp ?? false;
+    if (props.session.me.participant.role !== 'facilitator' || (requests.length === 0 && !usedUp)) return null;
+    const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const decide = (id: string, decision: 'approve' | 'deny') => (): void => {
         setBusy((b) => new Set(b).add(id));
         setError(undefined);
@@ -34,6 +36,14 @@ export function JoinRequests(props: { session: SessionData }) {
                 <div key={r.id} className="join-request" data-join-request={r.name}>
                     <UserPlus size={14} aria-hidden className="muted" />
                     <span className="join-request-name">{r.name}</span>
+                    {r.duplicate && (
+                        <span className="join-request-same" role="img" aria-label={tx.chat.sameName} data-tooltip={tx.chat.sameName}>
+                            <Users size={13} aria-hidden />
+                        </span>
+                    )}
+                    <time className="join-request-time muted small" dateTime={r.requestedAt}>
+                        {time(r.requestedAt)}
+                    </time>
                     <button className="chat-small primary" disabled={busy.has(r.id)} onClick={decide(r.id, 'approve')}>
                         {tx.chat.joinApprove}
                     </button>
@@ -42,6 +52,11 @@ export function JoinRequests(props: { session: SessionData }) {
                     </button>
                 </div>
             ))}
+            {usedUp && (
+                <p className="small muted join-requests-used-up" data-tooltip={tx.chat.inviteUsedUpHint}>
+                    {tx.chat.inviteUsedUp}
+                </p>
+            )}
             {error && <p className="small error">{error}</p>}
         </div>
     );
