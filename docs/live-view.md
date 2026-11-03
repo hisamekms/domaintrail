@@ -5,26 +5,37 @@ serves the page at <http://127.0.0.1:4321> (`--port`, `--host`, or `open.port` /
 and runs until Ctrl+C. [Getting started](getting-started.md#watch-it-in-the-live-view) shows what to look at first;
 this page describes every pane.
 
-The screen has no header. It is laid out like an IDE: the left pane with its lists, the main canvas, and the inspector
-(right of the canvas, or below it); in a session, the chat is a pillar of its own at the right end. Panes are closed
+The app bar runs across the top; under it the screen is laid out like an IDE: the left pane with its lists, the main
+canvas, and the inspector (right of the canvas, or below it); in a session, the chat is a pillar of its own at the
+right end. Panes are closed
 and opened with the icon buttons at their top (a closed inspector leaves a narrow rail with the buttons that open it)
 and resized by dragging; all of it is remembered per browser. A pane slides in and out as it opens and closes (its
 content does not reflow on the way), and the canvas keeps what is at its center in place whenever its size changes
 (a pane, the window); the inspector moving between right and below fades out and back in. With the OS's "reduce
 motion" setting everything is instant.
 
+## App bar
+
+It holds only what concerns the whole page. At the left, DomainTrail and the workspace's name (the folder of
+`domaintrail.jsonc`), then the world switch: **ドメインモデル** (the `.dt` model, seen through three views) and
+**イベントストーミング** (the `.dtes` stormings; it can be chosen with no storming yet, and then says how to start one).
+Switching worlds returns to the view, the storming and the conditions last used in each. At the right end: 問題 (the
+number of errors, else warnings, as a badge; a click opens the problems in the left pane, and closes it again), and in
+a session the collab menu, the AI's state and, in Solo, ⋯ (see below). On a narrow window the world switch shows its
+icons only, each named in its tooltip.
+
 ## Left pane
 
-Its head names the workspace (the folder of `domaintrail.jsonc`) after DomainTrail. A column of icons at its left edge,
-the activity bar, picks the list it shows — 木, 問題 and 差分, with the number of problems and changes as badges — and
-clicking the list shown collapses the pane to the activity bar (it never disappears). At its foot:
+A column of icons at its left edge, the activity bar, picks the list it shows — 木 and 差分, with the number of changes
+as a badge (問題 is opened from the app bar) — and clicking the list shown collapses the pane to the activity bar (it
+never disappears). At its foot:
 
 - **The health**: a dot, green when all is well, larger and amber or red with a word when it is not (警告: connecting,
   no sources, an older diagram shown, warnings; エラー: the model does not validate, or the server is gone). A click
   shows the status, the number of files, the version, the time of the last update and the connection.
 - **The settings** (the gear): 名前の表示, the theme, the language and 文字の大きさ.
 
-Collapsed, the pane keeps the brand's mark at the top of the activity bar, and the health and the gear at its bottom.
+Collapsed, the pane keeps the health and the gear at the bottom of the activity bar.
 
 ### 木 (tree)
 
@@ -43,24 +54,26 @@ it, the items added, changed and removed since then. A removed item opens in the
 
 ## Main (center)
 
-Views of the whole model, in tabs. Under the tabs, every view's toolbar puts the same kinds of controls in the same
-places, leaving out what the view does not have: at the left the subject (what is looked at: the storming and its
-timeline) and then the level (how much of it is drawn: icons, named in their tooltips); at the right
+One row above the canvas, the view bar, holds what acts on the canvas only. It puts the same kinds of controls in the
+same places in every view, leaving out what the view does not have: in the domain model, first the view switch —
+マップ (the Context Map), 構造 (the Structure View) and カタログ — then the subject (what is looked at: the structure's
+focused contexts, the catalog's search, the storming and its timeline) and the level (how much of it is drawn: the
+structure's 詳細 / 概観 / 集約 with their names, the storming's two levels as icons named in their tooltips); at the right
 「⏷ 絞り込み」 (what is hidden: the BCs, the kinds, a storming's exceptions…, in a popover; while anything is narrowed
 the button shows how many narrowings are active, e.g. 「絞り込み 2」, and the popover clears them all with すべて解除),
 then 「⤓ 書き出し」 (a menu: 印刷, PDF, PNG, SVG; see [Printing and exporting](#printing-and-exporting)) — the
-catalog has 「印刷」 there instead. The toolbar says what is shown (what an AI is told the view was); the canvas's
-controls, how it is looked at. On a narrow canvas (a toolbar under 40rem) the right end's buttons drop their text
-(icons, named in their tooltips; the count stays) and the subject's names are cut short (the whole name in a
-tooltip); the right end stays, and goes onto a second row only when even that is not enough. Notices — the connection lost, a syntax error that keeps the last diagram, a revision that cannot be compared,
+catalog has 「印刷」 there instead. The view bar says what is shown (what an AI is told the view was); the canvas's
+controls, how it is looked at. As the canvas narrows, the bar gives up words in turn, each control keeping its name in
+a tooltip: first the right end's buttons become icons (the count stays), then the view switch, then the structure's
+levels; last, the subject's names are cut short with … (the whole name in a tooltip). Notices — the connection lost, a syntax error that keeps the last diagram, a revision that cannot be compared,
 a storming that stopped parsing — are a strip over the canvas. Anything about one selected item is in the inspector.
 See [ADR 0007](adr/0007-pane-roles.md).
 
 The canvas's controls sit at its bottom-left: `− 85% +` zooms out and in around the middle (the level shows live;
 a click on it goes back to 100%), ⤢ fits everything (`Shift+1`), ◎ fits the selection (`Shift+2`; disabled while
 nothing is selected), 詰めて表示 (two inward arrows, named in its tooltip) closes up the gaps between the notes and
-boxes of every diagram, the book (凡例,
-named in its tooltip) opens the legend upward, and « at the right end collapses the bar toward the corner, leaving only
+boxes of every diagram, the shapes (凡例,
+named in its tooltip) open the legend upward, and « at the right end collapses the bar toward the corner, leaving only
 », which brings it back (the legend's panel is hidden while collapsed and keeps its own open or closed state). `U` does the same as « and », and the choice is remembered per browser. Hovering an
 edge (its line or arrowhead) tells what it means, in the legend's words for that view (「参照（ID で別の集約へ）」…).
 The keys do nothing while typing. The inspector's 状態遷移 diagram has the same controls, without 詰めて表示, and
@@ -91,17 +104,16 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   contexts in 絞り込み (any number) to draw only them, with the elements they use and the elements that use them as
   stubs; the eye next to each other context hides its stubs and the edges to and from them (the BCs picked and the hidden stubs
   count as one narrowing each). The first row, 「すべての BC」, checks or unchecks every context and shows or hides every stub. Three
-  levels work in both, switched by the icons in the toolbar: 詳細 (every field), 概観 (the elements' names only) and
+  levels work in both, switched in the view bar: 詳細 (every field), 概観 (the elements' names only) and
   集約 (only the aggregates with their descriptions, and one edge per pair of aggregates that depend on each other,
   also through the entities, value objects and IDs they hold; shared contexts are left out, and a context without
   aggregates stays as a frame with its description).
 - **Catalog**: cards to look over the model, one section per kind; for now the domain primitives per context (shared
-  first) with base type, invariants and usages. The text filter is at the left of the toolbar (the catalog has no
+  first) with base type, invariants and usages. The text filter is in the view bar, after the view switch (the catalog has no
   subject or level); 絞り込み picks the BCs and the kinds (checkboxes with each kind's colour). The catalog's filter is
   not remembered across reloads, so that a reload never hides elements without saying so.
-- **Event Storming** (イベントストーミング, shown when the workspace has a `.dtes` storming; a workspace of `.dtes` files only
-  opens on it): one storming as sticky notes, laid out left to right (`dt guide storming-views`). The toolbar's
-  subject is a breadcrumb of two pickers: the storming (表示するストーミング; its name alone when there is only one) ▸ the
+- **Event Storming** (the イベントストーミング world; a workspace of `.dtes` files only opens on it): one storming as
+  sticky notes, laid out left to right (`dt guide storming-views`). The view bar's subject is a breadcrumb of two pickers: the storming (表示するストーミング; its name alone when there is only one) ▸ the
   タイムライン — すべて（統合） for the integrated canvas, or one timeline with its one-hop causal paths (a subject, not
   a filter: the two draw different things). The level icons are ビッグピクチャー (the telescope: events, timelines
   and hotspots only, without the events marked `level design`) and デザインレベル (the microscope: also commands, policies, actors, external systems, aggregates
@@ -143,20 +155,21 @@ their command's blue). The others' cursors and names have a light halo, so that 
 
 ## Printing and exporting
 
-The browser's print (Ctrl+P / ⌘P) prints the current diagram alone — without the panes, the chat, the toolbars, the
+The browser's print (Ctrl+P / ⌘P) prints the current diagram alone — without the panes, the chat, the bars, the
 canvas's controls or the legend — fitted whole to one landscape page, in the light colours whatever the theme. The
 paper size is chosen in the browser's print dialog; the diagram is scaled to it. The diagram is printed in its compact
 layout when the page has it (詰めて表示 on, or printed before), else in the layout shown.
 
 The page has no margin of the browser's, so the browser prints no header or footer of its own (the page's title, its
 URL, the date); the sheet keeps its own margin. Above the diagram, one line says what it is and how it is shown, in the
-display mode's names: the workspace, the view and what in it is shown, then its conditions, e.g.
+display mode's names: the workspace, the world, the view and what in it is shown, then its conditions, e.g.
+`ws › ドメインモデル › 構造図 · 詳細` or
 `ws › イベントストーミング › 住民票などのコンビニ交付 › コンビニでの発行 · デザインレベル · 例外を含む` (an Event Storming
 view: the storming, すべて（統合）, a stage or a timeline, the level, and whether the exceptions are drawn when the storming
 has some; the Structure View: the focused contexts, if any, and the level; the Context Map: すべてのコンテキスト when
 shared and external BCs are shown). Nothing else is printed (no date, no version).
 
-書き出し at the right end of the view's toolbar opens a menu below it. Its **印刷** is the surer way to print: it gets
+書き出し at the right end of the view bar opens a menu below it. Its **印刷** is the surer way to print: it gets
 the compact layout first (the button spins meanwhile), then opens the print dialog. The catalog has 「印刷」 there
 instead: it prints as a page, its list without the panes around it (it has no export). The menu:
 
@@ -253,10 +266,11 @@ See [ADR 0001](adr/0001-mvp-implementation-decisions.md) for the design decision
 ## In a session
 
 Under `dt collab` (and `dt open`, for one person) the session's chat is a pillar at the right end of the page, the whole height,
-the same for everyone and open when the page joins. Its head shows the collab menu (the avatars and the participants online ▾: who is where, the invite link,
-ソース一式をダウンロード, 退出, and the facilitator's actions; see [`dt guide session`](guide.md#collaboration-sessions)) and
-the agent's status at a glance (running and for how long, waiting for an answer, or queued; nothing when idle), with ✕ to
-close it. A click on the status (AI の作業を見る) switches to AI の作業 and opens the card it stands for — the running one,
+the same for everyone and open when the page joins. Its head holds its two views and ✕ to close it. The app bar's right
+end shows the collab menu (the avatars and the participants online ▾: who is where, the invite link,
+ソース一式をダウンロード, 退出, and the facilitator's actions; see [`dt guide session`](guide.md#collaboration-sessions); in
+Solo a plain ⋯) and the agent's status at a glance (running and for how long, waiting for an answer, or queued; nothing
+when idle). A click on the status (AI の作業を見る) opens the chat on AI の作業 and the card it stands for — the running one,
 else the next to run, else the one waiting longest for an answer — scrolled to and marked for a moment, besides those
 already open; the chat keeps its scroll, so チャット brings the reader back where they were. While the chat is closed, a round 💬 button at the bottom right of the
 canvas opens it again, marked with a spinner while the agent runs, `?` while it waits for an answer, and the number of
