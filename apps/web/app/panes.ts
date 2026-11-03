@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { InspectorTab } from '../inspector';
+import { useLegends, type Legends } from './legends';
 import { clampSize, usePersistentState } from '../shared/layout';
 import { effectiveLayout, keptOverrides, NO_OVERRIDES, type Overrides } from './responsive';
 import { scaledSize } from './text-size';
@@ -8,7 +9,7 @@ import { scaledSize } from './text-size';
 export type LeftView = 'tree' | 'problems' | 'changes';
 
 /**
- * Which panes are open, their sizes and contents, and whether the legend is open (remembered per browser). The left
+ * Which panes are open, their sizes and contents, and whether each view's legend is open (remembered per browser). The left
  * column is as shown: on a narrow window with the conversation open the page may override the reader's saved choice
  * (`responsive.ts`); setting it then changes what is shown only, not what is saved.
  */
@@ -35,8 +36,8 @@ export interface Panes {
     conversationWidth: number;
     /** The conversation's width; null goes back to the default. */
     setConversationWidth: (width: number | null) => void;
-    legendOpen: boolean;
-    setLegendOpen: (open: boolean) => void;
+    /** Each view's legend, open or closed on its own (hidden by default). */
+    legends: Legends;
     inspectorTab: InspectorTab;
     setInspectorTab: (tab: InspectorTab) => void;
     /** Opens the detail on `tab` (and the left column with it). */
@@ -90,7 +91,7 @@ export function usePanes(uiScale = 1): Panes {
     const [detailHeight, setDetailHeight] = usePersistentState<number | null>('domaintrail.layout.detailHeight', null);
     const [conversationOpen, setConversationOpen] = useState(false);
     const [conversationWidthSaved, setConversationWidth] = usePersistentState<number | null>('domaintrail.layout.conversationWidth', null);
-    const [legendOpen, setLegendOpen] = usePersistentState('domaintrail.layout.legend', true);
+    const legends = useLegends();
     const [inspectorTab, setInspectorTab] = usePersistentState<InspectorTab>('domaintrail.inspector.tab', 'structure');
 
     const explorerWidth = paneSize(explorerWidthSaved, DEFAULT_PANE_SIZES.explorerWidth, uiScale);
@@ -136,8 +137,7 @@ export function usePanes(uiScale = 1): Panes {
         setConversationOpen,
         conversationWidth,
         setConversationWidth,
-        legendOpen,
-        setLegendOpen,
+        legends,
         inspectorTab,
         setInspectorTab,
         openInspector,
