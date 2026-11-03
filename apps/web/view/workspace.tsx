@@ -9,6 +9,7 @@ import { type CatalogFilter, contextLabels } from '../model-utils';
 import type { LegendView } from '../legend';
 import { StormingToolbar } from '../storming';
 import { applyTheme, type Theme } from '../theme';
+import { workspaceName } from '../app/health';
 import { useViewCamera } from './camera';
 import { useCenterOnResize } from './center';
 import { CanvasControls, EdgeHint } from './canvas-controls';
@@ -18,7 +19,9 @@ import { fitAll } from './canvas';
 import type { DiagramCanvas } from './diagram';
 import { activeFilterCount } from './filters';
 import { useViewGraph, type ViewGraph } from './graph';
+import { useExportOptions, type ExportOptions } from './export';
 import { PrintSheet, printKind, usePrint, usePrintWhenReady, type Printer } from './print';
+import { canvasSubject, sheetHeading } from './sheet';
 import { isCanvas, useNavigation, useOpenOnStormings, useSelectOnCanvas, type Navigation } from './navigation';
 import { useViewSettings, type ViewSettings } from './settings';
 import { FilterPopover, FilterSection, LevelSwitch, ToolbarEnd, ToolbarSubject } from './toolbar';
@@ -36,6 +39,8 @@ export interface Workspace {
     /** The catalog's filter (a session's message carries it as where it was sent from). */
     catalog: { filter: CatalogFilter; setFilter: (filter: CatalogFilter) => void };
     printer: Printer;
+    /** What an export (and a print) includes besides the diagram, remembered. */
+    exportOptions: { options: ExportOptions; setOptions: (options: ExportOptions) => void };
 }
 
 /**
@@ -50,6 +55,7 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
     const settings = useViewSettings();
     const catalog = useCatalogFilter();
     const printer = usePrint(theme);
+    const [exportOptions, setExportOptions] = useExportOptions();
     // printing a diagram prints its compact layout
     const viewGraph = useViewGraph(current, nav.view, settings, stormings, settings.compact || printer.phase !== 'idle');
     usePrintWhenReady(printer, isCanvas(nav.view) ? viewGraph.graph : null);
@@ -65,7 +71,7 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
 
     const onMount = useCallback((c: DiagramCanvas) => setCanvas(c), []);
 
-    return { canvas, onMount, stormings, nav, settings, viewGraph, catalog, printer };
+    return { canvas, onMount, stormings, nav, settings, viewGraph, catalog, printer, exportOptions: { options: exportOptions, setOptions: setExportOptions } };
 }
 
 /** The center of the page: the view tabs, the current view's toolbar, and the canvas (or the catalog). */
@@ -102,6 +108,11 @@ export function ViewWorkspace(props: {
               : view.kind === 'storming'
                 ? 'storming'
                 : `${structureLevel === 'aggregates' ? 'aggregates' : 'structure'}${focusKey ? 'Focus' : ''}`;
+    /** What the canvas shows, as a printed diagram says it (its heading). */
+    const subject = canvasSubject(view.kind, settings, focusKey ? checked : [], model, stormings);
+    const wsName = current ? workspaceName(current.root) : undefined;
+    const heading = subject ? sheetHeading(wsName, subject, t, mode) : '';
+    const { options: exportOptions } = workspace.exportOptions;
     /** Fits the whole view: a storming view like when it is shown (its graph, never zoomed in past normal size). */
     const fitView = (): void => {
         if (!canvas) return;
@@ -206,7 +217,7 @@ export function ViewWorkspace(props: {
                     />
                 )}
                 {printer.phase === 'printing' && printKind(isCanvas(view)) === 'diagram' && current && graph && (
-                    <PrintSheet graph={graph} current={current} mode={mode} />
+                    <PrintSheet graph={graph} current={current} mode={mode} heading={heading} legend={exportOptions.legend ? legendView : null} />
                 )}
                 <EdgeHint canvas={canvas} view={legendView} />
                 {nothing ? (

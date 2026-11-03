@@ -7686,6 +7686,10 @@ label.proposal-option {
     top: 0;
     width: 100vw;
     height: 100vh;
+    /* the page's margin (the @page has none, so that the browser adds no header or footer of its own) */
+    padding: 10mm;
+    display: flex;
+    flex-direction: column;
     visibility: hidden;
     pointer-events: none;
     z-index: -1;
@@ -7693,9 +7697,26 @@ label.proposal-option {
 }
 .print-sheet-svg {
     display: block;
+    flex: 1;
+    min-height: 0;
     width: 100%;
-    height: 100%;
     overflow: visible;
+}
+/* the line above the diagram: where it is and how it is shown (the page has no header of the browser's) */
+.print-heading {
+    flex: none;
+    margin-bottom: 4mm;
+    overflow: hidden;
+    font-size: 10pt;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--text-secondary);
+}
+/* the view's legend, under the diagram at the left */
+.print-legend {
+    flex: none;
+    align-self: flex-start;
+    margin-top: 4mm;
 }
 .print-sheet-boxes {
     position: relative;

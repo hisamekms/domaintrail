@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import type { DisplayMode, Lang, ViewLevel } from '@domaintrail/visualization';
+import type { DisplayMode, Lang, StructureLevel, ViewLevel } from '@domaintrail/visualization';
 import type { ElementKind } from '@domaintrail/modeling';
 import type { SemanticEdgeKind, StormingElementKind as EsElementKind } from '@domaintrail/storming';
 import type { Connection } from './app/useViewSocket';
@@ -108,6 +108,13 @@ const ja = {
         compactOff: '詰めて表示をやめる',
         print: '印刷（1 ページに収める）',
         printing: '印刷の準備中…',
+    },
+    /** The line above a printed or exported diagram: what it is and how it is shown. */
+    sheet: {
+        structureLevels: { detail: '詳細', overview: '概観', aggregates: '集約' } as Record<StructureLevel, string>,
+        allContexts: 'すべてのコンテキスト',
+        withExceptions: '例外を含む',
+        withoutExceptions: '例外を除く',
     },
     transitionLabels: '遷移のラベル',
     transitionLabelModes: {
@@ -974,6 +981,12 @@ const en: Messages = {
         compactOff: 'Back to normal spacing',
         print: 'Print (fitted to one page)',
         printing: 'Preparing to print…',
+    },
+    sheet: {
+        structureLevels: { detail: 'Detail', overview: 'Overview', aggregates: 'Aggregates' },
+        allContexts: 'All contexts',
+        withExceptions: 'with exceptions',
+        withoutExceptions: 'without exceptions',
     },
     transitionLabels: 'Transition labels',
     transitionLabelModes: {
