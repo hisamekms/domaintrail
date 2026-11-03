@@ -30,7 +30,7 @@ function aggregateNames(model: DomainModel | null, id: string): { name: string; 
     return r?.kind === 'element' ? { name: r.el.name, label: r.el.label } : { name: id };
 }
 
-/** The Live View page: composes the shell with the left pane's lists, the view workspace, the inspector and, in a session, the chat. */
+/** The Live View page: composes the shell with the left column's lists and detail (the inspector), the view workspace and, in a session, the chat. */
 export function App() {
     const socket = useViewSocket();
     const { current, connection } = socket;
@@ -194,10 +194,8 @@ export function App() {
                     />
                 }
                 {...(session.conversation && { conversation: session.conversation })}
-                inspector={(menu) => (
+                inspector={
                     <Inspector
-                        menu={menu}
-                        dock={panes.inspectorDock}
                         model={model}
                         mode={mode}
                         selected={selected}
@@ -261,7 +259,7 @@ export function App() {
                         onBack={goBack}
                         onClose={() => setInspectorOpen(false)}
                     />
-                )}
+                }
                 overlays={
                     current &&
                     baselineAnchor &&

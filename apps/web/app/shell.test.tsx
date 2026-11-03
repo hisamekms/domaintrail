@@ -8,12 +8,10 @@ import { AppShell } from './shell';
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- what the shell reads of the panes
 const panes = {
     explorerOpen: true,
-    explorerWidth: 260,
+    explorerWidth: 280,
     leftView: 'problems',
     inspectorOpen: true,
-    inspectorDock: 'right',
-    inspectorWidth: 320,
-    inspectorHeight: 320,
+    detailHeight: 300,
     conversationOpen: false,
     conversationWidth: 380,
 } as unknown as Panes;
@@ -34,7 +32,7 @@ const html = renderToStaticMarkup(
             settings={null}
             banners={null}
             workspace={null}
-            inspector={() => null}
+            inspector={<div className="inspector-slot" />}
             overlays={null}
         />
     </I18nProvider>,
@@ -58,5 +56,37 @@ describe('the app bar', () => {
     test('the activity bar keeps the tree and the changes', () => {
         const rail = html.slice(html.indexOf('class="activity-bar"'));
         expect([...rail.slice(0, rail.indexOf('</div>')).matchAll(/aria-label="([^"]+)"/g)].map((m) => m[1])).toEqual(['サイドバーの一覧', '木', '差分']);
+    });
+});
+
+describe('the left column', () => {
+    const left = html.slice(html.indexOf('<div class="left open"'), html.indexOf('<div class="main">'));
+
+    // not laid out here: the column has no height, so the detail keeps its minimum
+    test('the navigator on top, then the splitter, then the detail (the inspector) at its height', () => {
+        const order = ['class="navigator"', 'class="resizer resizer-y resizer-grip"', 'class="detail open" style="height:140px"', 'inspector-slot'].map((c) =>
+            left.indexOf(c),
+        );
+        expect(order.every((at) => at >= 0)).toBe(true);
+        expect([...order].sort((a, b) => a - b)).toEqual(order);
+        // the canvas column holds no inspector any more
+        expect(html.slice(html.indexOf('<div class="main">'))).not.toContain('inspector-slot');
+    });
+
+    test('the splitter is a focusable horizontal separator with its value', () => {
+        const splitter = /<div class="resizer resizer-y resizer-grip"[^>]*>/.exec(left)?.[0] ?? '';
+        expect(splitter).toContain('role="separator"');
+        expect(splitter).toContain('tabindex="0"');
+        expect(splitter).toContain('aria-orientation="horizontal"');
+        expect(splitter).toContain('aria-valuenow="140"');
+        expect(splitter).toContain('aria-valuemin="140"');
+        expect(splitter).toContain('aria-label="詳細の高さ');
+    });
+
+    test("the column's own edge is a vertical separator after it", () => {
+        const edge = html.slice(html.indexOf('<div class="left-foot">'), html.indexOf('<div class="main">'));
+        expect(edge).toMatch(
+            /<div class="resizer resizer-x" role="separator" tabindex="0" aria-label="左の列の幅[^"]*" aria-orientation="vertical" aria-valuenow="280"/,
+        );
     });
 });

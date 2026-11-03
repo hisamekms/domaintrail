@@ -2259,8 +2259,9 @@ select,
     white-space: nowrap;
 }
 
-/* The left pane: the activity bar and the lists, and its foot (the health and the settings). Collapsed, it is the
-   44px activity bar (BAR_WIDTH in app/shell.tsx), the health and the settings at the bottom. */
+/* The left column: the activity bar, the navigator (the lists) over the detail (the inspector), and its foot (the
+   health and the settings). Collapsed, it is the 44px activity bar (BAR_WIDTH in app/shell.tsx), the health and the
+   settings at the bottom. */
 .left {
     flex: none;
     display: flex;
@@ -2444,14 +2445,52 @@ select,
     white-space: nowrap;
 }
 
-/* the canvas and the dock (the inspector, right of the canvas or below it), then the conversation */
+/* the navigator over the detail, a splitter with a grip between them */
+.navigator {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+/* the detail slides between its height (DETAIL_MIN… in app/panes.ts) and a 28px rail (RAIL_SIZE in app/shell.tsx)
+   with the button that opens it */
+.detail {
+    flex: none;
+    position: relative;
+    /* clip: never scrolled, not even to show a focused or clicked element of a closed detail */
+    overflow: clip;
+    border-top: 1px solid var(--border);
+    transition: height var(--pane-duration) var(--pane-easing);
+}
+.detail > .rail,
+.detail > .detail-inner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    transition: opacity var(--pane-duration) var(--pane-easing);
+}
+.detail-inner {
+    display: flex;
+    flex-direction: column;
+}
+.detail:not(.open) > .detail-inner,
+.detail.open > .rail {
+    opacity: 0;
+}
+.detail > .rail {
+    flex-direction: row;
+    width: auto;
+    height: 28px;
+    padding: 0 6px;
+    gap: 4px;
+}
+
+/* the canvas column */
 .main {
     flex: 1;
     min-width: 0;
     display: flex;
-}
-.main.main-bottom {
-    flex-direction: column;
 }
 .canvas-pane {
     position: relative;
@@ -2469,71 +2508,12 @@ select,
     border-bottom-color: color-mix(in srgb, var(--error) 35%, transparent);
     color: var(--error);
 }
-/* the dock slides between its size and a 28px rail (RAIL_SIZE in app/shell.tsx) with the buttons that open it */
-.dock {
-    flex: none;
-    position: relative;
-    /* clip: never scrolled, not even to show a focused or clicked element of a collapsed pane */
-    overflow: clip;
-    background: var(--panel);
-    transition:
-        width var(--pane-duration) var(--pane-easing),
-        height var(--pane-duration) var(--pane-easing),
-        opacity var(--motion-swap) var(--motion-ease-standard);
-}
-.dock-right {
-    border-left: 1px solid var(--border);
-}
-.dock-bottom {
-    border-top: 1px solid var(--border);
-}
-.dock > .pane,
-.dock > .rail {
-    position: absolute;
-    transition: opacity var(--pane-duration) var(--pane-easing);
-}
-.dock-right > * {
-    top: 0;
-    bottom: 0;
-    right: 0;
-}
-.dock-bottom > * {
-    top: 0;
-    left: 0;
-    right: 0;
-}
-.dock:not(.open) > .pane,
-.dock.open > .rail {
-    opacity: 0;
-}
-.dock-bottom > .rail {
-    flex-direction: row;
-    width: auto;
-    height: 28px;
-    padding: 0 6px;
-    gap: 4px;
-}
-.dock-content {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-}
-.dock-content[hidden] {
-    display: none;
-}
 .rail {
     width: 28px;
     padding-top: 6px;
     display: flex;
     flex-direction: column;
     align-items: center;
-}
-.rail .count {
-    margin: 4px 0 0;
-}
-.dock-bottom > .rail .count {
-    margin: 0;
 }
 /* the dock's menu (⋯ in its head) */
 .pane-menu {
@@ -2693,6 +2673,23 @@ svg.chat-launcher-mark {
 .resizer:hover,
 .resizer:active {
     background: var(--resizer);
+}
+.resizer:focus-visible {
+    outline: none;
+    background: var(--resizer);
+    box-shadow: 0 0 0 2px var(--focus-ring);
+}
+/* the split of the left column: a handle seen at rest, with a grip in its middle */
+.resizer-grip::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 1.75rem;
+    height: 3px;
+    margin: -1.5px 0 0 -0.875rem;
+    border-radius: 2px;
+    background: var(--border-strong);
 }
 .pad {
     padding: 10px 14px;
@@ -3335,9 +3332,9 @@ svg.chat-launcher-mark {
     display: flex;
     padding: 0 6px;
     border-bottom: 1px solid var(--border);
-    /* six tabs for an aggregate: a narrow inspector scrolls them rather than breaking the labels */
-    overflow-x: auto;
-    scrollbar-width: none;
+    /* six tabs for an aggregate: in the left column they wrap onto a second row rather than breaking the labels or
+       hiding the last ones */
+    flex-wrap: wrap;
 }
 .subtabs button {
     flex: none;
@@ -3414,16 +3411,16 @@ svg.chat-launcher-mark {
 
 /* no animation while dragging a resizer, nor when the OS asks for less motion */
 .resizing .left,
-.resizing .dock,
+.resizing .detail,
 .resizing .conversation {
     transition: none;
 }
 @media (prefers-reduced-motion: reduce) {
     .left,
     .left-pane,
-    .dock,
-    .dock > .pane,
-    .dock > .rail,
+    .detail,
+    .detail > .rail,
+    .detail > .detail-inner,
     .conversation,
     .conversation-inner,
     .legend-slot,
@@ -3445,7 +3442,7 @@ svg.chat-launcher-mark {
     /* a pane opening (and the others giving way) / closing */
     --motion-enter: 220ms;
     --motion-exit: 160ms;
-    /* the inspector fading out before it moves (right ↔ below), then in */
+    /* a part changing in place cross-fades (the chat's activity line, an answer taking a card's place) */
     --motion-swap: 120ms;
     /* a menu, a popover or a suggestion list appearing (it disappears at once) */
     --motion-pop: 120ms;
@@ -3473,7 +3470,7 @@ svg.chat-launcher-mark {
     }
 }
 
-/* The panes (the left pane, the inspector, the chat) open and close at the pace of the change: `motion-enter` as soon
+/* The panes (the left column, the detail, the chat) open and close at the pace of the change: `motion-enter` as soon
    as one opens, `motion-exit` when they only close (usePaneMotion, on .app). The outer box's size moves, clipped; its
    content keeps the size it ends with and slides in with the box's moving edge as it fades, so that nothing is laid
    out again on the way. A drag of a pane's edge stays instant (.resizing). */
@@ -3500,15 +3497,6 @@ svg.chat-launcher-mark {
     right: 0;
     bottom: 0;
 }
-/* the inspector, on the right: with its left edge; below the canvas: with its top edge, at its final width (set by
-   the shell) while the chat opens or closes beside it */
-.dock-right > .pane {
-    right: auto;
-    left: 0;
-}
-.dock-bottom > .pane {
-    right: auto;
-}
 /* the chat: with its left edge, fading */
 .conversation-inner {
     right: auto;
@@ -3516,10 +3504,6 @@ svg.chat-launcher-mark {
     transition: opacity var(--pane-duration) var(--pane-easing);
 }
 .conversation:not(.open) .conversation-inner {
-    opacity: 0;
-}
-/* the inspector moving (right ↔ below): it fades out, moves, and fades in, without changing shape on the way */
-.dock.moving {
     opacity: 0;
 }
 
@@ -7912,7 +7896,6 @@ label.proposal-option {
     }
     .left,
     .resizer,
-    .dock,
     .conversation,
     .launcher-slot,
     .banners,
