@@ -296,11 +296,11 @@ describe('the answerer role', () => {
 
     test("an interview's turn: the interviewer's prompt (what to find out, the language, the transcript), a question or a brief", async () => {
         const { api, push, results } = fakeApi();
-        const lines = ['目的', '範囲', '使い道', 'レベル'].map((head) => ({ head, text: 'x' }));
+        const journey = { purpose: '返金を早める', participants: ['窓口担当'], use: 'modeling', level: 'BigPicture' };
         const agent = fakeAgent([
             { structured: { kind: 'question', question: 'どの業務ですか？' }, text: '', model: 'opus' },
-            { structured: { kind: 'brief', brief: { name: 'Returns', label: '返品', isNew: true, replaces: false, lines } }, text: '' },
-            { structured: { kind: 'brief', brief: { name: '返品', isNew: true, replaces: false, lines } }, text: '' },
+            { structured: { kind: 'brief', brief: { name: 'Returns', label: '返品', isNew: true, journey } }, text: '' },
+            { structured: { kind: 'brief', brief: { name: '返品', isNew: true, journey } }, text: '' },
             {
                 structured: {
                     kind: 'question',
@@ -335,13 +335,15 @@ describe('the answerer role', () => {
             'One question per turn',
             'Write in Japanese',
             'the first and the last events',
-            '目的 / 範囲 / 使い道 / レベル',
+            '「どこまで進めますか」',
+            'participants: [roles]',
             '"focus": "@{es:Returns}"',
             'SO-FAR',
             '<interview-n1>',
         ])
             expect(prompt).toContain(part);
-        expect(prompt).toContain('their `///` descriptions above `storming`');
+        expect(prompt).toContain('`journeys` (the journey file');
+        expect(prompt).toContain('dt writes the brief into the journey');
         // choices when the question has natural candidates, from the workspace, kept out of the question's text
         for (const part of [
             'give them in `choices` (2 to\n  6',
@@ -358,7 +360,7 @@ describe('the answerer role', () => {
         push({ kind: 'job', job: interview(2, 'en') });
         await waitFor(() => results.length === 2);
         expect(agent.turns[1].turn.prompt).toContain('Write in English');
-        expect(results[1].result).toMatchObject({ kind: 'brief', brief: { name: 'Returns', label: '返品', isNew: true, lines } });
+        expect(results[1].result).toMatchObject({ kind: 'brief', brief: { name: 'Returns', label: '返品', isNew: true, journey } });
         // an invalid brief is reported as failed
         push({ kind: 'job', job: interview(3) });
         await waitFor(() => results.length === 3);

@@ -445,12 +445,11 @@ Rules:
    it on a business event of the Big Picture. An event you add for a request sent at Design Level (\`viewedAt.level:
    "design"\`) that is a detail of the mechanism gets \`level design\`; for a request sent at Big Picture, add no such
    event unless the request asks for it.
-16. \`confirmedBrief\`, when present: the person who ran an interview (\`/es\` or \`/model\`) confirmed this brief; it,
-   not the request, is what to do. Write its \`lines\` as they are, one \`///\` line each, as the description directly
-   above \`storming <name>\` (\`for: "storming"\`, a \`.dtes\` file) or \`context <name>\` (\`for: "context"\`, a \`.dt\`
-   file). When \`create\` is true it does not exist yet: create it with the brief and its \`label\` and nothing else (a
-   new file named after it, beside the other stormings or contexts). Replace an existing description only when
-   \`replaceExistingDescription\` is true; else keep it and add the brief's lines below it. Change nothing else.
+16. \`confirmedBrief\`, when present: the person who ran \`/es:start\` confirmed the brief of a new storming; it, not
+   the request, is what to do. dt has already written the brief into \`domaintrail.journey.json\` (never edit that
+   file). Create the storming only: \`storming <name> "<label>" { }\` in a new \`.dtes\` file named after it, beside
+   the other stormings, with its \`description\` (when given) as its one \`///\` line directly above it — a short
+   description of what it is, never the brief. Change nothing else.
 17. A \`.dtes\` storming that goes through several phases is organised in \`stage\`s, in time order, each \`after\`
    the one before it (\`stage Issuance "発行" after Preparation { … }\`). In a stage (or a storming without stages),
    the normal flow is a \`timeline\`, written first; each exception is an \`exception\` that starts with the event of
@@ -493,15 +492,12 @@ function chosenCandidatesOf(c: Json<Collaboration.CandidatesInstruction>): Recor
     };
 }
 
-/** A confirmed brief as the run's data shows it (rule 16). */
+/** A confirmed brief as the run's data shows it (rule 16): the new storming to create, its label and short description. */
 function confirmedBriefOf(b: Json<Collaboration.BriefInstruction>): Record<string, unknown> {
     return {
-        for: b.command === 'Es' ? 'storming' : 'context',
-        name: b.brief.name,
+        storming: b.brief.name,
         ...(b.brief.label !== undefined && { label: b.brief.label }),
-        create: b.brief.isNew,
-        replaceExistingDescription: b.brief.replaces,
-        lines: b.brief.text.split('\n').filter((l) => l.trim() !== ''),
+        ...(b.brief.description !== undefined && { description: b.brief.description }),
     };
 }
 

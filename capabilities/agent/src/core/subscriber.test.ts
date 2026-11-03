@@ -290,27 +290,33 @@ describe('the session so far, approved proposals and answering instead of editin
 });
 
 describe("an interview's confirmed brief (the `/` commands)", () => {
-    test('the brief is data in the block, its lines as they go above the storming; rule 16 says where and when to replace', () => {
+    test('a new storming to create: its ID, label and short description in the block; rule 16 says dt wrote the brief', () => {
         const message = frozen({ kind: 'DtElement', element: 'Sales.Order' }, 'まずビッグピクチャーで');
         const run: Json<Collaboration.RunInput> = {
             ...input([{ ...message, targets: [] }]),
             brief: {
                 interview: crypto.randomUUID(),
                 command: 'Es',
-                brief: { name: 'Returns', label: '返品', isNew: true, replaces: false, text: '目的: 返金を早める\n範囲: 申請から返金まで' },
+                brief: {
+                    name: 'Returns',
+                    label: '返品',
+                    isNew: true,
+                    replaces: false,
+                    text: '目的: 返金を早める\n範囲: 申請から返金まで',
+                    description: '返品の受付から返金まで',
+                },
             },
         };
         const prompt = buildPrompt(run, new Map(), 'n');
+        // the brief itself is not the run's: dt wrote it into the journey file
         expect((block(prompt, 'n') as { confirmedBrief: unknown }).confirmedBrief).toEqual({
-            for: 'storming',
-            name: 'Returns',
+            storming: 'Returns',
             label: '返品',
-            create: true,
-            replaceExistingDescription: false,
-            lines: ['目的: 返金を早める', '範囲: 申請から返金まで'],
+            description: '返品の受付から返金まで',
         });
         expect(prompt).toContain('16. `confirmedBrief`, when present');
-        expect(prompt).toContain('Replace an existing description only when');
+        expect(prompt).toContain('dt has already written the brief into `domaintrail.journey.json`');
+        expect(prompt).not.toContain('Replace an existing description only when');
         expect(block(buildPrompt(input([message]), new Map(), 'n'), 'n')).not.toHaveProperty('confirmedBrief');
     });
 });
@@ -635,8 +641,9 @@ describe('the Claude Code arguments', () => {
             'Edit(./[dD][oO][mM][aA][iI][nN][tT][rR][aA][iI][lL].[jJ][sS][oO][nN][cC])',
             'Edit(**/[dD][oO][mM][aA][iI][nN][tT][rR][aA][iI][lL].[jJ][sS][oO][nN][cC])',
         ]);
-        expect(CONFIG_EDIT_DENIED).toHaveLength(16);
-        for (const name of ['domaintrail.json', 'domaintrail.local.jsonc', 'domaintrail.local.json'])
+        // and the journey file, which only dt writes
+        expect(CONFIG_EDIT_DENIED).toHaveLength(20);
+        for (const name of ['domaintrail.json', 'domaintrail.local.jsonc', 'domaintrail.local.json', 'domaintrail.journey.json'])
             expect(CONFIG_EDIT_DENIED).toEqual(expect.arrayContaining([`Edit(**/${name})`, `Edit(**/${caseless(name)})`]));
         expect(caseless('a\\*b.Ü1')).toBe('[aA]\\*[bB].[üÜ]1');
         expect(claudeArguments([], undefined, { configFiles: ['/w/conf/team.jsonc', 'conf/team.local.jsonc'] })).toEqual([
