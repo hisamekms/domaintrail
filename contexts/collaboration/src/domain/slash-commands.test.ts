@@ -34,16 +34,19 @@ describe('the commands and their IDs', () => {
     });
 
     test('the other commands: their type and who starts them', () => {
-        // the work on a storming in its order (the flow, then its details), then the session's
-        expect(SLASH_COMMAND_NAMES).toEqual(['es:exceptions', 'es:gaps', 'es:levels', 'es:names', 'es:recap', 'es:next']);
+        // the work on a storming in its order (the flow, then its details), then the session's; the hint, of no prefix
+        expect(SLASH_COMMAND_NAMES).toEqual(['es:exceptions', 'es:gaps', 'es:levels', 'es:names', 'es:recap', 'hint']);
         const candidates = { type: 'candidates', reply: 'candidates', facilitatorOnly: true, needsStorming: true } as const;
         expect(slashCommandOf('es:exceptions')).toEqual({ kind: 'EsExceptions', ...candidates });
         expect(slashCommandOf('es:gaps')).toEqual({ kind: 'EsGaps', ...candidates });
         expect(slashCommandOf('es:levels')).toEqual({ kind: 'EsLevels', ...candidates });
         expect(slashCommandOf('es:names')).toEqual({ kind: 'EsNames', ...candidates });
         expect(slashCommandOf('es:recap')).toEqual({ kind: 'EsRecap', type: 'answer', reply: 'answer', facilitatorOnly: false, needsStorming: false });
-        // anyone's, about the storming in view, answered in a shape of its own
-        expect(slashCommandOf('es:next')).toEqual({ kind: 'EsNext', type: 'answer', reply: 'next', facilitatorOnly: false, needsStorming: true });
+        // anyone's, about the event storming and the modeling alike (no storming needed), answered in a shape of its own
+        expect(slashCommandOf('hint')).toEqual({ kind: 'Hint', type: 'answer', reply: 'next', facilitatorOnly: false, needsStorming: false });
+        expect(slashCommandName('Hint')).toBe('hint');
+        // the former ID is no command any more (a stored one reads as a Hint: `legacy.ts`)
+        expect(slashCommandOf('es:next')).toBeUndefined();
         expect(slashCommandOf('es:start')).toBeUndefined();
         expect(slashCommandOf('constructor')).toBeUndefined();
         expect(slashCommandName('EsRecap')).toBe('es:recap');
@@ -121,7 +124,7 @@ describe("the answerer's candidates", () => {
         expect(readCommandReply({ kind: 'candidates', candidates: [] }, 'answer')).toMatchObject({ ok: false });
     });
 
-    test("/es:next's steps: read, clamped to three, one line each, an unknown command dropped; the message written from them", () => {
+    test("/hint's steps: read, clamped to three, one line each, an unknown command dropped; the message written from them", () => {
         const step = (text: string, more: object = {}): object => ({ text, reason: `${text} の理由`, ...more });
         const read = readCommandReply(
             {
@@ -146,11 +149,20 @@ describe("the answerer's candidates", () => {
                 },
             },
         });
-        // a command the steps may not suggest (itself, a model one) is dropped, the step kept
-        const odd = readCommandReply({ kind: 'next', status: 's', steps: [step('a', { command: 'es:next' }), step('b', { command: 'model:start' })] }, 'next');
+        // a command the steps may not suggest (itself, the former ID, an unknown one) is dropped, the step kept;
+        // `/model:start` is one they may
+        const odd = readCommandReply(
+            {
+                kind: 'next',
+                status: 's',
+                steps: [step('a', { command: 'hint' }), step('b', { command: 'es:next' }), step('c', { command: 'model:start' })],
+            },
+            'next',
+        );
         expect((odd.ok && odd.value.kind === 'answer' && odd.value.next?.steps) as unknown).toEqual([
             { text: 'a', reason: 'a の理由' },
             { text: 'b', reason: 'b の理由' },
+            { text: 'c', reason: 'c の理由', command: 'ModelStart' },
         ]);
         expect(readCommandReply({ kind: 'next', status: 's', steps: [] }, 'next')).toMatchObject({ ok: false, error: { path: 'reply.steps' } });
         expect(readCommandReply({ kind: 'next', status: 's', steps: [step('x'.repeat(121))] }, 'next')).toMatchObject({
@@ -171,6 +183,7 @@ describe("the answerer's candidates", () => {
             expect(nextAnswerText(read.value.next)).toBe(read.value.answer);
         }
         expect(suggestedCommandId('EsStart')).toBe('es:start');
+        expect(suggestedCommandId('ModelStart')).toBe('model:start');
     });
 
     test('the schema of each type, and the numbers chosen (each once, in order, all listed)', () => {
@@ -181,7 +194,7 @@ describe("the answerer's candidates", () => {
                 steps: {
                     minItems: 1,
                     maxItems: 3,
-                    items: { properties: { command: { enum: ['es:start', 'es:exceptions', 'es:gaps', 'es:levels', 'es:names', 'es:recap'] } } },
+                    items: { properties: { command: { enum: ['es:start', 'es:exceptions', 'es:gaps', 'es:levels', 'es:names', 'es:recap', 'model:start'] } } },
                 },
             },
         });

@@ -680,29 +680,33 @@ describe('the candidate and answer commands of the `/` list', () => {
         expect(state.slashCommands?.find((c) => c.id === command.id)).toMatchObject({ state: 'Answered', answer: answer?.id });
     });
 
-    test('/es:next: anyone, on the storming in view; its steps read again, the message written from them, the steps kept', async () => {
+    test('/hint: anyone, with no storming in view; its steps read again, the message written from them, the steps kept', async () => {
         const root = await scratch();
         await writeFile(path.join(root, 'orders.dtes'), STORMING);
         const ctx = await setup(root);
-        const started = await ctx.api(ctx.bob, 'commands', { command: 'es:next', body: '次にやること', language: 'ja', viewedAt: { view: storming } });
+        // the former ID is no command any more
+        expect((await ctx.api(ctx.bob, 'commands', { command: 'es:next', body: '次にやること', language: 'ja' })).status).toBe(400);
+        const started = await ctx.api(ctx.bob, 'commands', { command: 'hint', body: 'ヒントをもらう', language: 'ja' });
         expect(started.status).toBe(201);
-        const { command, request } = (await started.json()) as { command: { id: string; scope: string }; request: { id: string } };
-        expect(command.scope).toBe('Orders');
+        const { command, request } = (await started.json()) as { command: { id: string; state: string; scope?: string }; request: { id: string } };
+        expect(command).toMatchObject({ state: 'Working' });
+        expect(command.scope).toBeUndefined();
         const stream = answerStream(ctx);
         const job = await stream.commandJob();
-        expect(job).toMatchObject({ kind: 'command', name: 'es:next', type: 'next', author: 'Bob' });
+        expect(job).toMatchObject({ kind: 'command', name: 'hint', type: 'next', author: 'Bob' });
         // a plain answer is not what it takes
         expect((await stream.post(job.job, { kind: 'answer', answer: 'x', durationMs: 1 })).status).toBe(409);
         const again = await stream.commandJob();
         const steps = [
             { text: '例外を洗い出す', reason: '例外がない', command: 'es:exceptions' },
             { text: '専門家に聞く', reason: '未決のホットスポット', command: 'es:nope' },
+            { text: 'モデリングを始める', reason: 'Design Level まで進んだ', command: 'model:start' },
         ];
         expect((await stream.post(again.job, { kind: 'next', status: 'Big Picture: 通常フローまで', steps, durationMs: 2 })).status).toBe(200);
         const state = await ctx.state(ctx.bob);
         const answer = state.requests.find((r) => r.author === 'ai' && r.replyTo?.kind === 'Message' && r.replyTo.request === request.id);
         expect(answer?.body).toBe(
-            'Big Picture: 通常フローまで\n\n1. **例外を洗い出す** — 例外がない `/es:exceptions`\n2. **専門家に聞く** — 未決のホットスポット',
+            'Big Picture: 通常フローまで\n\n1. **例外を洗い出す** — 例外がない `/es:exceptions`\n2. **専門家に聞く** — 未決のホットスポット\n3. **モデリングを始める** — Design Level まで進んだ `/model:start`',
         );
         expect(state.slashCommands?.find((c) => c.id === command.id)).toMatchObject({
             state: 'Answered',
@@ -712,6 +716,7 @@ describe('the candidate and answer commands of the `/` list', () => {
                 steps: [
                     { text: '例外を洗い出す', reason: '例外がない', command: 'EsExceptions' },
                     { text: '専門家に聞く', reason: '未決のホットスポット' },
+                    { text: 'モデリングを始める', reason: 'Design Level まで進んだ', command: 'ModelStart' },
                 ],
             },
         });

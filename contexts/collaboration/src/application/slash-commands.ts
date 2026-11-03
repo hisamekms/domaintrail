@@ -44,8 +44,8 @@ export interface SlashCommandUseCases {
      * Starts a candidate or answer command (`/es:exceptions`, `/es:recap`): the starter's opening message (the command's
      * name), sent without triage, and the command waiting for the answerer. A command for the facilitator only refuses
      * the others (`FacilitatorOnly`); one of each kind runs at a time (`CommandAlreadyRunning`). A command about the
-     * storming in view, with none in view, lists no candidates at once (the AI is not asked) — an answer command too
-     * (`/es:next`): its card then says so, as a candidate command's.
+     * storming in view, with none in view, lists no candidates at once (the AI is not asked): its card then says so.
+     * `/hint` needs none: the AI reads where the person is from the session and the view.
      */
     startCommand(input: {
         readonly session: SessionId;
@@ -63,7 +63,7 @@ export interface SlashCommandUseCases {
         readonly candidates: readonly Collaboration.CommandCandidate[];
     }): Promise<Result<Collaboration.ListedSlashCommand, NotFound | NotAllowed | WrongCommandType | Closed>>;
     /**
-     * The answerer's answer (an answer command): a message of the AI replying to the opening message; for `/es:next`,
+     * The answerer's answer (an answer command): a message of the AI replying to the opening message; for `/hint`,
      * with the next steps it was written from (required there, refused elsewhere: `WrongCommandType`).
      */
     answerCommand(input: {

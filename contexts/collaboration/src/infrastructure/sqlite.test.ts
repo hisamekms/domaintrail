@@ -688,3 +688,47 @@ describe('a database moved from an older .domaintrail/', () => {
         expect(cleanMovedDatabase(garbage)).toBe(false);
     });
 });
+
+describe('a `/` command written when `/hint` was `/es:next`', () => {
+    test('is read as a Hint, its SlashCommandStarted too; nothing rewritten', async () => {
+        const db = openDatabase(':memory:');
+        // the row alone: its session and opening message are beside the point
+        db.exec('PRAGMA foreign_keys = OFF');
+        const session = knownSessionId('0a7c4f2e-1b3d-4e5f-8a9b-0c1d2e3f4a5b');
+        const command = {
+            state: 'Answered',
+            id: 'c-legacy',
+            session,
+            kind: 'EsNext',
+            startedBy: 'p1',
+            opening: 'r1',
+            language: 'Ja',
+            startedAt: { $date: at.toISOString() },
+            answer: 'r2',
+            next: { status: 'Big Picture まで', steps: [{ text: '例外を洗い出す', reason: '発行に例外がない', command: 'EsExceptions' }] },
+            answeredAt: { $date: at.toISOString() },
+        };
+        db.prepare('INSERT INTO slash_commands (id, session_id, seq, opening_id, run_id, state, data) VALUES (?, ?, 1, ?, NULL, ?, ?)').run(
+            command.id,
+            session,
+            'r1',
+            'Answered',
+            JSON.stringify(command),
+        );
+        const started = { type: 'SlashCommandStarted', commandId: 'c-legacy', session, kind: 'EsNext', startedBy: 'p1', opening: 'r1', language: 'Ja' };
+        db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(
+            session,
+            started.type,
+            JSON.stringify(started),
+            at.toISOString(),
+        );
+        const uow = createUnitOfWork(db);
+        const { commands, events } = await uow.transaction((st) => ({
+            commands: st.slashCommands.listBySession(session),
+            events: st.outbox.readAfter(0, 10, session),
+        }));
+        expect(commands.map((c) => [c.kind, c.state])).toEqual([['Hint', 'Answered']]);
+        expect(events.map((e) => (e.event.type === 'SlashCommandStarted' ? e.event.kind : undefined))).toEqual(['Hint']);
+        expect(JSON.parse((db.prepare('SELECT data FROM slash_commands').get() as { data: string }).data)).toMatchObject({ kind: 'EsNext' });
+    });
+});

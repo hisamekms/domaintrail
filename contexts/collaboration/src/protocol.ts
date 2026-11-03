@@ -401,7 +401,7 @@ export interface ConfirmInterviewBody {
 /**
  * `POST /api/session/commands` (any participant; a command for the facilitator only refuses the others with
  * `FacilitatorOnly`, 403): starts a candidate or answer command of the `/` list (`command`: its stable ID,
- * `es:exceptions`, `es:next`, …). `body` is the opening message (the command's name in the UI language); `viewedAt` and
+ * `es:exceptions`, `hint`, …). `body` is the opening message (the command's name in the UI language); `viewedAt` and
  * `focus` say what it is about (the storming in view). → 201 `{ command, request }`; `CommandAlreadyRunning` (409)
  * while one of the same kind runs.
  */
@@ -814,7 +814,7 @@ export interface AgentCommandJobBody {
     readonly command: Json<Collaboration.SlashCommand>;
     /** The command's stable ID (`es:exceptions`). */
     readonly name: string;
-    /** What the answerer returns: candidates, an answer, or the next steps (`/es:next`, an answer written from them). */
+    /** What the answerer returns: candidates, an answer, or the next steps (`/hint`, an answer written from them). */
     readonly type: 'candidates' | 'answer' | 'next';
     /** The starter's opening message. */
     readonly request: Json<Collaboration.Request>;
@@ -930,7 +930,7 @@ export type AgentCommandResultBody = (
     readonly durationMs: number;
 };
 
-/** `/es:next`'s answer as the answerer writes it (`NextAnswerData` of `domain/slash-commands.ts`): the status and the steps. */
+/** `/hint`'s answer as the answerer writes it (`NextAnswerData` of `domain/slash-commands.ts`): the status and the steps. */
 export interface NextAnswerBody {
     readonly status: string;
     readonly steps: readonly { readonly text: string; readonly reason: string; readonly command?: string }[];
