@@ -1776,10 +1776,9 @@ function Composer(props: {
     const slashKey = slashText === undefined ? undefined : 'slash';
     const slashOpen = slashText !== undefined && dismissed !== slashKey;
     const running = runningInterview(session.state);
-    const facilitator = session.me.participant.role === 'facilitator';
     // ヒントをもらう: with an answerer to take it, one at a time
     const presence = aiPresence(session.state.agent);
-    const hint = hintButton(session.state, facilitator, !(presence.kind === 'missing' && presence.role !== 'run'));
+    const hint = hintButton(session.state, !(presence.kind === 'missing' && presence.role !== 'run'));
     const [hinting, setHinting] = useState(false);
     // the commands the latest hint suggests: marked in `/`'s list
     const suggested = useMemo(() => hintSuggestions(session.state), [session.state]);
@@ -1793,7 +1792,7 @@ function Composer(props: {
               lang,
               scope,
               commandNames: tx.chat.slash.commands,
-              canStart: (id) => canStartCommand(session.state, facilitator, id),
+              canStart: (id) => canStartCommand(session.state, id),
               ...(session.state.templates && { team: session.state.templates }),
           })
         : [];
@@ -1867,7 +1866,7 @@ function Composer(props: {
 
     /** A `/` item picked: a template's text into the composer (to edit), or a command started (an interview, or another). */
     const pickSlash = async (item: SlashItem | undefined): Promise<void> => {
-        if (!item) return;
+        if (!item || (item.kind === 'command' && item.disabled)) return;
         if (item.kind === 'template') {
             composer.setValue(templateValue(item.template, lang, scope.selected));
             setError(undefined);
@@ -1966,7 +1965,8 @@ function Composer(props: {
                                 data-index={i}
                                 role="option"
                                 aria-selected={i === active}
-                                className={`chat-mention-option chat-slash-option ${c.kind}${i === active ? ' active' : ''}`}
+                                {...(c.kind === 'command' && c.disabled && { 'aria-disabled': true })}
+                                className={`chat-mention-option chat-slash-option ${c.kind}${c.kind === 'command' && c.disabled ? ' disabled' : ''}${i === active ? ' active' : ''}`}
                                 onMouseDown={(e) => {
                                     e.preventDefault();
                                     void pickSlash(c);

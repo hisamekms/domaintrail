@@ -376,8 +376,8 @@ export function useSessionPage(input: {
     return {
         baselineLocked: !facilitator,
         ended,
-        // the empty view points to its world's `/…:start`: only for who may start it
-        aiReady: canStartFromEmpty({ ended, facilitator, aiConnected: aiPresence(session.state.agent).kind === 'connected' }),
+        // the empty view points to its world's `/…:start` (anyone may start it)
+        aiReady: canStartFromEmpty({ ended, aiConnected: aiPresence(session.state.agent).kind === 'connected' }),
         canvasOverlay: (
             <>
                 <PeerCursors canvas={canvas} cursors={cursorsOn(session.peers, location)} />

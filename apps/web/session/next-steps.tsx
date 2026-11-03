@@ -1,8 +1,8 @@
 // `/hint`'s answer in the chat (the plan's "Built-in ES commands, phase 2" and "ヒントをもらう"): the AI's message (a
 // light bulb by its name) shows its status on one line and its one to three steps as a numbered list, each its text,
 // its reason muted and — when a command does that step — a button with the command's ID in the brand's colour, which puts the command in the composer (`/`'s list
-// opens on it): the person sends it, nothing runs by itself. A command the person may not start (the facilitator's) has
-// no button; one of a kind already running is disabled. The message's text (Markdown, the same list) is what the
+// opens on it): the person sends it, nothing runs by itself. Anyone may start any command; one of a kind already
+// running is disabled. The message's text (Markdown, the same list) is what the
 // session so far and any other reader see.
 import { CornerDownLeft } from 'lucide-react';
 import { suggestedCommandId, type SuggestedCommandId } from '@domaintrail/collaboration';
@@ -10,7 +10,7 @@ import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { useChat } from './chat-context';
 import type { ComposerValue } from './mentions';
 import { ReplyText } from './reply';
-import { canStartCommand, isCommandAllowed, type SlashCommandJson } from './slash';
+import { canStartCommand, type SlashCommandJson } from './slash';
 
 /** `/hint`'s answer as the page reads it. */
 export type NextAnswerJson = NonNullable<Extract<SlashCommandJson, { state: 'Answered' }>['next']>;
@@ -24,20 +24,14 @@ export function nextAnswerOf(state: Pick<SessionStateBody, 'slashCommands'>, req
 /** The composer holding a command: `/` and its ID, nothing else (`/`'s list opens on it). */
 export const commandComposerValue = (id: string): ComposerValue => ({ text: `/${id}`, chips: [], people: [] });
 
-/** A step's command button: shown when the person may start it at all, enabled when they may now. */
-export function commandButton(
-    state: Pick<SessionStateBody, 'interviews' | 'slashCommands'>,
-    facilitator: boolean,
-    id: SuggestedCommandId,
-): 'enabled' | 'disabled' | 'hidden' {
-    if (!isCommandAllowed(facilitator, id)) return 'hidden';
-    return canStartCommand(state, facilitator, id) ? 'enabled' : 'disabled';
+/** A step's command button: enabled when the command may start now (none of its kind running). */
+export function commandButton(state: Pick<SessionStateBody, 'interviews' | 'slashCommands'>, id: SuggestedCommandId): 'enabled' | 'disabled' {
+    return canStartCommand(state, id) ? 'enabled' : 'disabled';
 }
 
 export function NextSteps({ next }: { next: NextAnswerJson }) {
     const { tx, session, onNavigate, putCommand } = useChat();
     const live = session.status === 'live' && session.state.session.state === 'Open';
-    const facilitator = session.me.participant.role === 'facilitator';
     return (
         <div className="next-answer">
             <p className="next-status">
@@ -46,7 +40,7 @@ export function NextSteps({ next }: { next: NextAnswerJson }) {
             <ol className="next-steps">
                 {next.steps.map((s, i) => {
                     const id = s.command && suggestedCommandId(s.command);
-                    const button = id && live ? commandButton(session.state, facilitator, id) : 'hidden';
+                    const button = id && live ? commandButton(session.state, id) : 'hidden';
                     return (
                         <li key={i} className="next-step">
                             <span className="next-step-head">

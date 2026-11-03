@@ -1,13 +1,24 @@
 // An interview's choices in the chat (interview.tsx): shown under the question the interview awaits, to its starter only
 // and only until it is answered (also after a reload: they come with the interview in the session's state); one choice
 // pressed is sent at once as a reply to the question, several are checked and sent joined, and その他 always comes last
-// and goes to the composer.
+// and goes to the composer. The brief's card by who looks: the facilitator confirms their own or approves (or rejects)
+// a participant's; the others read it with 承認待ち.
 import { describe, expect, test } from 'bun:test';
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MESSAGES } from '../i18n';
 import { ChatProvider, type ChatContextValue } from './chat-context';
-import { awaitedChoices, choiceAnswerBody, ChoiceList, InterviewChoices, joinChoices, type ChoiceListProps } from './interview';
+import {
+    awaitedChoices,
+    briefRole,
+    choiceAnswerBody,
+    ChoiceList,
+    InterviewChoices,
+    InterviewPanel,
+    joinChoices,
+    rejectedOfMine,
+    type ChoiceListProps,
+} from './interview';
 
 const t = MESSAGES.ja;
 const at = '2026-11-03T09:00:00.000Z';
@@ -157,5 +168,61 @@ describe('under the message of the AI', () => {
         expect(render(chat('bob', interview()))).toBe('');
         expect(render(chat('f', interview()), 'q0')).toBe('');
         expect(render(chat('f', interview({ awaiting: 'a1', asked: undefined })))).toBe('');
+    });
+});
+
+describe("the brief's card, by who looks", () => {
+    const brief = { name: 'Returns', label: '返品', isNew: true, replaces: false, text: '目的: 返金を早める\n範囲: 申請から返金まで' };
+    const briefed = (startedBy: string) => interview({ startedBy, state: 'Briefed', asked: undefined, brief, answered: 'a1', briefedAt: at });
+    const panel = (me: string, i: unknown): string => {
+        const role = me === 'f' ? 'facilitator' : 'participant';
+        const session = {
+            status: 'live',
+            me: { participant: { id: me, role } },
+            state: { session: { state: 'Open', mode: 'Collab' }, interviews: [i], requests: [], runs: [] },
+        };
+        return renderToStaticMarkup(
+            <ChatProvider value={{ tx: t.session, session } as unknown as ChatContextValue}>
+                <InterviewPanel session={session as never} live />
+            </ChatProvider>,
+        );
+    };
+    const buttons = (html: string): string[] =>
+        [...html.matchAll(/<button[^>]*>(.*?)<\/button>/g)].map((m) => (m[1] ?? '').replace(/<svg.*?<\/svg>/g, '').trim());
+
+    test("a participant's brief: the facilitator approves, edits and approves, or rejects it", () => {
+        expect(briefRole({ startedBy: 'bob' }, { id: 'f', role: 'facilitator' }, true)).toBe('approve');
+        expect(buttons(panel('f', briefed('bob')))).toEqual(['承認', '編集して承認', '却下']);
+    });
+
+    test('its starter (a participant) sees 承認待ち and may stop it; another participant reads it', () => {
+        const starter = panel('bob', briefed('bob'));
+        expect(starter).toContain('承認待ち');
+        expect(starter).toContain('目的');
+        expect(buttons(starter)).toEqual(['中止']);
+        const other = panel('carol', briefed('bob'));
+        expect(other).toContain('承認待ち');
+        expect(buttons(other)).toEqual([]);
+        expect(briefRole({ startedBy: 'bob' }, { id: 'bob', role: 'participant' }, true)).toBe('wait');
+    });
+
+    test("the facilitator's own brief: 確定 / 編集して確定 / 中止, as before; participants wait for it", () => {
+        expect(buttons(panel('f', briefed('f')))).toEqual(['確定', '編集して確定', '中止']);
+        expect(buttons(panel('bob', briefed('f')))).toEqual([]);
+    });
+
+    test('while it asks, its starter and the facilitator may stop it', () => {
+        expect(buttons(panel('bob', interview({ startedBy: 'bob' })))).toEqual(['中止']);
+        expect(buttons(panel('f', interview({ startedBy: 'bob' })))).toEqual(['中止']);
+        expect(buttons(panel('carol', interview({ startedBy: 'bob' })))).toEqual([]);
+    });
+
+    test('rejected: its starter is told so, with the note; nobody else', () => {
+        const rejected = interview({ startedBy: 'bob', state: 'Rejected', asked: undefined, brief, rejectedBy: 'f', note: '範囲が広すぎます', rejectedAt: at });
+        expect(rejectedOfMine(state(rejected), 'bob')).toMatchObject({ note: '範囲が広すぎます' });
+        const html = panel('bob', rejected);
+        expect(html).toContain('却下されました');
+        expect(html).toContain('範囲が広すぎます');
+        expect(panel('f', rejected)).toBe('');
     });
 });

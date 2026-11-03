@@ -8106,6 +8106,11 @@ label.proposal-option {
 .chat-slash-icon {
     color: var(--accent);
 }
+/* one of its kind runs: listed, not picked */
+.chat-slash-option.disabled {
+    opacity: 0.5;
+    cursor: default;
+}
 
 /* a running interview (`/es:start`, `/model:start`): its bar above the composer and, once written, its brief */
 .chat-interview {
@@ -8200,6 +8205,9 @@ label.proposal-option {
     margin-top: var(--space-2);
 }
 .chat-brief-waiting {
+    margin: var(--space-2) 0 0;
+}
+.chat-brief .chat-apply-note {
     margin: var(--space-2) 0 0;
 }
 

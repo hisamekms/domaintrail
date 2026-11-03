@@ -84,11 +84,9 @@ describe('a view with nothing yet', () => {
         }
     });
 
-    test('only who may start an interview, with an AI connected and the session going on, is pointed to /…:start', () => {
-        expect(canStartFromEmpty({ ended: false, facilitator: true, aiConnected: true })).toBe(true);
-        // a participant of a Collab cannot start /es:start or /model:start
-        expect(canStartFromEmpty({ ended: false, facilitator: false, aiConnected: true })).toBe(false);
-        expect(canStartFromEmpty({ ended: false, facilitator: true, aiConnected: false })).toBe(false);
-        expect(canStartFromEmpty({ ended: true, facilitator: true, aiConnected: true })).toBe(false);
+    test('with an AI connected and the session going on, everyone is pointed to /…:start', () => {
+        expect(canStartFromEmpty({ ended: false, aiConnected: true })).toBe(true);
+        expect(canStartFromEmpty({ ended: false, aiConnected: false })).toBe(false);
+        expect(canStartFromEmpty({ ended: true, aiConnected: true })).toBe(false);
     });
 });

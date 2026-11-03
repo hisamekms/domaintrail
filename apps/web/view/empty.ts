@@ -35,8 +35,7 @@ export const emptyLine = (t: Messages, view: View['kind'], aiReady: boolean): st
 };
 
 /**
- * Whether an empty view may point to its `/…:start`: in a session not ended, with an AI connected, to who may start an
- * interview (`/es:start` and `/model:start` alike: the facilitator; in Solo, the person, who is it).
+ * Whether an empty view may point to its `/…:start`: in a session not ended, with an AI connected (anyone may start an
+ * interview).
  */
-export const canStartFromEmpty = (session: { ended: boolean; facilitator: boolean; aiConnected: boolean }): boolean =>
-    !session.ended && session.facilitator && session.aiConnected;
+export const canStartFromEmpty = (session: { ended: boolean; aiConnected: boolean }): boolean => !session.ended && session.aiConnected;

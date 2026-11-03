@@ -102,17 +102,20 @@ export const sessionApi = {
     retryAnswer: (request: string): Promise<unknown> => call(`requests/${encodeURIComponent(request)}/retry-answer`, { method: 'POST', body: {} }),
     /** Starts a candidate or answer command (`/es:exceptions`, `/es:recap`). */
     startCommand: (body: StartCommandBody): Promise<unknown> => call('commands', { method: 'POST', body }),
-    /** Applies the candidates checked of a candidate command (its starter): one run. */
+    /** Applies the candidates checked of a candidate command (the facilitator, whoever started it): one run. */
     applyCandidates: (id: string, chosen: readonly number[]): Promise<unknown> =>
         call(`commands/${encodeURIComponent(id)}/apply`, { method: 'POST', body: { chosen } }),
-    /** Stops a command (its starter). */
+    /** Stops a command (its starter or the facilitator). */
     stopCommand: (id: string): Promise<unknown> => call(`commands/${encodeURIComponent(id)}/stop`, { method: 'POST', body: {} }),
-    /** Starts the `/es:start` or `/model:start` interview (the facilitator; in Solo, the person). */
+    /** Starts the `/es:start` or `/model:start` interview (anyone). */
     startInterview: (body: StartInterviewBody): Promise<unknown> => call('interviews', { method: 'POST', body }),
-    /** Confirms an interview's brief, as is or with its text edited (its starter): a run writes it. */
+    /** Confirms an interview's brief, as is or with its text edited (the facilitator; a participant's: the approval): a run writes it. */
     confirmInterview: (id: string, text?: string): Promise<unknown> =>
         call(`interviews/${encodeURIComponent(id)}/confirm`, { method: 'POST', body: text === undefined ? {} : { text } }),
-    /** Stops an interview (its starter). */
+    /** Rejects an interview's brief, with an optional note to its starter (the facilitator): the interview ends. */
+    rejectInterview: (id: string, note?: string): Promise<unknown> =>
+        call(`interviews/${encodeURIComponent(id)}/reject`, { method: 'POST', body: note ? { note } : {} }),
+    /** Stops an interview (its starter or the facilitator). */
     stopInterview: (id: string): Promise<unknown> => call(`interviews/${encodeURIComponent(id)}/stop`, { method: 'POST', body: {} }),
     /** Withdraws my open change proposal (its requester). */
     withdrawProposal: (id: string): Promise<unknown> => call(`proposals/${encodeURIComponent(id)}/withdraw`, { method: 'POST', body: {} }),
