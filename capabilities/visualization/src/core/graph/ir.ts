@@ -97,6 +97,10 @@ export interface GraphNode {
     internal?: InternalTransition[];
     /** Model element shown in the Detail Panel when the node is selected. */
     elementId: string;
+    /** A hotspot settled by the team (`status resolved`, `.dtes` §3.5); absent while it is open, and on other nodes. */
+    status?: 'resolved';
+    /** A resolved hotspot's `resolution`: what was agreed. */
+    resolution?: string;
     width: number;
     height: number;
 }
@@ -248,7 +252,8 @@ export const HEADER_HEIGHT = 54;
 export const CONTAINER_PADDING = { top: 46, left: 20, bottom: 20, right: 20 };
 
 export function graphSignature(g: Graph): string {
-    const nodes = g.nodes.map((n) => `${n.id}|${n.parent ?? ''}|${n.width}x${n.height}|${maxUnits(n.label)}`).sort();
+    // a hotspot's status too: the page finds the compact layouts it keeps by signature, with the nodes they came with
+    const nodes = g.nodes.map((n) => `${n.id}|${n.parent ?? ''}|${n.width}x${n.height}|${maxUnits(n.label)}${n.status ? `|${n.status}` : ''}`).sort();
     const edges = g.edges.map((e) => `${e.id}|${e.source}|${e.target}|${e.label ? maxUnits(e.label) : ''}|${e.events ? maxUnits(e.events) : ''}`).sort();
     const grid = g.grid ? `#grid${GRID_VERSION}:${JSON.stringify([byKey(g.grid.cells), byKey(g.grid.frames), g.grid.looseRow])}` : '';
     return `${nodes.join(';')}#${edges.join(';')}${grid}`;

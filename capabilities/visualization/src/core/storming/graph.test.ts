@@ -6,7 +6,7 @@ import { analyze } from '@domaintrail/analysis';
 import type { ViewOptions } from './ir.js';
 import { matchRenderNodes, projectView } from './render.js';
 import { renderToGraph, stormingGraphId, stormingViewKey } from './graph.js';
-import type { LaidOutGraph, NodeLayout } from '../graph/ir.js';
+import { graphSignature, type LaidOutGraph, type NodeLayout } from '../graph/ir.js';
 import { ElkLayoutEngine } from '../../adapters/elk.js';
 
 const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', '..', '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
@@ -104,6 +104,41 @@ describe('an Event Storming view as a graph', () => {
         const words = graphOf(storming, { level: 'design-level' }).nodes.flatMap((n) => (n.stereotype ? [n.stereotype.ja.name] : []));
         expect(words.length).toBeGreaterThan(0);
         expect(words.filter((w) => /[A-Za-z]/.test(w))).toEqual([]);
+    });
+
+    test('carries a resolved hotspot’s status and resolution on its note, in every view; an open one carries neither', async () => {
+        const storming = await parse(`storming S {
+  event Placed "注文された"
+  hotspot Open "誰が確定する？" {
+    on Placed
+  }
+  hotspot Settled "通貨は混在する？" {
+    on Placed
+    status resolved
+    resolution "一つの注文は一つの通貨"
+  }
+  timeline T {
+    Placed
+  }
+}`);
+        const views: ViewOptions[] = [{ level: 'design-level' }, { level: 'big-picture' }, { level: 'design-level', timelineId: 'T' }];
+        for (const options of views) {
+            const graph = graphOf(storming, options);
+            const note = (id: string) => graph.nodes.find((n) => n.elementId === `es/S/${id}`)!;
+            expect(note('Settled')).toMatchObject({ kind: 'esHotspot', status: 'resolved', resolution: '一つの注文は一つの通貨' });
+            expect(note('Open').status).toBeUndefined();
+            expect(note('Open').resolution).toBeUndefined();
+            expect(note('Placed').status).toBeUndefined();
+        }
+        // resolving a hotspot changes the graph's signature (the page keeps compact layouts by it), not its size
+        const open = graphOf(await parse(`storming S {\n  event Placed\n  hotspot H {\n    on Placed\n  }\n}`), { level: 'design-level' });
+        const settled = graphOf(
+            await parse(`storming S {\n  event Placed\n  hotspot H {\n    on Placed\n    status resolved\n    resolution "決めた"\n  }\n}`),
+            {
+                level: 'design-level',
+            },
+        );
+        expect(graphSignature(settled)).not.toBe(graphSignature(open));
     });
 
     test('draws every note as the same square, however long its label (the canvas fits the label to it)', async () => {
