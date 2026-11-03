@@ -2433,7 +2433,13 @@ relative to the config file, and its directory becomes the root. Without a confi
       }
     }
   },
-  "open": { "port": 4321, "host": "127.0.0.1" }             // dt open; defaults shown
+  "open": { "port": 4321, "host": "127.0.0.1" },            // dt open; defaults shown
+  // the chat's message templates, listed after / with the built-in ones (dt open and dt collab); text and name: one
+  // string, or { "ja", "en" }; {target} is where the selected element goes; "when" (optional): big-picture,
+  // design-level, storming, model, element, aggregate, event, state, none
+  "templates": [
+    { "id": "glossary", "name": { "ja": "用語を確かめる", "en": "Check the terms" }, "text": "用語集と食い違うところを挙げて", "when": ["model"] }
+  ]
   // collab, agent and classifier: see dt guide session-config
 }
 ```
