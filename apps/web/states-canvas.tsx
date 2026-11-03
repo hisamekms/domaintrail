@@ -9,11 +9,15 @@ import { buildScene } from './render';
 import { applyTheme, type Theme } from './theme';
 import { CanvasControls, EdgeHint } from './view/canvas-controls';
 import { useCenterOnResize } from './view/center';
+import { useCompactGraph } from './view/compact';
 import { useCanvasValue, type Camera, type DiagramCanvas } from './view/diagram';
 import { FlowCanvas } from './view/flow-canvas';
 import { selectedElement } from './view/navigation';
 
-/** Camera of each aggregate's diagram, kept while the page is open (the canvas unmounts with its inspector tab). */
+/**
+ * Camera of each aggregate's diagram (and of its compact layout, `<aggregate>:compact`), kept while the page is open
+ * (the canvas unmounts with its inspector tab).
+ */
 const cameras = new Map<string, Camera>();
 
 /**
@@ -35,15 +39,19 @@ export function StatesCanvas(props: {
     onSelect: (id: string) => void;
     legendOpen: boolean;
     onLegendToggle: () => void;
+    /** 「詰めて表示」: the compact layout, once the page has it (without ghosts of removed states). */
+    compact: boolean;
 }) {
     const { aggregateId } = props;
     const t = useT();
     const [canvas, setCanvas] = useState<DiagramCanvas | null>(null);
     const [savedLabels, setLabels] = usePersistentState<TransitionLabels>('domaintrail.states.transitionLabels', 'both');
     const labels = TRANSITION_LABELS.includes(savedLabels) ? savedLabels : 'both';
-    const graph = props.graphs?.[labels];
-    const previous = props.previous?.[labels];
-    /** The aggregate whose camera is shown (set once it is restored or fitted). */
+    const graph = useCompactGraph(props.graphs?.[labels], props.compact);
+    const previous = graph?.spacing === 'compact' ? undefined : props.previous?.[labels];
+    /** The aggregate's camera key: its compact layout has a camera of its own. */
+    const cameraKey = graph?.spacing === 'compact' ? `${aggregateId}:compact` : aggregateId;
+    /** The camera key shown (set once it is restored or fitted). */
     const shown = useRef<string | null>(null);
 
     useCenterOnResize(canvas);
@@ -55,9 +63,9 @@ export function StatesCanvas(props: {
         if (!canvas) return;
         return canvas.watch(() => {
             const camera = canvas.getCamera();
-            if (shown.current === aggregateId) cameras.set(aggregateId, camera);
+            if (shown.current === cameraKey) cameras.set(cameraKey, camera);
         });
-    }, [canvas, aggregateId]);
+    }, [canvas, cameraKey]);
 
     // Draw the graph; restore the aggregate's camera, or fit the first time it is shown.
     useEffect(() => {
@@ -77,15 +85,15 @@ export function StatesCanvas(props: {
                 transitionLabels: labels,
             }),
         );
-        if (shown.current !== aggregateId) {
-            const saved = cameras.get(aggregateId);
+        if (shown.current !== cameraKey) {
+            const saved = cameras.get(cameraKey);
             if (saved) canvas.setCamera(saved);
             else fitAll(canvas, graph);
-            shown.current = aggregateId;
+            shown.current = cameraKey;
             if (props.selected) highlightElement(canvas, props.selected);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [canvas, graph, previous, props.diff, props.diagnostics, props.mode, props.lang, labels, aggregateId]);
+    }, [canvas, graph, previous, props.diff, props.diagnostics, props.mode, props.lang, labels, cameraKey]);
 
     // Show a selection made elsewhere.
     useEffect(() => {

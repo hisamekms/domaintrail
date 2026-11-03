@@ -26,10 +26,12 @@ const MAX_ID = 200;
 
 /**
  * The laid-out graph's identity: its ID and a hash of its signature (another layout of the same graph is another
- * location).
+ * location), and its spacing when compact (「詰めて表示」 places the same graph elsewhere).
  */
 export const layoutKeyOf = (graph: LaidOutGraph | null | undefined): string =>
-    graph ? `${graph.id.length > MAX_ID ? shortHash(graph.id) : graph.id}@${shortHash(graph.signature)}` : NO_LAYOUT;
+    graph
+        ? `${graph.id.length > MAX_ID ? shortHash(graph.id) : graph.id}@${shortHash(graph.signature)}${graph.spacing === 'compact' ? '~compact' : ''}`
+        : NO_LAYOUT;
 
 /**
  * The location of the page's view. `viewKey` tells the `.dt` views apart as their cameras are (the Structure View's

@@ -104,6 +104,10 @@ const ja = {
         fitSelectionNone: '選択した要素に合わせる（何も選択していません）',
         collapse: 'キャンバスの操作を畳む（U）',
         expand: 'キャンバスの操作を表示（U）',
+        compact: '詰めて表示',
+        compactOff: '詰めて表示をやめる',
+        print: '印刷（1 ページに収める）',
+        printing: '印刷の準備中…',
     },
     transitionLabels: '遷移のラベル',
     transitionLabelModes: {
@@ -966,6 +970,10 @@ const en: Messages = {
         fitSelectionNone: 'Fit the selection (nothing selected)',
         collapse: 'Collapse the canvas controls (U)',
         expand: 'Show the canvas controls (U)',
+        compact: 'Close up the gaps',
+        compactOff: 'Back to normal spacing',
+        print: 'Print (fitted to one page)',
+        printing: 'Preparing to print…',
     },
     transitionLabels: 'Transition labels',
     transitionLabelModes: {

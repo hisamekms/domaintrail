@@ -213,12 +213,21 @@ export interface EdgeLayout {
     label?: NodeLayout;
 }
 
+/**
+ * How far apart a layout places things: the normal spacing, or a compact one (「詰めて表示」, and printing), with the
+ * gaps between notes closed up as far as arrowheads, edge labels and frame titles stay readable.
+ */
+export type LayoutSpacing = 'normal' | 'compact';
+export const LAYOUT_SPACINGS: LayoutSpacing[] = ['normal', 'compact'];
+
 /** A graph together with absolute coordinates for every node and edge. */
 export interface LaidOutGraph extends Graph {
     nodeLayout: Record<string, NodeLayout>;
     edgeLayout: Record<string, EdgeLayout>;
     /** Changes whenever nodes, sizes, nesting or edges change; used to reuse cached layouts. */
     signature: string;
+    /** Laid out with the compact spacing (absent: the normal one). */
+    spacing?: 'compact';
 }
 
 export const CHAR_WIDTH = 8.6;

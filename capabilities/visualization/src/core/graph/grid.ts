@@ -24,23 +24,29 @@ import {
     type Graph,
     type GraphNode,
     type LaidOutGraph,
+    type LayoutSpacing,
     type NodeLayout,
     type Point,
 } from './ir.js';
 
-/** The gutter between two columns, and the extra one between two stages. */
-const COL_GAP = 72;
-const STAGE_GAP = 64;
-/** The gutter between two rows (a lane's caption, and the routes along it), and the extra one before the notes outside the frames. */
-const ROW_GAP = 72;
-const LOOSE_GAP = 72;
 /**
- * A frame's padding beside its cells (the routes along the gutters of its first and last columns inside it), below
- * them (the routes under its last row inside it), and its heading (its label, as a container's: CONTAINER_PADDING.top).
+ * The gaps of a grid, by spacing (`LayoutSpacing`):
+ *
+ * - `col`: the gutter between two columns; `stage`: the extra one between two stages.
+ * - `row`: the gutter between two rows (a lane's caption, and the routes along it); `loose`: the extra one before the
+ *   notes outside the frames.
+ * - `pad`: a frame's padding beside its cells (the routes along the gutters of its first and last columns inside it);
+ *   `head`: its heading (its label, as a container's: CONTAINER_PADDING.top). Below its cells it leaves `frameFoot`.
+ *
+ * The compact gutters still hold the routes on either side of a gutter's middle (`LANE_OFFSET`) and, under a row, the
+ * branch's route, the `then`'s route and a lane's caption one above the other.
  */
-const FRAME_PAD = 40;
-const FRAME_FOOT = ROW_GAP / 2 + 16;
-const FRAME_HEAD = 46;
+export const GRID_SPACING: Record<LayoutSpacing, { col: number; stage: number; row: number; loose: number; pad: number; head: number }> = {
+    normal: { col: 72, stage: 64, row: 72, loose: 72, pad: 40, head: 46 },
+    compact: { col: 32, stage: 24, row: 52, loose: 24, pad: 12, head: 40 },
+};
+/** Below a frame's cells: the routes under its last row inside it. */
+const frameFoot = (row: number): number => row / 2 + 16;
 /** A group's frame: its padding, its heading and the space between its notes. */
 const GROUP_PAD = 10;
 const GROUP_HEAD = 30;
@@ -63,8 +69,10 @@ interface Box {
     row: number;
 }
 
-export function layoutGrid(graph: Graph): LaidOutGraph {
+export function layoutGrid(graph: Graph, spacing: LayoutSpacing = 'normal'): LaidOutGraph {
     const grid = graph.grid!;
+    const { col: COL_GAP, stage: STAGE_GAP, row: ROW_GAP, loose: LOOSE_GAP, pad: FRAME_PAD, head: FRAME_HEAD } = GRID_SPACING[spacing];
+    const FRAME_FOOT = frameFoot(ROW_GAP);
     const byId = new Map(graph.nodes.map((n) => [n.id, n]));
     const members = new Map<string, GraphNode[]>();
     for (const n of graph.nodes) if (n.parent !== undefined && byId.has(n.parent)) members.set(n.parent, [...(members.get(n.parent) ?? []), n]);
@@ -231,5 +239,5 @@ export function layoutGrid(graph: Graph): LaidOutGraph {
         return [sa, { x: ga, y: sa.y }, { x: ga, y: channel }, { x: gb, y: channel }, { x: gb, y: sb.y }, sb];
     }
 
-    return { ...graph, nodeLayout, edgeLayout, signature: graphSignature(graph) };
+    return { ...graph, nodeLayout, edgeLayout, signature: graphSignature(graph), ...(spacing === 'compact' && { spacing }) };
 }

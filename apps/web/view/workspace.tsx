@@ -18,6 +18,7 @@ import { fitAll } from './canvas';
 import type { DiagramCanvas } from './diagram';
 import { activeFilterCount } from './filters';
 import { useViewGraph, type ViewGraph } from './graph';
+import { PrintSheet, printKind, usePrint, usePrintWhenReady, type Printer } from './print';
 import { isCanvas, useNavigation, useOpenOnStormings, useSelectOnCanvas, type Navigation } from './navigation';
 import { useViewSettings, type ViewSettings } from './settings';
 import { FilterPopover, FilterSection, LevelSwitch, ToolbarEnd, ToolbarSubject } from './toolbar';
@@ -34,6 +35,7 @@ export interface Workspace {
     viewGraph: ViewGraph;
     /** The catalog's filter (a session's message carries it as where it was sent from). */
     catalog: { filter: CatalogFilter; setFilter: (filter: CatalogFilter) => void };
+    printer: Printer;
 }
 
 /**
@@ -46,8 +48,11 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
     const stormings = useMemo(() => current?.stormings ?? [], [current?.stormings]);
     const nav = useNavigation(canvas, current, stormings);
     const settings = useViewSettings();
-    const viewGraph = useViewGraph(current, nav.view, settings, stormings);
     const catalog = useCatalogFilter();
+    const printer = usePrint(theme);
+    // printing a diagram prints its compact layout
+    const viewGraph = useViewGraph(current, nav.view, settings, stormings, settings.compact || printer.phase !== 'idle');
+    usePrintWhenReady(printer, isCanvas(nav.view) ? viewGraph.graph : null);
     useOpenOnStormings(current, nav.setView);
     useViewCamera(canvas, current, nav.view, settings, viewGraph, { mode, lang }, current !== null && isEmptyView(nav.view.kind, current));
 
@@ -60,7 +65,7 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
 
     const onMount = useCallback((c: DiagramCanvas) => setCanvas(c), []);
 
-    return { canvas, onMount, stormings, nav, settings, viewGraph, catalog };
+    return { canvas, onMount, stormings, nav, settings, viewGraph, catalog, printer };
 }
 
 /** The center of the page: the view tabs, the current view's toolbar, and the canvas (or the catalog). */
@@ -76,7 +81,7 @@ export function ViewWorkspace(props: {
     aiReady?: boolean;
 }) {
     const { workspace, current, mode, legendOpen, onLegendToggle } = props;
-    const { canvas, onMount, stormings, nav, settings, viewGraph } = workspace;
+    const { canvas, onMount, stormings, nav, settings, viewGraph, printer } = workspace;
     const { view, setView, selected, select } = nav;
     const { structureLevel, setStructureLevel, setStructureContexts, setHiddenContexts, mapAll, setMapAll, stormingChoice, setStormingChoice } = settings;
     const { checked, hidden, focusKey, noneChecked, graph } = viewGraph;
@@ -195,8 +200,13 @@ export function ViewWorkspace(props: {
                         canvas={canvas}
                         fitAll={fitView}
                         legend={legendView && { view: legendView, open: legendOpen, onToggle: onLegendToggle }}
+                        compact={{ on: settings.compact, onToggle: () => settings.setCompact(!settings.compact) }}
+                        print={{ preparing: printer.phase === 'preparing', onPrint: printer.print }}
                         keys
                     />
+                )}
+                {printer.phase === 'printing' && printKind(isCanvas(view)) === 'diagram' && current && graph && (
+                    <PrintSheet graph={graph} current={current} mode={mode} />
                 )}
                 <EdgeHint canvas={canvas} view={legendView} />
                 {nothing ? (

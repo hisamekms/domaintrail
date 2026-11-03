@@ -8,7 +8,16 @@ import { buildStateGraph, buildStructureGraph } from '../core/graph/build.js';
 import { buildContextMapGraph } from '../core/graph/context-map.js';
 import { markLineChanges } from '../core/graph/line-changes.js';
 import { layoutGrid } from '../core/graph/grid.js';
-import { TRANSITION_LABELS, graphSignature, type Graph, type LaidOutGraph, type Point, type StructureLevel, type TransitionLabels } from '../core/graph/ir.js';
+import {
+    TRANSITION_LABELS,
+    graphSignature,
+    type Graph,
+    type LaidOutGraph,
+    type LayoutSpacing,
+    type Point,
+    type StructureLevel,
+    type TransitionLabels,
+} from '../core/graph/ir.js';
 import type { LayoutEngine, LayoutOptions } from './layout-engine.js';
 import type { GitCommit, GitRevisions, LayoutCache, LayoutStore, WorkspaceReader } from './ports.js';
 import type { BaseView, Baseline, BaselineSpec, StormingView, ViewPayload } from '../protocol.js';
@@ -44,6 +53,31 @@ interface GitBase {
 }
 
 const stormingGraphIds = (stormings: readonly StormingView[]): string[] => stormings.flatMap((s) => Object.values(s.views).map((v) => v.graph.id));
+
+const COMPACT_SUFFIX = '#compact';
+
+/**
+ * The key a graph's compact layout is cached (and saved) under: beside its normal layout, never in its place, so that
+ * switching between the two lays out neither again.
+ */
+export const compactKey = (graphId: string): string => `${graphId}${COMPACT_SUFFIX}`;
+
+/** The graph a cached layout is of (its key, without the compact suffix). */
+const graphIdOf = (key: string): string => (key.endsWith(COMPACT_SUFFIX) ? key.slice(0, -COMPACT_SUFFIX.length) : key);
+
+/** Every graph a view pushes to the page (focused Structure Views are not pushed: they are laid out on request). */
+function pushedGraphs(p: ViewPayload): LaidOutGraph[] {
+    const graphs = [p.structure, p.overview, p.aggregates, p.contextMap, p.contextMapAll].filter((g): g is LaidOutGraph => g !== null);
+    for (const byLabels of Object.values(p.states)) graphs.push(...Object.values(byLabels));
+    for (const s of p.stormings) graphs.push(...Object.values(s.views).map((v) => v.graph));
+    return graphs;
+}
+
+/** The graph a laid-out one was laid out from. */
+function graphOf(laid: LaidOutGraph): Graph {
+    const { nodeLayout: _nodes, edgeLayout: _edges, signature: _signature, spacing: _spacing, ...graph } = laid;
+    return graph;
+}
 
 /** What a view service works with: the workspace and the adapters of its ports. */
 export interface ViewServiceDeps {
@@ -81,7 +115,13 @@ export interface ViewService {
      * of contexts can be asked for, so these are not part of the pushed state). The dependencies on and from the
      * `hidden` contexts are left out. Unknown contexts are ignored.
      */
-    focusGraph(contexts: readonly string[], level: StructureLevel, hidden?: readonly string[]): Promise<LaidOutGraph | null>;
+    focusGraph(contexts: readonly string[], level: StructureLevel, hidden?: readonly string[], spacing?: LayoutSpacing): Promise<LaidOutGraph | null>;
+    /**
+     * A pushed graph of the current view (by its ID) laid out with the compact spacing, on request: the page asks for it
+     * while 「詰めて表示」 is on, or to print. It is cached (and saved) beside the graph's normal layout (`compactKey`).
+     * Null when the current view has no graph of that ID.
+     */
+    compactGraph(graphId: string): Promise<LaidOutGraph | null>;
 }
 
 export function createViewService(deps: ViewServiceDeps): ViewService {
@@ -349,7 +389,7 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
     const forgetLayouts = (keep: readonly string[]): void => {
         const live = new Set(keep);
         for (const id of [...layouts.keys(), ...renders.keys()]) {
-            if (id.startsWith('storming:') && !live.has(id)) {
+            if (id.startsWith('storming:') && !live.has(graphIdOf(id))) {
                 layouts.delete(id);
                 renders.delete(id);
             }
@@ -445,7 +485,7 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
             ...Object.values(states).flatMap((byLabels) => Object.values(byLabels).map((g) => g.id)),
             ...stormingGraphIds(stormings),
         ]);
-        for (const id of layouts.keys()) if (!live.has(id)) layouts.delete(id);
+        for (const id of layouts.keys()) if (!live.has(graphIdOf(id))) layouts.delete(id);
         for (const id of renders.keys()) if (!live.has(id)) renders.delete(id);
         await layoutStore.save(engine, layouts);
 
@@ -487,7 +527,12 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
             });
         },
 
-        async focusGraph(contexts: readonly string[], level: StructureLevel, hidden: readonly string[] = []): Promise<LaidOutGraph | null> {
+        async focusGraph(
+            contexts: readonly string[],
+            level: StructureLevel,
+            hidden: readonly string[] = [],
+            spacing: LayoutSpacing = 'normal',
+        ): Promise<LaidOutGraph | null> {
             const model = current.model;
             if (!model) return null;
             const focusable = new Set(focusableContexts(model));
@@ -497,14 +542,34 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
             const baseModel = baselineModel();
             const graph = markLineChanges(buildStructureGraph(model, opts), baseModel && buildStructureGraph(baseModel, opts));
             const signature = graphSignature(graph);
-            const cached = focusLayouts.get(graph.id);
-            if (cached && cached.signature === signature) return { ...graph, nodeLayout: cached.nodeLayout, edgeLayout: cached.edgeLayout, signature };
-            const laid = await engine.layout(graph);
+            const key = spacing === 'compact' ? compactKey(graph.id) : graph.id;
+            const cached = focusLayouts.get(key);
+            if (cached && cached.signature === signature) return { ...cached, ...graph, signature };
+            const laid = await engine.layout(graph, { spacing });
             // keep the most recently used layouts only
-            focusLayouts.delete(graph.id);
-            focusLayouts.set(graph.id, laid);
+            focusLayouts.delete(key);
+            focusLayouts.set(key, laid);
             if (focusLayouts.size > FOCUS_LAYOUT_CACHE) focusLayouts.delete(focusLayouts.keys().next().value!);
             return laid;
+        },
+
+        compactGraph(graphId: string): Promise<LaidOutGraph | null> {
+            return serialized(async () => {
+                const shown = pushedGraphs(current).find((g) => g.id === graphId);
+                if (!shown) return null;
+                const graph = graphOf(shown);
+                const key = compactKey(graphId);
+                const signature = graphSignature(graph);
+                const cached = layouts.get(key);
+                if (cached && cached.signature === signature) {
+                    return { ...graph, nodeLayout: cached.nodeLayout, edgeLayout: cached.edgeLayout, signature, spacing: 'compact' };
+                }
+                // canonical: the incremental hints of a storming's normal layout are of the normal spacing
+                const laid = graph.grid ? layoutGrid(graph, 'compact') : await engine.layout(graph, { spacing: 'compact' });
+                layouts.set(key, laid);
+                await layoutStore.save(engine, layouts);
+                return laid;
+            });
         },
     };
 }
