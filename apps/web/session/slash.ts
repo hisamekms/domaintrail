@@ -8,11 +8,13 @@
 // selected (`TemplateContext`); filtering after `/` matches an item's stable English ID and its name in the UI
 // language. A template's `{target}` is where the selected element goes, as a `#` mention and the message's target.
 import {
+    commandId as interviewCommandId,
     INTERVIEW_COMMANDS,
     isInterviewCommandId,
     isSlashCommandName,
     SLASH_COMMAND_NAMES,
     SLASH_COMMANDS,
+    slashCommandName,
     suggestedCommandId,
     tokenName,
     type InterviewCommandId,
@@ -231,6 +233,17 @@ export function runningInterview(state: Pick<SessionStateBody, 'interviews'>): I
 export type InterviewJson = NonNullable<SessionStateBody['interviews']>[number];
 
 export type SlashCommandJson = NonNullable<SessionStateBody['slashCommands']>[number];
+
+/**
+ * The command a message opened, if it is a command's opening message (the chat shows it as the command's chip): read
+ * from the server's state — the SlashCommand's or the Interview's `opening` — never from the message's text.
+ */
+export function commandOfOpening(state: Pick<SessionStateBody, 'interviews' | 'slashCommands'>, request: string): CommandId | undefined {
+    const command = (state.slashCommands ?? []).find((c) => c.opening === request);
+    if (command) return slashCommandName(command.kind);
+    const interview = (state.interviews ?? []).find((i) => i.opening === request);
+    return interview && interviewCommandId(interview.command);
+}
 
 /**
  * Whether a command may start now (anyone may start any command): an interview while none runs; another command while

@@ -27,7 +27,6 @@ import {
     LoaderCircle,
     MessagesSquare,
     SendHorizontal,
-    Sparkles,
     Ban,
     X,
     type LucideIcon,
@@ -89,9 +88,12 @@ import { TriageRecordPanel } from './triage-record';
 import { InterviewChoices, InterviewPanel, interviewSlot } from './interview';
 import { CandidatesCard, commandSlot } from './candidates';
 import { HintButton, HintMark, startHint, SuggestedMark } from './hint';
+import { CommandChip, CommandIcon } from './command-chip';
 import { commandComposerValue, nextAnswerOf, NextSteps } from './next-steps';
 import {
     canStartCommand,
+    commandOfOpening,
+    commandType,
     hintButton,
     hintSuggestions,
     runningInterview,
@@ -1115,6 +1117,7 @@ function MessageRow({
     const triage = triages.get(r.id);
     const ai = messageAi(triage, givenUp);
     const selected = selection.ids.has(r.id);
+    const command = commandOfOpening(session.state, r.id);
     const [record, setRecord] = useState(false);
     // 「AI に送る」: a message not addressed yet, or one judged to need nothing (sent again as 相談); never in Solo,
     // where every message is addressed as it is sent
@@ -1184,18 +1187,28 @@ function MessageRow({
                 {!hangs && r.replyTo?.kind === 'Run' && <ReplyReferenceLine run={r.replyTo.run} />}
                 {!hangs && r.replyTo?.kind === 'Message' && <MessageReferenceLine request={r.replyTo.request} />}
                 <TargetChips targets={r.targets} statuses={statuses} onNavigate={onNavigate} tx={tx} />
-                <Clamped tx={tx} revealKey={`message:${r.id}`}>
-                    <MentionedText
-                        body={r.body}
-                        targets={r.targets}
-                        statuses={statuses}
-                        onNavigate={onNavigate}
-                        mentions={r.mentions}
-                        nameOf={nameOf}
-                        onPerson={showPerson}
-                        tx={tx}
+                {/* a `/` command's opening message: the command's chip in place of its name as text */}
+                {command ? (
+                    <CommandChip
+                        id={command}
+                        name={tx.chat.slash.commands[command]}
+                        description={tx.chat.slash.types[commandType(command)]}
+                        label={tx.chat.slash.chip(command, tx.chat.slash.commands[command])}
                     />
-                </Clamped>
+                ) : (
+                    <Clamped tx={tx} revealKey={`message:${r.id}`}>
+                        <MentionedText
+                            body={r.body}
+                            targets={r.targets}
+                            statuses={statuses}
+                            onNavigate={onNavigate}
+                            mentions={r.mentions}
+                            nameOf={nameOf}
+                            onPerson={showPerson}
+                            tx={tx}
+                        />
+                    </Clamped>
+                )}
                 {ai.kind === 'given-up' && !slotted && (
                     <p className="chat-ai-given-up">
                         {tx.chat.ai.givenUp}
@@ -1976,7 +1989,7 @@ function Composer(props: {
                                     setActive(i);
                                 }}
                             >
-                                {c.kind === 'command' && <Sparkles size={13} aria-hidden className="chat-slash-icon" />}
+                                {c.kind === 'command' && <CommandIcon id={c.id} />}
                                 {/* the hint's star in the name's cell: the option's grid keeps its columns */}
                                 <span className="chat-mention-name">
                                     {c.name}

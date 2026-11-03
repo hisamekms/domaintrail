@@ -842,6 +842,8 @@ const ja = {
                 hint: '↑↓ で選び、Enter か Tab で決める（Esc で閉じる）',
                 // a command the latest hint suggests: its mark in the list
                 suggested: 'ヒントのおすすめ',
+                // a command's opening message in the chat, shown as its chip: the chip's accessible name
+                chip: (id: string, name: string) => `コマンド /${id} ${name}`,
             },
             // `/hint` (ヒントをもらう): the composer's button that runs it, and the mark of its answer
             hint: {
@@ -1771,6 +1773,7 @@ const en: Messages = {
                 noMatch: 'Nothing matches',
                 hint: 'Choose with ↑↓, pick with Enter or Tab (Esc closes)',
                 suggested: 'Suggested by the hint',
+                chip: (id, name) => `Command /${id} ${name}`,
             },
             hint: {
                 button: 'Get a hint',
