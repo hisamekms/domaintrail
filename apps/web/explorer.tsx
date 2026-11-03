@@ -256,7 +256,7 @@ export function Explorer(props: ExplorerProps) {
                                 {group(
                                     <>
                                         {t.kinds[kind]}
-                                        <span className="muted"> {nodes.length}</span>
+                                        {!groupOpen && <span className="muted tree-count"> {groupCount(nodes.length)}</span>}
                                     </>,
                                     { depth: 1, visible: open, open: groupOpen, onToggle: () => toggle(key, true) },
                                 )}
@@ -386,6 +386,9 @@ export function Twisty({ row }: { row: RowState }) {
 }
 
 /** A titled section of the pane that opens and closes with its title, like a tree row. */
+/** A group heading's count (「集約 (1)」): shown only while the group is collapsed, when its rows do not tell it. */
+export const groupCount = (n: number): string => `(${n})`;
+
 export function Section({ title, hits, open, onToggle, children }: { title: string; hits?: number; open: boolean; onToggle: () => void; children: ReactNode }) {
     return (
         <section className="explorer-section">
