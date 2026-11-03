@@ -80,7 +80,9 @@ export function toolActivity(name: string, input: unknown, roots: readonly strin
     if (name === 'Bash') {
         const command = field('command');
         const dt = typeof command === 'string' ? DT_COMMAND.exec(command) : null;
-        return dt ? { phase: 'checking', subject: `dt ${dt[1]}` } : undefined;
+        if (!dt) return undefined;
+        // `dt guide` looks the languages up: reading, not checking
+        return { phase: dt[1] === 'guide' ? 'reading' : 'checking', subject: `dt ${dt[1]}` };
     }
     return undefined;
 }

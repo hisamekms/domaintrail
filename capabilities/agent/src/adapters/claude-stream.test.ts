@@ -32,6 +32,7 @@ describe("Claude Code's events as activities", () => {
         expect(activityOfEvent(assistant(tool('MultiEdit', { file_path: `${ROOT}/a.dt`, edits: [] })), [ROOT])).toEqual({ phase: 'editing', subject: 'a.dt' });
         expect(activityOfEvent(assistant(tool('Bash', { command: 'dt check' })), [ROOT])).toEqual({ phase: 'checking', subject: 'dt check' });
         expect(activityOfEvent(assistant(tool('Bash', { command: 'dt fmt order.dt' })), [ROOT])).toEqual({ phase: 'checking', subject: 'dt fmt' });
+        expect(activityOfEvent(assistant(tool('Bash', { command: 'dt guide storming-practice' })), [ROOT])).toEqual({ phase: 'reading', subject: 'dt guide' });
         expect(activityOfEvent(assistant(tool('StructuredOutput', { summary: 'Done.' })), [ROOT])).toEqual({ phase: 'finishing' });
         expect(activityOfEvent({ type: 'result', subtype: 'success', result: '{}' }, [ROOT])).toEqual({ phase: 'finishing' });
         // the last tool call of a message that maps

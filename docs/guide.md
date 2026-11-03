@@ -2971,7 +2971,7 @@ are shown. The old sections `session` and `view` are refused when the file is lo
     // the runner: the runs that edit the workspace
     "run": {
       // Claude Code permission rules; this is the default
-      "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)"],
+      "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)", "Bash(dt guide:*)"],
       "warm": true,            // one Claude Code process across runs (each run a turn); false: one process per run
       "restartAfter": 20,      // runs of one warm process before a fresh one replaces it
       "idleTimeout": 30        // minutes without a run before the warm process ends (its memory freed); 0 = never
@@ -3059,17 +3059,21 @@ The agent (`dt agent`, or in process) runs `claude` from the `PATH` in the works
 --permission-mode dontAsk --tools … --disallowedTools … --allowedTools …`, with the rules of `agent.run.allowedTools`
 only (any other tool is refused without asking, and no MCP server is loaded). The prompt tells it to read the related files, edit only
 the `.dt` and `.dtes` sources, keep a storming exploratory, and change no `.dt` when the requests are only about
-stormings, and lets it answer instead (status `answered`) a request that turns out to be a question; then `dt fmt` and
-`dt check` run when the run changed files (else both are skipped), and the server records the result.
+stormings, and lets it answer instead (status `answered`) a request that turns out to be a question. It also gives the
+ways of working of the languages the requests are about, as `dt guide storming-practice` and `dt guide
+modeling-practice` print them (both for a request about the whole workspace); the answerer's prompts give them too.
+Then `dt fmt` and `dt check` run when the run changed files (else both are skipped), and the server records the
+result.
 
-- **The agent's `dt`.** The agent may run `dt fmt` and `dt check` (the default `allowedTools`), whatever is installed:
-  for each run the subscriber puts a `dt` first on the agent's `PATH`, in a private temporary directory (0700) outside
-  the workspace. It runs `agent.run.dt` — `["node" | "bun" | "deno", "<script>"]` or `["<dt executable>"]`, e.g. a
-  clone of DomainTrail next to the workspace while developing it — or, unset, the very `dt` running the subscriber.
-  That command is read once when the subscriber starts (never again from the config file, which is in the workspace),
-  pinned to absolute real paths (the runtime found on the `PATH`), refused when the script or executable is inside the
-  workspace (symbolic links followed), and fingerprinted: a run does not start once either file changed. The agent's
-  `dt` takes `fmt` or `check` and then `.dt` / `.dtes` files of the workspace only; any option or other argument is
+- **The agent's `dt`.** The agent may run `dt fmt`, `dt check` and `dt guide` (the default `allowedTools`), whatever
+  is installed: for each run the subscriber puts a `dt` first on the agent's `PATH`, in a private temporary directory
+  (0700) outside the workspace. It runs `agent.run.dt` — `["node" | "bun" | "deno", "<script>"]` or
+  `["<dt executable>"]`, e.g. a clone of DomainTrail next to the workspace while developing it — or, unset, the very
+  `dt` running the subscriber. That command is read once when the subscriber starts (never again from the config file,
+  which is in the workspace), pinned to absolute real paths (the runtime found on the `PATH`), refused when the script
+  or executable is inside the workspace (symbolic links followed), and fingerprinted: a run does not start once either
+  file changed. The agent's `dt` takes `fmt` or `check` and then `.dt` / `.dtes` files of the workspace only, or
+  `guide` alone, with one topic or rule name, or with `--all` (it only prints); any other option or argument is
   refused with a message to the agent, and `-r <workspace>` is always added by the shim. Both the agent's `dt` and the
   `dt fmt` / `dt check` after the agent run with a private working directory, never the workspace.
 

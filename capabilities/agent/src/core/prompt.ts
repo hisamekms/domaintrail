@@ -251,7 +251,8 @@ function revertedRunOf(reverted: AgentRevertedRun, number: number, names: Readon
  */
 function practiceSection(practice: readonly string[]): string {
     if (practice.length === 0) return '';
-    return `How to work (from DomainTrail's guide). The rules above win where they differ: \`dt fmt\` and \`dt check\` run after your turn, and a question goes back as a "clarification".
+    return `How to work (from DomainTrail's guide; \`dt guide <topic>\` prints the topics it links to). The rules above win
+where they differ: \`dt fmt\` and \`dt check\` run after your turn, and a question goes back as a "clarification".
 
 ${practice.join('\n\n')}
 
@@ -387,8 +388,9 @@ Rules:
 3. A \`.dtes\` storming stays exploratory: open hotspots and events without a model counterpart are fine.
    Never copy or sync \`.dtes\` content into \`.dt\` files by yourself.
 4. ${scope}
-5. Run no command except \`dt check\`, and that only when you need its diagnostics to fix your edit: \`dt fmt\` and
-   \`dt check\` are run on the workspace after your turn anyway. No network, no package installs, no git.
+5. Run no command except \`dt check\` and \`dt guide\`: \`dt check\` only when you need its diagnostics to fix your edit
+   (\`dt fmt\` and \`dt check\` are run on the workspace after your turn anyway), \`dt guide <topic>\` to look up the
+   languages (\`dt guide\` lists the topics; it only prints). No network, no package installs, no git.
 6. When a request is ambiguous, contradicts another or the model, or cannot be done without guessing, do not guess:
    reply "clarification" with your questions (offer the likely answers as options) and leave the files as they are.
    \`answersToYourQuestions\`, when present, answers your questions of an earlier run: follow it.

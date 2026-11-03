@@ -13,7 +13,7 @@ import { parseSse } from '../adapters/http-agent-api.js';
 import type { AgentPreviousRun, Json } from '@domaintrail/collaboration/protocol';
 
 /** The default tools of the agent (`session.agent.allowedTools`; the configuration's default is tested with it). */
-const DEFAULT_AGENT_TOOLS: readonly string[] = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'];
+const DEFAULT_AGENT_TOOLS: readonly string[] = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)', 'Bash(dt guide:*)'];
 
 const REVISION = '00000000-0000-4000-8000-000000000000';
 
@@ -171,9 +171,11 @@ describe('the prompt', () => {
             'A plain `@name` mentions a participant (a person), not an',
             'Edit only `.dt` and `.dtes` source files',
             'Never copy or sync `.dtes` content into `.dt`',
-            // the subscriber runs dt fmt and dt check after the turn: the agent runs dt check only for its diagnostics
-            'Run no command except `dt check`, and that only when you need its diagnostics to fix your edit',
+            // the subscriber runs dt fmt and dt check after the turn: the agent runs dt check only for its diagnostics,
+            // and dt guide to look the languages up
+            'Run no command except `dt check` and `dt guide`: `dt check` only when you need its diagnostics to fix your edit',
             'are run on the workspace after your turn anyway',
+            '`dt guide <topic>` to look up the',
             'do not guess',
         ]) {
             expect(both).toContain(rule);
@@ -193,7 +195,7 @@ describe('the prompt', () => {
         expect(none).toContain(`${practice.storming}\n\n${practice.modeling}`);
         // after the rules, which win, and before the reply; outside the block of data
         expect(none.indexOf('14. `sessionSoFar`')).toBeLessThan(none.indexOf('How to work'));
-        expect(none).toContain('The rules above win where they differ');
+        expect(none).toContain('The rules above win\nwhere they differ');
         expect(none.indexOf('MODELING')).toBeLessThan(none.indexOf('Your final answer is the reply'));
         expect(none.indexOf('MODELING')).toBeLessThan(none.indexOf('<requests-n>'));
         // without the guide's text, no section
@@ -437,6 +439,7 @@ describe('the Claude Code arguments', () => {
             'Edit(./**)',
             'Bash(dt fmt:*)',
             'Bash(dt check:*)',
+            'Bash(dt guide:*)',
         ]);
         expect(scopedRules(['Read', 'Grep', 'Glob', 'Write', 'Edit', 'MultiEdit', 'Read(docs/**)', 'Bash(dt check:*)'])).toEqual([
             'Edit(./**)',
