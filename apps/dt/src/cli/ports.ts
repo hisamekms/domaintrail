@@ -4,6 +4,8 @@ import type { ResolvedClassifierConfig, ResolvedCollabConfig, ResolvedConfig } f
 import type { MessageTemplateConfig } from '@domaintrail/collaboration';
 import type { LanguageServerOptions } from '../lsp/server.js';
 import type { TrustStore } from './trust.js';
+import type { LaidOutGraph, StructureLevel } from '@domaintrail/visualization';
+import type { ViewPayload } from '@domaintrail/visualization/protocol';
 
 /**
  * What the CLI needs from outside, defined here on its side (ADR 0025): `cliDeps` (`main.ts`)
@@ -23,6 +25,11 @@ export interface CliDeps {
      * after the workspace.
      */
     exportSources(options: SourcesExportOptions): Promise<SourcesExport>;
+    /**
+     * The workspace's diagrams as the Live View has them (`dt export svg`): its graphs laid out from scratch, never from
+     * the layouts the Live View saved, so that the same sources always give the same drawing. `dispose` once drawn.
+     */
+    diagramViews(options: SourcesExportOptions): Promise<DiagramViews>;
     /** What `dt generate ts` prints after `hint: ` when no lint rule against casts is found from `root` up; else undefined. */
     castLintHint(root: string): Promise<string | undefined>;
     generatedOutput: GeneratedOutput;
@@ -97,6 +104,16 @@ export interface SourcesExport {
     /** How many of them are sources (`.dt` and `.dtes` files). */
     readonly sources: number;
     readonly zip: Uint8Array;
+}
+
+/** The Live View's diagrams of a workspace, laid out (`dt export svg`). */
+export interface DiagramViews {
+    /** What the Live View is sent: the model, its graphs and every view of every storming, with the diagnostics. */
+    readonly payload: ViewPayload;
+    /** The Structure View of some bounded contexts with their dependencies as stubs (none: no such context). */
+    focusGraph(contexts: readonly string[], level: StructureLevel): Promise<LaidOutGraph | null>;
+    /** Stops the layout engine. */
+    dispose(): void;
 }
 
 /** What `dt open --host <non-loopback>` asks of the Live View. */

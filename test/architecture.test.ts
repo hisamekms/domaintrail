@@ -17,12 +17,14 @@ const ROOT = path.join(import.meta.dir, '..');
 const MAP_FILE = 'test/architecture/map.ts';
 
 /**
- * Relative imports that leave their package: the CLI embeds the guide as text (bundled into dist/dt.js); the generator
+ * Relative imports that leave their package: the CLI embeds the guide as text (bundled into dist/dt.js), and the Live
+ * View's stylesheet, whose colours and fonts `dt export svg` draws in (the one source of them); the generator
  * reads domaintrail's version from the root package.json, which the generated contract tests state; the page shows the
  * approved logo files as they are (assets/brand, bundled into dist/web).
  */
 const OUTSIDE_PACKAGE: Record<string, string[]> = {
     'apps/dt/src/cli/main.ts': ['docs/guide.md'],
+    'apps/dt/src/cli/export-svg.ts': ['apps/web/styles.css'],
     'capabilities/generation/src/core/tests.ts': ['package.json'],
     'apps/web/app/shell.tsx': ['assets/brand/logo-dark.svg', 'assets/brand/logo-light.svg'],
 };

@@ -84,6 +84,8 @@ export function cliDeps(): CliDeps {
         loadWorkspace,
         exportSources: ({ root, sources, respectGitignore, configFile }) =>
             createSourceArchive({ root, selection: sourceSelection(sources, respectGitignore), ...(configFile !== undefined && { configFile }) }),
+        // loads the layout engine only when `dt export svg` draws
+        diagramViews: async (options) => (await import('./wiring/diagram.js')).loadDiagramViews(options),
         castLintHint: async (root) => ((await hasCastLintRule(root)) ? undefined : LINT_HINT),
         // the manifest in the workspace's state directory (an older `.domaintrail/` moved there first, said on stderr)
         generatedOutput: createGeneratedOutput(GENERATED_MARKER, async (root) => (await workspaceState(root, (line) => console.error(line))).state),

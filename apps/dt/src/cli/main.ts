@@ -23,6 +23,7 @@ import {
     StateError,
     TunnelError,
 } from './ports.js';
+import { checkSvgOptions, exportSvg, SvgExportError, type SvgExportOptions } from './export-svg.js';
 import { lookup, showJson, showText } from './show.js';
 import { approveSettings, NotApproved, type StartFlags } from './trust.js';
 import guide from '../../../../docs/guide.md' with { type: 'text' };
@@ -124,6 +125,7 @@ Examples:
   dt lsp                        language server over stdio, started by editors and AI agents
   dt show Sales.Order           one element resolved (field sets, labels, commands, used by), instead of reading files
   dt export sources             the .dt and .dtes files and the config as <workspace>-sources.zip, to share without git
+  dt export svg --storming S -o s.svg   a diagram as the Live View's 書き出し → SVG saves it, without a browser
 
 New to dt, or an AI agent? Run \`dt guide\` first: the workflow, the DSL at a glance and the commands, then the list
 of topics to read with \`dt guide <topic>\` (e.g. \`dt guide requires\`) when you need one.`,
@@ -326,9 +328,8 @@ Examples:
             exitCode = broken.size || (opts.check && changed) ? 1 : 0;
         });
 
-    program
-        .command('export')
-        .description('Export the model: its sources as one ZIP archive.')
+    const exporting = program.command('export').description('Export the model: its sources as one ZIP archive, or a diagram as an SVG file.');
+    exporting
         .command('sources')
         .description('Write the .dt and .dtes files and the config file as one ZIP archive, folders kept.')
         .option('-o, --out <file>', 'the archive to write, `-` for stdout (default: <workspace>-sources.zip in the current directory)')
@@ -363,6 +364,82 @@ Examples:
             const rel = path.relative(process.cwd(), file);
             io.out(summary(rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : file));
         });
+
+    exporting
+        .command('svg')
+        .description('Draw a diagram of the Live View as an SVG file, as its 書き出し → SVG saves it, without a browser.')
+        .option('--storming <id>', 'an Event Storming: the storming to draw (its ID)')
+        .option('--stage <id>', 'with --storming: one stage (its main flows and its exceptions)')
+        .option('--timeline <id>', 'with --storming: one timeline')
+        .option('--level <level>', 'with --storming: big-picture (default) or design; with --model: detail (default), overview or aggregates')
+        .addOption(
+            new Option('--exceptions <exceptions>', 'with --storming, on the whole storming or a stage: draw its exceptions (default) or not').choices([
+                'show',
+                'hide',
+            ]),
+        )
+        .option('--model', 'the domain model: its Structure View or Context Map')
+        .addOption(new Option('--view <view>', 'with --model: the Structure View (default) or the Context Map').choices(['structure', 'map']))
+        .option('--context <names...>', 'with --model: the bounded contexts to focus the Structure View on, their dependencies as stubs')
+        .option('--all', 'with --model --view map: also the shared and external contexts')
+        .option('--heading', 'the line saying what the diagram is above it (workspace › world › view · conditions)')
+        .option('--legend', "the view's legend under the diagram")
+        .addOption(new Option('--theme <theme>', 'the colours').choices(['light', 'dark']).default('light'))
+        .addOption(new Option('--lang <lang>', 'the language of the badges, the heading and the legend').choices(['ja', 'en']).default('ja'))
+        .addOption(new Option('--names <names>', 'names shown as their labels, their names, or both').choices(['label', 'name', 'both']).default('label'))
+        .requiredOption('-o, --out <file>', 'the SVG file to write, `-` for stdout')
+        .addHelpText(
+            'after',
+            `
+Draws the diagram the Live View shows with the same choices, as the portable SVG its 書き出し → SVG saves (plain shapes
+and text, no external resources): the same input always gives the same bytes, with no time and no random IDs in it.
+Every view is laid out from scratch (never from the layouts the Live View saved), and nothing is marked as changed;
+the diagnostics' marks are drawn as on the screen. The text is laid out with a table of the Live View's fonts (Hiragino
+Sans and SF Mono, as Chrome on macOS measures them), and the SVG names the page's font stacks without embedding a font.
+The light theme is on white, as the Live View exports it; the dark one on the dark canvas's background.
+An unknown storming, stage, timeline or context is named with the choices. An existing file is replaced.
+Exits 0 when written, 1 when the workspace has no such diagram (or no .dt or .dtes file), 2 on options that do not go
+together or an invalid config.
+
+Examples:
+  dt export svg --storming OrderToCash -o order-to-cash.svg
+  dt export svg --storming OrderToCash --timeline PaymentRetry --level design --legend -o retry.svg
+  dt export svg --storming OrderToCash --exceptions hide --theme dark --lang en --heading -o dark.svg
+  dt export svg --model --view map --all --heading -o map.svg
+  dt export svg --model --context Sales Billing --level aggregates -o - > sales.svg`,
+        )
+        .action(async (opts: SvgCommandOptions) => {
+            const svg = await drawSvg(opts);
+            const bytes = new TextEncoder().encode(svg);
+            if (opts.out === '-') {
+                if (io.bytes) await io.bytes(bytes);
+                else io.out(svg);
+                return;
+            }
+            const file = path.resolve(opts.out);
+            await writeFile(file, bytes);
+            const rel = path.relative(process.cwd(), file);
+            io.out(`written to ${rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : file}`);
+        });
+
+    /** The diagram `options` name, drawn from the workspace (the options checked before it is read). */
+    const drawSvg = async (options: SvgExportOptions): Promise<string> => {
+        try {
+            checkSvgOptions(options);
+            const cfg = await config();
+            const workspace = workspaceOf(cfg);
+            if ((await deps.findDomainFiles(cfg.root, cfg.sources, cfg.respectGitignore)).length === 0) throw new CliError(noSourcesMessage(cfg));
+            const views = await deps.diagramViews(workspace);
+            try {
+                return await exportSvg(views, path.basename(cfg.root), options);
+            } finally {
+                views.dispose();
+            }
+        } catch (e) {
+            if (e instanceof SvgExportError) throw new CliError(e.message, e.exitCode);
+            throw e;
+        }
+    };
 
     const serveOptions = (command: Command, section: 'open' | 'collab', hostHelp: string): Command =>
         command
@@ -965,6 +1042,9 @@ Examples:
     if (report) io.out(JSON.stringify(report, null, 2));
     return exitCode;
 }
+
+/** The options of `dt export svg`, as commander gives them (the choices and defaults checked by it). */
+type SvgCommandOptions = SvgExportOptions & { out: string };
 
 /** The options of `dt open` and `dt collab`. */
 interface ServeOptions {
