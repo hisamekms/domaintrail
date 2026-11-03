@@ -1,6 +1,8 @@
-import type { LaidOutGraph } from '@domaintrail/visualization';
-import { rectCenter, rectContains, type Rect, type SceneId, unionRects } from '../scene';
+import { graphBounds, type LaidOutGraph } from '@domaintrail/visualization';
+import { rectCenter, rectContains, type SceneId } from '../scene';
 import type { DiagramCanvas } from './diagram';
+
+export { graphBounds };
 
 /**
  * Initial zoom never goes below this (in units of normal-size text), so text stays readable;
@@ -22,15 +24,6 @@ export function fitReadable(canvas: DiagramCanvas, textScale = 1): void {
         x: Math.min(center.x, bounds.x + screen.w / minZoom / 2 - margin),
         y: Math.min(center.y, bounds.y + screen.h / minZoom / 2 - margin),
     });
-}
-
-/** Everything the graph draws, edge labels included (they stick out of the shapes' bounds). */
-export function graphBounds(graph: LaidOutGraph): Rect | undefined {
-    const boxes = [
-        ...Object.values(graph.nodeLayout),
-        ...Object.values(graph.edgeLayout).flatMap((e) => [...(e.label ? [e.label] : []), ...e.points.map((p) => ({ ...p, width: 0, height: 0 }))]),
-    ];
-    return unionRects(boxes.map((b) => ({ x: b.x, y: b.y, w: b.width, h: b.height })));
 }
 
 /** Fits the whole graph, zoomed in no further than normal size (for small panes, where `fitReadable` would crop). */

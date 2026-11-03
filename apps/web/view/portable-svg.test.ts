@@ -1,9 +1,24 @@
-// The portable SVG (view/portable-svg.ts): plain, well-formed SVG of every kind of diagram, its notes' text laid out as
-// the canvas fits it, its edges' heads as markers, and the heading and legend when asked.
+// The portable SVG (`@domaintrail/visualization`'s `portableSvg`, as the page exports it): plain, well-formed SVG of
+// every kind of diagram, its notes' text laid out as the canvas fits it, its edges' heads as markers, and the heading
+// and legend when asked.
 import { afterAll, describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { createViewService, ElkLayoutEngine, type LaidOutGraph } from '@domaintrail/visualization';
+import {
+    breakUnits,
+    createViewService,
+    ElkLayoutEngine,
+    ellipsize,
+    noteText,
+    PALETTE_VARS,
+    portableSvg,
+    wrapLines,
+    xml,
+    type Font,
+    type LaidOutGraph,
+    type Palette,
+    type TextMeasure,
+} from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { MESSAGES } from '../i18n';
 import { legendContent, legendKindNames } from '../legend';
@@ -12,7 +27,6 @@ import { buildScene } from '../render';
 import type { Scene } from '../scene';
 import { exampleSources, viewPayloads } from '../test-helpers';
 import { exportBounds } from './export';
-import { breakUnits, ellipsize, noteText, PALETTE_VARS, portableSvg, wrapLines, xml, type Font, type Palette, type TextMeasure } from './portable-svg';
 
 /** Wide characters 1em, others 0.55em: a measure of fixed widths, as a canvas's would be of one font. */
 const isWide = (ch: string): boolean => /[⺀-鿿가-힯豈-﫿︰-﹏＀-￯]/u.test(ch);

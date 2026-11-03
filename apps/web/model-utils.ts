@@ -1,4 +1,4 @@
-import { type DisplayMode, PRIMITIVE_LABELS, shownLabel, typeText } from '@domaintrail/visualization';
+import { type DisplayMode, nameIn, PRIMITIVE_LABELS, shownLabel, typeText } from '@domaintrail/visualization';
 import {
     commandsOf,
     contextNames,
@@ -39,14 +39,8 @@ export const shortName = (q: string): string => q.slice(q.lastIndexOf('.') + 1);
 
 export { shownLabel };
 
-/**
- * A name in the given display mode. A label missing, empty or only whitespace counts as none (`shownLabel`): the name
- * stands in for it, and 両方 shows the name alone.
- */
-export const nameIn = (mode: DisplayMode, name: string, label?: string): string => {
-    const shown = shownLabel(label);
-    return mode === 'name' || !shown ? name : mode === 'label' ? shown : `${shown} (${name})`;
-};
+/** A name in the given display mode (shared with the drawn diagrams' headings). */
+export { nameIn };
 
 /** `確定済み (Confirmed)` when a label exists, otherwise the name. */
 export const withLabel = (x: { name: string; label?: string }): string => nameIn('both', x.name, x.label);

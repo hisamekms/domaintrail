@@ -1,14 +1,26 @@
-// Exporting the diagram of a canvas as a file: a portable SVG (`portable-svg.ts`), or a PNG rasterized from it at twice
-// its size on white. The page gives the builder what it cannot know itself: the light theme's colours (resolved from
+// Exporting the diagram of a canvas as a file: a portable SVG (`@domaintrail/visualization`'s `portableSvg`), or a PNG
+// rasterized from it at twice its size on white. The page gives the builder what it cannot know itself: the light theme's colours (resolved from
 // styles.css's custom properties), the page's font stacks, and a canvas's `measureText` to lay text out with. PDF is the
 // print path (the browser's print dialog saves one). The options (the heading, the legend) are the viewer's, remembered.
 import { useCallback, useState } from 'react';
-import type { LaidOutGraph } from '@domaintrail/visualization';
-import { legendContent, legendKindNames, type LegendView } from '../legend';
+import {
+    exportBounds,
+    legendContent,
+    legendKindNames,
+    PALETTE_VARS,
+    portableSvg,
+    type Fonts,
+    type LaidOutGraph,
+    type LegendView,
+    type Palette,
+    type PortableSvg,
+    type Rgba,
+    type Scene,
+    type TextMeasure,
+} from '@domaintrail/visualization';
 import type { Messages } from '../i18n';
-import type { Rect, Scene } from '../scene';
-import { graphBounds } from './canvas';
-import { PALETTE_VARS, portableSvg, type Fonts, type Palette, type PortableSvg, type Rgba, type TextMeasure } from './portable-svg';
+
+export { exportBounds };
 
 /** What a canvas can export now: its diagram and what is said about it. */
 export interface ExportTarget {
@@ -68,15 +80,6 @@ export function useExportOptions(): [ExportOptions, (options: ExportOptions) => 
         writeExportOptions(browserStorage(), next);
     }, []);
     return [options, set];
-}
-
-/** Room around the diagram in an export (the builder adds its own margin around everything). */
-const EXPORT_MARGIN = 8;
-
-/** The part of the page an export shows: everything the graph draws, with a little room for the marks on its boxes. */
-export function exportBounds(graph: LaidOutGraph): Rect {
-    const b = graphBounds(graph) ?? { x: 0, y: 0, w: 1, h: 1 };
-    return { x: b.x - EXPORT_MARGIN, y: b.y - EXPORT_MARGIN - 4, w: b.w + 2 * EXPORT_MARGIN, h: b.h + 2 * EXPORT_MARGIN + 4 };
 }
 
 /** A PNG's pixels per px of the diagram (twice, for sharp text). */

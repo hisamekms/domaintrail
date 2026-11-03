@@ -3,11 +3,23 @@
 // wraps each in its own container (React Flow's custom nodes and edges in `view/flow-canvas.tsx`), at the item's place
 // on the page.
 import { Fragment, useLayoutEffect, useReducer, useRef, useSyncExternalStore, type ComponentType, type CSSProperties, type ReactNode } from 'react';
-import { TRANSITION_LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, TRANSITION_SUB_SIZE } from '@domaintrail/visualization';
+import {
+    BADGE,
+    badgeWidth,
+    checkPath,
+    DIAG_RADIUS,
+    RESOLVED_MARK,
+    TRANSITION_LINE_HEIGHT,
+    TRANSITION_SUB_LINE_HEIGHT,
+    TRANSITION_SUB_SIZE,
+} from '@domaintrail/visualization';
 import type { DiagMark, EdgeProps, GroupProps, InternalProps, NodeProps, Point } from './scene';
 import { fitKey, fitLabel, fontLoadCount, NOTE_KINDS, rememberedFit, rememberFit, subscribeFonts, type LabelFit } from './note-fit';
 import { useT } from './i18n';
 import { TOOLTIP_ATTR } from './tooltip';
+
+// the marks' places and sizes, shared with the portable SVG
+export { BADGE, badgeWidth, checkPath, DIAG_RADIUS, RESOLVED_MARK };
 
 /** A box's size and text scale (`--s`), as its CSS expects them. */
 const boxStyle = (p: { w: number; h: number; scale: number }): CSSProperties => ({ width: p.w, height: p.h, ['--s' as string]: p.scale });
@@ -127,13 +139,6 @@ function measureLabel(label: HTMLElement, scale: number): LabelFit | undefined {
         probe.remove();
     }
 }
-
-/** Where a resolved hotspot's check sits: a disc this far inside its note's top-right corner. */
-export const RESOLVED_MARK = { inset: 4, radius: 8 };
-
-/** The check of a resolved hotspot's mark, in a disc of radius `r` centred at (`cx`, `cy`): an SVG path to stroke. */
-export const checkPath = (cx: number, cy: number, r: number): string =>
-    `M${cx - 0.45 * r},${cy + 0.02 * r} L${cx - 0.12 * r},${cy + 0.36 * r} L${cx + 0.48 * r},${cy - 0.32 * r}`;
 
 /** A resolved hotspot's mark: a green disc with a check, inside its note's top-right corner (`.dn-resolved-mark`). */
 function ResolvedMark(): ReactNode {
@@ -262,18 +267,11 @@ function diamond(start: Point, next: Point): string {
     return `M${start.x},${start.y} L${mid.x + n.x * 4.5},${mid.y + n.y * 4.5} L${end.x},${end.y} L${mid.x - n.x * 4.5},${mid.y - n.y * 4.5} Z`;
 }
 
-/** Where the change badge and the diagnostic mark sit on a node's edge (see .dn-badge and .dn-diag). */
-export const BADGE = { left: 8, bottom: 7, height: 17, padding: 6, cjk: 12, latin: 7.2 };
-export const DIAG_RADIUS = 9;
 /** The marks grow when zoomed out, to stay about their size on the screen, up to this factor. */
 const MAX_MARK_SCALE = 3;
 
 /** How much the change badge and the diagnostic mark are enlarged at `zoom` (1 from 100% up). */
 export const markScale = (zoom: number): number => Math.min(MAX_MARK_SCALE, Math.max(1, 1 / zoom));
-
-/** The badge's width, from its text (12px: full-width characters 12px, others about 7px) and padding. */
-export const badgeWidth = (text: string): number =>
-    2 * BADGE.padding + text.split('').reduce((w, ch) => w + (/[　-鿿＀-￯]/.test(ch) ? BADGE.cjk : BADGE.latin), 0);
 
 /**
  * The change badge and the diagnostic mark on a node's edge, enlarged `scale` times (`markScale` of the zoom). The
