@@ -571,6 +571,32 @@ describe('validateStormings', () => {
         expect(ds.map((d) => d.code)).toEqual(['S014']);
     });
 
+    test('S015 a label too long for its sticky note even at the smallest font is a warning', () => {
+        const long =
+            'マイナンバーカードの暗証番号を三回間違えてロックされたので市役所の窓口で再設定の手続きをしてから改めてコンビニのマルチコピー機で住民票の写しを発行し直した';
+        const text = cancel(`  event CertificateReissued "${long}"
+  hotspot PinLocked "${long}？"`);
+        const ds = validate(text);
+        expect(summary(ds)).toEqual([
+            { code: 'S015', severity: 'warning', line: lineOf(text, 'event CertificateReissued') },
+            { code: 'S015', severity: 'warning', line: lineOf(text, 'hotspot PinLocked') },
+        ]);
+        expect(ds[0]!.message).toBe(
+            "The label of event 'CertificateReissued' is too long for its sticky note: even at its smallest font the Live View cuts it short with «…» (the whole label shows on hover and in the inspector).",
+        );
+        expect(ds[0]!.hint).toContain('about 12 Japanese characters');
+        expect(ds[0]!.elementId).toBe('es/DeliveryCancellation/CertificateReissued');
+    });
+
+    test('S015 is quiet for labels that fit at some size, including long ones the canvas only shrinks', () => {
+        const text = cancel(`  event Issued "マルチコピー機で証明書を発行した"
+  event Submitted "証明書を提出先に提出した"
+  event English "Certificate issued at the multi-copy machine of the convenience store"
+  event Shrunk "マイナンバーカードの暗証番号を三回間違えてロックされたので窓口で再設定した"
+  event WithoutLabel`);
+        expect(validate(text)).toEqual([]);
+    });
+
     test('completeness is not diagnosed: unreferenced events, missing `emits`, events in no timeline, elements without `ref`', () => {
         expect(
             validate(`storming Explore {

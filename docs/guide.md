@@ -2008,6 +2008,8 @@ to its note. One timeline draws each occurrence of an event, and a group as a fr
 make two occurrences the same happening, so read a path along one timeline's name. Solid arrows are type-level causal
 relations (`on`, `issues`, `emits`: possible, not "happened"), dotted lines the other relations (`actor`, `reads`,
 `target`; a hotspot's `on` without an arrowhead), dashed arrows the order of a timeline.
+Every note is a square of the same size: a long label is drawn smaller, and one too long even then is cut short with
+«…» (hovering it shows the whole label; S015 warns about it), so keep labels short (about 12 Japanese characters).
 The layout is automatic, left to right; positions are kept in `.domaintrail/layout.json`, never in the `.dtes`. In
 `dt open`, the イベントストーミング tab shows one storming at a time, with the storming and the timeline picked as
 its toolbar's subject (a breadcrumb at the left) and the level next to them; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in.
@@ -2015,7 +2017,7 @@ its toolbar's subject (a breadcrumb at the left) and the level next to them; sel
 <!-- topic: storming-rules -->
 ### Diagnostics of a storming
 
-S001–S009 and S014 need only the storming, S010–S013 check its `ref`s against the model. Each example below is a whole
+S001–S009, S014 and S015 need only the storming, S010–S013 check its `ref`s against the model. Each example below is a whole
 file with that one problem. Syntax errors are `SYNTAX`: an unknown keyword or clause, a `ref` or clause in a timeline or
 group, a declaration outside a storming or inside a body, a nested group, an empty group, a keyword used as an ID.
 
@@ -2219,6 +2221,18 @@ storming Checkout {
 }
 ```
 
+**S015** (warning): a label too long for its sticky note. Every note is the same size; its label is drawn smaller to
+fit, down to a floor, and one that does not fit even then is cut short with «…» (the whole label shows on hover and in
+the inspector). Shorten it, to about 12 Japanese characters (an event in the past tense), and put the details in a
+`///` comment. An element without a label shows its ID, which is checked the same way.
+
+```dtes
+// S015
+storming Errands {
+  event CertificateReissued "マイナンバーカードの暗証番号を三回間違えてロックされたので市役所の窓口で再設定の手続きをしてから改めてコンビニのマルチコピー機で住民票の写しを発行し直した"
+}
+```
+
 <!-- topic: rules -->
 ## Rules
 
@@ -2270,6 +2284,7 @@ storming](#diagnostics-of-a-storming).
 | S012 | (warning) `.dtes`: a command's `ref` is a command of the aggregate that its `target`'s `ref` names |
 | S013 | (warning) `.dtes`: a command `emits` no event whose `ref` its `.dt` command never emits (`.dt` `emits` is exhaustive) |
 | S014 | (warning) `.dtes`: a type-level cycle policy → command → event → policy (possible, not an infinite loop) |
+| S015 | (warning) `.dtes`: a label fits its sticky note (one too long even at the smallest font is cut short with «…») |
 
 <!-- topic: show -->
 ## Looking up one element

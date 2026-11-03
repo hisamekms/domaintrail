@@ -4,7 +4,8 @@
 //
 // A downstream context (Collaboration) takes only the published language (`published` in test/architecture/map.ts).
 
-// ---- published language: the IR of a storming, its semantic graph and timeline occurrences, its rule IDs, its files
+// ---- published language: the IR of a storming, its semantic graph and timeline occurrences, its rule IDs, its files,
+// the sticky note its elements are drawn as
 export {
     declarations,
     esElementId,
@@ -37,6 +38,7 @@ export {
 } from './domain/semantic.js';
 export type { StormingRuleId } from './domain/rule-ids.js';
 export { isStormingFile } from './domain/files.js';
+export { estimatedLabelLines, labelOverflowsNote, LINES_AT_FLOOR, STICKY_NOTE } from './domain/sticky-note.js';
 
 // ---- use cases: Storming's analysis of the `.dtes` sources against the typed model; formatting -----------------
 export { analyzeStormings } from './application/analyze.js';

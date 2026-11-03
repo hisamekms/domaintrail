@@ -143,8 +143,8 @@ export const MAP: Record<string, Module> = {
         // Storming → Modeling: it reads Modeling's typed model, which knows nothing of it; its analysis takes the model
         // as its input and does not run Modeling's analysis (T4)
         upstream: ['kernel', 'modeling'],
-        // the IR of a storming, its semantic graph and timeline occurrences, its rule IDs, its files
-        published: ['domain/ir', 'domain/semantic', 'domain/rule-ids', 'domain/files'],
+        // the IR of a storming, its semantic graph and timeline occurrences, its rule IDs, its files, its sticky note
+        published: ['domain/ir', 'domain/semantic', 'domain/rule-ids', 'domain/files', 'domain/sticky-note'],
     },
     collaboration: {
         kind: 'context',

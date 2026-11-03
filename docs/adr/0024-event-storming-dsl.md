@@ -153,6 +153,7 @@ it; `dt guide S001` works). T6 changes the schema's `code` pattern to
 | S012 | `.dt` contract | A command's `ref` names a command of another aggregate than the `ref` of its `target` | warning | T4 |
 | S013 | `.dt` contract | A command `emits` an event that the `.dt` command provably never emits (below) | warning | T4 |
 | S014 | Graph | A type-level cycle Policy → Command → Event → Policy. The message says it is a cycle of possibilities, not an infinite loop | warning | T3 |
+| S015 | Label | A label too long for its sticky note even at the smallest font: the Live View cuts it short with «…» (every note is the same size) | warning | — |
 
 - **Not implemented in v0.1:** the optional Info rule (a policy with ≥2 `on` and ≥2 `issues`). The spec marks it 任意,
   and it would need a third severity through `Diagnostic`, the schema, the CLI summary and the LSP. The guide states
@@ -237,7 +238,7 @@ These are pure functions of the storming IR (T5), with the types in `src/dtes/ir
   IR. Its node kinds are `esEvent`, `esCommand`, `esPolicy`, `esActor`, `esExternal`, `esAggregate`, `esReadModel`,
   `esHotspot` and `esGroup` (a container whose children are its event nodes). Its edge kinds are `esCausal` (solid,
   directed), `esRelated` (dotted), `esHotspot` (dotted, undirected: a hotspot's `on`) and `esSequence` (dashed). Notes
-  are squares whose label wraps. These kinds are added to `NodeKind`/`EdgeKind` in
+  are squares of one size (`STICKY_NOTE`) whose label wraps and shrinks to fit, cut short with «…» below a floor. These kinds are added to `NodeKind`/`EdgeKind` in
   `src/graph/ir.ts`. The label is the element's label, its ID in name mode, and both in both mode. The stereotype is
   the kind. The `.dt` `ref` and the occurrences with their timelines go to the inspector (§6, §8.4).
 - Layout uses the existing `ElkLayoutEngine`, with direction `RIGHT` for graph IDs with the prefix `storming`
