@@ -89,6 +89,15 @@ export const READ_DENIED: readonly string[] = [
     'Edit(**/.git)',
 ];
 
+/**
+ * A rule's path matching in any case, by construction: each letter as a bracket of its two cases (`[dD][oO]…`), so
+ * that a case-insensitive file system's `DOMAINTRAIL.LOCAL.JSONC`, the same file, is denied too (measured with Claude
+ * Code 2.1.317: brackets are honoured). Letters are never escaped by `rulePath`, so escapes stay as they are.
+ */
+export function caseless(rule: string): string {
+    return rule.replace(/\p{L}/gu, (c) => (c.toLowerCase() === c.toUpperCase() ? c : `[${c.toLowerCase()}${c.toUpperCase()}]`));
+}
+
 /** The names of the configuration files (the project's and the local override) the agents never write. */
 export const CONFIG_FILE_NAMES: readonly string[] = ['domaintrail.jsonc', 'domaintrail.json', 'domaintrail.local.jsonc', 'domaintrail.local.json'];
 
@@ -97,7 +106,12 @@ export const CONFIG_FILE_NAMES: readonly string[] = ['domaintrail.jsonc', 'domai
  * (ignored by git, so out of sight) could widen what the next agent may read or run; the scan after a run would stop
  * the subscriber, but the file would stay for the next start. Deny rules win over every allow rule.
  */
-export const CONFIG_EDIT_DENIED: readonly string[] = CONFIG_FILE_NAMES.flatMap((name) => [`Edit(./${name})`, `Edit(**/${name})`]);
+export const CONFIG_EDIT_DENIED: readonly string[] = CONFIG_FILE_NAMES.flatMap((name) => [
+    `Edit(./${name})`,
+    `Edit(**/${name})`,
+    `Edit(./${caseless(name)})`,
+    `Edit(**/${caseless(name)})`,
+]);
 
 /** A path as a permission rule's (gitignore syntax): its special characters escaped. */
 const rulePath = (p: string): string => p.replace(/[\\*?[\]!#]/g, (c) => `\\${c}`);
@@ -244,7 +258,10 @@ export function claudeArguments(allowedTools: readonly string[], requests?: numb
         '--disallowedTools',
         ...READ_DENIED,
         ...CONFIG_EDIT_DENIED,
-        ...(options.configFiles ?? []).map((f) => `Edit(${path.isAbsolute(f) ? absoluteRule(f) : relativeRule(f)})`),
+        ...(options.configFiles ?? []).flatMap((f) => {
+            const r = path.isAbsolute(f) ? absoluteRule(f) : relativeRule(f);
+            return [`Edit(${r})`, `Edit(${caseless(r)})`];
+        }),
         ...deniedRules(options.deniedPaths ?? []),
         ...(extra?.denied ?? []),
         ...(allowed.length ? ['--allowedTools', ...allowed] : []),

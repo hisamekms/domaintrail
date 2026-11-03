@@ -26,6 +26,7 @@ export { AGENT_ROLES, type AgentRole } from '@domaintrail/collaboration/protocol
 
 // ---- adapters, for the app that wires them ---------------------------------------------------------------------
 export {
+    caseless,
     claudeArguments,
     CONFIG_EDIT_DENIED,
     CONFIG_FILE_NAMES,
