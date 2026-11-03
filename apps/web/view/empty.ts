@@ -19,5 +19,15 @@ export function isEmptyView(view: View['kind'], current: Pick<ViewPayload, 'mode
     return nothing && !current.diagnostics.some((d) => d.severity === 'error' && d.file.endsWith(ext));
 }
 
+/**
+ * What the canvas shows under a view: its graph, nothing, or what it drew last, covered by the catalog. An empty view
+ * shows nothing on the canvas (an empty catalog is not drawn, so it would leave the previous view's graph in sight).
+ */
+export function canvasShows(view: View['kind'], empty: boolean, hasGraph: boolean): 'graph' | 'nothing' | 'covered' {
+    if (empty) return 'nothing';
+    if (view === 'catalog') return 'covered';
+    return hasGraph ? 'graph' : 'nothing';
+}
+
 /** The one line an empty view shows: with an AI connected to the chat, that asking there makes it. */
 export const emptyLine = (t: Messages, aiReady: boolean): string => (aiReady ? t.emptyViewAskAi : t.emptyView);
