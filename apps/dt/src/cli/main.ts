@@ -787,6 +787,7 @@ function openSettings(cfg: ResolvedConfig, port: number, host: string): SessionS
         quickReactions: cfg.collab.quickReactions,
         agent: { port: cfg.agent.port, allowedTools: run.allowedTools, maxPreviousRunDiff: run.maxPreviousRunDiff },
         classifier: cfg.classifier,
+        templates: cfg.templates,
     };
 }
 
@@ -799,6 +800,7 @@ function sessionSettings(cfg: ResolvedConfig, server: { port: number; host: stri
         host: opts.host ?? server.host,
         agent: { port: cfg.agent.port, allowedTools: run.allowedTools, maxPreviousRunDiff: run.maxPreviousRunDiff },
         classifier: cfg.classifier,
+        templates: cfg.templates,
     };
 }
 

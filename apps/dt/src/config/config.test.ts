@@ -79,6 +79,7 @@ describe('config file', () => {
             collab: COLLAB_DEFAULTS,
             agent: AGENT_DEFAULTS,
             classifier: CLASSIFIER_DEFAULTS,
+            templates: [],
         };
         expect(defaultConfig(ROOT)).toEqual(defaults);
         expect(Object.keys(defaultConfig(ROOT))).toEqual(Object.keys(defaults));
@@ -150,6 +151,7 @@ describe('config file', () => {
                 triage: { model: 'sonnet', warm: true },
             },
             classifier: { ...CLASSIFIER_DEFAULTS, enabled: true, accountId: '0123456789abcdef0123456789abcdef' },
+            templates: [],
         });
         expect(Object.keys(c.collab)).toEqual(['port', 'host', 'identity', 'access', 'maxParticipants', 'quickReactions']);
         expect(Object.keys(c.agent)).toEqual(['port', 'run', 'answer', 'triage']);
@@ -225,6 +227,10 @@ describe('config file', () => {
         ['{ "agent": { "triage": { "warm": 1 } } }', "'agent.triage.warm' must be true or false"],
         ['{ "collab": { "quickReactions": ["ok"] } }', "'collab.quickReactions' must hold one emoji per entry: 'ok'"],
         ['{ "classifier": { "model": "x" } }', "'classifier.model' must be one of"],
+        // the team's message templates (the plan's round 4)
+        ['{ "templates": {} }', "'templates' must be an array"],
+        ['{ "templates": [{ "id": "a", "name": "A" }] }', "'templates[0].text' must be a string, or an object with 'ja' and/or 'en'"],
+        ['{ "templates": [{ "id": "a", "name": "A", "text": "T", "when": ["board"] }] }', "'templates[0].when' must hold"],
     ])('%s is refused with the file name', (text, expected) => {
         const msg = message(text);
         expect(msg.startsWith(`${FILE}: `)).toBe(true);
@@ -261,6 +267,12 @@ describe('config file', () => {
         ['{ "agent": { "run": { "maxPreviousRunDiff": -1 } } }', "'agent.run.maxPreviousRunDiff'"],
     ])('the first error of %s is %s', (text, expected) => {
         expect(message(text)).toContain(expected);
+    });
+
+    test('the team templates: kept as written, after the classifier is checked', () => {
+        const templates = [{ id: 'glossary', name: { ja: '用語', en: 'Terms' }, text: '用語集と食い違うところを挙げて', when: ['model'] }];
+        expect(resolveConfig(JSON.stringify({ templates }), FILE).templates as unknown).toEqual(templates);
+        expect(message('{ "templates": 1, "classifier": [] }')).toContain("'classifier' must be an object");
     });
 
     test("an agent's dt inside the workspace is refused after the pure checks", () => {

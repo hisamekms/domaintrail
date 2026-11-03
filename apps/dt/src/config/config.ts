@@ -1,7 +1,7 @@
 // domaintrail.jsonc as the app composes it (ADR 0027, Project analysis and configuration; ADR 0030, the sections): each
 // owner defines the type, defaults and validation of its section — the analysis `sources`, the generation `generate`
 // and `lintHint`, the app the ports and hosts (./server.ts: `open`), the owners of `collab` and `agent` (./collab.ts),
-// Collaboration the `classifier` — and this module puts them together: the file's keys, its validation in a fixed
+// Collaboration the `classifier` and `templates` — and this module puts them together: the file's keys, its validation in a fixed
 // order (the first error wins), the old sections `session` and `view` refused with where their keys went, and the
 // resolved configuration. The workspace reads the file (`loadConfig`, given `CONFIG_FILE_FORMAT` by the composition)
 // and knows none of the sections. The CLI and the language server read the resolved configuration and its errors.
@@ -16,7 +16,14 @@ import {
     validateGenerationConfig,
 } from '@domaintrail/generation';
 import { type ResolvedSourcesConfig, resolveSourcesConfig, type SourcesConfigFile, SOURCES_CONFIG_KEYS, validateSourcesConfig } from '@domaintrail/analysis';
-import { type ClassifierConfigFile, resolveCollaborationConfig, type ResolvedCollaborationConfig, validateClassifierConfig } from '@domaintrail/collaboration';
+import {
+    type ClassifierConfigFile,
+    type MessageTemplateConfig,
+    resolveCollaborationConfig,
+    type ResolvedCollaborationConfig,
+    validateClassifierConfig,
+    validateTemplatesConfig,
+} from '@domaintrail/collaboration';
 import { type OpenConfigFile, resolveOpenConfig, SERVER_CONFIG_KEYS, validateOpenConfig } from './server.js';
 import {
     type AgentSectionFile,
@@ -58,6 +65,8 @@ export interface DomainTrailConfigFile extends SourcesConfigFile, GenerationConf
     agent?: AgentSectionFile;
     /** The classifier of the addressed messages (Clef), called by the server in both modes. */
     classifier?: ClassifierConfigFile;
+    /** The team's message templates of the chat (after `/`), in both modes. */
+    templates?: MessageTemplateConfig[];
 }
 
 export type { ResolvedAgentSection, ResolvedCollabConfig };
@@ -72,6 +81,7 @@ export interface ResolvedConfig extends ResolvedSourcesConfig, ResolvedGeneratio
     collab: ResolvedCollabConfig;
     agent: ResolvedAgentSection;
     classifier: ResolvedClassifierConfig;
+    templates: readonly MessageTemplateConfig[];
 }
 
 export class ConfigError extends Error {}
@@ -104,6 +114,7 @@ function resolved(config: DomainTrailConfigFile, dir?: string): Omit<ResolvedCon
         collab: resolveCollab(config.collab),
         agent: resolveAgent(config.agent, dir),
         classifier: resolveCollaborationConfig({ classifier: config.classifier }).classifier,
+        templates: config.templates ?? [],
     };
 }
 
@@ -173,6 +184,7 @@ function validate(raw: unknown, fail: (msg: string) => never): DomainTrailConfig
     if (raw.collab !== undefined) validateCollab(raw.collab, CONFIG_KEYS, fail);
     if (raw.agent !== undefined) validateAgent(raw.agent, CONFIG_KEYS, fail);
     validateClassifierConfig(raw.classifier, fail);
+    validateTemplatesConfig(raw.templates, fail);
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- every key was checked above
     return raw as DomainTrailConfigFile;
 }
