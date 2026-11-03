@@ -381,6 +381,64 @@ describe('Design Level elements in a view of stages', () => {
         for (const e of render.edges.filter((x) => x.source.includes('@') || x.target.includes('@'))) expect(cells[e.source]!.col).toBe(cells[e.target]!.col);
         expect(crossings(g)).toEqual([]);
     });
+
+    test('the cause of an event, with its actor and aggregate, in every view of it: the stages, the stage, a main flow and an exception', async () => {
+        const s = await parse(text);
+        // Pay emits Paid (the main flow) and Failed (the exception); no policy issues it
+        const cause = ['n:Customer@Pay', 'n:Order@Pay', 'n:Pay'];
+        const views: [ViewOptions, string][] = [
+            [DL, 'Paid'],
+            [{ ...DL, stageId: 'Ordering' }, 'Paid'],
+            [{ ...DL, timelineId: 'Main' }, 'Paid'],
+            [{ ...DL, timelineId: 'Failure' }, 'Failed'],
+        ];
+        for (const [options, eventId] of views) {
+            const render = projectView(s, options);
+            expect(render.nodes.map((n) => n.id)).toEqual(expect.arrayContaining(cause));
+            const ids = render.edges.filter((e) => e.type === 'semantic').map((e) => `${e.kind}:${eventOf(render, e.source)}->${eventOf(render, e.target)}`);
+            expect(ids).toEqual(expect.arrayContaining([`emits:n:Pay->${eventId}`, 'actor:n:Customer@Pay->n:Pay', 'target:n:Pay->n:Order@Pay']));
+            if (render.grid) {
+                const cells = render.grid.cells;
+                const col = cells[only(render, 'Paid').id]!.col;
+                for (const id of cause) expect(cells[id]!.col).toBe(col);
+                expect(crossings(laidOut(render, s))).toEqual([]);
+            }
+            // Big Picture: none of them
+            const bp = projectView(s, { ...options, level: 'big-picture' });
+            for (const id of cause) expect(bp.nodes.map((n) => n.id)).not.toContain(id);
+        }
+        // Failed is not in the main flow: its emits is not drawn there
+        const main = projectView(s, { ...DL, timelineId: 'Main' });
+        expect(main.edges.some((e) => e.type === 'semantic' && e.kind === 'emits' && eventOf(main, e.target) === 'Failed')).toBe(false);
+    });
+
+    test('the cause of a step of the convenience store (EnterPin) in the stages, the stage, its main flow and an exception', async () => {
+        const s = await parse(
+            (await read('convenience-store-stages.dtes')).replace(
+                '  stage Preparation',
+                [
+                    '  actor Resident',
+                    '  aggregate Card',
+                    '  command EnterPin {\n    actor Resident\n    target Card\n    emits PinEntered\n  }',
+                    '  command ResetPin {\n    actor Resident\n    emits PinResetAtCityOffice\n  }',
+                    '  stage Preparation',
+                ].join('\n'),
+            ),
+        );
+        const has = (options: ViewOptions, ids: string[]): void => {
+            const render = projectView(s, options);
+            expect(render.nodes.map((n) => n.id)).toEqual(expect.arrayContaining(ids));
+            if (render.grid) expect(crossings(laidOut(render, s))).toEqual([]);
+        };
+        const enterPin = ['n:EnterPin', 'n:Resident@EnterPin', 'n:Card@EnterPin'];
+        const resetPin = ['n:ResetPin', 'n:Resident@ResetPin'];
+        has(DL, [...enterPin, ...resetPin]);
+        has({ ...DL, stageId: 'Issuance' }, [...enterPin, ...resetPin]);
+        has({ ...DL, timelineId: 'IssuanceFlow' }, enterPin);
+        has({ ...DL, timelineId: 'PinLockedBranch' }, resetPin);
+        const stage = projectView(s, { ...DL, stageId: 'Issuance' });
+        expect(stage.grid!.cells['n:EnterPin']!.col).toBe(stage.grid!.cells[only(stage, 'PinEntered').id]!.col);
+    });
 });
 
 /** The segments of edge routes that pass through a note other than the edge's own ends (and their groups). */

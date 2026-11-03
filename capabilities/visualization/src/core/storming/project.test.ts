@@ -305,8 +305,9 @@ describe('views (spec §6, §9.3)', () => {
             el('command', 'C2', ['emits', 'E3']),
             tl('T', 'E1', 'E3'),
         );
-        // E1 → P1 → C1 → E2 → P2 → C2 → E3 would reach E3 in two hops; E2 is not in the timeline
-        expect(elementIds(projectView(s, { level: 'design-level', timelineId: 'T' }))).toEqual([]);
+        // E1 → P1 → C1 → E2 → P2 → C2 → E3 would reach E3 in two hops; E2 is not in the timeline. C2 is drawn as the
+        // cause of E3, but nothing is followed back from it (P2 on E2, nor C1 and P1)
+        expect(elementIds(projectView(s, { level: 'design-level', timelineId: 'T' }))).toEqual(['C2']);
         expect(elementIds(projectView(s, DL))).toEqual(['C1', 'C2', 'P1', 'P2']);
     });
 
@@ -374,12 +375,12 @@ describe('actors, external systems, read models and aggregates drawn once per us
         ]);
         // no note of the element itself once it has copies
         for (const id of ['Bank', 'Clerk', 'Order', 'Stock']) expect(nodeIds(g)).not.toContain(`n:${id}`);
-        // a timeline: the copies beside the commands of its 1-hop paths (E1 → P → C2 → E2)
-        expect(copies(projectView(uses(), { level: 'design-level', timelineId: 'T' }))).toEqual([
-            'n:Clerk@C2 actor Clerk@C2',
-            'n:Order@C2 aggregate Order@C2',
-            'n:Stock@C2 readmodel Stock@C2',
-        ]);
+        // a timeline: the copies beside its commands, the cause of E1 (C1) and the command of its 1-hop path (E1 → P → C2 → E2)
+        expect(copies(projectView(uses(), { level: 'design-level', timelineId: 'T' }))).toEqual(copies(g));
+        // E3 is not in the timeline: the copies of its cause are not drawn there
+        expect(copies(projectView(uses(el('command', 'C3', ['actor', 'Clerk'], ['emits', 'E3'])), { level: 'design-level', timelineId: 'T' }))).toEqual(
+            copies(g),
+        );
         // declared but used by no command: drawn once, where it was (the integrated canvas; a timeline draws only what it uses)
         expect(g.nodes.filter((n) => n.type === 'element' && ['Idle', 'Unused'].includes(n.elementId))).toEqual([
             { type: 'element', id: 'n:Idle', elementId: 'Idle', kind: 'actor' },
@@ -646,7 +647,7 @@ describe('§12.3 properties', () => {
         );
     });
 
-    test('R16: every policy and command of a timeline filter lies on a 1-hop path between two of its events', () => {
+    test('R16: every policy of a timeline filter lies on a 1-hop path between two of its events; every command too, or emits one of them', () => {
         fc.assert(
             fc.property(arbitraryStorming, ([elements]) => {
                 const s = storming(...elements);
@@ -662,7 +663,10 @@ describe('§12.3 properties', () => {
                     const policies = shown.filter((id) => id.startsWith('P'));
                     const commands = shown.filter((id) => COMMANDS.includes(id));
                     for (const p of policies) expect(commands.some((c) => onPath(p, c))).toBe(true);
-                    for (const c of commands) expect(policies.some((p) => onPath(p, c))).toBe(true);
+                    const causes = (cmd: string) => edges.some((e) => e.kind === 'emits' && e.sourceId === cmd && inTimeline.has(e.targetId));
+                    for (const c of commands) expect(policies.some((p) => onPath(p, c)) || causes(c)).toBe(true);
+                    // the cause of each event of the timeline is drawn
+                    for (const c of COMMANDS) if (causes(c)) expect(commands).toContain(c);
                 }
             }),
         );

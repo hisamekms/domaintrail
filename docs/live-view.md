@@ -125,7 +125,7 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   not remembered across reloads, so that a reload never hides elements without saying so.
 - **Event Storming** (the イベントストーミング world; a workspace of `.dtes` files only opens on it): one storming as
   sticky notes, laid out left to right (`dt guide storming-views`). The view bar's subject is a breadcrumb of two pickers: the storming (表示するストーミング; its name alone when there is only one) ▸ the
-  タイムライン — すべて（統合） for the integrated canvas, or one timeline with its one-hop causal paths (a subject, not
+  タイムライン — すべて（統合） for the integrated canvas, or one timeline with its one-hop causal paths and the causes of its events (a subject, not
   a filter: the two draw different things). The level icons are ビッグピクチャー (the telescope: events, timelines
   and hotspots only, without the events marked `level design`) and デザインレベル (the microscope: also commands, policies, actors, external systems, aggregates
   and read models). The choices are
