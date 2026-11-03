@@ -1,10 +1,11 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
+import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createViewService, ElkLayoutEngine, type ViewService } from '@domaintrail/visualization';
 import { I18nProvider } from './i18n';
-import { shownStorming, stageChoice, StormingDetails, StormingToolbar, type StormingChoice } from './storming';
+import { clearStormingFilter, shownStorming, stageChoice, StormingDetails, StormingFilter, StormingToolbar, type StormingChoice } from './storming';
 
 const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 
@@ -94,6 +95,13 @@ describe('the inspector of a storming element', () => {
 
 describe('a storming with stages', () => {
     const STAGED = readFile(path.join(import.meta.dir, '..', '..', 'test', 'fixtures', 'stages', 'convenience-store-stages.dtes'), 'utf8');
+    /** The choice with the exceptions hidden, on the integrated canvas or a scope of the staged storming. */
+    const off = (scope?: string): StormingChoice => ({
+        stormingId: undefined,
+        level: 'big-picture',
+        timelines: scope ? { ConvenienceStoreIssuance: scope } : {},
+        exceptions: false,
+    });
 
     test('a stage is chosen as `@<stage ID>` in the timeline picker; an unknown one is the integrated canvas', async () => {
         const { stormings } = await viewService(await STAGED).refresh();
@@ -103,28 +111,29 @@ describe('a storming with stages', () => {
         expect(shownStorming(stormings, choice('@Nowhere'))?.options).toEqual({ level: 'big-picture' });
     });
 
-    test('「例外を表示」 off hides the exceptions of the integrated canvas and a stage, never of a timeline’s view; the toggle is there only with exceptions', async () => {
+    test('「例外を表示」 off hides the exceptions of the integrated canvas and a stage, never of a timeline’s view', async () => {
         const staged = (await viewService(await STAGED).refresh()).stormings;
         const plain = (await viewService().refresh()).stormings;
-        const off = (scope?: string): StormingChoice => ({
-            stormingId: undefined,
-            level: 'big-picture',
-            timelines: scope ? { ConvenienceStoreIssuance: scope } : {},
-            exceptions: false,
-        });
         expect(shownStorming(staged, off())?.options).toEqual({ level: 'big-picture', hideExceptions: true });
         expect(shownStorming(staged, off(stageChoice('Issuance')))?.options).toEqual({ level: 'big-picture', stageId: 'Issuance', hideExceptions: true });
         expect(shownStorming(staged, off('PinLockedBranch'))?.options).toEqual({ level: 'big-picture', timelineId: 'PinLockedBranch' });
         expect(shownStorming(plain, off())?.options).toEqual({ level: 'big-picture' });
-        const toolbar = (stormings: typeof staged) =>
-            renderToStaticMarkup(
-                <I18nProvider lang="ja">
-                    <StormingToolbar stormings={stormings} choice={off()} mode="label" onChange={() => {}} />
-                </I18nProvider>,
-            );
-        expect(toolbar(staged)).toContain('aria-label="例外を表示"');
-        expect(toolbar(staged)).toContain('aria-pressed="false"');
-        expect(toolbar(plain)).not.toContain('例外を表示');
+    });
+
+    test('「例外を表示」 is in the 絞り込み, not the toolbar’s subject: only with exceptions and not on one timeline; hidden, it counts one, and clearing shows them', async () => {
+        const staged = (await viewService(await STAGED).refresh()).stormings;
+        const plain = (await viewService().refresh()).stormings;
+        const render = (node: ReactNode): string => renderToStaticMarkup(<I18nProvider lang="ja">{node}</I18nProvider>);
+        const filter = (stormings: typeof staged, choice: StormingChoice): string =>
+            render(<StormingFilter stormings={stormings} choice={choice} onChange={() => {}} />);
+        expect(render(<StormingToolbar stormings={staged} choice={off()} mode="label" onChange={() => {}} />)).not.toContain('例外を表示');
+        expect(filter(staged, off())).toContain('aria-label="絞り込み（1 件適用中）"');
+        expect(filter(staged, off())).toContain('<span class="filter-count">1</span>');
+        expect(filter(staged, { ...off(), exceptions: true })).toContain('aria-label="絞り込み"');
+        expect(filter(staged, { ...off(), exceptions: true })).not.toContain('filter-count');
+        expect(filter(staged, off('PinLockedBranch'))).toBe('');
+        expect(filter(plain, off())).toBe('');
+        expect(shownStorming(staged, clearStormingFilter(off()))?.options).toEqual({ level: 'big-picture' });
     });
 
     test('the inspector of a stage: the stage it comes after, its main flow, its exceptions, and the way to its view', async () => {

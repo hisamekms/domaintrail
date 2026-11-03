@@ -7,7 +7,7 @@ import { ContextList } from '../context-picker';
 import { useLang, useT } from '../i18n';
 import { type CatalogFilter, contextLabels } from '../model-utils';
 import type { LegendView } from '../legend';
-import { StormingToolbar } from '../storming';
+import { StormingFilter, StormingToolbar } from '../storming';
 import { applyTheme, type Theme } from '../theme';
 import { workspaceName } from '../app/health';
 import { buildScene } from '../render';
@@ -21,6 +21,7 @@ import type { DiagramCanvas } from './diagram';
 import { activeFilterCount } from './filters';
 import { useViewGraph, type ViewGraph } from './graph';
 import { useExportOptions, type ExportOptions, type ExportTarget } from './export';
+import { ExportButton, PrintButton, toolbarOutput } from './export-menu';
 import { PrintSheet, printKind, usePrint, usePrintWhenReady, type Printer } from './print';
 import { canvasSubject, exportFileName, sheetHeading } from './sheet';
 import { isCanvas, useNavigation, useOpenOnStormings, useSelectOnCanvas, type Navigation } from './navigation';
@@ -102,6 +103,8 @@ export function ViewWorkspace(props: {
     const nothing = current !== null && isEmptyView(view.kind, current);
     /** The view whose controls the toolbar shows: none for an empty view (they would have nothing to act on). */
     const bar = nothing ? undefined : view.kind;
+    /** What the toolbar offers to take the view out of the page (printing, exporting): what it shows, as it is shown. */
+    const output = toolbarOutput(bar);
     const legendView: LegendView | null =
         !graph || !isCanvas(view)
             ? null
@@ -212,6 +215,17 @@ export function ViewWorkspace(props: {
                                 <CatalogFilters model={model} mode={mode} filter={catalogFilter} onChange={setCatalogFilter} />
                             </FilterPopover>
                         )}
+                        {bar === 'storming' && <StormingFilter stormings={stormings} choice={stormingChoice} onChange={setStormingChoice} />}
+                        {output === 'print' && <PrintButton onPrint={printer.print} />}
+                        {output === 'export' && (
+                            <ExportButton
+                                control={{
+                                    target: exportTarget,
+                                    ...workspace.exportOptions,
+                                    print: { preparing: printer.phase === 'preparing', onPrint: printer.print },
+                                }}
+                            />
+                        )}
                     </ToolbarEnd>
                 </div>
             </div>
@@ -224,8 +238,6 @@ export function ViewWorkspace(props: {
                         fitAll={fitView}
                         legend={legendView && { view: legendView, open: legendOpen, onToggle: onLegendToggle }}
                         compact={{ on: settings.compact, onToggle: () => settings.setCompact(!settings.compact) }}
-                        print={{ preparing: printer.phase === 'preparing', onPrint: printer.print }}
-                        exporting={{ target: exportTarget, ...workspace.exportOptions, onPdf: printer.print }}
                         keys
                     />
                 )}

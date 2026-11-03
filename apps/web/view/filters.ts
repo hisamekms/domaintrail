@@ -24,11 +24,17 @@ export type ViewFilters =
           readonly contexts: readonly string[] | null;
           /** The kinds shown (none: every one). */
           readonly kinds: readonly string[];
+      }
+    | {
+          readonly view: 'storming';
+          /** The exceptions drawn (by default), on the integrated canvas and a stage. */
+          readonly exceptions: boolean;
       };
 
 /**
  * How many narrowings are active: one per kind of narrowing not in its default state (the contexts, the hidden stubs,
- * the kinds, the shared and external contexts). The catalog's text filter is not counted: it is shown as it is typed.
+ * the kinds, the shared and external contexts, the storming's exceptions). The catalog's text filter is not counted: it
+ * is shown as it is typed.
  */
 export function activeFilterCount(f: ViewFilters): number {
     switch (f.view) {
@@ -38,6 +44,8 @@ export function activeFilterCount(f: ViewFilters): number {
             return (f.checked !== f.contexts ? 1 : 0) + (f.hidden > 0 ? 1 : 0);
         case 'catalog':
             return (f.contexts !== null ? 1 : 0) + (f.kinds.length > 0 ? 1 : 0);
+        case 'storming':
+            return f.exceptions ? 0 : 1;
     }
 }
 

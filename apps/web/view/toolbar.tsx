@@ -5,7 +5,8 @@ import { useDismiss } from '../shared/layout';
 
 /**
  * The parts of the view toolbar, the same in every view, left to right: the subject (what is looked at), the level
- * (how much of it), then at the right end the 絞り込み button (what is hidden) and the canvas's menu ⋯.
+ * (how much of it), then at the right end the 絞り込み button (what is hidden) and 書き出し (the catalog: 印刷). What
+ * is shown is set here; how it is looked at (the camera, the density, the legend), in the canvas's controls.
  */
 
 /** Whether the element's text is cut short (so that the whole of it is shown as a tooltip). */
@@ -53,7 +54,7 @@ export function ToolbarSubject({ children }: { children: ReactNode }) {
     return <div className="toolbar-subject">{children}</div>;
 }
 
-/** The toolbar's right part: the 絞り込み button and the menu ⋯, never shrunk. */
+/** The toolbar's right part: the 絞り込み button and 書き出し (or 印刷), never shrunk. */
 export function ToolbarEnd({ children }: { children: ReactNode }) {
     return <div className="toolbar-end">{children}</div>;
 }

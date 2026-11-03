@@ -2137,7 +2137,7 @@ Every note is a square of the same size: a long label is drawn smaller, and one 
 «…» (hovering it shows the whole label; S015 warns about it), so keep labels short (about 12 Japanese characters).
 The layout is automatic, left to right; positions are kept in `.domaintrail/layout.json`, never in the `.dtes`.
 詰めて表示 in the canvas's controls closes up the gaps between the notes (every diagram, remembered per browser), and
-印刷 prints the diagram alone, fitted to one landscape page (Ctrl+P too). In
+印刷 in the toolbar's 書き出し menu prints the diagram alone, fitted to one landscape page (Ctrl+P too). In
 `dt open`, the イベントストーミング tab shows one storming at a time, with the storming and the timeline picked as
 its toolbar's subject (a breadcrumb at the left) and the level next to them; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in (and
 デザインレベルのみ for an event marked `level design`).
@@ -2149,8 +2149,8 @@ and named by its label: the other main flows first, then the exceptions, whose d
 step an exception branches off at is one note for both; a dotted arrow goes from an exception's last step back to the
 step of its `then`. Elements of Design Level stand above the event they belong to. The timeline picker lists the
 stages (「コンビニでの発行（例外を含む）」) between すべて（統合） and the timelines; clicking a stage's frame selects
-it (its main flows, its exceptions and 「この段階を表示」). 「例外を表示」 in the toolbar (a storming with exceptions
-only) hides the exceptions of the integrated canvas and of a stage: their steps, the events only they have, the
+it (its main flows, its exceptions and 「この段階を表示」). 「例外を表示」 in the toolbar's 絞り込み (a storming with
+exceptions only) hides the exceptions of the integrated canvas and of a stage: their steps, the events only they have, the
 hotspots on those events and their `then` arrows; an exception's own view is unchanged.
 
 <!-- topic: storming-rules -->
