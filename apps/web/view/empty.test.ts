@@ -3,7 +3,7 @@ import type { Diagnostic } from '@domaintrail/kernel';
 import type { DomainModel } from '@domaintrail/modeling';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { MESSAGES } from '../i18n';
-import { canvasShows, emptyLine, isEmptyView } from './empty';
+import { canStartFromEmpty, canvasShows, emptyLine, isEmptyView } from './empty';
 import { MODEL_VIEWS } from './worlds';
 
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- only the number of BCs matters here
@@ -63,9 +63,32 @@ describe('a view with nothing yet', () => {
         expect(canvasShows('catalog', false, false)).toBe('covered');
     });
 
-    test('its one line points to /es:start in the chat only while an AI is connected', () => {
-        expect(emptyLine(MESSAGES.ja, true)).toBe('まだありません。チャットで /es:start から始められます');
-        expect(emptyLine(MESSAGES.en, true)).toBe('Nothing yet. Start with /es:start in the chat');
-        expect(emptyLine(MESSAGES.ja, false)).toBe('まだありません');
+    test('an empty storming view points to /es:start in the chat while an AI is connected', () => {
+        expect(emptyLine(MESSAGES.ja, 'storming', true)).toBe('まだありません。チャットで /es:start から始められます');
+        expect(emptyLine(MESSAGES.en, 'storming', true)).toBe('Nothing yet. Start with /es:start in the chat');
+    });
+
+    test('an empty view of the domain model points to /model:start, also when there are stormings but no BC', () => {
+        for (const view of MODEL_VIEWS) {
+            // stormings exist, the model has no BC: the model's view is empty all the same
+            expect(isEmptyView(view, { model: model(0), stormings: [storming], diagnostics: [] })).toBe(true);
+            expect(emptyLine(MESSAGES.ja, view, true)).toBe('まだありません。チャットで /model:start から始められます');
+            expect(emptyLine(MESSAGES.en, view, true)).toBe('Nothing yet. Start with /model:start in the chat');
+        }
+    });
+
+    test('with no AI to start it, an empty view of either world says only that there is nothing yet', () => {
+        for (const view of VIEWS) {
+            expect(emptyLine(MESSAGES.ja, view, false)).toBe('まだありません');
+            expect(emptyLine(MESSAGES.en, view, false)).toBe('Nothing yet');
+        }
+    });
+
+    test('only who may start an interview, with an AI connected and the session going on, is pointed to /…:start', () => {
+        expect(canStartFromEmpty({ ended: false, facilitator: true, aiConnected: true })).toBe(true);
+        // a participant of a Collab cannot start /es:start or /model:start
+        expect(canStartFromEmpty({ ended: false, facilitator: false, aiConnected: true })).toBe(false);
+        expect(canStartFromEmpty({ ended: false, facilitator: true, aiConnected: false })).toBe(false);
+        expect(canStartFromEmpty({ ended: true, facilitator: true, aiConnected: true })).toBe(false);
     });
 });

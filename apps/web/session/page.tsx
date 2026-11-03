@@ -14,6 +14,7 @@ import { stormingGraph, type StormingChoice, type StormingDetailSession } from '
 import { graphNodeOf, nodeItemId } from '../scene';
 import { highlightElement, showItem } from '../view/canvas';
 import { useCanvasValue } from '../view/diagram';
+import { canStartFromEmpty } from '../view/empty';
 import type { Workspace } from '../view/workspace';
 import { aiPresence } from './ai';
 import { ChatLauncher, SessionChat, type ChatGoTo } from './chat';
@@ -375,8 +376,8 @@ export function useSessionPage(input: {
     return {
         baselineLocked: !facilitator,
         ended,
-        // the empty view points to `/es`: only for who may start it
-        aiReady: !ended && facilitator && aiPresence(session.state.agent).kind === 'connected',
+        // the empty view points to its world's `/…:start`: only for who may start it
+        aiReady: canStartFromEmpty({ ended, facilitator, aiConnected: aiPresence(session.state.agent).kind === 'connected' }),
         canvasOverlay: (
             <>
                 <PeerCursors canvas={canvas} cursors={cursorsOn(session.peers, location)} />

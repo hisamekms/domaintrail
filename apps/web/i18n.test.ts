@@ -59,6 +59,8 @@ const LATIN_IN_JA = new Set([
     'es',
     'start',
     'ES',
+    // the `/model:start` command (an empty view of the domain model points to it)
+    'model',
     // the formats of 書き出し
     'PNG',
     'SVG',

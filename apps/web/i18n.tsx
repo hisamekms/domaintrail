@@ -139,9 +139,11 @@ const ja = {
     pickContexts: '表示する BC を選んでください',
     loading: '読み込み中…',
     noDiagram: '表示できる図がありません',
-    // a view with nothing yet (no BC, or no storming): one line, and with an AI in the chat, that it can make it
+    // a view with nothing yet (no BC, or no storming): one line, and with an AI in the chat, the command of its own
+    // world that starts it (`/es:start` under the storming view, `/model:start` under the model's views)
     emptyView: 'まだありません',
-    emptyViewAskAi: 'まだありません。チャットで /es:start から始められます',
+    emptyViewStartEs: 'まだありません。チャットで /es:start から始められます',
+    emptyViewStartModel: 'まだありません。チャットで /model:start から始められます',
 
     // Event Storming view (its level and timeline are the page's state: they never change a .dtes file)
     noStormings: 'ストーミングがありません（.dtes ファイルに storming を書くと表示されます）',
@@ -1097,7 +1099,8 @@ const en: Messages = {
     loading: 'Loading…',
     noDiagram: 'Nothing to draw',
     emptyView: 'Nothing yet',
-    emptyViewAskAi: 'Nothing yet. Start with /es:start in the chat',
+    emptyViewStartEs: 'Nothing yet. Start with /es:start in the chat',
+    emptyViewStartModel: 'Nothing yet. Start with /model:start in the chat',
 
     noStormings: 'No stormings (write a storming in a .dtes file to see it here)',
     stormingPicker: 'Storming to show',
