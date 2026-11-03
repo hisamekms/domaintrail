@@ -55,6 +55,8 @@ export function useSessionPage(input: {
     mode: DisplayMode;
     /** Shows a `.dt` item in the view that suits it best (the explorer's double-click). */
     openBest: (id: string) => void;
+    /** The app bar's place for the session's controls of the whole page (the collab menu, the AI's state). */
+    barSlot: HTMLElement | null;
 }): SessionPage {
     const { socket, current, workspace, panes } = input;
     const { canvas, stormings, nav, settings, viewGraph } = workspace;
@@ -361,7 +363,9 @@ export function useSessionPage(input: {
                         viewedAt={viewedAt}
                         onOpenView={openView}
                         onNavigate={navigate}
+                        onOpen={() => setConversationOpen(true)}
                         onClose={() => setConversationOpen(false)}
+                        barSlot={input.barSlot}
                     />
                 </TargetNamingProvider>
             ),

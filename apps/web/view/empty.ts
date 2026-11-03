@@ -3,12 +3,6 @@ import type { Messages } from '../i18n';
 import type { View } from './navigation';
 
 /**
- * The view tabs, in order. The storming tab shows even without a storming: a workspace started from nothing shows that
- * it can have one (`/es` in the chat starts one with the AI).
- */
-export const VIEW_TABS: readonly View['kind'][] = ['contextMap', 'structure', 'catalog', 'storming'];
-
-/**
  * Whether a view has nothing yet: no BC in the model for the model's views, no storming for the storming view. A file of
  * that kind with errors is not "nothing": the view says why it draws nothing instead.
  */

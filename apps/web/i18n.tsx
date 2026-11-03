@@ -84,7 +84,12 @@ const ja = {
     healthLabel: (health: string) => `状態: ${health}`,
     healthRows: { status: 'モデル', files: 'ファイル', version: 'バージョン', updated: '更新', connection: '接続' },
 
-    // views and their toolbar
+    // the worlds (the app bar), the views and the view bar
+    worlds: { model: 'ドメインモデル', storming: 'イベントストーミング' },
+    worldsLabel: '世界',
+    /** The domain model's views, in the view bar's switch. */
+    modelViews: { contextMap: 'マップ', structure: '構造', catalog: 'カタログ' },
+    modelViewsLabel: '見方',
     views: { contextMap: 'コンテキストマップ', structure: '構造図', catalog: 'カタログ', storming: 'イベントストーミング' },
     showAllContexts: '共有・外部の BC も表示',
     structureMode: '構造図の表示',
@@ -972,6 +977,10 @@ const en: Messages = {
     healthLabel: (health) => `Status: ${health}`,
     healthRows: { status: 'Model', files: 'Files', version: 'Version', updated: 'Updated', connection: 'Connection' },
 
+    worlds: { model: 'Domain model', storming: 'Event Storming' },
+    worldsLabel: 'World',
+    modelViews: { contextMap: 'Map', structure: 'Structure', catalog: 'Catalog' },
+    modelViewsLabel: 'View',
     views: { contextMap: 'Context Map', structure: 'Structure', catalog: 'Catalog', storming: 'Event Storming' },
     showAllContexts: 'Also show shared and external BCs',
     structureMode: 'Structure view',

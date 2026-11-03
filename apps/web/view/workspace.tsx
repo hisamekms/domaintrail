@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Box, LayoutGrid, LayoutList, type LucideIcon } from 'lucide-react';
+import { BookOpen, Box, LayoutGrid, LayoutList, Network, Workflow, type LucideIcon } from 'lucide-react';
 import { type DisplayMode, type Lang, STRUCTURE_LEVELS, type StructureLevel } from '@domaintrail/visualization';
 import type { StormingView, ViewPayload } from '@domaintrail/visualization/protocol';
 import { Catalog, CatalogFilters, CatalogSearch, useCatalogFilter } from '../catalog';
 import { ContextList } from '../context-picker';
 import { useLang, useT } from '../i18n';
-import { type CatalogFilter, contextLabels } from '../model-utils';
+import { type CatalogFilter, contextLabels, nameIn } from '../model-utils';
 import type { LegendView } from '../legend';
 import { StormingFilter, StormingToolbar } from '../storming';
 import { applyTheme, type Theme } from '../theme';
@@ -14,7 +14,7 @@ import { buildScene } from '../render';
 import { useViewCamera } from './camera';
 import { useCenterOnResize } from './center';
 import { CanvasControls, EdgeHint } from './canvas-controls';
-import { emptyLine, isEmptyView, VIEW_TABS } from './empty';
+import { emptyLine, isEmptyView } from './empty';
 import { FlowCanvas } from './flow-canvas';
 import { fitAll } from './canvas';
 import type { DiagramCanvas } from './diagram';
@@ -24,11 +24,16 @@ import { useExportOptions, type ExportOptions, type ExportTarget } from './expor
 import { ExportButton, PrintButton, toolbarOutput } from './export-menu';
 import { PrintSheet, printKind, usePrint, usePrintWhenReady, type Printer } from './print';
 import { canvasSubject, exportFileName, sheetHeading } from './sheet';
-import { isCanvas, useNavigation, useOpenOnStormings, useSelectOnCanvas, type Navigation } from './navigation';
+import { isCanvas, useNavigation, useOpenOnStormings, useSelectOnCanvas, type Navigation, type View } from './navigation';
 import { useViewSettings, type ViewSettings } from './settings';
-import { FilterPopover, FilterSection, LevelSwitch, ToolbarEnd, ToolbarSubject } from './toolbar';
+import { FilterPopover, FilterSection, LevelSwitch, NameSwitch, SubjectName, ToolbarEnd, ToolbarSubject } from './toolbar';
+import { MODEL_VIEWS, useWorlds, type ModelView, type Worlds } from './worlds';
 
 const LEVEL_ICONS: Record<StructureLevel, LucideIcon> = { detail: LayoutList, overview: LayoutGrid, aggregates: Box };
+const VIEW_ICONS: Record<ModelView, LucideIcon> = { contextMap: Network, structure: Workflow, catalog: BookOpen };
+
+/** A level's short name, beside its icon: the part of its name before what it shows (「詳細 — すべての項目を表示」: 詳細). */
+export const shortName = (name: string): string => name.split(' — ')[0] ?? name;
 
 /** The state of the view workspace: the canvas, the current view with its navigation, settings and graph. */
 export interface Workspace {
@@ -36,6 +41,8 @@ export interface Workspace {
     onMount: (canvas: DiagramCanvas) => void;
     stormings: readonly StormingView[];
     nav: Navigation;
+    /** The world shown (the app bar's switch), derived from the view. */
+    worlds: Worlds;
     settings: ViewSettings;
     viewGraph: ViewGraph;
     /** The catalog's filter (a session's message carries it as where it was sent from). */
@@ -54,6 +61,7 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
     const [canvas, setCanvas] = useState<DiagramCanvas | null>(null);
     const stormings = useMemo(() => current?.stormings ?? [], [current?.stormings]);
     const nav = useNavigation(canvas, current, stormings);
+    const worlds = useWorlds(nav.view, nav.setView);
     const settings = useViewSettings();
     const catalog = useCatalogFilter();
     const printer = usePrint(theme);
@@ -73,10 +81,21 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
 
     const onMount = useCallback((c: DiagramCanvas) => setCanvas(c), []);
 
-    return { canvas, onMount, stormings, nav, settings, viewGraph, catalog, printer, exportOptions: { options: exportOptions, setOptions: setExportOptions } };
+    return {
+        canvas,
+        onMount,
+        stormings,
+        nav,
+        worlds,
+        settings,
+        viewGraph,
+        catalog,
+        printer,
+        exportOptions: { options: exportOptions, setOptions: setExportOptions },
+    };
 }
 
-/** The center of the page: the view tabs, the current view's toolbar, and the canvas (or the catalog). */
+/** The canvas column: the view bar (the domain model's view switch, the view's conditions), and the canvas (or the catalog). */
 export function ViewWorkspace(props: {
     workspace: Workspace;
     current: ViewPayload | null;
@@ -90,12 +109,11 @@ export function ViewWorkspace(props: {
 }) {
     const { workspace, current, mode, legendOpen, onLegendToggle } = props;
     const { canvas, onMount, stormings, nav, settings, viewGraph, printer } = workspace;
-    const { view, setView, selected, select } = nav;
-    const { structureLevel, setStructureLevel, setStructureContexts, setHiddenContexts, mapAll, setMapAll, stormingChoice, setStormingChoice } = settings;
-    const { checked, hidden, focusKey, noneChecked, graph } = viewGraph;
+    const { view, selected, select } = nav;
+    const { structureLevel } = settings;
+    const { checked, focusKey, noneChecked, graph } = viewGraph;
     const model = current?.model ?? null;
-    const focusContexts = current?.focusContexts ?? [];
-    const { filter: catalogFilter, setFilter: setCatalogFilter } = workspace.catalog;
+    const { filter: catalogFilter } = workspace.catalog;
     const t = useT();
     const lang = useLang();
     const empty = { added: [], changed: [], removed: [] };
@@ -103,8 +121,6 @@ export function ViewWorkspace(props: {
     const nothing = current !== null && isEmptyView(view.kind, current);
     /** The view whose controls the toolbar shows: none for an empty view (they would have nothing to act on). */
     const bar = nothing ? undefined : view.kind;
-    /** What the toolbar offers to take the view out of the page (printing, exporting): what it shows, as it is shown. */
-    const output = toolbarOutput(bar);
     const legendView: LegendView | null =
         !graph || !isCanvas(view)
             ? null
@@ -137,98 +153,7 @@ export function ViewWorkspace(props: {
 
     return (
         <section className="center">
-            <div className="view-tabs">
-                <div className="view-tab-list" role="tablist">
-                    {VIEW_TABS.map((k) => (
-                        <button
-                            key={k}
-                            role="tab"
-                            aria-selected={view.kind === k}
-                            className={view.kind === k ? 'active' : ''}
-                            onClick={() => setView({ kind: k })}
-                        >
-                            {t.views[k]}
-                        </button>
-                    ))}
-                </div>
-                <div className="view-toolbar">
-                    {bar === 'structure' && (
-                        <ToolbarSubject>
-                            <LevelSwitch
-                                label={t.structureMode}
-                                levels={STRUCTURE_LEVELS}
-                                value={structureLevel}
-                                icons={LEVEL_ICONS}
-                                names={(l) => ({ label: t.structureLevels[l], tooltip: t.structureLevels[l] })}
-                                onChange={setStructureLevel}
-                            />
-                        </ToolbarSubject>
-                    )}
-                    {bar === 'catalog' && (
-                        <ToolbarSubject>
-                            <CatalogSearch filter={catalogFilter} onChange={setCatalogFilter} />
-                        </ToolbarSubject>
-                    )}
-                    {bar === 'storming' && <StormingToolbar stormings={stormings} choice={stormingChoice} mode={mode} onChange={setStormingChoice} />}
-                    <ToolbarEnd>
-                        {bar === 'contextMap' && (
-                            <FilterPopover count={activeFilterCount({ view: 'contextMap', mapAll })} onClear={() => setMapAll(false)}>
-                                <FilterSection title={t.filters.contexts}>
-                                    <label className="check">
-                                        <input type="checkbox" checked={mapAll} onChange={(e) => setMapAll(e.target.checked)} />
-                                        {t.showAllContexts}
-                                    </label>
-                                </FilterSection>
-                            </FilterPopover>
-                        )}
-                        {bar === 'structure' && (
-                            <FilterPopover
-                                count={activeFilterCount({
-                                    view: 'structure',
-                                    contexts: focusContexts.length,
-                                    checked: checked.length,
-                                    hidden: hidden.length,
-                                })}
-                                onClear={() => {
-                                    setStructureContexts(null);
-                                    setHiddenContexts([]);
-                                }}
-                            >
-                                <FilterSection title={t.filters.contexts}>
-                                    <ContextList
-                                        contexts={focusContexts}
-                                        labels={model ? contextLabels(model) : {}}
-                                        selected={checked}
-                                        hidden={hidden}
-                                        mode={mode}
-                                        onChange={(cs) => setStructureContexts(cs.length === focusContexts.length ? null : cs)}
-                                        onHiddenChange={setHiddenContexts}
-                                    />
-                                </FilterSection>
-                            </FilterPopover>
-                        )}
-                        {bar === 'catalog' && model && (
-                            <FilterPopover
-                                count={activeFilterCount({ view: 'catalog', contexts: catalogFilter.contexts, kinds: catalogFilter.sections })}
-                                onClear={() => setCatalogFilter({ ...catalogFilter, contexts: null, sections: [] })}
-                            >
-                                <CatalogFilters model={model} mode={mode} filter={catalogFilter} onChange={setCatalogFilter} />
-                            </FilterPopover>
-                        )}
-                        {bar === 'storming' && <StormingFilter stormings={stormings} choice={stormingChoice} onChange={setStormingChoice} />}
-                        {output === 'print' && <PrintButton onPrint={printer.print} />}
-                        {output === 'export' && (
-                            <ExportButton
-                                control={{
-                                    target: exportTarget,
-                                    ...workspace.exportOptions,
-                                    print: { preparing: printer.phase === 'preparing', onPrint: printer.print },
-                                }}
-                            />
-                        )}
-                    </ToolbarEnd>
-                </div>
-            </div>
+            <ViewBar workspace={workspace} current={current} mode={mode} bar={bar} exportTarget={exportTarget} />
             <div className="view-area">
                 <FlowCanvas onMount={onMount} />
                 {isCanvas(view) && props.overlay}
@@ -275,5 +200,127 @@ export function ViewWorkspace(props: {
                 )}
             </div>
         </section>
+    );
+}
+
+/**
+ * The view bar: in the domain model, the view switch (マップ / 構造 / カタログ); then the view's conditions (the
+ * structure's focused contexts and level, the catalog's search, the storming › stage or timeline and the level), and at
+ * the right end 絞り込み and 書き出し (the catalog: 印刷). `bar` is the view whose controls it shows (none for an empty
+ * view).
+ */
+export function ViewBar(props: {
+    workspace: Workspace;
+    current: ViewPayload | null;
+    mode: DisplayMode;
+    bar: View['kind'] | undefined;
+    exportTarget: () => ExportTarget | null;
+}) {
+    const { workspace, current, mode, bar, exportTarget } = props;
+    const { stormings, nav, worlds, settings, viewGraph, printer } = workspace;
+    const { view, setView } = nav;
+    const { structureLevel, setStructureLevel, setStructureContexts, setHiddenContexts, mapAll, setMapAll, stormingChoice, setStormingChoice } = settings;
+    const { checked, hidden, focusKey } = viewGraph;
+    const model = current?.model ?? null;
+    const focusContexts = current?.focusContexts ?? [];
+    const { filter: catalogFilter, setFilter: setCatalogFilter } = workspace.catalog;
+    const t = useT();
+    /** What the bar offers to take the view out of the page (printing, exporting): what it shows, as it is shown. */
+    const output = toolbarOutput(bar);
+    /** The focused contexts, as the bar names them. */
+    const contextNamesOf = (ids: readonly string[]): string => {
+        const labels = model ? contextLabels(model) : {};
+        return ids.map((c) => nameIn(mode, c, labels[c])).join(', ');
+    };
+    return (
+        <div className="view-toolbar">
+            {worlds.world === 'model' && view.kind !== 'storming' && (
+                <NameSwitch
+                    label={t.modelViewsLabel}
+                    className="view-switch"
+                    choices={MODEL_VIEWS}
+                    value={view.kind}
+                    icons={VIEW_ICONS}
+                    names={t.modelViews}
+                    onChange={(kind) => setView({ kind })}
+                />
+            )}
+            {bar === 'structure' && (
+                <ToolbarSubject>
+                    {focusKey && checked.length > 0 && <SubjectName label={t.contextsToShow} text={contextNamesOf(checked)} />}
+                    <LevelSwitch
+                        label={t.structureMode}
+                        levels={STRUCTURE_LEVELS}
+                        value={structureLevel}
+                        icons={LEVEL_ICONS}
+                        names={(l) => ({ label: t.structureLevels[l], tooltip: t.structureLevels[l], text: shortName(t.structureLevels[l]) })}
+                        onChange={setStructureLevel}
+                    />
+                </ToolbarSubject>
+            )}
+            {bar === 'catalog' && (
+                <ToolbarSubject>
+                    <CatalogSearch filter={catalogFilter} onChange={setCatalogFilter} />
+                </ToolbarSubject>
+            )}
+            {bar === 'storming' && <StormingToolbar stormings={stormings} choice={stormingChoice} mode={mode} onChange={setStormingChoice} />}
+            <ToolbarEnd>
+                {bar === 'contextMap' && (
+                    <FilterPopover count={activeFilterCount({ view: 'contextMap', mapAll })} onClear={() => setMapAll(false)}>
+                        <FilterSection title={t.filters.contexts}>
+                            <label className="check">
+                                <input type="checkbox" checked={mapAll} onChange={(e) => setMapAll(e.target.checked)} />
+                                {t.showAllContexts}
+                            </label>
+                        </FilterSection>
+                    </FilterPopover>
+                )}
+                {bar === 'structure' && (
+                    <FilterPopover
+                        count={activeFilterCount({
+                            view: 'structure',
+                            contexts: focusContexts.length,
+                            checked: checked.length,
+                            hidden: hidden.length,
+                        })}
+                        onClear={() => {
+                            setStructureContexts(null);
+                            setHiddenContexts([]);
+                        }}
+                    >
+                        <FilterSection title={t.filters.contexts}>
+                            <ContextList
+                                contexts={focusContexts}
+                                labels={model ? contextLabels(model) : {}}
+                                selected={checked}
+                                hidden={hidden}
+                                mode={mode}
+                                onChange={(cs) => setStructureContexts(cs.length === focusContexts.length ? null : cs)}
+                                onHiddenChange={setHiddenContexts}
+                            />
+                        </FilterSection>
+                    </FilterPopover>
+                )}
+                {bar === 'catalog' && model && (
+                    <FilterPopover
+                        count={activeFilterCount({ view: 'catalog', contexts: catalogFilter.contexts, kinds: catalogFilter.sections })}
+                        onClear={() => setCatalogFilter({ ...catalogFilter, contexts: null, sections: [] })}
+                    >
+                        <CatalogFilters model={model} mode={mode} filter={catalogFilter} onChange={setCatalogFilter} />
+                    </FilterPopover>
+                )}
+                {bar === 'storming' && <StormingFilter stormings={stormings} choice={stormingChoice} onChange={setStormingChoice} />}
+                {output === 'print' && <PrintButton onPrint={printer.print} />}
+                {output === 'export' && (
+                    <ExportButton
+                        control={{
+                            target: exportTarget,
+                            ...workspace.exportOptions,
+                            print: { preparing: printer.phase === 'preparing', onPrint: printer.print },
+                        }}
+                    />
+                )}
+            </ToolbarEnd>
+        </div>
     );
 }

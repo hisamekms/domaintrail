@@ -10,6 +10,7 @@
 // card, cancel, and the menus of the cards and of the head. In Solo (`dt open`) what only makes sense with others is
 // hidden: every message goes to the AI as it is sent.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from 'react';
+import { createPortal } from 'react-dom';
 import {
     ArrowDown,
     Bot,
@@ -195,7 +196,10 @@ export function SessionChat(props: {
     slash: { readonly view: SlashScope['view']; readonly selected: TargetDraft | undefined };
     /** Where this page is looking: sent with each message. */
     viewedAt: SentView | undefined;
+    onOpen: () => void;
     onClose: () => void;
+    /** The app bar's place for the collab menu and the AI's state (they concern the whole page). */
+    barSlot: HTMLElement | null;
 }) {
     const { session, composer, focusPending } = props;
     const { state, me } = session;
@@ -426,6 +430,7 @@ export function SessionChat(props: {
     // the header status clicked: AI の作業, at the unit it stands for (opened and revealed); the chat keeps its scroll
     const [peek, setPeek] = useState<Peek | undefined>();
     const peekStatus = (): void => {
+        props.onOpen();
         setView('history');
         const unit = statusUnit(status.kind, units);
         if (unit) setPeek((p) => ({ key: unit.key, n: (p?.n ?? 0) + 1 }));
@@ -476,7 +481,8 @@ export function SessionChat(props: {
     return (
         <ChatProvider value={context}>
             <div className="session-chat" ref={root}>
-                <ChatHeader
+                <SessionBar
+                    slot={props.barSlot}
                     session={session}
                     status={status}
                     now={now}
@@ -486,22 +492,26 @@ export function SessionChat(props: {
                     viewScope={props.viewScope}
                     onOpenView={props.onOpenView}
                     onLeave={() => void leave()}
-                    onClose={props.onClose}
                     onPeek={peekStatus}
                     tx={tx}
                 />
-                <div className="segmented chat-views" role="tablist" aria-label={tx.chat.tabsLabel}>
-                    {(['chat', 'history'] as const).map((v) => (
-                        <button key={v} role="tab" aria-selected={view === v} className={view === v ? 'active' : ''} onClick={() => setView(v)}>
-                            {tx.chat.tabs[v]}
-                            {/* AI の作業: how many units are not finished (running and queued), whichever tab is shown */}
-                            {v === 'history' && unfinished > 0 && (
-                                <span className="chat-views-badge" role="img" aria-label={tx.chat.history.unfinished(unfinished)}>
-                                    {unfinished}
-                                </span>
-                            )}
-                        </button>
-                    ))}
+                <div className="chat-head">
+                    <div className="segmented chat-views" role="tablist" aria-label={tx.chat.tabsLabel}>
+                        {(['chat', 'history'] as const).map((v) => (
+                            <button key={v} role="tab" aria-selected={view === v} className={view === v ? 'active' : ''} onClick={() => setView(v)}>
+                                {tx.chat.tabs[v]}
+                                {/* AI の作業: how many units are not finished (running and queued), whichever tab is shown */}
+                                {v === 'history' && unfinished > 0 && (
+                                    <span className="chat-views-badge" role="img" aria-label={tx.chat.history.unfinished(unfinished)}>
+                                        {unfinished}
+                                    </span>
+                                )}
+                            </button>
+                        ))}
+                    </div>
+                    <button className="icon-button" onClick={props.onClose} data-tooltip={tx.chat.close} aria-label={tx.chat.close}>
+                        <X size={16} aria-hidden />
+                    </button>
                 </div>
                 {session.status === 'signed-out' && <p className="session-note chat-notice">{tx.signedOut}</p>}
                 {ended && (
@@ -557,7 +567,12 @@ export function SessionChat(props: {
     );
 }
 
-function ChatHeader(props: {
+/**
+ * The session's controls of the whole page, put in the app bar (rendered here, inside the chat's context): the collab
+ * menu (the avatars ▾; in Solo a plain ⋯, after the AI's state) and the AI's state at a glance.
+ */
+function SessionBar(props: {
+    slot: HTMLElement | null;
     session: SessionData;
     status: AgentStatus;
     now: number;
@@ -567,27 +582,32 @@ function ChatHeader(props: {
     viewScope: ViewScope;
     onOpenView: (target: ViewTarget) => void;
     onLeave: () => void;
-    onClose: () => void;
     onPeek: () => void;
     tx: Tx;
 }) {
     const { session, status, tx } = props;
+    const solo = isSolo(session.state);
     const label =
         status.kind === 'running' ? tx.chat.status.running(elapsed(status.since, props.now)) : status.kind === 'idle' ? '' : tx.chat.status[status.kind];
     // the AI: nothing while it is connected; else which role is missing and how much waits for it
     const presence = aiPresence(session.state.agent);
-    return (
-        <div className="chat-header">
-            <CollabMenu
-                solo={isSolo(session.state)}
-                session={session}
-                location={props.location}
-                scope={props.viewScope}
-                units={props.units}
-                live={props.live}
-                onOpenView={props.onOpenView}
-                onLeave={props.onLeave}
-            />
+    if (!props.slot) return null;
+    const menu = (
+        <CollabMenu
+            solo={solo}
+            session={session}
+            location={props.location}
+            scope={props.viewScope}
+            units={props.units}
+            live={props.live}
+            onOpenView={props.onOpenView}
+            onLeave={props.onLeave}
+        />
+    );
+    // `session-chat`: the chat's own look for its buttons and the menu's popover, here outside the chat's pillar
+    return createPortal(
+        <div className="session-chat session-bar">
+            {!solo && menu}
             {/* idle says nothing: only running, a question or a queued run shows; a click opens it in AI の作業 */}
             <span className="chat-status-slot" aria-live="polite">
                 {presence.kind === 'missing' && (
@@ -612,10 +632,9 @@ function ChatHeader(props: {
                     </button>
                 )}
             </span>
-            <button className="icon-button" onClick={props.onClose} data-tooltip={tx.chat.close} aria-label={tx.chat.close}>
-                <X size={16} aria-hidden />
-            </button>
-        </div>
+            {solo && menu}
+        </div>,
+        props.slot,
     );
 }
 
