@@ -1,13 +1,14 @@
 // The agent's `dt` (ADR 0026): a private directory outside the workspace holding an executable `dt` that runs the
 // configured `dt` (by default this very CLI: its runtime and its entry), put first on the agent's PATH, so that the
-// prompt and the allowed tools stay `dt fmt` / `dt check` whatever is installed on the facilitator's machine.
+// prompt and the allowed tools stay `dt fmt` / `dt check` / `dt guide` whatever is installed on the facilitator's machine.
 //
 // The agent can write in the workspace while it runs, so the rules are positive and few:
 // - what runs has one of two shapes: `[<node|bun|deno>, <script>]` or `[<dt executable>]`, pinned once when the
 //   subscriber starts to absolute real paths (the runtime found on the PATH), the script or executable outside the
 //   workspace; both are fingerprinted then and checked again before each run (`pinDt`, `fingerprintDt`);
-// - the agent's `dt` takes `fmt` or `check` and, after it, `.dt` / `.dtes` files of the workspace only: no option of
-//   the agent ever reaches `dt`, and `-r <workspace>` is always the launcher's own;
+// - the agent's `dt` takes `fmt` or `check` and, after it, `.dt` / `.dtes` files of the workspace only, or `guide`
+//   with a topic name or `--all` (it only prints): no other option of the agent ever reaches `dt`, and
+//   `-r <workspace>` is always the launcher's own;
 // - `dt` runs with a private working directory (the shim's), never the workspace: no runtime picks a config of it up;
 // - the shim's words are never parsed by a shell: `dt` (or `dt.cmd`) only starts this runtime on a launcher holding
 //   the command as JSON, which spawns it with `shell: false`.
@@ -141,17 +142,35 @@ export async function fingerprintDt(dt: PinnedDt): Promise<string> {
     return hash.digest('hex');
 }
 
-/** What the agent may ask of its `dt`: `fmt` or `check`, then `.dt` / `.dtes` files of the workspace, nothing else. */
-export const AGENT_SUBCOMMANDS = ['fmt', 'check'] as const;
+/**
+ * What the agent may ask of its `dt`: `fmt` or `check`, then `.dt` / `.dtes` files of the workspace; or `guide` alone,
+ * with one topic or rule name, or with `--all`. Nothing else.
+ */
+export const AGENT_SUBCOMMANDS = ['fmt', 'check', 'guide'] as const;
+
+/** What the agent is told when its `dt` refuses (the launcher says the same). */
+const AGENT_DT_USAGE =
+    'Use `dt fmt` or `dt check`, optionally followed by .dt / .dtes files of the workspace, or `dt guide [<topic> | --all]`; no other options.';
+
+/** A name `dt guide` takes: a topic (`storming-practice`) or a rule code (`M010`); never an option. */
+const GUIDE_NAME = /^[A-Za-z0-9][A-Za-z0-9-]*$/;
+
+/** Whether the arguments after `guide` are what it may take: none, one name, or `--all`. */
+const guideArguments = (rest: readonly string[]): boolean => rest.length === 0 || (rest.length === 1 && (rest[0] === '--all' || GUIDE_NAME.test(rest[0])));
 
 /**
- * The arguments `dt` gets for what the agent typed in `cwd`: `-r <root>`, the subcommand, and the files made absolute;
- * or why it is refused (said to the agent). Pure: the launcher runs the same rule.
+ * The arguments `dt` gets for what the agent typed in `cwd`: `-r <root>`, the subcommand, and the files made absolute
+ * (for `guide`, its topic or `--all` as given); or why it is refused (said to the agent). Pure: the launcher runs the
+ * same rule.
  */
 export function agentDtArguments(given: readonly string[], cwd: string, root: string): { ok: true; args: string[] } | { ok: false; error: string } {
     const [sub, ...files] = given;
-    const usage = 'Use `dt fmt` or `dt check`, optionally followed by .dt / .dtes files of the workspace; no options.';
-    if (!sub || !(AGENT_SUBCOMMANDS as readonly string[]).includes(sub)) return { ok: false, error: `dt: only fmt and check are available. ${usage}` };
+    const usage = AGENT_DT_USAGE;
+    if (!sub || !(AGENT_SUBCOMMANDS as readonly string[]).includes(sub)) return { ok: false, error: `dt: only fmt, check and guide are available. ${usage}` };
+    if (sub === 'guide') {
+        if (!guideArguments(files)) return { ok: false, error: `dt: guide takes one topic or --all (${files.join(' ')}). ${usage}` };
+        return { ok: true, args: ['-r', root, sub, ...files] };
+    }
     const out: string[] = [];
     for (const f of files) {
         if (f.startsWith('-')) return { ok: false, error: `dt: options are not accepted (${f}). ${usage}` };
@@ -178,11 +197,14 @@ export function launcherScript(dt: PinnedDt, root: string, cwd: string): string 
         `const root = ${JSON.stringify(real(root))};`,
         'const real = (p) => { try { return realpathSync(p); } catch { const d = dirname(p); return d === p ? p : join(real(d), basename(p)); } };',
         "const inside = (p) => { const r = relative(root, real(p)); return r === '' || (r !== '..' && !r.startsWith('..' + sep) && !isAbsolute(r)); };",
-        "const usage = 'Use `dt fmt` or `dt check`, optionally followed by .dt / .dtes files of the workspace; no options.';",
+        `const usage = ${JSON.stringify(AGENT_DT_USAGE)};`,
         'const refuse = (m) => { console.error(`dt: ${m} ${usage}`); process.exit(2); };',
         'const [sub, ...files] = process.argv.slice(2);',
-        "if (sub !== 'fmt' && sub !== 'check') refuse('only fmt and check are available.');",
-        'const abs = files.map((f) => {',
+        "if (sub !== 'fmt' && sub !== 'check' && sub !== 'guide') refuse('only fmt, check and guide are available.');",
+        `const guideName = ${GUIDE_NAME.toString()};`,
+        "const guideOk = files.length === 0 || (files.length === 1 && (files[0] === '--all' || guideName.test(files[0])));",
+        "if (sub === 'guide' && !guideOk) refuse(`guide takes one topic or --all (${files.join(' ')}).`);",
+        "const abs = sub === 'guide' ? files : files.map((f) => {",
         "    if (f.startsWith('-')) refuse(`options are not accepted (${f}).`);",
         '    if (!/\\.dt(es)?$/.test(f)) refuse(`not a .dt or .dtes file (${f}).`);',
         '    const a = resolve(process.cwd(), f);',

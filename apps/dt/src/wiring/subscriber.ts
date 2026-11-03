@@ -24,6 +24,7 @@ import {
     dtCommandOf,
     pinDt,
     type PinnedDt,
+    type Practice,
     randomNonce,
     resolveAnswerConfig,
     resolveTriageConfig,
@@ -79,6 +80,8 @@ export interface SubscriberOptions {
     answer?: AnswerConfig;
     /** Stage 3 of the triage (`agent.triage`); default: `haiku`, a fresh process per triage. */
     triage?: TriageConfig;
+    /** The ways of working the prompts give (the guide's); none without it. */
+    practice?: Practice;
     /** The answerer's program instead of `agentCommand`: for the tests only. */
     answerCommand?: AgentCommand;
     log?: (line: string) => void;
@@ -190,7 +193,11 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
                       nonce: randomNonce,
                       log,
                   },
-                  { timeoutMs: answerConfig.timeout * 1000, ...(options.reconnect && { reconnect: options.reconnect }) },
+                  {
+                      timeoutMs: answerConfig.timeout * 1000,
+                      ...(options.reconnect && { reconnect: options.reconnect }),
+                      ...(options.practice && { practice: options.practice }),
+                  },
               )
             : undefined;
     // the view goes with the answerer
@@ -250,6 +257,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             once: options.once,
             heartbeatMs: options.heartbeatMs,
             reconnect: options.reconnect,
+            ...(options.practice && { practice: options.practice }),
         },
     );
     // the runner's end ends the answerer too (the session closed, the server is gone, Ctrl+C, `--once`)
