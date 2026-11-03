@@ -386,7 +386,9 @@ function AgentBody({ run, message: m }: { run: string; message: AgentMessage }) 
                 </p>
             ) : (
                 <ReplySection kind="ask">
-                    <p className="reply-question-text">{m.question}</p>
+                    <p className="reply-question-text">
+                        <ReplyText text={m.question} onNavigate={onNavigate} />
+                    </p>
                 </ReplySection>
             );
         case 'completed':

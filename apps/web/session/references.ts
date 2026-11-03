@@ -7,10 +7,12 @@
 //                                    `storming` and `local` of a `DtesElement` target)
 //   `.dtes` storming as a whole:     `@{es:Returns}` (the storming's ID, the `storming` of a `DtesStorming` target)
 //
-// A token is `@{`, an identifier without whitespace, braces or `@`, and `}`. A request body's mention is `@name[n]`
-// (no braces), so the two never read as each other. `\@{` is a literal `@{` (the backslash is dropped). A token that
-// does not read as a reference (whitespace in it, a path too long for `es:`) never shows its `@{` `}`: it is text, its
-// identifier as written (of an `es:` one, its last segment). Pure: no React.
+// A token is `@{`, an identifier without whitespace, braces or `@`, and `}` (spaces around it or a `/` are dropped). A
+// request body's mention is `@name[n]` (no braces), so the two never read as each other. `\@{` is a literal `@{` (the
+// backslash is dropped). A token that does not read as a reference (whitespace inside a name, an empty segment) never
+// shows its `@{` `}`: it is text, its identifier as written (of an `es:` one, its last segment). How a reference
+// resolves — any kind of storming declaration, by ID or label — is `resolveTarget`'s (`targets.ts`), shared with the
+// proposal chips. Pure: no React.
 import type { ModelTarget, NamingContext } from './targets';
 import { targetName, targetShortName } from './targets';
 
@@ -26,12 +28,16 @@ const TOKEN = /\\@\{|@\{([^\n{}@]{1,200})\}/gu;
 function targetOf(id: string): ModelTarget | undefined {
     if (/\s/u.test(id)) return undefined;
     if (id.startsWith('es:')) {
-        const m = /^es:([^/]+)(?:\/([^/]+))?$/.exec(id);
+        // a path through a timeline (`es:Returns/Main/ReturnRequested`) is kept whole: `resolveTarget` reads its last segment
+        const m = /^es:([^/]+)(?:\/([^/]+(?:\/[^/]+)*))?$/.exec(id);
         if (!m) return undefined;
         return m[2] === undefined ? { kind: 'DtesStorming', storming: m[1] ?? '' } : { kind: 'DtesElement', storming: m[1] ?? '', local: m[2] };
     }
     return { kind: 'DtElement', element: id };
 }
+
+/** An identifier as written, without the spaces the AI sometimes puts inside the braces or around a `/`. */
+const tidy = (id: string): string => id.trim().replace(/\s*\/\s*/gu, '/');
 
 /** What a reference that does not resolve (or does not read as one) shows: its identifier, of an `es:` one its last segment. */
 export function plainIdentifier(id: string): string {
@@ -55,7 +61,7 @@ export function parseReplyText(text: string): ReplySegment[] {
     for (const m of text.matchAll(TOKEN)) {
         buffer += text.slice(last, m.index);
         last = m.index + m[0].length;
-        const id = m[1];
+        const id = m[1] === undefined ? undefined : tidy(m[1]);
         const target = id === undefined ? undefined : targetOf(id);
         if (id === undefined) buffer += '@{';
         else if (!target) buffer += plainIdentifier(id);
@@ -72,8 +78,9 @@ export function parseReplyText(text: string): ReplySegment[] {
 
 /**
  * What a reference shows: its own name in the display setting when it resolves now (a state or a command without its
- * aggregate, a storming element without its storming, a storming by its title), with its whole name as `path` when that
- * says more; else its identifier (`plainIdentifier`: of a storming or a storming element, its own ID).
+ * aggregate, a storming element of any kind — a note, a timeline or an exception, a group, a stage — without its
+ * storming, a storming by its title; as `resolveTarget` reads it), with its whole name as `path` when that says more;
+ * else its identifier (`plainIdentifier`: of a storming or a storming element, its own ID).
  */
 export function referenceText(
     ref: Extract<ReplySegment, { kind: 'ref' }>,
@@ -85,4 +92,11 @@ export function referenceText(
         return { text: name, resolved: true, ...(full !== undefined && full !== name && { path: full }) };
     }
     return { text: plainIdentifier(ref.id), resolved: false };
+}
+
+/** Reply text as plain text, its references by what they show (`referenceText`): for a line that is not a link itself. */
+export function referencesAsText(text: string, naming: NamingContext | undefined): string {
+    return parseReplyText(text)
+        .map((seg) => (seg.kind === 'text' ? seg.text : referenceText(seg, naming).text))
+        .join('');
 }

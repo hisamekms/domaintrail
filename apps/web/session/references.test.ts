@@ -39,7 +39,9 @@ describe('reply text with element references', () => {
 
     test('`\\@{` is a literal `@{`; a token that does not read as a reference is its identifier, never `@{` `}`', () => {
         expect(refs('write \\@{Sales.Order} literally')).toEqual([{ kind: 'text', text: 'write @{Sales.Order} literally' }]);
-        expect(refs('@{es:a/b/c} and @{Sales Order} and @{es:Returns/}')).toEqual([{ kind: 'text', text: 'c and Sales Order and Returns' }]);
+        expect(refs('@{Sales Order} and @{es:Returns/} and @{es:/a}')).toEqual([{ kind: 'text', text: 'Sales Order and Returns and a' }]);
+        // a path through a timeline is a reference (`resolveTarget` reads its last segment)
+        expect(refs('@{es:a/b/c}')).toEqual([{ kind: 'ref', target: { kind: 'DtesElement', storming: 'a', local: 'b/c' }, id: 'es:a/b/c' }]);
         expect(plainIdentifier('es:Returns/ReturnRequested')).toBe('ReturnRequested');
         expect(plainIdentifier('es:Returns')).toBe('Returns');
         expect(plainIdentifier(' Sales.Order ')).toBe('Sales.Order');
