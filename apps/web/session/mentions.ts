@@ -183,7 +183,7 @@ export function composerKey(e: KeyInput, menuOpen: boolean): ComposerKey {
     return 'none';
 }
 
-/** Something a request can be about, offered after `#`: a `.dt` element, state or command, or a storming's note. */
+/** Something a request can be about, offered after `#`: a `.dt` element, state or command, a storming or its note. */
 export interface MentionCandidate {
     readonly key: string;
     readonly target: TargetDraft;
@@ -191,11 +191,11 @@ export interface MentionCandidate {
     readonly name: string;
     /** The name a mention writes: the label in ラベル and 両方, else the name. */
     readonly mention: string;
-    /** The model ID or `Storming/Local`, to tell same names apart. */
+    /** The model ID, `Storming/Local` or the storming's ID, to tell same names apart. */
     readonly qualified: string;
-    /** `.dt`: the element's kind (or `state`, `command`); `.dtes`: the note's kind. */
+    /** `.dt`: the element's kind (or `state`, `command`); `.dtes`: the note's kind, or `storming` for a whole storming. */
     readonly kind: { readonly language: 'dt' | 'dtes'; readonly kind: string };
-    /** The context, or the storming, it is in (in the display mode). */
+    /** The context, or the storming, it is in (in the display mode); empty for a whole storming. */
     readonly where: string;
     /** What a query is matched with: the label, the name and the qualified name. */
     readonly search: readonly string[];
@@ -205,8 +205,8 @@ export interface MentionCandidate {
 const NOT_NOTES = new Set(['timeline', 'group']);
 
 /**
- * Everything `#` offers: the model's elements with their states and commands, and the stormings' notes (not their
- * timelines or groups; an occurrence is added from a timeline's view with the selection's `+`).
+ * Everything `#` offers: the model's elements with their states and commands, and each storming as a whole then its
+ * notes (not its timelines or groups; an occurrence is added from a timeline's view with the selection's `+`).
  */
 export function mentionCandidates(
     ctx: NamingContext & { readonly stormings: readonly StormingView[]; readonly sources: readonly { readonly path: string; readonly text: string }[] },
@@ -243,6 +243,17 @@ export function mentionCandidates(
     for (const view of ctx.stormings) {
         const byId = firstDeclarations(view.storming);
         const where = nameIn(mode, view.id, view.storming.label);
+        const target: TargetDraft = { target: { kind: 'DtesStorming', storming: view.id }, label: where };
+        out.push({
+            key: targetKey(target.target),
+            target,
+            name: where,
+            mention: nameIn(labelFirst, view.id, view.storming.label),
+            qualified: view.id,
+            kind: { language: 'dtes', kind: 'storming' },
+            where: '',
+            search: [shownLabel(view.storming.label) ?? '', view.id].filter(Boolean),
+        });
         for (const d of declarations(view.storming)) {
             if (NOT_NOTES.has(d.kind) || byId.get(d.id) !== d) continue;
             add(`es/${view.id}/${d.id}`, 'dtes', d.kind, where, d.id, d.label);

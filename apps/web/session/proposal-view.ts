@@ -26,8 +26,8 @@ export interface TargetLabel {
     readonly resolved: boolean;
 }
 
-/** The names of kinds: `kinds` (`.dt`) and `esKinds` (`.dtes`) of the messages. */
-export type KindNames = Pick<Messages, 'kinds' | 'esKinds'>;
+/** The names of kinds: `kinds` (`.dt`) and `esKinds` (`.dtes`) of the messages, and what a storming is called. */
+export type KindNames = Pick<Messages, 'kinds' | 'esKinds' | 'inStorming'>;
 
 /** The name of a context in the display setting. */
 function contextName(naming: NamingContext, name: string): string {
@@ -35,11 +35,23 @@ function contextName(naming: NamingContext, name: string): string {
     return nameIn(naming.mode, name, ctx?.label);
 }
 
-/** A target of a proposal as its chip shows it. */
+/**
+ * A target of a proposal as its chip shows it; one that does not resolve by its identifier (`plainIdentifier`: of a
+ * storming or a storming element, its own ID).
+ */
 export function targetLabel(t: ModelTarget, naming: NamingContext | undefined, kinds: KindNames): TargetLabel {
     const name = naming && targetShortName(t, naming);
     if (!naming || name === undefined) {
-        const id = t.kind === 'DtElement' ? t.element : t.kind === 'DtesElement' ? `${t.storming}/${t.local}` : t.kind === 'DtesOccurrence' ? t.eventName : '';
+        const id =
+            t.kind === 'DtElement'
+                ? t.element
+                : t.kind === 'DtesStorming'
+                  ? t.storming
+                  : t.kind === 'DtesElement'
+                    ? t.local
+                    : t.kind === 'DtesOccurrence'
+                      ? t.eventName
+                      : '';
         return { name: id, resolved: false };
     }
     const full = targetName(t, naming);
@@ -51,6 +63,7 @@ export function targetLabel(t: ModelTarget, naming: NamingContext | undefined, k
             if (r?.kind === 'state' || r?.kind === 'command') return `${kinds.kinds[r.kind]}・${nameIn(naming.mode, r.agg.name, r.agg.label)}`;
             return undefined;
         }
+        if (t.kind === 'DtesStorming') return kinds.inStorming;
         if (t.kind === 'DtesElement') {
             const view = naming.stormings.find((s) => s.id === t.storming);
             const declaration = view && firstDeclarations(view.storming).get(t.local);

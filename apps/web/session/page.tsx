@@ -204,6 +204,12 @@ export function useSessionPage(input: {
             const storming = stormings.find((s) => s.id === target.storming);
             if (!storming) return;
             const { [target.storming]: _, ...others } = stormingChoice.timelines;
+            if (target.kind === 'DtesStorming') {
+                // the whole storming: its integrated canvas, at the level chosen
+                setStormingChoice({ stormingId: target.storming, level: stormingChoice.level, timelines: others });
+                setView({ kind: 'storming' });
+                return;
+            }
             if (target.kind === 'DtesElement') {
                 // the integrated canvas, at a level that draws the element
                 const kind = firstDeclarations(storming.storming).get(target.local)?.kind;

@@ -2,7 +2,7 @@
 // name display setting, and what is left as text.
 import { describe, expect, test } from 'bun:test';
 import { analyze } from '@domaintrail/analysis';
-import { parseReplyText, referenceText, type ReplySegment } from './references';
+import { parseReplyText, plainIdentifier, referenceText, type ReplySegment } from './references';
 import type { NamingContext } from './targets';
 import { exampleSources } from '../test-helpers';
 
@@ -29,9 +29,20 @@ describe('reply text with element references', () => {
         ]);
     });
 
-    test('`\\@{` is a literal `@{`; a malformed storming reference stays as written', () => {
+    test('a whole storming: `@{es:Returns}`', () => {
+        expect(refs('（@{es:Returns}）')).toEqual([
+            { kind: 'text', text: '（' },
+            { kind: 'ref', target: { kind: 'DtesStorming', storming: 'Returns' }, id: 'es:Returns' },
+            { kind: 'text', text: '）' },
+        ]);
+    });
+
+    test('`\\@{` is a literal `@{`; a token that does not read as a reference is its identifier, never `@{` `}`', () => {
         expect(refs('write \\@{Sales.Order} literally')).toEqual([{ kind: 'text', text: 'write @{Sales.Order} literally' }]);
-        expect(refs('@{es:Returns} and @{es:a/b/c}')).toEqual([{ kind: 'text', text: '@{es:Returns} and @{es:a/b/c}' }]);
+        expect(refs('@{es:a/b/c} and @{Sales Order} and @{es:Returns/}')).toEqual([{ kind: 'text', text: 'c and Sales Order and Returns' }]);
+        expect(plainIdentifier('es:Returns/ReturnRequested')).toBe('ReturnRequested');
+        expect(plainIdentifier('es:Returns')).toBe('Returns');
+        expect(plainIdentifier(' Sales.Order ')).toBe('Sales.Order');
     });
 
     test('resolved in the display setting; unresolved as the identifier, without braces', async () => {
@@ -43,13 +54,20 @@ describe('reply text with element references', () => {
         const [returned] = refs('@{es:Returns/ReturnRequested}');
         const [gone] = refs('@{Sales.Gone}');
         const [goneEs] = refs('@{es:Returns/Gone}');
+        const [returns] = refs('@{es:Returns}');
+        const [goneStorming] = refs('@{es:Gone}');
         if (order?.kind !== 'ref' || returned?.kind !== 'ref' || gone?.kind !== 'ref' || goneEs?.kind !== 'ref') throw new Error('not references');
+        if (returns?.kind !== 'ref' || goneStorming?.kind !== 'ref') throw new Error('not references');
+        // a whole storming by its title, in the display setting
+        expect(referenceText(returns, naming('label'))).toEqual({ text: '返品', resolved: true });
+        expect(referenceText(returns, naming('name'))).toEqual({ text: 'Returns', resolved: true });
+        expect(referenceText(goneStorming, naming('label'))).toEqual({ text: 'Gone', resolved: false });
         expect(referenceText(order, naming('label'))).toEqual({ text: '注文', resolved: true });
         expect(referenceText(order, naming('name'))).toEqual({ text: 'Order', resolved: true });
         // its own name shown; what it is in only in the path (the tooltip)
         expect(referenceText(returned, naming('name'))).toEqual({ text: 'ReturnRequested', resolved: true, path: 'Returns / ReturnRequested' });
         expect(referenceText(gone, naming('label'))).toEqual({ text: 'Sales.Gone', resolved: false });
-        expect(referenceText(goneEs, naming('label'))).toEqual({ text: 'Returns/Gone', resolved: false });
+        expect(referenceText(goneEs, naming('label'))).toEqual({ text: 'Gone', resolved: false });
         expect(referenceText(order, undefined)).toEqual({ text: 'Sales.Order', resolved: false });
         const [draft] = refs('@{Sales.Order#Draft}');
         const [confirm] = refs('@{Sales.Order:confirm}');

@@ -127,6 +127,8 @@ export function targetKey(t: ModelTarget): string {
             return `workspace:${t.scope ?? ''}`;
         case 'DtElement':
             return `dt:${t.element}`;
+        case 'DtesStorming':
+            return `dtes:${t.storming}`;
         case 'DtesElement':
             return `dtes:${t.storming}/${t.local}`;
         case 'DtesOccurrence':
@@ -138,6 +140,8 @@ export function targetKey(t: ModelTarget): string {
 export function selectionOf(t: ModelTarget): string | undefined {
     switch (t.kind) {
         case 'Workspace':
+        // a whole storming is a view, not an element on it
+        case 'DtesStorming':
             return undefined;
         case 'DtElement':
             return t.element;
@@ -178,6 +182,10 @@ export function targetName(t: ModelTarget, ctx: NamingContext): string | undefin
             const r = ctx.model ? resolve(ctx.model, t.element) : undefined;
             if (!r || r.kind === 'context') return undefined;
             return namer(ctx.mode, ctx.model).id(t.element);
+        }
+        case 'DtesStorming': {
+            const view = ctx.stormings.find((s) => s.id === t.storming);
+            return view && nameIn(ctx.mode, view.id, view.storming.label);
         }
         case 'DtesElement':
         case 'DtesOccurrence': {

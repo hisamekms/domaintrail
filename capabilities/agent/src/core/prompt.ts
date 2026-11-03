@@ -62,6 +62,8 @@ function targetOf(snapshot: Json<Collaboration.TargetSnapshot>): Record<string, 
             };
         case 'DtElement':
             return { kind: '.dt model element', element: t.element, ...label, ...where };
+        case 'DtesStorming':
+            return { kind: '.dtes storming as a whole', storming: t.storming, ...label, ...where };
         case 'DtesElement':
             return { kind: '.dtes storming element', storming: t.storming, element: t.local, ...label, ...where };
         case 'DtesOccurrence':
@@ -85,7 +87,7 @@ function languagesOf(input: Json<Collaboration.RunInput>): { dt: boolean; dtes: 
         if (targets.length === 0) dt = dtes = true;
         for (const { target: t } of targets) {
             if (t.kind === 'DtElement') dt = true;
-            else if (t.kind === 'DtesElement' || t.kind === 'DtesOccurrence') dtes = true;
+            else if (t.kind === 'DtesStorming' || t.kind === 'DtesElement' || t.kind === 'DtesOccurrence') dtes = true;
             else if (t.scope === 'Dt') dt = true;
             else if (t.scope === 'Dtes') dtes = true;
             else dt = dtes = true;
@@ -235,7 +237,8 @@ function replyDescription(): string {
   most ${L.alternativeLabel}).
 In any of its text, name an element by its identifier, never its label: a \`.dt\` element, state or command as
 \`@{Sales.Order}\`, \`@{Sales.Order#Draft}\` or \`@{Sales.Order:confirm}\`, a \`.dtes\` element as
-\`@{es:Returns/ReturnRequested}\` (storming / element). The page shows them by name and links them.`;
+\`@{es:Returns/ReturnRequested}\` (storming / element), a whole \`.dtes\` storming as \`@{es:Returns}\`. The page shows
+them by name and links them; use no other form.`;
 }
 
 /**

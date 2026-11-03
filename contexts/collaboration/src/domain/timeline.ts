@@ -240,6 +240,8 @@ function targetName(t: Collaboration.ModelTarget): string {
             return 'the workspace';
         case 'DtElement':
             return t.element;
+        case 'DtesStorming':
+            return t.storming;
         case 'DtesElement':
             return `${t.storming}.${t.local}`;
         case 'DtesOccurrence':

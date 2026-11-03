@@ -1543,6 +1543,7 @@ function Composer(props: {
     const look = (m: ComposerMention): MentionLook =>
         m.kind === 'element' ? { label: `#${ownTokenName(m.name, m.target)}`, title: `#${nameOf(m.target)}` } : { label: `@${m.name}`, title: `@${m.name}` };
     const kindOf = (c: MentionCandidate): string => {
+        if (c.kind.language === 'dtes' && c.kind.kind === 'storming') return t.inStorming;
         const names: Readonly<Record<string, string>> = c.kind.language === 'dt' ? t.kinds : t.esKinds;
         return names[c.kind.kind] ?? c.kind.kind;
     };
@@ -1681,7 +1682,7 @@ function Composer(props: {
                                         <span className="chat-mention-name">{c.element.name}</span>
                                         <span className={`chat-mention-kind lang-${c.element.kind.language}`}>{kindOf(c.element)}</span>
                                         <span className="chat-mention-where muted">
-                                            {c.element.where} · {c.element.qualified}
+                                            {c.element.where ? `${c.element.where} · ${c.element.qualified}` : c.element.qualified}
                                         </span>
                                     </>
                                 ) : (
