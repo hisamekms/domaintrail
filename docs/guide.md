@@ -2556,8 +2556,8 @@ Sessions need Node.js 22.13 or later (for `node:sqlite`). In the repository,
 
 - `dt open` — the Live View and a chat for you alone, at `http://127.0.0.1:4321` (`--port`, `--host`, or `open.port` /
   `open.host`; `--base <ref>` compares with a git revision), until Ctrl+C. It prints a one-time link instead of the
-  plain address: opened within 60 minutes, it signs that browser in as you, the facilitator (an HttpOnly cookie, kept
-  across restarts), with no join form; a browser or another program without that cookie is not let in, and no one else
+  plain address: opened within 60 minutes, it signs that browser in as you, the facilitator (an HttpOnly session
+  cookie this server alone knows: a restart prints a new link), with no join form; a browser or another program without that cookie is not let in, and no one else
   joins. It answers loopback only (never `collab.access`'s hosts). The chat, runs and revisions are kept across restarts. It refuses a
   workspace with an open collab session (resume it with `dt collab`, or end it from its collab menu). With `--host` on
   a non-loopback address it serves the Live View read-only: no chat, no agent.

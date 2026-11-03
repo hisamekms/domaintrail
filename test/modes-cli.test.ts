@@ -74,8 +74,8 @@ async function signInSolo(link: string): Promise<string> {
     expect(res.status).toBe(303);
     expect(res.headers.get('location')).toBe('/');
     const cookie = res.headers.get('set-cookie') ?? '';
-    expect(cookie).toContain('HttpOnly');
-    expect(cookie).toContain('SameSite=Strict');
+    // a name of this server's own, a session cookie (no Max-Age), HttpOnly, SameSite=Strict
+    expect(cookie).toMatch(/^dt_open_[0-9a-f]{12}=[A-Za-z0-9_-]{43}; Path=\/; HttpOnly; SameSite=Strict$/);
     return cookie.split(';')[0];
 }
 
@@ -287,6 +287,7 @@ describe('the modes on one workspace (decision 13)', () => {
     test('dt open: its one person signs in with the printed one-time link (a cookie), no form; nobody else is identified', async () => {
         const root = await copy();
         const server = await start(root, 'Solo');
+        let firstCookie = '';
         try {
             expect([server.mode, server.opened]).toEqual(['Solo', 'started']);
             expect(server.facilitatorLink).toStartWith(`${server.url}session/open?code=`);
@@ -299,10 +300,15 @@ describe('the modes on one workspace (decision 13)', () => {
             expect(joined.status).not.toBe(201);
             // the link: once, it sets an HttpOnly, SameSite=Strict cookie and goes to the Live View
             const cookie = await signInSolo(server.facilitatorLink);
+            firstCookie = cookie;
             expect(((await (await api(server, 'me', undefined, cookie)).json()) as Me).participant.role).toBe('facilitator');
             expect((await fetch(server.url, { headers: { cookie } })).status).toBe(200);
             expect((await fetch(server.facilitatorLink, { redirect: 'manual' })).status).toBe(403);
             expect((await api(server, 'me', undefined, 'dt_session=' + 'x'.repeat(43))).status).toBe(401);
+            expect((await api(server, 'me', undefined, `${cookie.split('=')[0]}=${'x'.repeat(43)}`)).status).toBe(401);
+            // the link is not a facilitator link: the facilitator's page does not take its code
+            const code = new URL(server.facilitatorLink).searchParams.get('code') ?? '';
+            expect((await fetch(`${server.url}session/facilitator?code=${code}`, { headers: { cookie }, redirect: 'manual' })).status).toBe(404);
             const link = await issueFacilitatorLink(root).then(
                 () => undefined,
                 (e: unknown) => e,
@@ -311,6 +317,14 @@ describe('the modes on one workspace (decision 13)', () => {
             expect(String(link)).toContain('The running server is `dt open`');
         } finally {
             await server.stop();
+        }
+        // the cookie is this server instance's only: a restart forgets it, and prints a new link
+        const again = await start(root, 'Solo');
+        try {
+            expect((await api(again, 'me', undefined, firstCookie)).status).toBe(401);
+            expect(again.facilitatorLink).not.toBe(server.facilitatorLink);
+        } finally {
+            await again.stop();
         }
     });
 
@@ -385,11 +399,15 @@ describe('the modes on one workspace (decision 13)', () => {
         const collab = await start(root, 'Collab');
         try {
             expect([collab.mode, collab.opened, collab.resumed, collab.session]).toEqual(['Collab', 'collaborated', true, solo.session]);
-            // the history stays, and the dt open person's browser is still its facilitator; anyone else signs in
+            // the history stays
             expect((await api(collab, 'me')).status).toBe(401);
-            expect(((await (await api(collab, 'me', undefined, soloCookie)).json()) as Me).participant.role).toBe('facilitator');
+            // dt open's cookie and link are worth nothing here: the person takes the facilitator link dt collab prints
+            expect((await api(collab, 'me', undefined, soloCookie)).status).toBe(401);
             const join = await fetch(`${collab.url}api/session/join`, { method: 'POST', headers: json, body: JSON.stringify({ name: 'Ada' }) });
             const cookie = (join.headers.get('set-cookie') ?? '').split(';')[0];
+            const soloCode = new URL(solo.facilitatorLink).searchParams.get('code') ?? '';
+            await fetch(`${collab.url}session/facilitator?code=${soloCode}`, { headers: { cookie }, redirect: 'manual' });
+            expect(((await (await api(collab, 'me', undefined, cookie)).json()) as Me).participant.role).toBe('participant');
             const state = (await (await fetch(`${collab.url}api/session/state`, { headers: { cookie } })).json()) as SessionStateBody;
             expect(state.requests.map((r) => r.body)).toEqual(['Rename Order to 受注.']);
             expect(collab.facilitatorLink).toStartWith(`${collab.url}session/facilitator?code=`);

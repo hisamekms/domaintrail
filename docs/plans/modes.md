@@ -506,13 +506,18 @@ M5 landed the commands and the config, with these details settled or changed:
   and `--agent claude` share one option (`--agent claude` makes an unusable Claude Code an error, after which the
   server is stopped). `dt open --host <non-loopback>` serves the read-only Live View (`--agent claude` with it is an
   error).
-- **`dt open`'s sign-in** (security review): not "every loopback request is the facilitator". `dt open` prints a
-  one-time link (`/session/open?code=…`: a facilitator link's code, single use, 60 minutes) in place of the plain
-  address; opening it signs that browser in as the Solo identity (`dev:solo`) with the dev mode's cookie (`dt_session`,
-  HttpOnly, SameSite=Strict, stored in `session.db`, so it survives restarts) and redirects to the Live View. Without
-  the cookie a request is not identified (401; a page says to open the printed link, no join form), so another local
-  process or OS user is not the facilitator. The link is the only step. When `dt collab` continues the session, that
-  browser stays its facilitator (the claimed role is the Solo identity's).
+- **`dt open`'s sign-in** (security review, two rounds): not "every loopback request is the facilitator". `dt open`
+  prints a one-time link (`/session/open?code=…`, single use, 60 minutes) in place of the plain address; opening it
+  sets a cookie and redirects to the Live View. The link is the only step. Everything about it lives in the server's
+  memory only (`wiring/solo.ts`, `createSoloSignIn`): the code is not a facilitator link (the database never sees it,
+  the collab facilitator page does not take it); the cookie's name is chosen when the server starts
+  (`dt_open_<random>`), it is HttpOnly, SameSite=Strict and a session cookie (no Max-Age), and its value is known to
+  this server instance alone — so the cookie, which a browser sends to every port of the host, is worth nothing to
+  another server, nor to this one after a restart (which prints a new link). Without it a request is not identified
+  (401; a page says to open the printed link, no join form), so another local process or OS user is not the
+  facilitator. The link and the sign-ins are revoked when the server stops or the session leaves Solo. When `dt collab`
+  continues the session, the person takes the facilitator link it prints (their messages are the facilitator
+  participant's already).
 - **Loopback only**: `dt open` never reads `collab` beyond `quickReactions` (`open.port` / `open.host`, the dev
   identity); its host policy admits loopback Hosts and Origins only, whatever `collab.access` allows.
 - **Fail closed and one server per workspace**: the Solo identities identify no one once the session is not open and

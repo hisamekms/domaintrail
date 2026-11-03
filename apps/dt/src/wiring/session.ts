@@ -56,7 +56,7 @@ import { processAlive } from './process.js';
 import { createModelValidator, createSourceFormatter } from './validator.js';
 import { prepareLiveView, serverUrl, watchLiveView, type ViewServerOptions } from './view.js';
 import { createWatcherHold, type WatcherHold } from './watcher-hold.js';
-import { issueSoloLink, soloIdentities, soloName, soloSurface } from './solo.js';
+import { createSoloSignIn, soloIdentities, soloName, soloSurface } from './solo.js';
 import * as path from 'node:path';
 
 /** How long a lease of the agent holds without a heartbeat. */
@@ -283,12 +283,13 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             maxParticipants: config.maxParticipants,
         });
         const soloPerson = soloPersonName(sessionOpened.session);
+        // `dt open`'s sign-in: in this server's memory only, revoked when it stops
+        const soloSignIn = createSoloSignIn();
         // a Solo session's person, bound to the cookie of the link `dt open` prints; nobody once it is no longer Solo
         const identities =
             mode === 'Solo'
                 ? soloIdentities({
-                      session,
-                      access,
+                      signIn: soloSignIn,
                       base: shared,
                       name: soloPerson,
                       isOpenSolo: async () => {
@@ -477,7 +478,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 if (auth.kind !== 'participant') return void socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
                 hub.handleUpgrade(req, socket, head, { participant: auth.participant, role: auth.role, actor: auth.actor });
             },
-            session: mode === 'Solo' ? soloSurface(sessionSurface, { session, access, name: soloPerson, secureCookie: false }) : sessionSurface,
+            session: mode === 'Solo' ? soloSurface(sessionSurface, soloSignIn) : sessionSurface,
         });
         opened.http = http;
         const port = await listen(http, config.port, config.host);
@@ -497,7 +498,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         };
         // the one person of a Solo session is the facilitator already
         // in Solo, the one-time link that signs the launching user's browser in as the facilitator
-        const facilitatorLink = mode === 'Solo' ? await issueSoloLink(access, session, url) : await issueFacilitatorLink();
+        const facilitatorLink = mode === 'Solo' ? soloSignIn.link(url) : await issueFacilitatorLink();
 
         const expiring = setInterval(() => {
             collaboration
@@ -533,6 +534,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             issueFacilitatorLink,
             stop() {
                 stopped ??= (async () => {
+                    soloSignIn.revoke();
                     clearInterval(expiring);
                     await reverts.stop();
                     for (const timer of expiries.values()) clearTimeout(timer);

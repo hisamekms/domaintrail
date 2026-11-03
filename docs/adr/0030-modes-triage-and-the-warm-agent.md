@@ -155,9 +155,11 @@ one rather than rewritten.
 ### 10. The CLI and the config as built (M5)
 
 *Proposed* (M5; see the plan's "As built in M5"): `dt open`'s one person is bound to a secret only the launching user
-holds — it prints a one-time link (a facilitator link's code, 60 minutes) that signs the browser opening it in with the
-dev mode's HttpOnly, SameSite=Strict cookie; a request without it is not identified, so another local process or OS user
-is not the facilitator. `dt open` answers loopback Hosts and Origins only, never `collab.access`'s. Its identities fail
+holds — it prints a one-time link (60 minutes, accepted on its own page only, not a facilitator link) that signs the
+browser opening it in with a cookie named per server start, HttpOnly, SameSite=Strict, without Max-Age, whose value
+only that server instance knows (in memory; revoked when it stops or the session leaves Solo); a request without it is
+not identified, so another local process or OS user is not the facilitator, and the cookie is worth nothing to another
+server on the same host. `dt open` answers loopback Hosts and Origins only, never `collab.access`'s. Its identities fail
 closed once the session is no longer Solo, and a workspace has one live session server (`server.json`, its process
 alive): another `dt open` / `dt collab` refuses to start rather than open or change the session under it.
 
