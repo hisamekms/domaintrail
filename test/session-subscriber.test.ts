@@ -234,6 +234,8 @@ async function subscribe(ctx: Context, planFile: string, extra: Partial<Subscrib
         dt: DT,
         agentCommand: { command: process.execPath, args: [FAKE, planFile] },
         run: { warm: false, restartAfter: 20, idleTimeout: 30 },
+        // the runner only: the answerer role (its own fake plan) has its tests in session-triage.test.ts
+        roles: ['run'],
         log: (l) => log.push(l),
         reconnect: { minMs: 100, maxMs: 500, giveUpMs: 5_000 },
         ...extra,

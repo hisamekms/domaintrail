@@ -164,3 +164,94 @@ function dtShapeError(dt: readonly string[]): string | undefined {
     if (dt.length === 1) return hasSeparator(dt[0]) && !dt[0].startsWith('-') ? undefined : `${shape}: a dt executable is given by its path`;
     return shape;
 }
+
+// ---- The answerer role's settings (ADR 0030, decisions 5, 6 and 7; plan Q12) ----------------------------------------
+// Their keys and checks, not yet part of the file's sections: `agent.answer.*` and `agent.triage.*` are placed in the
+// config when the sections are renamed (plan task M5), which wires them to `createClaudeAnswerer` and `startAnswerer`.
+
+/** Turns of one warm answerer process before a fresh one replaces it, unless configured. */
+export const DEFAULT_ANSWER_RESTART_AFTER = 50;
+/** Seconds an answer or a proposal may take, unless configured (`agent.answer.timeout`). */
+export const DEFAULT_ANSWER_TIMEOUT = 120;
+/** Stage 3's model unless configured (`agent.triage.model`). */
+export const DEFAULT_TRIAGE_MODEL = 'haiku';
+
+/** The keys of `agent.answer` and `agent.triage`. */
+export const ANSWER_CONFIG_KEYS = ['model', 'effort', 'warm', 'restartAfter', 'timeout'] as const;
+export const TRIAGE_CONFIG_KEYS = ['model', 'warm'] as const;
+
+/** How Claude Code answers (`agent.answer`), as the file gives it. Its tools are not configurable (`Read`, `Grep`, `Glob`). */
+export interface AnswerConfigFile {
+    model?: string;
+    effort?: AgentEffort;
+    /** One long-lived process across answers (default true). */
+    warm?: boolean;
+    /** Answers of one warm process before a fresh one replaces it (default `DEFAULT_ANSWER_RESTART_AFTER`). */
+    restartAfter?: number;
+    /** Seconds an answer may take (default `DEFAULT_ANSWER_TIMEOUT`). */
+    timeout?: number;
+}
+
+/** Stage 3 of the triage (`agent.triage`), as the file gives it. */
+export interface TriageConfigFile {
+    /** `claude --model` (default `haiku`). */
+    model?: string;
+    /** One long-lived process across triages (default false: a fresh `claude -p` per triage). */
+    warm?: boolean;
+}
+
+export interface AnswerConfig {
+    model?: string;
+    effort?: AgentEffort;
+    warm: boolean;
+    restartAfter: number;
+    /** Seconds. */
+    timeout: number;
+}
+
+export interface TriageConfig {
+    model: string;
+    warm: boolean;
+}
+
+const MODEL = /^[A-Za-z0-9][\w.:@[\]/-]*$/;
+
+/** Checks `agent.answer` (`at`: where it sits, for the messages). */
+export function validateAnswerConfig(answer: unknown, at: string, fail: (msg: string) => never): void {
+    if (!isRecord(answer)) return fail(`'${at}' must be an object`);
+    for (const key of Object.keys(answer)) if (!(ANSWER_CONFIG_KEYS as readonly string[]).includes(key)) fail(`unknown key '${at}.${key}'`);
+    if (answer.model !== undefined && !(typeof answer.model === 'string' && MODEL.test(answer.model)))
+        fail(`'${at}.model' must be a Claude Code model name or alias (e.g. "sonnet")`);
+    if (answer.effort !== undefined && !(AGENT_EFFORTS as readonly unknown[]).includes(answer.effort))
+        fail(`'${at}.effort' must be one of ${AGENT_EFFORTS.map((e) => `"${e}"`).join(', ')}`);
+    if (answer.warm !== undefined && typeof answer.warm !== 'boolean') fail(`'${at}.warm' must be true or false`);
+    if (answer.restartAfter !== undefined && !(typeof answer.restartAfter === 'number' && Number.isInteger(answer.restartAfter) && answer.restartAfter >= 1))
+        fail(`'${at}.restartAfter' must be a positive integer (answers)`);
+    if (answer.timeout !== undefined && !(typeof answer.timeout === 'number' && Number.isFinite(answer.timeout) && answer.timeout > 0))
+        fail(`'${at}.timeout' must be a number of seconds, more than 0`);
+}
+
+/** Checks `agent.triage`. */
+export function validateTriageConfig(triage: unknown, at: string, fail: (msg: string) => never): void {
+    if (!isRecord(triage)) return fail(`'${at}' must be an object`);
+    for (const key of Object.keys(triage)) if (!(TRIAGE_CONFIG_KEYS as readonly string[]).includes(key)) fail(`unknown key '${at}.${key}'`);
+    if (triage.model !== undefined && !(typeof triage.model === 'string' && MODEL.test(triage.model)))
+        fail(`'${at}.model' must be a Claude Code model name or alias (e.g. "haiku")`);
+    if (triage.warm !== undefined && typeof triage.warm !== 'boolean') fail(`'${at}.warm' must be true or false`);
+}
+
+/** `agent.answer` with its defaults: warm, replaced after 50 answers, 120 s, the user's model and effort. */
+export function resolveAnswerConfig(answer: AnswerConfigFile = {}): AnswerConfig {
+    return {
+        warm: answer.warm ?? true,
+        restartAfter: answer.restartAfter ?? DEFAULT_ANSWER_RESTART_AFTER,
+        timeout: answer.timeout ?? DEFAULT_ANSWER_TIMEOUT,
+        ...(answer.model !== undefined && { model: answer.model }),
+        ...(answer.effort !== undefined && { effort: answer.effort }),
+    };
+}
+
+/** `agent.triage` with its defaults: `haiku`, a fresh process per triage. */
+export function resolveTriageConfig(triage: TriageConfigFile = {}): TriageConfig {
+    return { model: triage.model ?? DEFAULT_TRIAGE_MODEL, warm: triage.warm ?? false };
+}

@@ -125,6 +125,11 @@ export interface SessionServer {
     closed: Promise<void>;
     /** Another one-time facilitator link. */
     issueFacilitatorLink(): Promise<string>;
+    /**
+     * Sends what the use cases appended to the outbox to the pages and the agents, and lets the server's stages take it
+     * (after a use case called on `collaboration` directly: the tests, a solo sign-in).
+     */
+    pump(): Promise<void>;
     stop(): Promise<void>;
 }
 
@@ -527,6 +532,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             watcherHold,
             closed,
             issueFacilitatorLink,
+            pump,
             stop() {
                 stopped ??= (async () => {
                     clearInterval(expiring);

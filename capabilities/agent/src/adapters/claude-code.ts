@@ -32,6 +32,8 @@ export interface ClaudeRunOptions {
     readonly effort?: string;
     /** The user messages come as stream-json lines on stdin (a warm process: one turn each), not as one prompt. */
     readonly streamInput?: boolean;
+    /** The structured output's JSON schema instead of a run's reply (the answerer role's). */
+    readonly schema?: Readonly<Record<string, unknown>>;
 }
 
 /** A value that must not become a flag of `claude`. */
@@ -74,7 +76,11 @@ export function claudeArguments(allowedTools: readonly string[], requests?: numb
         tools.length ? tools.join(',') : '',
         ...(options.model === undefined ? [] : ['--model', checkValue('a model', options.model)]),
         ...(options.effort === undefined ? [] : ['--effort', checkValue('an effort', options.effort)]),
-        ...(requests === undefined ? [] : ['--json-schema', JSON.stringify(replyJsonSchema(requests))]),
+        ...(options.schema !== undefined
+            ? ['--json-schema', JSON.stringify(options.schema)]
+            : requests === undefined
+              ? []
+              : ['--json-schema', JSON.stringify(replyJsonSchema(requests))]),
         ...(allowedTools.length ? ['--allowedTools', ...allowedTools] : []),
     ];
 }
