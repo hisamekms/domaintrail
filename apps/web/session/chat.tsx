@@ -816,7 +816,7 @@ function Stream({ shown }: { shown: Shown }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [signature]);
     // a row continues the one before of the same author on the same line of replies only (a reply hanging under a
-    // message, indented, shows its avatar; so does the row after the replies)
+    // message shows its avatar, the line joining the two; so does the row after the replies)
     const follows = continued(rows.map((r) => r.author)).map((c, i) => c && rows[i - 1]?.look.hangsOn === rows[i]?.look.hangsOn);
     // the items there when the stream is first shown with something in it (the page loaded, the tab switched back):
     // only those posted after come in with motion
