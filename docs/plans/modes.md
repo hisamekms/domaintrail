@@ -1649,3 +1649,27 @@ This replaces where the guide's goal is read from (above) and where the intervie
   directory, which is moved away and kept from the AI.
 - **The AI reads it.** It is added to the agent's read scope, next to the `.dt` and `.dtes` files and the config. Only
   dt writes it.
+
+### The current journey, and how journeys begin (decided 2026-11-03)
+
+- **One current journey per session.** It is session state, not stored in the journey file.
+  - In Collab the facilitator sets it, and everyone sees the same journey. The guide's card draws that journey's map.
+  - In Solo the person sets it.
+  - This replaces "each viewer remembers their choice" above.
+- **Seeing it in the UI:** the current journey, its brief, its goal and where it stands are visible in Solo and Collab
+  alike. Where this goes on the page is still open; a preview will compare the candidates.
+- **How journeys begin:**
+  - **ES:** `/es:start` on a storming with no journey creates one. On a storming that has one, it revises its brief;
+    there is still one journey per storming.
+  - **Modeling:** `/model:start` first asks whether to continue an existing journey (listed) or start a new one. A
+    new one also asks for a name.
+  - **The guide and the AI only suggest.**
+    - When an ES journey reaches its goal and its `use` is `modeling`, the guide suggests `/model:start`, with
+      pattern B from that storming as the first option.
+    - With no journey at all, the guide's first step is "set the goal".
+    - The AI's advice may suggest a journey, e.g. a D review when diagnostics pile up. A person starts it with the
+      command.
+  - **Who:**
+    - The facilitator, or the person in Solo, creates journeys directly.
+    - Participants may run the commands, but their journey exists only once the facilitator approves its brief.
+  - **Outside dt** (Claude Code): read only in 0.7.0. A `dt journey` command to write it can come later.
