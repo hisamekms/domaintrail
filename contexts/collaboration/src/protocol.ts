@@ -41,6 +41,8 @@ export interface JoinRequestBody {
     readonly name: string;
     readonly requestedAt: string;
     readonly expiresAt: string;
+    /** Its name is another pending request's or a participant's (the same, NFKC, case and spaces folded). */
+    readonly duplicate?: boolean;
 }
 
 /** The `link` identity mode's invite as the facilitator sees it: when the live one expires (the link itself is shown once, when made). */
@@ -211,7 +213,13 @@ export type SessionServerMessage =
     | { readonly type: 'run.activity'; readonly run: string; readonly activity: RunActivity }
     // the `link` identity mode, to the facilitator's pages only: the pending join requests and the live invite; on
     // connect, then on each change
-    | { readonly type: 'join.requests'; readonly requests: readonly JoinRequestBody[]; readonly invite: InviteStateBody | null };
+    // (`inviteUsedUp`: the live invite took as many requests as it may)
+    | {
+          readonly type: 'join.requests';
+          readonly requests: readonly JoinRequestBody[];
+          readonly invite: InviteStateBody | null;
+          readonly inviteUsedUp?: boolean;
+      };
 
 /**
  * The triages' events as a participant's page gets them (plan decision 8): `triage.step_recorded` is not sent at all;

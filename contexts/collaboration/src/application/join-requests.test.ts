@@ -119,6 +119,34 @@ describe('join requests', () => {
         expect(requests.request({ name: name('B'), key: 'spoofed-9', inviteExpiresAt: until }).ok).toBe(true);
     });
 
+    test('a new invite starts the per-key counts afresh; without a key only the other bounds hold', () => {
+        const { requests, now } = setup({ perKey: 1, maxPending: 3, perInvite: 10 });
+        const until = new Date(now().getTime() + HOUR);
+        expect(requests.request({ name: name('A'), key: 'x', inviteExpiresAt: until }).ok).toBe(true);
+        expect(requests.request({ name: name('A'), key: 'x', inviteExpiresAt: until }).ok).toBe(false);
+        requests.expirePending();
+        expect(requests.request({ name: name('A'), key: 'x', inviteExpiresAt: until }).ok).toBe(true);
+        expect(requests.request({ name: name('B'), key: undefined, inviteExpiresAt: until }).ok).toBe(true);
+        expect(requests.request({ name: name('C'), key: undefined, inviteExpiresAt: until }).ok).toBe(true);
+        expect(requests.request({ name: name('D'), key: undefined, inviteExpiresAt: until })).toEqual({ ok: false, error: { type: 'TooManyPending', max: 3 } });
+    });
+
+    test('exhausted once the invite took its share; stopping the invite drops the approved not yet admitted', () => {
+        const { requests, now } = setup({ perInvite: 2 });
+        const until = new Date(now().getTime() + HOUR);
+        const a = requests.request({ name: name('A'), key: undefined, inviteExpiresAt: until });
+        const b = requests.request({ name: name('B'), key: undefined, inviteExpiresAt: until });
+        if (!a.ok || !b.ok) throw new Error('refused');
+        expect(requests.exhausted()).toBe(true);
+        requests.approve(a.value.id);
+        requests.deny(b.value.id);
+        requests.expireAll();
+        expect(requests.exhausted()).toBe(false);
+        expect(requests.status(a.value.secret).state).toBe('expired');
+        expect(requests.admit(a.value.secret)).toBeUndefined();
+        expect(requests.status(b.value.secret).state).toBe('denied');
+    });
+
     test('the secret is not the ID, and a request is looked up by its secret only', () => {
         const { requests, now } = setup();
         const made = requests.request({ name: name('Ada'), key: 'k', inviteExpiresAt: new Date(now().getTime() + HOUR) });

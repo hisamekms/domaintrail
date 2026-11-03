@@ -5,7 +5,8 @@
 // came through, whichever is first; an approved one is admitted once (the visitor's next look at the waiting page
 // signs them in). Bounded: at most `maxPending` pending at once, `perInvite` requests in all through one invite
 // (whatever the client says it is), and `perKey` requests per `windowMs` from one client key (the caller decides what a
-// key is: the client's address).
+// key is: the client's address, or none when it cannot tell clients apart; then only the other two bounds hold). A new
+// invite starts the counts afresh; stopping the invite also drops the approved requests not yet admitted.
 import { err, ok, type Collaboration, type Result } from '../generated/index.js';
 import { secretHash } from './access.js';
 import type { Clock, SecretGenerator } from './ports.js';
@@ -58,10 +59,13 @@ export interface JoinRequestNotFound {
 export type JoinRequestStatus = { readonly state: JoinRequestState; readonly request: JoinRequest } | { readonly state: 'expired' };
 
 export interface JoinRequests {
-    /** A new pending request of `name`, from the client `key`, through an invite that expires at `inviteExpiresAt`. */
+    /**
+     * A new pending request of `name`, from the client `key` (undefined: clients cannot be told apart, no per-key limit),
+     * through an invite that expires at `inviteExpiresAt`.
+     */
     request(input: {
         readonly name: Collaboration.DisplayName;
-        readonly key: string;
+        readonly key: string | undefined;
         readonly inviteExpiresAt: Date;
     }): Result<{ readonly id: string; readonly secret: string }, TooManyPending | RateLimited | InviteExhausted>;
     /** The request of the visitor's secret. */
@@ -74,8 +78,12 @@ export interface JoinRequests {
     deny(id: string): Result<JoinRequest, JoinRequestNotFound>;
     /** Takes the approved request of the visitor's secret, once: it is gone afterwards. */
     admit(secret: string): JoinRequest | undefined;
-    /** The invite was revoked or replaced: every request still pending expires, and the count of the next invite starts. */
+    /** The invite was replaced: every request still pending expires, and the counts of the next invite start. */
     expirePending(): void;
+    /** The invite was stopped: every request pending or approved but not yet admitted expires; the counts start again. */
+    expireAll(): void;
+    /** Whether the current invite took as many requests as it may (`perInvite`): the facilitator makes another. */
+    exhausted(): boolean;
     /** Drops what expired by now: whether the pending requests changed. */
     sweep(): boolean;
 }
@@ -150,11 +158,11 @@ export function createJoinRequests(deps: {
             sweep();
             const now = clock.now();
             if (madeThroughInvite >= perInvite) return err({ type: 'InviteExhausted', max: perInvite });
-            const times = asked.get(key) ?? [];
+            const times = key === undefined ? [] : (asked.get(key) ?? []);
             if (times.length >= perKey) return err({ type: 'RateLimited', retryAfterMs: Math.max(0, times[0] + windowMs - now.getTime()) });
             if ([...entries.values()].filter((e) => e.request.state === 'pending').length >= maxPending)
                 return err({ type: 'TooManyPending', max: maxPending });
-            asked.set(key, [...times, now.getTime()]);
+            if (key !== undefined) asked.set(key, [...times, now.getTime()]);
             madeThroughInvite++;
             const id = secrets.newSecret().slice(0, 22);
             const secret = secrets.newSecret();
@@ -194,8 +202,17 @@ export function createJoinRequests(deps: {
 
         expirePending() {
             madeThroughInvite = 0;
+            asked.clear();
             for (const [id, entry] of entries) if (entry.request.state === 'pending') drop(id);
         },
+
+        expireAll() {
+            madeThroughInvite = 0;
+            asked.clear();
+            for (const [id, entry] of entries) if (entry.request.state !== 'denied') drop(id);
+        },
+
+        exhausted: () => madeThroughInvite >= perInvite,
 
         sweep,
     };
