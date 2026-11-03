@@ -83,7 +83,7 @@ export interface StartedSession {
     session: string;
     /** `started`, `resumed`, or `collaborated` (a `dt open` session continued by `dt collab`). */
     opened: 'started' | 'resumed' | 'collaborated';
-    /** The one-time facilitator link; none in `Solo` (the one person is the facilitator). */
+    /** The one-time facilitator link; in `Solo`, the one-time link that signs the launching user's browser in as its person. */
     facilitatorLink?: string;
     /** Resolves when the facilitator closes the session. */
     closed: Promise<void>;

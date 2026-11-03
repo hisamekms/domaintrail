@@ -328,8 +328,8 @@ Examples:
             .addHelpText(
                 'after',
                 `
-Serves the Live View and a chat for one person on loopback: you are signed in as the facilitator, no form and no
-link. Every message you send goes to the AI, which answers questions and applies change requests. It re-checks on
+Serves the Live View and a chat for one person on loopback. It prints a one-time link: opened within 60 minutes, it
+signs that browser in as you, the facilitator (a cookie; no join form); nothing else is let in. Every message you send goes to the AI, which answers questions and applies change requests. It re-checks on
 every save and pushes updates to the browser. The chat, the runs and the revisions are kept in .domaintrail/session/
 across restarts. The agent (Claude Code) starts in this process when \`claude\` is usable; otherwise the server starts
 without it and says why (\`dt agent\` connects one later). Refused while the workspace has an open collab session
@@ -373,7 +373,7 @@ Examples:
                 respectGitignore: cfg.respectGitignore,
                 base: opts.base,
                 mode: 'Solo',
-                session: { ...sessionSettings(cfg, cfg.collab, { port, host }), identity: 'dev' },
+                session: openSettings(cfg, port, host),
                 log: io.out,
             })
             .catch((e: unknown) => {
@@ -381,7 +381,9 @@ Examples:
                 return base(e);
             });
         if (cfg.file) io.out(`Config: ${path.relative(process.cwd(), cfg.file) || cfg.file}`);
-        io.out(`Live View: ${server.url}`);
+        // the printed link is the only step: opened once, it signs this browser in (a cookie) as the one person
+        io.out(`Live View: ${server.facilitatorLink ?? server.url}`);
+        io.out(`  (a link for you only: opened once within 60 minutes, it signs that browser in; then ${server.url})`);
         io.out(`Session: ${server.session} (${server.opened}, solo)`);
         await serveWithAgent(cfg, opts, server);
     });
@@ -698,6 +700,23 @@ interface ServeOptions {
     base?: string;
     /** `false` with `--no-agent`, `claude` given explicitly, else undefined (started when usable). */
     agent?: 'claude' | false;
+}
+
+/**
+ * What the session server of `dt open` reads of `cfg`: its port and host, the dev identity, and nothing of
+ * `collab.access` (`dt open` answers loopback only, never a tunnel's hosts).
+ */
+function openSettings(cfg: ResolvedConfig, port: number, host: string): SessionSettings {
+    const { run } = cfg.agent;
+    return {
+        port,
+        host,
+        identity: 'dev',
+        maxParticipants: 1,
+        quickReactions: cfg.collab.quickReactions,
+        agent: { port: cfg.agent.port, allowedTools: run.allowedTools, maxPreviousRunDiff: run.maxPreviousRunDiff },
+        classifier: cfg.classifier,
+    };
 }
 
 /** What the session server reads of `cfg`, its port and host from `server` with `--port` and `--host` applied. */

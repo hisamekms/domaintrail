@@ -56,7 +56,8 @@ import { processAlive } from './process.js';
 import { createModelValidator, createSourceFormatter } from './validator.js';
 import { prepareLiveView, serverUrl, watchLiveView, type ViewServerOptions } from './view.js';
 import { createWatcherHold, type WatcherHold } from './watcher-hold.js';
-import { soloIdentities, soloName } from './solo.js';
+import { issueSoloLink, soloIdentities, soloName, soloSurface } from './solo.js';
+import * as path from 'node:path';
 
 /** How long a lease of the agent holds without a heartbeat. */
 export const AGENT_LEASE_MS = 60_000;
@@ -112,7 +113,7 @@ export interface SessionServer {
     resumed: boolean;
     /** How the session was opened: `started`, `resumed`, or `collaborated` (a Solo session continued as Collab). */
     opened: 'started' | 'resumed' | 'collaborated';
-    /** A one-time link: opened by a signed-in browser, it makes that identity the facilitator. Empty in `Solo` (none is made). */
+    /** A one-time link: opened by a signed-in browser, it makes that identity the facilitator; in `Solo`, it signs the browser that opens it in as the one person. */
     facilitatorLink: string;
     view: ViewService;
     /** The use cases of the session, for the tests and S7. */
@@ -143,6 +144,9 @@ const close = (server: Server): Promise<void> =>
         server.closeAllConnections();
         server.close(() => resolve());
     });
+
+/** The workspaces (resolved roots) a session server of this process serves. */
+const served = new Set<string>();
 
 /** The name of the facilitator a session was started with (the one person of a Solo session). */
 const soloPersonName = (session: Collaboration.OpenSession): Collaboration.DisplayName =>
@@ -218,6 +222,13 @@ export async function startSessionServer(options: SessionServerOptions): Promise
     const config = options.session;
     const clock = options.clock ?? systemClock;
     const provider = identityProvider(options, clock, log);
+    // one live server per workspace: a second one would open (or change the mode of) the session under the first
+    const root = path.resolve(options.root);
+    const running = await readServerAddress(root).catch(() => undefined);
+    if (served.has(root) || (running && running.pid !== process.pid && processAlive(running.pid)))
+        throw new SessionError(
+            `A session server is already running for this workspace${running ? ` (pid ${running.pid}, ${running.url})` : ''}: stop it before starting another.`,
+        );
     const leaseMs = options.leaseMs ?? AGENT_LEASE_MS;
     const sources = options.sources ?? DEFAULT_SOURCES;
     const respectGitignore = options.respectGitignore ?? true;
@@ -229,6 +240,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         if ('dispose' in engine && typeof engine.dispose === 'function') engine.dispose();
     };
     const opened: { http?: Server; agent?: Server } = {};
+    served.add(root);
     try {
         const uow = createUnitOfWork(db);
         const snapshot = createWorkspaceSnapshot(options.root, sourceSelection(sources, respectGitignore));
@@ -270,9 +282,20 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             collaboration,
             maxParticipants: config.maxParticipants,
         });
+        const soloPerson = soloPersonName(sessionOpened.session);
+        // a Solo session's person, bound to the cookie of the link `dt open` prints; nobody once it is no longer Solo
         const identities =
             mode === 'Solo'
-                ? soloIdentities(shared, soloPersonName(sessionOpened.session), async () => (await collaboration.currentSession())?.id === session)
+                ? soloIdentities({
+                      session,
+                      access,
+                      base: shared,
+                      name: soloPerson,
+                      isOpenSolo: async () => {
+                          const current = await collaboration.currentSession();
+                          return current?.id === session && current.mode === 'Solo';
+                      },
+                  })
                 : shared;
 
         let resolveClosed: () => void = () => {};
@@ -423,8 +446,9 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             log,
         });
 
-        const accessConfig = config.access;
-        const surface = createSessionHttp({
+        // `dt open` answers loopback only: `collab.access` (a tunnel's hosts and origins) is never its
+        const accessConfig = mode === 'Solo' ? undefined : config.access;
+        const sessionSurface = createSessionHttp({
             session,
             collaboration,
             identities,
@@ -453,7 +477,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 if (auth.kind !== 'participant') return void socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
                 hub.handleUpgrade(req, socket, head, { participant: auth.participant, role: auth.role, actor: auth.actor });
             },
-            session: surface,
+            session: mode === 'Solo' ? soloSurface(sessionSurface, { session, access, name: soloPerson, secureCookie: false }) : sessionSurface,
         });
         opened.http = http;
         const port = await listen(http, config.port, config.host);
@@ -472,7 +496,8 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             return linkOf(url, link.value.code);
         };
         // the one person of a Solo session is the facilitator already
-        const facilitatorLink = mode === 'Solo' ? '' : await issueFacilitatorLink();
+        // in Solo, the one-time link that signs the launching user's browser in as the facilitator
+        const facilitatorLink = mode === 'Solo' ? await issueSoloLink(access, session, url) : await issueFacilitatorLink();
 
         const expiring = setInterval(() => {
             collaboration
@@ -524,6 +549,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                     db.close();
                     await removeSessionFiles(options.root, process.pid);
                     disposeEngine();
+                    served.delete(root);
                 })();
                 return stopped;
             },
@@ -532,6 +558,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         await Promise.all([opened.http, opened.agent].map((s) => (s?.listening ? close(s) : Promise.resolve())));
         db.close();
         disposeEngine();
+        served.delete(root);
         throw e;
     }
 }

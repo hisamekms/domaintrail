@@ -63,7 +63,7 @@ export function cliDeps(): CliDeps {
             const server = await (await import('./wiring/session.js')).startSessionServer(options);
             // Ctrl+C stops the server cleanly: the agent's credential file is removed and the database closed
             onInterrupt(() => server.stop());
-            return { ...server, ...(server.mode === 'Solo' && { facilitatorLink: undefined }) };
+            return server;
         },
         issueFacilitatorLink: async (root) => (await import('./wiring/session.js')).issueFacilitatorLink(root),
         checkAgent: async () => (await import('@domaintrail/agent')).checkClaudeCode(),

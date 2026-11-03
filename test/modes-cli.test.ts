@@ -20,6 +20,7 @@ import {
     startSessionServer,
 } from '@domaintrail/dt';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
+import { FACILITATOR_NAME, FACILITATOR_PARTICIPANT } from '@domaintrail/collaboration';
 import { tempCopyOfExamples } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
@@ -67,6 +68,17 @@ const api = (server: { url: string }, p: string, body?: unknown, cookie?: string
         ...(body !== undefined && { body: JSON.stringify(body) }),
     });
 
+/** Opens `dt open`'s one-time link as a browser would: the cookie it sets (HttpOnly, SameSite=Strict). */
+async function signInSolo(link: string): Promise<string> {
+    const res = await fetch(link, { redirect: 'manual' });
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toBe('/');
+    const cookie = res.headers.get('set-cookie') ?? '';
+    expect(cookie).toContain('HttpOnly');
+    expect(cookie).toContain('SameSite=Strict');
+    return cookie.split(';')[0];
+}
+
 /** What the fake CLI deps were asked, and what they answer. */
 interface Calls {
     view: unknown[];
@@ -96,7 +108,7 @@ function fakeDeps(
                 agentUrl: 'http://127.0.0.1:2/',
                 session: 's1',
                 opened,
-                ...(options.mode === 'Collab' && { facilitatorLink: 'http://127.0.0.1:1/session/facilitator?code=x' }),
+                facilitatorLink: options.mode === 'Collab' ? 'http://127.0.0.1:1/session/facilitator?code=x' : 'http://127.0.0.1:1/session/open?code=y',
                 closed: Promise.resolve(),
                 stop: async () => {
                     calls.stopped++;
@@ -176,7 +188,8 @@ describe('dt open and dt collab: the agent in process', () => {
         expect(calls.sessions).toHaveLength(1);
         expect(calls.sessions[0]).toMatchObject({ mode: 'Solo', session: { port: 4321, host: '127.0.0.1', identity: 'dev' } });
         expect(calls.agents).toEqual([{ roles: ['answer', 'run'], once: false }]);
-        expect(r.out).toContain('Live View: http://127.0.0.1:1/');
+        expect(r.out).toContain('Live View: http://127.0.0.1:1/session/open?code=y');
+        expect(r.out).toContain('  (a link for you only: opened once within 60 minutes, it signs that browser in; then http://127.0.0.1:1/)');
         expect(r.out).toContain('Session: s1 (started, solo)');
         expect(r.out).toContain('AI: started in this process (claude 9.9.9 (Claude Code); role run)');
         expect(r.out.join('\n')).not.toContain('Facilitator link');
@@ -193,7 +206,18 @@ describe('dt open and dt collab: the agent in process', () => {
         expect(r.out).toContain('Session: s1 (continued from dt open, identity dev)');
         expect(r.out).toContain('Facilitator link (single use, expires in 10 minutes): http://127.0.0.1:1/session/facilitator?code=x');
         expect(calls.agents).toHaveLength(1);
-        expect((await run(fakeDeps(USABLE).deps, '-r', dir, 'open')).out).toContain('Live View: http://127.0.0.1:1/');
+        // dt open never takes collab's port, nor its access settings
+        const open = fakeDeps(USABLE);
+        await writeFile(
+            path.join(dir, 'domaintrail.jsonc'),
+            JSON.stringify({
+                open: { port: 1111 },
+                collab: { identity: 'access', access: { teamDomain: 't.cloudflareaccess.com', audience: 'a', allowedHosts: ['tunnel.example.com'] } },
+            }),
+        );
+        expect((await run(open.deps, '-r', dir, 'open')).code).toBe(0);
+        expect(open.calls.sessions[0].session).toEqual(expect.objectContaining({ port: 1111, identity: 'dev' }));
+        expect(open.calls.sessions[0].session.access).toBeUndefined();
     });
 
     test('without a usable Claude Code the server starts without the agent, with one line why; --no-agent does not try', async () => {
@@ -260,16 +284,25 @@ describe('dt agent', () => {
 });
 
 describe('the modes on one workspace (decision 13)', () => {
-    test('dt open: its one person is the facilitator without a form or a link; no one else joins', async () => {
+    test('dt open: its one person signs in with the printed one-time link (a cookie), no form; nobody else is identified', async () => {
         const root = await copy();
         const server = await start(root, 'Solo');
         try {
-            expect([server.mode, server.opened, server.facilitatorLink]).toEqual(['Solo', 'started', '']);
-            const me = (await (await api(server, 'me')).json()) as Me;
-            expect(me.participant.role).toBe('facilitator');
-            expect((await fetch(server.url)).status).toBe(200);
+            expect([server.mode, server.opened]).toEqual(['Solo', 'started']);
+            expect(server.facilitatorLink).toStartWith(`${server.url}session/open?code=`);
+            // without the cookie: not identified (another local process or OS user), and no join form
+            expect((await api(server, 'me')).status).toBe(401);
+            const page = await fetch(server.url);
+            expect(page.status).toBe(401);
+            expect(await page.text()).toContain('open the link it printed');
             const joined = await fetch(`${server.url}api/session/join`, { method: 'POST', headers: json, body: JSON.stringify({ name: 'Eve' }) });
             expect(joined.status).not.toBe(201);
+            // the link: once, it sets an HttpOnly, SameSite=Strict cookie and goes to the Live View
+            const cookie = await signInSolo(server.facilitatorLink);
+            expect(((await (await api(server, 'me', undefined, cookie)).json()) as Me).participant.role).toBe('facilitator');
+            expect((await fetch(server.url, { headers: { cookie } })).status).toBe(200);
+            expect((await fetch(server.facilitatorLink, { redirect: 'manual' })).status).toBe(403);
+            expect((await api(server, 'me', undefined, 'dt_session=' + 'x'.repeat(43))).status).toBe(401);
             const link = await issueFacilitatorLink(root).then(
                 () => undefined,
                 (e: unknown) => e,
@@ -281,18 +314,80 @@ describe('the modes on one workspace (decision 13)', () => {
         }
     });
 
+    test('dt open answers loopback only, whatever collab.access allows', async () => {
+        const root = await copy();
+        const server = await startSessionServer({
+            root,
+            debounceMs: 30,
+            mode: 'Solo',
+            session: {
+                ...settings,
+                access: {
+                    teamDomain: 't.cloudflareaccess.com',
+                    audience: 'a',
+                    allowedHosts: ['tunnel.example.com'],
+                    allowedOrigins: ['https://tunnel.example.com'],
+                    acceptCookie: false,
+                    avatarHosts: [],
+                },
+            },
+        });
+        try {
+            const cookie = await signInSolo(server.facilitatorLink);
+            expect((await api(server, 'me', undefined, cookie)).status).toBe(200);
+            const tunnel = await fetch(`${server.url}api/session/me`, { headers: { cookie, host: 'tunnel.example.com' } });
+            expect(tunnel.status).toBe(403);
+            const origin = await fetch(`${server.url}api/session/requests`, {
+                method: 'POST',
+                headers: { cookie, ...json, origin: 'https://tunnel.example.com' },
+                body: JSON.stringify({ targets: [], body: 'x' }),
+            });
+            expect(origin.status).toBe(403);
+        } finally {
+            await server.stop();
+        }
+    });
+
+    test('one live server per workspace; a dt open server identifies no one once its session is no longer Solo', async () => {
+        const root = await copy();
+        const solo = await start(root, 'Solo');
+        try {
+            const cookie = await signInSolo(solo.facilitatorLink);
+            const second = await start(root, 'Collab').then(
+                () => undefined,
+                (e: unknown) => e,
+            );
+            expect(second).toBeInstanceOf(SessionError);
+            expect(String(second)).toContain('A session server is already running for this workspace');
+            const cli = await run(cliDeps(), '-r', root, 'collab', '--no-agent', '--port', '0');
+            expect(cli.code).toBe(1);
+            expect(cli.err[0]).toStartWith('A session server is already running for this workspace');
+            // the session continued as Collab behind the Solo server's back: it fails closed
+            const continued = await solo.collaboration.openSession({ mode: 'Collab', facilitator: FACILITATOR_PARTICIPANT, name: FACILITATOR_NAME });
+            expect(continued.ok && continued.value.opened).toBe('collaborated');
+            expect((await api(solo, 'me', undefined, cookie)).status).toBe(401);
+        } finally {
+            await solo.stop();
+        }
+        // stopped, the workspace can be served again
+        const again = await start(root, 'Collab');
+        await again.stop();
+    });
+
     test('dt open refuses a workspace with an open collab session; dt collab continues a dt open session with its history', async () => {
         const root = await copy();
         const solo = await start(root, 'Solo');
-        const sent = await api(solo, 'requests', { targets: [], body: 'Rename Order to 受注.' });
+        const soloCookie = await signInSolo(solo.facilitatorLink);
+        const sent = await api(solo, 'requests', { targets: [], body: 'Rename Order to 受注.' }, soloCookie);
         expect(sent.status).toBe(201);
         await solo.stop();
 
         const collab = await start(root, 'Collab');
         try {
             expect([collab.mode, collab.opened, collab.resumed, collab.session]).toEqual(['Collab', 'collaborated', true, solo.session]);
-            // the history stays; the person needs the facilitator link now (or signs in as anyone else would)
+            // the history stays, and the dt open person's browser is still its facilitator; anyone else signs in
             expect((await api(collab, 'me')).status).toBe(401);
+            expect(((await (await api(collab, 'me', undefined, soloCookie)).json()) as Me).participant.role).toBe('facilitator');
             const join = await fetch(`${collab.url}api/session/join`, { method: 'POST', headers: json, body: JSON.stringify({ name: 'Ada' }) });
             const cookie = (join.headers.get('set-cookie') ?? '').split(';')[0];
             const state = (await (await fetch(`${collab.url}api/session/state`, { headers: { cookie } })).json()) as SessionStateBody;
@@ -379,21 +474,25 @@ describe('the agent in process, with a fake claude on the PATH', () => {
             cliDeps(),
         );
         try {
-            const server = { url: await listening.promise };
+            const link = await listening.promise;
+            const server = { url: new URL('/', link).href };
+            const cookie = await signInSolo(link);
             expect(out).toContain('AI: started in this process (claude 9.9.9 (Claude Code); role run)');
-            const sent = (await (await api(server, 'requests', { targets: [], body: '返品の取り消しを足してください' })).json()) as { request: { id: string } };
-            const queued = await api(server, 'runs', { requests: [sent.request.id] });
+            const sent = (await (await api(server, 'requests', { targets: [], body: '返品の取り消しを足してください' }, cookie)).json()) as {
+                request: { id: string };
+            };
+            const queued = await api(server, 'runs', { requests: [sent.request.id] }, cookie);
             expect(queued.status).toBe(201);
             let state: SessionStateBody | undefined;
             for (let i = 0; i < 200; i++) {
-                state = (await (await api(server, 'state')).json()) as SessionStateBody;
+                state = (await (await api(server, 'state', undefined, cookie)).json()) as SessionStateBody;
                 if (state.runs.some((r) => r.state === 'Completed' || r.state === 'Failed')) break;
                 await Bun.sleep(100);
             }
             expect(state?.runs.map((r) => r.state)).toEqual(['Completed']);
             expect(await readFile(path.join(root, returns), 'utf8')).toContain('ReturnCancelled');
             expect((await readFile(`${planFile}.log`, 'utf8')).split('\n').filter(Boolean)).toHaveLength(1);
-            expect((await api(server, 'close', {})).status).toBe(200);
+            expect((await api(server, 'close', {}, cookie)).status).toBe(200);
             expect(await done).toBe(0);
             expect(out.at(-1)).toBe('Session closed.');
         } finally {

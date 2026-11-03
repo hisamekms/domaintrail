@@ -384,7 +384,8 @@ describe('a session in access mode (against a mock of Cloudflare)', () => {
     });
 
     test('the cookie is accepted when configured; the header comes first', async () => {
-        const other = await start({ session: sessionConfig(accessConfig({ acceptCookie: true })) });
+        // another workspace: one live server per workspace
+        const other = await start({ root: await workspace(), session: sessionConfig(accessConfig({ acceptCookie: true })) });
         try {
             const cookie = `CF_Authorization=${token(claims('ada'), k1)}`;
             expect((await fetch(`${other.url}api/state`, { headers: { cookie } })).status).toBe(200);
