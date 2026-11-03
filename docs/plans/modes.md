@@ -1612,3 +1612,35 @@ This replaces where the guide's goal is read from (above) and where the intervie
     - a storming body file plus one file per stage, a stage never split;
     - `after` required on every stage but the first;
     - no stageless timelines in a split storming.
+
+### The journey file's format and contents (decided 2026-11-03)
+
+- **Format: JSON.** The file is `domaintrail.journey.json`, with `"$schema"` and `"version": 1`.
+  - dt writes it with a stable key order and two-space indent.
+  - The why is split into short fields rather than one long text.
+- **`stormings`**: an object keyed by the storming's ID. Each journey has:
+  - `purpose`, `scope`, `participants`;
+  - `use`: `align` | `modeling`. On reaching the goal with `modeling`, the guide suggests `/model:start`;
+  - `level`: `BigPicture` | `DesignLevel`;
+  - `state`;
+  - `marks`: step IDs.
+- **`modeling`**: an array of named journeys. Each has:
+  - `id`: a stable slug, used for marks and for the viewer's remembered choice;
+  - `name`: the label shown;
+  - `purpose`, `scope`, `constraints`, `participants`;
+  - `pattern`: `Whole` | `FromStorming` | `OneContext` | `Review`;
+  - `from`: `{ stormings: [...] }` for `FromStorming`, `{ context }` for `OneContext`;
+  - `goal`: the values the pattern allows;
+  - `state`;
+  - `marks`: `{ steps: [...], contexts: { <Context>: [...] } }`.
+- **Enums are English** in the file. The UI shows them in Japanese or English. Step IDs are fixed per path.
+- **Participants are roles only** (「窓口担当」), never people's names. The interview turns names it hears into roles.
+- **`state`**: `active` | `done` | `archived`.
+  - `done` is set by a person, when the guide offers it on reaching the goal.
+  - `archived` hides the journey from the guide's picker.
+  - These are explicit acts like the others (a participant's need approval).
+- **Stale marks stay.** A mark is not recomputed when the model changes. The guide's AI may suggest reviewing a mark
+  that looks out of date.
+- **No author or time in the file.** Git's history records them.
+- **Renames.** A journey naming a missing storming or context is a warning (`dt check`) and shown as missing.
+  `dt guide` tells the AI to update the journey's keys when it renames a storming or a context.
