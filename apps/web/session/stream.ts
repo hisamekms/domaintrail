@@ -6,7 +6,7 @@ import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { listedParticipants, type Peers } from './presence';
 import { changeUnits, type ChangeUnit } from './history';
 import { timeline } from './timeline';
-import { AI_CANDIDATE, AI_NAME, AI_PARTICIPANT, isSolo, type ProposalJson } from './ai';
+import { AI_CANDIDATE, AI_NAME, AI_PARTICIPANT, isSolo, type AiSlot, type ProposalJson } from './ai';
 import type { PersonCandidate } from './mentions';
 import { targetKey, targetName, targetShortName, type NamingContext, type TargetDraft } from './targets';
 
@@ -218,6 +218,56 @@ export function streamItems(state: Pick<SessionStateBody, 'runs' | 'revisions' |
         .map((item, i) => ({ item, i }))
         .sort((a, b) => a.item.at.localeCompare(b.item.at) || a.i - b.i)
         .map(({ item }) => item);
+}
+
+/**
+ * A line of the chat as Solo shows it: an item of the stream, or the AI's card under a message (`request`), which is
+ * pending (or given up) until the answer or the run card it went to takes its place.
+ */
+export type ChatEntry =
+    | { readonly kind: 'item'; readonly item: StreamItem }
+    | {
+          readonly kind: 'slot';
+          readonly request: string;
+          readonly content: { readonly kind: 'pending' | 'given-up' } | { readonly kind: 'item'; readonly item: StreamItem };
+      };
+
+/**
+ * The stream with the AI's card under each message that has one (`slots`, by the message's ID): the answer or the run
+ * card a message went to is taken from where it stands by time and put right under the message, in its card's place;
+ * a run card holding the runs of several messages stays under the first. Without slots (Collab) it is the stream as is.
+ */
+export function placeAiSlots(items: readonly StreamItem[], slots: ReadonlyMap<string, AiSlot>): ChatEntry[] {
+    const byKey = new Map(items.map((i) => [i.key, i]));
+    const cardOf = new Map<string, string>();
+    for (const i of items) if (i.kind === 'card') for (const { run } of i.unit.runs) cardOf.set(run.id, i.key);
+    // the item each slot shows once it is there, the first message taking it
+    const placed = new Map<string, StreamItem>();
+    const taken = new Set<string>();
+    for (const i of items) {
+        const slot = i.kind === 'message' ? slots.get(i.request.id) : undefined;
+        if (!slot || i.kind !== 'message' || (slot.kind !== 'answer' && slot.kind !== 'run')) continue;
+        const key = slot.kind === 'answer' ? `message:${slot.answer}` : cardOf.get(slot.run);
+        const item = key === undefined ? undefined : byKey.get(key);
+        if (!item || taken.has(item.key)) continue;
+        taken.add(item.key);
+        placed.set(i.request.id, item);
+    }
+    const entries: ChatEntry[] = [];
+    for (const i of items) {
+        if (taken.has(i.key)) continue;
+        entries.push({ kind: 'item', item: i });
+        if (i.kind !== 'message') continue;
+        const slot = slots.get(i.request.id);
+        if (!slot) continue;
+        const item = placed.get(i.request.id);
+        if (item) entries.push({ kind: 'slot', request: i.request.id, content: { kind: 'item', item } });
+        else if (slot.kind === 'pending' || slot.kind === 'given-up') entries.push({ kind: 'slot', request: i.request.id, content: { kind: slot.kind } });
+        // decided, its answer or card not on the page yet: pending until it is
+        else if (!taken.has(slot.kind === 'answer' ? `message:${slot.answer}` : (cardOf.get(slot.run) ?? '')))
+            entries.push({ kind: 'slot', request: i.request.id, content: { kind: 'pending' } });
+    }
+    return entries;
 }
 
 /** When an item last changed: a card when its runs did, anything else when it was added. */

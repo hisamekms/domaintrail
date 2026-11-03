@@ -5,7 +5,8 @@
 // facilitator picks one when approving. Approved together, proposals are one run. The text is the AI's: untrusted,
 // validated against the limits below before it is kept, and shown as plain text.
 //
-// Targets are element references as the chat writes them (`@{Sales.Order}`, `@{es:Returns/ReturnRequested}`). One that
+// Targets are element references as the chat writes them (`@{Sales.Order}`, `@{es:Returns/ReturnRequested}`, a whole
+// storming `@{es:Returns}`). One that
 // is malformed (whitespace, braces, a path or a file name) is dropped; one that is well formed but names nothing yet
 // is kept, since a proposal may add the element it names — the page shows it unlinked until it resolves.
 import { Collaboration, decide, err, ok, type Result } from '../generated/index.js';
@@ -82,18 +83,21 @@ const IDENTIFIER = /^[^\s{}@\\]+$/u;
 
 /**
  * The model element an element reference names: `@{Sales.Order}` (or `Sales.Order`; states and commands as
- * `Sales.Order#Draft`, `Sales.Order:confirm`) a `.dt` element, `@{es:Returns/ReturnRequested}` a storming element;
- * undefined when it is malformed — a path (`/` outside `es:`), a file (`.dt`, `.dtes`), whitespace or braces.
+ * `Sales.Order#Draft`, `Sales.Order:confirm`) a `.dt` element, `@{es:Returns/ReturnRequested}` a storming element,
+ * `@{es:Returns}` a whole storming; undefined when it is malformed — a path (`/` outside `es:`, or more than one in it),
+ * a file (`.dt`, `.dtes`), whitespace or braces.
  */
 export function parseElementReference(ref: string): Collaboration.ModelTarget | undefined {
     const t = ref.trim();
     const id = t.startsWith('@{') && t.endsWith('}') ? t.slice(2, -1) : t;
     if (!id || id.length > PROPOSAL_LIMITS.reference || !IDENTIFIER.test(id)) return undefined;
     if (id.startsWith('es:')) {
-        const m = /^es:([^/]+)\/([^/]+)$/u.exec(id);
+        const m = /^es:([^/]+)(?:\/([^/]+))?$/u.exec(id);
         const storming = m && Collaboration.makeStormingName(m[1] ?? '');
-        const local = m && Collaboration.makeStormingLocalName(m[2] ?? '');
-        return storming?.ok && local?.ok ? { kind: 'DtesElement', storming: storming.value, local: local.value } : undefined;
+        if (!storming?.ok) return undefined;
+        if (m?.[2] === undefined) return { kind: 'DtesStorming', storming: storming.value };
+        const local = Collaboration.makeStormingLocalName(m[2]);
+        return local.ok ? { kind: 'DtesElement', storming: storming.value, local: local.value } : undefined;
     }
     if (id.includes('/') || /\.dtes?$/iu.test(id)) return undefined;
     const element = Collaboration.makeElementName(id);
@@ -104,14 +108,20 @@ export function parseElementReference(ref: string): Collaboration.ModelTarget | 
 type TargetLike =
     | { readonly kind: 'Workspace' }
     | { readonly kind: 'DtElement'; readonly element: string }
+    | { readonly kind: 'DtesStorming'; readonly storming: string }
     | { readonly kind: 'DtesElement'; readonly storming: string; readonly local: string }
     | { readonly kind: 'DtesOccurrence'; readonly storming: string; readonly eventName: string };
 
-/** A target as an element reference (`@{Sales.Order}`, `@{es:Returns/ReturnRequested}`), as the AI and the chat write it. */
+/**
+ * A target as an element reference (`@{Sales.Order}`, `@{es:Returns/ReturnRequested}`, `@{es:Returns}`), as the AI and
+ * the chat write it.
+ */
 export function elementReference(t: TargetLike): string {
     switch (t.kind) {
         case 'DtElement':
             return `@{${t.element}}`;
+        case 'DtesStorming':
+            return `@{es:${t.storming}}`;
         case 'DtesElement':
             return `@{es:${t.storming}/${t.local}}`;
         case 'DtesOccurrence':

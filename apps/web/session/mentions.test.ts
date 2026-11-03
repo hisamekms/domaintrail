@@ -223,7 +223,7 @@ const sources = workspace.map((f) => ({ path: f.path, text: f.text }));
 describe('the # candidates', () => {
     const candidates = mentionCandidates({ mode: 'label', model, stormings, sources });
 
-    test('every element, state and command of the model, and every note of the stormings (not their timelines)', () => {
+    test('every element, state and command of the model, every storming and its notes (not their timelines)', () => {
         const order = candidates.find((c) => c.qualified === 'Sales.Order');
         expect(order).toMatchObject({
             name: '注文',
@@ -241,6 +241,13 @@ describe('the # candidates', () => {
             target: { target: { kind: 'DtesElement' } },
         });
         expect(candidates.some((c) => c.qualified === 'DeliveryCancellation/Normal')).toBe(false);
+        // a storming as a whole, by its title
+        expect(candidates.find((c) => c.qualified === 'DeliveryCancellation')).toMatchObject({
+            name: '配送キャンセル',
+            mention: '配送キャンセル',
+            kind: { language: 'dtes', kind: 'storming' },
+            target: { target: { kind: 'DtesStorming', storming: 'DeliveryCancellation' } },
+        });
         expect(candidates.some((c) => c.target.target.kind === 'DtesOccurrence' || c.target.target.kind === 'Workspace')).toBe(false);
         expect(new Set(candidates.map((c) => c.key)).size).toBe(candidates.length);
     });

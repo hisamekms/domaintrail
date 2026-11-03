@@ -97,14 +97,16 @@ export interface AnswerContext {
 /** The identifiers the page links, as the runs' replies name elements. */
 const ELEMENT_NAMES = `name an element by its identifier, never its label: a \`.dt\` element, state or command as
 \`@{Sales.Order}\`, \`@{Sales.Order#Draft}\` or \`@{Sales.Order:confirm}\`, a \`.dtes\` element as
-\`@{es:Returns/ReturnRequested}\` (storming / element). The page shows them by name and links them.`;
+\`@{es:Returns/ReturnRequested}\` (storming / element), a whole \`.dtes\` storming as \`@{es:Returns}\`. The page shows
+them by name and links them; use no other form.`;
 
 const PROPOSAL_FIELDS = `proposal: { targets, how, options? }`;
 
 /** How to write a proposal: the elements it changes, how in a line or two, options only when unsure. */
 const PROPOSAL_RULES = `A proposal is short: the facilitator reads it in a narrow chat column and decides at a glance.
 - targets: the model elements the change touches, as element references (\`@{Sales.Order}\`,
-  \`@{es:Returns/ReturnRequested}\`; one that does not exist yet, to be added, is named the same way). Never a file
+  \`@{es:Returns/ReturnRequested}\`, a whole storming \`@{es:Returns}\`; one that does not exist yet, to be added, is
+  named the same way). Never a file
   name or a path: the page shows the elements, not files.
 - how (at most ${PROPOSAL_LIMITS.how} characters): what to do to them, in one or two short lines — a sentence, not a
   plan. No file names or paths, no alternatives in prose, no reasons.

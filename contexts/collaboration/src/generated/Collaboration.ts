@@ -5824,6 +5824,15 @@ export type ModelTarget =
           readonly local: StormingLocalName;
       }
     /**
+     * ストーミング全体
+     * `.dtes` ストーミング全体（`@{es:Returns}`）。
+     */
+    | {
+          readonly kind: 'DtesStorming';
+          /** ストーミング名 */
+          readonly storming: StormingName;
+      }
+    /**
      * イベントの出現
      * タイムラインでのイベントの出現。タイムラインのビューからだけ指せる。
      */
@@ -5857,6 +5866,10 @@ export function equalModelTarget(a: ModelTarget, b: ModelTarget): boolean {
         const y = b as Extract<ModelTarget, { readonly kind: 'DtesElement' }>;
         return a.storming === y.storming && a.local === y.local;
     }
+    if (a.kind === 'DtesStorming') {
+        const y = b as Extract<ModelTarget, { readonly kind: 'DtesStorming' }>;
+        return a.storming === y.storming;
+    }
     if (a.kind === 'DtesOccurrence') {
         const y = b as Extract<ModelTarget, { readonly kind: 'DtesOccurrence' }>;
         return a.storming === y.storming && a.timeline === y.timeline && a.eventName === y.eventName && a.occurrence === y.occurrence;
@@ -5868,7 +5881,7 @@ export function equalModelTarget(a: ModelTarget, b: ModelTarget): boolean {
  * ソースの範囲
  * ソースの範囲（両端を含む）。
  * @invariant ordered (開始が終了より前): startLine < endLine or (startLine == endLine and startColumn <= endColumn)
- * @see contexts/collaboration/model/target.dt:45
+ * @see contexts/collaboration/model/target.dt:49
  */
 export interface SourceRange {
     /** ワークスペース内パス */
@@ -5885,7 +5898,7 @@ export interface SourceRange {
 
 /**
  * Whether two SourceRange values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/target.dt:45
+ * @see contexts/collaboration/model/target.dt:49
  */
 export function equalSourceRange(a: SourceRange, b: SourceRange): boolean {
     return a.path === b.path && a.startLine === b.startLine && a.startColumn === b.startColumn && a.endLine === b.endLine && a.endColumn === b.endColumn;
@@ -5893,7 +5906,7 @@ export function equalSourceRange(a: SourceRange, b: SourceRange): boolean {
 
 /**
  * The invariants of SourceRange that a value violates, in declaration order; empty when it holds them all.
- * @see contexts/collaboration/model/target.dt:45
+ * @see contexts/collaboration/model/target.dt:49
  */
 export function checkSourceRange(sourceRange: SourceRange): readonly 'ordered'[] {
     const violated: 'ordered'[] = [];
@@ -5905,7 +5918,7 @@ export function checkSourceRange(sourceRange: SourceRange): readonly 'ordered'[]
  * 依頼時の対象
  * 依頼を作ったときの対象。対象の道筋がもう合わなくなっても付け替えず、古くなったと示す。
  * @invariant workspaceHasNoRange (ワークスペース全体には範囲がない): target.kind == ModelTarget.Workspace implies not exists(range)
- * @see contexts/collaboration/model/target.dt:56
+ * @see contexts/collaboration/model/target.dt:60
  */
 export interface TargetSnapshot {
     /** 依頼の対象 */
@@ -5920,7 +5933,7 @@ export interface TargetSnapshot {
 
 /**
  * Whether two TargetSnapshot values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/target.dt:56
+ * @see contexts/collaboration/model/target.dt:60
  */
 export function equalTargetSnapshot(a: TargetSnapshot, b: TargetSnapshot): boolean {
     return equalModelTarget(a.target, b.target) && a.sourceRevision === b.sourceRevision && sameOptional(a.label, b.label, ($36: string, $37: string) => $36 === $37) && sameOptional(a.range, b.range, equalSourceRange);
@@ -5928,7 +5941,7 @@ export function equalTargetSnapshot(a: TargetSnapshot, b: TargetSnapshot): boole
 
 /**
  * The invariants of TargetSnapshot that a value violates, in declaration order; empty when it holds them all.
- * @see contexts/collaboration/model/target.dt:56
+ * @see contexts/collaboration/model/target.dt:60
  */
 export function checkTargetSnapshot(targetSnapshot: TargetSnapshot): readonly 'workspaceHasNoRange'[] {
     const violated: 'workspaceHasNoRange'[] = [];

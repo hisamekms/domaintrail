@@ -68,10 +68,12 @@ export function targetStatus(target: Collaboration.ModelTarget, scope: TargetSco
         case 'DtElement':
             if (!scope.model) return 'unknown';
             return modelIdResolves(scope.model, target.element) ? 'current' : 'stale';
+        case 'DtesStorming':
         case 'DtesElement':
         case 'DtesOccurrence': {
             const storming = scope.stormings.find((s) => s.id === target.storming);
             if (!storming) return scope.stormingsComplete ? 'stale' : 'unknown';
+            if (target.kind === 'DtesStorming') return 'current';
             if (target.kind === 'DtesElement') return declarations(storming).some((d) => d.id === target.local) ? 'current' : 'stale';
             const stepPath = decodeOccurrencePath(target.occurrence);
             return stepPath && occurrenceResolves(storming, target.timeline, target.eventName, stepPath) ? 'current' : 'stale';

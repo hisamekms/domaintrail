@@ -115,6 +115,12 @@ function modelTarget(v: unknown, field: string): Result<Collaboration.ModelTarge
             const element = made(v.element, f('element'), Collaboration.makeElementName);
             return element.ok ? ok({ kind: 'DtElement', element: element.value }) : element;
         }
+        case 'DtesStorming': {
+            const b = body(v, ['kind', 'storming']);
+            if (!b.ok) return invalid(f(b.error.field), b.error.message);
+            const storming = made(v.storming, f('storming'), Collaboration.makeStormingName);
+            return storming.ok ? ok({ kind: 'DtesStorming', storming: storming.value }) : storming;
+        }
         case 'DtesElement': {
             const b = body(v, ['kind', 'storming', 'local']);
             if (!b.ok) return invalid(f(b.error.field), b.error.message);
@@ -140,7 +146,7 @@ function modelTarget(v: unknown, field: string): Result<Collaboration.ModelTarge
             return ok({ kind: 'DtesOccurrence', storming: storming.value, timeline: timeline.value, eventName: eventName.value, occurrence: occurrence.value });
         }
         default:
-            return invalid(f('kind'), "Expected 'Workspace', 'DtElement', 'DtesElement' or 'DtesOccurrence'.");
+            return invalid(f('kind'), "Expected 'Workspace', 'DtElement', 'DtesStorming', 'DtesElement' or 'DtesOccurrence'.");
     }
 }
 

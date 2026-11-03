@@ -7284,6 +7284,25 @@ button.add-to-request.added:hover {
 .chat-ai-dots {
     animation: chat-blink 1.2s ease-in-out infinite;
 }
+/* Solo: the AI's card right under a message, from its sending: its name line with a muted 確認中 and the quiet "…",
+   until its answer or its run card takes its place, cross-fading (`--motion-swap`) as the activity line does */
+.chat-ai-slot {
+    transition: opacity var(--motion-swap) var(--motion-ease-standard);
+}
+.chat-ai-slot.swapping {
+    opacity: 0;
+}
+.chat-ai-pending-state {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--space-1);
+    color: var(--muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.chat-ai-pending .chat-ai-given-up {
+    margin-top: var(--space-2);
+}
 /* the AI gave up answering: one small line in the danger's ink under the text */
 .chat-ai-given-up {
     display: flex;

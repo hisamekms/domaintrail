@@ -62,6 +62,10 @@ describe('a proposal as its card shows it', () => {
         });
         // not there (yet): to be added by the change, or gone
         expect(targetLabel(dt('Sales.ReturnCancelled'), naming, t)).toEqual({ name: 'Sales.ReturnCancelled', resolved: false });
+        expect(targetLabel({ kind: 'DtesElement', storming: 'Returns', local: 'Gone' }, naming, t)).toEqual({ name: 'Gone', resolved: false });
+        // a whole storming: by its title, as a storming
+        expect(targetLabel({ kind: 'DtesStorming', storming: 'Returns' }, naming, t)).toEqual({ name: '返品', detail: 'ストーミング', resolved: true });
+        expect(targetLabel({ kind: 'DtesStorming', storming: 'Gone' }, naming, t)).toEqual({ name: 'Gone', resolved: false });
     });
 
     test('the first three targets, then how many more', () => {

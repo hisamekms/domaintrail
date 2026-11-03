@@ -59,7 +59,10 @@ describe('a proposal as the AI writes it', () => {
     test('malformed references are dropped (paths, files, whitespace); unknown ones are kept, each once, at most 50', () => {
         expect(parseElementReference('@{Sales.Order:confirm}')).toEqual({ kind: 'DtElement', element: 'Sales.Order:confirm' } as unknown as C.ModelTarget);
         expect(parseElementReference('Sales.Order#Draft')).toEqual({ kind: 'DtElement', element: 'Sales.Order#Draft' } as unknown as C.ModelTarget);
-        for (const bad of ['contexts/sales/order.dt', 'order.dtes', '@{Sales Order}', '@{es:Orders}', '@{es:a/b/c}', '', '@{}', 'a{b}'])
+        // a whole storming
+        expect(parseElementReference('@{es:Orders}')).toEqual({ kind: 'DtesStorming', storming: 'Orders' } as unknown as C.ModelTarget);
+        expect(elementReference({ kind: 'DtesStorming', storming: 'Orders' })).toBe('@{es:Orders}');
+        for (const bad of ['contexts/sales/order.dt', 'order.dtes', '@{Sales Order}', '@{es:}', '@{es:a/b/c}', '@{es:a/}', '', '@{}', 'a{b}'])
             expect(parseElementReference(bad)).toBeUndefined();
         const read = value(readProposal({ ...raw, targets: ['@{Sales.Order}', 'sales/order.dt', '@{Sales.Order}', '@{Sales.Nothing}'] }));
         expect(read.targets.map(elementReference)).toEqual(['@{Sales.Order}', '@{Sales.Nothing}']);

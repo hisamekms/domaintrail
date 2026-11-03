@@ -718,6 +718,8 @@ const ja = {
             // the AI as a participant (ADR 0030): where an addressed message stands, the header's presence, the composer's mark
             ai: {
                 working: 'AI が読んでいます',
+                // the AI's card under a message in Solo, while it is triaged or answered
+                pending: '確認中',
                 toAnswer: 'AI の回答へ',
                 toProposal: '変更案へ',
                 givenUp: 'AI が答えられませんでした',
@@ -1509,6 +1511,7 @@ const en: Messages = {
             listSeparator: ', ',
             ai: {
                 working: 'The AI is reading it',
+                pending: 'Checking',
                 toAnswer: "To the AI's answer",
                 toProposal: 'To the proposal',
                 givenUp: 'The AI could not answer',
