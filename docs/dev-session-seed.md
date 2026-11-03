@@ -79,12 +79,12 @@ card gives a title of its own that the card does not take.
 - `references`: `@{…}` in a summary, a note, an assumption, a question and its options — `.dt` elements, states,
   commands, storming elements, ones that do not resolve, and `\@{` written as text.
 - `revert` (in `stormings/order-to-cash.dtes`, which no other scenario edits): 再請求のイベント (with an assumption) and a
-  later unit adding a read model elsewhere in the file; the first is reverted mechanically by the server — a 打ち消し
-  card, its assumption 打ち消し済み, `git diff` showing only the later read model. Then 支払の督促 (with an assumption), a
+  later unit adding a read model elsewhere in the file; the first is reverted mechanically by the server — an AI
+  card, done, with what it changed; its assumption 打ち消し済み, `git diff` showing only the later read model. Then 支払の督促 (with an assumption), a
   later unit renaming the event it added, and its revert, which conflicts and is left to the seed's agent: an AI card
-  that reverts it. To try both paths yourself, ⋯ → この作業を打ち消す… on any card that changed files; edit by hand the
-  lines a unit added first to make its revert conflict (it then waits for an agent, its card saying why: stop it, or run
-  a subscriber). With `--leave-running`, a revert asked now waits behind the running run (待ち), and the server reverts
+  that reverts it. To try both paths yourself, ⋯ → この作業を打ち消す on any card that changed files; edit by hand the
+  lines a unit added first to make its revert conflict (it then waits for an agent, 実行待ち with why in the tooltip on its state: stop it, or run
+  a subscriber). With `--leave-running`, a revert asked now waits behind the running run (実行待ち, 前に n 件), and the server reverts
   it once the runs ahead of it end.
 
 Not produced by default: a run left **running** and runs **queued**. `--leave-running` leaves both: once the scenarios

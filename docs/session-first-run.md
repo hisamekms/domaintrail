@@ -50,14 +50,14 @@ cd /tmp/dt-session && git init -q && git add -A && git commit -qm 'before the se
 7. **Check the files**: `git -C /tmp/dt-session status --short` lists only `.dt` and `.dtes` files, and
    `git -C /tmp/dt-session diff` is what the requests asked for. `--once` has ended the subscriber.
 8. **Revert** (as Ada): the card's ⋯ → 変更を見る shows what the run changed (its source diff matches `git diff`);
-   ⋯ → この作業を打ち消す… → 打ち消す reverts it: the chat shows Ada's 「〈作業名〉の変更を打ち消す」 and a 打ち消し card
-   (the queue was empty, so the server reverted it at once, mechanically — the subscriber has ended, no agent is
+   ⋯ → この作業を打ち消す → 打ち消す reverts it: the page goes to Ada's 「〈作業名〉の変更を打ち消す」 in the chat, and the
+   AI card below it is done, with what it changed (the queue was empty, so the server reverted it at once, mechanically — the subscriber has ended, no agent is
    needed), both pages show the model as it was, and `git -C /tmp/dt-session diff` is empty. Had a run been running,
-   the revert would have waited its turn behind it; had a later run changed the same lines, the revert would have been
-   left to the agent, its card saying why (the subscriber, without `--once`, takes it). The collab menu's
-   以前の状態に復元… restores any earlier state of the whole workspace: the last resort.
+   the revert would have waited its turn behind it (実行待ち, 前に 1 件); had a later run changed the same lines, the revert
+   would have been left to the agent, still 実行待ち, why in the tooltip on its state (the subscriber, without `--once`, takes it). The collab menu's
+   以前の状態に復元 restores any earlier state of the whole workspace: the last resort.
 9. **Stop**: Ctrl+C in terminal 1 (the session stays open and is resumed by the next `dt session start`). To end it,
-   as Ada, the collab menu → コラボを終える… → 終える — every page shows the summary, コラボを終えました. Then remove `/tmp/dt-session`.
+   as Ada, the collab menu → コラボを終える → 終える — every page shows the summary, コラボを終えました. Then remove `/tmp/dt-session`.
 
 **Developing DomainTrail itself?** Point the agent's `dt` at your clone in the workspace's `domaintrail.jsonc`, outside
 the workspace: `"session": { "agent": { "dt": ["node", "../domaintrail/dist/dt.js"] } }` (or `["bun",
