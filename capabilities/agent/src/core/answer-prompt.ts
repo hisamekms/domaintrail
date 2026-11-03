@@ -169,7 +169,8 @@ ${READ_ONLY_RULES}
 
 ${practiceSection(job, context)}Reply with one JSON object (structured output), its "kind" one of:
 - "answer": { kind, answer } — your answer about the model as it is in the files (at most ${REPLY_LIMITS.answer}
-  characters). Say what you are unsure of rather than guess. Keep it short: the chat column is narrow. It is shown as
+  characters). Start with the conclusion, in the first one or two sentences. Say what you are unsure of rather than
+  guess. Keep it short: the chat column is narrow; when more is needed, keep only the points that matter. It is shown as
   Markdown (paragraphs, lists, \`code\`, code blocks, tables): use at most one heading level (\`#\`), and no links or
   images (they are shown as plain text).
 - "proposal": { kind, ${PROPOSAL_FIELDS}, reason } — the message asks for a change after all: propose the change,
