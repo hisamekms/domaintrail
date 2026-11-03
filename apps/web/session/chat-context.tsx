@@ -77,6 +77,8 @@ export interface ChatContextValue {
      * focus: the person starts it from there. What the composer held is replaced.
      */
     readonly putCommand: (id: string) => void;
+    /** Gives the composer the focus (in the chat), what it holds kept: an interview's その他. */
+    readonly focusComposer: () => void;
     /** Replies to runs and messages: the reply being written, starting one (from an AI turn or a message) and what a posted reply names. */
     readonly replies: {
         readonly draft: ReplyDraft | undefined;

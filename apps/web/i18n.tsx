@@ -869,6 +869,8 @@ const ja = {
                 cancel: 'やめる',
                 text: '要約の本文',
                 waiting: '始めた人の確定待ち',
+                // the choices of the question awaited, for its starter
+                choices: { label: '答えの選択肢', send: '送る', other: 'その他（自分で書く）' },
             },
             // the facilitator's record of a message's triage (仕分けの記録)
             triage: {
@@ -1779,6 +1781,7 @@ const en: Messages = {
                 cancel: 'Cancel',
                 text: 'The brief',
                 waiting: 'Waiting for its starter to confirm',
+                choices: { label: 'Choices to answer with', send: 'Send', other: 'Other (write it)' },
             },
             triage: {
                 open: 'Triage record',

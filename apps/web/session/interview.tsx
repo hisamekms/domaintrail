@@ -2,11 +2,15 @@
 // name, whether the AI is thinking, and 中止 for its starter — and, once the AI wrote its brief, the brief as a card:
 // where it goes (a new storming or context, or that it replaces the current description), its lines with their heads,
 // and 確定 / 編集して確定 / 中止 for its starter (the others see it read-only). The questions themselves are the AI's
-// messages in the stream; in Solo each sits under the answer it follows (`interviewSlot`).
-import { useState } from 'react';
-import { Check, LoaderCircle, Pencil, Sparkles, X } from 'lucide-react';
+// messages in the stream; in Solo each sits under the answer it follows (`interviewSlot`). Under the question the
+// interview awaits, its starter gets its choices as buttons (`InterviewChoices`): one pressed is sent as the answer at
+// once, or — when several make one answer — checked and sent together; the last, その他, takes them to the composer.
+import { useState, type ReactElement } from 'react';
+import { Check, LoaderCircle, Pencil, Send, Sparkles, X } from 'lucide-react';
 import { briefLines, commandId } from '@domaintrail/collaboration';
-import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
+import type { SendRequestBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import { useLang } from '../i18n';
+import type { Lang } from '@domaintrail/visualization';
 import { isAiAuthor, type AiSlot } from './ai';
 import { sessionApi } from './api';
 import { useChat } from './chat-context';
@@ -154,5 +158,141 @@ export function InterviewPanel(props: { session: SessionData; live: boolean }) {
             )}
             {error && <p className="session-note session-error">{tx.error(error)}</p>}
         </div>
+    );
+}
+
+/** The choices of the question the interview awaits an answer to, for its starter. */
+export interface AwaitedChoices {
+    /** The AI's question (its message). */
+    readonly question: string;
+    readonly choices: readonly string[];
+    /** Several make one answer: checked, then sent together. */
+    readonly multiple: boolean;
+}
+
+/**
+ * The choices to show under a message of the AI: only when it is the question the running interview awaits an answer
+ * to (none once its starter answered, or the next question came), only for its starter on a live page, only when it
+ * has any. The others in a Collab session do not see them: the starter's answer shows as a message.
+ */
+export function awaitedChoices(state: Pick<SessionStateBody, 'interviews'>, request: string, me: string, live: boolean): AwaitedChoices | undefined {
+    if (!live) return undefined;
+    const i = runningInterview(state);
+    if (!i || i.state !== 'Asking' || i.startedBy !== me || i.awaiting !== undefined) return undefined;
+    const asked = i.asked;
+    if (!asked || asked.question !== request || asked.choices.length === 0) return undefined;
+    return { question: asked.question, choices: asked.choices, multiple: asked.multiple };
+}
+
+/** Several choices as one answer, in their order: joined with 「、」 in Japanese, ", " in English. */
+export const joinChoices = (picked: readonly string[], lang: Lang): string => picked.join(lang === 'ja' ? '、' : ', ');
+
+/** The answer of a choice (or several, joined) as a message: a reply to the question, as the composer would send it. */
+export const choiceAnswerBody = (question: string, text: string): SendRequestBody => ({
+    targets: [],
+    body: text,
+    replyTo: { kind: 'Message', request: question },
+});
+
+/** What the choices' buttons do: the state is the caller's (`InterviewChoices`), so this renders the same each time. */
+export interface ChoiceListProps {
+    readonly choices: readonly string[];
+    readonly multiple: boolean;
+    /** The choices checked (multiple), by index. */
+    readonly checked: ReadonlySet<number>;
+    readonly busy: boolean;
+    readonly lang: Lang;
+    readonly tx: ReturnType<typeof useChat>['tx']['chat']['interview']['choices'];
+    readonly onToggle: (index: number) => void;
+    /** An answer to send: the choice pressed (single), or the checked ones joined (multiple). */
+    readonly onSend: (text: string) => void;
+    /** その他: the person writes the answer in the composer. */
+    readonly onOther: () => void;
+}
+
+/**
+ * The choices under the question: buttons in the action colour that send one at once, or (multiple) checkboxes and
+ * 送る; always その他 last. Each choice is the AI's text shown as text.
+ */
+export function ChoiceList(props: ChoiceListProps): ReactElement {
+    const { choices, multiple, checked, busy, tx } = props;
+    const picked = choices.filter((_, i) => checked.has(i));
+    return (
+        <div className="interview-choices" role="group" aria-label={tx.label}>
+            {multiple
+                ? choices.map((c, i) => (
+                      <label key={i} className={checked.has(i) ? 'interview-choice checked' : 'interview-choice'}>
+                          <input type="checkbox" checked={checked.has(i)} disabled={busy} onChange={() => props.onToggle(i)} />
+                          {c}
+                      </label>
+                  ))
+                : choices.map((c, i) => (
+                      <button key={i} type="button" className="interview-choice" disabled={busy} onClick={() => props.onSend(c)}>
+                          {c}
+                      </button>
+                  ))}
+            {multiple && (
+                <button
+                    type="button"
+                    className="interview-choice send"
+                    disabled={busy || picked.length === 0}
+                    onClick={() => props.onSend(joinChoices(picked, props.lang))}
+                >
+                    <Send size={12} aria-hidden /> {tx.send}
+                </button>
+            )}
+            <button type="button" className="interview-choice other" disabled={busy} onClick={props.onOther}>
+                {tx.other}
+            </button>
+        </div>
+    );
+}
+
+/** The choices of the question the interview awaits, under the AI's message, for its starter (nothing otherwise). */
+export function InterviewChoices({ request }: { request: string }) {
+    const { session, tx, focusComposer } = useChat();
+    const lang = useLang();
+    const live = session.status === 'live' && session.state.session.state === 'Open';
+    const awaited = awaitedChoices(session.state, request, session.me.participant.id, live);
+    const [checked, setChecked] = useState<ReadonlySet<number>>(new Set());
+    const [busy, setBusy] = useState(false);
+    // sent: hidden at once, before the state says the interview heard it
+    const [sent, setSent] = useState(false);
+    const [error, setError] = useState<string | undefined>();
+    if (!awaited || sent) return null;
+    const send = async (text: string): Promise<void> => {
+        setBusy(true);
+        try {
+            await sessionApi.sendRequest(choiceAnswerBody(awaited.question, text));
+            setSent(true);
+            setError(undefined);
+        } catch (e) {
+            setError(failure(e));
+        } finally {
+            setBusy(false);
+        }
+    };
+    return (
+        <>
+            <ChoiceList
+                choices={awaited.choices}
+                multiple={awaited.multiple}
+                checked={checked}
+                busy={busy}
+                lang={lang}
+                tx={tx.chat.interview.choices}
+                onToggle={(i) =>
+                    setChecked((s) => {
+                        const next = new Set(s);
+                        if (next.has(i)) next.delete(i);
+                        else next.add(i);
+                        return next;
+                    })
+                }
+                onSend={(text) => void send(text)}
+                onOther={focusComposer}
+            />
+            {error && <p className="session-note session-error">{tx.error(error)}</p>}
+        </>
     );
 }
