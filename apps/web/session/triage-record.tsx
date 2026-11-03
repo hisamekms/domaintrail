@@ -5,11 +5,12 @@ import { X } from 'lucide-react';
 import type { TriageRecord } from './ai';
 import { useChat } from './chat-context';
 import { approvedLabel } from './proposal-view';
+import { ReplyText } from './reply';
 
 const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
 export function TriageRecordPanel({ triage, onClose }: { triage: TriageRecord; onClose: () => void }) {
-    const { tx, nameOf, session } = useChat();
+    const { tx, nameOf, session, onNavigate } = useChat();
     const t = tx.chat.triage;
     // a 依頼 that went to a proposal approved with one of its options: the option chosen
     const outcome = triage.state === 'Decided' ? triage.outcome : undefined;
@@ -39,7 +40,16 @@ export function TriageRecordPanel({ triage, onClose }: { triage: TriageRecord; o
                                 .filter((x) => x !== undefined)
                                 .join(' · ')}
                         </span>
-                        {(s.error ?? s.reason) && <span className={`triage-reason${s.error ? ' session-error' : ''}`}>{s.error ?? s.reason}</span>}
+                        {s.error !== undefined ? (
+                            <span className="triage-reason session-error">{s.error}</span>
+                        ) : (
+                            // the model's reason names elements as the AI does (`@{es:…}`): by their names, as links
+                            s.reason && (
+                                <span className="triage-reason">
+                                    <ReplyText text={s.reason} onNavigate={onNavigate} />
+                                </span>
+                            )
+                        )}
                     </li>
                 ))}
             </ol>

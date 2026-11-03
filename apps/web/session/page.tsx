@@ -30,7 +30,16 @@ import type { ComposerValue } from './mentions';
 import { cursorsOn } from './presence';
 import { mentionCandidates } from './mentions';
 import { sentView, type ViewScope, type ViewTarget } from './views';
-import { occurrenceNode, targetKey, targetOfSelection, type ModelTarget, type NamingContext, type TargetDraft } from './targets';
+import {
+    occurrenceNode,
+    resolveTarget,
+    targetKey,
+    targetOfSelection,
+    viewOfDeclaration,
+    type ModelTarget,
+    type NamingContext,
+    type TargetDraft,
+} from './targets';
 import { agentStatus, latestAt, streamItems, unreadCount, unreadMentions } from './stream';
 import { defaultDraftStorage, useComposerDraft, usePresence, useSession } from './useSession';
 
@@ -274,7 +283,9 @@ export function useSessionPage(input: {
     const { stormingChoice, setStormingChoice } = settings;
     const { openBest } = input;
     const navigate = useCallback(
-        (target: ModelTarget) => {
+        (written: ModelTarget) => {
+            // as the reference was named (`resolveTarget`): by its label, `es:` left out, …
+            const target = resolveTarget(written, naming) ?? written;
             if (target.kind === 'Workspace') return;
             if (target.kind === 'DtElement') return openBest(target.element);
             const storming = stormings.find((s) => s.id === target.storming);
@@ -289,12 +300,21 @@ export function useSessionPage(input: {
                 return;
             }
             if (target.kind === 'DtesElement') {
+                const id = `es/${target.storming}/${target.local}`;
+                // a timeline, an exception or a stage: its own view, as the storming's picker opens it; a group: the
+                // view of its timeline. The declaration in the inspector.
+                const scope = viewOfDeclaration(storming.storming, target.local);
+                if (scope !== undefined) {
+                    setStormingChoice({ ...stormingChoice, stormingId: target.storming, timelines: { ...others, [target.storming]: scope } });
+                    setView({ kind: 'storming' });
+                    select(id, { highlight: false });
+                    return;
+                }
                 // the integrated canvas, at a level that draws the element
                 const kind = firstDeclarations(storming.storming).get(target.local)?.kind;
                 const drawn = LEVEL_KINDS[stormingChoice.level].some((k) => k === kind);
                 const level = drawn ? stormingChoice.level : 'design-level';
                 setStormingChoice({ ...stormingChoice, stormingId: target.storming, level, timelines: others });
-                const id = `es/${target.storming}/${target.local}`;
                 setView({ kind: 'storming' });
                 select(id, { highlight: false });
                 requestAnimationFrame(() => requestAnimationFrame(() => canvas && highlightElement(canvas, id)));
@@ -320,7 +340,7 @@ export function useSessionPage(input: {
                 }),
             );
         },
-        [canvas, stormings, stormingChoice, setStormingChoice, select, setView, openBest],
+        [canvas, naming, stormings, stormingChoice, setStormingChoice, select, setView, openBest],
     );
 
     // another participant's view, opened here as it is (the view, not their camera)

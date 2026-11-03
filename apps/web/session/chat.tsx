@@ -83,7 +83,7 @@ import { JoinRequests } from './join-requests';
 import { Avatar, failure, MentionedText, TargetChips } from './parts';
 import { AiAvatar, ProposalCard } from './proposal';
 import { chosenIndex } from './proposal-view';
-import { parseReplyText, referenceText } from './references';
+import { referencesAsText } from './references';
 import { TriageRecordPanel } from './triage-record';
 import { InterviewChoices, InterviewPanel, interviewSlot } from './interview';
 import { CandidatesCard, commandSlot } from './candidates';
@@ -1323,12 +1323,7 @@ function ReplyReferenceLine({ run }: { run: string }) {
     if (!ref) return null;
     const r = tx.chat.replies;
     // plain text in a button: an element the AI named reads as its name, not a link
-    const head =
-        ref.summary === undefined
-            ? r.states[ref.state]
-            : parseReplyText(ref.summary)
-                  .map((seg) => (seg.kind === 'text' ? seg.text : referenceText(seg, naming).text))
-                  .join('');
+    const head = ref.summary === undefined ? r.states[ref.state] : referencesAsText(ref.summary, naming);
     return (
         <button className="chat-reply-ref" onClick={() => jump(`card:${ref.card}`)} data-tooltip={r.referenceHint(ref.name)}>
             <span className="chat-reply-ref-run">↩ {r.reference(ref.name)}:</span> <span className="chat-reply-ref-head">{head}</span>
@@ -1342,12 +1337,15 @@ function ReplyReferenceLine({ run }: { run: string }) {
  */
 function MessageReferenceLine({ request }: { request: string }) {
     const { session, tx, nameOf, jump, replies } = useChat();
+    const naming = useTargetNaming();
     const ref = replies.messageReferenceOf(request);
     if (!ref) return null;
     const who = speakerName(ref.author, session.me.participant.id, nameOf, tx.chat.you);
+    // the AI's answer names elements as references: by their names here, as its bubble shows them
+    const head = isAiAuthor(ref.author) ? referencesAsText(ref.head, naming) : ref.head;
     return (
         <button className="chat-reply-ref" onClick={() => jump(`message:${ref.request}`)} data-tooltip={tx.chat.replies.messageReferenceHint(who)}>
-            <span className="chat-reply-ref-run">↩ {who}:</span> <span className="chat-reply-ref-head">{ref.head}</span>
+            <span className="chat-reply-ref-run">↩ {who}:</span> <span className="chat-reply-ref-head">{head}</span>
         </button>
     );
 }

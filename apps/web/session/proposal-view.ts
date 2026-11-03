@@ -7,7 +7,7 @@ import { firstDeclarations } from '@domaintrail/storming';
 import type { Messages } from '../i18n';
 import { nameIn, resolve } from '../model-utils';
 import type { ProposalJson } from './ai';
-import { targetName, targetShortName, type ModelTarget, type NamingContext } from './targets';
+import { resolveTarget, targetName, targetShortName, type ModelTarget, type NamingContext } from './targets';
 
 type Content = ProposalJson['content'];
 type Option = Content['options'][number];
@@ -39,7 +39,9 @@ function contextName(naming: NamingContext, name: string): string {
  * A target of a proposal as its chip shows it; one that does not resolve by its identifier (`plainIdentifier`: of a
  * storming or a storming element, its own ID).
  */
-export function targetLabel(t: ModelTarget, naming: NamingContext | undefined, kinds: KindNames): TargetLabel {
+export function targetLabel(target: ModelTarget, naming: NamingContext | undefined, kinds: KindNames): TargetLabel {
+    // as the chat's references resolve (`resolveTarget`): a storming element by its label, `es:` left out, …
+    const t = (naming && resolveTarget(target, naming)) ?? target;
     const name = naming && targetShortName(t, naming);
     if (!naming || name === undefined) {
         const id =

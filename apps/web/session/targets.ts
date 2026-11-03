@@ -5,7 +5,7 @@
 import type { Json } from '@domaintrail/collaboration/protocol';
 import type { Collaboration } from '@domaintrail/collaboration';
 import { type DomainModel } from '@domaintrail/modeling';
-import { firstDeclarations, type SourceRange as StormingRange } from '@domaintrail/storming';
+import { allTimelines, firstDeclarations, type SourceRange as StormingRange } from '@domaintrail/storming';
 import type { DisplayMode, RenderGraph } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { nameIn, namer, resolve, selectedFile, withLabel } from '../model-utils';
@@ -162,6 +162,19 @@ export function occurrenceNode(render: RenderGraph, t: Extract<ModelTarget, { ki
     )?.id;
 }
 
+/**
+ * The storming view a declaration has of its own, as the storming's picker names it (`StormingChoice.timelines`): a
+ * timeline's or an exception's ID, a stage's `@<ID>` (`stageChoice`); a group, the view of the timeline it is in. Undefined for a note
+ * (it is shown on the integrated canvas).
+ */
+export function viewOfDeclaration(storming: StormingView['storming'], local: string): string | undefined {
+    const declaration = firstDeclarations(storming).get(local);
+    if (declaration?.kind === 'timeline') return declaration.id;
+    if (declaration?.kind === 'stage') return `@${declaration.id}`;
+    if (declaration?.kind === 'group') return allTimelines(storming).find((t) => t.steps.some((s) => s.type === 'group' && s.id === local))?.id;
+    return undefined;
+}
+
 /** What names a target as the page shows it now: the name display setting, the model and the stormings. */
 export interface NamingContext {
     readonly mode: DisplayMode;
@@ -169,12 +182,70 @@ export interface NamingContext {
     readonly stormings: readonly Pick<StormingView, 'id' | 'storming'>[];
 }
 
+/** A storming of the naming context by its ID, else by its title when exactly one has that title. */
+function stormingOf(ctx: NamingContext, ref: string): NamingContext['stormings'][number] | undefined {
+    const byId = ctx.stormings.find((s) => s.id === ref);
+    if (byId) return byId;
+    const byLabel = ctx.stormings.filter((s) => s.storming.label?.trim() === ref);
+    return byLabel.length === 1 ? byLabel[0] : undefined;
+}
+
+/**
+ * The local ID of a storming's declaration a reference names: by its ID (any kind: a note, a timeline or an exception, a
+ * group, a stage), else by its label when exactly one declaration has it; of a path (`Timeline/Event`), its last segment.
+ */
+function localOf(storming: StormingView['storming'], ref: string): string | undefined {
+    const byId = firstDeclarations(storming);
+    const last = ref.split('/').at(-1) ?? ref;
+    for (const id of new Set([ref, last])) if (byId.has(id)) return id;
+    const byLabel = [...byId.values()].filter((d) => d.label?.trim() === last);
+    return byLabel.length === 1 ? byLabel[0]?.id : undefined;
+}
+
+/**
+ * The target a reference stands for now, as written or as the AI may have meant it (the agent is told the canonical
+ * forms, but writes others): a storming or a storming element by its ID or, when unique, its label; a `.dt` reference
+ * that names no model element but a storming (`@{Returns}`, `@{Returns/ReturnRequested}`, `es:` left out); a path
+ * through a timeline (`es:Returns/Main/ReturnRequested`) by its last segment. Undefined when nothing resolves: the
+ * workspace and an occurrence are themselves.
+ */
+export function resolveTarget(t: ModelTarget, ctx: NamingContext): ModelTarget | undefined {
+    switch (t.kind) {
+        case 'Workspace':
+            return t;
+        case 'DtElement': {
+            const r = ctx.model ? resolve(ctx.model, t.element) : undefined;
+            if (r && r.kind !== 'context') return t;
+            // `es:` left out: a storming, or one of its elements
+            const [storming, ...rest] = t.element.split('/');
+            if (storming === undefined) return undefined;
+            return resolveTarget(rest.length === 0 ? { kind: 'DtesStorming', storming } : { kind: 'DtesElement', storming, local: rest.join('/') }, ctx);
+        }
+        case 'DtesStorming': {
+            const view = stormingOf(ctx, t.storming);
+            return view && (view.id === t.storming ? t : { kind: 'DtesStorming', storming: view.id });
+        }
+        case 'DtesElement': {
+            const view = stormingOf(ctx, t.storming);
+            const local = view && localOf(view.storming, t.local);
+            if (!view || local === undefined) return undefined;
+            return view.id === t.storming && local === t.local ? t : { kind: 'DtesElement', storming: view.id, local };
+        }
+        case 'DtesOccurrence': {
+            const view = ctx.stormings.find((s) => s.id === t.storming);
+            return view && firstDeclarations(view.storming).has(t.eventName) ? t : undefined;
+        }
+    }
+}
+
 /**
  * A target's name in the current display mode (ラベル / 名前 / 両方), resolved from the model and the stormings now, as
  * the inspector and the storming view name the same item; undefined for the whole workspace and for a target that no
  * longer resolves (the caller falls back to the label stored with the request).
  */
-export function targetName(t: ModelTarget, ctx: NamingContext): string | undefined {
+export function targetName(target: ModelTarget, ctx: NamingContext): string | undefined {
+    const t = resolveTarget(target, ctx);
+    if (!t) return undefined;
     switch (t.kind) {
         case 'Workspace':
             return undefined;
@@ -211,7 +282,9 @@ export function targetName(t: ModelTarget, ctx: NamingContext): string | undefin
  * aggregate, a storming element's without its storming (`targetName` says the whole path). An occurrence keeps its
  * timeline and step. Undefined where `targetName` is.
  */
-export function targetShortName(t: ModelTarget, ctx: NamingContext): string | undefined {
+export function targetShortName(target: ModelTarget, ctx: NamingContext): string | undefined {
+    const t = resolveTarget(target, ctx);
+    if (!t) return undefined;
     switch (t.kind) {
         case 'DtElement': {
             const r = ctx.model ? resolve(ctx.model, t.element) : undefined;

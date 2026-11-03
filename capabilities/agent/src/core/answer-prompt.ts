@@ -131,7 +131,7 @@ ${practice.join('\n\n')}
 const ELEMENT_NAMES = `name an element by its identifier, never its label: a \`.dt\` element, state or command as
 \`@{Sales.Order}\`, \`@{Sales.Order#Draft}\` or \`@{Sales.Order:confirm}\`, a \`.dtes\` element as
 \`@{es:Returns/ReturnRequested}\` (storming / element), a whole \`.dtes\` storming as \`@{es:Returns}\`. The page shows
-them by name and links them; use no other form.`;
+them by name and links them; use no other form, and write them bare, never inside backticks.`;
 
 const PROPOSAL_FIELDS = `proposal: { targets, how, options? }`;
 
