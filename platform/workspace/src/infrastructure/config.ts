@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
@@ -30,13 +30,26 @@ export interface ConfigFileFormat<T> {
     notFound(configPath: string): Error;
 }
 
-/** Finds a config file named one of `files` in `start` or its parents (like tsconfig.json). */
+/**
+ * Whether the file `file` exists under exactly its name: on a case-insensitive file system `DomainTrail.Local.JSONC`
+ * opens as `domaintrail.local.jsonc`, but is never taken for it (an agent could write such a variant past its rules).
+ */
+export function existsExactly(file: string): boolean {
+    if (!existsSync(file)) return false;
+    try {
+        return readdirSync(path.dirname(file)).includes(path.basename(file));
+    } catch {
+        return false;
+    }
+}
+
+/** Finds a config file named exactly one of `files` in `start` or its parents (like tsconfig.json). */
 export function findConfigFile(start: string, files: readonly string[]): string | undefined {
     let dir = path.resolve(start);
     for (;;) {
         for (const name of files) {
             const candidate = path.join(dir, name);
-            if (existsSync(candidate)) return candidate;
+            if (existsExactly(candidate)) return candidate;
         }
         const parent = path.dirname(dir);
         if (parent === dir) return undefined;
@@ -44,8 +57,8 @@ export function findConfigFile(start: string, files: readonly string[]): string 
     }
 }
 
-/** The first of `candidates` that exists. */
-const firstExisting = (candidates: readonly string[]): string | undefined => candidates.find((c) => existsSync(c));
+/** The first of `candidates` that exists under exactly its name. */
+const firstExisting = (candidates: readonly string[]): string | undefined => candidates.find(existsExactly);
 
 /**
  * The config file and its local override: an explicit `--config` file and the local override beside it, else the

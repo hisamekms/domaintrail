@@ -40,8 +40,9 @@ export interface ClaudeRunOptions {
     /** What the agent may read outside its working directory, never edit (`agent.read.paths`). */
     readonly extraRead?: ExtraRead;
     /**
-     * Configuration files by absolute path the agent may never edit besides `CONFIG_EDIT_DENIED` (a `-c` file and its
-     * local override, which may have other names).
+     * Configuration files the agent may never edit besides `CONFIG_EDIT_DENIED` (a `-c` file and its local override,
+     * which may have other names): absolute, or relative to the working directory (`/`-separated); one no rule can
+     * name refuses the run.
      */
     readonly configFiles?: readonly string[];
 }
@@ -243,7 +244,7 @@ export function claudeArguments(allowedTools: readonly string[], requests?: numb
         '--disallowedTools',
         ...READ_DENIED,
         ...CONFIG_EDIT_DENIED,
-        ...(options.configFiles ?? []).map((f) => `Edit(${absoluteRule(f)})`),
+        ...(options.configFiles ?? []).map((f) => `Edit(${path.isAbsolute(f) ? absoluteRule(f) : relativeRule(f)})`),
         ...deniedRules(options.deniedPaths ?? []),
         ...(extra?.denied ?? []),
         ...(allowed.length ? ['--allowedTools', ...allowed] : []),
@@ -268,7 +269,7 @@ export interface ClaudeCodeOptions {
     /** `--model` and `--effort` (unset: the user's Claude Code settings). */
     readonly model?: string;
     readonly effort?: string;
-    /** Configuration files by absolute path the agent never edits (a `-c` file and its local override). */
+    /** Configuration files the agent never edits (a `-c` file and its local override; see `ClaudeRunOptions`). */
     readonly configFiles?: readonly string[];
 }
 

@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import * as path from 'node:path';
 import { format } from 'node:util';
 import {
@@ -90,6 +90,15 @@ export interface LanguageServerFiles {
     findDomainFiles(root: string, sources: readonly string[], respectGitignore: boolean): Promise<string[]>;
 }
 
+/** Whether `file` exists under exactly its name (a case variant on a case-insensitive file system is not it). */
+function existsExactly(file: string): boolean {
+    try {
+        return existsSync(file) && readdirSync(path.dirname(file)).includes(path.basename(file));
+    } catch {
+        return false;
+    }
+}
+
 /** Which files below a root are the workspace's sources. */
 export interface SourceScope {
     /** Whether the directory `dir` (absolute, below the root) is walked. */
@@ -161,7 +170,7 @@ export class DomainWorkspace {
         for (let dir = path.dirname(file); ; dir = path.dirname(dir)) {
             for (const name of [...CONFIG_FILES, ...LOCAL_CONFIG_FILES]) {
                 const candidate = path.join(dir, name);
-                if (existsSync(candidate)) return candidate;
+                if (existsExactly(candidate)) return candidate;
             }
             if (dir === this.start || dir === path.dirname(dir)) return undefined;
         }

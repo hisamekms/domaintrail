@@ -28,6 +28,7 @@ export { AGENT_ROLES, type AgentRole } from '@domaintrail/collaboration/protocol
 export {
     claudeArguments,
     CONFIG_EDIT_DENIED,
+    CONFIG_FILE_NAMES,
     createClaudeCodeRunner,
     extraReadRules,
     type AgentCommand,
@@ -40,6 +41,7 @@ export { checkClaudeCode, type ClaudeUsability } from './adapters/claude-usable.
 export { userClaudeDefaults } from './adapters/claude-settings.js';
 export {
     createWorkspaceView,
+    foldedName,
     holdsRepository,
     ignoredEntries,
     type IgnoredSource,

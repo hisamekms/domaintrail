@@ -4,7 +4,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { type ConfigFileFormat, findConfigFile, findConfigFiles, loadConfig } from './config.js';
+import { type ConfigFileFormat, existsExactly, findConfigFile, findConfigFiles, loadConfig } from './config.js';
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -91,5 +91,14 @@ describe('config file', () => {
         });
         // a format without a local override reads the file alone
         expect(await loadConfig({ start: dir }, format)).toEqual({ text: 'P', file: path.join(dir, 'domaintrail.json') });
+    });
+
+    test('a case variant of a name is never taken for it (an agent could write one past a case-sensitive rule)', async () => {
+        const dir = await project({ 'DomainTrail.JSONC': '{}', 'DomainTrail.Local.JSONC': '{}', 'sub/x.txt': '' });
+        const local = { ...format, localFiles: (file: string) => [path.join(path.dirname(file), 'domaintrail.local.jsonc')] };
+        expect(findConfigFiles({ start: path.join(dir, 'sub') }, local)).toEqual({});
+        expect(findConfigFile(dir, FILES)).toBeUndefined();
+        expect(existsExactly(path.join(dir, 'DomainTrail.JSONC'))).toBe(true);
+        expect(existsExactly(path.join(dir, 'domaintrail.jsonc'))).toBe(false);
     });
 });
