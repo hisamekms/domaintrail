@@ -1,4 +1,4 @@
-import { ChevronRight, Microscope, Telescope, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { ChevronRight, Microscope, Telescope, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { commandsOf, elementOf, type DomainModel } from '@domaintrail/modeling';
 import {
@@ -28,7 +28,8 @@ import type { StormingView } from '@domaintrail/visualization/protocol';
 import { useT } from './i18n';
 import { fileSelection, labelOrName, nameIn, shownLabel, type Select } from './model-utils';
 import type { SourceFocus } from './source';
-import { LevelSwitch, SubjectPicker, ToolbarSubject } from './view/toolbar';
+import { activeFilterCount } from './view/filters';
+import { FilterPopover, FilterSection, LevelSwitch, SubjectPicker, ToolbarSubject } from './view/toolbar';
 
 /** What the Event Storming view shows: a storming, a level and a timeline filter, all of them the page's state only. */
 export interface StormingChoice {
@@ -40,7 +41,7 @@ export interface StormingChoice {
     exceptions?: boolean;
 }
 
-/** Whether a storming has exceptions (the toolbar's 「例外を表示」 is then shown). */
+/** Whether a storming has exceptions (the 絞り込み's 「例外を表示」 is then shown). */
 export const hasExceptionTimelines = (storming: StormingView): boolean => storming.timelines.some((t) => t.exception);
 
 /** The picker's value of a stage's view (a timeline's is its ID: an ID never starts with `@`). */
@@ -112,7 +113,7 @@ const LEVEL_ICONS: Record<ViewLevel, LucideIcon> = { 'big-picture': Telescope, '
 /**
  * The Event Storming view's toolbar: its subject, the storming then the timeline (すべて（統合）, a stage with its
  * exceptions, or one timeline) as a breadcrumb of pickers, and its level. The timeline is what is looked at, not a
- * filter: the integrated canvas, a stage and a timeline draw different things.
+ * filter: the integrated canvas, a stage and a timeline draw different things (the exceptions are, `StormingFilter`).
  */
 export function StormingToolbar({
     stormings,
@@ -161,19 +162,6 @@ export function StormingToolbar({
                     </>
                 )}
             </nav>
-            {hasExceptionTimelines(storming) && options.timelineId === undefined && (
-                <div className="segmented small icons level-switch" role="group" aria-label={t.showExceptions}>
-                    <button
-                        className={choice.exceptions !== false ? 'active' : ''}
-                        aria-pressed={choice.exceptions !== false}
-                        aria-label={t.showExceptions}
-                        data-tooltip={t.showExceptions}
-                        onClick={() => onChange({ ...choice, exceptions: choice.exceptions === false })}
-                    >
-                        <TriangleAlert size={15} aria-hidden />
-                    </button>
-                </div>
-            )}
             <LevelSwitch
                 label={t.stormingLevel}
                 levels={VIEW_LEVELS}
@@ -185,6 +173,38 @@ export function StormingToolbar({
         </ToolbarSubject>
     );
 }
+
+/**
+ * The storming's 絞り込み: 「例外を表示」, when the storming has exceptions and the view is not one timeline (whose
+ * exceptions are what it shows). Hidden exceptions count as one narrowing.
+ */
+export function StormingFilter({
+    stormings,
+    choice,
+    onChange,
+}: {
+    stormings: readonly StormingView[];
+    choice: StormingChoice;
+    onChange: (choice: StormingChoice) => void;
+}): ReactNode {
+    const t = useT();
+    const shown = shownStorming(stormings, choice);
+    if (!shown || !hasExceptionTimelines(shown.storming) || shown.options.timelineId !== undefined) return null;
+    const exceptions = choice.exceptions !== false;
+    return (
+        <FilterPopover count={activeFilterCount({ view: 'storming', exceptions })} onClear={() => onChange(clearStormingFilter(choice))}>
+            <FilterSection title={t.filters.shown}>
+                <label className="check">
+                    <input type="checkbox" checked={exceptions} onChange={(e) => onChange({ ...choice, exceptions: e.target.checked })} />
+                    {t.showExceptions}
+                </label>
+            </FilterSection>
+        </FilterPopover>
+    );
+}
+
+/** The storming's 絞り込み cleared: the exceptions shown again. */
+export const clearStormingFilter = (choice: StormingChoice): StormingChoice => ({ ...choice, exceptions: true });
 
 /**
  * The inspector's view of a storming element: its kind, names and description, its `.dt` ref, its relations, and for
