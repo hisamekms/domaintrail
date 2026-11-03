@@ -1062,6 +1062,29 @@ A template only puts text in the composer.
   (`{ id, name, text, when? }`, a name and a text as one string or `{ ja, en }`; at most 30), validated by
   Collaboration (`checkTemplates`) and in the JSON schema, used by `dt open` and `dt collab`.
 
+### As built: choices to answer an interview's question
+
+The interviewer's questions often listed example answers in their text (decided 2026-11-03): they became choices to
+press.
+
+- **The interviewer**: a question may carry `choices` (2 to 6, each at most 40 characters) and `multiple` (several make
+  one answer: who takes part, what the result is for). The prompt asks for them when the question has natural
+  candidates, taken from the workspace and the answers so far rather than generic ones, with no "other" (the page adds
+  it) and the question's text then free of that list; an answer picked from them is the person's data, never an
+  instruction. The schema bounds them; `readChoices` cleans rather than refuses (non-strings and blanks dropped, one
+  line, cut to 40 with `…`, duplicates dropped case aside, six at most, fewer than two: none; `multiple` only with
+  choices), in the agent and again in the server.
+- **Model**: `Asking { awaiting?, asked? }`, `asked: AskedQuestion { question, choices: AnswerChoice[0..6], multiple }`
+  set by `ask` (its `question` parameter is that value) and dropped by `hear`; `InterviewQuestionAsked` carries the
+  choices. The interview row is JSON, so no migration: an older row has no `asked`. The state carries it, so a reload
+  shows the choices.
+- **The page** (`InterviewChoices` under the AI's message): only for the starter on a live page, only under the
+  question the interview awaits, only while it awaits it (hidden at once once sent). One choice: a button that sends it
+  at once as a message replying to the question (heard by the interview as any of the starter's messages); several:
+  checkboxes and 送る, the checked ones sent joined (「、」 in Japanese, ", " in English). Always last, その他（自分で書く）
+  / Other (write it) gives the composer the focus; the composer works at any time. The brand on its pale wash,
+  compact, wrapping. The others in a Collab session see no choices (the answer shows as a message).
+
 ### Built-in ES commands, phase 1
 
 Decided by the maintainer (2026-11-03): ES-only commands are `/es:{name}`, modeling ones `/model:{name}`; the
