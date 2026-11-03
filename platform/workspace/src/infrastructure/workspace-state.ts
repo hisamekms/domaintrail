@@ -4,7 +4,7 @@
 // prune`: the directories of workspaces that are gone (or unused for a while), listed, removed only when asked.
 import { lstat, readFile, readdir, rm } from 'node:fs/promises';
 import * as path from 'node:path';
-import { moveLegacyState } from './legacy-state.js';
+import { type CleanDatabase, moveLegacyState } from './legacy-state.js';
 import {
     type StateEnvironment,
     type WorkspaceDirs,
@@ -24,6 +24,8 @@ export interface WorkspaceStateOptions {
     /** Where the move of `.domaintrail/` and the hints are said. */
     readonly log?: (line: string) => void;
     readonly environment?: StateEnvironment;
+    /** Checks and cleans the session database moved from `.domaintrail/` (the app's); absent: no database is moved. */
+    readonly cleanDatabase?: CleanDatabase;
 }
 
 /**
@@ -35,7 +37,7 @@ export async function openWorkspaceState(root: string, options: WorkspaceStateOp
     const log = options.log ?? (() => {});
     const dirs = workspaceDirs(root, options.environment ?? currentEnvironment());
     checkOutsideWorkspace(dirs);
-    await moveLegacyState(dirs, log);
+    await moveLegacyState(dirs, log, options.cleanDatabase);
     const { made } = await workspaceDirectory(dirs.roots.state, dirs.state, dirs.workspace);
     await workspaceDirectory(dirs.roots.cache, dirs.cache, dirs.workspace);
     if (made)

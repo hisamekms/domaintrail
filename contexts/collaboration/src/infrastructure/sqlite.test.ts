@@ -5,14 +5,24 @@ import { createHash } from 'node:crypto';
 import { chmod, lstat, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import type { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync } from 'node:sqlite';
 import { Collaboration as C } from '../generated/index.js';
 import type { Stores } from '../application/ports.js';
 import { agentRunCommands, sessionCommands } from '../domain/commands.js';
 import { createFileBlobs, openSessionBlobs } from './blobs.js';
 import { writeServerAddress } from './session-files.js';
 import { UnsafeSessionPath } from './session-dir.js';
-import { MIGRATIONS, NewerSchema, createUnitOfWork, decodeJson, encodeJson, openDatabase, openSessionDatabase } from './sqlite.js';
+import {
+    CREDENTIAL_TABLES,
+    MIGRATIONS,
+    NewerSchema,
+    cleanMovedDatabase,
+    createUnitOfWork,
+    decodeJson,
+    encodeJson,
+    openDatabase,
+    openSessionDatabase,
+} from './sqlite.js';
 import { knownAgentRunId, knownRequestId, knownRevisionId, knownSessionId } from '../domain/ids.js';
 
 /** The error a promise rejects with (fails when it resolves). */
@@ -574,5 +584,76 @@ describe('change proposals written when a proposal was three texts', () => {
         // reading changes nothing in the database
         expect(JSON.stringify(db.prepare('SELECT data FROM proposals').all())).toBe(stored);
         db.close();
+    });
+});
+
+describe('a database moved from an older .domaintrail/', () => {
+    /** A session database as dt makes it, with a session and every kind of credential in it. */
+    async function withCredentials(): Promise<string> {
+        const dir = await tempDir();
+        const db = await openSessionDatabase(dir);
+        db.exec(`
+            INSERT INTO sessions (id, state, data) VALUES ('s', 'Open', '{}');
+            INSERT INTO sign_ins (token_hash, session_id, identity, created_at) VALUES ('t', 's', '{}', 1);
+            INSERT INTO facilitator_links (code_hash, session_id, expires_at) VALUES ('c', 's', 1);
+            INSERT INTO invites (code_hash, session_id, created_at, expires_at) VALUES ('i', 's', 1, 2);
+            INSERT INTO facilitators (session_id, provider, subject, bound_at) VALUES ('s', 'access', 'mallory@example.com', 1);
+        `);
+        db.close();
+        return path.join(dir, 'session.db');
+    }
+    const count = (file: string, sql: string): number => {
+        const db = new DatabaseSync(file);
+        try {
+            return Number(db.prepare(sql).get()?.n);
+        } finally {
+            db.close();
+        }
+    };
+
+    test('one dt made: every credential deleted, the session kept', async () => {
+        const file = await withCredentials();
+        expect(cleanMovedDatabase(file)).toBe(true);
+        for (const t of CREDENTIAL_TABLES) expect([t, count(file, `SELECT count(*) AS n FROM ${t}`)]).toEqual([t, 0]);
+        expect(count(file, 'SELECT count(*) AS n FROM sessions')).toBe(1);
+    });
+
+    test('one made at an older migration level (without the later credential tables): cleaned too', async () => {
+        const level = MIGRATIONS.findIndex((m) => m.includes('CREATE TABLE sign_ins')) + 1;
+        expect(level).toBeLessThan(MIGRATIONS.length);
+        const file = path.join(await tempDir(), 'session.db');
+        const db = new DatabaseSync(file);
+        db.exec('PRAGMA foreign_keys = ON');
+        for (let v = 0; v < level; v++) db.exec(MIGRATIONS[v]);
+        db.exec(`PRAGMA user_version = ${level}`);
+        db.exec("INSERT INTO sessions (id, state, data) VALUES ('s', 'Open', '{}')");
+        db.exec("INSERT INTO sign_ins (token_hash, session_id, identity, created_at) VALUES ('t', 's', '{}', 1)");
+        db.close();
+        expect(cleanMovedDatabase(file)).toBe(true);
+        expect(count(file, 'SELECT count(*) AS n FROM sign_ins')).toBe(0);
+    });
+
+    test('refused (false, nothing to use) unless its schema is exactly one dt made: case variants, triggers, views, extra tables, unknown levels', async () => {
+        const crafted = async (sql: string): Promise<string> => {
+            const file = await withCredentials();
+            const db = new DatabaseSync(file);
+            db.exec(sql);
+            db.close();
+            return file;
+        };
+        for (const sql of [
+            'ALTER TABLE sign_ins RENAME TO tmp; ALTER TABLE tmp RENAME TO SIGN_INS',
+            "CREATE TRIGGER keep AFTER DELETE ON sign_ins BEGIN INSERT INTO sign_ins VALUES (old.token_hash || 'x', old.session_id, old.identity, 1, NULL); END",
+            'CREATE VIEW v AS SELECT * FROM sign_ins',
+            'CREATE TABLE extra (x)',
+            'ALTER TABLE sessions ADD COLUMN extra TEXT',
+            'PRAGMA user_version = 0',
+            `PRAGMA user_version = ${MIGRATIONS.length + 1}`,
+            `PRAGMA user_version = ${MIGRATIONS.length - 1}`,
+        ])
+            expect([sql, cleanMovedDatabase(await crafted(sql))]).toEqual([sql, false]);
+        const garbage = path.join(await tempDir(), 'session.db');
+        await writeFile(garbage, 'not a database'.repeat(200));
+        expect(cleanMovedDatabase(garbage)).toBe(false);
     });
 });

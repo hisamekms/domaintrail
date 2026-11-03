@@ -2864,15 +2864,17 @@ finishes it.
 
 A `.domaintrail/` can also come with a cloned repository, so the move takes only what it can trust:
 
-- Nothing moves when git tracks or does not ignore anything in `.domaintrail/` (dt's own always ignored itself), or
-  when git cannot tell: it is left as it is, the workspace starts a new session, and the line says how to remove it
-  (`git rm -r --cached .domaintrail` when it is tracked). Outside a git repository there is nothing to ask.
+- Nothing moves when git tracks or does not ignore anything in `.domaintrail/` (in any case of its name; dt's own
+  always ignored itself), or when git cannot tell: it is left as it is, the workspace starts a new session, and the
+  line says how to remove it (`git rm -r --cached .domaintrail` when it is tracked). Outside a git repository there is
+  nothing to ask. A directory named in another case (`.DomainTrail`) is not dt's and is never moved.
 - Only regular files of yours, in directories of yours that nobody else can write, move; the others stay, named in one
   line. The session database moves with its WAL files or not at all.
 - The moved database keeps the session — messages, runs, revisions, participants — but none of its credentials: the
   sign-ins, the facilitator links, the sign-in and pairing codes, the invites and who holds the facilitator role are
-  deleted, so everyone signs in again (`dt open` prints a new link; `dt collab` a new facilitator link). A database that
-  cannot be cleaned (not one) is not moved.
+  deleted, so everyone signs in again (`dt open` prints a new link; `dt collab` a new facilitator link). Only a
+  database dt made moves: its schema must be exactly the one a known version of dt made (every table, column and index;
+  no trigger or view, nothing more); any other is not moved.
 - The record of `dt generate ts` (`generated.json`) is not moved: it says which files a run deletes. The next
   `dt generate ts` writes its output as usual and records it; generated files of earlier runs outside the output
   directories it writes (a moved output directory, a removed context) are not deleted then: delete them by hand.

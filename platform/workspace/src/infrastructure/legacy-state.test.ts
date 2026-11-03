@@ -32,6 +32,8 @@ const modeOf = async (p: string): Promise<number> => (await lstat(p)).mode & 0o7
 const exists = async (p: string): Promise<boolean> => (await lstat(p).catch(() => undefined)) !== undefined;
 const sha = (text: string): string => createHash('sha256').update(text).digest('hex');
 /** A process ID no process has (one that ran and ended). */
+/** The app's cleaning of a moved database stands in here (the collaboration's is tested with its schema): accepted. */
+const cleanDatabase = (): boolean => true;
 const deadPid = (): number => spawnSync(process.execPath, ['-e', '0']).pid ?? 999_999;
 
 /**
@@ -88,7 +90,7 @@ describe('moving .domaintrail/', () => {
             const base = await scratch();
             const { ws, legacy, blob } = await legacyWorkspace(base);
             const lines: string[] = [];
-            const d = await openWorkspaceState(ws, { environment: environment(base), log: (l) => lines.push(l) });
+            const d = await openWorkspaceState(ws, { cleanDatabase, environment: environment(base), log: (l) => lines.push(l) });
             expect(lines).toEqual([`Moved .domaintrail/ to ${d.state}${path.sep}`]);
             expect(await exists(legacy)).toBe(false);
             expect(rows(d.state)).toEqual(['hello', 'again']);
@@ -113,7 +115,7 @@ describe('moving .domaintrail/', () => {
 
             // already moved: nothing to do, nothing said
             lines.length = 0;
-            await openWorkspaceState(ws, { environment: environment(base), log: (l) => lines.push(l) });
+            await openWorkspaceState(ws, { cleanDatabase, environment: environment(base), log: (l) => lines.push(l) });
             expect(lines).toEqual([]);
             expect(rows(d.state)).toEqual(['hello', 'again']);
         },
@@ -136,7 +138,7 @@ describe('moving .domaintrail/', () => {
         const base = await scratch();
         const { ws, legacy } = await legacyWorkspace(base);
         await writeFile(path.join(legacy, 'session', 'server.json'), JSON.stringify({ url: 'http://127.0.0.1:1/', session: 's', pid: process.ppid }));
-        const e = await openWorkspaceState(ws, { environment: environment(base) }).catch((x: unknown) => x);
+        const e = await openWorkspaceState(ws, { cleanDatabase, environment: environment(base) }).catch((x: unknown) => x);
         expect(e).toBeInstanceOf(StateDirError);
         expect(String(e)).toContain(`A session server of an older dt (pid ${process.ppid}) runs on this workspace`);
         expect(await exists(path.join(legacy, 'session', 'session.db'))).toBe(true);
@@ -151,7 +153,7 @@ describe('moving .domaintrail/', () => {
         await writeFile(path.join(d.state, 'workspace.json'), JSON.stringify({ version: 1, path: ws }));
         await writeFile(path.join(d.state, 'session.db'), 'newer');
         const lines: string[] = [];
-        await openWorkspaceState(ws, { environment: environment(base), log: (l) => lines.push(l) });
+        await openWorkspaceState(ws, { cleanDatabase, environment: environment(base), log: (l) => lines.push(l) });
         expect(lines).toEqual([`Kept .domaintrail/ as it is: ${d.state} already holds this workspace's files (remove one of them to choose).`]);
         expect(await readFile(path.join(d.state, 'session.db'), 'utf8')).toBe('newer');
         expect(await exists(path.join(legacy, 'session', 'session.db'))).toBe(true);
@@ -163,7 +165,7 @@ describe('moving .domaintrail/', () => {
         const d = workspaceDirs(ws, environment(base));
         await mkdir(d.state, { recursive: true });
         await writeFile(path.join(d.state, 'workspace.json'), JSON.stringify({ version: 1, path: ws }));
-        await openWorkspaceState(ws, { environment: environment(base) });
+        await openWorkspaceState(ws, { cleanDatabase, environment: environment(base) });
         expect(rows(d.state)).toEqual(['hello', 'again']);
     });
 
@@ -178,12 +180,12 @@ describe('moving .domaintrail/', () => {
             const [sub] = await readdir(blobDir);
             const [blobName] = await readdir(path.join(blobDir, sub));
             await chmod(path.join(blobDir, sub, blobName), 0o000);
-            expect(await openWorkspaceState(ws, { environment: environment(base) }).catch((x: unknown) => x)).toBeInstanceOf(Error);
+            expect(await openWorkspaceState(ws, { cleanDatabase, environment: environment(base) }).catch((x: unknown) => x)).toBeInstanceOf(Error);
             expect(await exists(d.state)).toBe(false);
             expect((await readdir(d.roots.state)).filter((n) => n.includes('.moving-'))).toEqual([]);
             expect(await exists(path.join(legacy, 'session', 'session.db-wal'))).toBe(true);
             await chmod(path.join(blobDir, sub, blobName), 0o600);
-            await openWorkspaceState(ws, { environment: environment(base) });
+            await openWorkspaceState(ws, { cleanDatabase, environment: environment(base) });
             expect(rows(d.state)).toEqual(['hello', 'again']);
             expect(await exists(legacy)).toBe(false);
         },
@@ -196,7 +198,7 @@ describe('moving .domaintrail/', () => {
         const leftover = path.join(d.roots.state, `.${d.name}.moving-${deadPid()}-0badc0de`);
         await mkdir(leftover, { recursive: true });
         await writeFile(path.join(leftover, 'session.db'), 'half');
-        await openWorkspaceState(ws, { environment: environment(base) });
+        await openWorkspaceState(ws, { cleanDatabase, environment: environment(base) });
         expect(await exists(leftover)).toBe(false);
         expect(rows(d.state)).toEqual(['hello', 'again']);
         expect(await exists(legacy)).toBe(false);
@@ -207,12 +209,12 @@ describe('moving .domaintrail/', () => {
         const { ws, legacy } = await legacyWorkspace(base);
         const saved = path.join(base, 'saved');
         await cp(legacy, saved, { recursive: true });
-        const d = await openWorkspaceState(ws, { environment: environment(base) });
+        const d = await openWorkspaceState(ws, { cleanDatabase, environment: environment(base) });
         // what the killed run left: both copies (and part of .domaintrail/ already deleted)
         await cp(saved, legacy, { recursive: true });
         await rm(path.join(legacy, 'layout.json'));
         const lines: string[] = [];
-        await openWorkspaceState(ws, { environment: environment(base), log: (l) => lines.push(l) });
+        await openWorkspaceState(ws, { cleanDatabase, environment: environment(base), log: (l) => lines.push(l) });
         expect(lines).toEqual([]);
         expect(await exists(legacy)).toBe(false);
         expect(rows(d.state)).toEqual(['hello', 'again']);
@@ -222,7 +224,7 @@ describe('moving .domaintrail/', () => {
         const [sub] = await readdir(blobs);
         const [name] = await readdir(path.join(blobs, sub));
         await writeFile(path.join(blobs, sub, name), 'another');
-        await openWorkspaceState(ws, { environment: environment(base), log: (l) => lines.push(l) });
+        await openWorkspaceState(ws, { cleanDatabase, environment: environment(base), log: (l) => lines.push(l) });
         expect(lines.at(-1)).toContain('Kept .domaintrail/ as it is');
         expect(await exists(path.join(legacy, 'session', 'session.db'))).toBe(true);
     });
@@ -236,7 +238,7 @@ describe('moving .domaintrail/', () => {
         await writeFile(path.join(legacy, 'notes.txt'), 'mine');
         await symlink(path.join(outside, 'victim.json'), path.join(legacy, 'seed.json'));
         const lines: string[] = [];
-        const d = await openWorkspaceState(ws, { environment: environment(base), log: (l) => lines.push(l) });
+        const d = await openWorkspaceState(ws, { cleanDatabase, environment: environment(base), log: (l) => lines.push(l) });
         expect(lines).toContain(`Kept .domaintrail/: it holds files that are not dt's (notes.txt, seed.json).`);
         expect(rows(d.state)).toEqual(['hello', 'again']);
         expect(await exists(path.join(d.state, 'seed.json'))).toBe(false);
@@ -250,7 +252,7 @@ describe('moving .domaintrail/', () => {
         await mkdir(path.join(ws, '.domaintrail'), { recursive: true });
         await writeFile(path.join(ws, '.domaintrail', '.gitignore'), '*\n');
         const lines: string[] = [];
-        await openWorkspaceState(ws, { environment: environment(base), log: (l) => lines.push(l) });
+        await openWorkspaceState(ws, { cleanDatabase, environment: environment(base), log: (l) => lines.push(l) });
         expect(lines).toEqual(['Removed .domaintrail/ (nothing in it to keep).']);
         expect(await readdir(ws)).toEqual([]);
     });
@@ -266,7 +268,7 @@ describe('moving .domaintrail/', () => {
         // not ignored: no .gitignore makes it so (dt's own is removed)
         await rm(path.join(legacy, '.gitignore'));
         const lines: string[] = [];
-        const d = await openWorkspaceState(ws, { environment: environment(base), log: (l) => lines.push(l) });
+        const d = await openWorkspaceState(ws, { cleanDatabase, environment: environment(base), log: (l) => lines.push(l) });
         expect(lines).toHaveLength(1);
         expect(lines[0]).toStartWith('Not moving .domaintrail/: git tracks or does not ignore ');
         expect(lines[0]).toContain('this workspace starts a new session');
@@ -276,13 +278,13 @@ describe('moving .domaintrail/', () => {
         await writeFile(path.join(legacy, '.gitignore'), '*\n');
         git('add', '-f', '.domaintrail/session/session.db');
         lines.length = 0;
-        await openWorkspaceState(ws, { environment: environment(base), log: (l) => lines.push(l) });
+        await openWorkspaceState(ws, { cleanDatabase, environment: environment(base), log: (l) => lines.push(l) });
         expect(lines[0]).toContain('.domaintrail/session/session.db');
         expect(lines[0]).toContain('git rm -r --cached .domaintrail');
         // ignored by dt's own .gitignore and tracked by nothing: moved
         git('rm', '-q', '--cached', '.domaintrail/session/session.db');
         lines.length = 0;
-        await openWorkspaceState(ws, { environment: environment(base), log: (l) => lines.push(l) });
+        await openWorkspaceState(ws, { cleanDatabase, environment: environment(base), log: (l) => lines.push(l) });
         expect(lines).toEqual([`Moved .domaintrail/ to ${d.state}${path.sep}`]);
         expect(rows(d.state)).toEqual(['hello', 'again']);
     });
@@ -295,7 +297,7 @@ describe('moving .domaintrail/', () => {
             const blobDir = path.join(legacy, 'session', 'blobs', sha(blob).slice(0, 2));
             await chmod(blobDir, 0o777);
             const lines: string[] = [];
-            const d = await openWorkspaceState(ws, { environment: environment(base), log: (l) => lines.push(l) });
+            const d = await openWorkspaceState(ws, { cleanDatabase, environment: environment(base), log: (l) => lines.push(l) });
             expect(lines).toContain(
                 `Not moving 1 file(s) of .domaintrail/ (not a plain file of yours, or in a directory others can write): session/blobs/${sha(blob).slice(0, 2)}/${sha(blob)}. They stay there.`,
             );
@@ -306,7 +308,7 @@ describe('moving .domaintrail/', () => {
             const second = await legacyWorkspace(other);
             await chmod(path.join(second.legacy, 'session'), 0o775);
             const said: string[] = [];
-            const d2 = await openWorkspaceState(second.ws, { environment: environment(other), log: (l) => said.push(l) });
+            const d2 = await openWorkspaceState(second.ws, { cleanDatabase, environment: environment(other), log: (l) => said.push(l) });
             expect(said[0]).toStartWith('Not moving 4 file(s) of .domaintrail/');
             expect(await exists(path.join(d2.state, 'session.db'))).toBe(false);
             expect(await readFile(path.join(d2.cache, 'layout.json'), 'utf8')).toBe('{"version":1}');
@@ -314,60 +316,70 @@ describe('moving .domaintrail/', () => {
         },
     );
 
-    test('the moved database loses every credential (sign-ins, links and codes, invites, the facilitator), even against a crafted trigger; its content stays', async () => {
+    test('the moved database is cleaned (the app checks and cleans it) in the copy, before it is in place', async () => {
         const base = await scratch();
         const { ws, legacy } = await legacyWorkspace(base);
-        const file = path.join(legacy, 'session', 'session.db');
-        await rm(`${file}-wal`);
-        await rm(`${file}-shm`);
-        await rm(file);
-        const db = new DatabaseSync(file);
-        db.exec(`
-            CREATE TABLE requests (text TEXT);
-            INSERT INTO requests VALUES ('hello'), ('again');
-            CREATE TABLE sign_ins (token_hash TEXT PRIMARY KEY, session_id TEXT);
-            CREATE TABLE facilitator_links (code_hash TEXT PRIMARY KEY, session_id TEXT);
-            CREATE TABLE invites (code_hash TEXT PRIMARY KEY, session_id TEXT);
-            CREATE TABLE facilitators (session_id TEXT PRIMARY KEY, provider TEXT, subject TEXT);
-            INSERT INTO sign_ins VALUES ('t', 's');
-            INSERT INTO facilitator_links VALUES ('c', 's');
-            INSERT INTO invites VALUES ('i', 's');
-            INSERT INTO facilitators VALUES ('s', 'access', 'mallory@example.com');
-            CREATE TRIGGER keep AFTER DELETE ON sign_ins BEGIN INSERT INTO sign_ins VALUES (old.token_hash || 'x', old.session_id); END;
-        `);
-        db.close();
-        const d = await openWorkspaceState(ws, { environment: environment(base) });
-        const moved = new DatabaseSync(path.join(d.state, 'session.db'));
-        try {
-            for (const t of ['sign_ins', 'facilitator_links', 'invites', 'facilitators'])
-                expect([t, moved.prepare(`SELECT count(*) AS n FROM ${t}`).get()?.n]).toEqual([t, 0]);
-            expect(moved.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type = 'trigger'").get()?.n).toBe(0);
-        } finally {
-            moved.close();
-        }
-        expect(rows(d.state)).toEqual(['hello', 'again']);
+        const cleaned: { file: string; rows: unknown[] }[] = [];
+        const clean = (file: string): boolean => {
+            const db = new DatabaseSync(file);
+            try {
+                cleaned.push({
+                    file,
+                    rows: db
+                        .prepare('SELECT text FROM requests')
+                        .all()
+                        .map((r) => r.text),
+                });
+                db.exec("DELETE FROM requests WHERE text = 'again'");
+            } finally {
+                db.close();
+            }
+            return true;
+        };
+        const d = await openWorkspaceState(ws, { cleanDatabase: clean, environment: environment(base) });
+        expect(cleaned).toHaveLength(1);
+        expect(path.basename(path.dirname(cleaned[0].file))).toStartWith(`.${d.name}.moving-`);
+        // the WAL was there beside it
+        expect(cleaned[0].rows).toEqual(['hello', 'again']);
+        expect(rows(d.state)).toEqual(['hello']);
         expect(await exists(legacy)).toBe(false);
     });
 
-    test('a session.db that is no database (it cannot be cleaned) is not moved, and said; the rest is', async () => {
+    test('a database the app refuses (not one dt made), or with no app to check it, is not moved, and said; the rest is', async () => {
+        for (const clean of [(): boolean => false, undefined]) {
+            const base = await scratch();
+            const { ws, legacy, blob } = await legacyWorkspace(base);
+            const file = path.join(legacy, 'session', 'session.db');
+            const lines: string[] = [];
+            const d = await openWorkspaceState(ws, { ...(clean && { cleanDatabase: clean }), environment: environment(base), log: (l) => lines.push(l) });
+            expect(lines).toContain(
+                "Not moving .domaintrail/session/session.db: it is not a session database of dt's (its schema is not one dt made), or it could not be cleaned of its credentials. It stays there.",
+            );
+            expect((await readdir(d.state)).filter((n) => n.startsWith('session.db'))).toEqual([]);
+            expect(await readFile(path.join(d.state, 'blobs', sha(blob).slice(0, 2), sha(blob)), 'utf8')).toBe(blob);
+            for (const f of [file, `${file}-wal`, `${file}-shm`]) expect(await exists(f)).toBe(true);
+        }
+    });
+
+    test('a directory named .domaintrail in another case is not dt’s: never moved', async () => {
         const base = await scratch();
-        const { ws, legacy, blob } = await legacyWorkspace(base);
-        const file = path.join(legacy, 'session', 'session.db');
-        await rm(`${file}-wal`);
-        await rm(`${file}-shm`);
-        await writeFile(file, 'not a database, but long enough to be read as one would be'.repeat(100));
+        const ws = path.join(base, 'shop');
+        const variant = path.join(ws, '.DomainTrail', 'session');
+        await mkdir(variant, { recursive: true });
+        await writeFile(path.join(variant, 'session.db'), 'x');
         const lines: string[] = [];
-        const d = await openWorkspaceState(ws, { environment: environment(base), log: (l) => lines.push(l) });
-        expect(lines).toContain('Not moving .domaintrail/session/session.db: it is not a session database dt can clean of its credentials. It stays there.');
-        expect(await exists(path.join(d.state, 'session.db'))).toBe(false);
-        expect(await readFile(path.join(d.state, 'blobs', sha(blob).slice(0, 2), sha(blob)), 'utf8')).toBe(blob);
-        expect(await exists(file)).toBe(true);
+        const d = await openWorkspaceState(ws, { cleanDatabase, environment: environment(base), log: (l) => lines.push(l) });
+        expect(await readFile(path.join(variant, 'session.db'), 'utf8')).toBe('x');
+        expect(await readdir(d.state)).toEqual(['workspace.json']);
+        // said where the file system answers to both names (macOS, Windows)
+        if (await exists(path.join(ws, '.domaintrail')))
+            expect(lines).toEqual(['Not moving .DomainTrail/: dt only ever wrote .domaintrail/, by that exact name. It stays as it is.']);
     });
 
     test('generated.json (it says what dt generate ts deletes) is never moved: the next run records its own', async () => {
         const base = await scratch();
         const { ws, legacy } = await legacyWorkspace(base);
-        const d = await openWorkspaceState(ws, { environment: environment(base) });
+        const d = await openWorkspaceState(ws, { cleanDatabase, environment: environment(base) });
         expect(await exists(path.join(d.state, 'generated.json'))).toBe(false);
         expect(await exists(path.join(legacy, 'generated.json'))).toBe(false);
     });
