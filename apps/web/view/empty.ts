@@ -23,5 +23,5 @@ export function canvasShows(view: View['kind'], empty: boolean, hasGraph: boolea
     return hasGraph ? 'graph' : 'nothing';
 }
 
-/** The one line an empty view shows: with an AI connected to the chat (and the person able to start one), that `/es` there starts it. */
+/** The one line an empty view shows: with an AI connected to the chat (and the person able to start one), that `/es:start` there starts it. */
 export const emptyLine = (t: Messages, aiReady: boolean): string => (aiReady ? t.emptyViewAskAi : t.emptyView);

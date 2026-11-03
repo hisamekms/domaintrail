@@ -1,16 +1,42 @@
 // What `/` lists in the composer (the plan's "message templates", round 4, and "`/` commands", round 5), without
-// React: the commands (`/es`, `/model`: each starts an interview with the AI) and the templates (built in, then the
-// team's from `domaintrail.jsonc`: each only puts its text in the composer). The list depends on what is open and
+// React: the commands — interviews (`/es:start`, `/model:start`), candidate commands (`/es:exceptions`: the AI lists
+// changes to check) and answer commands (`/es:recap`: the AI answers) — and the templates (built in, then the team's
+// from `domaintrail.jsonc`: each only puts its text in the composer). The commands are grouped by their prefix (`es:`,
+// then `model:`), each group's `:start` first, so that `/es` lists the ES commands. The list depends on what is open and
 // selected (`TemplateContext`); filtering after `/` matches an item's stable English ID and its name in the UI
 // language. A template's `{target}` is where the selected element goes, as a `#` mention and the message's target.
-import { tokenName, type InterviewCommandId, type TemplateContext } from '@domaintrail/collaboration';
+import {
+    INTERVIEW_COMMANDS,
+    isInterviewCommandId,
+    isSlashCommandName,
+    SLASH_COMMAND_NAMES,
+    SLASH_COMMANDS,
+    tokenName,
+    type InterviewCommandId,
+    type SlashCommandName,
+    type TemplateContext,
+} from '@domaintrail/collaboration';
 import type { MessageTemplateBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import type { Lang } from '@domaintrail/visualization';
 import type { ComposerValue, MentionCandidate } from './mentions';
 import { targetKey, type TargetDraft } from './targets';
 
-/** The commands' IDs, in the order `/` lists them. */
-const COMMAND_IDS: readonly InterviewCommandId[] = ['es', 'model'];
+/** A command's stable ID: an interview's or another command's. */
+export type CommandId = InterviewCommandId | SlashCommandName;
+
+/** What a command does: an interview, candidates to check, or an answer. */
+export type CommandType = 'interview' | 'candidates' | 'answer';
+
+/** The prefixes, in the order their commands are listed. */
+const PREFIXES = ['es', 'model'] as const;
+
+/** The commands' IDs, in the order `/` lists them: by prefix, each prefix's `:start` (an interview) first. */
+export const COMMAND_IDS: readonly CommandId[] = PREFIXES.flatMap((prefix) =>
+    [...Object.keys(INTERVIEW_COMMANDS).filter(isInterviewCommandId), ...SLASH_COMMAND_NAMES].filter((id) => id.startsWith(`${prefix}:`)),
+);
+
+/** What a command does. */
+export const commandType = (id: CommandId): CommandType => (isSlashCommandName(id) ? SLASH_COMMANDS[id].type : 'interview');
 
 /** A text in each UI language. */
 export type Localized = Readonly<Record<Lang, string>>;
@@ -110,9 +136,9 @@ export function teamTemplate(t: MessageTemplateBody): MessageTemplate {
     return { id: t.id, name: both(t.name), text: both(t.text), ...(t.when && { when: t.when }), team: true };
 }
 
-/** One entry after `/`: a command (starts an interview) or a template (puts its text in the composer). */
+/** One entry after `/`: a command (starts an interview, or has the AI list candidates or answer) or a template (puts its text in the composer). */
 export type SlashItem =
-    | { readonly kind: 'command'; readonly id: InterviewCommandId; readonly name: string }
+    | { readonly kind: 'command'; readonly id: CommandId; readonly name: string; readonly type: CommandType }
     | { readonly kind: 'template'; readonly id: string; readonly name: string; readonly template: MessageTemplate };
 
 /** Whether `text` in the composer is a `/` query: `/` then the query, nothing else (no line, no space). */
@@ -129,24 +155,24 @@ function matches(id: string, name: string, query: string): boolean {
 }
 
 /**
- * What `/` lists for a query: the commands first (only for who may start one, and while none runs), then the templates
- * offered in the scope's contexts — the built-in ones, then the team's — in the UI language. Items whose ID starts
- * with the query come before those that only contain it.
+ * What `/` lists for a query: the commands first (those the person may start now: `canStart`), grouped by prefix,
+ * then the templates offered in the scope's contexts — the built-in ones, then the team's — in the UI language. Items
+ * whose ID starts with the query come before those that only contain it (within the commands, the templates).
  */
 export function slashItems(input: {
     readonly query: string;
     readonly lang: Lang;
     readonly scope: SlashScope;
-    readonly commandNames: Readonly<Record<InterviewCommandId, string>>;
-    /** The person may start an interview now: the facilitator (in Solo, the person) and none runs. */
-    readonly canStart: boolean;
+    readonly commandNames: Readonly<Record<CommandId, string>>;
+    /** Whether the person may start the command now (the facilitator's only for the others, none of its kind running). */
+    readonly canStart: (id: CommandId) => boolean;
     readonly team?: readonly MessageTemplateBody[];
 }): SlashItem[] {
     const { query, lang, scope } = input;
     const contexts = templateContexts(scope);
-    const commands: SlashItem[] = input.canStart
-        ? COMMAND_IDS.map((id): SlashItem => ({ kind: 'command', id, name: input.commandNames[id] })).filter((c) => matches(c.id, c.name, query))
-        : [];
+    const commands = COMMAND_IDS.filter(input.canStart)
+        .map((id): SlashItem => ({ kind: 'command', id, name: input.commandNames[id], type: commandType(id) }))
+        .filter((c) => matches(c.id, c.name, query));
     const offered = (t: MessageTemplate): boolean => !t.when || t.when.some((w) => contexts.has(w));
     // a template that needs the selection is offered only with one
     const fits = (t: MessageTemplate): boolean => !t.text[lang].includes('{target}') || scope.selected !== undefined;
@@ -182,3 +208,16 @@ export function runningInterview(state: Pick<SessionStateBody, 'interviews'>): I
 }
 
 export type InterviewJson = NonNullable<SessionStateBody['interviews']>[number];
+
+export type SlashCommandJson = NonNullable<SessionStateBody['slashCommands']>[number];
+
+/**
+ * Whether a person may start a command now: an interview, the facilitator while none runs; another command, anyone
+ * unless it is the facilitator's, while none of its kind runs.
+ */
+export function canStartCommand(state: Pick<SessionStateBody, 'interviews' | 'slashCommands'>, facilitator: boolean, id: CommandId): boolean {
+    if (!isSlashCommandName(id)) return facilitator && !runningInterview(state);
+    const spec = SLASH_COMMANDS[id];
+    if (spec.facilitatorOnly && !facilitator) return false;
+    return !(state.slashCommands ?? []).some((c) => c.kind === spec.kind && (c.state === 'Working' || c.state === 'Listed'));
+}

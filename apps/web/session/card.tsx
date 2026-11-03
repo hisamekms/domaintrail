@@ -238,7 +238,7 @@ function RunSection({
     compact: boolean;
     about: string;
 }) {
-    const { tx, nameOf, control, session } = useChat();
+    const { tx, nameOf, control, session, jump } = useChat();
     const runs = session.state.runs;
     const live = session.status === 'live' && session.state.session.state === 'Open';
     const reply = run.message.kind === 'clarification' ? run.message.reply : undefined;
@@ -279,6 +279,21 @@ function RunSection({
                             ↳ {tx.chat.proposal.chosen}: <span className="run-line-text">{a.instruction.label}</span>
                         </p>
                     ),
+            )}
+            {/* the candidates of a `/` command its starter applied: a link back to the command's card */}
+            {run.run.input.candidates && (
+                <p className="run-line">
+                    ↳{' '}
+                    <button
+                        type="button"
+                        className="decided-run"
+                        onClick={() => jump(`command:${run.run.input.candidates?.command}`)}
+                        data-tooltip={tx.chat.candidates.toCard}
+                    >
+                        {tx.chat.candidates.chosen}
+                    </button>
+                    : <span className="run-line-text">{run.run.input.candidates.chosen.map((c) => c.label).join(' · ')}</span>
+                </p>
             )}
             {display.quotes && (
                 <ul className="run-quotes">

@@ -47,7 +47,7 @@ function TargetChip({ target }: { target: ModelTarget }) {
 }
 
 /** The targets of a proposal or an option as a row of chips: the first three, then 「ほか n」 (the rest in its tooltip). */
-function TargetRow({ targets }: { targets: readonly ModelTarget[] }) {
+export function TargetRow({ targets }: { targets: readonly ModelTarget[] }) {
     const { tx } = useChat();
     const naming = useTargetNaming();
     const t = useT();
