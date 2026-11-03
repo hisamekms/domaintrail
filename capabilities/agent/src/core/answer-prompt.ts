@@ -278,8 +278,8 @@ ${practice.join('\n\n')}
         transcript: job.transcript,
         ...(job.sessionSoFar && { sessionSoFar: job.sessionSoFar.text }),
     };
-    return `You are the interviewer of a DomainTrail session, working read-only in this workspace. ${job.author} started
-\`/${job.command}\`: ${kind.what}. Interview them, one question at a time, to write a short brief of it.
+    return `You are the interviewer of a DomainTrail session, working read-only in this workspace. The person in
+\`person\` (in the block below) started \`/${job.command}\`: ${kind.what}. Interview them, one question at a time, to write a short brief of it.
 
 What to find out:
 ${kind.items}
@@ -320,7 +320,8 @@ ${blockJson(data)}
 /** What a `/` command asks of the answerer: what it is, the task, its own rules, and the reply's shape. */
 interface CommandPrompt {
     readonly what: string;
-    readonly task: (job: AgentCommandJobBody, storming: string | undefined) => string;
+    /** The task: no person's or file's text in it (names, labels): those are in the data block only. */
+    readonly task: string;
     readonly rules: (lang: string) => string;
     readonly reply: string;
 }
@@ -339,8 +340,8 @@ The person checks the ones to apply; another agent then writes them into the fil
 const COMMAND_PROMPTS: Readonly<Record<string, CommandPrompt>> = {
     'es:exceptions': {
         what: 'find the exceptions not modeled yet in the storming in view',
-        task: (job, storming) => `${job.author} ran \`/es:exceptions\` on the storming ${storming ?? 'in view'}. For each step of its
-main flow, propose plausible exceptions that are not modeled yet — a failure, a cancellation, a timeout, missing input,
+        task: `The person in \`person\` ran \`/es:exceptions\` on the storming in \`storming\` (the block below). For each step of
+its main flow, propose plausible exceptions that are not modeled yet — a failure, a cancellation, a timeout, missing input,
 a rejection — each as one \`exception\` timeline to add: it starts at the event of the flow it branches off at (the
 branch point), then its new event or events, and \`then <Event>\` when the flow resumes there.`,
         rules: (lang) => `- Read the storming first: its \`///\` description, its stages, timelines and existing \`exception\`s, and
@@ -360,7 +361,7 @@ branch point), then its new event or events, and \`then <Event>\` when the flow 
     },
     'es:recap': {
         what: 'a short recap of this session so far',
-        task: (job) => `${job.author} ran \`/es:recap\`: recap this session so far for the people in it, from \`sessionSoFar\` (the
+        task: `The person in \`person\` ran \`/es:recap\`: recap this session so far for the people in it, from \`sessionSoFar\` (the
 messages, the AI's turns and what they changed, proposals, interviews, commands, what is open now). Read the files
 only to name what changed precisely.`,
         rules: (lang) => `- Three parts, each a short bullet list under a bold lead-in, leaving out a part that is empty:
@@ -405,7 +406,7 @@ ${practice.join('\n\n')}
     };
     return `You are the read-only answerer of a DomainTrail session, working in this workspace: ${command.what}.
 
-${command.task(job, storming)}
+${command.task}
 
 Rules:
 ${command.rules(lang)}
