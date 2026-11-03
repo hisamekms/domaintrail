@@ -89,6 +89,8 @@ export {
     type StormingOutline,
     type StormingScope,
 } from './core/drawing/sheet.js';
+export { tableMeasure } from './core/drawing/text-measure.js';
+export { styleFonts, stylePalette, styleTokens, tokenColour, type DiagramTheme, type StyleTokens } from './core/drawing/palette.js';
 export {
     breakUnits,
     ellipsize,
