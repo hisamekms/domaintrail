@@ -103,7 +103,11 @@ export function CandidatesCard({ command: c, continues }: { command: SlashComman
                                         <span className="proposal-option-how">
                                             <ReplyText text={x.how} onNavigate={onNavigate} />
                                         </span>
-                                        {x.reason && <span className="candidates-reason muted">{x.reason}</span>}
+                                        {x.reason && (
+                                            <span className="candidates-reason muted">
+                                                <ReplyText text={x.reason} onNavigate={onNavigate} />
+                                            </span>
+                                        )}
                                     </span>
                                 );
                                 const className = `proposal-option candidate${on ? ' chosen' : ''}${c.state === 'Applied' && !on ? ' dropped' : ''}`;

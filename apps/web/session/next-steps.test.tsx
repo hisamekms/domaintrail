@@ -95,7 +95,7 @@ describe("/es:next's answer", () => {
 });
 
 describe("a candidate's chips", () => {
-    test('only the elements that exist: one to be added is not shown by its identifier', () => {
+    test('only the elements that exist: one to be added is not shown by its identifier; the reason names elements as links', () => {
         const command = {
             id: 'c2',
             kind: 'EsExceptions',
@@ -112,6 +112,7 @@ describe("a candidate's chips", () => {
                         { kind: 'DtesElement', storming: 'Returns', local: 'NoMyNumberCard' },
                     ],
                     how: '依頼から: カードがなかった',
+                    reason: '@{es:Returns/ReturnRequested} の前に起きる',
                 },
             ],
         } as never;
@@ -119,5 +120,7 @@ describe("a candidate's chips", () => {
         expect(html).toContain('マイナンバーカードがなかった');
         expect(html).not.toContain('#NoMyNumberCard');
         expect(html.match(/class="chat-chip chat-target proposal-target"/g)).toHaveLength(1);
+        // an element the reason names is its name (a link), not the raw reference
+        expect(html).not.toContain('@{es:Returns/ReturnRequested}');
     });
 });
