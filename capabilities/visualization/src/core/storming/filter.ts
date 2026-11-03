@@ -1,23 +1,31 @@
 import type { SemanticEdge } from '@domaintrail/storming';
 
 /**
- * The semantic edges of a timeline filter (§9.3): each 1-hop path Event → Policy → Command → Event whose two events are
- * in the timeline (`events`), the actors, read models and target of its command, and the hotspots on an event of the
- * timeline. No path is followed further, so a cycle is no different from any other path (R10, R16).
+ * The semantic edges of a timeline filter (§9.3), and of a stage's view: each 1-hop path Event → Policy → Command → Event
+ * whose two events are in view (`events`), each command that emits an event in view (its cause, without the policy that
+ * issues it unless that is such a path), the actors, read models and target of those commands, and the hotspots on an
+ * event in view. No path is followed further, so a cycle is no different from any other path (R10, R16).
  */
 export function filterEdges(edges: readonly SemanticEdge[], events: ReadonlySet<string>): SemanticEdge[] {
-    const from = (id: string, kind: SemanticEdge['kind']) => edges.filter((e) => e.sourceId === id && e.kind === kind);
+    const from = (id: string, kind: SemanticEdge['kind']): SemanticEdge[] => edges.filter((e) => e.sourceId === id && e.kind === kind);
     const kept = new Set<SemanticEdge>();
+    const commands = new Set<string>();
     for (const on of edges) {
         if (on.kind !== 'on' || !events.has(on.sourceId)) continue;
         for (const issues of from(on.targetId, 'issues')) {
-            const emits = from(issues.targetId, 'emits').filter((e) => events.has(e.targetId));
-            if (emits.length === 0) continue;
-            const command = issues.targetId;
-            const related = edges.filter((e) => (e.kind === 'actor' || e.kind === 'reads') && e.targetId === command);
-            for (const e of [on, issues, ...emits, ...related, ...from(command, 'target')]) kept.add(e);
+            if (!from(issues.targetId, 'emits').some((e) => events.has(e.targetId))) continue;
+            kept.add(on).add(issues);
         }
     }
-    for (const e of edges) if (e.kind === 'hotspot-on' && events.has(e.targetId)) kept.add(e);
+    // the cause of an event in view: each command that emits it (those of the paths above among them)
+    for (const e of edges) if (e.kind === 'emits' && events.has(e.targetId)) commands.add(e.sourceId);
+    for (const e of edges) {
+        const keep =
+            (e.kind === 'emits' && events.has(e.targetId)) ||
+            ((e.kind === 'actor' || e.kind === 'reads') && commands.has(e.targetId)) ||
+            (e.kind === 'target' && commands.has(e.sourceId)) ||
+            (e.kind === 'hotspot-on' && events.has(e.targetId));
+        if (keep) kept.add(e);
+    }
     return edges.filter((e) => kept.has(e));
 }

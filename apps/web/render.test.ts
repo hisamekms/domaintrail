@@ -336,7 +336,8 @@ describe('the focus of a selected note in a view of stages (the grid) and a time
         const big = await items('big-picture|');
         expect(focusElements(big, [noteOf(big, 'B')])).toEqual(es('A', 'B', 'C', 'X', 'H'));
         const main = await items('design-level|Main');
-        expect(focusElements(main, [noteOf(main, 'B')])).toEqual(es('A', 'B', 'C', 'P', 'H'));
+        // the cause of B with its actor, as on the integrated canvas
+        expect(focusElements(main, [noteOf(main, 'B')])).toEqual(es('A', 'B', 'C', 'DoB', 'Clerk', 'P', 'H'));
         const grouped = await items('big-picture|Main2');
         expect(focusElements(grouped, [noteOf(grouped, 'G2')])).toEqual(es('D', 'G2'));
         // the group's step selected from before it brings the group's events along

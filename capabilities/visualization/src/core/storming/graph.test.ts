@@ -241,8 +241,8 @@ describe('layout of an Event Storming view', () => {
             expectReadable(laid);
             const box = (id: string): NodeLayout => laid.nodeLayout[id]!;
             const centre = (id: string): number => box(id).x + box(id).width / 2;
-            // a timeline draws the commands of its 1-hop paths: not Open, which no policy issues
-            for (const command of options.timelineId === undefined ? ['Open', 'Close'] : ['Close']) {
+            // a timeline draws the cause of its events too: Open, which no policy issues
+            for (const command of ['Open', 'Close']) {
                 const c = `n:${command}`;
                 expect(centre(`n:Clerk@${command}`)).toBeLessThan(centre(c));
                 expect(centre(`n:Board@${command}`)).toBeLessThan(centre(c));

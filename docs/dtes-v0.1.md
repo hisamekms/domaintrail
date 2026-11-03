@@ -416,7 +416,8 @@ Render Graph（§7.3、本節 8.1〜8.4）は prefix trie のまま変えない�
 - **境界**: 選択 timeline に登場しない Event へ無制限にたどらない。Policy の他の `issues` を自動的にすべて表示する必要はない。
 - **安全性**: 選択 timeline 内で因果経路が**実際に起きた**と確定的に描かない。因果エッジは「型レベルの可能な関連」として表示する。
 - **確定**: 選択 timeline 上の Event を両端とする `Event → Policy → Command → Event` **1ホップ連鎖**に限定する。対象 Command の `actor/reads/target` と両端 Event に `on` で結びつく Hotspot を付加する。片端が timeline 外なら経路を投影しない。孤立した timeline Event は常に表示。多段経路は v0.1 で自動展開しない。
-- `emits` で選択 Event に結びつく Command が存在しても、対応する `Event → Policy → Command` が存在しなければ、それをシナリオ上で発火したと推定しない。統合ビューでは型レベルの全関係を表示できる。
+- **Event の原因**【確定（2026-11-03 追加）】: 選択 timeline の Event を `emits` する Command は、Policy に発行されていなくても、その Event の原因として描く（統合キャンバスで同じ Event に描くものと同じ）。その Command の `actor/reads/target` を付加し（Actor・Read Model・Aggregate は §6 の使われるごとに描く）、`emits` は timeline の Event へのものだけを描く。その Command を発行する Policy は、上の1ホップ連鎖に当たるときだけ描く（Command からさかのぼらない）。段階ビューも同じ規則で、その段階の Event を対象にする。Big Picture では Command を描かないので変わらない。
+- `emits` で選択 Event に結びつく Command は型レベルの原因として描くが、対応する `Event → Policy → Command` が存在しなければ、Policy を補ってシナリオ上で発火したと推定しない。統合ビューでは型レベルの全関係を表示できる。
 
 ### 9.4 視覚表現
 
@@ -523,7 +524,7 @@ Render Graph（§7.3、本節 8.1〜8.4）は prefix trie のまま変えない�
 - [ ] R13: `.dt ref` を修正しても Semantic ID は変わらない。
 - [ ] R14: Big Picture で Command/Policy を隠しても、`level design` のない Event は消えない。
 - [ ] R15: 全体ビューに timeline 未所属の Event が現れる。
-- [ ] R16: timeline のフィルタは1ホップの Event→Policy→Command→Event のみ（両端が対象 timeline）投影し、多段連鎖は自動展開しない。
+- [ ] R16: timeline のフィルタは1ホップの Event→Policy→Command→Event のみ（両端が対象 timeline）投影し、多段連鎖は自動展開しない。Design Level では timeline の Event を `emits` する Command（とその `actor/reads/target`）も描く。timeline ビュー・例外のビュー・段階ビューで同じ。
 - [ ] R17: Big Picture と Design Level のどちらでも同一 `.dtes` を使い、`external` は Design Level に表示する。
 - [ ] R18: `level design` の Event は Big Picture で非表示、Design Level で表示。timeline の順序エッジは前後をつなぎ、全要素が非表示の group は描かず、共通 prefix 統合は表示される列で行う。Hotspot は残り、非表示の Event への `on` は描かない。
 - [ ] R19: 段階のある統合キャンバスで、幹の付箋の x 座標は全段階を通して狭義単調増加し、y は同じ。段階の枠は重ならない。
@@ -579,7 +580,7 @@ Render Graph（§7.3、本節 8.1〜8.4）は prefix trie のまま変えない�
 | Hotspot `on` | Event のみ、最大1件 |
 | External System | **`external` 宣言を導入**。`command.actor` は Actor / External System を参照可能。外部呼び出し関係は導入しない |
 | CLI | 既存 `dt` CLI と workspace root 指定の慣習に合わせる。別 CLI 製品は作らない。正確なサブコマンド・フラグは現行コードを確認して整合する名称を採用 |
-| timeline フィルタ | **1ホップ** `Event → Policy → Command → Event` のみ。多段自動展開なし |
+| timeline フィルタ | **1ホップ** `Event → Policy → Command → Event` と、timeline の Event を `emits` する Command。多段自動展開なし |
 | レイアウト | 既存描画基盤を優先し、決定的 canonical layout と増分レイアウトを実現。ライブラリ名自体は意味論・公開仕様ではない |
 | Occurrence ID | **永続 ID の DSL 構文なし**。構文位置 + 編集差分から一時的に対応付ける |
 

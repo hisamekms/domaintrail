@@ -2120,9 +2120,11 @@ A storming is viewed along two independent axes, neither of which changes the `.
   hotspot on a hidden event is shown without its line.
 - **Scope.** The *integrated canvas* shows every timeline, the events in no timeline and every element. A storming
   with stages also has a view of each *stage* (its main flows and exceptions, drawn as on the integrated canvas). *One timeline*
-  shows its events, plus each one-hop path event → policy → command → event whose two events are both in that timeline
-  (with the command's actors, read models and target), and the hotspots on its events. Longer chains are not followed,
-  and a hotspot without `on` is shown on the integrated canvas only.
+  shows its events, plus each one-hop path event → policy → command → event whose two events are both in that timeline,
+  the commands that emit one of its events (their cause, as on the integrated canvas), the actors, read models and
+  target of those commands, and the hotspots on its events. A stage's view picks them the same way over the stage's
+  events. Longer chains are not followed (a command's policy is shown only on such a path), and a hotspot without `on`
+  is shown on the integrated canvas only.
 
 The integrated canvas draws each event once, without group frames: the time order is one dashed arrow per pair of
 consecutive events, naming the timelines it belongs to when not all of them do, and an event that repeats loops back
