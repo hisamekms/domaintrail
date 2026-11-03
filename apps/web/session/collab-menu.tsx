@@ -6,6 +6,9 @@
 //
 // Everyone downloads the sources (a ZIP of the .dt, .dtes and config files, `download.ts`).
 //
+// In the `link` identity mode the facilitator makes the invite link here (copied; a new one stops the previous) and
+// stops it, removes a participant from the list, and lets each person who asks in (`JoinRequests`, in the chat's head).
+//
 // In Solo (`dt open`, one person) the button is a plain ⋯ and the popover holds no people, only the workspace's
 // record, restore and download: the invite, the hand-over, the end and 退出 make sense only with others.
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
@@ -86,7 +89,8 @@ export function CollabMenu(props: {
     const rows = participantRows(session.state, session.peers, session.me, props.location);
     const online = rows.filter((r) => r.where !== 'away').length;
     const label = tx.chat.participantsOnline(online, rows.length);
-    const items = collabMenuItems(session.me.participant.role, live, props.solo);
+    const link = session.me.identity.provider === 'link';
+    const items = collabMenuItems(session.me.participant.role, live, props.solo, link ? { inviteLive: Boolean(session.joining?.invite) } : undefined);
 
     const pick = (f: () => void | Promise<void>) => (): void => {
         close();
@@ -95,9 +99,26 @@ export function CollabMenu(props: {
     };
     const run: Record<CollabMenuItem, () => void | Promise<void>> = {
         invite: async () => {
-            const link = inviteLink(location.origin);
-            await navigator.clipboard?.writeText(link).catch(() => undefined);
-            setNote(tx.collab.inviteCopied(link));
+            if (!link) {
+                const address = inviteLink(location.origin);
+                await navigator.clipboard?.writeText(address).catch(() => undefined);
+                return setNote(tx.collab.inviteCopied(address));
+            }
+            try {
+                const made = await sessionApi.invite();
+                await navigator.clipboard?.writeText(made.link).catch(() => undefined);
+                setNote(tx.collab.inviteMade(made.link));
+            } catch (e) {
+                setNote(tx.error(failure(e)));
+            }
+        },
+        'stop-invite': async () => {
+            try {
+                await sessionApi.stopInvite();
+                setNote(tx.collab.inviteStopped);
+            } catch (e) {
+                setNote(tx.error(failure(e)));
+            }
         },
         record: () => revisions.take(),
         restore: () => setRestoring(true),
@@ -121,7 +142,8 @@ export function CollabMenu(props: {
         leave: () => props.onLeave(),
     };
     const itemLabel: Record<CollabMenuItem, string> = {
-        invite: tx.collab.invite,
+        invite: link ? tx.collab.makeInvite : tx.collab.invite,
+        'stop-invite': tx.collab.stopInvite,
         record: tx.takeRevision,
         restore: tx.collab.restore,
         'download-sources': tx.collab.downloadSources,
@@ -187,6 +209,13 @@ export function CollabMenu(props: {
                                 rows={rows}
                                 scope={props.scope}
                                 focus={focus}
+                                {...(link &&
+                                    live &&
+                                    session.me.participant.role === 'facilitator' && {
+                                        onRemove: (id: string) => {
+                                            sessionApi.removeParticipant(id).catch((e: unknown) => setNote(tx.error(failure(e))));
+                                        },
+                                    })}
                                 onOpenView={(target) => {
                                     props.onOpenView(target);
                                     close();
@@ -202,7 +231,7 @@ export function CollabMenu(props: {
                                     role="menuitem"
                                     className={item === 'end' ? 'danger' : undefined}
                                     data-item={item}
-                                    {...(item === 'invite' && { 'data-tooltip': tx.collab.inviteHint })}
+                                    {...(item === 'invite' && { 'data-tooltip': link ? tx.collab.makeInviteHint : tx.collab.inviteHint })}
                                     onClick={pick(run[item])}
                                 >
                                     {itemLabel[item]}

@@ -2,7 +2,7 @@
 // with where they are (this page, the same view, another view and which, offline), and a way to open the view another
 // participant is on (just the view: their camera and cursor are theirs).
 import { useEffect, useRef, useState } from 'react';
-import { ArrowRight, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowRight, ChevronDown, ChevronRight, UserX } from 'lucide-react';
 import { useT } from '../i18n';
 import { Avatar } from './parts';
 import { canOpen, viewName, viewTargetOf, type ParticipantRow, type ViewScope, type ViewTarget, type ViewWords } from './views';
@@ -22,6 +22,8 @@ export function ParticipantsList(props: {
     onOpenView: (target: ViewTarget) => void;
     /** A participant to show: their row is scrolled to, focused and marked for a moment (the offline ones shown if needed). */
     focus: PeopleFocus | undefined;
+    /** `link`, the facilitator: removes a participant who signed in with a cookie of this mode (their pages close). */
+    onRemove?: (id: string) => void;
 }) {
     const { rows, scope, focus } = props;
     const t = useT();
@@ -76,6 +78,16 @@ export function ParticipantsList(props: {
                         </span>
                     )}
                 </span>
+                {props.onRemove && !r.me && r.role !== 'facilitator' && r.id.startsWith('link:') && (
+                    <button
+                        className="icon-button chat-person-go"
+                        aria-label={tx.chat.remove(r.name)}
+                        data-tooltip={tx.chat.remove(r.name)}
+                        onClick={() => props.onRemove?.(r.id)}
+                    >
+                        <UserX size={14} aria-hidden />
+                    </button>
+                )}
                 {r.where === 'another-view' && (
                     <button
                         className="icon-button chat-person-go"

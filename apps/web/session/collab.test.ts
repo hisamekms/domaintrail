@@ -95,6 +95,27 @@ describe('the collab menu', () => {
         expect(collabMenuItems('participant', true)).toEqual(['invite', 'download-sources', 'leave']);
     });
 
+    test('link: the facilitator makes the invite link (and stops a live one); a participant has none to copy', () => {
+        expect(collabMenuItems('facilitator', true, false, { inviteLive: false })).toEqual([
+            'invite',
+            'record',
+            'restore',
+            'download-sources',
+            'hand-over',
+            'end',
+        ]);
+        expect(collabMenuItems('facilitator', true, false, { inviteLive: true })).toEqual([
+            'invite',
+            'stop-invite',
+            'record',
+            'restore',
+            'download-sources',
+            'hand-over',
+            'end',
+        ]);
+        expect(collabMenuItems('participant', true, false, { inviteLive: true })).toEqual(['download-sources', 'leave']);
+    });
+
     test('once ended (or signed out), the menu only lists the participants', () => {
         expect(collabMenuItems('facilitator', false)).toEqual([]);
         expect(collabMenuItems('participant', false)).toEqual([]);

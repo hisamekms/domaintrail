@@ -77,6 +77,7 @@ import {
 } from './mentions';
 import { useTargetNaming } from './naming';
 import { CollabMenu, CollabSummaryDialog, openPeople, useCollabSummary } from './collab-menu';
+import { JoinRequests } from './join-requests';
 import { Avatar, failure, MentionedText, TargetChips } from './parts';
 import { AiAvatar, ProposalCard } from './proposal';
 import { chosenIndex } from './proposal-view';
@@ -490,6 +491,7 @@ export function SessionChat(props: {
                     onPeek={peekStatus}
                     tx={tx}
                 />
+                {live && <JoinRequests session={session} />}
                 <div className="segmented chat-views" role="tablist" aria-label={tx.chat.tabsLabel}>
                     {(['chat', 'history'] as const).map((v) => (
                         <button key={v} role="tab" aria-selected={view === v} className={view === v ? 'active' : ''} onClick={() => setView(v)}>

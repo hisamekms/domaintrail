@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { Duplex } from 'node:stream';
-import { checkAccess, hostAllowList, type AccessPolicy, type Authorization } from './access.js';
+import { changesState, checkAccess, hostAllowList, type AccessPolicy, type Authorization } from './access.js';
 import type { Assets } from './assets.js';
 import { sendError } from './json.js';
 import { send, type ApiRoutes } from './routes.js';
@@ -46,6 +46,12 @@ export interface ViewHttpServerOptions {
 const isApi = (pathname: string): boolean => pathname === '/api' || pathname.startsWith('/api/');
 const isSessionApi = (pathname: string): boolean => pathname === SESSION_API || pathname.startsWith(`${SESSION_API}/`);
 
+/**
+ * A file of the page whose name carries its content's hash (`chunk-g13csqym.js`): the same name, the same bytes, and
+ * only the page's code (nothing of the model), so a browser may keep it; everything else of a session is `no-store`.
+ */
+export const isHashedAsset = (pathname: string): boolean => /^\/[\w.-]+-[a-z0-9]{8}\.(js|css|svg|png|woff2?)$/.test(pathname);
+
 /** The view API's requests that change what every page sees: in a session only the facilitator makes them. */
 const FACILITATOR_VIEW_API: ReadonlySet<string> = new Set(['/api/baseline']);
 
@@ -72,7 +78,10 @@ export function createViewHttpServer({ host, api, assets, upgrade, session }: Vi
             if (api.has(url.pathname) && (await checkAccess(req.headers, viewPolicy)).kind === 'forbidden') return send(res, 403, 'text/plain', 'Forbidden');
             return serveView(req, url, res);
         }
-        const auth = await checkAccess(req.headers, session.policy);
+        // a session's answers are never framed (clickjacking), and never kept by a browser or a proxy but the hashed files
+        res.setHeader('content-security-policy', "frame-ancestors 'none'");
+        if (!isHashedAsset(url.pathname)) res.setHeader('cache-control', 'no-store');
+        const auth = await checkAccess(req.headers, session.policy, changesState(req.method));
         if (auth.kind === 'forbidden') {
             return isApi(url.pathname) ? sendError(res, 403, 'Forbidden', 'Host or Origin not allowed.') : send(res, 403, 'text/plain', 'Forbidden');
         }
@@ -100,7 +109,8 @@ export function createViewHttpServer({ host, api, assets, upgrade, session }: Vi
         const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
         const refuse = (status: string): void => void socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`);
         if (pathname !== WS_PATH) return refuse('404 Not Found');
-        checkAccess(req.headers, session?.policy ?? viewPolicy).then(
+        // a WebSocket sends messages that change things: its upgrade needs an Origin where a session requires one
+        checkAccess(req.headers, session?.policy ?? viewPolicy, true).then(
             (auth) => {
                 if (auth.kind === 'forbidden') return refuse('403 Forbidden');
                 if (session && auth.kind !== 'participant') return refuse('401 Unauthorized');

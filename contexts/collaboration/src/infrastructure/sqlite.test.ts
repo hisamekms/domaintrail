@@ -100,6 +100,7 @@ describe('schema and transactions', () => {
             'facilitator_links',
             'facilitators',
             'interviews',
+            'invites',
             'marks',
             'outbox',
             'proposals',

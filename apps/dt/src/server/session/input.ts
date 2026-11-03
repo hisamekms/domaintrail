@@ -78,10 +78,18 @@ export function text(v: unknown, field: string, max: number): Result<Collaborati
 }
 
 /** A display name picked in `dev` mode: trimmed, 1–60 characters, on one line. */
+/**
+ * Whether `name` holds a Unicode format character (category Cf: bidi controls, zero-width spaces and joiners, …) that
+ * could make it read as another; a zero-width joiner inside an emoji sequence (👩‍💻) is the emoji's, and allowed.
+ */
+export const hasFormatCharacter = (name: string): boolean =>
+    /\p{Cf}/u.test(name.replace(/(?<=\p{Extended_Pictographic}\p{M}*)\u200d(?=\p{Extended_Pictographic})/gu, ''));
+
 export function displayName(v: unknown, field = 'name'): Result<Collaboration.DisplayName, InvalidInput> {
     if (typeof v !== 'string') return invalid(field, 'Expected a name.');
     const name = v.trim();
-    if (!name || name.length > MAX_NAME || /[\r\n]/.test(name) || hasControl(name)) return invalid(field, `A name of 1 to ${MAX_NAME} characters on one line.`);
+    if (!name || name.length > MAX_NAME || /[\r\n]/.test(name) || hasControl(name) || hasFormatCharacter(name))
+        return invalid(field, `A name of 1 to ${MAX_NAME} characters on one line.`);
     const n = Collaboration.makeDisplayName(name);
     return n.ok ? n : invalid(field, 'Not a name.');
 }

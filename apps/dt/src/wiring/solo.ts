@@ -124,6 +124,7 @@ export function soloIdentities(deps: SoloIdentitiesDeps): SessionIdentities {
     let closed = false;
     return {
         mode: base.mode,
+        cookieName: signIn.cookieName,
         async identify(headers) {
             if (closed) return undefined;
             if (!(await isOpenSolo())) {
@@ -133,6 +134,8 @@ export function soloIdentities(deps: SoloIdentitiesDeps): SessionIdentities {
             return signIn.signedIn(headers) ? who : undefined;
         },
         signIn: async () => err({ type: 'SoloSession' }),
+        signInFacilitator: async () => err({ type: 'SoloSession' }),
+        remove: async () => err({ type: 'NotRemovable' }),
         signOut: async () => undefined,
         claimFacilitator: async () => err({ type: 'LinkInvalid' }),
         facilitatorParticipant: async () => (closed ? undefined : participantOf(SOLO_IDENTITY)),

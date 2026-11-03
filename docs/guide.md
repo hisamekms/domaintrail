@@ -3239,7 +3239,9 @@ are shown. The old sections `session` and `view` are refused when the file is lo
   "collab": {
     "port": 4321,              // the page and its API
     "host": "127.0.0.1",       // the dev identity refuses a non-loopback address
-    "identity": "dev",         // "dev" or "access"
+    "identity": "dev",         // "dev", "access" or "link" (dt collab --tunnel sets "link")
+    // only with "identity": "link" and your own tunnel (not with --tunnel); see docs/session-link.md
+    // "link": { "publicUrl": "https://dt.example.com" }, // https, no path: the only host and origin answered
     // only with "identity": "access" (then teamDomain and audience are required); see docs/session-access.md
     "access": {
       "teamDomain": "myteam.cloudflareaccess.com", // your team domain
@@ -3314,7 +3316,14 @@ are in Japanese when the browser prefers Japanese, else in English. `access` put
 and a Cloudflare Tunnel: each request's Access token is verified (signature with the team's keys, issuer, audience,
 expiry), the name comes from Access's Identity API, a page's WebSocket closes when its token expires, and only the
 configured hosts and origins are answered; `docs/session-access.md` in the repository sets it up and checks it by
-hand. `--port` and `--host` win over the file.
+hand. `link` puts the session on the internet without an account: `dt collab --tunnel` starts a Cloudflare quick
+tunnel (`cloudflared`, a temporary public `https://….trycloudflare.com` address, stopped with the session), the
+facilitator shares an invite link (the collab menu's 招待, or `dt collab invite`; 60 minutes, a new one stops the
+previous), each person who opens it gives a name and waits, and the facilitator lets them in or not from the page.
+Only the public URL's host and origin are answered, every change needs that Origin, the cookies are Secure and
+SameSite=Strict, and every sign-in ends with the server; `docs/session-link.md` in the repository tells the security
+model and its limits. With your own tunnel, set `link.publicUrl` instead of `--tunnel`. `--port` and `--host` win
+over the file.
 
 <!-- topic: session-revisions -->
 ### Revisions, comparison and restore
