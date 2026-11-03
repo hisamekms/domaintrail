@@ -1428,3 +1428,17 @@ told the view was); the canvas's controls, how it is looked at.
   trycloudflare URL, an invite made from the menu, a second browser asked to join and was let in as a participant, a
   third was denied; `dt collab link` and `dt collab invite` printed links on the public URL; Ctrl+C left no
   cloudflared.
+
+## Who may run the `/` commands in Collab (decided 2026-11-03)
+
+- **Everyone may run every command**, participants included. There is still one running command of each kind per
+  session.
+- **Changing files is approved by the facilitator.**
+  - Candidate commands (`/es:exceptions`, `/es:gaps`, `/es:levels`, `/es:names`): whoever started one, only the
+    facilitator checks candidates and applies them, and applying is the approval. Everyone else sees the card
+    read-only, as with a proposal's options.
+  - Interviews (`/es:start`, `/model:start`): a participant who starts one answers its questions, choices included.
+    The brief that writes `///` waits for the facilitator: 承認, 編集して承認 or 却下. Everyone sees the questions and
+    the brief.
+- **Answer commands** (`/hint`, `/es:recap`): anyone, and the answer is an ordinary AI message everyone sees.
+- **The facilitator's own commands** go on without approval, as before.
