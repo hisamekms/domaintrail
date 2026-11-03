@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { LaidOutGraph } from '@domaintrail/visualization';
 import type { BaseView, StormingView, ViewPayload } from '@domaintrail/visualization/protocol';
+import { fetchServer } from '../app/sign-in';
 import { shownStorming, stormingGraph } from '../storming';
 import { isCanvas, type View } from './navigation';
 import type { ViewSettings } from './settings';
@@ -54,7 +55,7 @@ export function useViewGraph(current: ViewPayload | null, view: View, settings: 
         if (!focusKey || view.kind !== 'structure') return;
         let cancelled = false;
         const params = new URLSearchParams({ contexts: focused.join(','), level: structureLevel, hide: hidden.join(',') });
-        fetch(`/api/focus?${params}`)
+        fetchServer(`/api/focus?${params}`)
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the response of our own server's api/focus
             .then((r) => (r.ok ? (r.json() as Promise<LaidOutGraph>) : null))
             .then((graph) => {

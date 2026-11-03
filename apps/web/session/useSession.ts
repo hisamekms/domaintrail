@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Classification, Cursor, Me, RunActivity, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import type { ViewSocket } from '../app/useViewSocket';
+import { reloadForSignIn } from '../app/sign-in';
 import type { DiagramCanvas } from '../view/diagram';
 import { SessionApiError, sessionApi, type TargetStatuses } from './api';
 import {
@@ -28,7 +29,10 @@ import type { ModelTarget, TargetDraft } from './targets';
 /** The WebSocket close codes of a session (apps/dt's `WS_SESSION_CLOSED`, `WS_REVOKED`). */
 const WS_SESSION_CLOSED = 4000;
 const WS_REVOKED = 4001;
-/** The Access token of the page expired (apps/dt's `WS_EXPIRED`): the socket reconnects; a reload signs in again. */
+/**
+ * The Access token of the page expired (apps/dt's `WS_EXPIRED`): the socket reconnects when Access still lets the page
+ * in; else a reload signs in again.
+ */
 const WS_EXPIRED = 4002;
 /** At most 20 presence updates a second (the server's interval). */
 export const PRESENCE_INTERVAL_MS = 50;
@@ -93,12 +97,14 @@ export function useSession(socket: ViewSocket, current: ViewPayload | null): Ses
                 setPeers(NO_PEERS);
                 if (code === WS_SESSION_CLOSED) setStatus('closed');
                 if (code === WS_EXPIRED && inSession) {
-                    // the socket reconnects by itself; when the sign-in is gone, a reload lets Access sign the page in again
+                    // the socket reconnects by itself; when the sign-in is gone, a reload lets Access sign the page in again.
+                    // Behind Access, Access answers for the server then (SignInRequired: the API client reloaded already);
+                    // the server's own 401 is what a token the server no longer takes gets
                     sessionApi.me().then(
                         () => undefined,
                         (e: unknown) => {
-                            if (e instanceof SessionApiError && e.status === 401) location.reload();
-                            else setError(message(e));
+                            if (e instanceof SessionApiError && e.status === 401 && reloadForSignIn()) return;
+                            setError(message(e));
                         },
                     );
                     return;

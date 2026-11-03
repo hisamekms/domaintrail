@@ -16,9 +16,11 @@ import type {
     RevertRequestedBody,
 } from '@domaintrail/collaboration/protocol';
 import type { TargetStatus } from '@domaintrail/collaboration';
+import { isSignInRedirect, reloadForSignIn, SAME_ORIGIN } from '../app/sign-in';
 
 /**
- * A failed call: the server's error type (`FacilitatorOnly`, `InvalidInput`, …) or `Network`, its status, and the
+ * A failed call: the server's error type (`FacilitatorOnly`, `InvalidInput`, …), `Network`, or `SignInRequired` (the
+ * edge in front, Cloudflare Access, answered with a redirect to its sign-in: the page reloads), its status, and the
  * error's other fields (`paths` of external changes, the `run` in progress, the `preRestore` revision, …).
  */
 export class SessionApiError extends Error {
@@ -46,10 +48,15 @@ async function call<T>(path: string, init?: { method: 'POST'; body: unknown }): 
     try {
         res = await fetch(`/api/session/${path}`, {
             ...(init && { method: init.method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(init.body) }),
-            credentials: 'same-origin',
+            ...SAME_ORIGIN,
         });
     } catch (e) {
         throw new SessionApiError('Network', 0, e instanceof Error ? e.message : String(e));
+    }
+    if (isSignInRedirect(res)) {
+        // the Access session ran out: Access answers for the server, with its sign-in page; a reload goes there
+        reloadForSignIn();
+        throw new SessionApiError('SignInRequired', 0, 'Sign in again.');
     }
     let body: unknown;
     try {
