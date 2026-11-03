@@ -11,7 +11,7 @@ import { isAi } from '../domain/ai.js';
 import { requestCommands, sessionCommands } from '../domain/commands.js';
 import { knownChangeProposalId, knownRequestId, knownTriageId } from '../domain/ids.js';
 import { sessionOpening } from '../domain/modes.js';
-import { proposalCommands } from '../domain/proposals.js';
+import { instructionOf, proposalCommands, recommendedOption } from '../domain/proposals.js';
 import { REPLY_LIMITS } from '../domain/reply.js';
 import { sessionSoFar, type SessionSoFar, type TimelineRecords } from '../domain/timeline.js';
 import {
@@ -247,18 +247,30 @@ export interface ConversationUseCases {
         >
     >;
     /**
-     * The facilitator approves open proposals of the session, each as is or edited: together they are one run queued
-     * with the proposals' messages and the approved texts (plan Q2); one at a time, separate runs.
+     * The facilitator approves open proposals of the session, each with one of its options when it has options (its
+     * recommended one when none is given) and as is or with its how edited: together they are one run queued with the
+     * proposals' messages and the approved instructions (plan Q2); one at a time, separate runs.
      */
     approveProposals(input: {
         readonly session: SessionId;
         readonly actor: Actor;
-        readonly proposals: readonly { readonly proposal: Collaboration.ChangeProposalId; readonly edited?: Collaboration.ProposalContent }[];
+        readonly proposals: readonly {
+            readonly proposal: Collaboration.ChangeProposalId;
+            readonly option?: Collaboration.ProposalOptionIndex;
+            readonly editedHow?: Collaboration.ProposalText;
+        }[];
         readonly note?: Collaboration.Text;
     }): Promise<
         Result<
             ProposalsApproved,
-            NotFound | NotAllowed | NoRequests | Collaboration.FacilitatorOnly | Collaboration.SessionNotFound | Collaboration.SessionAlreadyClosed | QueueError
+            | NotFound
+            | NotAllowed
+            | NoRequests
+            | Collaboration.FacilitatorOnly
+            | Collaboration.NoSuchOption
+            | Collaboration.SessionNotFound
+            | Collaboration.SessionAlreadyClosed
+            | QueueError
         >
     >;
     /** The facilitator rejects an open proposal, with an optional note to its requester. */
@@ -668,19 +680,24 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
             return uow.transaction(async (stores) => {
                 const active = await storeVerifications(stores).makeActiveSession(session);
                 if (!active.ok) return active;
-                const open: { proposal: Collaboration.OpenChangeProposal; edited?: Collaboration.ProposalContent }[] = [];
-                for (const { proposal, edited } of proposals) {
+                const open: {
+                    proposal: Collaboration.OpenChangeProposal;
+                    option: Collaboration.ProposalOptionIndex | undefined;
+                    editedHow: Collaboration.ProposalText | undefined;
+                    instruction: Collaboration.ProposalInstruction;
+                }[] = [];
+                for (const { proposal, option: given, editedHow } of proposals) {
                     const p = stores.proposals.load(proposal);
                     if (!p || p.session !== session) return err(notFound('ChangeProposal', proposal));
                     if (p.state !== 'Open') return err(notAllowed('approve', p.state));
                     if (open.some((o) => o.proposal.id === p.id)) continue;
-                    open.push({ proposal: p, ...(edited && { edited }) });
+                    // no option given of a proposal with options: the one the AI recommends
+                    const option = given ?? recommendedOption(p.content);
+                    const instruction = instructionOf(p.content, option, editedHow);
+                    if (!instruction) return err({ type: 'NoSuchOption' });
+                    open.push({ proposal: p, option, editedHow, instruction });
                 }
-                const [first, ...rest] = open.map(({ proposal, edited }) => ({
-                    proposal: proposal.id,
-                    request: proposal.request,
-                    content: edited ?? proposal.content,
-                }));
+                const [first, ...rest] = open.map(({ proposal, instruction }) => ({ proposal: proposal.id, request: proposal.request, instruction }));
                 if (!first) return err({ type: 'NoRequests' });
                 const at = clock.now();
                 const run = await queueRequests(stores, ids, {
@@ -693,11 +710,12 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
                 });
                 if (!run.ok) return run;
                 const approved: Collaboration.ApprovedChangeProposal[] = [];
-                for (const { proposal, edited } of open) {
+                for (const { proposal, option, editedHow } of open) {
                     const a = proposalCommands.approve(proposal, {
                         approvedBy: actor.participant,
                         approvedByRole: actor.role,
-                        edited,
+                        option,
+                        editedHow,
                         run: run.value.id,
                         approvedAt: at,
                     });

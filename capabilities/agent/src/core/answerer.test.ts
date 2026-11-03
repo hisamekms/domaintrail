@@ -4,6 +4,7 @@
 // stopped without a result, a job past its timeout reported as failed, and the session's end.
 import { describe, expect, test } from 'bun:test';
 import type { AgentAnswerJobBody } from '@domaintrail/collaboration/protocol';
+import { buildProposePrompt } from './answer-prompt.js';
 import { startAnswerer } from './answerer.js';
 import type { AgentApi, AnswerAgent, AnswerStreamItem, AnswerTurn, AnswerTurnResult } from './ports.js';
 
@@ -119,7 +120,9 @@ describe('the answerer role', () => {
             kind: 'job',
             job: job('triage', 1, {
                 chat: ['Ada: hi', 'Bob: Order とは？'],
-                openProposals: [{ content: { what: 'W', where: 'X', how: 'H' } }] as unknown as AgentAnswerJobBody['openProposals'],
+                openProposals: [
+                    { content: { targets: [{ kind: 'DtElement', element: 'Sales.Order' }], how: 'H', options: [] } },
+                ] as unknown as AgentAnswerJobBody['openProposals'],
             }),
         });
         await waitFor(() => results.length === 1);
@@ -130,7 +133,9 @@ describe('the answerer role', () => {
         expect(agent.turns[0].kind).toBe('triage');
         expect(prompt).toContain('<message-n1>');
         expect(prompt).toContain('Bob: Order とは？');
-        expect(prompt).toContain('"what": "W"');
+        // the open proposals as the answerer wrote them: element references, the how
+        expect(prompt).toContain('"@{Sales.Order}"');
+        expect(prompt).toContain('"how": "H"');
         // the log has kinds and IDs, never the message
         expect(log.join('\n')).not.toContain('Order');
         await answerer.stop();
@@ -140,7 +145,7 @@ describe('the answerer role', () => {
         const { api, push, results } = fakeApi();
         const agent = fakeAgent([
             { structured: { kind: 'answer', answer: 'Order は注文です。' }, text: '' },
-            { structured: { kind: 'proposal', proposal: { what: 'W', where: 'X', how: 'H' }, reason: '依頼だった' }, text: '' },
+            { structured: { kind: 'proposal', proposal: { targets: ['@{Sales.Order}'], how: 'H' }, reason: '依頼だった' }, text: '' },
         ]);
         const scans = [new Map([['a.dt', '1']]), new Map([['a.dt', '1']]), new Map([['a.dt', '2']]), new Map([['a.dt', '2']])];
         const { answerer } = start(api, agent, scans);
@@ -155,7 +160,7 @@ describe('the answerer role', () => {
         expect(agent.turns[0].turn.continuedPrompt).toBeUndefined();
         push({ kind: 'job', job: job('answer', 2, { sessionSoFar: { text: 'FULL-2', last: 5 }, sessionSoFarSince: { text: 'SINCE-3', last: 5, since: 3 } }) });
         await waitFor(() => results.length === 2);
-        expect(results[1].result).toMatchObject({ kind: 'proposal', proposal: { what: 'W', where: 'X', how: 'H' }, reason: '依頼だった' });
+        expect(results[1].result).toMatchObject({ kind: 'proposal', proposal: { targets: ['@{Sales.Order}'], how: 'H' }, reason: '依頼だった' });
         expect(agent.turns[1].turn.prompt).toContain('FULL-2');
         const continued = agent.turns[1].turn.continuedPrompt ?? '';
         expect(continued).toContain('SINCE-3');
@@ -167,7 +172,7 @@ describe('the answerer role', () => {
     test('a propose job: the proposal; anything else or an invalid output is a failure, with why', async () => {
         const { api, push, results } = fakeApi();
         const agent = fakeAgent([
-            { structured: { kind: 'proposal', proposal: { what: 'W', where: 'X', how: 'H' } }, text: '' },
+            { structured: { kind: 'proposal', proposal: { targets: ['@{Sales.Order}', 'sales/order.dt'], how: 'H' } }, text: '' },
             { structured: { kind: 'answer', answer: 'no' }, text: '' },
             { structured: { kind: 'answer' }, text: '' },
             { text: '', error: 'claude exited with 1' },
@@ -178,7 +183,8 @@ describe('the answerer role', () => {
         push({ kind: 'job', job: job('answer', 3) });
         push({ kind: 'job', job: job('triage', 4) });
         await waitFor(() => results.length === 4);
-        expect(results[0].result).toMatchObject({ proposal: { what: 'W', where: 'X', how: 'H' } });
+        // sent as read: the path dropped
+        expect(results[0].result).toMatchObject({ proposal: { targets: ['@{Sales.Order}'], how: 'H' } });
         expect(results[1].result).toMatchObject({ error: 'no proposal (answer)' });
         expect(results[2].result).toMatchObject({ error: 'invalid output (reply.answer)' });
         expect(results[3].result).toMatchObject({ error: 'claude exited with 1' });
@@ -186,6 +192,43 @@ describe('the answerer role', () => {
         expect(agent.turns[0].turn.prompt).toContain('Do not carry it out.');
         expect(agent.turns[0].turn.prompt).toContain('Read, Grep and Glob are your only tools');
         await answerer.stop();
+    });
+
+    test('a proposal with options is clamped to three with one recommended before it is sent', async () => {
+        const { api, push, results } = fakeApi();
+        const option = (label: string, recommended?: boolean): object => ({
+            label,
+            targets: ['@{Sales.Order}'],
+            ...(recommended !== undefined && { recommended }),
+        });
+        const agent = fakeAgent([
+            {
+                structured: { kind: 'proposal', proposal: { targets: [], how: 'H', options: [option('a'), option('b'), option('c'), option('d', true)] } },
+                text: '',
+            },
+        ]);
+        const { answerer } = start(api, agent);
+        push({ kind: 'job', job: job('propose', 1) });
+        await waitFor(() => results.length === 1);
+        const sent = results[0].result.proposal as { options: { label: string; recommended: boolean }[] };
+        expect(sent.options.map((o) => [o.label, o.recommended])).toEqual([
+            ['a', false],
+            ['b', false],
+            ['d', true],
+        ]);
+        await answerer.stop();
+    });
+
+    test('the propose prompt asks for element references and a short how, options only when unsure, no file paths', () => {
+        const prompt = buildProposePrompt(job('propose', 1), 'n');
+        expect(prompt).toContain('as element references (`@{Sales.Order}`');
+        expect(prompt).toContain('Never a file\n  name or a path');
+        expect(prompt).toContain('in one or two short lines');
+        expect(prompt).toContain('no alternatives in prose');
+        expect(prompt).toContain('only when you are genuinely unsure');
+        expect(prompt).toContain('two or three, never more');
+        expect(prompt).toContain('Mark exactly one recommended');
+        expect(prompt).not.toMatch(/\bwhere\b \(at most/);
     });
 
     test('a withdrawn job is stopped and not answered; one past its timeout is reported as failed; a restore resets the agent', async () => {

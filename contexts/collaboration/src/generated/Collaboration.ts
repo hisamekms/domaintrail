@@ -2882,16 +2882,17 @@ export const makeChangeProposalId: MakeChangeProposalId = (value) => {
 
 /**
  * 変更案の文
- * 変更案の文。項目ごとの上限はコード（`domain/proposals.ts` の `PROPOSAL_LIMITS`）が決める。
+ * 変更案の文（「どう」）。上限はコード（`domain/proposals.ts` の `PROPOSAL_LIMITS`）が決める: AI の文は短く、
+ * ファシリテーターの編集は長くてもよい。前の形（何を・どこを・どう）で保存した変更案は、3つをつないだ文として読む。
  * @invariant valid: length(value) >= 1 and length(value) <= 2000
  * Make it with `makeProposalText`; never `as ProposalText` (see dt guide lint).
- * @see contexts/collaboration/model/proposal.dt:6
+ * @see contexts/collaboration/model/proposal.dt:7
  */
 export type ProposalText = string & { readonly __domain: 'Collaboration.ProposalText' };
 
 /**
  * A value that violates an invariant of ProposalText.
- * @see contexts/collaboration/model/proposal.dt:6
+ * @see contexts/collaboration/model/proposal.dt:7
  */
 export interface InvalidProposalText {
     readonly type: 'InvalidProposalText';
@@ -2902,13 +2903,13 @@ export interface InvalidProposalText {
 
 /**
  * Creates a ProposalText, checking its invariants: generated as `makeProposalText`, or written by hand.
- * @see contexts/collaboration/model/proposal.dt:6
+ * @see contexts/collaboration/model/proposal.dt:7
  */
 export type MakeProposalText = (value: string) => Result<ProposalText, InvalidProposalText>;
 
 /**
  * The invariants of ProposalText that a value violates, in declaration order; empty when it is a ProposalText.
- * @see contexts/collaboration/model/proposal.dt:6
+ * @see contexts/collaboration/model/proposal.dt:7
  */
 export function checkProposalText(value: string): readonly InvalidProposalText['invariant'][] {
     const violated: InvalidProposalText['invariant'][] = [];
@@ -2918,7 +2919,7 @@ export function checkProposalText(value: string): readonly InvalidProposalText['
 
 /**
  * Creates a ProposalText, checking its invariants with `checkProposalText`: the first one violated is reported.
- * @see contexts/collaboration/model/proposal.dt:6
+ * @see contexts/collaboration/model/proposal.dt:7
  */
 export const makeProposalText: MakeProposalText = (value) => {
     const [invariant] = checkProposalText(value);
@@ -2927,54 +2928,215 @@ export const makeProposalText: MakeProposalText = (value) => {
 };
 
 /**
+ * 選択肢の見出し
+ * 変更案の選択肢の見出し（「集約だけ」など）。上限はコードが決める。
+ * @invariant valid: length(value) >= 1 and length(value) <= 200
+ * Make it with `makeProposalLabel`; never `as ProposalLabel` (see dt guide lint).
+ * @see contexts/collaboration/model/proposal.dt:10
+ */
+export type ProposalLabel = string & { readonly __domain: 'Collaboration.ProposalLabel' };
+
+/**
+ * A value that violates an invariant of ProposalLabel.
+ * @see contexts/collaboration/model/proposal.dt:10
+ */
+export interface InvalidProposalLabel {
+    readonly type: 'InvalidProposalLabel';
+    readonly value: string;
+    /** The violated invariant. */
+    readonly invariant: 'valid';
+}
+
+/**
+ * Creates a ProposalLabel, checking its invariants: generated as `makeProposalLabel`, or written by hand.
+ * @see contexts/collaboration/model/proposal.dt:10
+ */
+export type MakeProposalLabel = (value: string) => Result<ProposalLabel, InvalidProposalLabel>;
+
+/**
+ * The invariants of ProposalLabel that a value violates, in declaration order; empty when it is a ProposalLabel.
+ * @see contexts/collaboration/model/proposal.dt:10
+ */
+export function checkProposalLabel(value: string): readonly InvalidProposalLabel['invariant'][] {
+    const violated: InvalidProposalLabel['invariant'][] = [];
+    if (!((value.length >= 1) && (value.length <= 200))) violated.push('valid');
+    return violated;
+}
+
+/**
+ * Creates a ProposalLabel, checking its invariants with `checkProposalLabel`: the first one violated is reported.
+ * @see contexts/collaboration/model/proposal.dt:10
+ */
+export const makeProposalLabel: MakeProposalLabel = (value) => {
+    const [invariant] = checkProposalLabel(value);
+    if (invariant === undefined) return ok(value as ProposalLabel);
+    return err({ type: 'InvalidProposalLabel', value, invariant });
+};
+
+/**
+ * 選択肢の番号
+ * 変更案の選択肢の番号（0 から）。
+ * @invariant valid: value >= 0 and value <= 2
+ * Make it with `makeProposalOptionIndex`; never `as ProposalOptionIndex` (see dt guide lint).
+ * @see contexts/collaboration/model/proposal.dt:13
+ */
+export type ProposalOptionIndex = number & { readonly __domain: 'Collaboration.ProposalOptionIndex' };
+
+/**
+ * A value that violates an invariant of ProposalOptionIndex.
+ * @see contexts/collaboration/model/proposal.dt:13
+ */
+export interface InvalidProposalOptionIndex {
+    readonly type: 'InvalidProposalOptionIndex';
+    readonly value: number;
+    /** The violated invariant. */
+    readonly invariant: 'valid';
+}
+
+/**
+ * Creates a ProposalOptionIndex, checking its invariants: generated as `makeProposalOptionIndex`, or written by hand.
+ * @see contexts/collaboration/model/proposal.dt:13
+ */
+export type MakeProposalOptionIndex = (value: number) => Result<ProposalOptionIndex, InvalidProposalOptionIndex>;
+
+/**
+ * The invariants of ProposalOptionIndex that a value violates, in declaration order; empty when it is a ProposalOptionIndex.
+ * @see contexts/collaboration/model/proposal.dt:13
+ */
+export function checkProposalOptionIndex(value: number): readonly InvalidProposalOptionIndex['invariant'][] {
+    const violated: InvalidProposalOptionIndex['invariant'][] = [];
+    if (!((value >= 0) && (value <= 2))) violated.push('valid');
+    return violated;
+}
+
+/**
+ * Creates a ProposalOptionIndex, checking its invariants with `checkProposalOptionIndex`: the first one violated is reported.
+ * @see contexts/collaboration/model/proposal.dt:13
+ */
+export const makeProposalOptionIndex: MakeProposalOptionIndex = (value) => {
+    const [invariant] = checkProposalOptionIndex(value);
+    if (invariant === undefined) return ok(value as ProposalOptionIndex);
+    return err({ type: 'InvalidProposalOptionIndex', value, invariant });
+};
+
+/**
+ * 変更案の選択肢
+ * 範囲などで AI が迷ったときの、変更案の選択肢1つ: 見出し、対象、選択肢だけの「どう」。
+ * @see contexts/collaboration/model/proposal.dt:16
+ */
+export interface ProposalOption {
+    /** 見出し */
+    readonly label: ProposalLabel;
+    /** 対象 — 対象のモデルの要素（`.dt` の要素か `.dtes` の要素）。まだない要素（足すもの）も指せる。 */
+    readonly targets: readonly ModelTarget[];
+    /** どう — 変更案の「どう」と違うときだけ。 */
+    readonly how?: ProposalText;
+    /** AI の勧め */
+    readonly recommended: boolean;
+}
+
+/**
+ * Whether two ProposalOption values are equal: by all their fields (ADR 0016).
+ * @see contexts/collaboration/model/proposal.dt:16
+ */
+export function equalProposalOption(a: ProposalOption, b: ProposalOption): boolean {
+    return a.label === b.label && sameList(a.targets, b.targets, equalModelTarget) && sameOptional(a.how, b.how, ($26: ProposalText, $27: ProposalText) => $26 === $27) && a.recommended === b.recommended;
+}
+
+/**
  * 変更案の中身
- * 変更案の中身: 何を、どこを（要素は `#名前` で）、どう変えるか。差分の見本はまだない。
- * @see contexts/collaboration/model/proposal.dt:9
+ * 変更案の中身: 対象のモデルの要素と、どう変えるかを1〜2行で。AI が迷ったときは選択肢（2つか3つ、勧めは1つ）。
+ * ファイル名やパスは持たない。差分の見本はまだない。
+ * @invariant choiceOfTwoOrMore (選択肢はないか、2つ以上): count(options) == 0 or count(options) >= 2
+ * @invariant oneRecommended (選択肢があれば、AI の勧めはちょうど1つ): not expressed in the DSL
+ * @see contexts/collaboration/model/proposal.dt:27
  */
 export interface ProposalContent {
-    /** 何を */
-    readonly what: ProposalText;
-    /** どこを */
-    readonly where: ProposalText;
+    /** 対象 */
+    readonly targets: readonly ModelTarget[];
+    /** どう */
+    readonly how: ProposalText;
+    /** 選択肢 */
+    readonly options: readonly ProposalOption[];
+}
+
+/**
+ * Whether two ProposalContent values are equal: by all their fields (ADR 0016).
+ * @see contexts/collaboration/model/proposal.dt:27
+ */
+export function equalProposalContent(a: ProposalContent, b: ProposalContent): boolean {
+    return sameList(a.targets, b.targets, equalModelTarget) && a.how === b.how && sameList(a.options, b.options, equalProposalOption);
+}
+
+/**
+ * The invariants of ProposalContent that the DSL does not express: implement them in your code and pass them to `checkProposalContentWith`.
+ * @see contexts/collaboration/model/proposal.dt:27
+ */
+export type ProposalContentDeclaredChecks = { readonly oneRecommended: (proposalContent: ProposalContent) => boolean };
+
+/**
+ * The invariants of ProposalContent that a value violates, in declaration order; empty when it holds them all.
+ * @see contexts/collaboration/model/proposal.dt:27
+ */
+export function checkProposalContentWith(checks: ProposalContentDeclaredChecks): (proposalContent: ProposalContent) => readonly ('choiceOfTwoOrMore' | 'oneRecommended')[] {
+    return (proposalContent) => {
+        const violated: ('choiceOfTwoOrMore' | 'oneRecommended')[] = [];
+        if (!((proposalContent.options.length === 0) || (proposalContent.options.length >= 2))) violated.push('choiceOfTwoOrMore');
+        if (!checks.oneRecommended(proposalContent)) violated.push('oneRecommended');
+        return violated;
+    };
+}
+
+/**
+ * 承認した指示
+ * 承認した変更案が実行に求めること: 選んだ選択肢の見出し（選択肢があれば）、対象、どう（ファシリテーターが編集したなら
+ * その文）。
+ * @see contexts/collaboration/model/proposal.dt:38
+ */
+export interface ProposalInstruction {
+    /** 選んだ選択肢 */
+    readonly label?: ProposalLabel;
+    /** 対象 */
+    readonly targets: readonly ModelTarget[];
     /** どう */
     readonly how: ProposalText;
 }
 
 /**
- * Whether two ProposalContent values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/proposal.dt:9
+ * Whether two ProposalInstruction values are equal: by all their fields (ADR 0016).
+ * @see contexts/collaboration/model/proposal.dt:38
  */
-export function equalProposalContent(a: ProposalContent, b: ProposalContent): boolean {
-    return a.what === b.what && a.where === b.where && a.how === b.how;
+export function equalProposalInstruction(a: ProposalInstruction, b: ProposalInstruction): boolean {
+    return sameOptional(a.label, b.label, ($28: ProposalLabel, $29: ProposalLabel) => $28 === $29) && sameList(a.targets, b.targets, equalModelTarget) && a.how === b.how;
 }
 
 /**
  * 承認した変更案
- * 実行の入力に凍結した、承認した変更案1つ（ファシリテーターが編集したなら、その文）。
- * @see contexts/collaboration/model/proposal.dt:16
+ * 実行の入力に凍結した、承認した変更案1つ。
+ * @see contexts/collaboration/model/proposal.dt:45
  */
 export interface ApprovedProposal {
     /** 変更案 */
     readonly proposal: ChangeProposalId;
     /** 元のメッセージ */
     readonly request: RequestId;
-    /** 承認した文 */
-    readonly content: ProposalContent;
+    /** 承認した指示 */
+    readonly instruction: ProposalInstruction;
 }
 
 /**
  * Whether two ApprovedProposal values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/proposal.dt:16
+ * @see contexts/collaboration/model/proposal.dt:45
  */
 export function equalApprovedProposal(a: ApprovedProposal, b: ApprovedProposal): boolean {
-    return a.proposal === b.proposal && a.request === b.request && equalProposalContent(a.content, b.content);
+    return a.proposal === b.proposal && a.request === b.request && equalProposalInstruction(a.instruction, b.instruction);
 }
 
 /**
  * 承認した変更案の組
  * まとめて承認した変更案。まとめて承認したものは1つの実行になる。
  * @invariant distinctProposals (変更案は1回): unique(approved, p => p.proposal)
- * @see contexts/collaboration/model/proposal.dt:23
+ * @see contexts/collaboration/model/proposal.dt:52
  */
 export interface ApprovedProposals {
     /** 変更案 */
@@ -2983,7 +3145,7 @@ export interface ApprovedProposals {
 
 /**
  * Whether two ApprovedProposals values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/proposal.dt:23
+ * @see contexts/collaboration/model/proposal.dt:52
  */
 export function equalApprovedProposals(a: ApprovedProposals, b: ApprovedProposals): boolean {
     return sameList(a.approved, b.approved, equalApprovedProposal);
@@ -2991,7 +3153,7 @@ export function equalApprovedProposals(a: ApprovedProposals, b: ApprovedProposal
 
 /**
  * The invariants of ApprovedProposals that a value violates, in declaration order; empty when it holds them all.
- * @see contexts/collaboration/model/proposal.dt:23
+ * @see contexts/collaboration/model/proposal.dt:52
  */
 export function checkApprovedProposals(approvedProposals: ApprovedProposals): readonly 'distinctProposals'[] {
     const violated: 'distinctProposals'[] = [];
@@ -3001,7 +3163,7 @@ export function checkApprovedProposals(approvedProposals: ApprovedProposals): re
 
 /**
  * Fields shared by every state of 変更案 (ChangeProposal).
- * @see contexts/collaboration/model/proposal.dt:32
+ * @see contexts/collaboration/model/proposal.dt:61
  */
 export interface ChangeProposalCommon {
     /** 変更案ID */
@@ -3031,7 +3193,7 @@ export interface ChangeProposalCommon {
 
 /**
  * 承認待ち
- * @see contexts/collaboration/model/proposal.dt:41
+ * @see contexts/collaboration/model/proposal.dt:70
  */
 export interface OpenChangeProposal extends ChangeProposalCommon {
     readonly state: 'Open';
@@ -3039,7 +3201,7 @@ export interface OpenChangeProposal extends ChangeProposalCommon {
 
 /**
  * 承認済み
- * @see contexts/collaboration/model/proposal.dt:42
+ * @see contexts/collaboration/model/proposal.dt:71
  */
 export interface ApprovedChangeProposal extends ChangeProposalCommon {
     readonly state: 'Approved';
@@ -3047,8 +3209,10 @@ export interface ApprovedChangeProposal extends ChangeProposalCommon {
     readonly approvedBy: ParticipantId;
     /** 承認日時 */
     readonly approvedAt: Timestamp;
-    /** 編集した変更案 — ファシリテーターが編集して承認したなら、その文（実行はこちらに従う）。 */
-    readonly edited?: ProposalContent;
+    /** 選んだ選択肢 — 選択肢があれば、ファシリテーターが選んだもの。 */
+    readonly option?: ProposalOptionIndex;
+    /** 編集した「どう」 — ファシリテーターが編集して承認したなら、その「どう」（実行はこちらに従う）。 */
+    readonly editedHow?: ProposalText;
     /**
      * 実行
      * @see {@link AgentRun}
@@ -3058,7 +3222,7 @@ export interface ApprovedChangeProposal extends ChangeProposalCommon {
 
 /**
  * 却下
- * @see contexts/collaboration/model/proposal.dt:49
+ * @see contexts/collaboration/model/proposal.dt:80
  */
 export interface RejectedChangeProposal extends ChangeProposalCommon {
     readonly state: 'Rejected';
@@ -3072,7 +3236,7 @@ export interface RejectedChangeProposal extends ChangeProposalCommon {
 
 /**
  * 取り下げ
- * @see contexts/collaboration/model/proposal.dt:55
+ * @see contexts/collaboration/model/proposal.dt:86
  */
 export interface WithdrawnChangeProposal extends ChangeProposalCommon {
     readonly state: 'Withdrawn';
@@ -3085,22 +3249,22 @@ export interface WithdrawnChangeProposal extends ChangeProposalCommon {
  * 参加者の変更依頼について、回答役（読むだけの AI）が書いた変更案。ファシリテーターが承認（編集してもよい）か却下し、
  * 依頼した参加者は承認待ちのあいだ取り下げられる。承認した変更案は、ふつうの実行として待ちに入る（まとめて承認したものは
  * 1つの実行）。
- * @see contexts/collaboration/model/proposal.dt:32
+ * @see contexts/collaboration/model/proposal.dt:61
  */
 export type ChangeProposal = OpenChangeProposal | ApprovedChangeProposal | RejectedChangeProposal | WithdrawnChangeProposal;
 
 /**
  * The fields of ChangeProposal as data for `decide`: the common fields, and the fields of each state on top of them.
- * @see contexts/collaboration/model/proposal.dt:32
+ * @see contexts/collaboration/model/proposal.dt:61
  */
 export const ChangeProposalShape: Shape = {
     fields: ['id', 'session', 'triage', 'request', 'requestedBy', 'content', 'proposedAt'],
-    states: { Open: [], Approved: ['approvedBy', 'approvedAt', 'edited', 'run'], Rejected: ['rejectedBy', 'rejectedAt', 'note'], Withdrawn: ['withdrawnAt'] },
+    states: { Open: [], Approved: ['approvedBy', 'approvedAt', 'option', 'editedHow', 'run'], Rejected: ['rejectedBy', 'rejectedAt', 'note'], Withdrawn: ['withdrawnAt'] },
 };
 
 /**
  * The invariants of ChangeProposal (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.
- * @see contexts/collaboration/model/proposal.dt:32
+ * @see contexts/collaboration/model/proposal.dt:61
  */
 export function checkChangeProposalCommon(_changeProposal: ChangeProposalCommon): readonly never[] {
     return [];
@@ -3108,7 +3272,7 @@ export function checkChangeProposalCommon(_changeProposal: ChangeProposalCommon)
 
 /**
  * The parameters of ChangeProposal.propose, by name.
- * @see contexts/collaboration/model/proposal.dt:60
+ * @see contexts/collaboration/model/proposal.dt:91
  */
 export interface ProposeChangeProposalParams {
     /** 変更案ID */
@@ -3131,7 +3295,7 @@ export interface ProposeChangeProposalParams {
  * 変更案を書く
  * 回答役が、参加者の変更依頼について変更案を書く。
  * @emits ChangeProposed — exactly once when the command succeeds
- * @see contexts/collaboration/model/proposal.dt:60
+ * @see contexts/collaboration/model/proposal.dt:91
  */
 export type ProposeChangeProposal = (
     params: ProposeChangeProposalParams,
@@ -3147,7 +3311,7 @@ export type ProposeChangeProposal = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
  * new -> Open — set: every field
  * @emits ChangeProposed — exactly once when the command succeeds
- * @see contexts/collaboration/model/proposal.dt:60
+ * @see contexts/collaboration/model/proposal.dt:91
  */
 export type ProposeChangeProposalDecision = (
     params: ProposeChangeProposalParams,
@@ -3160,15 +3324,17 @@ export type ProposeChangeProposalDecision = (
 
 /**
  * The parameters of ChangeProposal.approve, by name.
- * @see contexts/collaboration/model/proposal.dt:65
+ * @see contexts/collaboration/model/proposal.dt:97
  */
 export interface ApproveChangeProposalParams {
     /** 参加者ID */
     readonly approvedBy: ParticipantId;
     /** 役割 */
     readonly approvedByRole: ParticipantRole;
-    /** 変更案の中身 */
-    readonly edited?: ProposalContent;
+    /** 選択肢の番号 */
+    readonly option?: ProposalOptionIndex;
+    /** 変更案の文 */
+    readonly editedHow?: ProposalText;
     /** エージェント実行ID */
     readonly run: AgentRunId;
     readonly approvedAt: Timestamp;
@@ -3177,11 +3343,13 @@ export interface ApproveChangeProposalParams {
 /**
  * ChangeProposal.approve (Open -> Approved)
  * 変更案を承認する
- * ファシリテーターが承認する（編集してもよい）。実行の登録と同じ取引で、その実行を記録する。
+ * ファシリテーターが承認する（選択肢があれば1つ選び、その「どう」を編集してもよい）。実行の登録と同じ取引で、その
+ * 実行を記録する。
  * @requires facilitatorApproves (ファシリテーターが承認する) else FacilitatorOnly: approvedByRole == ParticipantRole.Facilitator
+ * @requires optionOfProposal (選択肢があれば、そのうちの1つを選ぶ) else NoSuchOption: (count(content.options) == 0 implies not exists(option)) and (count(content.options) >= 1 implies exists(option) and option < count(content.options))
  * @changes none — the command changes no common field
  * @emits ProposalApproved — exactly once when the command succeeds
- * @see contexts/collaboration/model/proposal.dt:65
+ * @see contexts/collaboration/model/proposal.dt:97
  */
 export type ApproveChangeProposal = (
     changeProposal: OpenChangeProposal,
@@ -3191,38 +3359,40 @@ export type ApproveChangeProposal = (
         readonly aggregate: ApprovedChangeProposal;
         readonly events: { readonly ProposalApproved: ProposalApproved };
     };
-}, FacilitatorOnly>;
+}, FacilitatorOnly | NoSuchOption>;
 
 /**
  * ChangeProposal.approve, decided per source state; implement it with `decide(ChangeProposalShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires facilitatorApproves (ファシリテーターが承認する) else FacilitatorOnly: approvedByRole == ParticipantRole.Facilitator
+ * @requires optionOfProposal (選択肢があれば、そのうちの1つを選ぶ) else NoSuchOption: (count(content.options) == 0 implies not exists(option)) and (count(content.options) >= 1 implies exists(option) and option < count(content.options))
  * @changes none — the command changes no common field
- * Open -> Approved — set: approvedBy (new in Approved), approvedAt (new in Approved), edited (new in Approved), run (new in Approved); carried over: id, session, triage, request, requestedBy, content, proposedAt
- * @see contexts/collaboration/model/proposal.dt:65
+ * Open -> Approved — set: approvedBy (new in Approved), approvedAt (new in Approved), option (new in Approved), editedHow (new in Approved), run (new in Approved); carried over: id, session, triage, request, requestedBy, content, proposedAt
+ * @see contexts/collaboration/model/proposal.dt:97
  */
 export type ApproveChangeProposalDecision = {
     /** @emits ProposalApproved — exactly once when the command succeeds */
     readonly Open: (changeProposal: OpenChangeProposal, params: ApproveChangeProposalParams) => Result<{
         readonly Approved: {
-            readonly set: { readonly approvedBy: ParticipantId; readonly approvedAt: Timestamp; readonly edited: ProposalContent | undefined; readonly run: AgentRunId };
+            readonly set: { readonly approvedBy: ParticipantId; readonly approvedAt: Timestamp; readonly option: ProposalOptionIndex | undefined; readonly editedHow: ProposalText | undefined; readonly run: AgentRunId };
             readonly events: { readonly ProposalApproved: ProposalApproved };
         };
-    }, FacilitatorOnly>;
+    }, FacilitatorOnly | NoSuchOption>;
 };
 
 /**
  * The first requirement of ChangeProposal.approve that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/proposal.dt:65
+ * @see contexts/collaboration/model/proposal.dt:97
  */
-export function checkApproveChangeProposalRequires(_changeProposal: OpenChangeProposal, params: ApproveChangeProposalParams): 'facilitatorApproves' | undefined {
+export function checkApproveChangeProposalRequires(changeProposal: OpenChangeProposal, params: ApproveChangeProposalParams): 'facilitatorApproves' | 'optionOfProposal' | undefined {
     if (!(params.approvedByRole === 'Facilitator')) return 'facilitatorApproves';
+    if (!((!(changeProposal.content.options.length === 0) || !(params.option !== undefined)) && (!(changeProposal.content.options.length >= 1) || ((params.option !== undefined) && (params.option < changeProposal.content.options.length))))) return 'optionOfProposal';
     return undefined;
 }
 
 /**
  * The parameters of ChangeProposal.reject, by name.
- * @see contexts/collaboration/model/proposal.dt:73
+ * @see contexts/collaboration/model/proposal.dt:108
  */
 export interface RejectChangeProposalParams {
     /** 参加者ID */
@@ -3241,7 +3411,7 @@ export interface RejectChangeProposalParams {
  * @requires facilitatorRejects (ファシリテーターが却下する) else FacilitatorOnly: rejectedByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * @emits ProposalRejected — exactly once when the command succeeds
- * @see contexts/collaboration/model/proposal.dt:73
+ * @see contexts/collaboration/model/proposal.dt:108
  */
 export type RejectChangeProposal = (
     changeProposal: OpenChangeProposal,
@@ -3259,7 +3429,7 @@ export type RejectChangeProposal = (
  * @requires facilitatorRejects (ファシリテーターが却下する) else FacilitatorOnly: rejectedByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * Open -> Rejected — set: rejectedBy (new in Rejected), rejectedAt (new in Rejected), note (new in Rejected); carried over: id, session, triage, request, requestedBy, content, proposedAt
- * @see contexts/collaboration/model/proposal.dt:73
+ * @see contexts/collaboration/model/proposal.dt:108
  */
 export type RejectChangeProposalDecision = {
     /** @emits ProposalRejected — exactly once when the command succeeds */
@@ -3273,7 +3443,7 @@ export type RejectChangeProposalDecision = {
 
 /**
  * The first requirement of ChangeProposal.reject that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/proposal.dt:73
+ * @see contexts/collaboration/model/proposal.dt:108
  */
 export function checkRejectChangeProposalRequires(_changeProposal: OpenChangeProposal, params: RejectChangeProposalParams): 'facilitatorRejects' | undefined {
     if (!(params.rejectedByRole === 'Facilitator')) return 'facilitatorRejects';
@@ -3282,7 +3452,7 @@ export function checkRejectChangeProposalRequires(_changeProposal: OpenChangePro
 
 /**
  * The parameters of ChangeProposal.withdraw, by name.
- * @see contexts/collaboration/model/proposal.dt:81
+ * @see contexts/collaboration/model/proposal.dt:116
  */
 export interface WithdrawChangeProposalParams {
     /** 参加者ID */
@@ -3297,7 +3467,7 @@ export interface WithdrawChangeProposalParams {
  * @requires requesterWithdraws (依頼した人が取り下げる) else NotTheRequester: withdrawnBy == requestedBy
  * @changes none — the command changes no common field
  * @emits ProposalWithdrawn — exactly once when the command succeeds
- * @see contexts/collaboration/model/proposal.dt:81
+ * @see contexts/collaboration/model/proposal.dt:116
  */
 export type WithdrawChangeProposal = (
     changeProposal: OpenChangeProposal,
@@ -3315,7 +3485,7 @@ export type WithdrawChangeProposal = (
  * @requires requesterWithdraws (依頼した人が取り下げる) else NotTheRequester: withdrawnBy == requestedBy
  * @changes none — the command changes no common field
  * Open -> Withdrawn — set: withdrawnAt (new in Withdrawn); carried over: id, session, triage, request, requestedBy, content, proposedAt
- * @see contexts/collaboration/model/proposal.dt:81
+ * @see contexts/collaboration/model/proposal.dt:116
  */
 export type WithdrawChangeProposalDecision = {
     /** @emits ProposalWithdrawn — exactly once when the command succeeds */
@@ -3329,7 +3499,7 @@ export type WithdrawChangeProposalDecision = {
 
 /**
  * The first requirement of ChangeProposal.withdraw that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/proposal.dt:81
+ * @see contexts/collaboration/model/proposal.dt:116
  */
 export function checkWithdrawChangeProposalRequires(changeProposal: OpenChangeProposal, params: WithdrawChangeProposalParams): 'requesterWithdraws' | undefined {
     if (!(params.withdrawnBy === changeProposal.requestedBy)) return 'requesterWithdraws';
@@ -3339,7 +3509,7 @@ export function checkWithdrawChangeProposalRequires(changeProposal: OpenChangePr
 /**
  * Command contracts of ChangeProposal. Implement this interface by hand.
  * Commands are pure functions of the aggregate and their parameters: no I/O, no clock, no randomness. IDs and times are passed in as parameters.
- * @see contexts/collaboration/model/proposal.dt:32
+ * @see contexts/collaboration/model/proposal.dt:61
  */
 export interface ChangeProposalCommands {
     /** 変更案を書く */
@@ -3354,14 +3524,14 @@ export interface ChangeProposalCommands {
 
 /**
  * Events that the commands of ChangeProposal may emit.
- * @see contexts/collaboration/model/proposal.dt:32
+ * @see contexts/collaboration/model/proposal.dt:61
  */
 export type ChangeProposalEvent = ChangeProposed | ProposalApproved | ProposalRejected | ProposalWithdrawn;
 
 /**
  * 変更案の提案
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/proposal.dt:87
+ * @see contexts/collaboration/model/proposal.dt:122
  */
 export interface ChangeProposed {
     readonly type: 'ChangeProposed';
@@ -3383,7 +3553,7 @@ export interface ChangeProposed {
 /**
  * 変更案の承認
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/proposal.dt:97
+ * @see contexts/collaboration/model/proposal.dt:132
  */
 export interface ProposalApproved {
     readonly type: 'ProposalApproved';
@@ -3391,8 +3561,10 @@ export interface ProposalApproved {
     readonly proposalId: ChangeProposalId;
     /** 参加者ID */
     readonly approvedBy: ParticipantId;
-    /** 編集した変更案 */
-    readonly edited?: ProposalContent;
+    /** 選んだ選択肢 */
+    readonly option?: ProposalOptionIndex;
+    /** 編集した「どう」 */
+    readonly editedHow?: ProposalText;
     /** エージェント実行ID */
     readonly run: AgentRunId;
     readonly approvedAt: Timestamp;
@@ -3401,7 +3573,7 @@ export interface ProposalApproved {
 /**
  * 変更案の却下
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/proposal.dt:105
+ * @see contexts/collaboration/model/proposal.dt:141
  */
 export interface ProposalRejected {
     readonly type: 'ProposalRejected';
@@ -3417,7 +3589,7 @@ export interface ProposalRejected {
 /**
  * 変更案の取り下げ
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/proposal.dt:112
+ * @see contexts/collaboration/model/proposal.dt:148
  */
 export interface ProposalWithdrawn {
     readonly type: 'ProposalWithdrawn';
@@ -3431,10 +3603,19 @@ export interface ProposalWithdrawn {
 /**
  * 依頼した人でない
  * 変更案を取り下げられるのは、依頼した参加者だけ。
- * @see contexts/collaboration/model/proposal.dt:119
+ * @see contexts/collaboration/model/proposal.dt:155
  */
 export interface NotTheRequester {
     readonly type: 'NotTheRequester';
+}
+
+/**
+ * 変更案にない選択肢
+ * 承認で選んだ選択肢が変更案にない（選択肢のある変更案で選ばなかった、選択肢のない変更案で選んだ、を含む）。
+ * @see contexts/collaboration/model/proposal.dt:158
+ */
+export interface NoSuchOption {
+    readonly type: 'NoSuchOption';
 }
 
 /**
@@ -3684,7 +3865,7 @@ export function checkRequestCommon(request: RequestCommon): readonly ('atMostTwe
     if (!(request.targets.length <= 20)) violated.push('atMostTwentyTargets');
     if (!(distinct(request.targets, (t, t2) => equalModelTarget(t.target, t2.target)))) violated.push('distinctTargets');
     if (!(request.mentions.length <= 20)) violated.push('atMostTwentyMentions');
-    if (!(distinct(request.mentions, ($26: ParticipantId, $27: ParticipantId) => $26 === $27))) violated.push('distinctMentions');
+    if (!(distinct(request.mentions, ($30: ParticipantId, $31: ParticipantId) => $30 === $31))) violated.push('distinctMentions');
     if (!(request.targets.every((t) => !(t.target.kind === 'Workspace')))) violated.push('noWorkspaceTarget');
     return violated;
 }
@@ -3788,7 +3969,7 @@ export function checkSendRequestRequires(params: SendRequestParams): 'atMostTwen
     if (!(distinct(params.targets, (t, t2) => equalModelTarget(t.target, t2.target)))) return 'distinctTargets';
     if (!(params.targets.every((t) => !(t.target.kind === 'Workspace')))) return 'noWorkspaceTarget';
     if (!(params.mentions.length <= 20)) return 'atMostTwentyMentions';
-    if (!(distinct(params.mentions, ($28: ParticipantId, $29: ParticipantId) => $28 === $29))) return 'distinctMentions';
+    if (!(distinct(params.mentions, ($32: ParticipantId, $33: ParticipantId) => $32 === $33))) return 'distinctMentions';
     return undefined;
 }
 
@@ -5666,7 +5847,7 @@ export function equalModelTarget(a: ModelTarget, b: ModelTarget): boolean {
     if (a.kind !== b.kind) return false;
     if (a.kind === 'Workspace') {
         const y = b as Extract<ModelTarget, { readonly kind: 'Workspace' }>;
-        return sameOptional(a.scope, y.scope, ($30: string, $31: string) => $30 === $31);
+        return sameOptional(a.scope, y.scope, ($34: string, $35: string) => $34 === $35);
     }
     if (a.kind === 'DtElement') {
         const y = b as Extract<ModelTarget, { readonly kind: 'DtElement' }>;
@@ -5742,7 +5923,7 @@ export interface TargetSnapshot {
  * @see contexts/collaboration/model/target.dt:56
  */
 export function equalTargetSnapshot(a: TargetSnapshot, b: TargetSnapshot): boolean {
-    return equalModelTarget(a.target, b.target) && a.sourceRevision === b.sourceRevision && sameOptional(a.label, b.label, ($32: string, $33: string) => $32 === $33) && sameOptional(a.range, b.range, equalSourceRange);
+    return equalModelTarget(a.target, b.target) && a.sourceRevision === b.sourceRevision && sameOptional(a.label, b.label, ($36: string, $37: string) => $36 === $37) && sameOptional(a.range, b.range, equalSourceRange);
 }
 
 /**
@@ -5959,7 +6140,7 @@ export interface TriageStep {
  * @see contexts/collaboration/model/triage.dt:39
  */
 export function equalTriageStep(a: TriageStep, b: TriageStep): boolean {
-    return a.stage === b.stage && a.verdict === b.verdict && sameOptional(a.confidence, b.confidence, ($34: Confidence, $35: Confidence) => Number($34) === Number($35)) && sameOptional(a.reason, b.reason, ($36: Text, $37: Text) => $36 === $37) && sameOptional(a.model, b.model, ($38: string, $39: string) => $38 === $39) && a.durationMs === b.durationMs && sameOptional(a.error, b.error, ($40: Text, $41: Text) => $40 === $41) && a.at.getTime() === b.at.getTime();
+    return a.stage === b.stage && a.verdict === b.verdict && sameOptional(a.confidence, b.confidence, ($38: Confidence, $39: Confidence) => Number($38) === Number($39)) && sameOptional(a.reason, b.reason, ($40: Text, $41: Text) => $40 === $41) && sameOptional(a.model, b.model, ($42: string, $43: string) => $42 === $43) && a.durationMs === b.durationMs && sameOptional(a.error, b.error, ($44: Text, $45: Text) => $44 === $45) && a.at.getTime() === b.at.getTime();
 }
 
 /**
@@ -6016,7 +6197,7 @@ export function equalTriageOutcome(a: TriageOutcome, b: TriageOutcome): boolean 
     if (a.kind !== b.kind) return false;
     if (a.kind === 'Answer') {
         const y = b as Extract<TriageOutcome, { readonly kind: 'Answer' }>;
-        return a.answer === y.answer && sameOptional(a.readRevision, y.readRevision, ($42: RevisionId, $43: RevisionId) => $42 === $43);
+        return a.answer === y.answer && sameOptional(a.readRevision, y.readRevision, ($46: RevisionId, $47: RevisionId) => $46 === $47);
     }
     if (a.kind === 'Proposal') {
         const y = b as Extract<TriageOutcome, { readonly kind: 'Proposal' }>;

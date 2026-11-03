@@ -12,7 +12,7 @@
 // since its previous job ended (`changedSinceYourLastAnswer`). A restored revision makes the agent forget. The output is
 // validated here before it is sent (the server validates it again). Functions over the ports only; the log has job
 // kinds and IDs, never a message's text or an answer.
-import { readAnswererReply, readTriageAnswer, TRIAGE_KINDS } from '@domaintrail/collaboration';
+import { proposalData, readAnswererReply, readTriageAnswer, TRIAGE_KINDS } from '@domaintrail/collaboration';
 import type { AgentAnswerJobBody } from '@domaintrail/collaboration/protocol';
 import { buildAnswerPrompt, buildProposePrompt, buildTriagePrompt } from './answer-prompt.js';
 import { AgentApiError, type AgentApi, type AnswerAgent, type AnswerTurnResult, type Clock, type WorkspaceFiles } from './ports.js';
@@ -119,10 +119,12 @@ export function startAnswerer(deps: AnswererDeps, options: AnswererOptions = {})
         if (!read.ok) return failed(`invalid output (${read.error.path})`, result.model);
         const meta = { ...(result.model && { model: result.model }), durationMs: elapsed() };
         const reply = read.value;
+        // a proposal as read (clamped, malformed references dropped) goes as the answerer sends one: the server reads it again
         if (job.kind === 'propose') {
             if (reply.kind !== 'proposal') return failed(`no proposal (${reply.kind})`, result.model);
-            return { proposal: reply.proposal, ...meta };
+            return { proposal: proposalData(reply.proposal), ...meta };
         }
+        if (reply.kind === 'proposal') return { ...reply, proposal: proposalData(reply.proposal), ...meta };
         return { ...reply, ...(reply.kind === 'answer' && job.readRevision && { readRevision: job.readRevision }), ...meta };
     };
 

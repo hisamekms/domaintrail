@@ -12,7 +12,7 @@ import { hashBytes, snapshotFile, snapshotHash } from './domain/snapshot.js';
 import { tally } from './domain/validation.js';
 import { makeEmoji, markCommands } from './domain/marks.js';
 import { approvalCommands } from './domain/approvals.js';
-import { proposalCommands } from './domain/proposals.js';
+import { oneRecommended, proposalCommands } from './domain/proposals.js';
 import { inCascadeOrder, triageCommands } from './domain/triage.js';
 import { isNormalEmoji } from './domain/emoji.js';
 import { knownAgentRunId, knownChangeProposalId, knownRequestId, knownRevisionId, knownSessionId, knownTriageId } from './domain/ids.js';
@@ -130,10 +130,11 @@ const pendingTriage: C.PendingTriage = {
 };
 const step = (stage: C.TriageStage, verdict: C.TriageVerdict): C.TriageStep => ({ stage, verdict, durationMs: value(C.makeMilliseconds(12)), at });
 const decidedTriage = (kind: C.TriageVerdict): C.DecidedTriage => ({ ...pendingTriage, state: 'Decided', kind, decidedBy: 'Model', decidedAt: at });
+const order: C.ModelTarget = { kind: 'DtElement', element: value(C.makeElementName('Sales.Order')) };
 const proposalContent: C.ProposalContent = {
-    what: value(C.makeProposalText('A cancel command')),
-    where: value(C.makeProposalText('#Order')),
+    targets: [order],
     how: value(C.makeProposalText('Add cancel from Confirmed to Cancelled.')),
+    options: [],
 };
 const openProposal: C.OpenChangeProposal = {
     state: 'Open',
@@ -144,6 +145,17 @@ const openProposal: C.OpenChangeProposal = {
     requestedBy: facilitator,
     content: proposalContent,
     proposedAt: at,
+};
+const label = (l: string): C.ProposalLabel => value(C.makeProposalLabel(l));
+const optionsProposal: C.OpenChangeProposal = {
+    ...openProposal,
+    content: {
+        ...proposalContent,
+        options: [
+            { label: label('The aggregate only'), targets: [order], recommended: true },
+            { label: label('Its stickies too'), targets: [order], how: value(C.makeProposalText('Rename the sticky too.')), recommended: false },
+        ],
+    },
 };
 
 register(
@@ -175,6 +187,8 @@ register(
                 TriageId: C.makeTriageId,
                 ChangeProposalId: C.makeChangeProposalId,
                 ProposalText: C.makeProposalText,
+                ProposalLabel: C.makeProposalLabel,
+                ProposalOptionIndex: C.makeProposalOptionIndex,
                 Confidence: C.makeConfidence,
                 Milliseconds: C.makeMilliseconds,
             },
@@ -192,6 +206,7 @@ register(
             declared: {
                 Collaboration: {
                     Emoji: { singleEmoji: isNormalEmoji },
+                    ProposalContent: { oneRecommended },
                     Revision: declaredChecks.Revision,
                     TakeRevision: { hashMatchesFiles: ({ contentHash, files: fs }) => snapshotHash(fs) === contentHash },
                     RestoreRevision: { hashMatchesFiles: ({ contentHash, files: fs }) => snapshotHash(fs) === contentHash },
@@ -279,7 +294,25 @@ register(
                         approve: [
                             [
                                 openProposal,
-                                { approvedBy: facilitator, approvedByRole: 'Facilitator', edited: proposalContent, run: running.id, approvedAt: at },
+                                {
+                                    approvedBy: facilitator,
+                                    approvedByRole: 'Facilitator',
+                                    option: undefined,
+                                    editedHow: value(C.makeProposalText('Add cancel from Placed only.')),
+                                    run: running.id,
+                                    approvedAt: at,
+                                },
+                            ],
+                            [
+                                optionsProposal,
+                                {
+                                    approvedBy: facilitator,
+                                    approvedByRole: 'Facilitator',
+                                    option: value(C.makeProposalOptionIndex(1)),
+                                    editedHow: undefined,
+                                    run: running.id,
+                                    approvedAt: at,
+                                },
                             ],
                         ],
                         reject: [

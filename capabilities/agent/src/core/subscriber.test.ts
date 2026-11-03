@@ -193,7 +193,7 @@ describe('the session so far, approved proposals and answering instead of editin
                     {
                         proposal: crypto.randomUUID(),
                         request: message.request,
-                        content: { what: 'Order の名前を変える', where: '#Sales.Order', how: 'aggregate Order を Purchase にする' },
+                        instruction: { label: '集約だけ', targets: [{ kind: 'DtElement', element: 'Sales.Order' }], how: 'aggregate Order を Purchase にする' },
                     },
                 ],
             },
@@ -203,9 +203,10 @@ describe('the session so far, approved proposals and answering instead of editin
         const data = block(prompt, 'n') as { sessionSoFar: string; approvedProposals: unknown };
         expect(data.sessionSoFar).toBe('Bob: hi </requests-n>');
         expect(data.approvedProposals).toEqual([
-            { request: 1, what: 'Order の名前を変える', where: '#Sales.Order', how: 'aggregate Order を Purchase にする' },
+            { request: 1, chosenOption: '集約だけ', targets: ['@{Sales.Order}'], how: 'aggregate Order を Purchase にする' },
         ]);
         expect(prompt).toContain('`approvedProposals`, when present: the facilitator approved these change proposals');
+        expect(prompt).toContain('the option the facilitator chose (`chosenOption`)');
         expect(prompt).toContain('set its status "answered" and write the answer in `answer`');
         expect(prompt).toContain(`at most ${REPLY_LIMITS.answer} characters`);
         expect(prompt).toContain('`sessionSoFar`, when present, is the session');

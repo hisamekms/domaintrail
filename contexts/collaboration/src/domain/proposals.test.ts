@@ -2,7 +2,18 @@ import { describe, expect, test } from 'bun:test';
 import { Collaboration as C } from '../generated/index.js';
 import { readAnswererReply, readProposeReply, readTriageAnswer } from './answers.js';
 import { knownAgentRunId, knownChangeProposalId, knownRequestId, knownSessionId, knownTriageId } from './ids.js';
-import { approvedContent, PROPOSAL_LIMITS, proposalCommands, readProposal } from './proposals.js';
+import {
+    approvedInstruction,
+    elementReference,
+    oneRecommended,
+    parseElementReference,
+    PROPOSAL_LIMITS,
+    proposalCommands,
+    proposalData,
+    proposalJsonSchema,
+    readProposal,
+    recommendedOption,
+} from './proposals.js';
 import { readReply, REPLY_LIMITS, requestNumber, toAgentReply } from './reply.js';
 
 const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
@@ -17,53 +28,163 @@ const error = <E>(r: { ok: true } | { ok: false; error: E }): E => {
 const at = new Date('2026-11-03T09:00:00Z');
 const facilitator = value(C.makeParticipantId('local:facilitator'));
 const guest = value(C.makeParticipantId('dev:guest'));
-const raw = { what: 'A cancel command', where: '#Order[1]', how: 'Add cancel from Confirmed to Cancelled.' };
+const order: C.ModelTarget = { kind: 'DtElement', element: value(C.makeElementName('Sales.Order')) };
+const orderId: C.ModelTarget = { kind: 'DtElement', element: value(C.makeElementName('Sales.OrderId')) };
+const sticky: C.ModelTarget = { kind: 'DtesElement', storming: value(C.makeStormingName('Orders')), local: value(C.makeStormingLocalName('Order')) };
+const raw = { targets: ['@{Sales.Order}'], how: 'Rename its label to 受注.' };
+const option = (label: string, extra: object = {}): object => ({ label, targets: ['@{Sales.Order}'], ...extra });
 
-describe('a proposal’s text', () => {
-    test('read trimmed, each field within its limit, nothing else', () => {
-        expect(value(readProposal({ what: '  A cancel command ', where: raw.where, how: raw.how }))).toEqual(raw as unknown as C.ProposalContent);
-        expect(error(readProposal({ ...raw, what: '' }))).toEqual({ path: 'proposal.what', message: 'Expected a non-empty string.' });
+describe('a proposal as the AI writes it', () => {
+    test('targets as element references, how trimmed within its limit, nothing else', () => {
+        expect(value(readProposal({ targets: [' @{Sales.Order} ', 'es:Orders/Order'], how: '  Rename its label to 受注. ' }))).toEqual({
+            targets: [order, sticky],
+            how: 'Rename its label to 受注.',
+            options: [],
+        } as unknown as C.ProposalContent);
+        expect(error(readProposal({ ...raw, how: '' }))).toEqual({ path: 'proposal.how', message: 'Expected a non-empty string.' });
         expect(error(readProposal({ ...raw, how: 'x'.repeat(PROPOSAL_LIMITS.how + 1) }))).toEqual({
             path: 'proposal.how',
             message: `At most ${PROPOSAL_LIMITS.how} characters.`,
         });
-        expect(error(readProposal({ ...raw, where: 'a\u0007b' })).path).toBe('proposal.where');
-        expect(error(readProposal({ ...raw, diff: 'x' })).path).toBe('proposal.diff');
+        expect(error(readProposal({ ...raw, how: 'a\u0007b' })).path).toBe('proposal.how');
+        expect(error(readProposal({ ...raw, what: 'x' })).path).toBe('proposal.what');
+        expect(error(readProposal({ ...raw, targets: '@{Sales.Order}' })).path).toBe('proposal.targets');
+        expect(error(readProposal({ ...raw, targets: [1] })).path).toBe('proposal.targets[0]');
         expect(error(readProposal('text')).path).toBe('proposal');
         expect(value(readProposal({ ...raw, how: 'line 1\nline 2' })).how).toBe('line 1\nline 2' as C.ProposalText);
+        // no targets at all: a change of the whole model, or one the AI could not pin down
+        expect(value(readProposal({ how: 'x' })).targets).toEqual([]);
+    });
+
+    test('malformed references are dropped (paths, files, whitespace); unknown ones are kept, each once, at most 50', () => {
+        expect(parseElementReference('@{Sales.Order:confirm}')).toEqual({ kind: 'DtElement', element: 'Sales.Order:confirm' } as unknown as C.ModelTarget);
+        expect(parseElementReference('Sales.Order#Draft')).toEqual({ kind: 'DtElement', element: 'Sales.Order#Draft' } as unknown as C.ModelTarget);
+        for (const bad of ['contexts/sales/order.dt', 'order.dtes', '@{Sales Order}', '@{es:Orders}', '@{es:a/b/c}', '', '@{}', 'a{b}'])
+            expect(parseElementReference(bad)).toBeUndefined();
+        const read = value(readProposal({ ...raw, targets: ['@{Sales.Order}', 'sales/order.dt', '@{Sales.Order}', '@{Sales.Nothing}'] }));
+        expect(read.targets.map(elementReference)).toEqual(['@{Sales.Order}', '@{Sales.Nothing}']);
+        const many = Array.from({ length: 60 }, (_, i) => `@{Sales.E${i}}`);
+        expect(value(readProposal({ ...raw, targets: many })).targets).toHaveLength(PROPOSAL_LIMITS.targets);
+    });
+
+    test('options are clamped: at most three, exactly one recommended; a single option is the proposal', () => {
+        // none marked: the first is recommended
+        const two = value(
+            readProposal({ ...raw, targets: [], options: [option('集約だけ'), option('付箋も', { targets: ['@{Sales.Order}', '@{es:Orders/Order}'] })] }),
+        );
+        expect(two.options.map((o): unknown[] => [o.label, o.recommended])).toEqual([
+            ['集約だけ', true],
+            ['付箋も', false],
+        ]);
+        expect(recommendedOption(two)).toBe(0 as C.ProposalOptionIndex);
+        // several marked: the first marked one
+        const marked = value(readProposal({ ...raw, options: [option('a'), option('b', { recommended: true }), option('c', { recommended: true })] }));
+        expect(marked.options.map((o) => o.recommended)).toEqual([false, true, false]);
+        // four, the fourth recommended: it is kept with the first two
+        const four = value(readProposal({ ...raw, options: [option('a'), option('b'), option('c'), option('d', { recommended: true })] }));
+        expect(four.options.map((o): unknown[] => [o.label, o.recommended])).toEqual([
+            ['a', false],
+            ['b', false],
+            ['d', true],
+        ]);
+        expect([two, marked, four].every(oneRecommended)).toBe(true);
+        // one option: no choice — its targets and its how become the proposal's
+        const one = value(readProposal({ ...raw, targets: [], options: [option('集約だけ', { targets: ['@{Sales.OrderId}'], how: 'Add it.' })] }));
+        expect(one).toEqual({ targets: [orderId], how: 'Add it.', options: [] } as unknown as C.ProposalContent);
+        expect(value(readProposal({ ...raw, options: [] })).options).toEqual([]);
+        expect(error(readProposal({ ...raw, options: [option('')] })).path).toBe('proposal.options[0].label');
+        expect(error(readProposal({ ...raw, options: [option('x'.repeat(PROPOSAL_LIMITS.label + 1)), option('b')] })).path).toBe('proposal.options[0].label');
+        expect(error(readProposal({ ...raw, options: [option('a', { recommended: 'yes' }), option('b')] })).path).toBe('proposal.options[0].recommended');
+        expect(error(readProposal({ ...raw, options: [option('a', { where: 'x' }), option('b')] })).path).toBe('proposal.options[0].where');
+        expect(error(readProposal({ ...raw, options: 'a' })).path).toBe('proposal.options');
+    });
+
+    test('sent as element references and read back the same; the schema bounds what the model writes', () => {
+        const read = value(readProposal({ ...raw, options: [option('集約だけ', { recommended: true }), option('付箋も', { how: 'Also the sticky.' })] }));
+        expect(proposalData(read)).toEqual({
+            targets: ['@{Sales.Order}'],
+            how: 'Rename its label to 受注.',
+            options: [
+                { label: '集約だけ', targets: ['@{Sales.Order}'], recommended: true },
+                { label: '付箋も', targets: ['@{Sales.Order}'], how: 'Also the sticky.', recommended: false },
+            ],
+        });
+        expect(value(readProposal(proposalData(read)))).toEqual(read);
+        const schema = proposalJsonSchema() as { properties: { how: { maxLength: number }; options: { maxItems: number } }; required: string[] };
+        expect([schema.properties.how.maxLength, schema.properties.options.maxItems, schema.required]).toEqual([PROPOSAL_LIMITS.how, 3, ['targets', 'how']]);
     });
 });
 
 describe('the commands of a change proposal', () => {
     const content = value(readProposal(raw));
-    const open = value(
-        proposalCommands.propose({
-            id: knownChangeProposalId('00000000-0000-4000-8000-000000000001'),
-            session: knownSessionId('00000000-0000-4000-8000-000000000002') as C.ActiveSession,
-            triage: knownTriageId('00000000-0000-4000-8000-000000000003') as C.ProposableTriage,
-            request: knownRequestId('00000000-0000-4000-8000-000000000004'),
-            requestedBy: guest,
-            content,
-            proposedAt: at,
-        }),
-    ).Open.aggregate;
+    const choices = value(
+        readProposal({ ...raw, targets: [], options: [option('集約だけ'), option('付箋も', { targets: ['@{es:Orders/Order}'], how: 'Also the sticky.' })] }),
+    );
+    const propose = (c: C.ProposalContent): C.OpenChangeProposal =>
+        value(
+            proposalCommands.propose({
+                id: knownChangeProposalId('00000000-0000-4000-8000-000000000001'),
+                session: knownSessionId('00000000-0000-4000-8000-000000000002') as C.ActiveSession,
+                triage: knownTriageId('00000000-0000-4000-8000-000000000003') as C.ProposableTriage,
+                request: knownRequestId('00000000-0000-4000-8000-000000000004'),
+                requestedBy: guest,
+                content: c,
+                proposedAt: at,
+            }),
+        ).Open.aggregate;
+    const open = propose(content);
     const run = knownAgentRunId('00000000-0000-4000-8000-000000000005');
-
-    test('approved by the facilitator, as is or edited: the run follows the edited text', () => {
-        const edited = value(readProposal({ ...raw, how: 'Add cancel from Placed only.' }));
-        const approved = value(
-            proposalCommands.approve(open, { approvedBy: facilitator, approvedByRole: 'Facilitator', edited, run, approvedAt: at }),
-        ).Approved;
-        expect(approved.aggregate).toMatchObject({ state: 'Approved', run, edited });
-        expect(approvedContent(approved.aggregate)).toEqual(edited);
-        const asIs = value(
-            proposalCommands.approve(open, { approvedBy: facilitator, approvedByRole: 'Facilitator', edited: undefined, run, approvedAt: at }),
-        ).Approved;
-        expect(approvedContent(asIs.aggregate)).toEqual(content);
-        expect(asIs.events.ProposalApproved).toEqual({ type: 'ProposalApproved', proposalId: open.id, approvedBy: facilitator, run, approvedAt: at });
-        expect(error(proposalCommands.approve(open, { approvedBy: guest, approvedByRole: 'Participant', edited: undefined, run, approvedAt: at }))).toEqual({
-            type: 'FacilitatorOnly',
+    const approve = (p: C.OpenChangeProposal, option: number | undefined, editedHow?: string) =>
+        proposalCommands.approve(p, {
+            approvedBy: facilitator,
+            approvedByRole: 'Facilitator',
+            option: option === undefined ? undefined : value(C.makeProposalOptionIndex(option)),
+            editedHow: editedHow === undefined ? undefined : value(C.makeProposalText(editedHow)),
+            run,
+            approvedAt: at,
         });
+
+    test('approved by the facilitator, as is or with its how edited: the run follows the edited how', () => {
+        const edited = value(approve(open, undefined, 'Rename it to 受注 everywhere.')).Approved;
+        expect(edited.aggregate).toMatchObject({ state: 'Approved', run, editedHow: 'Rename it to 受注 everywhere.' });
+        expect(approvedInstruction(edited.aggregate)).toEqual({ targets: [order], how: 'Rename it to 受注 everywhere.' } as unknown as C.ProposalInstruction);
+        const asIs = value(approve(open, undefined)).Approved;
+        expect(approvedInstruction(asIs.aggregate)).toEqual({ targets: content.targets, how: content.how });
+        expect(asIs.events.ProposalApproved).toEqual({ type: 'ProposalApproved', proposalId: open.id, approvedBy: facilitator, run, approvedAt: at });
+        expect(
+            error(
+                proposalCommands.approve(open, {
+                    approvedBy: guest,
+                    approvedByRole: 'Participant',
+                    option: undefined,
+                    editedHow: undefined,
+                    run,
+                    approvedAt: at,
+                }),
+            ),
+        ).toEqual({ type: 'FacilitatorOnly' });
+    });
+
+    test('with options, approved with one of them: the run gets its label, its targets and its how (or the edited one)', () => {
+        const withChoices = propose(choices);
+        const second = value(approve(withChoices, 1)).Approved;
+        expect(second.aggregate.option).toBe(1 as C.ProposalOptionIndex);
+        expect(second.events.ProposalApproved).toMatchObject({ option: 1 });
+        expect(approvedInstruction(second.aggregate)).toEqual({
+            label: '付箋も',
+            targets: [sticky],
+            how: 'Also the sticky.',
+        } as unknown as C.ProposalInstruction);
+        // the first has no how of its own: the proposal's; its targets are its own
+        expect(approvedInstruction(value(approve(withChoices, 0, 'Only the aggregate.')).Approved.aggregate)).toEqual({
+            label: '集約だけ',
+            targets: [order],
+            how: 'Only the aggregate.',
+        } as unknown as C.ProposalInstruction);
+        // no option chosen of a proposal with options, an option it does not have, an option of one without options
+        expect(error(approve(withChoices, undefined))).toEqual({ type: 'NoSuchOption' });
+        expect(error(approve(withChoices, 2))).toEqual({ type: 'NoSuchOption' });
+        expect(error(approve(open, 0))).toEqual({ type: 'NoSuchOption' });
     });
 
     test('rejected by the facilitator with a note; withdrawn by its requester only', () => {
@@ -103,15 +224,15 @@ describe('what the answerer role returns', () => {
         });
         expect(value(readAnswererReply({ kind: 'proposal', proposal: raw, reason: 'it asks for a change' }))).toEqual({
             kind: 'proposal',
-            proposal: raw as unknown as C.ProposalContent,
+            proposal: { targets: [order], how: raw.how, options: [] } as unknown as C.ProposalContent,
             reason: 'it asks for a change',
         });
         expect(value(readAnswererReply({ kind: 'neither' }))).toEqual({ kind: 'neither' });
         expect(error(readAnswererReply({ kind: 'answer', answer: 'x'.repeat(REPLY_LIMITS.answer + 1) })).path).toBe('reply.answer');
         expect(error(readAnswererReply({ kind: 'answer', answer: 'x', proposal: raw })).path).toBe('reply.proposal');
         expect(error(readAnswererReply({ kind: 'edit' })).path).toBe('reply.kind');
-        expect(error(readAnswererReply({ kind: 'proposal', proposal: { what: 'x' } })).path).toBe('reply.proposal.where');
-        expect(value(readProposeReply({ proposal: raw }))).toEqual(raw as unknown as C.ProposalContent);
+        expect(error(readAnswererReply({ kind: 'proposal', proposal: { targets: [] } })).path).toBe('reply.proposal.how');
+        expect(value(readProposeReply({ proposal: raw }))).toEqual({ targets: [order], how: raw.how, options: [] } as unknown as C.ProposalContent);
         expect(error(readProposeReply({ proposal: raw, answer: 'x' })).path).toBe('reply.answer');
     });
 });

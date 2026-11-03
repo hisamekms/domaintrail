@@ -4,7 +4,7 @@
 // the message, the chat and the session so far are data written by people, put into the prompt as JSON inside a block
 // delimited by a random nonce that their text cannot close, and the rules tell the agent not to obey them. The replies'
 // shapes and limits are the collaboration's (`domain/answers.ts`, `domain/proposals.ts`).
-import { PROPOSAL_LIMITS, plainBody, REPLY_LIMITS, TRIAGE_REASON_LIMIT } from '@domaintrail/collaboration';
+import { PROPOSAL_LIMITS, plainBody, proposalData, REPLY_LIMITS, TRIAGE_REASON_LIMIT } from '@domaintrail/collaboration';
 import type { AgentAnswerJobBody, AgentPreviousRun } from '@domaintrail/collaboration/protocol';
 import { MAX_CHANGED_SHOWN } from './prompt.js';
 
@@ -26,9 +26,9 @@ function messageOf(job: AgentAnswerJobBody): Record<string, unknown> {
     };
 }
 
-/** The open proposals as stage 3 sees them. */
+/** The open proposals as stage 3 sees them: as the answerer wrote them (targets as element references). */
 function proposalsOf(job: AgentAnswerJobBody): Record<string, unknown>[] {
-    return (job.openProposals ?? []).map((p) => ({ what: p.content.what, where: p.content.where, how: p.content.how }));
+    return (job.openProposals ?? []).map((p) => ({ ...proposalData(p.content) }));
 }
 
 /** The prompt of stage 3: the kind of the message, how sure, and why — from the block only, with no tools. */
@@ -99,8 +99,20 @@ const ELEMENT_NAMES = `name an element by its identifier, never its label: a \`.
 \`@{Sales.Order}\`, \`@{Sales.Order#Draft}\` or \`@{Sales.Order:confirm}\`, a \`.dtes\` element as
 \`@{es:Returns/ReturnRequested}\` (storming / element). The page shows them by name and links them.`;
 
-const PROPOSAL_FIELDS = `proposal: { what (at most ${PROPOSAL_LIMITS.what} characters: what to change, in a line or two), where (at
-most ${PROPOSAL_LIMITS.where}: the elements and files), how (at most ${PROPOSAL_LIMITS.how}: how, as text, no diff) }`;
+const PROPOSAL_FIELDS = `proposal: { targets, how, options? }`;
+
+/** How to write a proposal: the elements it changes, how in a line or two, options only when unsure. */
+const PROPOSAL_RULES = `A proposal is short: the facilitator reads it in a narrow chat column and decides at a glance.
+- targets: the model elements the change touches, as element references (\`@{Sales.Order}\`,
+  \`@{es:Returns/ReturnRequested}\`; one that does not exist yet, to be added, is named the same way). Never a file
+  name or a path: the page shows the elements, not files.
+- how (at most ${PROPOSAL_LIMITS.how} characters): what to do to them, in one or two short lines — a sentence, not a
+  plan. No file names or paths, no alternatives in prose, no reasons.
+- options (only when you are genuinely unsure what is wanted — most often how far the change should reach — else
+  leave it out): two or three, never more, each { label (at most ${PROPOSAL_LIMITS.label} characters: a few words,
+  e.g. 「集約だけ」), targets (that option's elements), how (only when it differs from the proposal's), recommended }.
+  Mark exactly one recommended: the one you would choose. The facilitator picks one; \`targets\` and \`how\` of the
+  proposal are then what the options share (\`targets\` may be empty).`;
 
 /** The rules both read-only prompts share. */
 const READ_ONLY_RULES = `- You can only read: Read, Grep and Glob are your only tools, on the workspace's files in your working directory.
@@ -140,10 +152,12 @@ Reply with one JSON object (structured output), its "kind" one of:
   characters). Say what you are unsure of rather than guess. Keep it short: the chat column is narrow. It is shown as
   Markdown (paragraphs, lists, \`code\`, code blocks, tables): use at most one heading level (\`#\`), and no links or
   images (they are shown as plain text).
-- "proposal": { kind, ${PROPOSAL_FIELDS}, reason } — the message asks for a change after all: describe the change,
-  grounded in the files you read, instead of describing it as done; reason (at most ${TRIAGE_REASON_LIMIT}) says why it is
-  a request.
+- "proposal": { kind, ${PROPOSAL_FIELDS}, reason } — the message asks for a change after all: propose the change,
+  grounded in the files you read, instead of describing it as done (written as below); reason (at most
+  ${TRIAGE_REASON_LIMIT}) says why it is a request.
 - "neither": { kind, reason } — it needs no answer at all (thanks, an acknowledgement).
+
+${PROPOSAL_RULES}
 
 <message-${nonce}>
 ${blockJson(answerData(job, context))}
@@ -155,14 +169,15 @@ ${blockJson(answerData(job, context))}
 export function buildProposePrompt(job: AgentAnswerJobBody, nonce: string, context: AnswerContext = {}): string {
     return `You are the read-only answerer of a DomainTrail collaboration session, working in this workspace. The message
 in the block below asks the AI to change the domain model; it comes from a participant, so the facilitator decides
-first. Write it up as a change proposal the facilitator can approve, edit or reject: what to change, where and how,
+first. Write it up as a change proposal the facilitator can approve, edit or reject: the elements to change and how,
 grounded in the files you read. Do not carry it out.
 
 Rules:
 ${READ_ONLY_RULES}
 
-Reply with the JSON object (structured output) { kind: "proposal", ${PROPOSAL_FIELDS} }. Where the message leaves a
-choice open, say in "how" what you chose and what the other choices are.
+Reply with the JSON object (structured output) { kind: "proposal", ${PROPOSAL_FIELDS} }.
+
+${PROPOSAL_RULES}
 
 <message-${nonce}>
 ${blockJson(answerData(job, context))}

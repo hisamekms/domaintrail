@@ -5,7 +5,7 @@
 // after an answer or a pick (a cancel of the run while it is still queued); a participant withdraws their own proposal.
 // Every action acts at once: there is no tray. The server checks the role anyway.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AnswerBody, ProposalBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import type { AnswerBody, ApproveProposalsBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { sessionApi } from './api';
 import { failure } from './parts';
 
@@ -54,8 +54,11 @@ export const requestsOf = (run: RunJson): string[] => run.input.requests.map((r)
 export interface ChatActions {
     /** The facilitator's 「AI に送る」 (ADR 0030): addresses the messages to the AI; each one's triage decides what follows. */
     address(requests: readonly string[]): Promise<boolean>;
-    /** Approves open change proposals, each as is or edited (`edited`): approved together, they are one run. */
-    approveProposals(proposals: readonly { readonly proposal: string; readonly edited?: ProposalBody }[]): Promise<boolean>;
+    /**
+     * Approves open change proposals, each with the option chosen (`option`, when it has options) and as is or with its
+     * how edited (`how`): approved together, they are one run.
+     */
+    approveProposals(proposals: ApproveProposalsBody['proposals']): Promise<boolean>;
     /** Rejects an open change proposal, with a note to its requester if any. */
     rejectProposal(proposal: string, note?: string): Promise<boolean>;
     /** Tries the AI's answer or proposal for a message again, once the server gave it up. */

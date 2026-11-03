@@ -312,11 +312,23 @@ describe('the answers entry point', () => {
             await stream.post(triage.job, { kind: 'change_request', confidence: 0.95, reason: '変更', durationMs: 1 });
             const job = await stream.job('propose');
             expect(job.sessionSoFar).toBeDefined();
-            const posted = await stream.post(job.job, { proposal: { what: `W ${body}`, where: '@{Shop.Order}', how: 'H' }, durationMs: 5 });
+            const written = {
+                targets: [],
+                how: `H ${body}`,
+                options: [
+                    { label: 'Order だけ', targets: ['@{Shop.Order}'], recommended: true },
+                    { label: '明細も', targets: ['@{Shop.Order}', '@{Shop.OrderLine}'], how: '明細にも足す' },
+                ],
+            };
+            const posted = await stream.post(job.job, { proposal: written, durationMs: 5 });
             expect(posted.status).toBe(200);
             const state = await ctx.state(ctx.bob);
             const proposal = state.proposals?.find((p) => p.request === request);
-            expect(proposal).toMatchObject({ state: 'Open', requestedBy: ctx.bobId, content: { what: `W ${body}` } });
+            expect(proposal).toMatchObject({
+                state: 'Open',
+                requestedBy: ctx.bobId,
+                content: { how: `H ${body}`, options: [{ recommended: true }, { recommended: false }] },
+            });
             expect(triageOf(state, request)).toMatchObject({ kind: 'ChangeRequest', outcome: { kind: 'Proposal' } });
             return { request, proposal: proposal?.id ?? '' };
         };
@@ -332,16 +344,28 @@ describe('the answers entry point', () => {
             200,
             { state: 'Rejected', note: 'まだ早い' },
         ]);
-        const edited = { what: 'total を足す', where: '@{Shop.Order}', how: 'total: Int を足す' };
-        const approved = await ctx.api(ctx.ada, 'proposals/approve', { proposals: [{ proposal: second.proposal, edited }], note: 'お願い' });
+        // an option it does not have, or one that is not an index: refused
+        expect((await ctx.api(ctx.ada, 'proposals/approve', { proposals: [{ proposal: second.proposal, option: 2 }] })).status).toBe(400);
+        expect((await ctx.api(ctx.ada, 'proposals/approve', { proposals: [{ proposal: second.proposal, option: '1' }] })).status).toBe(400);
+        const how = 'total: Int を Order と明細に足す';
+        const approved = await ctx.api(ctx.ada, 'proposals/approve', { proposals: [{ proposal: second.proposal, option: 1, how }], note: 'お願い' });
         expect(approved.status).toBe(201);
         const body = (await approved.json()) as {
-            run: { input: { requests: { request: string }[]; proposals: { approved: { content: unknown }[] } } };
-            proposals: { state: string }[];
+            run: { input: { requests: { request: string }[]; proposals: { approved: { instruction: unknown }[] } } };
+            proposals: { state: string; option?: number; editedHow?: string }[];
         };
         expect(body.run.input.requests.map((r) => r.request)).toEqual([second.request]);
-        expect(body.run.input.proposals.approved.map((a) => a.content)).toEqual([edited]);
-        expect(body.proposals.map((p) => p.state)).toEqual(['Approved']);
+        expect(body.run.input.proposals.approved.map((a) => a.instruction)).toEqual([
+            {
+                label: '明細も',
+                targets: [
+                    { kind: 'DtElement', element: 'Shop.Order' },
+                    { kind: 'DtElement', element: 'Shop.OrderLine' },
+                ],
+                how,
+            },
+        ]);
+        expect(body.proposals.map((p) => [p.state, p.option, p.editedHow])).toEqual([['Approved', 1, how]]);
         const states = (await ctx.state()).proposals?.map((p) => p.state);
         expect(states).toEqual(['Withdrawn', 'Approved', 'Rejected']);
     });
@@ -473,7 +497,7 @@ describe('end to end with the two roles and a fake Claude Code', () => {
             { reply: { kind: 'consultation', confidence: 0.9, reason: '質問' } },
             { reply: { kind: 'answer', answer: '返品は ReturnRequested から始まります。' } },
             { reply: { kind: 'change_request', confidence: 0.95, reason: '変更' } },
-            { reply: { kind: 'proposal', proposal: { what: 'ReturnCancelled を足す', where: '@{es:Returns/ItemDisposed}', how: 'イベントを足す' } } },
+            { reply: { kind: 'proposal', proposal: { targets: ['@{es:Returns/ItemDisposed}', 'returns.dtes'], how: 'ReturnCancelled を足す' } } },
         ]);
         const log = await agentFor(ctx, runPlan, answerPlan);
         // the facilitator's own request (not addressed): a run that takes 3 s
@@ -522,6 +546,9 @@ describe('end to end with the two roles and a fake Claude Code', () => {
         expect(runCalls).toHaveLength(2);
         expect(runCalls[1].prompt).toContain('"approvedProposals"');
         expect(runCalls[1].prompt).toContain('ReturnCancelled を足す');
+        // the targets as element references; the file the AI named was dropped
+        expect(runCalls[1].prompt).toContain('"@{es:Returns/ItemDisposed}"');
+        expect(runCalls[1].prompt).not.toContain('returns.dtes');
         expect(runCalls[1].prompt).toContain('"sessionSoFar"');
         expect(log.join('\n')).not.toContain('返品');
     }, 60_000);

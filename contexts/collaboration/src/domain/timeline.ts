@@ -22,6 +22,7 @@ import { approvalOf } from './approvals.js';
 import { plainBody } from './body.js';
 import { compareFiles } from './compare.js';
 import { laterRunOf } from './marks.js';
+import { elementReference } from './proposals.js';
 import { revertStatus } from './revert.js';
 
 /** The limits of the timeline: the newest entries in full, then one line each, the rest counted (configurable later). */
@@ -155,13 +156,16 @@ function numbered(records: TimelineRecords): { readonly entries: TimelineEntry[]
                 const of = ref(`request:${p.request}`) ?? 'a message';
                 return {
                     full: `${AI_NAME} proposed a change for ${of} (by ${nameOf(p.requestedBy)}):\n${indent(content(p.content))}`,
-                    line: `${AI_NAME} proposed a change for ${of}: ${cut(oneLine(p.content.what), LINE_CHARS)}`,
+                    line: `${AI_NAME} proposed a change for ${of}: ${cut(oneLine(p.content.how), LINE_CHARS)}`,
                 };
             },
         });
         const decided =
             p.state === 'Approved'
-                ? { at: p.approvedAt, text: `approved by ${nameOf(p.approvedBy)}${p.edited ? ' after editing it' : ''}` }
+                ? {
+                      at: p.approvedAt,
+                      text: `approved by ${nameOf(p.approvedBy)}${chosenLabel(p) ? ` with the option "${chosenLabel(p)}"` : ''}${p.editedHow ? ' after editing its how' : ''}`,
+                  }
                 : p.state === 'Rejected'
                   ? { at: p.rejectedAt, text: `rejected by ${nameOf(p.rejectedBy)}${p.note ? `: ${oneLine(p.note)}` : ''}` }
                   : p.state === 'Withdrawn'
@@ -174,7 +178,7 @@ function numbered(records: TimelineRecords): { readonly entries: TimelineEntry[]
             key: `proposal-decided:${p.id}`,
             render: (ref) => {
                 const line = `The proposal ${ref(`proposal:${p.id}`) ?? ''} was ${decided.text}`.replace('  ', ' ');
-                const edited = p.state === 'Approved' && p.edited ? `\n${indent(`edited to:\n${content(p.edited)}`)}` : '';
+                const edited = p.state === 'Approved' && p.editedHow ? `\n${indent(`how edited to: ${p.editedHow}`)}` : '';
                 const run = p.state === 'Approved' ? ` (${ref(`run:${p.run}`) ?? 'its run is in the queue'})` : '';
                 return { full: `${line}${run}${edited}`, line: cut(line, LINE_CHARS) };
             },
@@ -267,7 +271,22 @@ const indent = (s: string): string =>
         .map((l) => `    ${l}`)
         .join('\n');
 
-const content = (c: Collaboration.ProposalContent): string => `what: ${c.what}\nwhere: ${c.where}\nhow: ${c.how}`;
+/** Targets as the agents name elements (`@{Sales.Order}`), or "none". */
+const targetsText = (ts: readonly Collaboration.ModelTarget[]): string => (ts.length === 0 ? 'none' : ts.map(elementReference).join(', '));
+
+const content = (c: Collaboration.ProposalContent): string =>
+    [
+        `targets: ${targetsText(c.targets)}`,
+        `how: ${c.how}`,
+        ...c.options.map(
+            (o, i) =>
+                `option ${i + 1}${o.recommended ? ' (recommended)' : ''}: ${o.label} — targets: ${targetsText(o.targets)}${o.how ? `; how: ${o.how}` : ''}`,
+        ),
+    ].join('\n');
+
+/** The label of the option an approved proposal was approved with, if it had options. */
+const chosenLabel = (p: Collaboration.ChangeProposal): string | undefined =>
+    p.state === 'Approved' && p.option !== undefined ? p.content.options[p.option]?.label : undefined;
 
 /** An AI turn: its messages, outcome, summary, changes and assumptions. */
 function turn(
@@ -307,7 +326,12 @@ function turn(
     if (reply?.answer) lines.push(`answer:\n${indent(cut(reply.answer, BODY_CHARS))}`);
     const proposals = run.input.proposals?.approved ?? [];
     for (const p of proposals)
-        lines.push(`following the approved proposal ${ref(`proposal:${p.proposal}`) ?? ''}: ${oneLine(p.content.what)}`.replace('  ', ' '));
+        lines.push(
+            `following the approved proposal ${ref(`proposal:${p.proposal}`) ?? ''}: ${p.instruction.label ? `${p.instruction.label} — ` : ''}${oneLine(p.instruction.how)}`.replace(
+                '  ',
+                ' ',
+            ),
+        );
     if (changed) lines.push(`changed: ${changes(run, records).join(', ') || 'files'}`);
     if (run.state === 'NeedsClarification') for (const q of reply?.questions ?? []) lines.push(`question: ${oneLine(q.text)}`);
     if (run.state === 'NeedsClarification' && !reply) lines.push(`question: ${oneLine(run.question)}`);

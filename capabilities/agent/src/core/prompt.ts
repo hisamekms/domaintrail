@@ -6,6 +6,7 @@
 // as data the rules tell the agent not to obey, and nothing of them reaches a command line.
 import {
     type Collaboration,
+    elementReference,
     peopleAsNames,
     plainBody,
     plainQuestion,
@@ -237,14 +238,17 @@ In any of its text, name an element by its identifier, never its label: a \`.dt\
 \`@{es:Returns/ReturnRequested}\` (storming / element). The page shows them by name and links them.`;
 }
 
-/** The approved proposals as the prompt shows them: each with the number of the request it came from. */
+/**
+ * The approved proposals as the prompt shows them: each with the number of the request it came from, the option the
+ * facilitator chose (when it had options), its targets as element references, and how.
+ */
 function approvedProposalsOf(input: Json<Collaboration.RunInput>, proposals: Json<Collaboration.ApprovedProposals>): Record<string, unknown>[] {
     const numberOf = new Map(input.requests.map((r, i) => [r.request, i + 1]));
     return proposals.approved.map((p) => ({
         ...(numberOf.has(p.request) && { request: numberOf.get(p.request) }),
-        what: p.content.what,
-        where: p.content.where,
-        how: p.content.how,
+        ...(p.instruction.label !== undefined && { chosenOption: p.instruction.label }),
+        targets: p.instruction.targets.map(elementReference),
+        how: p.instruction.how,
     }));
 }
 
@@ -364,8 +368,10 @@ Rules:
 11. \`changedSinceYourLastRun\`, when present: this conversation continues your earlier runs of this session, and
    these files changed since your last run (edited by people or another agent, formatted by \`dt fmt\`, or restored):
    what you remember of them is out of date, so read them again before relying on them or editing them.
-12. \`approvedProposals\`, when present: the facilitator approved these change proposals (what, where, how) for the
-   requests they name; carry them out as approved — the approved text is what to do, the request is why.
+12. \`approvedProposals\`, when present: the facilitator approved these change proposals for the requests they name —
+   the elements to change (\`targets\`), how, and the option the facilitator chose (\`chosenOption\`) when the proposal
+   offered several; carry them out as approved, to that option's extent — the approved text is what to do, the
+   request is why.
 13. When a request turns out to be a question about the model (an explanation, an opinion) rather than a change, change
    nothing for it: set its status "answered" and write the answer in \`answer\`, from the files as they are. Never edit
    on a guess; when unsure whether a change is wanted, answer or ask (rule 6).

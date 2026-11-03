@@ -284,19 +284,25 @@ export interface AddressedBody {
     readonly triages: readonly Json<Collaboration.Triage>[];
 }
 
-/** A change proposal's text: what, where (elements as `#name`), how (`PROPOSAL_LIMITS` of `domain/proposals.ts`). */
+/**
+ * A change proposal as the answerer sends it (`ProposalData` of `domain/proposals.ts`, read by `readProposal`): its
+ * targets as element references (`@{Sales.Order}`, `@{es:Returns/ReturnRequested}`), how in a line or two, and two or
+ * three options when the AI is unsure (one `recommended`).
+ */
 export interface ProposalBody {
-    readonly what: string;
-    readonly where: string;
+    readonly targets: readonly string[];
     readonly how: string;
+    readonly options?: readonly { readonly label: string; readonly targets: readonly string[]; readonly how?: string; readonly recommended?: boolean }[];
 }
 
 /**
- * `POST /api/session/proposals/approve` (the facilitator): open proposals of the session, each as is or edited; approved
- * together, one run (`note`: the facilitator's note on it).
+ * `POST /api/session/proposals/approve` (the facilitator): open proposals of the session, each with the option chosen
+ * (`option`, its index; the recommended one when not given, and none for a proposal without options) and as is or
+ * with its how edited (`how`, at most `PROPOSAL_LIMITS.editedHow`); approved together, one run (`note`: the
+ * facilitator's note on it). A proposal without the option given → 400 `NoSuchOption`.
  */
 export interface ApproveProposalsBody {
-    readonly proposals: readonly { readonly proposal: string; readonly edited?: ProposalBody }[];
+    readonly proposals: readonly { readonly proposal: string; readonly option?: number; readonly how?: string }[];
     readonly note?: string;
 }
 

@@ -28,7 +28,7 @@ import type {
     Stores,
     UnitOfWork,
 } from '../application/ports.js';
-import { upgradeEvent, upgradeRequest, upgradeRun, upgradeSession } from './legacy.js';
+import { upgradeEvent, upgradeProposal, upgradeRequest, upgradeRun, upgradeSession } from './legacy.js';
 import { DATABASE_FILE, PRIVATE_FILE, checkPlain, looserThan, restrict, sessionDirectory } from './session-dir.js';
 
 /**
@@ -666,7 +666,7 @@ function proposals(db: DatabaseSync): ProposalRepository {
     return {
         load(id) {
             const r = load.get(params({ id }));
-            return r ? decoded<Collaboration.ChangeProposal>(text(r, 'data')) : undefined;
+            return r ? decoded<Collaboration.ChangeProposal>(text(r, 'data'), upgradeProposal) : undefined;
         },
         save(proposal) {
             save.run(
@@ -682,7 +682,7 @@ function proposals(db: DatabaseSync): ProposalRepository {
             );
         },
         listBySession(session) {
-            return list.all(params({ session })).map((r) => decoded<Collaboration.ChangeProposal>(text(r, 'data')));
+            return list.all(params({ session })).map((r) => decoded<Collaboration.ChangeProposal>(text(r, 'data'), upgradeProposal));
         },
     };
 }

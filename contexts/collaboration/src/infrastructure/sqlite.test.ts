@@ -447,3 +447,97 @@ describe("rows written before the agent's reply was structured", () => {
         expect(events.map((e) => e.event.type)).toEqual(['RunNeedsClarification', 'RunCompleted']);
     });
 });
+
+describe('change proposals written when a proposal was three texts', () => {
+    // a proposal was `{ what, where, how }` and an approval's edit a whole one (ADR 0030, M2): read as a proposal with no
+    // targets and no options whose how is the three joined, the edit as the how it edited; nothing rewritten
+    test('load with the three texts as their how, in the proposal, its events and the run that followed it', async () => {
+        const db = openDatabase(':memory:');
+        const raw = (o: unknown): string => JSON.stringify(o);
+        const ids = {
+            session: '00000000-0000-4000-8000-000000000101',
+            request: '00000000-0000-4000-8000-000000000102',
+            triage: '00000000-0000-4000-8000-000000000103',
+            run: '00000000-0000-4000-8000-000000000104',
+            proposal: '00000000-0000-4000-8000-000000000105',
+        };
+        const former = { what: '取り消しのコマンド', where: '@{Sales.Order}, sales/order.dt', how: 'Confirmed から Cancelled へ' };
+        const edited = { what: '取り消しのコマンド', where: '@{Sales.Order}', how: 'Placed からだけ' };
+        db.prepare('INSERT INTO sessions (id, state, data) VALUES (?, ?, ?)').run(ids.session, 'Open', raw({}));
+        db.prepare('INSERT INTO requests (id, session_id, seq, state, data) VALUES (?, ?, 1, ?, ?)').run(ids.request, ids.session, 'Sent', raw({}));
+        db.prepare('INSERT INTO triages (id, session_id, seq, request_id, state, data) VALUES (?, ?, 1, ?, ?, ?)').run(
+            ids.triage,
+            ids.session,
+            ids.request,
+            'Decided',
+            raw({}),
+        );
+        const input = { requests: [], proposals: { approved: [{ proposal: ids.proposal, request: ids.request, content: edited }] } };
+        db.prepare('INSERT INTO agent_runs (id, session_id, seq, state, data) VALUES (?, ?, 1, ?, ?)').run(
+            ids.run,
+            ids.session,
+            'Queued',
+            raw({ state: 'Queued', input }),
+        );
+        const proposal = {
+            state: 'Approved',
+            id: ids.proposal,
+            session: ids.session,
+            triage: ids.triage,
+            request: ids.request,
+            requestedBy: 'dev:bob',
+            content: former,
+            proposedAt: at.toISOString(),
+            approvedBy: 'local:facilitator',
+            approvedAt: at.toISOString(),
+            edited,
+            run: ids.run,
+        };
+        db.prepare('INSERT INTO proposals (id, session_id, seq, triage_id, request_id, run_id, state, data) VALUES (?, ?, 1, ?, ?, ?, ?, ?)').run(
+            ids.proposal,
+            ids.session,
+            ids.triage,
+            ids.request,
+            ids.run,
+            'Approved',
+            raw(proposal),
+        );
+        for (const payload of [
+            { type: 'ChangeProposed', proposalId: ids.proposal, content: former },
+            { type: 'ProposalApproved', proposalId: ids.proposal, edited, run: ids.run },
+        ])
+            db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(
+                ids.session,
+                payload.type,
+                raw(payload),
+                at.toISOString(),
+            );
+        const stored = JSON.stringify(db.prepare('SELECT data FROM proposals').all());
+        const uow = createUnitOfWork(db);
+        const session = knownSessionId(ids.session);
+        const read = await uow.transaction((st) => ({
+            proposals: st.proposals.listBySession(session),
+            run: st.runs.load(knownAgentRunId(ids.run))?.run,
+            events: st.outbox.readAfter(0, 10, session),
+        }));
+        const plain = (v: unknown): unknown => JSON.parse(JSON.stringify(v));
+        const [p] = read.proposals;
+        expect(plain(p?.content)).toEqual({ targets: [], how: '取り消しのコマンド\n@{Sales.Order}, sales/order.dt\nConfirmed から Cancelled へ', options: [] });
+        expect(p && C.checkProposalContentWith({ oneRecommended: () => true })(p.content)).toEqual([]);
+        expect((p?.state === 'Approved' && [p.editedHow, 'edited' in p, p.option]) as unknown).toEqual([
+            '取り消しのコマンド\n@{Sales.Order}\nPlaced からだけ',
+            false,
+            undefined,
+        ]);
+        expect(plain(read.run?.input.proposals?.approved)).toEqual([
+            { proposal: ids.proposal, request: ids.request, instruction: { targets: [], how: '取り消しのコマンド\n@{Sales.Order}\nPlaced からだけ' } },
+        ]);
+        expect(plain(read.events.map((e) => (e.event.type === 'ChangeProposed' ? e.event.content : e.event)))).toEqual([
+            { targets: [], how: '取り消しのコマンド\n@{Sales.Order}, sales/order.dt\nConfirmed から Cancelled へ', options: [] },
+            { type: 'ProposalApproved', proposalId: ids.proposal, run: ids.run, editedHow: '取り消しのコマンド\n@{Sales.Order}\nPlaced からだけ' },
+        ]);
+        // reading changes nothing in the database
+        expect(JSON.stringify(db.prepare('SELECT data FROM proposals').all())).toBe(stored);
+        db.close();
+    });
+});
