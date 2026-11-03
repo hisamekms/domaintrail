@@ -13,5 +13,5 @@
       "tests": { "runner": "bun" },
     },
   },
-  "view": { "port": 4321 },
+  "open": { "port": 4321 },
 }

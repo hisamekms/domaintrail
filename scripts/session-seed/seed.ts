@@ -1,8 +1,8 @@
-// Seeds a collaboration session for review (scripts/session-seed.ts): a scratch copy of examples/shop, `dt session
-// start` from the built CLI (a child process: its outbox, WebSocket, classifier and agent API are the real ones),
+// Seeds a collaboration session for review (scripts/session-seed.ts): a scratch copy of examples/shop, `dt collab
+// --no-agent` from the built CLI (a child process: its outbox, WebSocket, classifier and agent API are the real ones),
 // named participants signed in with their own cookies (one of them made the facilitator with the start's link), the
 // seed's agent (the real subscriber with a scripted runner), and the scenarios played through the session API as pages
-// play them. The agent is stopped once the scenarios are done, so that a real `dt session subscribe` can take over —
+// play them. The agent is stopped once the scenarios are done, so that a real `dt agent` can take over —
 // unless it is to leave a run running, which it then holds until the server stops.
 import { plainBody } from '@domaintrail/collaboration';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -53,7 +53,12 @@ export interface Ctx {
         body: string,
         options?: { targets?: readonly TargetSpec[]; reads?: ReadsAs; replyTo?: RunJson | RequestJson; mentions?: readonly Person[] },
     ): Promise<RequestJson>;
-    /** The facilitator applies messages as one run that the agent plays as `step`; resolves once the run ended. */
+    /**
+     * The facilitator applies messages as one run that the agent plays as `step`; resolves once the run ended. One
+     * message without a note goes as the page's 「AI に送る」 does (ADR 0030): addressed to the AI, its triage decides a
+     * change request (the classifier, else the seed's answerer) and queues the run. Several messages, or a note, are
+     * one run queued at once (the runs route the page still uses for a run with a comment).
+     */
     apply(requests: readonly RequestJson[], step: Step, options?: { note?: string }): Promise<RunJson>;
     /** The facilitator answers a run's questions: its requests queued again with the answer, played as `step`. */
     answer(run: RunJson, answer: AnswerBody, step: Step): Promise<RunJson>;
@@ -125,12 +130,12 @@ export interface Seeded {
     stop(): Promise<void>;
 }
 
-/** Starts `dt session start` and waits for its Live View and facilitator link. */
+/** Starts `dt collab` (without the agent in process: the seed's agent plays the runs) and waits for its Live View and facilitator link. */
 async function startServer(
     options: SeedOptions,
     classifier: MockClassifier | undefined,
 ): Promise<{ child: ChildProcess; url: string; link: string; exited: Promise<number | null> }> {
-    const child = spawn(options.dt.command, [...options.dt.args, '-r', options.dir, 'session', 'start', '--port', String(options.port)], {
+    const child = spawn(options.dt.command, [...options.dt.args, '-r', options.dir, 'collab', '--no-agent', '--port', String(options.port)], {
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...process.env, ...(classifier && { DOMAINTRAIL_CLASSIFIER_URL: classifier.url, [SEED_TOKEN_ENV]: 'seed' }) },
     });
@@ -156,7 +161,7 @@ async function startServer(
     const first = await Promise.race([started.then(() => 'started' as const), exited.then(() => 'exited' as const), timeout]);
     if (first !== 'started' || !url || !link) {
         child.kill('SIGTERM');
-        throw new Error(`dt session start did not start (${first}):\n${output.join('\n')}`);
+        throw new Error(`dt collab did not start (${first}):\n${output.join('\n')}`);
     }
     return { child, url, link, exited };
 }
@@ -318,6 +323,25 @@ function makeCtx(deps: {
         return played(await api.queue(f, body), step);
     };
 
+    /** The facilitator sends one message to the AI (「AI に送る」): the run its triage queues, once it ended. */
+    const send = async (request: RequestJson, step: Step): Promise<RunJson> => {
+        agent.expect(step);
+        // stage 3, when it is asked (no classifier, or one unsure), reads it as a change request
+        agent.sendsForRun(plainBody(request.body, { targets: request.targets.length, people: request.mentions?.length ?? 0 }));
+        await api.address(f, request.id);
+        const deadline = Date.now() + RUN_TIMEOUT_MS;
+        for (;;) {
+            const state = await api.state(f);
+            const run = state.runs.find((r) => r.input.requests.some((x) => x.request === request.id));
+            if (run) return played(run, step);
+            if (Date.now() > deadline) {
+                const triage = state.triages?.find((t) => t.request === request.id);
+                throw new Error(`The message ${request.id} sent to the AI queued no run (its triage: ${JSON.stringify(triage)})`);
+            }
+            await sleep(100);
+        }
+    };
+
     return {
         root: deps.root,
         api,
@@ -348,7 +372,10 @@ function makeCtx(deps: {
                 ...(mentions.length > 0 && { mentions }),
             });
         },
-        apply: (requests, step, options = {}) => queue({ requests: requests.map((r) => r.id), ...(options.note && { note: options.note }) }, step),
+        apply: (requests, step, options = {}) =>
+            requests.length === 1 && !options.note
+                ? send(requests[0], step)
+                : queue({ requests: requests.map((r) => r.id), ...(options.note && { note: options.note }) }, step),
         answer: (run, answer, step) => queue({ requests: run.input.requests.map((r) => r.request), answerTo: run.id, answer }, step),
         // the pick is a run of the same requests with `pick`, and the note the page writes for it
         pickAlternative(run, assumption, alternative, step) {

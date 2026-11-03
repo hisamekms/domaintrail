@@ -164,16 +164,19 @@ export {
 // stage 2 of the triage (ADR 0030): Clef's step for a message addressed to the AI
 export { CLEF_NOT_CONFIGURED, clefStep, type MessageClassifier } from './application/classifier.js';
 export { createRunActivities, RUN_ENDING_EVENTS, type RunActivities } from './application/activities.js';
-// its settings in the `session` section of domaintrail.jsonc (T6), composed by the app
+// its settings in domaintrail.jsonc (`collab`, `classifier`, `agent.run.maxPreviousRunDiff`), composed by the app
 export {
     ACCESS_CHECKS,
     COLLABORATION_CONFIG_KEYS,
     resolveCollaborationConfig,
     validateAccessNeeded,
+    validateClassifierConfig,
     validateCollaborationConfig,
     validateIdentityConfig,
     validatePreviousRunsConfig,
+    type ClassifierConfigFile,
     type ClefModel,
+    type CollabConfigFile,
     type CollaborationConfigFile,
     type ResolvedCollaborationConfig,
 } from './application/config.js';
@@ -193,13 +196,13 @@ export { createClefClassifier } from './infrastructure/clef.js';
 export { createCloudflareAccess, type AccessAdapterOptions, type AccessClaims, type AccessTokenVerifier } from './infrastructure/identity.js';
 export { SESSION_DIR } from './infrastructure/session-dir.js';
 export {
-    AGENT_FILE,
-    readAgentCredential,
+    LEGACY_AGENT_FILE,
     readServerAddress,
+    removeLegacyAgentFile,
     removeSessionFiles,
-    writeAgentCredential,
     writeServerAddress,
     type AgentCredential,
+    type ServerAddress,
 } from './infrastructure/session-files.js';
 export { createUnitOfWork, openSessionDatabase } from './infrastructure/sqlite.js';
 export { randomIds, randomSecrets, systemClock } from './infrastructure/system.js';

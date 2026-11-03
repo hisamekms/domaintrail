@@ -1,8 +1,10 @@
-// `dt session start` (ADR 0026, S4): the Live View exactly as `dt view` serves it, plus a collaboration session in the
-// same HTTP process (its REST API, its WebSocket messages, its identities), and the agent API on a listener of its
-// own bound to 127.0.0.1. One open session per workspace: an open session is resumed, else one is started. The server
-// runs the triage's stage 2 (Clef, `classifier`) on the messages addressed to the AI, hands the answerer role its jobs
-// (the agent API's answers entry point) and tells the pages which agents are connected (ADR 0030).
+// `dt open` and `dt collab` (ADR 0026, S4; ADR 0030): the Live View, plus a collaboration session in the same HTTP
+// process (its REST API, its WebSocket messages, its identities), and the agent API on a listener of its own bound to
+// 127.0.0.1. One open session per workspace, opened in the mode asked for (`openSession`, decision 13): a session of
+// that mode is resumed; `dt collab` continues a Solo session as a Collab one; `dt open` refuses an open Collab session.
+// In the Solo mode the one person is the facilitator without signing in (./solo.ts) and no facilitator link is made.
+// The server runs the triage's stage 2 (Clef, `classifier`) on the messages addressed to the AI, hands the answerer
+// role its jobs (the agent API's answers entry point) and tells the pages which agents are connected.
 import {
     type AccessAdapterOptions,
     type AccessTokenVerifier,
@@ -25,12 +27,12 @@ import {
     randomIds,
     randomSecrets,
     readServerAddress,
+    removeLegacyAgentFile,
     removeSessionFiles,
     RUN_ENDING_EVENTS,
     sameIdentity,
     type SessionAccess,
     systemClock,
-    writeAgentCredential,
     writeServerAddress,
 } from '@domaintrail/collaboration';
 import type { AgentPresence, EventMessage } from '@domaintrail/collaboration/protocol';
@@ -49,14 +51,15 @@ import { createTriageStage } from '../server/session/triage.js';
 import { eventFor } from '../server/session/views.js';
 import { createViewHttpServer } from '../server/http/server.js';
 import { isLoopbackBind, sessionHostPolicy } from '../server/http/access.js';
-import { SessionError } from '../cli/ports.js';
-import { type ResolvedSessionConfig } from '../config/config.js';
+import { SessionError, type SessionSettings } from '../cli/ports.js';
 import type { ViewService } from '@domaintrail/visualization';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 import { processAlive } from './process.js';
 import { createModelValidator, createSourceFormatter } from './validator.js';
 import { prepareLiveView, serverUrl, watchLiveView, type ViewServerOptions } from './view.js';
 import { createWatcherHold, type WatcherHold } from './watcher-hold.js';
+import { createSoloSignIn, soloIdentities, soloName, soloSurface } from './solo.js';
+import * as path from 'node:path';
 
 /** How long a lease of the agent holds without a heartbeat. */
 export const AGENT_LEASE_MS = 60_000;
@@ -64,6 +67,8 @@ export const AGENT_LEASE_MS = 60_000;
 const EXPIRE_EVERY_MS = 5_000;
 /** How long a facilitator link works. */
 export const FACILITATOR_LINK_TTL_MS = 10 * 60_000;
+/** How long an agent pairing code (`dt collab agent-link`) works. */
+export const AGENT_CODE_TTL_MS = 10 * 60_000;
 /** Largest WebSocket message from a page. */
 export const MAX_WS_PAYLOAD = 16 * 1024;
 /** Most agent SSE streams at once. */
@@ -85,8 +90,8 @@ export const CLASSIFIER_URL_ENV = 'DOMAINTRAIL_CLASSIFIER_URL';
 const MAX_TIMER_MS = 2 ** 31 - 1;
 
 export interface SessionServerOptions extends ViewServerOptions {
-    /** The `session` section of the configuration, resolved. */
-    session: ResolvedSessionConfig;
+    /** What the session server reads of the configuration (`collab`, `agent.port`, `agent.run`'s tools, `classifier`). */
+    session: SessionSettings;
     /** `access` mode: a stand-in for the JWKS check of the tokens' signature (tests); default: the team's JWKS. */
     accessVerifier?: AccessTokenVerifier;
     /** `access` mode: where the JWKS and the Identity API are and their timings (tests point them at a local mock). */
@@ -102,17 +107,27 @@ export interface SessionServerOptions extends ViewServerOptions {
     answerTimeoutMs?: number;
     /** The debug log: one line per triage decided, without the message's text (default: the log when `DOMAINTRAIL_DEBUG` is set). */
     debug?: (line: string) => void;
+    /** `Solo` (`dt open`: one person, loopback, the facilitator without signing in) or `Collab` (`dt collab`). Default: `Collab`. */
+    mode?: Collaboration.SessionMode;
+    /** The name a session started now gives its facilitator. Default: in `Solo`, git's `user.name` or the OS user's; else `Facilitator`. */
+    facilitatorName?: Collaboration.DisplayName;
 }
 
 export interface SessionServer {
     /** The page and the session's API. */
     url: string;
-    /** The agent API, on 127.0.0.1 (also in `.domaintrail/session/agent.json` with its credential). */
+    /** The agent API, on 127.0.0.1 (also in `.domaintrail/session/server.json`, without its credential). */
     agentUrl: string;
+    /** The agent API's bearer token, in memory only: for the agent in process (a standalone one pairs with a code). */
+    agentToken: string;
     session: Collaboration.SessionId;
-    /** Whether an open session was resumed rather than started. */
+    /** The session's mode as served. */
+    mode: Collaboration.SessionMode;
+    /** Whether an open session was resumed (or continued from Solo) rather than started. */
     resumed: boolean;
-    /** A one-time link: opened by a signed-in browser, it makes that identity the facilitator. */
+    /** How the session was opened: `started`, `resumed`, or `collaborated` (a Solo session continued as Collab). */
+    opened: 'started' | 'resumed' | 'collaborated';
+    /** A one-time link: opened by a signed-in browser, it makes that identity the facilitator; in `Solo`, it signs the browser that opens it in as the one person. */
     facilitatorLink: string;
     view: ViewService;
     /** The use cases of the session, for the tests and S7. */
@@ -149,6 +164,13 @@ const close = (server: Server): Promise<void> =>
         server.close(() => resolve());
     });
 
+/** The workspaces (resolved roots) a session server of this process serves. */
+const served = new Set<string>();
+
+/** The name of the facilitator a session was started with (the one person of a Solo session). */
+const soloPersonName = (session: Collaboration.OpenSession): Collaboration.DisplayName =>
+    session.participants.find((p) => p.id === FACILITATOR_PARTICIPANT)?.name ?? FACILITATOR_NAME;
+
 const linkOf = (url: string, code: string): string => `${url}session/facilitator?code=${code}`;
 
 /**
@@ -159,22 +181,24 @@ const linkOf = (url: string, code: string): string => `${url}session/facilitator
  */
 function identityProvider(options: SessionServerOptions, clock: Clock, log: (line: string) => void): IdentityProvider | undefined {
     const config = options.session;
-    if (config.identity === 'dev') {
+    if (options.mode === 'Solo' && !isLoopbackBind(config.host))
+        throw new SessionError(`dt open serves the chat on loopback only; ${config.host} is not a loopback address.`);
+    if (config.identity === 'dev' || options.mode === 'Solo') {
         if (!isLoopbackBind(config.host)) {
             throw new SessionError(`The dev identity mode serves loopback only; ${config.host} is not a loopback address (use identity "access").`);
         }
         return undefined;
     }
     const access = config.access;
-    if (!access?.teamDomain.trim() || !access.audience.trim()) throw new SessionError('The access identity mode needs session.access (teamDomain, audience).');
+    if (!access?.teamDomain.trim() || !access.audience.trim()) throw new SessionError('The access identity mode needs collab.access (teamDomain, audience).');
     if (access.publicUrl !== undefined) {
         const url = URL.canParse(access.publicUrl) ? new URL(access.publicUrl) : undefined;
         if (url?.protocol !== 'https:')
-            throw new SessionError(`session.access.publicUrl must be an https URL (Cloudflare Access serves https): ${access.publicUrl}`);
+            throw new SessionError(`collab.access.publicUrl must be an https URL (Cloudflare Access serves https): ${access.publicUrl}`);
         if (!access.allowedHosts.some((h) => h.toLowerCase() === url.hostname))
-            throw new SessionError(`session.access.allowedHosts must include the host of publicUrl (${url.hostname}), or the tunnel's requests are refused.`);
+            throw new SessionError(`collab.access.allowedHosts must include the host of publicUrl (${url.hostname}), or the tunnel's requests are refused.`);
         if (!access.allowedOrigins.includes(url.origin))
-            throw new SessionError(`session.access.allowedOrigins must include the origin of publicUrl (${url.origin}), or the pages' requests are refused.`);
+            throw new SessionError(`collab.access.allowedOrigins must include the origin of publicUrl (${url.origin}), or the pages' requests are refused.`);
     }
     if (!isLoopbackBind(config.host))
         log(`Bound to ${config.host}: reachable without the tunnel (an Access token is still required). Bind to 127.0.0.1 behind cloudflared.`);
@@ -190,8 +214,8 @@ function identityProvider(options: SessionServerOptions, clock: Clock, log: (lin
 }
 
 /**
- * Stage 2 of the triage: Clef, when `session.classifier` is enabled and its token is in the environment; otherwise none
- * (the stage is recorded as not configured, and the light model of the answerer role decides).
+ * Stage 2 of the triage: Clef, when `classifier` is enabled and its token is in the environment; otherwise none (the
+ * stage is recorded as not configured, and the light model of the answerer role decides).
  */
 function messageClassifier(options: SessionServerOptions, log: (line: string) => void): MessageClassifier | undefined {
     if (options.classifier) return options.classifier;
@@ -199,7 +223,7 @@ function messageClassifier(options: SessionServerOptions, log: (line: string) =>
     if (!c.enabled || !c.accountId) return undefined;
     const token = process.env[c.apiTokenEnv];
     if (!token) {
-        log(`session.classifier is enabled but ${c.apiTokenEnv} is not set: the triage goes without Clef.`);
+        log(`classifier is enabled but ${c.apiTokenEnv} is not set: the triage goes without Clef.`);
         return undefined;
     }
     const baseUrl = process.env[CLASSIFIER_URL_ENV];
@@ -210,13 +234,20 @@ function messageClassifier(options: SessionServerOptions, log: (line: string) =>
 /**
  * Starts the session server of a workspace: resumes its open session or starts one (with a revision of every source),
  * serves the Live View and the session on `session.host:session.port`, the agent API on 127.0.0.1, writes
- * `agent.json` and `server.json` and makes a facilitator link.
+ * `server.json` (no secret) and makes a facilitator link.
  */
 export async function startSessionServer(options: SessionServerOptions): Promise<SessionServer> {
     const log = options.log ?? (() => {});
     const config = options.session;
     const clock = options.clock ?? systemClock;
     const provider = identityProvider(options, clock, log);
+    // one live server per workspace: a second one would open (or change the mode of) the session under the first
+    const root = path.resolve(options.root);
+    const running = await readServerAddress(root).catch(() => undefined);
+    if (served.has(root) || (running && running.pid !== process.pid && processAlive(running.pid)))
+        throw new SessionError(
+            `A session server is already running for this workspace${running ? ` (pid ${running.pid}, ${running.url})` : ''}: stop it before starting another.`,
+        );
     const leaseMs = options.leaseMs ?? AGENT_LEASE_MS;
     const sources = options.sources ?? DEFAULT_SOURCES;
     const respectGitignore = options.respectGitignore ?? true;
@@ -228,6 +259,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         if ('dispose' in engine && typeof engine.dispose === 'function') engine.dispose();
     };
     const opened: { http?: Server; agent?: Server } = {};
+    served.add(root);
     try {
         const uow = createUnitOfWork(db);
         const snapshot = createWorkspaceSnapshot(options.root, sourceSelection(sources, respectGitignore));
@@ -242,27 +274,49 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         });
         const access: SessionAccess = createSessionAccess({ uow, clock, secrets: randomSecrets });
 
-        // the recovery policy at startup, then one open session per workspace
+        // the recovery policy at startup, then one open session per workspace, in the mode asked for
         await collaboration.expireLeases();
-        const current = await collaboration.currentSession();
-        let session: Collaboration.SessionId;
-        if (current) {
-            session = current.id;
-        } else {
-            const started = await collaboration.startSession({ facilitator: FACILITATOR_PARTICIPANT, name: FACILITATOR_NAME });
-            if (!started.ok) throw new SessionError(`A source is outside the workspace: ${started.error.path}`);
-            session = started.value.session.id;
+        const mode = options.mode ?? 'Collab';
+        const openedSession = await collaboration.openSession({
+            mode,
+            facilitator: FACILITATOR_PARTICIPANT,
+            name: options.facilitatorName ?? (mode === 'Solo' ? await soloName(options.root) : FACILITATOR_NAME),
+        });
+        if (!openedSession.ok) {
+            if (openedSession.error.type === 'CollabSessionOpen')
+                throw new SessionError(
+                    'This workspace has an open collab session: resume it with `dt collab`, or end it from its collab menu before `dt open`.',
+                );
+            throw new SessionError(`A source is outside the workspace: ${openedSession.error.path}`);
         }
+        const { value: sessionOpened } = openedSession;
+        const session: Collaboration.SessionId = sessionOpened.session.id;
 
-        const identities = createSessionIdentities({
+        const shared = createSessionIdentities({
             session,
-            mode: config.identity,
+            mode: mode === 'Solo' ? 'dev' : config.identity,
             provider,
             acceptAccessCookie: config.access?.acceptCookie ?? false,
             access,
             collaboration,
             maxParticipants: config.maxParticipants,
         });
+        const soloPerson = soloPersonName(sessionOpened.session);
+        // `dt open`'s sign-in: in this server's memory only, revoked when it stops
+        const soloSignIn = createSoloSignIn();
+        // a Solo session's person, bound to the cookie of the link `dt open` prints; nobody once it is no longer Solo
+        const identities =
+            mode === 'Solo'
+                ? soloIdentities({
+                      signIn: soloSignIn,
+                      base: shared,
+                      name: soloPerson,
+                      isOpenSolo: async () => {
+                          const current = await collaboration.currentSession();
+                          return current?.id === session && current.mode === 'Solo';
+                      },
+                  })
+                : shared;
 
         let resolveClosed: () => void = () => {};
         const closed = new Promise<void>((resolve) => (resolveClosed = resolve));
@@ -413,6 +467,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             answerTimeoutMs: options.answerTimeoutMs ?? ANSWER_TIMEOUT_MS,
             onPresence: () => presenceChanged(),
             log,
+            pair: (code) => access.redeemAgentCode({ session, code }),
         });
         const stage = createTriageStage({
             session,
@@ -449,8 +504,9 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             log,
         });
 
-        const accessConfig = config.access;
-        const surface = createSessionHttp({
+        // `dt open` answers loopback only: `collab.access` (a tunnel's hosts and origins) is never its
+        const accessConfig = mode === 'Solo' ? undefined : config.access;
+        const sessionSurface = createSessionHttp({
             session,
             collaboration,
             identities,
@@ -481,7 +537,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 if (auth.kind !== 'participant') return void socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
                 hub.handleUpgrade(req, socket, head, { participant: auth.participant, role: auth.role, actor: auth.actor });
             },
-            session: surface,
+            session: mode === 'Solo' ? soloSurface(sessionSurface, soloSignIn) : sessionSurface,
         });
         opened.http = http;
         const port = await listen(http, config.port, config.host);
@@ -491,15 +547,18 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         const agentUrl = serverUrl('127.0.0.1', agentPort);
 
         watch = await watchLiveView(options, live, (payload) => hub.publish(payload), watcherHold);
-        await writeAgentCredential(options.root, { url: agentUrl, token: agentToken, session, pid: process.pid });
-        await writeServerAddress(options.root, { url, session, pid: process.pid });
+        // the credential is never on disk: an older version's agent.json goes
+        if (await removeLegacyAgentFile(options.root)) log('Removed .domaintrail/session/agent.json (an agent credential an older version wrote).');
+        await writeServerAddress(options.root, { url, agentUrl, session, pid: process.pid });
 
         const issueFacilitatorLink = async (): Promise<string> => {
             const link = await access.issueFacilitatorLink({ session, ttlMs: FACILITATOR_LINK_TTL_MS });
             if (!link.ok) throw new Error('The session is not open');
             return linkOf(url, link.value.code);
         };
-        const facilitatorLink = await issueFacilitatorLink();
+        // the one person of a Solo session is the facilitator already
+        // in Solo, the one-time link that signs the launching user's browser in as the facilitator
+        const facilitatorLink = mode === 'Solo' ? soloSignIn.link(url) : await issueFacilitatorLink();
 
         const expiring = setInterval(() => {
             collaboration
@@ -523,8 +582,11 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         return {
             url,
             agentUrl,
+            agentToken,
             session,
-            resumed: current !== undefined,
+            mode,
+            resumed: sessionOpened.opened !== 'started',
+            opened: sessionOpened.opened,
             facilitatorLink,
             view,
             collaboration,
@@ -535,7 +597,10 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             pump,
             stop() {
                 stopped ??= (async () => {
+                    soloSignIn.revoke();
                     clearInterval(expiring);
+                    // the links and pairing codes not used yet die with the server
+                    await access.revokeLinks(session).catch(() => undefined);
                     await reverts.stop();
                     for (const timer of expiries.values()) clearTimeout(timer);
                     expiries.clear();
@@ -551,6 +616,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                     db.close();
                     await removeSessionFiles(options.root, process.pid);
                     disposeEngine();
+                    served.delete(root);
                 })();
                 return stopped;
             },
@@ -559,22 +625,27 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         await Promise.all([opened.http, opened.agent].map((s) => (s?.listening ? close(s) : Promise.resolve())));
         db.close();
         disposeEngine();
+        served.delete(root);
         throw e;
     }
 }
 
 /**
- * Another facilitator link for the session server running on the workspace at `root` (`dt session link`): written to
- * the session's database, so the running server accepts it. Rejects with `SessionError` when none runs.
+ * Another facilitator link for the session server running on the workspace at `root` (`dt collab link`): written to
+ * the session's database, so the running server accepts it. Rejects with `SessionError` when none runs, or when it
+ * serves a Solo session (`dt open`: its one person is the facilitator already).
  */
 export async function issueFacilitatorLink(root: string): Promise<{ link: string; expiresAt: Date }> {
     const address = await readServerAddress(root);
-    if (!address || !processAlive(address.pid)) throw new SessionError('No session server is running for this workspace (start one with `dt session start`).');
+    if (!address || !processAlive(address.pid)) throw new SessionError('No session server is running for this workspace (start one with `dt collab`).');
     const db = await openSessionDatabase(root);
     try {
         const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
-        const collaboration = await openSessionId(db);
+        const open = await openSessionOf(db);
+        const collaboration = open?.id;
         if (collaboration !== address.session) throw new SessionError('The running session server serves a session that is no longer open.');
+        if (open?.mode === 'Solo')
+            throw new SessionError('The running server is `dt open`: one person, the facilitator already. Stop it and run `dt collab` to invite others.');
         const link = await access.issueFacilitatorLink({ session: collaboration, ttlMs: FACILITATOR_LINK_TTL_MS });
         if (!link.ok) throw new SessionError('The session is not open.');
         return { link: linkOf(address.url, link.value.code), expiresAt: link.value.expiresAt };
@@ -583,8 +654,32 @@ export async function issueFacilitatorLink(root: string): Promise<{ link: string
     }
 }
 
+/**
+ * A one-time agent pairing code for the session server running on the workspace at `root` (`dt collab agent-link`,
+ * `dt open agent-link`): `dt agent --code` exchanges it for the agent API's credential. Written (as a hash) to the
+ * session's database, so the running server accepts it; never a facilitator link. Rejects with `SessionError` when no
+ * server runs.
+ */
+export async function issueAgentLink(root: string): Promise<{ code: string; agentUrl: string; expiresAt: Date }> {
+    const address = await readServerAddress(root);
+    if (!address || !processAlive(address.pid))
+        throw new SessionError('No session server is running for this workspace (start one with `dt open` or `dt collab`).');
+    if (!address.agentUrl) throw new SessionError('The running session server is of an older version: restart it.');
+    const db = await openSessionDatabase(root);
+    try {
+        const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
+        const open = await openSessionOf(db);
+        if (open?.id !== address.session) throw new SessionError('The running session server serves a session that is no longer open.');
+        const code = await access.issueAgentCode({ session: open.id, ttlMs: AGENT_CODE_TTL_MS });
+        if (!code.ok) throw new SessionError('The session is not open.');
+        return { code: code.value.code, agentUrl: address.agentUrl, expiresAt: code.value.expiresAt };
+    } finally {
+        db.close();
+    }
+}
+
 /** The open session of a database, if any. */
-async function openSessionId(db: Awaited<ReturnType<typeof openSessionDatabase>>): Promise<Collaboration.SessionId | undefined> {
+async function openSessionOf(db: Awaited<ReturnType<typeof openSessionDatabase>>): Promise<Collaboration.OpenSession | undefined> {
     const uow = createUnitOfWork(db);
-    return uow.transaction((stores) => stores.sessions.listOpen()[0]?.id);
+    return uow.transaction((stores) => stores.sessions.listOpen()[0]);
 }

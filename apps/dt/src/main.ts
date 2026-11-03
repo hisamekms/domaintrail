@@ -31,9 +31,25 @@ const languageServerFiles: LanguageServerFiles = {
     findDomainFiles,
 };
 
+/** What Ctrl+C stops, in the order registered; stopped in reverse (the agent in process before its server). */
+const interruptible: (() => Promise<unknown>)[] = [];
+
+/** Stops `stop` on Ctrl+C (or SIGTERM), after whatever was registered later, then exits with 130. */
+function onInterrupt(stop: () => Promise<unknown>): void {
+    interruptible.push(stop);
+    if (interruptible.length > 1) return;
+    const interrupted = (): void => {
+        void (async () => {
+            for (const s of [...interruptible].reverse()) await s().catch(() => undefined);
+        })().finally(() => process.exit(130));
+    };
+    process.once('SIGINT', interrupted);
+    process.once('SIGTERM', interrupted);
+}
+
 /**
- * The adapters of `dt`: the workspace on disk, the Live View, the session server, the subscriber and the language
- * server. The servers are loaded only by the commands that start them.
+ * The adapters of `dt`: the workspace on disk, the Live View, the session server, the agent and the language server.
+ * The servers are loaded only by the commands that start them.
  */
 export function cliDeps(): CliDeps {
     return {
@@ -46,27 +62,21 @@ export function cliDeps(): CliDeps {
         startSessionServer: async (options) => {
             const server = await (await import('./wiring/session.js')).startSessionServer(options);
             // Ctrl+C stops the server cleanly: the agent's credential file is removed and the database closed
-            const interrupted = (): void => {
-                void server.stop().finally(() => process.exit(130));
-            };
-            process.once('SIGINT', interrupted);
-            process.once('SIGTERM', interrupted);
+            onInterrupt(() => server.stop());
             return server;
         },
         issueFacilitatorLink: async (root) => (await import('./wiring/session.js')).issueFacilitatorLink(root),
-        startSubscriber: async (options) => {
-            // the agent's `dt` and `dt fmt` / `dt check` after it: `session.agent.dt`, else this very CLI, with the runtime
+        issueAgentLink: async (root) => (await import('./wiring/session.js')).issueAgentLink(root),
+        checkAgent: async () => (await import('@domaintrail/agent')).checkClaudeCode(),
+        startAgent: async (options) => {
+            // the agent's `dt` and `dt fmt` / `dt check` after it: `agent.run.dt`, else this very CLI, with the runtime
             // and the entry running it now
             const [command, ...args] = options.dt ?? [];
             const dt = command ? { command, args } : { command: process.execPath, args: process.argv[1] ? [process.argv[1]] : [] };
-            const subscriber = await (await import('./wiring/subscriber.js')).startSubscriber({ ...options, dt });
+            const agent = await (await import('./wiring/subscriber.js')).startSubscriber({ ...options, dt });
             // Ctrl+C: the run in hand is released or failed as interrupted, and its agent stopped, before exiting
-            const interrupted = (): void => {
-                void subscriber.stop().finally(() => process.exit(130));
-            };
-            process.once('SIGINT', interrupted);
-            process.once('SIGTERM', interrupted);
-            return subscriber;
+            onInterrupt(() => agent.stop());
+            return agent;
         },
         // loads the language server only when `dt lsp` starts it
         startLanguageServer: (options) => startLanguageServer(options, languageServerFiles),

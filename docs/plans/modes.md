@@ -516,8 +516,8 @@ M4 landed the triage and the answers end to end on the server and in `capabiliti
 - **Stage 2** (`clefStep` in `application/classifier.ts`; the server's `triage.ts`): Clef's three `noul` questions
   (`consultation`, `change_request`, `neither`) in one call, the probabilities as the step's reason, the model recorded;
   not configured, a `Clef` step `Unknown` with that reason. Pending triages waiting for it are taken when a message is
-  addressed and when the server starts. The threshold is `session.classifier.threshold`, whose default is still 0.5:
-  **M5 raises it to 0.9** (`TRIAGE_THRESHOLDS.clef`, Q5) when it moves the section to `classifier`.
+  addressed and when the server starts. The threshold is `classifier.threshold` (it was `session.classifier.threshold`
+  in M4, default 0.5); since the merge of M4 and M5 its default is 0.9 (`TRIAGE_THRESHOLDS.clef`, Q5).
 - **The answers entry point** (`answers.ts`): what is handed out is held in memory — a job ID per hand-out, one job in
   hand per stream, a timeout of 120 s (`ANSWER_TIMEOUT_MS`; `agent.answer.timeout` is the agent's own bound) plus 5 s
   for the answerer to report a failure, then `answer.job_withdrawn`. Stage 3 that fails, times out or gives an invalid
@@ -555,10 +555,76 @@ M4 landed the triage and the answers end to end on the server and in `capabiliti
   Checked once with Claude Code 2.1.317: from the view, a README is readable; `.env` (ignored), `.domaintrail/`, the
   workspace by its absolute path and a file outside it are not; the runner cannot read or edit a denied `.env` nor
   write outside its directory.
-- **Config**: no key was added. `resolveAnswerConfig`, `validateAnswerConfig`, `resolveTriageConfig`,
-  `validateTriageConfig` and their defaults are exported by `@domaintrail/agent` for M5 to place under `agent.answer` /
-  `agent.triage`. Until then `dt session subscribe` starts both roles with the defaults (the wiring's `startSubscriber`
-  takes `roles`, `answer`, `triage`); M5 gives `dt agent --role answer|run` and the in-process agent.
+- **Config**: no key was added in M4. `resolveAnswerConfig`, `validateAnswerConfig`, `resolveTriageConfig`,
+  `validateTriageConfig` and their defaults are exported by `@domaintrail/agent`; M5's config module places them under
+  `agent.answer` / `agent.triage` (see "Connected after M4 and M5").
+
+### As built in M5
+
+M5 landed the commands and the config, with these details settled or changed:
+
+- **Commands**: `dt open`, `dt collab` (+ `dt collab link`), `dt agent [--role answer|run] [--once]`; `dt view` and
+  `dt session start|link|subscribe` are hidden commands that fail with the replacement's name (exit 2). `--no-agent`
+  and `--agent claude` share one option (`--agent claude` makes an unusable Claude Code an error, after which the
+  server is stopped). `dt open --host <non-loopback>` serves the read-only Live View (`--agent claude` with it is an
+  error).
+- **`dt open`'s sign-in** (security review, two rounds): not "every loopback request is the facilitator". `dt open`
+  prints a one-time link (`/session/open?code=…`, single use, 60 minutes) in place of the plain address; opening it
+  sets a cookie and redirects to the Live View. The link is the only step. Everything about it lives in the server's
+  memory only (`wiring/solo.ts`, `createSoloSignIn`): the code is not a facilitator link (the database never sees it,
+  the collab facilitator page does not take it); the cookie's name is chosen when the server starts
+  (`dt_open_<random>`), it is HttpOnly, SameSite=Strict and a session cookie (no Max-Age), and its value is known to
+  this server instance alone — so the cookie, which a browser sends to every port of the host, is worth nothing to
+  another server, nor to this one after a restart (which prints a new link). Without it a request is not identified
+  (401; a page says to open the printed link, no join form), so another local process or OS user is not the
+  facilitator. The link and the sign-ins are revoked when the server stops or the session leaves Solo. When `dt collab`
+  continues the session, the person takes the facilitator link it prints (their messages are the facilitator
+  participant's already).
+- **Loopback only**: `dt open` never reads `collab` beyond `quickReactions` (`open.port` / `open.host`, the dev
+  identity); its host policy admits loopback Hosts and Origins only, whatever `collab.access` allows.
+- **Fail closed and one server per workspace**: the Solo identities identify no one once the session is not open and
+  Solo (`dt collab` continuing it); `startSessionServer` refuses to start while another live server (`server.json`
+  with its process alive, or a server of the same process) serves the workspace, so a session's mode never changes
+  under a running server.
+- **The agent in process**: `checkClaudeCode` decides; the subscriber is the same as `dt agent`'s (loopback HTTP),
+  handed the agent API's URL and bearer token in memory; Ctrl+C stops the agent before its server.
+- **The agent credential is never on disk** (maintainer, 2026-11-03): `agent.json` is gone. A standalone `dt agent`
+  pairs: `dt collab agent-link` (or `dt open agent-link` for a running `dt open`) prints a one-time code (random, single
+  use, 10 minutes, stored as a hash beside the facilitator links but in a hash domain of its own, so neither kind is
+  accepted as the other) and the agent API's address; `dt agent --code <code> [--url <agent API>]` exchanges it at
+  `POST /agent/pair` (loopback, no `Origin`) for the token and keeps it in memory. The server revokes every unused
+  link and code when it stops. `server.json` keeps the page's and the agent API's addresses (no secret); a leftover
+  `agent.json` of an older version is removed when a server starts; `.domaintrail/` gets a `.gitignore` (`*`) when it
+  has none.
+- **Roles**: `--role` is parsed and passed on, both by default (connected to M4's answerer at the merge, below).
+- **Config**: `agent.answer` also has `idleTimeout` (default 30) and `agent.triage` has `warm` (default false, Q12);
+  `agent.answer.timeout` is in seconds (default 120). The session server is given a `SessionSettings` composed from
+  `collab`, `agent.port`, `agent.run.{allowedTools,maxPreviousRunDiff}` and `classifier`.
+- **The seed** runs `dt collab --no-agent` (its scripted agent plays the runs); how it sends messages since the merge
+  is below.
+
+### Connected after M4 and M5
+
+The merge of M4 (the triage and the answers) and M5 (the commands and the config) connected them:
+
+- **Both roles in every agent**: `dt agent` and the agent `dt open` / `dt collab` start in process take on the answerer
+  (`startAnswerer` with `createClaudeAnswerer`, in the view of the workspace) and the runner, both by default;
+  `dt agent --role answer` or `--role run` takes one. The two share one paired credential (in memory) and end together.
+  The answer stream (`/agent/answers/*`) is behind the same bearer token as the runs' routes; only `POST /agent/pair`
+  goes without it.
+- **Config**: one module (`capabilities/agent/src/adapters/config.ts`) holds `agent.run`, `agent.answer` and
+  `agent.triage`; its checks of `agent.answer` and `agent.triage` are M4's exported validators
+  (`validateAnswerConfig(value, at, fail)`, `validateTriageConfig`), with M5's keys (`agent.answer.idleTimeout`
+  included); the unknown keys are the app's to check, with its hints. The resolved `agent.answer` (warm, restartAfter,
+  idleTimeout, timeout, model, effort) and `agent.triage` (model, warm) feed the answerer; a role without its own model
+  or effort takes the user's Claude Code settings. `classifier.threshold` defaults to 0.9 (`TRIAGE_THRESHOLDS.clef`).
+- **The seed**: one message applied without a note goes as the page's 「AI に送る」 does
+  (`POST /api/session/requests/:id/address`): its triage decides a change request — the mock classifier, or, with
+  `--no-classifier`, the seed's own answerer (the real `startAnswerer` with a scripted agent: stage 3 reads the
+  scenario's message as a change request and anything else as needing no answer; it answers and proposes nothing) —
+  and the facilitator's addressing queues the run. Several messages in one run, a run with a note, もう一度送る and an
+  alternative still use the runs route (as the page does until M6). A participant's reply the classifier reads as a
+  request gets a proposal job the seed's answerer does not make: the server gives it up after two attempts.
 
 ## The page
 

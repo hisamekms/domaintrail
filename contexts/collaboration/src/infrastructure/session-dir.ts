@@ -46,13 +46,17 @@ export async function replaceFile(file: string, text: string | Uint8Array, mode 
 }
 
 /**
- * The session directory of a workspace, made if absent: `.domaintrail/session/` with its `.gitignore` (`*`). Throws
- * `UnsafeSessionPath` when `.domaintrail`, `.domaintrail/session` or the `.gitignore` is a symbolic link.
+ * The session directory of a workspace, made if absent: `.domaintrail/session/` with its `.gitignore` (`*`), and a
+ * `.gitignore` (`*`) in `.domaintrail` when it has none (one there is left as it is), so that nothing of it is
+ * committed by accident (files already tracked stay tracked).
+ * Throws `UnsafeSessionPath` when `.domaintrail`, `.domaintrail/session` or a `.gitignore` is a symbolic link.
  */
 export async function sessionDirectory(root: string): Promise<string> {
     const top = path.join(path.resolve(root), '.domaintrail');
     const dir = path.join(path.resolve(root), SESSION_DIR);
     await plainDirectory(top);
+    const topIgnore = path.join(top, '.gitignore');
+    if ((await checkPlain(topIgnore, 'file')) === 'absent') await replaceFile(topIgnore, GITIGNORE);
     await plainDirectory(dir);
     const ignore = path.join(dir, '.gitignore');
     if ((await checkPlain(ignore, 'file')) === 'absent' || (await readFile(ignore, 'utf8')) !== GITIGNORE) await replaceFile(ignore, GITIGNORE);

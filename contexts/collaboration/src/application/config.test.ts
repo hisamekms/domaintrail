@@ -1,4 +1,4 @@
-// Collaboration's settings in the `session` section of domaintrail.jsonc (composed with the others and read from a
+// Collaboration's settings in domaintrail.jsonc (`collab`, `classifier`, `agent.run.maxPreviousRunDiff`) (composed with the others and read from a
 // file: apps/dt/src/config/config.test.ts).
 import { describe, expect, test } from 'bun:test';
 import {
@@ -6,26 +6,39 @@ import {
     type ResolvedClassifierConfig,
     resolveCollaborationConfig,
     validateAccessNeeded,
+    validateClassifierConfig,
     validateCollaborationConfig,
     validateIdentityConfig,
     validatePreviousRunsConfig,
 } from './config.js';
 
-/** The first refusal of the section's checks, in the order the app runs them. */
-const refusal = (session: Record<string, unknown>): string | undefined => {
+/** The first refusal of the checks of `collab` (and of `run`: `agent.run`), in the order the app runs them. */
+const refusal = (collab: Record<string, unknown>, run?: Record<string, unknown>): string | undefined => {
     const fail = (msg: string): never => {
         throw new Error(msg);
     };
     try {
-        validateIdentityConfig(session, fail);
-        const access = session.access;
+        validateIdentityConfig(collab, fail);
+        const access = collab.access;
         if (access !== undefined) {
-            if (typeof access !== 'object' || access === null || Array.isArray(access)) return fail("'session.access' must be an object");
+            if (typeof access !== 'object' || access === null || Array.isArray(access)) return fail("'collab.access' must be an object");
             for (const check of Object.values(ACCESS_CHECKS)) check(access as Record<string, unknown>, fail);
         }
-        validateAccessNeeded(session, fail);
-        if (typeof session.agent === 'object' && session.agent !== null) validatePreviousRunsConfig(session.agent as Record<string, unknown>, fail);
-        validateCollaborationConfig(session, fail);
+        validateAccessNeeded(collab, fail);
+        if (run) validatePreviousRunsConfig(run, fail);
+        validateCollaborationConfig(collab, fail);
+        return undefined;
+    } catch (e) {
+        return e instanceof Error ? e.message : String(e);
+    }
+};
+
+/** The refusal of the `classifier` section's checks, if any. */
+const classifierRefusal = (classifier: unknown): string | undefined => {
+    try {
+        validateClassifierConfig(classifier, (msg) => {
+            throw new Error(msg);
+        });
         return undefined;
     } catch (e) {
         return e instanceof Error ? e.message : String(e);
@@ -37,7 +50,7 @@ const CLASSIFIER_DEFAULTS: ResolvedClassifierConfig = {
     provider: 'cloudflare-clef',
     model: 'clef-flash',
     apiTokenEnv: 'CLOUDFLARE_API_TOKEN',
-    threshold: 0.5,
+    threshold: 0.9,
 };
 
 describe("Collaboration's settings", () => {
@@ -52,14 +65,18 @@ describe("Collaboration's settings", () => {
     });
 
     test("access: the team, the audience, the public URL (the hosts and origins allowed are the app's)", () => {
-        const session = {
+        const collab = {
             identity: 'access',
             access: { teamDomain: 'team.cloudflareaccess.com', audience: 'aud', publicUrl: 'https://s.example.com', avatarHosts: ['img.example.com'] },
-            agent: { maxPreviousRunDiff: 4096 },
             maxParticipants: 5,
         } as const;
-        expect(refusal(session)).toBeUndefined();
-        expect(resolveCollaborationConfig({ ...session, access: { ...session.access, avatarHosts: [...session.access.avatarHosts] } })).toEqual({
+        expect(refusal(collab, { maxPreviousRunDiff: 4096 })).toBeUndefined();
+        expect(
+            resolveCollaborationConfig({
+                collab: { ...collab, access: { ...collab.access, avatarHosts: [...collab.access.avatarHosts] } },
+                agent: { run: { maxPreviousRunDiff: 4096 } },
+            }),
+        ).toEqual({
             identity: 'access',
             access: {
                 teamDomain: 'team.cloudflareaccess.com',
@@ -78,12 +95,12 @@ describe("Collaboration's settings", () => {
     test('the quick reactions: one emoji each, kept in the form reactions are (❤ as ❤️)', () => {
         const quickReactions = ['❤', '👨‍👩‍👧‍👦', '👍🏽', '🇯🇵', '1⃣'];
         expect(refusal({ quickReactions })).toBeUndefined();
-        expect(resolveCollaborationConfig({ quickReactions }).quickReactions).toEqual(['❤️', '👨‍👩‍👧‍👦', '👍🏽', '🇯🇵', '1️⃣']);
+        expect(resolveCollaborationConfig({ collab: { quickReactions } }).quickReactions).toEqual(['❤️', '👨‍👩‍👧‍👦', '👍🏽', '🇯🇵', '1️⃣']);
     });
 
     test('the classifier: opt-in, Clef Flash, the token by the name of its variable', () => {
         const classifier = { enabled: true, accountId: '0123456789abcdef0123456789abcdef', model: 'clef', threshold: 0.7 } as const;
-        expect(refusal({ classifier })).toBeUndefined();
+        expect(classifierRefusal(classifier)).toBeUndefined();
         expect(resolveCollaborationConfig({ classifier }).classifier).toEqual({
             enabled: true,
             provider: 'cloudflare-clef',
@@ -95,43 +112,51 @@ describe("Collaboration's settings", () => {
     });
 
     test.each([
-        [{ identity: 'basic' }, "'session.identity' must be one of 'dev', 'access'"],
-        [{ identity: 'access' }, "'session.identity' \"access\" needs 'session.access' with 'teamDomain' and 'audience'"],
-        [{ access: [] }, "'session.access' must be an object"],
-        [{ access: { teamDomain: 't' } }, "'session.access.audience' must be a non-empty string"],
-        [{ access: { teamDomain: 't', audience: 'a', publicUrl: 'nope' } }, "'session.access.publicUrl' must be a URL"],
+        [{ identity: 'basic' }, "'collab.identity' must be one of 'dev', 'access'"],
+        [{ identity: 'access' }, "'collab.identity' \"access\" needs 'collab.access' with 'teamDomain' and 'audience'"],
+        [{ access: [] }, "'collab.access' must be an object"],
+        [{ access: { teamDomain: 't' } }, "'collab.access.audience' must be a non-empty string"],
+        [{ access: { teamDomain: 't', audience: 'a', publicUrl: 'nope' } }, "'collab.access.publicUrl' must be a URL"],
         [
             { access: { teamDomain: 'https://t.example.com/path', audience: 'a' } },
-            "'session.access.teamDomain' must be a host name like '<team>.cloudflareaccess.com': 'https://t.example.com/path'",
+            "'collab.access.teamDomain' must be a host name like '<team>.cloudflareaccess.com': 'https://t.example.com/path'",
         ],
-        [{ access: { teamDomain: 't', audience: 'a', acceptCookie: 'yes' } }, "'session.access.acceptCookie' must be a boolean"],
+        [{ access: { teamDomain: 't', audience: 'a', acceptCookie: 'yes' } }, "'collab.access.acceptCookie' must be a boolean"],
         [
             { access: { teamDomain: 't', audience: 'a', avatarHosts: ['https://x.example'] } },
-            "'session.access.avatarHosts' must hold host names only: 'https://x.example'",
+            "'collab.access.avatarHosts' must hold host names only: 'https://x.example'",
         ],
-        [{ agent: { maxPreviousRunDiff: -1 } }, "'session.agent.maxPreviousRunDiff' must be a non-negative integer (characters of diff)"],
-        [{ agent: { maxPreviousRunDiff: 1.5 } }, "'session.agent.maxPreviousRunDiff' must be a non-negative integer (characters of diff)"],
-        [{ maxParticipants: 0 }, "'session.maxParticipants' must be a positive integer"],
-        [{ quickReactions: [] }, "'session.quickReactions' must be an array of 1 to 8 emoji"],
-        [{ quickReactions: '👍' }, "'session.quickReactions' must be an array of 1 to 8 emoji"],
-        [{ quickReactions: ['👍', '👍', '👍', '👍', '👍', '👍', '👍', '👍', '👍'] }, "'session.quickReactions' must be an array of 1 to 8 emoji"],
-        [{ quickReactions: ['ok'] }, "'session.quickReactions' must hold one emoji per entry: 'ok'"],
-        [{ quickReactions: ['👍👍'] }, "'session.quickReactions' must hold one emoji per entry: '👍👍'"],
-        [{ quickReactions: ['❤', '❤️'] }, "'session.quickReactions' must not repeat an emoji: '❤️'"],
-        [{ classifier: { enabled: true } }, "'session.classifier' enabled needs 'accountId'"],
-        [{ classifier: { provider: 'openai' } }, "'session.classifier.provider' must be one of 'cloudflare-clef'"],
-        [{ classifier: { model: 'jev' } }, "'session.classifier.model' must be one of 'clef-flash', 'clef'"],
-        [{ classifier: { accountId: 'acct' } }, "'session.classifier.accountId' must be a Cloudflare account ID (32 hexadecimal digits)"],
-        [
-            { classifier: { apiTokenEnv: 'cf-token value' } },
-            "'session.classifier.apiTokenEnv' must be the name of an environment variable (the token itself never goes in the file)",
-        ],
-        [{ classifier: { threshold: 1 } }, "'session.classifier.threshold' must be a number between 0 and 1"],
-        [{ classifier: { token: 'x' } }, "unknown key 'session.classifier.token'"],
-        // the first refusal wins: the identity before the classifier, the classifier before the participants
-        [{ classifier: { token: 'x' }, identity: 'basic' }, "'session.identity' must be one of 'dev', 'access'"],
-        [{ maxParticipants: 0, classifier: { model: 'jev' } }, "'session.classifier.model' must be one of 'clef-flash', 'clef'"],
-    ])('%j is refused', (session, message) => {
-        expect(refusal(session)).toBe(message);
+        [{ maxParticipants: 0 }, "'collab.maxParticipants' must be a positive integer"],
+        [{ quickReactions: [] }, "'collab.quickReactions' must be an array of 1 to 8 emoji"],
+        [{ quickReactions: '👍' }, "'collab.quickReactions' must be an array of 1 to 8 emoji"],
+        [{ quickReactions: ['👍', '👍', '👍', '👍', '👍', '👍', '👍', '👍', '👍'] }, "'collab.quickReactions' must be an array of 1 to 8 emoji"],
+        [{ quickReactions: ['ok'] }, "'collab.quickReactions' must hold one emoji per entry: 'ok'"],
+        [{ quickReactions: ['👍👍'] }, "'collab.quickReactions' must hold one emoji per entry: '👍👍'"],
+        [{ quickReactions: ['❤', '❤️'] }, "'collab.quickReactions' must not repeat an emoji: '❤️'"],
+        // the first refusal wins: the identity before the participants
+        [{ maxParticipants: 0, identity: 'basic' }, "'collab.identity' must be one of 'dev', 'access'"],
+    ])('collab %j is refused', (collab, message) => {
+        expect(refusal(collab)).toBe(message);
+    });
+
+    test.each([
+        [{ maxPreviousRunDiff: -1 }, "'agent.run.maxPreviousRunDiff' must be a non-negative integer (characters of diff)"],
+        [{ maxPreviousRunDiff: 1.5 }, "'agent.run.maxPreviousRunDiff' must be a non-negative integer (characters of diff)"],
+    ])('agent.run %j is refused', (run, message) => {
+        expect(refusal({}, run)).toBe(message);
+    });
+
+    test.each([
+        [[], "'classifier' must be an object"],
+        [{ enabled: true }, "'classifier' enabled needs 'accountId'"],
+        [{ provider: 'openai' }, "'classifier.provider' must be one of 'cloudflare-clef'"],
+        [{ model: 'jev' }, "'classifier.model' must be one of 'clef-flash', 'clef'"],
+        [{ accountId: 'acct' }, "'classifier.accountId' must be a Cloudflare account ID (32 hexadecimal digits)"],
+        [{ apiTokenEnv: 'cf-token value' }, "'classifier.apiTokenEnv' must be the name of an environment variable (the token itself never goes in the file)"],
+        [{ threshold: 1 }, "'classifier.threshold' must be a number between 0 and 1"],
+        [{ token: 'x' }, "unknown key 'classifier.token'"],
+        [{ token: 'x', model: 'jev' }, "unknown key 'classifier.token'"],
+    ])('classifier %j is refused', (classifier, message) => {
+        expect(classifierRefusal(classifier)).toBe(message);
     });
 });

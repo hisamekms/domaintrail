@@ -543,7 +543,7 @@ export interface CollaborationUseCases extends ConversationUseCases {
     sessionState(input: { readonly session: SessionId }): Promise<Result<SessionState, NotFound>>;
     /** Validates the workspace now and tells, for each request of the session, whether its target still resolves. */
     targetStatuses(input: { readonly session: SessionId }): Promise<Result<TargetStatuses, NotFound | Collaboration.PathOutsideRoot>>;
-    /** The open session of the workspace, if any: `dt session start` resumes it rather than starting another. */
+    /** The open session of the workspace, if any: `dt open` / `dt collab` resume it rather than starting another. */
     currentSession(): Promise<Collaboration.OpenSession | undefined>;
     /** At most `limit` events of the session after the outbox position `cursor` (0: from the start), in order. */
     eventsAfter(input: { readonly session: SessionId; readonly cursor: number; readonly limit: number }): Promise<readonly OutboxEntry[]>;
@@ -977,7 +977,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                         type: 'SubscriberOutdated',
                         run: id,
                         needs: REVERT_CAPABILITY,
-                        message: 'The next run reverts a run: this subscriber cannot run it. Update DomainTrail and restart `dt session subscribe`.',
+                        message: 'The next run reverts a run: this subscriber cannot run it. Update DomainTrail and restart `dt agent`.',
                     });
                 }
                 return ok({ run, lease });

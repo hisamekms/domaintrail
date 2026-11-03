@@ -7,7 +7,7 @@ import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { parseClientMessage } from './client-messages.js';
 
 /**
- * What the server sends over the WebSocket: the view, as `type: 'update'` (all `dt view` ever sends), and in a
+ * What the server sends over the WebSocket: the view, as `type: 'update'` (all the read-only Live View ever sends), and in a
  * session the messages of `SessionServerMessage` (`session.*`, `request.*`, `run.*`, `revision.*`, `presence.*`).
  */
 export type ServerMessage = ViewPayload | SessionServerMessage;
@@ -50,7 +50,7 @@ const encode = (message: ServerMessage): string => JSON.stringify(message);
 const text = (data: RawData): string => (Array.isArray(data) ? Buffer.concat(data) : data instanceof ArrayBuffer ? Buffer.from(data) : data).toString('utf8');
 
 /**
- * A hub that sends `current()` to each page as it connects. Without `session` (`dt view`) it reads nothing from the
+ * A hub that sends `current()` to each page as it connects. Without `session` (the read-only Live View) it reads nothing from the
  * pages; with it, messages are parsed and validated here and handed to `session.onMessage`.
  */
 export function createWebSocketHub<T = undefined>(current: () => ServerMessage, session?: HubSession<T>): WebSocketHub<T> {

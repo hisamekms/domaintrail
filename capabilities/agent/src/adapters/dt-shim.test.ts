@@ -30,7 +30,7 @@ const failure = (p: Promise<unknown>): Promise<string> =>
 const run = { prompt: 'p', allowedTools: ['Bash(dt fmt:*)'], requests: 1 };
 const node = realpathSync(findProgram('node') ?? process.execPath);
 
-describe("the agent's dt (session.agent.dt)", () => {
+describe("the agent's dt (agent.run.dt)", () => {
     test('the shim only starts the runtime on the launcher; the pinned dt is JSON in the launcher, spawned without a shell in a private directory', () => {
         expect(dtShim('/usr/bin/node', "/tmp/it's/launcher.mjs", 'darwin')).toEqual({
             file: 'dt',
@@ -91,10 +91,10 @@ describe("the agent's dt (session.agent.dt)", () => {
         expect(refusal(['node', `../${path.basename(outside)}/dt.js`])).toBeUndefined();
         expect(refusal([path.join(outside, 'dt')])).toBeUndefined();
         expect(refusal(['node', './tools/dt.js'])).toBe(
-            `'session.agent.dt' may not run anything inside the workspace (${path.join(root, 'tools', 'dt.js')}): the agent can write there during a run. Use a dt outside the workspace (e.g. a clone next to it).`,
+            `'agent.run.dt' may not run anything inside the workspace (${path.join(root, 'tools', 'dt.js')}): the agent can write there during a run. Use a dt outside the workspace (e.g. a clone next to it).`,
         );
         for (const dt of [['node', `${path.join(outside, 'link')}/dt.js`], ['node', '..evil/dt.js'], ['./tools/dt.js']])
-            expect(refusal(dt)).toContain("'session.agent.dt' may not run anything inside the workspace");
+            expect(refusal(dt)).toContain("'agent.run.dt' may not run anything inside the workspace");
     });
 
     test("the agent's arguments: fmt or check, then .dt / .dtes files of the workspace; no option; -r is the launcher's", async () => {

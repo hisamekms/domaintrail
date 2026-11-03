@@ -1,15 +1,16 @@
-// `dt session subscribe --agent claude` (ADR 0026, S6): the agent of the session server running on the workspace, wired
-// to its agent API (`.domaintrail/session/agent.json`), in its two roles (ADR 0030, decision 6), both by default:
+// `dt agent` (ADR 0026, S6; ADR 0030), and the agent `dt open` and `dt collab` start in process over the same loopback
+// HTTP: the agent of the session server running on the workspace, wired to its agent API (its credential in memory:
+// handed over by the server in process, or paired for with a one-time code), in its two roles (ADR 0030, decision 6),
+// both by default (`--role` names one):
 //
-// - the runner: Claude Code (a warm process across runs, or one per run: `session.agent.run`), `dt fmt`/`dt check` (this
-//   CLI, or `session.agent.dt`, for the agent too) and the workspace's files;
-// - the answerer: stage 3 of the triage (a light model with no tools), answers and proposals (Claude Code with the
-//   reading tools only), from the answers entry point; its settings are their defaults until the config has
-//   `agent.answer.*` and `agent.triage.*` (plan task M5, which also gives `dt agent --role answer|run`).
-import { lstat } from 'node:fs/promises';
+// - the runner: Claude Code (a warm process across runs, or one per run: `agent.run`), `dt fmt`/`dt check` (this CLI,
+//   or `agent.run.dt`, for the agent too) and the workspace's files;
+// - the answerer: stage 3 of the triage (a light model with no tools: `agent.triage`), answers and proposals (Claude
+//   Code with the reading tools only: `agent.answer`), from the answers entry point.
 import { hostname } from 'node:os';
 import * as path from 'node:path';
 import {
+    AGENT_ROLES,
     type AgentCommand,
     type AgentRole,
     type AgentRunner,
@@ -38,7 +39,7 @@ import {
     createWorkspaceView,
     ignoredEntries,
 } from '@domaintrail/agent';
-import { AGENT_FILE, type AgentCredential, readAgentCredential, SESSION_DIR } from '@domaintrail/collaboration';
+import { type AgentCredential, readServerAddress } from '@domaintrail/collaboration';
 import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/analysis';
 import { SessionError } from '../cli/ports.js';
 import { findDomainFiles, GitIgnore } from '@domaintrail/workspace';
@@ -46,7 +47,7 @@ import { processAlive } from './process.js';
 
 export type { SubscriberEnd };
 
-/** The agents `dt session subscribe` can run. */
+/** The agents `dt agent` can run. */
 export const AGENTS = ['claude'] as const;
 export type AgentName = (typeof AGENTS)[number];
 
@@ -57,20 +58,25 @@ export interface SubscriberOptions {
     /** The config file given with `-c`, passed on to `dt fmt` and `dt check`. */
     configPath?: string;
     agent: AgentName;
+    /**
+     * How to reach the agent API: its credential (the agent in process, handed over in memory), or a one-time pairing
+     * code (`dt collab agent-link`) to exchange for it at `url` (default: the running server's, from `server.json`).
+     */
+    connect: { readonly credential: AgentCredential } | { readonly code: string; readonly url?: string };
     /** Handle one run, then end. */
     once?: boolean;
     /**
      * How `dt` is started for `dt fmt` and `dt check` after the agent, and by the agent itself (its `dt`): the CLI passes
-     * `session.agent.dt` when configured, else its own runtime and entry.
+     * `agent.run.dt` when configured, else its own runtime and entry.
      */
     dt: DtCommand;
-    /** How Claude Code carries out the runs (`session.agent.run`); default: warm, with its default restart. */
+    /** How Claude Code carries out the runs (`agent.run`); default: warm, with its default restart. */
     run?: RunConfig;
     /** The roles to take (default both): `run`, the runs; `answer`, the triage's stage 3, answers and proposals. */
     roles?: readonly AgentRole[];
-    /** How Claude Code answers (`agent.answer`, M5); default: warm, 50 answers a process, 120 s. */
+    /** How Claude Code answers (`agent.answer`); default: warm, 50 answers a process, 30 idle minutes, 120 s. */
     answer?: AnswerConfig;
-    /** Stage 3 of the triage (`agent.triage`, M5); default: `haiku`, a fresh process per triage. */
+    /** Stage 3 of the triage (`agent.triage`); default: `haiku`, a fresh process per triage. */
     triage?: TriageConfig;
     /** The answerer's program instead of `agentCommand`: for the tests only. */
     answerCommand?: AgentCommand;
@@ -83,38 +89,55 @@ export interface SubscriberOptions {
 
 export interface RunningSubscriber {
     session: string;
+    /** The roles it took on. */
+    roles: readonly AgentRole[];
     /** Resolves when the subscriber ends. */
     done: Promise<SubscriberEnd>;
     /** Releases or fails (`Interrupted`) the run in hand and ends. */
     stop(): Promise<SubscriberEnd>;
 }
 
+const isLoopbackUrl = (url: string): boolean => {
+    if (!URL.canParse(url)) return false;
+    const u = new URL(url);
+    return u.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(u.hostname);
+};
+
 /**
- * The credential of the session server running on the workspace. Refused (`SessionError`) when `agent.json` is
- * missing, a symbolic link, readable by others (not 0600), or written by a process that is gone.
+ * Exchanges a one-time pairing code for the agent API's credential (kept in memory by the caller), at `url` or the
+ * agent API of the server running on the workspace. Refused (`SessionError`) when no server runs, the URL is not a
+ * loopback one, or the code is unknown, used or expired.
  */
-export async function readCredential(root: string): Promise<AgentCredential> {
-    const file = path.join(path.resolve(root), SESSION_DIR, AGENT_FILE);
-    const stat = await lstat(file).catch((e: unknown) => {
-        if (e instanceof Error && 'code' in e && e.code === 'ENOENT') return undefined;
-        throw e;
-    });
-    if (!stat) throw new SessionError('No session server is running for this workspace (start one with `dt session start`).');
-    if (stat.isSymbolicLink() || !stat.isFile()) throw new SessionError(`${file} is not a plain file: refusing to read the agent credential through it.`);
-    if (process.platform !== 'win32' && (stat.mode & 0o777) !== 0o600)
-        throw new SessionError(`${file} must be private to you (mode 600), not ${(stat.mode & 0o777).toString(8)}: refusing the agent credential.`);
-    const credential = await readAgentCredential(root);
-    if (!credential) throw new SessionError(`${file} is not an agent credential.`);
-    if (!processAlive(credential.pid))
-        throw new SessionError('The session server that wrote the agent credential is no longer running (start one with `dt session start`).');
-    return credential;
+export async function pairAgent(root: string, code: string, url?: string): Promise<AgentCredential> {
+    let at = url;
+    if (at === undefined) {
+        const address = await readServerAddress(root);
+        if (!address || !processAlive(address.pid))
+            throw new SessionError('No session server is running for this workspace (start one with `dt open` or `dt collab`).');
+        if (!address.agentUrl) throw new SessionError('The running session server is of an older version: restart it, or pass --url.');
+        at = address.agentUrl;
+    }
+    const base = at.endsWith('/') ? at : `${at}/`;
+    if (!isLoopbackUrl(base)) throw new SessionError(`The agent API is on this machine only (http://127.0.0.1:…): not ${at}.`);
+    const res = await fetch(`${base}agent/pair`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code }) }).catch(
+        (e: unknown) => {
+            throw new SessionError(`The session server's agent API does not answer (${e instanceof Error ? e.message : String(e)}).`);
+        },
+    );
+    const body: unknown = await res.json().catch(() => undefined);
+    const ok = typeof body === 'object' && body !== null && 'token' in body && 'session' in body;
+    if (res.status !== 200 || !ok || typeof body.token !== 'string' || typeof body.session !== 'string')
+        throw new SessionError('The pairing code is unknown, used or expired: print another with `dt collab agent-link` (or `dt open agent-link`).');
+    return { url: base, token: body.token, session: body.session };
 }
 
 /** Subscribes to the session server running on the workspace at `options.root` and runs its agent runs. */
 export async function startSubscriber(options: SubscriberOptions): Promise<RunningSubscriber> {
     const log = options.log ?? (() => {});
+    const taken: readonly AgentRole[] = AGENT_ROLES.filter((r) => (options.roles ?? AGENT_ROLES).includes(r));
+    if (taken.length === 0) throw new SessionError('No role to take on: name `--role answer` or `--role run`, or neither for both.');
     const root = path.resolve(options.root);
-    const credential = await readCredential(root);
+    const credential = 'credential' in options.connect ? options.connect.credential : await pairAgent(root, options.connect.code, options.connect.url);
     const api = createHttpAgentApi({ url: credential.url, token: credential.token });
     const session = await api.session().catch((e: unknown) => {
         throw new SessionError(`The session server's agent API does not answer (${e instanceof Error ? e.message : String(e)}).`);
@@ -123,7 +146,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     if (session.value.session !== credential.session) throw new SessionError('The agent credential is not for the session the server runs.');
     if (session.value.state !== 'Open') throw new SessionError('The session is closed.');
 
-    const roles = new Set<AgentRole>(options.roles ?? ['run', 'answer']);
+    const roles = new Set<AgentRole>(taken);
     const scan = (): Promise<ReadonlyMap<string, string>> => scanWorkspace(root);
     const owner = `${options.agent}@${
         hostname()
@@ -156,6 +179,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
                           answer: {
                               warm: answerConfig.warm,
                               restartAfter: answerConfig.restartAfter,
+                              idleTimeoutMs: answerConfig.idleTimeout * 60_000,
                               ...((answerConfig.model ?? user.model) !== undefined && { model: answerConfig.model ?? user.model }),
                               ...((answerConfig.effort ?? user.effort) !== undefined && { effort: answerConfig.effort ?? user.effort }),
                           },
@@ -174,7 +198,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     void answerer?.done.then(() => view?.dispose());
     if (!roles.has('run')) {
         const done = answerer?.done ?? Promise.resolve<SubscriberEnd>('stopped');
-        return { session: session.value.session, done, stop: async () => (await answerer?.stop()) ?? 'stopped' };
+        return { session: session.value.session, roles: taken, done, stop: async () => (await answerer?.stop()) ?? 'stopped' };
     }
 
     // the agent's dt, taken once now (never read again from the config file, which is in the workspace)
@@ -239,6 +263,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     });
     return {
         session: session.value.session,
+        roles: taken,
         done,
         stop: async () => {
             const [why] = await Promise.all([subscriber.stop(), answerer?.stop()]);

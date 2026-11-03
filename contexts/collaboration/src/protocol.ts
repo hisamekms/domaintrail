@@ -438,7 +438,7 @@ export interface ComparisonBody {
 export type ModelChangesBody = ElementChanges;
 export type { ElementChange };
 
-// ---- Agent API (loopback listener, `Authorization: Bearer <agent.json token>`) ----
+// ---- Agent API (loopback listener, `Authorization: Bearer <token>`, held in memory; `POST /agent/pair` exchanges a one-time code for it) ----
 
 /**
  * The SSE stream `GET /agent/events`: `id:` is the outbox position (resume with `Last-Event-ID`), `event:` one of these

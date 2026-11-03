@@ -1,12 +1,22 @@
-// The seed's agent: the real subscriber of `dt session subscribe` (claim, start, heartbeats, the scan of what changed,
+// The seed's agent: the real subscriber of `dt agent` (claim, start, heartbeats, the scan of what changed,
 // `dt fmt` / `dt check` with the built CLI, then finish / clarification / decline / fail over the agent API), with a
 // scripted runner in place of Claude Code. Each step a scenario expects is queued before its run, and the runs are
 // taken in queue order, one at a time: the next invocation plays the next step. A step edits the workspace for real
 // and returns the structured reply the scenario wrote, validated as a real reply is.
+//
+// Beside it, the real answerer role (`startAnswerer`) with a scripted agent in place of Claude Code: stage 3 of the
+// triage reads a message the scenario sends to the AI for a run (`sendsForRun`) as a change request, any other as
+// needing no answer; it answers and proposes nothing (`neither`: a proposal job, from a participant's reply the
+// classifier read as a request, is then given up by the server until it restarts). The seeded timeline thus has no AI
+// answer or proposal of its own.
 import {
     type AgentInvocation,
     type AgentOutcome,
     type AgentRunner,
+    type AnswerAgent,
+    type AnswerTurnResult,
+    type Answerer,
+    startAnswerer,
     createDtTools,
     createHttpAgentApi,
     type DtCommand,
@@ -16,7 +26,7 @@ import {
     type Subscriber,
     systemClock,
 } from '@domaintrail/agent';
-import { readCredential } from '@domaintrail/dt';
+import { issueAgentLink, pairAgent } from '@domaintrail/dt';
 import { plainQuestion, readReply, type ReplyData, requestNumber, type RunActivity } from '@domaintrail/collaboration';
 import { sourceSelection } from '@domaintrail/analysis';
 import { findDomainFiles } from '@domaintrail/workspace';
@@ -41,6 +51,8 @@ export type Step =
 export interface FakeAgent {
     /** The step of the next run the facilitator queues: call it before queueing that run. */
     expect(step: Step): void;
+    /** Stage 3 reads the message with this text (as the prompt shows it, `plainBody`) as a change request. */
+    sendsForRun(text: string): void;
     /** How many steps are still waiting for their run. */
     pending(): number;
     /** Stops the subscriber (no run is held afterwards). */
@@ -115,9 +127,37 @@ function scriptedRunner(steps: Step[], root: string): AgentRunner {
     };
 }
 
+/** The addressed message's text in a triage prompt (the JSON block between the `<message-…>` tags). */
+function messageText(prompt: string): string | undefined {
+    const block = /<message-[^>]+>\n([\s\S]*)\n<\/message-[^>]+>/.exec(prompt)?.[1];
+    if (!block) return undefined;
+    try {
+        const data: unknown = JSON.parse(block);
+        if (typeof data !== 'object' || data === null || !('message' in data)) return undefined;
+        const message: unknown = data.message;
+        return typeof message === 'object' && message !== null && 'text' in message && typeof message.text === 'string' ? message.text : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+/** The answerer's scripted agent: stage 3 from the texts the scenarios send for a run; no answer, no proposal. */
+function scriptedAnswerer(forRun: Set<string>): AnswerAgent {
+    const structured = (value: Record<string, unknown>): AnswerTurnResult => ({ structured: value, text: JSON.stringify(value), model: 'seed' });
+    return {
+        async triage(turn) {
+            const text = messageText(turn.prompt);
+            if (text !== undefined && forRun.delete(text)) return structured({ kind: 'change_request', confidence: 0.95, reason: 'シードの台本: 変更の依頼' });
+            return structured({ kind: 'neither', confidence: 0.95, reason: 'シードの台本にないメッセージ' });
+        },
+        answer: async () => structured({ kind: 'neither', reason: 'シードの台本にないメッセージ' }),
+    };
+}
+
 /** Subscribes the scripted agent to the session server running on `root`. */
 export async function startFakeAgent(options: FakeAgentOptions): Promise<FakeAgent> {
-    const credential = await readCredential(options.root);
+    // paired as a standalone `dt agent` is: a one-time code for the credential, kept in memory
+    const credential = await pairAgent(options.root, (await issueAgentLink(options.root)).code);
     const api = createHttpAgentApi({ url: credential.url, token: credential.token });
     const session = await api.session();
     if (!session.ok) throw new Error(`The agent API refused the credential (${session.status} ${session.type})`);
@@ -138,11 +178,21 @@ export async function startFakeAgent(options: FakeAgentOptions): Promise<FakeAge
         },
         { allowedTools: session.value.allowedTools, leaseMs: session.value.leaseMs },
     );
+    const forRun = new Set<string>();
+    const answerer: Answerer = startAnswerer({
+        api,
+        agent: scriptedAnswerer(forRun),
+        workspace: { scan: () => scanWorkspace(options.root) },
+        clock: systemClock,
+        nonce: randomNonce,
+        log: options.log,
+    });
     return {
         expect: (step) => void steps.push(step),
+        sendsForRun: (text) => void forRun.add(text),
         pending: () => steps.length,
         async stop() {
-            await subscriber.stop();
+            await Promise.all([subscriber.stop(), answerer.stop()]);
         },
     };
 }

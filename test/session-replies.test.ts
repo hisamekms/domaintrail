@@ -351,7 +351,6 @@ describe('the requests route and the agent API with replies', () => {
                 agent: {
                     port: 0,
                     allowedTools: [...DEFAULT_AGENT_TOOLS],
-                    run: { warm: true, restartAfter: 20, idleTimeout: 30 },
                     maxPreviousRunDiff: 20 * 1024,
                 },
                 maxParticipants: 50,
@@ -363,7 +362,7 @@ describe('the requests route and the agent API with replies', () => {
         ada = await join('Ada');
         bob = await join('Bob');
         expect((await fetch(server.facilitatorLink, { headers: { cookie: ada }, redirect: 'manual' })).status).toBe(303);
-        cred = JSON.parse(await Bun.file(path.join(root, '.domaintrail', 'session', 'agent.json')).text());
+        cred = { url: server.agentUrl, token: server.agentToken };
     });
     afterAll(() => server?.stop());
 

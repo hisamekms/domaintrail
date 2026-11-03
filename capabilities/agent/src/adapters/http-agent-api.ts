@@ -1,6 +1,7 @@
-// The agent API over HTTP (ADR 0026, S4's `createAgentApi`): JSON calls with the bearer token of `agent.json`, and the
-// SSE stream parsed here (`id:`, `event:`, `data:`, comments), resumed with `Last-Event-ID`. The token is sent only to
-// the URL of `agent.json` (loopback) and never logged.
+// The agent API over HTTP (ADR 0026, S4's `createAgentApi`): JSON calls with the bearer token the agent holds in memory
+// (handed over in process, or paired for with a one-time code; ADR 0030, M5), and the SSE stream parsed here (`id:`,
+// `event:`, `data:`, comments), resumed with `Last-Event-ID`. The token is sent only to the agent API's URL (loopback)
+// and never logged.
 import {
     AGENT_ANSWER_EVENT_TYPES,
     type AgentAnswerJobBody,
@@ -16,7 +17,7 @@ import { AgentApiError, type AgentApi, type AnswerStreamItem, type ApiResult, ty
 const CALL_TIMEOUT_MS = 120_000;
 
 export interface HttpAgentApiOptions {
-    /** The agent API's base URL (`agent.json`'s `url`, ending in `/`). */
+    /** The agent API's base URL (loopback, ending in `/`). */
     readonly url: string;
     readonly token: string;
 }

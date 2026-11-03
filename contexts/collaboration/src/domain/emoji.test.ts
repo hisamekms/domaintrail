@@ -1,5 +1,5 @@
 // One emoji, as a reaction holds it (ADR 0026, appendix "Votes and reactions"): what counts as one emoji and the form
-// it is kept in (the `Emoji` primitive built on it: marks.test.ts; `session.quickReactions`:
+// it is kept in (the `Emoji` primitive built on it: marks.test.ts; `collab.quickReactions`:
 // application/config.test.ts).
 import { describe, expect, test } from 'bun:test';
 import { isNormalEmoji, isSingleEmoji, normalizeEmoji, readEmoji } from './emoji.js';

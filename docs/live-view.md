@@ -1,7 +1,7 @@
 # The Live View
 
-`dt view` watches the workspace, re-validates on every save and pushes updates to the browser over WebSocket. It
-serves the page at <http://127.0.0.1:4321> (`--port`, `--host`, or `view.port` / `view.host` in `domaintrail.jsonc`)
+`dt open` watches the workspace, re-validates on every save and pushes updates to the browser over WebSocket. It
+serves the page at <http://127.0.0.1:4321> (`--port`, `--host`, or `open.port` / `open.host` in `domaintrail.jsonc`)
 and runs until Ctrl+C. [Getting started](getting-started.md#watch-it-in-the-live-view) shows what to look at first;
 this page describes every pane.
 
@@ -143,7 +143,7 @@ explorer.
 
 The 比較対象 menu, at the top of the 差分 list, picks what additions, changes and removals are shown against: 前回の保存 (the last valid
 model shown before, the default) or a git revision of the workspace — a branch, a tag, one of the latest commits, or
-any revision typed in (`main`, `HEAD~3`, a commit). `dt view --base main` starts with one. The model compared is the
+any revision typed in (`main`, `HEAD~3`, a commit). `dt open --base main` starts with one. The model compared is the
 working tree, saved but not necessarily committed, against the `.dt` files of that commit (picked by `sources`). The
 choice is the server's, so every open page follows it; a branch is followed as it moves (a commit, a checkout).
 
@@ -183,7 +183,7 @@ See [ADR 0001](adr/0001-mvp-implementation-decisions.md) for the design decision
 
 ## In a session
 
-Under `dt session start` (not `dt view`) the session's chat is a pillar at the right end of the page, the whole height,
+Under `dt collab` (and `dt open`, for one person) the session's chat is a pillar at the right end of the page, the whole height,
 the same for everyone and open when the page joins. Its head shows the collab menu (the avatars and the participants online ▾: who is where, the invite link,
 退出, and the facilitator's actions; see [`dt guide session`](guide.md#collaboration-sessions)) and
 the agent's status at a glance (running and for how long, waiting for an answer, or queued; nothing when idle), with ✕ to
@@ -229,7 +229,7 @@ The chat has two views:
   the filled mark (◉, ☑) on what was chosen, the rest muted, the votes frozen and `回答 name · time` under it; a picked
   alternative has ◉ and `選択 name · time`, the time a link to the run the pick queued. Anyone reacts to a message or an AI turn with any one emoji
   (☺+ on hover: a row's actions — the facilitator's tools, ↩ and ☺+ — float in a small bar over its top right while
-  it is hovered or focused, always on touch; the quick row of `session.quickReactions` and ＋ to type or paste another; the app gives none a
+  it is hovered or focused, always on touch; the quick row of `collab.quickReactions` and ＋ to type or paste another; the app gives none a
   meaning). Reactions show as colored emoji with small counts, mine with a violet count and a faint violet outline;
   who marked is in the tooltip and, for a vote, in a list on a click.
   ↩ on an ended AI turn (on hover) replies to it: a chip above the composer (`↩ 「請求書の税区分」への返信 ✕`), the targets of its
@@ -262,4 +262,4 @@ The chat has two views:
   that changed files; すべて also lists the runs that changed nothing, and those declined, failed or cancelled. The
   other groups always show.
 
-The others' cursors are drawn on the same view. `dt view` serves the same page without any of it. See [`dt guide session`](guide.md#collaboration-sessions).
+The others' cursors are drawn on the same view. `dt open --host <non-loopback>` serves the same page read-only, without any of it. See [`dt guide session`](guide.md#collaboration-sessions).

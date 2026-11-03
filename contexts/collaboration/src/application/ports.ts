@@ -165,6 +165,8 @@ export interface AccessStore {
     addLink(codeHash: string, session: SessionId, expiresAt: Date): void;
     /** Marks a link used when it is unused and not expired at `now`: the session it is for; `undefined` otherwise. */
     useLink(codeHash: string, now: Date): SessionId | undefined;
+    /** Marks every unused link of the session used (facilitator links and agent pairing codes alike). */
+    revokeLinks(session: SessionId, now: Date): void;
     /** The identity that holds the facilitator role of the session, if one claimed it. */
     facilitator(session: SessionId): IdentityKey | undefined;
     setFacilitator(session: SessionId, identity: IdentityKey, at: Date): void;

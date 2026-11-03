@@ -252,7 +252,7 @@ describe('expected failures', () => {
         const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-cli-'));
         dirs.push(dir);
         await writeFile(path.join(dir, 'file.txt'), '');
-        for (const command of ['check', 'view']) {
+        for (const command of ['check', 'open']) {
             expect(await run('-r', path.join(dir, 'missing'), command)).toEqual({
                 code: 1,
                 out: [],
@@ -281,7 +281,7 @@ describe('expected failures', () => {
     });
 
     test('an invalid port is a usage error', async () => {
-        const r = await run('view', '--port', 'abc');
+        const r = await run('open', '--port', 'abc');
         expect(r.code).toBe(1);
         expect(r.err).toEqual([expect.stringContaining('Expected a port number')]);
     });
@@ -293,7 +293,7 @@ describe('expected failures', () => {
         await new Promise<void>((resolve) => busy.listen(0, '127.0.0.1', resolve));
         const { port } = busy.address() as AddressInfo;
         try {
-            const r = await run('-r', dir, 'view', '--port', String(port));
+            const r = await run('-r', dir, 'open', '--no-agent', '--port', String(port));
             expect(r.code).toBe(1);
             expect(r.err).toEqual([`Port ${port} on 127.0.0.1 is already in use; pick another with --port.`]);
         } finally {

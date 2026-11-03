@@ -1,4 +1,4 @@
-// The agent's dt (session.agent.dt) as the configuration reads it, and as the agent pins it (the shim itself:
+// The agent's dt (agent.run.dt) as the configuration reads it, and as the agent pins it (the shim itself:
 // capabilities/agent/src/adapters/dt-shim.test.ts).
 import { afterAll, describe, expect, test } from 'bun:test';
 import { realpathSync } from 'node:fs';
@@ -28,7 +28,7 @@ const thrown = (f: () => unknown): string => {
 };
 const node = realpathSync(Bun.which('node') ?? process.execPath);
 
-describe("the agent's dt (session.agent.dt)", () => {
+describe("the agent's dt (agent.run.dt)", () => {
     test('only two shapes: [node|bun|deno, script] or [dt executable], as absolute real paths outside the workspace', async () => {
         const root = await scratch();
         const outside = await scratch();
@@ -57,9 +57,9 @@ describe("the agent's dt (session.agent.dt)", () => {
         for (const [dt, why] of refused) expect(thrown(() => pinDt(dt, root))).toMatch(why);
         // in the config: the shapes, the script relative to the config file, nothing inside the workspace
         const configured = async (dt: unknown): Promise<string> => {
-            await writeFile(path.join(root, 'domaintrail.json'), JSON.stringify({ session: { agent: { dt } } }));
+            await writeFile(path.join(root, 'domaintrail.json'), JSON.stringify({ agent: { run: { dt } } }));
             return loadConfig({ start: root }, CONFIG_FILE_FORMAT).then(
-                (c) => JSON.stringify(c.session.agent.dt),
+                (c) => JSON.stringify(c.agent.run.dt),
                 (e: unknown) => (e instanceof ConfigError ? `ConfigError ${String(e)}` : String(e)),
             );
         };
@@ -68,6 +68,6 @@ describe("the agent's dt (session.agent.dt)", () => {
         for (const dt of [['npx', 'domaintrail'], ['bun', 'x', 'dt'], ['node', '--require=./x.js', 'dt.js'], ['node', '-r'], ['dt'], ['corepack', 'dt']])
             expect(await configured(dt)).toContain('ConfigError Error: ');
         for (const dt of [['node', './tools/dt.js'], ['node', `${path.join(outside, 'link')}/dt.js`], ['node', '..evil/dt.js'], ['./tools/dt.js']])
-            expect(await configured(dt)).toContain("'session.agent.dt' may not run anything inside the workspace");
+            expect(await configured(dt)).toContain("'agent.run.dt' may not run anything inside the workspace");
     });
 });

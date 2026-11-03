@@ -24,7 +24,7 @@ import {
 } from '@domaintrail/collaboration';
 import type { AgentAnswerJobBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { type AnswerStreamItem, createHttpAgentApi, DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
-import { createModelValidator, type ResolvedSessionConfig, type SessionServer, startSessionServer, startSubscriber } from '@domaintrail/dt';
+import { createModelValidator, type SessionServer, type SessionSettings, startSessionServer, startSubscriber } from '@domaintrail/dt';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 import { sourceSelection } from '@domaintrail/analysis';
 import { tempCopyOfExamples } from './helpers';
@@ -64,11 +64,11 @@ afterAll(async () => {
     for (const dir of dirs) await rm(dir, { recursive: true, force: true });
 });
 
-const sessionConfig = (): ResolvedSessionConfig => ({
+const sessionConfig = (): SessionSettings => ({
     port: 0,
     host: '127.0.0.1',
     identity: 'dev',
-    agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS], run: { warm: false, restartAfter: 20, idleTimeout: 30 }, maxPreviousRunDiff: 20 * 1024 },
+    agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS], maxPreviousRunDiff: 20 * 1024 },
     maxParticipants: 50,
     quickReactions: ['👍'],
     classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.9 },
@@ -115,7 +115,8 @@ async function setup(root?: string): Promise<Ctx> {
         });
     const state = async (cookie = ada): Promise<SessionStateBody> => (await (await api(cookie, 'state')).json()) as SessionStateBody;
     const bobId = ((await (await api(bob, 'me')).json()) as { participant: { id: string } }).participant.id;
-    const cred = JSON.parse(await readFile(path.join(dir, '.domaintrail', 'session', 'agent.json'), 'utf8')) as { url: string; token: string };
+    // the agent API's credential, in memory (as the agent in process gets it)
+    const cred = { url: server.agentUrl, token: server.agentToken };
     return { root: dir, server, ada, bob, bobId, api, state, cred };
 }
 
@@ -397,6 +398,7 @@ describe('end to end with the two roles and a fake Claude Code', () => {
         const subscriber = await startSubscriber({
             root: ctx.root,
             agent: 'claude',
+            connect: { credential: { ...ctx.cred, session: ctx.server.session } },
             dt: DT_COMMAND,
             agentCommand: { command: process.execPath, args: [FAKE, runPlan] },
             answerCommand: { command: process.execPath, args: [FAKE, answerPlan] },
@@ -537,7 +539,7 @@ describe('a Solo session (dt open)', () => {
         if (!sent.ok) throw new Error(sent.error.type);
         expect(sent.value.triage).toMatchObject({ addressedBy: 'Solo' });
         await server.pump();
-        const cred = JSON.parse(await readFile(path.join(root, '.domaintrail', 'session', 'agent.json'), 'utf8')) as { url: string; token: string };
+        const cred = { url: server.agentUrl, token: server.agentToken };
         const stream = answerStream({ cred } as Ctx);
         const job = await stream.job('triage');
         expect((await stream.post(job.job, { kind: 'change_request', confidence: 0.9, reason: '変更', durationMs: 1 })).status).toBe(200);

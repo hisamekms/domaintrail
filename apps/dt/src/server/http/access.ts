@@ -34,7 +34,7 @@ export interface Identified {
 
 /**
  * What the access check decides about a request: refused (unexpected Host or Origin), let in without an identity
- * (always so in `dt view`; in a session, someone who has not signed in), or a participant with their role.
+ * (always so in the read-only Live View; in a session, someone who has not signed in), or a participant with their role.
  */
 export type Authorization = { readonly kind: 'forbidden' } | { readonly kind: 'anonymous' } | ({ readonly kind: 'participant' } & Identified);
 
@@ -47,7 +47,7 @@ export interface AccessPolicy {
     readonly allowedHost: (hostname: string) => boolean;
     /** Whether a browser's `Origin` may call; default: the same host as the request's `Host`. */
     readonly allowedOrigin?: (origin: URL, host: string) => boolean;
-    /** A session's identities; absent in `dt view`, where everyone admitted is anonymous. */
+    /** A session's identities; absent in the read-only Live View, where everyone admitted is anonymous. */
     readonly identify?: Identify;
 }
 
@@ -57,7 +57,7 @@ const sameHost = (origin: URL, host: string): boolean => origin.host === host;
  * The one access check of the Live View and of a session, for every request it guards and the `/ws` upgrade (see
  * `createViewHttpServer`). The model may be confidential: reject requests whose Host is unexpected (DNS rebinding) and
  * cross-origin browser requests (browsers do not apply the same-origin policy to WebSockets); non-browser clients send
- * no Origin. Then, in a session, who is asking. `dt view` has no identities: its answers are `forbidden` and
+ * no Origin. Then, in a session, who is asking. The read-only Live View has no identities: its answers are `forbidden` and
  * `anonymous`, as `'forbidden'` and `'ok'` were before.
  */
 export async function checkAccess(headers: IncomingHttpHeaders, policy: AccessPolicy): Promise<Authorization> {

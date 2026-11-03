@@ -99,7 +99,6 @@ describe('refused requests of a session in dev mode', () => {
                 agent: {
                     port: 0,
                     allowedTools: [...DEFAULT_AGENT_TOOLS],
-                    run: { warm: true, restartAfter: 20, idleTimeout: 30 },
                     maxPreviousRunDiff: 20 * 1024,
                 },
                 maxParticipants: 50,

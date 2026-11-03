@@ -3,7 +3,7 @@
 // stands for. The facilitator is assigned locally (a one-time link), never derived from the identity provider.
 import { Collaboration } from '../generated/index.js';
 
-/** The identity modes of a session, explicit in the configuration (`session.identity`), never inferred from headers. */
+/** The identity modes of a session, explicit in the configuration (`collab.identity`), never inferred from headers. */
 export type IdentityMode = 'dev' | 'access';
 
 /** A proven identity. The e-mail is never shown to other participants. */
@@ -13,7 +13,7 @@ export interface Identity {
     readonly subject: string;
     readonly displayName: string;
     readonly email?: string;
-    /** An `https` image of an allowed host (`session.access.avatarHosts`); absent, the page shows initials. */
+    /** An `https` image of an allowed host (`collab.access.avatarHosts`); absent, the page shows initials. */
     readonly avatarUrl?: string;
     /** When the proof stops holding (an Access token's expiry, with the clock skew allowed): the pages of the identity close then. */
     readonly expiresAt?: Date;

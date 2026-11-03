@@ -31,14 +31,16 @@ cd /tmp/dt-session && git init -q && git add -A && git commit -qm 'before the se
 
 ## The run
 
-1. **Start the session** (terminal 1): `dt -r /tmp/dt-session session start`. It prints `Session: … (started, identity
+1. **Start the session** (terminal 1): `dt -r /tmp/dt-session collab --no-agent`. It prints `Session: … (started, identity
    dev)`, the Live View's URL (`http://127.0.0.1:4321/`), a facilitator link and the agent API's address.
 2. **Become the facilitator**: open the Live View in your browser, give a name on the join form (*Ada*), then open the
    facilitator link. The chat opens at the right end; its participants (the collab menu in its head, the avatars ▾) list you once, as
    *Facilitator*.
 3. **A second participant**: a private window, the same URL, another name (*Bob*). Each lists the other.
-4. **Start the agent** (terminal 2): `dt -r /tmp/dt-session session subscribe --agent claude --once`. It prints
-   `Subscribed to session …; waiting for runs.`
+4. **Start the agent** (terminal 2): `dt -r /tmp/dt-session collab agent-link` prints a one-time code, then
+   `dt -r /tmp/dt-session agent --code <code> --once`. It prints
+   `Agent on session … with claude (role run) (one run); waiting.` (Without `--no-agent` in step 1, `dt collab` starts
+   the agent in its own process instead, and keeps it running.)
 5. **Messages** (as Bob): in the Event Storming view, pick the storming `Returns`, one timeline and Design Level, select
    an event's note, write a message about the selection (e.g. "Add an event for a return the customer cancels") and
    send it, then a second about the whole workspace. Both appear in everyone's chat, the first with its occurrence
@@ -56,12 +58,12 @@ cd /tmp/dt-session && git init -q && git add -A && git commit -qm 'before the se
    the revert would have waited its turn behind it (実行待ち, 前に 1 件); had a later run changed the same lines, the revert
    would have been left to the agent, still 実行待ち, why in the tooltip on its state (the subscriber, without `--once`, takes it). The collab menu's
    以前の状態に復元 restores any earlier state of the whole workspace: the last resort.
-9. **Stop**: Ctrl+C in terminal 1 (the session stays open and is resumed by the next `dt session start`). To end it,
+9. **Stop**: Ctrl+C in terminal 1 (the session stays open and is resumed by the next `dt collab`). To end it,
    as Ada, the collab menu → コラボを終える → 終える — every page shows the summary, コラボを終えました. Then remove `/tmp/dt-session`.
 
 **Developing DomainTrail itself?** Point the agent's `dt` at your clone in the workspace's `domaintrail.jsonc`, outside
-the workspace: `"session": { "agent": { "dt": ["node", "../domaintrail/dist/dt.js"] } }` (or `["bun",
-"../domaintrail/bin/dt.ts"]`). It is read when `dt session subscribe` starts; restart the subscriber after changing
+the workspace: `"agent": { "run": { "dt": ["node", "../domaintrail/dist/dt.js"] } }` (or `["bun",
+"../domaintrail/bin/dt.ts"]`). It is read when the agent starts (`dt agent`, or with `dt collab`); restart the subscriber after changing
 it, and after rebuilding the clone (a changed script stops the next run).
 
 If terminal 2 logs `not claiming further runs: review …`, the agent changed a file other than a `.dt` or `.dtes`

@@ -1,13 +1,16 @@
 // The agent API of a session (ADR 0026, S4): a listener of its own, bound to 127.0.0.1 only, never routed through the
-// public listener, and requiring the bearer token of `.domaintrail/session/agent.json` on every request. Browsers are
-// refused (any `Origin`). The subscriber (S6) follows an SSE stream of the outbox (`id:` = outbox position, resumed
-// with `Last-Event-ID`), reads the participants' display names (for the prompt), claims the next run with a lease,
-// starts it (and gets the runs it continues, with what they changed, and the runs it reverts), heartbeats, and ends it (finish with its facts and the agent's reply, ask for clarification, decline,
-// fail) or releases it. The server computes the rest (S3's use cases); the reply is validated and kept, never a fact.
-// While a run runs, its holder also reports what it is doing (an activity, ADR 0026, amendment): held in memory and
-// sent to the pages, never stored. Since ADR 0030 (decision 6) these are the runner role's; the answerer role has an
-// entry point of its own beside them (`/agent/answers/events`, `POST /agent/answers/:job`: `answers.ts`). Each stream
-// open is an agent of its role connected (the page's AI status).
+// public listener, and requiring its bearer token on every request but the pairing (ADR 0030, M5): the token is held in
+// memory only, handed to the agent in process, or exchanged once for a one-time pairing code (`POST /agent/pair`, the
+// code printed by `dt collab agent-link`) by a standalone `dt agent`. Browsers are refused (any `Origin`). The
+// subscriber (S6) follows an SSE stream of the outbox (`id:` = outbox position, resumed with `Last-Event-ID`), reads the
+// participants' display names (for the prompt), claims the next run with a lease, starts it (and gets the runs it
+// continues, with what they changed, and the runs it reverts), heartbeats, and ends it (finish with its facts and the
+// agent's reply, ask for clarification, decline, fail) or releases it. The server computes the rest (S3's use cases);
+// the reply is validated and kept, never a fact. While a run runs, its holder also reports what it is doing (an
+// activity, ADR 0026, amendment): held in memory and sent to the pages, never stored. Since ADR 0030 (decision 6) these
+// are the runner role's; the answerer role has an entry point of its own beside them, behind the same token
+// (`/agent/answers/events`, `POST /agent/answers/:job`: `answers.ts`). Each stream open is an agent of its role
+// connected (the page's AI status).
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import {
@@ -43,7 +46,7 @@ export interface AgentApiDeps {
     readonly allowedTools: readonly string[];
     /** How long a claim or a heartbeat holds the lease. */
     readonly leaseMs: number;
-    /** The most characters of diff a started run is given of the runs it continues, together (`session.agent.maxPreviousRunDiff`). */
+    /** The most characters of diff a started run is given of the runs it continues, together (`agent.run.maxPreviousRunDiff`). */
     readonly maxPreviousRunDiff: number;
     /** Most SSE streams open at once. */
     readonly maxStreams: number;
@@ -58,6 +61,8 @@ export interface AgentApiDeps {
     /** The agents connected changed (a stream of either role opened or closed). */
     readonly onPresence?: () => void;
     readonly log?: (line: string) => void;
+    /** Uses a one-time pairing code: whether it was valid (`POST /agent/pair` then answers the token). Absent: no pairing. */
+    readonly pair?: (code: string) => Promise<boolean>;
 }
 
 export interface AgentApi {
@@ -361,11 +366,20 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         }
         if (!hostname || !isLoopbackHost(hostname) || req.headers.origin !== undefined)
             return sendError(res, 403, 'Forbidden', 'The agent API is for local processes only.');
+        // the pairing: a one-time code (single use, short-lived, an agent code: never a facilitator link) for the token
+        if (new URL(req.url ?? '/', 'http://localhost').pathname === '/agent/pair' && req.method === 'POST' && deps.pair) {
+            const b = await input(req, res, ['code']);
+            if (!b) return;
+            const code = typeof b.code === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(b.code) ? b.code : undefined;
+            if (!code || !(await deps.pair(code)))
+                return sendError(res, 401, 'PairingInvalid', 'The pairing code is unknown, used or expired: print another with `dt collab agent-link`.');
+            return sendJson(res, 200, { session, token: deps.token });
+        }
         const auth = req.headers.authorization ?? '';
         const given = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : '';
         if (!given || !sameSecret(given, deps.token)) {
             res.setHeader('www-authenticate', 'Bearer realm="dt-session-agent"');
-            return sendError(res, 401, 'Unauthenticated', 'The agent credential (.domaintrail/session/agent.json) is required.');
+            return sendError(res, 401, 'Unauthenticated', 'The agent credential is required (pair with `dt agent --code`).');
         }
         const url = new URL(req.url ?? '/', 'http://localhost');
         const path = url.pathname;

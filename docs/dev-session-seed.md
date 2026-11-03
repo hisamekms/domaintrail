@@ -30,25 +30,25 @@ bun run session:seed --scenario chat,replies --dir /tmp/dt-seed-2 --reset
 | `--exit` | Stops the session server once seeded instead of leaving it running. |
 
 The seed copies the workspace (without `.domaintrail/` and `generated/`), commits it to a git repository of its own
-(`git -C <dir> diff` shows what the runs changed), starts `dt session start`, signs in five people — `ooyama_F`, made
+(`git -C <dir> diff` shows what the runs changed), starts `dt collab --no-agent`, signs in five people — `ooyama_F`, made
 the facilitator with the start's link, and 佐藤, 鈴木, 田中, 高橋 — and plays the scenarios through the session's REST
-API, as the pages do. The runs are taken by the real subscriber of `dt session subscribe`, with a scripted runner in
+API, as the pages do. The runs are taken by the real subscriber of `dt agent`, with a scripted runner in
 place of Claude Code: it edits the workspace's `.dt` and `.dtes` files for real, `dt fmt` and `dt check` run, and the
 server records the revisions. Once the scenarios are done the seed's agent is stopped: it holds no run.
 
 It then prints the Live View's URL, a fresh facilitator link and how to join, and leaves the session server running
-until Ctrl+C. The session stays in the directory: `dt -r <dir> session start` resumes it (without the classifier's
+until Ctrl+C. The session stays in the directory: `dt -r <dir> collab` resumes it (without the classifier's
 tags, see below).
 
 ## Looking at it
 
 - **As the facilitator**: open the Live View, join with any name, then open the printed facilitator link (single use,
-  10 minutes; `node dist/dt.js -r <dir> session link` prints another). You then hold the role `ooyama_F` held: the
+  10 minutes; `node dist/dt.js -r <dir> collab link` prints another). You then hold the role `ooyama_F` held: the
   facilitator's messages and reactions show as 「あなた」, and the AI に送る buttons and the menus are yours.
 - **As a participant**: a private window, the same URL, another name. Your browser is a new participant, so none of the
   seeded messages are yours; the seeded people's cookies (`dt_session`) are in `<dir>/.domaintrail/seed.json`, for a
   browser (or a test) that should be one of them.
-- **With the real agent**: `node dist/dt.js -r <dir> session subscribe --agent claude` takes the runs queued from then
+- **With the real agent**: `node dist/dt.js -r <dir> collab agent-link`, then `node dist/dt.js -r <dir> agent --code <code>`, takes the runs queued from then
   on (and the one `--leave-queued` left).
 
 ## What the scenarios show
@@ -99,7 +99,7 @@ show in AI の作業 as 答え待ち.
 ## The classifier
 
 Telling talk from requests (a message read as talk has no AI に送る button in its row, only in its … menu) needs
-the message classifier (`session.classifier`). The seed enables it in the scratch config
+the message classifier (`classifier`). The seed enables it in the scratch config
 with a placeholder account and serves a stand-in for Cloudflare's API itself (`DOMAINTRAIL_CLASSIFIER_URL`): each
 seeded message reads as the scenario says, and a message typed later reads as a request when it asks for a change
 (して, 追加, 削除, …). No message leaves the machine. The stand-in lives in the seed's process, so a session server

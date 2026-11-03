@@ -57,7 +57,7 @@ const en: PageTexts = {
         formTooLarge: { title: 'Form too large', message: 'The form is larger than this session accepts.' },
         linkMethod: { title: 'Method not allowed', message: 'Open the link.' },
         linkIncomplete: { title: 'Not a facilitator link', message: 'The link is incomplete.' },
-        linkNotValid: { title: 'Link not valid', message: 'This facilitator link was used already or has expired. Ask for a new one (dt session link).' },
+        linkNotValid: { title: 'Link not valid', message: 'This facilitator link was used already or has expired. Ask for a new one (dt collab link).' },
         notFound: { title: 'Not found', message: 'No such page.' },
     },
 };
@@ -85,7 +85,7 @@ const ja: PageTexts = {
         linkIncomplete: { title: 'ファシリテーターのリンクではありません', message: 'リンクが途中で切れています。' },
         linkNotValid: {
             title: 'リンクが無効です',
-            message: 'このファシリテーターのリンクは使用済みか、期限が切れています。新しいリンクをもらってください（dt session link）。',
+            message: 'このファシリテーターのリンクは使用済みか、期限が切れています。新しいリンクをもらってください（dt collab link）。',
         },
         notFound: { title: 'ページがありません', message: 'このページはありません。' },
     },

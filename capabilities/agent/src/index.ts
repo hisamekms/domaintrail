@@ -32,8 +32,8 @@ export { ANSWERER_TOOLS, answererArguments, createClaudeAnswerer, triageArgument
 // the warm process itself, for a role other than the runs (its own tools, prompt and schema)
 export { createWarmClaude, type WarmClaude, type WarmClaudeOptions, type WarmProfile, type WarmTurn, type WarmTurnEnd } from './adapters/warm-claude.js';
 export { checkDtOutsideWorkspace, dtCommandOf, pinDt, type PinnedDt } from './adapters/dt-shim.js';
-// the adapters' settings in domaintrail.jsonc, `session.agent.allowedTools`, `session.agent.dt` (T6) and
-// `session.agent.run` (the warm agent), composed by the app
+// the adapters' settings in domaintrail.jsonc, `agent.run` (the runner: tools, `dt`, the warm agent), `agent.answer`
+// (the answerer) and `agent.triage` (stage 3), composed by the app
 export {
     AGENT_CONFIG_KEYS,
     AGENT_EFFORTS,
@@ -41,22 +41,23 @@ export {
     ANSWER_CONFIG_KEYS,
     type AnswerConfig,
     type AnswerConfigFile,
+    DEFAULT_AGENT_TOOLS,
     DEFAULT_ANSWER_RESTART_AFTER,
     DEFAULT_ANSWER_TIMEOUT,
+    DEFAULT_IDLE_TIMEOUT,
+    DEFAULT_RESTART_AFTER,
     DEFAULT_TRIAGE_MODEL,
+    type ResolvedRunConfig,
+    type RunConfig,
     resolveAnswerConfig,
     resolveTriageConfig,
     TRIAGE_CONFIG_KEYS,
     type TriageConfig,
     type TriageConfigFile,
-    validateAnswerConfig,
-    validateTriageConfig,
-    DEFAULT_AGENT_TOOLS,
-    DEFAULT_IDLE_TIMEOUT,
-    DEFAULT_RESTART_AFTER,
-    type RunConfig,
     resolveAgentConfig,
     validateAgentConfig,
+    validateAnswerConfig,
+    validateTriageConfig,
     type AgentConfigFile,
     type ResolvedAgentConfig,
 } from './adapters/config.js';

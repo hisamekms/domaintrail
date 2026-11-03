@@ -8,7 +8,16 @@ import { type Analysis, analyze } from '@domaintrail/analysis';
 import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/kernel';
 import { checkTestsTypes, checkTsContexts, ConfigError, type ResolvedConfig } from '../config/config.js';
 import { guideTopic, parseGuide, quickReference } from './guide.js';
-import { SessionError, type CliDeps } from './ports.js';
+import {
+    AGENT_ROLES,
+    type AgentOptions,
+    type AgentRole,
+    type CliDeps,
+    SessionError,
+    type SessionSettings,
+    type StartedAgent,
+    type StartedSession,
+} from './ports.js';
 import { lookup, showJson, showText } from './show.js';
 import guide from '../../../../docs/guide.md' with { type: 'text' };
 
@@ -99,7 +108,7 @@ Examples:
   dt check                      validate every .dt and .dtes file below the current directory
   dt -r domain generate ts      check, then write TypeScript (by default into domain/generated/domain)
   dt fmt                        rewrite every .dt and .dtes file in the canonical layout (run it after editing)
-  dt view                       serve the Live View at http://127.0.0.1:4321 (runs until Ctrl+C)
+  dt open                       the Live View with the chat and the AI at http://127.0.0.1:4321 (runs until Ctrl+C)
   dt lsp                        language server over stdio, started by editors and AI agents
   dt show Sales.Order           one element resolved (field sets, labels, commands, used by), instead of reading files
 
@@ -304,103 +313,138 @@ Examples:
             exitCode = broken.size || (opts.check && changed) ? 1 : 0;
         });
 
-    program
-        .command('view')
-        .description('Start the Live View server and watch .dt and .dtes files (runs until Ctrl+C).')
-        .option('-p, --port <port>', 'port to listen on (default: view.port, else 4321)', parsePort)
-        .option('--host <host>', 'host to bind (default: view.host, else 127.0.0.1)')
-        .option('--base <ref>', 'compare the model with this git revision (e.g. main, HEAD~3) instead of the previous save')
-        .addHelpText(
-            'after',
-            `
-A server that keeps running and never exits by itself: stop it with Ctrl+C. It re-checks on every save and
-pushes updates to the browser. Use \`dt check\` for a one-shot result (e.g. from scripts or AI agents).
+    const serveOptions = (command: Command, section: 'open' | 'collab', hostHelp: string): Command =>
+        command
+            .option('-p, --port <port>', `port to listen on (default: ${section}.port, else 4321)`, parsePort)
+            .option('--host <host>', hostHelp)
+            .option('--base <ref>', 'compare the model with this git revision (e.g. main, HEAD~3) instead of the previous save')
+            .addOption(new Option('--agent <agent>', 'the agent to start in this process (an error if it cannot start)').choices(['claude']))
+            .option('--no-agent', 'do not start the agent in this process (start one later with `dt agent`)');
+
+    const open = serveOptions(
+        program
+            .command('open')
+            .description('Open the Live View with the chat for you alone, the AI included (runs until Ctrl+C).')
+            .addHelpText(
+                'after',
+                `
+Serves the Live View and a chat for one person on loopback. It prints a one-time link: opened within 60 minutes, it
+signs that browser in as you, the facilitator (a cookie; no join form); nothing else is let in. Every message you send goes to the AI, which answers questions and applies change requests. It re-checks on
+every save and pushes updates to the browser. The chat, the runs and the revisions are kept in .domaintrail/session/
+across restarts. The agent (Claude Code) starts in this process when \`claude\` is usable; otherwise the server starts
+without it and says why (\`dt agent\` connects one later). Refused while the workspace has an open collab session
+(\`dt collab\` resumes it). With --host on a non-loopback address, the Live View is served read-only: no chat, no agent.
+Use \`dt check\` for a one-shot result (e.g. from scripts or AI agents).
 
 Examples:
-  dt view
-  dt view --port 8080
-  dt view --base main           mark what changed since main (the base can be switched in the page)
-  dt -r examples/shop view`,
-        )
-        .action(async (opts: { port?: number; host?: string; base?: string }) => {
-            const cfg = await config();
-            const { UnknownRevisionError } = await import('@domaintrail/visualization');
-            const port = opts.port ?? cfg.view.port;
-            const host = opts.host ?? cfg.view.host;
+  dt open
+  dt open --port 8080
+  dt open --base main           mark what changed since main (the base can be switched in the page)
+  dt open --no-agent            the chat without the AI in this process (dt agent elsewhere)
+  dt -r examples/shop open`,
+            ),
+        'open',
+        'host to bind (default: open.host, else 127.0.0.1; a non-loopback address serves the Live View read-only)',
+    ).action(async (opts: ServeOptions) => {
+        const cfg = await config();
+        const { UnknownRevisionError } = await import('@domaintrail/visualization');
+        const port = opts.port ?? cfg.open.port;
+        const host = opts.host ?? cfg.open.host;
+        const base = (e: unknown): never => {
+            if (e instanceof UnknownRevisionError) throw new CliError(`${e.message}: pass a branch, tag or commit to --base.`);
+            if (errorCode(e) === 'EADDRINUSE') throw new CliError(`Port ${port} on ${host} is already in use; pick another with --port.`);
+            throw e;
+        };
+        if (!isLoopback(host)) {
+            // what remains of `dt view`: the Live View alone, read-only, for others to look at
+            if (opts.agent === 'claude') throw new CliError(`No agent with a read-only Live View: ${host} is not a loopback address.`);
             const server = await deps
-                .startViewServer({
-                    root: cfg.root,
-                    sources: cfg.sources,
-                    respectGitignore: cfg.respectGitignore,
-                    port,
-                    host,
-                    base: opts.base,
-                    log: io.out,
-                })
-                .catch((e: unknown) => {
-                    if (e instanceof UnknownRevisionError) throw new CliError(`${e.message}: pass a branch, tag or commit to --base.`);
-                    if (errorCode(e) === 'EADDRINUSE') throw new CliError(`Port ${port} on ${host} is already in use; pick another with --port.`);
-                    throw e;
-                });
+                .startViewServer({ root: cfg.root, sources: cfg.sources, respectGitignore: cfg.respectGitignore, port, host, base: opts.base, log: io.out })
+                .catch(base);
             if (cfg.file) io.out(`Config: ${path.relative(process.cwd(), cfg.file) || cfg.file}`);
-            io.out(`Live View: ${server.url}`);
+            io.out(`Live View (read-only: ${host} is not a loopback address; the chat and the agent are on loopback only): ${server.url}`);
             await new Promise<void>(() => {}); // run until interrupted
-        });
+            return;
+        }
+        const server = await deps
+            .startSessionServer({
+                root: cfg.root,
+                sources: cfg.sources,
+                respectGitignore: cfg.respectGitignore,
+                base: opts.base,
+                mode: 'Solo',
+                session: openSettings(cfg, port, host),
+                log: io.out,
+            })
+            .catch((e: unknown) => {
+                if (e instanceof SessionError) throw new CliError(e.message);
+                return base(e);
+            });
+        if (cfg.file) io.out(`Config: ${path.relative(process.cwd(), cfg.file) || cfg.file}`);
+        // the printed link is the only step: opened once, it signs this browser in (a cookie) as the one person
+        io.out(`Live View: ${server.facilitatorLink ?? server.url}`);
+        io.out(`  (a link for you only: opened once within 60 minutes, it signs that browser in; then ${server.url})`);
+        io.out(`Session: ${server.session} (${server.opened}, solo)`);
+        await serveWithAgent(cfg, opts, server);
+    });
 
-    const session = program.command('session').description('Collaboration sessions: participants, requests, agent runs and revisions over the Live View.');
-    session
-        .command('start')
-        .description("Start the session server: the Live View plus the workspace's collaboration session (runs until Ctrl+C or the session closes).")
-        .option('-p, --port <port>', 'port to listen on (default: session.port, else 4321)', parsePort)
-        .option('--host <host>', 'host to bind (default: session.host, else 127.0.0.1; the dev identity mode allows loopback only)')
-        .option('--base <ref>', 'compare the model with this git revision (e.g. main, HEAD~3) instead of the previous save')
-        .addHelpText(
-            'after',
-            `
-Serves the Live View as \`dt view\` does, and a collaboration session: participants sign in (identity mode
-session.identity: dev, a name picked in the browser on loopback; access, Cloudflare Access), send requests about
-elements of the model, and the facilitator bundles them into agent runs. One session per workspace: an open session
-is resumed. Prints a one-time facilitator link: open it in your browser to become the facilitator (\`dt session link\`
-prints another). The agent API listens on 127.0.0.1 only; its address and credential are in
-.domaintrail/session/agent.json.
+    const collab = serveOptions(
+        program
+            .command('collab')
+            .description('Start the collaboration session: the Live View, the chat and the AI for several people (runs until Ctrl+C or the session closes).')
+            .addHelpText(
+                'after',
+                `
+Serves the Live View and the workspace's collaboration session: participants sign in (identity mode
+collab.identity: dev, a name picked in the browser on loopback; access, Cloudflare Access), send messages about
+elements of the model, and address the AI with @AI; the facilitator decides what changes. One session per workspace:
+an open session is resumed, and a \`dt open\` session is continued with you as its facilitator. Prints a one-time
+facilitator link: open it in your browser to become the facilitator (\`dt collab link\` prints another). The agent
+(Claude Code) starts in this process when \`claude\` is usable; otherwise the server starts without it and says why.
+The agent API listens on 127.0.0.1 only; its credential is in memory, never on disk (\`dt collab agent-link\` pairs
+another agent).
 
 Examples:
-  dt session start
-  dt session start --port 8080
-  dt -r examples/shop session start`,
-        )
-        .action(async (opts: { port?: number; host?: string; base?: string }) => {
-            const cfg = await config();
-            const { UnknownRevisionError } = await import('@domaintrail/visualization');
-            const settings = { ...cfg.session, port: opts.port ?? cfg.session.port, host: opts.host ?? cfg.session.host };
-            const server = await deps
-                .startSessionServer({
-                    root: cfg.root,
-                    sources: cfg.sources,
-                    respectGitignore: cfg.respectGitignore,
-                    base: opts.base,
-                    session: settings,
-                    log: io.out,
-                })
-                .catch((e: unknown) => {
-                    if (e instanceof SessionError) throw new CliError(e.message);
-                    if (e instanceof UnknownRevisionError) throw new CliError(`${e.message}: pass a branch, tag or commit to --base.`);
-                    if (errorCode(e) === 'EADDRINUSE')
-                        throw new CliError(`Port ${settings.port} on ${settings.host} (or the agent port) is already in use; pick another with --port.`);
-                    throw e;
-                });
-            if (cfg.file) io.out(`Config: ${path.relative(process.cwd(), cfg.file) || cfg.file}`);
-            io.out(`Session: ${server.session} (${server.resumed ? 'resumed' : 'started'}, identity ${settings.identity})`);
-            io.out(`Live View: ${server.url}`);
-            io.out(`Facilitator link (single use, expires in 10 minutes): ${server.facilitatorLink}`);
-            io.out(`Agent API: ${server.agentUrl} (credential in .domaintrail/session/agent.json)`);
-            await server.closed;
-            await server.stop();
-            io.out('Session closed.');
-        });
-    session
+  dt collab
+  dt collab --port 8080
+  dt collab --no-agent          the agent on another machine or terminal (dt agent)
+  dt collab link                another facilitator link
+  dt -r examples/shop collab`,
+            ),
+        'collab',
+        'host to bind (default: collab.host, else 127.0.0.1; the dev identity mode allows loopback only)',
+    ).action(async (opts: ServeOptions) => {
+        const cfg = await config();
+        const { UnknownRevisionError } = await import('@domaintrail/visualization');
+        const settings = sessionSettings(cfg, cfg.collab, opts);
+        const server = await deps
+            .startSessionServer({
+                root: cfg.root,
+                sources: cfg.sources,
+                respectGitignore: cfg.respectGitignore,
+                base: opts.base,
+                mode: 'Collab',
+                session: settings,
+                log: io.out,
+            })
+            .catch((e: unknown) => {
+                if (e instanceof SessionError) throw new CliError(e.message);
+                if (e instanceof UnknownRevisionError) throw new CliError(`${e.message}: pass a branch, tag or commit to --base.`);
+                if (errorCode(e) === 'EADDRINUSE')
+                    throw new CliError(`Port ${settings.port} on ${settings.host} (or the agent port) is already in use; pick another with --port.`);
+                throw e;
+            });
+        if (cfg.file) io.out(`Config: ${path.relative(process.cwd(), cfg.file) || cfg.file}`);
+        const opened = server.opened === 'collaborated' ? 'continued from dt open' : server.opened;
+        io.out(`Session: ${server.session} (${opened}, identity ${settings.identity})`);
+        io.out(`Live View: ${server.url}`);
+        if (server.facilitatorLink) io.out(`Facilitator link (single use, expires in 10 minutes): ${server.facilitatorLink}`);
+        io.out(`Agent API: ${server.agentUrl} (another agent pairs with a code: dt collab agent-link)`);
+        await serveWithAgent(cfg, opts, server);
+    });
+    collab
         .command('link')
-        .description('Print another one-time facilitator link for the session server running on the workspace.')
+        .description('Print another one-time facilitator link for the collaboration session running on the workspace.')
         .addHelpText(
             'after',
             `
@@ -408,8 +452,8 @@ The link makes whoever opens it while signed in the facilitator (the previous fa
 once, for 10 minutes.
 
 Examples:
-  dt session link
-  dt -r examples/shop session link`,
+  dt collab link
+  dt -r examples/shop collab link`,
         )
         .action(async () => {
             const cfg = await config();
@@ -419,50 +463,87 @@ Examples:
             });
             io.out(`Facilitator link (single use, expires in 10 minutes): ${link}`);
         });
-    session
-        .command('subscribe')
-        .description("Run the agent on the session's queued runs, one at a time (runs until Ctrl+C or the session closes).")
-        .addOption(new Option('--agent <agent>', 'the agent that edits the workspace').choices(['claude']).makeOptionMandatory())
+
+    // a one-time code for a standalone `dt agent` (the credential itself is never written to disk)
+    for (const [parent, name] of [
+        [open, 'open'],
+        [collab, 'collab'],
+    ] as const) {
+        parent
+            .command('agent-link')
+            .description(
+                `Print a one-time code that pairs a standalone \`dt agent\` with the ${name === 'open' ? '`dt open`' : 'collaboration'} server running on the workspace.`,
+            )
+            .addHelpText(
+                'after',
+                `
+\`dt agent --code <code>\` exchanges the code for the agent API's credential, which it keeps in memory: the credential
+is never written to disk. The code works once, for 10 minutes, and dies with the server.
+
+Examples:
+  dt ${name} agent-link
+  dt agent --code <code>`,
+            )
+            .action(async () => {
+                const cfg = await config();
+                const { code, agentUrl } = await deps.issueAgentLink(cfg.root).catch((e: unknown) => {
+                    if (e instanceof SessionError) throw new CliError(e.message);
+                    throw e;
+                });
+                io.out(`Agent code (single use, expires in 10 minutes): ${code}`);
+                io.out(`Agent API: ${agentUrl}`);
+                io.out(`Run: dt agent --code ${code}`);
+            });
+    }
+
+    program
+        .command('agent')
+        .description('Run the AI on the session running on the workspace: its answers and its runs (runs until Ctrl+C or the session closes).')
+        .addOption(new Option('--agent <agent>', 'the agent').choices(['claude']).default('claude'))
+        .addOption(new Option('--role <role>', 'take on one role only: answer (read-only answers) or run (the runs); default: both').choices([...AGENT_ROLES]))
         .option('--once', 'handle one run (waiting for one if none is queued), then exit')
+        .requiredOption('--code <code>', 'the one-time pairing code of `dt collab agent-link` (or `dt open agent-link`)')
+        .option('--url <url>', "the agent API's address (default: the running server's, from .domaintrail/session/server.json)")
         .addHelpText(
             'after',
             `
-Connects to the session server running on the workspace (\`dt session start\`) through its agent API, with the
-credential in .domaintrail/session/agent.json, and takes the runs the facilitator queues: for each, Claude Code
-(\`claude\` on the PATH, in print mode, with the tools of session.agent.allowedTools only) edits the .dt and .dtes
-files (its \`dt\` is session.agent.dt, else this very CLI), then \`dt fmt\` and \`dt check\` run and the server records the result as a revision. A run that changes any
-other file fails. The next queued run starts as soon as one ends. Ctrl+C stops the agent and fails its run as
-interrupted.
+Connects to the session server running on the workspace (\`dt open\` or \`dt collab\`, e.g. started with --no-agent)
+through its agent API: the code printed by \`dt collab agent-link\` is exchanged once for the agent API's credential,
+kept in memory (never on disk). The runner takes the runs one at a
+time: Claude Code (\`claude\` on the PATH, with the tools of agent.run.allowedTools only) edits the .dt and .dtes files
+(its \`dt\` is agent.run.dt, else this very CLI), then \`dt fmt\` and \`dt check\` run and the server records the result
+as a revision. A run that changes any other file fails. The answerer answers the questions addressed to the AI with
+read-only tools. Ctrl+C stops the agent and fails its run as interrupted. Another \`dt agent\` beside the one in
+process is allowed.
 
 Examples:
-  dt session subscribe --agent claude
-  dt session subscribe --agent claude --once
-  dt -r examples/shop session subscribe --agent claude`,
+  dt collab agent-link          prints the code
+  dt agent --code <code>
+  dt agent --code <code> --role run   the runs only (the answers from another dt agent --role answer)
+  dt agent --code <code> --once
+  dt -r examples/shop agent --code <code>`,
         )
-        .action(async (opts: { agent: 'claude'; once?: boolean }) => {
+        .action(async (opts: { agent: 'claude'; role?: AgentRole; once?: boolean; code: string; url?: string }) => {
             const cfg = await config();
-            const configPath = program.opts<{ config?: string }>().config;
-            const subscriber = await deps
-                .startSubscriber({
-                    root: cfg.root,
-                    sources: cfg.sources,
-                    respectGitignore: cfg.respectGitignore,
-                    configPath: configPath === undefined ? undefined : path.resolve(configPath),
-                    agent: opts.agent,
-                    ...(cfg.session.agent.dt && { dt: cfg.session.agent.dt }),
-                    run: cfg.session.agent.run,
-                    once: opts.once ?? false,
-                    log: io.out,
-                })
+            const connect = { code: opts.code, ...(opts.url !== undefined && { url: opts.url }) };
+            const agent = await deps
+                .startAgent({ ...agentOptions(cfg, opts.agent), connect, roles: opts.role ? [opts.role] : AGENT_ROLES, once: opts.once ?? false, log: io.out })
                 .catch((e: unknown) => {
                     if (e instanceof SessionError) throw new CliError(e.message);
                     throw e;
                 });
-            io.out(`Subscribed to session ${subscriber.session} with ${opts.agent}${opts.once ? ' (one run)' : ''}; waiting for runs.`);
-            const end = await subscriber.done;
+            io.out(`Agent on session ${agent.session} with ${opts.agent} (${rolesText(agent.roles)})${opts.once ? ' (one run)' : ''}; waiting.`);
+            const end = await agent.done;
             if (end === 'lost') throw new CliError('The session server is gone or refused the agent credential.');
             io.out(end === 'closed' ? 'Session closed.' : end === 'once' ? 'Done.' : 'Stopped.');
         });
+
+    // the commands removed by ADR 0030: an error naming the replacement, no alias
+    removed(program, 'view', "'dt view' was removed; use 'dt open' (or 'dt open --host <address>' for a read-only Live View)");
+    const session = removed(program, 'session', "'dt session' was removed; use 'dt collab' (start), 'dt collab link' or 'dt agent'");
+    removed(session, 'start', "'dt session start' was removed; use 'dt collab'");
+    removed(session, 'link', "'dt session link' was removed; use 'dt collab link'");
+    removed(session, 'subscribe', "'dt session subscribe' was removed; use 'dt agent'");
 
     program
         .command('lsp')
@@ -572,6 +653,68 @@ Examples:
             io.out(found.text);
         });
 
+    /** The agent's settings for `dt agent` or the agent in process. */
+    const agentOptions = (cfg: ResolvedConfig, agent: 'claude'): Omit<AgentOptions, 'roles' | 'once' | 'log' | 'connect'> => {
+        const configPath = program.opts<{ config?: string }>().config;
+        return {
+            root: cfg.root,
+            sources: cfg.sources,
+            respectGitignore: cfg.respectGitignore,
+            configPath: configPath === undefined ? undefined : path.resolve(configPath),
+            agent,
+            ...(cfg.agent.run.dt && { dt: cfg.agent.run.dt }),
+            run: cfg.agent.run,
+            answer: cfg.agent.answer,
+            triage: cfg.agent.triage,
+        };
+    };
+
+    /**
+     * Starts the agent in this process (both roles, over loopback HTTP as `dt agent` would) unless `--no-agent`; when
+     * Claude Code is not usable, says why in one line and goes on without it (an error with `--agent claude`). Then
+     * serves until the session closes.
+     */
+    const serveWithAgent = async (cfg: ResolvedConfig, opts: ServeOptions, server: StartedSession): Promise<void> => {
+        let agent: StartedAgent | undefined;
+        try {
+            if (opts.agent === false) io.out('AI: not started (--no-agent); start it with `dt agent`');
+            else {
+                const usable = await deps.checkAgent('claude');
+                if (!usable.ok) {
+                    if (opts.agent === 'claude') throw new CliError(`AI: cannot start: ${usable.reason}`);
+                    io.out(`AI: not started (${usable.reason}); start it later with \`dt agent\``);
+                } else {
+                    agent = await deps
+                        .startAgent({
+                            ...agentOptions(cfg, 'claude'),
+                            // the credential in memory: never on disk
+                            connect: { credential: { url: server.agentUrl, token: server.agentToken, session: server.session } },
+                            roles: AGENT_ROLES,
+                            once: false,
+                            log: (line) => io.out(`AI: ${line}`),
+                        })
+                        .catch((e: unknown) => {
+                            if (!(e instanceof SessionError)) throw e;
+                            if (opts.agent === 'claude') throw new CliError(`AI: cannot start: ${e.message}`);
+                            io.out(`AI: not started (${e.message}); start it later with \`dt agent\``);
+                            return undefined;
+                        });
+                    if (agent) io.out(`AI: started in this process (claude ${usable.version}; ${rolesText(agent.roles)})`);
+                }
+            }
+        } catch (e) {
+            await server.stop();
+            throw e;
+        }
+        void agent?.done.then((end) => {
+            if (end === 'lost') io.out('AI: stopped (the session server refused it); start it again with `dt agent`');
+        });
+        await server.closed;
+        await agent?.stop();
+        await server.stop();
+        io.out('Session closed.');
+    };
+
     const config = async () => {
         const start = path.resolve(program.opts().root);
         const info = await stat(start).catch(() => undefined);
@@ -595,6 +738,69 @@ Examples:
     }
     if (report) io.out(JSON.stringify(report, null, 2));
     return exitCode;
+}
+
+/** The options of `dt open` and `dt collab`. */
+interface ServeOptions {
+    port?: number;
+    host?: string;
+    base?: string;
+    /** `false` with `--no-agent`, `claude` given explicitly, else undefined (started when usable). */
+    agent?: 'claude' | false;
+}
+
+/**
+ * What the session server of `dt open` reads of `cfg`: its port and host, the dev identity, and nothing of
+ * `collab.access` (`dt open` answers loopback only, never a tunnel's hosts).
+ */
+function openSettings(cfg: ResolvedConfig, port: number, host: string): SessionSettings {
+    const { run } = cfg.agent;
+    return {
+        port,
+        host,
+        identity: 'dev',
+        maxParticipants: 1,
+        quickReactions: cfg.collab.quickReactions,
+        agent: { port: cfg.agent.port, allowedTools: run.allowedTools, maxPreviousRunDiff: run.maxPreviousRunDiff },
+        classifier: cfg.classifier,
+    };
+}
+
+/** What the session server reads of `cfg`, its port and host from `server` with `--port` and `--host` applied. */
+function sessionSettings(cfg: ResolvedConfig, server: { port: number; host: string }, opts: { port?: number; host?: string }): SessionSettings {
+    const { run } = cfg.agent;
+    return {
+        ...cfg.collab,
+        port: opts.port ?? server.port,
+        host: opts.host ?? server.host,
+        agent: { port: cfg.agent.port, allowedTools: run.allowedTools, maxPreviousRunDiff: run.maxPreviousRunDiff },
+        classifier: cfg.classifier,
+    };
+}
+
+/** The roles an agent took on, as the CLI prints them. */
+const rolesText = (roles: readonly AgentRole[]): string => `role${roles.length > 1 ? 's' : ''} ${roles.join(', ')}`;
+
+/** Whether `host` is a loopback address (or name): `dt open` serves the chat there only. */
+function isLoopback(host: string): boolean {
+    const h = host.toLowerCase().replace(/^\[|\]$/g, '');
+    return h === 'localhost' || h === '::1' || /^127(\.\d{1,3}){3}$/.test(h);
+}
+
+/**
+ * A command removed without an alias (ADR 0030): hidden from the help, it fails with `message` (exit 2), whatever it
+ * is given. The removed subcommands are added to the command it returns.
+ */
+function removed(parent: Command, name: string, message: string): Command {
+    return parent
+        .command(name, { hidden: true })
+        .helpOption(false)
+        .allowUnknownOption()
+        .allowExcessArguments()
+        .argument('[args...]')
+        .action(() => {
+            throw new CliError(message, 2);
+        });
 }
 
 function noSourcesMessage(cfg: ResolvedConfig): string {
