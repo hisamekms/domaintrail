@@ -264,15 +264,6 @@ export {
 export { openSessionBlobs } from './infrastructure/blobs.js';
 export { createClefClassifier } from './infrastructure/clef.js';
 export { createCloudflareAccess, type AccessAdapterOptions, type AccessClaims, type AccessTokenVerifier } from './infrastructure/identity.js';
-export { SESSION_DIR } from './infrastructure/session-dir.js';
-export {
-    LEGACY_AGENT_FILE,
-    readServerAddress,
-    removeLegacyAgentFile,
-    removeSessionFiles,
-    writeServerAddress,
-    type AgentCredential,
-    type ServerAddress,
-} from './infrastructure/session-files.js';
+export { readServerAddress, removeSessionFiles, writeServerAddress, type AgentCredential, type ServerAddress } from './infrastructure/session-files.js';
 export { createUnitOfWork, openSessionDatabase } from './infrastructure/sqlite.js';
 export { randomIds, randomSecrets, systemClock } from './infrastructure/system.js';

@@ -8,45 +8,51 @@ export interface GeneratedFile {
     content: string;
 }
 
-/** Files written by the last `generate ts`, relative to the root, so that a later run can remove those it no longer writes. */
-export const MANIFEST_FILE = path.join('.domaintrail', 'generated.json');
+/**
+ * Files written by the last `generate ts`, relative to the root, so that a later run can remove those it no longer
+ * writes: in the workspace's state directory (./state-dirs.ts), never in the workspace.
+ */
+export const MANIFEST_FILE = 'generated.json';
 
 /**
  * The output of `dt generate ts` on disk: the safety checks before writing and the writing itself (a `GeneratedOutput`
  * of the CLI, `@domaintrail/dt/cli/ports`). `marker` starts every file the generator writes (the generator's
- * `GENERATED_MARKER`, given by the app): only such files are ever replaced or removed.
+ * `GENERATED_MARKER`, given by the app): only such files are ever replaced or removed. `stateDir` gives the workspace's
+ * state directory (made), where the manifest is.
  */
-export function createGeneratedOutput(marker: string): {
-    manifestFile: string;
+export function createGeneratedOutput(
+    marker: string,
+    stateDir: (root: string) => Promise<string>,
+): {
     symlinkOnPath(root: string, target: string): Promise<string | undefined>;
     foreignFiles(files: readonly string[]): Promise<string[]>;
-    replace(root: string, files: readonly GeneratedFile[]): Promise<{ recorded: boolean }>;
+    replace(root: string, files: readonly GeneratedFile[]): Promise<{ recorded: boolean; manifest: string }>;
 } {
     return {
-        manifestFile: MANIFEST_FILE,
         symlinkOnPath,
         foreignFiles: (files) => foreignFiles(files, marker),
-        replace: (root, files) => replace(root, files, marker),
+        replace: async (root, files) => replace(root, files, marker, path.join(await stateDir(root), MANIFEST_FILE)),
     };
 }
 
 /**
  * Replaces the output of the previous run with `files`: deletes the files of the previous run this one does not write,
- * removes the generated files of the output directories, writes `files` and records them in the manifest. `recorded`
- * is false when the manifest could not be written (see `writeManifest`). The output directories must already be
- * checked to be inside the root and free of symlinks, and `files` to be generated or missing (see `foreignFiles`).
+ * removes the generated files of the output directories, writes `files` and records them in the manifest `manifest`.
+ * `recorded` is false when the manifest could not be written (see `writeManifest`). The output directories must
+ * already be checked to be inside the root and free of symlinks, and `files` to be generated or missing (see
+ * `foreignFiles`).
  */
-async function replace(root: string, files: readonly GeneratedFile[], marker: string): Promise<{ recorded: boolean }> {
+async function replace(root: string, files: readonly GeneratedFile[], marker: string, manifest: string): Promise<{ recorded: boolean; manifest: string }> {
     const outDirs = [...new Set(files.map((f) => path.dirname(f.file)))];
-    const previous = await readManifest(root);
+    const previous = await readManifest(manifest);
     await removeStale(root, previous, new Set(files.map((f) => f.file)), marker);
     for (const dir of outDirs) await cleanGenerated(dir, marker);
     for (const f of files) await writeNew(f.file, f.content);
     const recorded = await writeManifest(
-        root,
+        manifest,
         files.map((f) => f.path),
     );
-    return { recorded };
+    return { recorded, manifest };
 }
 
 /**
@@ -111,9 +117,9 @@ interface Manifest {
     files: string[];
 }
 
-async function readManifest(root: string): Promise<string[]> {
+async function readManifest(file: string): Promise<string[]> {
     try {
-        const m: { version?: unknown; files?: unknown } = JSON.parse(await readFile(path.join(root, MANIFEST_FILE), 'utf8'));
+        const m: { version?: unknown; files?: unknown } = JSON.parse(await readFile(file, 'utf8'));
         // the file may have been crafted: entries that would leave the root are dropped
         return m.version === 1 && Array.isArray(m.files) ? m.files.filter((f) => typeof f === 'string' && f !== '' && staysInside(f)) : [];
     } catch {
@@ -121,13 +127,12 @@ async function readManifest(root: string): Promise<string[]> {
     }
 }
 
-/** Records the generated files; false when `.domaintrail` is not a plain directory (never written through a symlink). */
-async function writeManifest(root: string, files: string[]): Promise<boolean> {
-    const target = path.join(root, MANIFEST_FILE);
+/** Records the generated files in `target`; false when its directory is not a plain one (never written through a symlink). */
+async function writeManifest(target: string, files: string[]): Promise<boolean> {
     const dir = path.dirname(target);
     const existing = await lstat(dir).catch(() => undefined);
     if (existing && (existing.isSymbolicLink() || !existing.isDirectory())) return false;
-    // `.domaintrail` is the user's alone (0700) and so is the manifest (0600), whatever the umask
+    // the state directory is the user's alone (0700) and so is the manifest (0600), whatever the umask
     await mkdir(dir, { recursive: true, mode: 0o700 });
     await chmod(dir, 0o700);
     const manifest: Manifest = { version: 1, files: [...files].sort() };

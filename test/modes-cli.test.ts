@@ -5,7 +5,7 @@
  * not with `--no-agent`), and the removed commands and config sections.
  */
 import { afterAll, describe, expect, test } from 'bun:test';
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
@@ -32,6 +32,7 @@ import {
     randomSecrets,
     systemClock,
 } from '@domaintrail/collaboration';
+import { workspaceDirs } from '@domaintrail/workspace';
 import { tempCopyOfExamples } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
@@ -352,14 +353,9 @@ describe('dt agent', () => {
 describe('pairing a standalone dt agent (the credential never on disk)', () => {
     test('dt collab agent-link prints a one-time code that pairs once; expired, reused and facilitator codes are refused', async () => {
         const root = await copy();
-        // what an older version left: removed when a server starts
-        await mkdir(path.join(root, '.domaintrail', 'session'), { recursive: true });
-        await writeFile(path.join(root, '.domaintrail', 'session', 'agent.json'), JSON.stringify({ url: 'http://127.0.0.1:1/', token: 'old' }));
-        const lines: string[] = [];
-        const server = await startSessionServer({ root, debounceMs: 30, mode: 'Collab', session: settings, log: (l) => lines.push(l) });
+        const server = await startSessionServer({ root, debounceMs: 30, mode: 'Collab', session: settings });
+        const { state } = workspaceDirs(root);
         try {
-            expect(await readFile(path.join(root, '.domaintrail', 'session', 'agent.json'), 'utf8').catch(() => 'gone')).toBe('gone');
-            expect(lines).toContain('Removed .domaintrail/session/agent.json (an agent credential an older version wrote).');
             const printed = await run(cliDeps(), '-r', root, 'collab', 'agent-link');
             expect(printed.code).toBe(0);
             const code = /^Agent code \(single use, expires in 10 minutes\): (\S+)$/.exec(printed.out[0])?.[1] ?? '';
@@ -382,17 +378,19 @@ describe('pairing a standalone dt agent (the credential never on disk)', () => {
             expect((await pairAgent(root, agentCode, server.agentUrl)).token).toBe(server.agentToken);
 
             // expired
-            const db = await openSessionDatabase(root);
+            const db = await openSessionDatabase(workspaceDirs(root).state);
             const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
             const short = await access.issueAgentCode({ session: server.session, ttlMs: 1 });
+            // issued in the session's database (the state directory's), so the refusal below is the expiry's
+            expect(short.ok).toBe(true);
             db.close();
             await Bun.sleep(10);
             expect(await pairAgent(root, short.ok ? short.value.code : '').catch((e: unknown) => e)).toBeInstanceOf(SessionError);
             // only to the agent API on this machine
             expect(String(await pairAgent(root, 'x', 'http://example.com:1/').catch((e: unknown) => e))).toContain('on this machine only');
             // nothing secret on disk
-            expect(await readFile(path.join(root, '.domaintrail', 'session', 'agent.json'), 'utf8').catch(() => 'gone')).toBe('gone');
-            expect(await readFile(path.join(root, '.domaintrail', 'session', 'server.json'), 'utf8')).not.toContain(server.agentToken);
+            expect(await readFile(path.join(state, 'agent.json'), 'utf8').catch(() => 'gone')).toBe('gone');
+            expect(await readFile(path.join(state, 'server.json'), 'utf8')).not.toContain(server.agentToken);
         } finally {
             await server.stop();
         }
@@ -495,9 +493,11 @@ describe('the modes on one workspace (decision 13)', () => {
             const { code: agentCode } = await issueAgentLink(root);
             expect((await fetch(`${server.url}session/open?code=${agentCode}`, { redirect: 'manual' })).status).toBe(403);
             // expired
-            const db = await openSessionDatabase(root);
+            const db = await openSessionDatabase(workspaceDirs(root).state);
             const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
             const short = await access.issueOpenCode({ session: server.session, ttlMs: 1 });
+            // issued in the session's database (the state directory's), so the refusal below is the expiry's
+            expect(short.ok).toBe(true);
             db.close();
             await Bun.sleep(10);
             expect((await fetch(`${server.url}session/open?code=${short.ok ? short.value.code : ''}`, { redirect: 'manual' })).status).toBe(403);
@@ -529,7 +529,8 @@ describe('the modes on one workspace (decision 13)', () => {
         const root = await copy();
         const server = await start(root, 'Solo');
         const linkFromAnotherProcess = (): string => {
-            const r = Bun.spawnSync(['bun', path.join(ROOT, 'bin', 'dt.ts'), '-r', root, 'open', 'link']);
+            // Bun.spawn passes the environment the process started with: the test's state directories are given
+            const r = Bun.spawnSync(['bun', path.join(ROOT, 'bin', 'dt.ts'), '-r', root, 'open', 'link'], { env: process.env });
             expect(r.exitCode).toBe(0);
             return /^Sign-in link \(single use, expires in 60 minutes\): (\S+)$/m.exec(r.stdout.toString())?.[1] ?? '';
         };
@@ -542,9 +543,11 @@ describe('the modes on one workspace (decision 13)', () => {
             // a used link stays used
             for (const link of links) expect((await fetch(link, { redirect: 'manual' })).status).toBe(403);
             // and an expired one is refused
-            const db = await openSessionDatabase(root);
+            const db = await openSessionDatabase(workspaceDirs(root).state);
             const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
             const short = await access.issueOpenCode({ session: server.session, ttlMs: 1 });
+            // issued in the session's database (the state directory's), so the refusal below is the expiry's
+            expect(short.ok).toBe(true);
             db.close();
             await Bun.sleep(10);
             expect((await fetch(`${server.url}session/open?code=${short.ok ? short.value.code : ''}`, { redirect: 'manual' })).status).toBe(403);

@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { cliDeps, runCli } from '@domaintrail/dt';
-import { findDomainFiles } from '@domaintrail/workspace';
+import { findDomainFiles, workspaceDirs } from '@domaintrail/workspace';
 import { sourceSelection } from '@domaintrail/analysis';
 
 const dirs: string[] = [];
@@ -193,7 +193,7 @@ describe('output directories per context', () => {
     test('files of earlier runs that are no longer generated are removed; hand-written files stay', async () => {
         const dir = await project({ 'domaintrail.json': config({ out: 'gen', contexts: { C: { out: 'shared/gen' } } }), ...SPLIT_MODEL });
         expect((await run('-r', dir, 'generate', 'ts')).code).toBe(0);
-        const manifest = JSON.parse(await Bun.file(path.join(dir, '.domaintrail', 'generated.json')).text());
+        const manifest = JSON.parse(await Bun.file(path.join(workspaceDirs(dir).state, 'generated.json')).text());
         expect(manifest).toEqual({
             version: 1,
             files: ['gen/S.ts', 'gen/_runtime.ts', 'gen/index.ts', 'shared/gen/C.ts', 'shared/gen/_runtime.ts', 'shared/gen/index.ts'],
@@ -278,14 +278,14 @@ describe('generated output safety', () => {
         expect(await readdir(dir)).toEqual(['s.dt']);
     });
 
-    test.skipIf(process.platform === 'win32')('generated.json is private to the user: 0600 in a .domaintrail of 0700', async () => {
-        const { chmod, lstat } = await import('node:fs/promises');
+    test.skipIf(process.platform === 'win32')('generated.json is private to the user, in the state directory: 0600 in a directory of 0700', async () => {
+        const { lstat } = await import('node:fs/promises');
         const dir = await project({ 's.dt': MODEL });
-        await mkdir(path.join(dir, '.domaintrail'));
-        await chmod(path.join(dir, '.domaintrail'), 0o755);
         expect((await run('-r', dir, 'generate', 'ts')).code).toBe(0);
-        expect((await lstat(path.join(dir, '.domaintrail'))).mode & 0o777).toBe(0o700);
-        expect((await lstat(path.join(dir, '.domaintrail', 'generated.json'))).mode & 0o777).toBe(0o600);
+        const { state } = workspaceDirs(dir);
+        expect((await lstat(state)).mode & 0o777).toBe(0o700);
+        expect((await lstat(path.join(state, 'generated.json'))).mode & 0o777).toBe(0o600);
+        expect((await readdir(dir)).sort()).toEqual(['generated', 's.dt']);
     });
 
     test('generated.json entries outside the root or through a symlink are never deleted', async () => {
@@ -300,13 +300,14 @@ describe('generated output safety', () => {
             .split(path.sep)
             .join('/');
         const files = [rel, path.join(outside, 'victim', 'abs.ts'), 'link/S.ts', `generated/domain/../../${rel}`];
-        await mkdir(path.join(dir, '.domaintrail'));
-        await writeFile(path.join(dir, '.domaintrail', 'generated.json'), JSON.stringify({ version: 1, files }));
+        const { state } = workspaceDirs(dir);
+        await mkdir(state, { recursive: true });
+        await writeFile(path.join(state, 'generated.json'), JSON.stringify({ version: 1, files }));
         expect((await run('-r', dir, 'generate', 'ts')).code).toBe(0);
         expect(existsSync(path.join(outside, 'victim', 'gen', 'S.ts'))).toBe(true);
         expect(existsSync(path.join(outside, 'victim', 'abs.ts'))).toBe(true);
         expect(existsSync(path.join(outside, 'linked', 'S.ts'))).toBe(true);
-        const manifest = JSON.parse(await Bun.file(path.join(dir, '.domaintrail', 'generated.json')).text());
+        const manifest = JSON.parse(await Bun.file(path.join(state, 'generated.json')).text());
         expect(manifest.files).toEqual(['generated/domain/S.ts', 'generated/domain/_runtime.ts', 'generated/domain/index.ts']);
     });
 });
@@ -425,6 +426,12 @@ describe('CLI with paths the AI reads outside the workspace (agent.read.paths)',
         const inside = await run('-r', ws, 'check');
         expect(inside.code).toBe(2);
         expect(inside.err.join('\n')).toContain(`${local}: 'agent.read.paths' names "docs": it is inside the workspace`);
+        // dt's own state directory (every workspace's session, outside them): never
+        const state = process.env.DOMAINTRAIL_STATE_DIR ?? '';
+        await writeFile(local, JSON.stringify({ agent: { read: { paths: [path.dirname(state)] } } }));
+        const own = await run('-r', ws, 'check');
+        expect(own.code).toBe(2);
+        expect(own.err.join('\n')).toContain('where dt keeps the sessions, which the AI never reads');
         // nothing outside: no line
         await rm(local);
         expect((await run('-r', ws, 'agent', '--code', 'x', '--yes')).out).toHaveLength(1);

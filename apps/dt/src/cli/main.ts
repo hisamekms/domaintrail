@@ -20,6 +20,7 @@ import {
     type StartedAgent,
     type StartedSession,
     type StartedTunnel,
+    StateError,
     TunnelError,
 } from './ports.js';
 import { lookup, showJson, showText } from './show.js';
@@ -254,10 +255,10 @@ Examples:
                 return;
             }
             const outDirs = [...new Set(files.map((f) => path.dirname(f.file)))];
-            const { recorded } = await deps.generatedOutput.replace(cfg.root, files);
+            const { recorded, manifest } = await deps.generatedOutput.replace(cfg.root, files);
             if (!recorded)
                 io.err(
-                    `Warning: generated files not recorded in ${deps.generatedOutput.manifestFile}, which is not a plain file in a plain directory; they will not be removed automatically.`,
+                    `Warning: generated files not recorded in ${manifest}, which is not a plain file in a plain directory; they will not be removed automatically.`,
                 );
             const written = outDirs.map((d) => path.relative(process.cwd(), d) || '.');
             const hint = cfg.lintHint ? await deps.castLintHint(cfg.root) : undefined;
@@ -382,8 +383,8 @@ Examples:
 Serves the Live View and a chat for one person on loopback. It prints a one-time link: opened within 60 minutes, it
 signs that browser in as you, the facilitator (a cookie; no join form); nothing else is let in (\`dt open link\` prints
 another link while it runs). Every message you send goes to the AI, which answers questions and applies change requests. It re-checks on
-every save and pushes updates to the browser. The chat, the runs and the revisions are kept in .domaintrail/session/
-across restarts. The agent (Claude Code) starts in this process when \`claude\` is usable; otherwise the server starts
+every save and pushes updates to the browser. The chat, the runs and the revisions are kept across restarts, outside
+the workspace (~/.local/state/domaintrail/<workspace>/). The agent (Claude Code) starts in this process when \`claude\` is usable; otherwise the server starts
 without it and says why (\`dt agent\` connects one later). Refused while the workspace has an open collab session
 (\`dt collab\` resumes it). With --host on a non-loopback address, the Live View is served read-only: no chat, no agent.
 Use \`dt check\` for a one-shot result (e.g. from scripts or AI agents).
@@ -634,7 +635,7 @@ Examples:
         .addOption(new Option('--role <role>', 'take on one role only: answer (read-only answers) or run (the runs); default: both').choices([...AGENT_ROLES]))
         .option('--once', 'handle one run (waiting for one if none is queued), then exit')
         .requiredOption('--code <code>', 'the one-time pairing code of `dt collab agent-link` (or `dt open agent-link`)')
-        .option('--url <url>', "the agent API's address (default: the running server's, from .domaintrail/session/server.json)")
+        .option('--url <url>', "the agent API's address (default: the running server's, from server.json in the workspace's state directory)")
         .option('--yes', 'approve changed security-relevant settings without asking (for scripts; they are printed)')
         .addHelpText(
             'after',
@@ -900,6 +901,7 @@ Examples:
     } catch (e) {
         if (e instanceof ConfigError) fail(e.message, 2);
         else if (e instanceof CliError) fail(e.message, e.exitCode);
+        else if (e instanceof StateError) fail(e.message, 1);
         // File system and network failures (unreadable directories, permissions…) are reported, not thrown.
         else if (errorCode(e)) fail(e instanceof Error ? e.message : String(e), 1);
         else {

@@ -225,6 +225,9 @@ export interface StartedAgent {
 /** A session cannot be started, or no session server runs (`dt open`, `dt collab`, `dt agent`): printed as one line. */
 export class SessionError extends Error {}
 
+/** The workspace's state directory (outside it) cannot be used, or its `.domaintrail/` moved: printed as one line. */
+export class StateError extends Error {}
+
 /** A file of `dt generate ts`: `path` relative to the root (`/`-separated), `file` absolute. */
 export interface GeneratedFile {
     path: string;
@@ -234,15 +237,14 @@ export interface GeneratedFile {
 
 /** The output of `dt generate ts` on disk. */
 export interface GeneratedOutput {
-    /** The manifest of the generated files, relative to the root. */
-    readonly manifestFile: string;
     /** The first existing path component between `root` (exclusive) and `target` that is a symlink; `target` when outside `root`. */
     symlinkOnPath(root: string, target: string): Promise<string | undefined>;
     /** Existing entries at `files` that the generator may not replace: anything but a regular file it wrote. */
     foreignFiles(files: readonly string[]): Promise<string[]>;
     /**
      * Replaces the output of the previous run with `files` (stale files removed, the output directories cleaned, the
-     * manifest written); `recorded` is false when the manifest could not be written.
+     * manifest written in the workspace's state directory, outside it); `recorded` is false when the manifest, the file
+     * `manifest`, could not be written. Rejects with `StateError` when the state directory cannot be used.
      */
-    replace(root: string, files: readonly GeneratedFile[]): Promise<{ recorded: boolean }>;
+    replace(root: string, files: readonly GeneratedFile[]): Promise<{ recorded: boolean; manifest: string }>;
 }

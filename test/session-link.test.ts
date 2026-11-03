@@ -13,6 +13,7 @@ import * as path from 'node:path';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import type { Me } from '@domaintrail/collaboration/protocol';
 import { createSessionAccess, createUnitOfWork, FACILITATOR_NAME, openSessionDatabase, randomSecrets, systemClock } from '@domaintrail/collaboration';
+import { workspaceDirs } from '@domaintrail/workspace';
 import { issueInvite, SessionError, type SessionServer, type SessionSettings, startSessionServer, WS_REVOKED } from '@domaintrail/dt';
 
 const PUBLIC = 'https://quiet-river-1234.trycloudflare.com';
@@ -485,7 +486,7 @@ describe('a session in the link identity mode', () => {
         const renamed = `${(await facilitator(again)).split('=')[0]}=${value}`;
         expect(await me(again, renamed)).toBe(401);
         // a dev sign-in of this session, its secret under the link cookie's name: not a link identity
-        const db = await openSessionDatabase(root);
+        const db = await openSessionDatabase(workspaceDirs(root).state);
         const access = createSessionAccess({ uow: createUnitOfWork(db), clock: systemClock, secrets: randomSecrets });
         const devSecret = await access.signIn({
             session: again.session as never,

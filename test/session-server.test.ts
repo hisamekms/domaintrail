@@ -24,6 +24,7 @@ import {
     SessionError,
 } from '@domaintrail/dt';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
+import { workspaceDirs } from '@domaintrail/workspace';
 import type { SessionSettings } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 
@@ -536,13 +537,15 @@ describe('the agent API', () => {
     });
     afterAll(() => server?.stop());
 
-    test('the credential is never on disk; server.json has the addresses only; the listener is on 127.0.0.1 only', async () => {
-        expect(await readFile(path.join(root, '.domaintrail', 'session', 'agent.json'), 'utf8').catch(() => 'gone')).toBe('gone');
-        const address = await readFile(path.join(root, '.domaintrail', 'session', 'server.json'), 'utf8');
-        expect((await stat(path.join(root, '.domaintrail', 'session', 'server.json'))).mode & 0o777).toBe(0o600);
+    test('the credential is never on disk; server.json (in the state directory, outside the workspace) has the addresses only; the listener is on 127.0.0.1 only', async () => {
+        const { state } = workspaceDirs(root);
+        expect(await readFile(path.join(state, 'agent.json'), 'utf8').catch(() => 'gone')).toBe('gone');
+        const address = await readFile(path.join(state, 'server.json'), 'utf8');
+        expect((await stat(path.join(state, 'server.json'))).mode & 0o777).toBe(0o600);
         expect(address).not.toContain(cred.token);
         expect(JSON.parse(address)).toMatchObject({ agentUrl: server.agentUrl });
-        expect(await readFile(path.join(root, '.domaintrail', '.gitignore'), 'utf8')).toBe('*\n');
+        // nothing of the session in the workspace
+        expect(await stat(path.join(root, '.domaintrail')).catch(() => 'absent')).toBe('absent');
         expect(new URL(cred.url).hostname).toBe('127.0.0.1');
         expect(cred.url).toBe(server.agentUrl);
         expect(new URL(cred.url).port).not.toBe(new URL(server.url).port);
@@ -1017,7 +1020,7 @@ describe('closing and resuming', () => {
         const id = first.session;
         expect(first.resumed).toBe(false);
         await first.stop();
-        expect(await readFile(path.join(root, '.domaintrail', 'session', 'server.json'), 'utf8').catch(() => 'gone')).toBe('gone');
+        expect(await readFile(path.join(workspaceDirs(root).state, 'server.json'), 'utf8').catch(() => 'gone')).toBe('gone');
 
         const second = await start(root);
         try {

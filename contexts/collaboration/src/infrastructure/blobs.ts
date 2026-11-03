@@ -1,4 +1,4 @@
-// The bytes of the snapshots' files, content addressed: `.domaintrail/session/blobs/<first two hex digits>/<sha256>`.
+// The bytes of the snapshots' files, content addressed: `blobs/<first two hex digits>/<sha256>` in the session's directory.
 // A content stored once is never stored again; a blob is written through a temporary file renamed into place, never
 // through a symbolic link, and read back only when it still has its hash. Blobs are 0600 in directories 0700.
 import { createHash } from 'node:crypto';
@@ -59,9 +59,9 @@ async function tightenBlobs(dir: string): Promise<void> {
     }
 }
 
-/** The blobs of a workspace's session: `.domaintrail/session/blobs`, the existing ones made the user's alone. */
-export async function openSessionBlobs(root: string): Promise<SnapshotBlobs> {
-    const dir = path.join(await sessionDirectory(root), BLOBS_DIR);
+/** The blobs of a session whose directory is `sessionDir`: `blobs` in it, the existing ones made the user's alone. */
+export async function openSessionBlobs(sessionDir: string): Promise<SnapshotBlobs> {
+    const dir = path.join(await sessionDirectory(sessionDir), BLOBS_DIR);
     await tightenBlobs(dir);
     return createFileBlobs(dir);
 }

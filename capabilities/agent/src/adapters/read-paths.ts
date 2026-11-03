@@ -1,7 +1,8 @@
 // What the AI may read outside the workspace (`agent.read.paths` for both roles, `agent.answer.read.paths` and
 // `agent.run.read.paths` for one; the maintainer's decision of 2026-11-03): directories or files, read-only. The
-// configuration's check (`checkReadPaths`, after the pure validation): a path inside the workspace, one holding it, or
-// one in a `.git` or `.domaintrail` directory is an error, symbolic links followed (an extra path never re-admits what
+// configuration's check (`checkReadPaths`, after the pure validation): a path inside the workspace, one holding it, one
+// in a `.git` or `.domaintrail` directory, or one inside or holding dt's own state or cache directory (`own`: where the
+// sessions of every workspace are kept, outside them; the app gives them) is an error, symbolic links followed (an extra path never re-admits what
 // the workspace's rules keep out). When the agent starts (`readTargets`), each path is taken by its real path and
 // checked again; one that is missing (or became one of the above) is skipped and said. What is readable inside them
 // (the files git does not ignore there, else every file; never `.git` nor `.domaintrail`) is the wiring's: views for
@@ -87,12 +88,22 @@ function sensitiveError(p: string, home: string): string | undefined {
     return undefined;
 }
 
+/** Why `p` (absolute) touches one of dt's own directories `own` (the state and cache roots), if it does. Links followed. */
+function ownDirError(p: string, own: readonly string[], home: string): string | undefined {
+    for (const at of own) {
+        const shown = shownReadPath(at, home);
+        if (inside(p, at)) return `it is or holds ${shown}, where dt keeps the sessions, which the AI never reads`;
+        if (inside(at, p)) return `it is inside ${shown}, where dt keeps the sessions, which the AI never reads`;
+    }
+    return undefined;
+}
+
 /**
  * Why the AI may not read `p` (absolute) beside the workspace `workspace`, if it may not; links followed. `home`: the
- * user's home directory (for the places where secrets live).
+ * user's home directory (for the places where secrets live); `own`: dt's state and cache roots.
  */
-export function readPathError(p: string, workspace: string, home: string = homedir()): string | undefined {
-    const sensitive = sensitiveError(p, home);
+export function readPathError(p: string, workspace: string, home: string = homedir(), own: readonly string[] = []): string | undefined {
+    const sensitive = sensitiveError(p, home) ?? ownDirError(p, own, home);
     if (sensitive) return sensitive;
     if (inside(workspace, p)) return 'it is inside the workspace, which the AI reads already (what git ignores there stays out)';
     if (inside(p, workspace)) return 'it holds the workspace: name the directories or files beside it instead';
@@ -109,13 +120,19 @@ const readParts = (agent: AgentConfigFile | undefined): [string, readonly string
 
 /**
  * Refuses a configured read path (as written, `dir` the config file's directory: the workspace) that lies inside the
- * workspace, holds it, or is in a `.git` or `.domaintrail` directory. A path that does not exist is not refused here:
- * the agent skips it when it starts, and says so.
+ * workspace, holds it, is in a `.git` or `.domaintrail` directory, or inside or holding one of `own` (dt's state and
+ * cache roots). A path that does not exist is not refused here: the agent skips it when it starts, and says so.
  */
-export function checkReadPaths(agent: AgentConfigFile | undefined, dir: string, fail: (msg: string) => never, home: string = homedir()): void {
+export function checkReadPaths(
+    agent: AgentConfigFile | undefined,
+    dir: string,
+    fail: (msg: string) => never,
+    home: string = homedir(),
+    own: readonly string[] = [],
+): void {
     for (const [at, paths] of readParts(agent)) {
         for (const p of paths ?? []) {
-            const why = readPathError(resolveReadPath(p, dir, home), dir, home);
+            const why = readPathError(resolveReadPath(p, dir, home), dir, home, own);
             if (why) fail(`'${at}' names ${JSON.stringify(p)}: ${why}`);
         }
     }
@@ -129,6 +146,7 @@ export function readTargets(
     paths: readonly string[],
     workspace: string,
     home: string = homedir(),
+    own: readonly string[] = [],
 ): { readonly targets: ReadTarget[]; readonly skipped: string[] } {
     const targets: ReadTarget[] = [];
     const skipped: string[] = [];
@@ -140,7 +158,7 @@ export function readTargets(
             skipped.push(`${configured} (not found)`);
             continue;
         }
-        const why = readPathError(real, workspace, home);
+        const why = readPathError(real, workspace, home, own);
         if (why) {
             skipped.push(`${configured} (${why})`);
             continue;

@@ -1,16 +1,13 @@
-// Where a session keeps its state: `.domaintrail/session/` below the workspace's root, with a `.gitignore` that
-// ignores everything in it. Like the layout file (`.domaintrail/layout.json`), nothing is ever written through a
-// symbolic link: a checked-out repository may contain `.domaintrail` or its children as links. Everything in it is the
-// user's alone: directories 0700, files 0600, whatever the umask, and tightened when found looser (older versions
-// made them 0755 and 0644).
+// Where a session keeps its state: a directory the app gives, the workspace's state directory outside the workspace
+// (`$XDG_STATE_HOME/domaintrail/<workspace>/`, ADR 0026; `@domaintrail/workspace` says where and makes it). Nothing is
+// ever written through a symbolic link. Everything in it is the user's alone: directories 0700, files 0600, whatever
+// the umask, and tightened when found looser (older versions made them 0755 and 0644).
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, readFile, rename, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, open, rename, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
-export const SESSION_DIR = path.join('.domaintrail', 'session');
 export const DATABASE_FILE = 'session.db';
 export const BLOBS_DIR = 'blobs';
-const GITIGNORE = '*\n';
 /** The permissions of the session's directories and files: the user's alone. */
 export const PRIVATE_DIR = 0o700;
 export const PRIVATE_FILE = 0o600;
@@ -78,22 +75,10 @@ export async function replaceFile(file: string, text: string | Uint8Array): Prom
 }
 
 /**
- * The session directory of a workspace, made if absent: `.domaintrail/session/` with its `.gitignore` (`*`), and a
- * `.gitignore` (`*`) in `.domaintrail` when it has none (one there is left as it is), so that nothing of it is
- * committed by accident (files already tracked stay tracked). Both directories and both files are made the user's alone
- * (0700, 0600), existing ones too.
- * Throws `UnsafeSessionPath` when `.domaintrail`, `.domaintrail/session` or a `.gitignore` is a symbolic link.
+ * The session's directory `dir`, made if absent (its parent must exist) and made the user's alone (0700).
+ * Throws `UnsafeSessionPath` when it is a symbolic link or not a directory.
  */
-export async function sessionDirectory(root: string): Promise<string> {
-    const top = path.join(path.resolve(root), '.domaintrail');
-    const dir = path.join(path.resolve(root), SESSION_DIR);
-    await plainDirectory(top);
-    const topIgnore = path.join(top, '.gitignore');
-    if ((await checkPlain(topIgnore, 'file')) === 'absent') await replaceFile(topIgnore, GITIGNORE);
-    else await restrict(topIgnore, PRIVATE_FILE);
+export async function sessionDirectory(dir: string): Promise<string> {
     await plainDirectory(dir);
-    const ignore = path.join(dir, '.gitignore');
-    if ((await checkPlain(ignore, 'file')) === 'absent' || (await readFile(ignore, 'utf8')) !== GITIGNORE) await replaceFile(ignore, GITIGNORE);
-    else await restrict(ignore, PRIVATE_FILE);
     return dir;
 }

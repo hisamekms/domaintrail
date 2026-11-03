@@ -15,8 +15,16 @@ import {
     type ViewService,
 } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
-import { createGitRefWatcher, createSourceArchive, createWorkspaceReader, createWorkspaceWatcher, type SourceArchive } from '@domaintrail/workspace';
+import {
+    createGitRefWatcher,
+    createSourceArchive,
+    createWorkspaceReader,
+    createWorkspaceWatcher,
+    type SourceArchive,
+    type WorkspaceDirs,
+} from '@domaintrail/workspace';
 import type { WatcherGate } from './watcher-hold.js';
+import { workspaceState } from './state.js';
 
 export interface ViewServerOptions {
     root: string;
@@ -35,6 +43,8 @@ export interface ViewServerOptions {
     base?: string;
     /** Built Live View page (default: see `defaultWebDir`). */
     webDir?: string;
+    /** The workspace's state and cache directories, opened (default: opened here, `workspaceState`). */
+    state?: WorkspaceDirs;
     log?: (line: string) => void;
 }
 
@@ -57,10 +67,12 @@ export interface LiveView {
 }
 
 /**
- * Wires the adapters (layout engine, git, layout file, workspace reader) into the view service, computes the first
- * view and loads the page. An unknown `base` rejects with `UnknownRevisionError`.
+ * Wires the adapters (layout engine, git, layout file in the workspace's cache directory, workspace reader) into the
+ * view service, computes the first view and loads the page. An unknown `base` rejects with `UnknownRevisionError`; a
+ * state directory that cannot be used, with `StateError`.
  */
 export async function prepareLiveView(options: ViewServerOptions): Promise<LiveView> {
+    const state = options.state ?? (await workspaceState(options.root, options.log));
     const engine = options.engine ?? new ElkLayoutEngine();
     const sources = options.sources ?? DEFAULT_SOURCES;
     const respectGitignore = options.respectGitignore ?? true;
@@ -71,7 +83,7 @@ export async function prepareLiveView(options: ViewServerOptions): Promise<LiveV
         root: options.root,
         engine,
         workspace: createWorkspaceReader(options.root, sourceSelection(sources, respectGitignore)),
-        layoutStore: createFileLayoutStore(options.root),
+        layoutStore: createFileLayoutStore(state.cache),
         git,
         sources,
         baseRef: options.base,

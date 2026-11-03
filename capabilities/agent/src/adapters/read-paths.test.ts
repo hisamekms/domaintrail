@@ -115,6 +115,48 @@ describe('where secrets live: never read', () => {
     });
 });
 
+describe('dt’s own state and cache directories (every workspace’s session): never read', () => {
+    test('a path inside one, or holding one, links followed: refused when configured and skipped when the agent starts', async () => {
+        const d = await scratch();
+        const home = path.join(d, 'home');
+        const state = path.join(home, '.local', 'state', 'domaintrail');
+        const cache = path.join(d, 'xdg-cache', 'domaintrail');
+        await mkdir(path.join(state, 'shop-01234567'), { recursive: true });
+        await mkdir(cache, { recursive: true });
+        await writeFile(path.join(state, 'shop-01234567', 'session.db'), 'x');
+        await symlink(path.join(state, 'shop-01234567'), path.join(d, 'sessions'));
+        const ws = path.join(d, 'ws');
+        const own = [state, cache];
+        const why = (p: string): string | undefined => {
+            try {
+                checkReadPaths(
+                    { read: { paths: [p] } },
+                    ws,
+                    (m) => {
+                        throw new Error(m);
+                    },
+                    home,
+                    own,
+                );
+                return undefined;
+            } catch (e) {
+                return e instanceof Error ? e.message : String(e);
+            }
+        };
+        expect(why('~/.local/state/domaintrail/shop-01234567/session.db')).toContain(
+            'it is inside ~/.local/state/domaintrail, where dt keeps the sessions, which the AI never reads',
+        );
+        expect(why('~/.local/state')).toContain('it is or holds ~/.local/state/domaintrail');
+        expect(why(path.join(d, 'xdg-cache'))).toContain(`it is or holds ${cache}`);
+        expect(why(path.join(d, 'sessions'))).toContain('it is inside ~/.local/state/domaintrail');
+        expect(why(path.join(d, 'specs'))).toBeUndefined();
+        expect(readTargets([path.join(d, 'sessions'), path.join(d, 'specs')], ws, home, own)).toMatchObject({
+            targets: [{ real: path.join(d, 'specs') }],
+            skipped: [`${path.join(d, 'sessions')} (it is inside ~/.local/state/domaintrail, where dt keeps the sessions, which the AI never reads)`],
+        });
+    });
+});
+
 describe('the paths when the agent starts', () => {
     test('by their real paths, each once; a missing one, or one now inside the workspace, skipped and said', async () => {
         const d = await scratch();

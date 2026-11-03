@@ -1,6 +1,6 @@
 // What the answerer role may read (ADR 0030, as built in M4 and M4b; the maintainer's decision of 2026-11-03): any file
 // of the workspace — the model, READMEs, notes, code — but nothing outside the workspace's root, never `.domaintrail/`
-// (the session's state: the agent API's credential) nor `.git` (a directory, or a submodule's or worktree's file), at
+// (where older versions kept the session's state; it is outside the workspace now, ADR 0026) nor `.git` (a directory, or a submodule's or worktree's file), at
 // any depth, and no file git ignores (`.env`, build outputs, `node_modules`). Claude Code's permission rules cannot say
 // "not ignored by git", so the answerer does not run in the workspace: it runs in a **view**, a private directory (0700,
 // outside the workspace) holding copies of the readable files only, refreshed before each of its turns (a file copied
