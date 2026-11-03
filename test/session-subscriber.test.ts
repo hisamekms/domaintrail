@@ -1,5 +1,5 @@
 /**
- * `dt session subscribe` (ADR 0026, S6) against a real session server (dev identity) on a copy of examples/shop, with
+ * `dt agent` (ADR 0026, S6; was `dt session subscribe`) against a real session server (dev identity) on a copy of examples/shop, with
  * a fake agent instead of Claude Code (`test/fixtures/agent/fake-claude.mjs`): requests about `.dtes` and `.dt`
  * elements → a run → the agent's edits → the Live View's Big Picture, Design Level and Domain views, and a completed
  * run with its result revision; serial runs without confirmation; cancel; heartbeats and lease expiry; the stream's
@@ -1003,9 +1003,9 @@ async function fakeClaudeOnPath(planFile: string): Promise<string> {
     return bin;
 }
 
-/** Runs `dt session subscribe --agent claude` in a child process with the fake `claude` first on the PATH. */
+/** Runs `dt agent` in a child process with the fake `claude` first on the PATH. */
 function cli(runtime: string[], root: string, bin: string, extra: string[] = []): { child: ChildProcess; output: () => string; exit: Promise<number | null> } {
-    const child = spawn(runtime[0], [...runtime.slice(1), '-r', root, 'session', 'subscribe', '--agent', 'claude', ...extra], {
+    const child = spawn(runtime[0], [...runtime.slice(1), '-r', root, 'agent', ...extra], {
         env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ''}` },
         stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -1037,7 +1037,7 @@ describe('the CLI', () => {
         const bin = await fakeClaudeOnPath(await ctx.plan([{ edits: ADD_RETURN_CANCELLED }]));
         const { output, exit } = cli(['node', path.join(ROOT, 'dist', 'dt.js')], ctx.root, bin, ['--once']);
         expect(await exit).toBe(0);
-        expect(output()).toContain(`Subscribed to session ${ctx.server.session} with claude (one run)`);
+        expect(output()).toContain(`Agent on session ${ctx.server.session} with claude (role run) (one run); waiting.`);
         expect(output()).toContain('Done.');
         const done = await until(ctx, run, ['Completed', 'Failed']);
         expect(done.state === 'Completed' && [done.changed, done.report]).toEqual([

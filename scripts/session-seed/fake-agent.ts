@@ -1,4 +1,4 @@
-// The seed's agent: the real subscriber of `dt session subscribe` (claim, start, heartbeats, the scan of what changed,
+// The seed's agent: the real subscriber of `dt agent` (claim, start, heartbeats, the scan of what changed,
 // `dt fmt` / `dt check` with the built CLI, then finish / clarification / decline / fail over the agent API), with a
 // scripted runner in place of Claude Code. Each step a scenario expects is queued before its run, and the runs are
 // taken in queue order, one at a time: the next invocation plays the next step. A step edits the workspace for real

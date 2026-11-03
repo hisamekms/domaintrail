@@ -237,7 +237,7 @@ describe('a session in access mode (against a mock of Cloudflare)', () => {
         await mock.close();
     });
 
-    test('dt session start runs the access mode now, and refuses a publicUrl the hosts and origins do not allow', async () => {
+    test('dt collab runs the access mode now, and refuses a publicUrl the hosts and origins do not allow', async () => {
         expect(server.url.startsWith('http://127.0.0.1:')).toBe(true);
         for (const access of [
             accessConfig({ publicUrl: 'http://session.example.com' }),
@@ -254,7 +254,7 @@ describe('a session in access mode (against a mock of Cloudflare)', () => {
         );
         const out: string[] = [];
         const err: string[] = [];
-        const code = await runCli(['-r', dir, 'session', 'start', '--port', '0'], { out: (l) => out.push(l), err: (l) => err.push(l) }, cliDeps());
+        const code = await runCli(['-r', dir, 'collab', '--no-agent', '--port', '0'], { out: (l) => out.push(l), err: (l) => err.push(l) }, cliDeps());
         expect(code).toBe(1);
         expect(err.join('\n')).toContain('allowedHosts must include the host of publicUrl');
     });

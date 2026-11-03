@@ -1,8 +1,8 @@
-// Seeds a collaboration session for review (scripts/session-seed.ts): a scratch copy of examples/shop, `dt session
-// start` from the built CLI (a child process: its outbox, WebSocket, classifier and agent API are the real ones),
+// Seeds a collaboration session for review (scripts/session-seed.ts): a scratch copy of examples/shop, `dt collab
+// --no-agent` from the built CLI (a child process: its outbox, WebSocket, classifier and agent API are the real ones),
 // named participants signed in with their own cookies (one of them made the facilitator with the start's link), the
 // seed's agent (the real subscriber with a scripted runner), and the scenarios played through the session API as pages
-// play them. The agent is stopped once the scenarios are done, so that a real `dt session subscribe` can take over —
+// play them. The agent is stopped once the scenarios are done, so that a real `dt agent` can take over —
 // unless it is to leave a run running, which it then holds until the server stops.
 import { plainBody } from '@domaintrail/collaboration';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -125,12 +125,12 @@ export interface Seeded {
     stop(): Promise<void>;
 }
 
-/** Starts `dt session start` and waits for its Live View and facilitator link. */
+/** Starts `dt collab` (without the agent in process: the seed's agent plays the runs) and waits for its Live View and facilitator link. */
 async function startServer(
     options: SeedOptions,
     classifier: MockClassifier | undefined,
 ): Promise<{ child: ChildProcess; url: string; link: string; exited: Promise<number | null> }> {
-    const child = spawn(options.dt.command, [...options.dt.args, '-r', options.dir, 'session', 'start', '--port', String(options.port)], {
+    const child = spawn(options.dt.command, [...options.dt.args, '-r', options.dir, 'collab', '--no-agent', '--port', String(options.port)], {
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...process.env, ...(classifier && { DOMAINTRAIL_CLASSIFIER_URL: classifier.url, [SEED_TOKEN_ENV]: 'seed' }) },
     });
@@ -156,7 +156,7 @@ async function startServer(
     const first = await Promise.race([started.then(() => 'started' as const), exited.then(() => 'exited' as const), timeout]);
     if (first !== 'started' || !url || !link) {
         child.kill('SIGTERM');
-        throw new Error(`dt session start did not start (${first}):\n${output.join('\n')}`);
+        throw new Error(`dt collab did not start (${first}):\n${output.join('\n')}`);
     }
     return { child, url, link, exited };
 }

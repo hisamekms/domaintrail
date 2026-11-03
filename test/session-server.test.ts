@@ -1302,12 +1302,12 @@ describe('the CLI', () => {
         return { code, out, err };
     };
 
-    test('dt session start refuses a non-loopback bind in dev mode; dt session link needs a running server', async () => {
+    test('dt collab refuses a non-loopback bind in dev mode; dt collab link needs a running server', async () => {
         const root = await workspace();
-        const started = await run('-r', root, 'session', 'start', '--host', '0.0.0.0', '--port', '0');
+        const started = await run('-r', root, 'collab', '--no-agent', '--host', '0.0.0.0', '--port', '0');
         expect(started.code).toBe(1);
         expect(started.err.join('\n')).toContain('loopback');
-        const link = await run('-r', root, 'session', 'link');
+        const link = await run('-r', root, 'collab', 'link');
         expect(link.code).toBe(1);
         expect(link.err.join('\n')).toContain('No session server is running');
     });

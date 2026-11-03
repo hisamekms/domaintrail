@@ -1,5 +1,5 @@
-// `dt session subscribe --agent claude` (ADR 0026, S6): the subscriber of the session server running on the
-// workspace, wired to its agent API (`.domaintrail/session/agent.json`), Claude Code (a warm process across runs, or
+// `dt agent` (ADR 0026, S6; ADR 0030), and the agent `dt open` and `dt collab` start in process over the same loopback
+// HTTP: the subscriber of the session server running on the workspace, wired to its agent API (`.domaintrail/session/agent.json`), Claude Code (a warm process across runs, or
 // one per run: `agent.run`), `dt fmt`/`dt check` (this CLI, or `agent.run.dt`, for the agent too) and the
 // workspace's files.
 import { lstat } from 'node:fs/promises';
@@ -32,9 +32,16 @@ import { processAlive } from './process.js';
 
 export type { SubscriberEnd };
 
-/** The agents `dt session subscribe` can run. */
+/** The agents `dt agent` can run. */
 export const AGENTS = ['claude'] as const;
 export type AgentName = (typeof AGENTS)[number];
+
+/**
+ * The roles of an agent (ADR 0030, decision 21): the read-only answerer (the triage's stage 3, answers, proposals) and
+ * the runner (the runs). `dt agent` holds both unless `--role` names one.
+ */
+export const AGENT_ROLES = ['answer', 'run'] as const;
+export type AgentRole = (typeof AGENT_ROLES)[number];
 
 export interface SubscriberOptions {
     root: string;
@@ -43,6 +50,8 @@ export interface SubscriberOptions {
     /** The config file given with `-c`, passed on to `dt fmt` and `dt check`. */
     configPath?: string;
     agent: AgentName;
+    /** The roles to take on. Default: both. */
+    roles?: readonly AgentRole[];
     /** Handle one run, then end. */
     once?: boolean;
     /**
@@ -61,6 +70,8 @@ export interface SubscriberOptions {
 
 export interface RunningSubscriber {
     session: string;
+    /** The roles it took on. */
+    roles: readonly AgentRole[];
     /** Resolves when the subscriber ends. */
     done: Promise<SubscriberEnd>;
     /** Releases or fails (`Interrupted`) the run in hand and ends. */
@@ -77,20 +88,24 @@ export async function readCredential(root: string): Promise<AgentCredential> {
         if (e instanceof Error && 'code' in e && e.code === 'ENOENT') return undefined;
         throw e;
     });
-    if (!stat) throw new SessionError('No session server is running for this workspace (start one with `dt session start`).');
+    if (!stat) throw new SessionError('No session server is running for this workspace (start one with `dt open` or `dt collab`).');
     if (stat.isSymbolicLink() || !stat.isFile()) throw new SessionError(`${file} is not a plain file: refusing to read the agent credential through it.`);
     if (process.platform !== 'win32' && (stat.mode & 0o777) !== 0o600)
         throw new SessionError(`${file} must be private to you (mode 600), not ${(stat.mode & 0o777).toString(8)}: refusing the agent credential.`);
     const credential = await readAgentCredential(root);
     if (!credential) throw new SessionError(`${file} is not an agent credential.`);
     if (!processAlive(credential.pid))
-        throw new SessionError('The session server that wrote the agent credential is no longer running (start one with `dt session start`).');
+        throw new SessionError('The session server that wrote the agent credential is no longer running (start one with `dt open` or `dt collab`).');
     return credential;
 }
 
 /** Subscribes to the session server running on the workspace at `options.root` and runs its agent runs. */
 export async function startSubscriber(options: SubscriberOptions): Promise<RunningSubscriber> {
     const log = options.log ?? (() => {});
+    // the answerer role (its entry point `/agent/answers/events` and its warm processes) is connected here once the
+    // agent exposes it (plan modes, M4); until then the runner is the only role taken on
+    const roles: readonly AgentRole[] = (options.roles ?? AGENT_ROLES).filter((r) => r === 'run');
+    if (roles.length === 0) throw new SessionError('The answerer role is not available yet: run `dt agent` or `dt agent --role run`.');
     const root = path.resolve(options.root);
     const credential = await readCredential(root);
     const api = createHttpAgentApi({ url: credential.url, token: credential.token });
@@ -154,5 +169,5 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             reconnect: options.reconnect,
         },
     );
-    return { session: session.value.session, done: subscriber.done, stop: () => subscriber.stop() };
+    return { session: session.value.session, roles, done: subscriber.done, stop: () => subscriber.stop() };
 }
