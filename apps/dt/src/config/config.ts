@@ -124,6 +124,7 @@ export function resolveConfig(text: string, file: string): ResolvedConfig {
         throw new ConfigError(`${file}: ${msg}`);
     };
     const config = validate(parseJsonc(text, file), fail);
+    refuseSharedReadPaths(config, file, fail);
     // the only check that reads the disk (the agent's adapter: symbolic links), after the pure validation
     checkAgent(config.agent, path.dirname(file), fail);
     return { root: path.dirname(file), file, ...resolved(config, path.dirname(file)) };
@@ -146,6 +147,7 @@ export function resolveConfigWithLocal(
     if (project) {
         base = parseJsonc(project.text, project.file);
         const config = validate(base, failIn(project.file));
+        refuseSharedReadPaths(config, project.file, failIn(project.file));
         checkAgent(config.agent, path.dirname(project.file), failIn(project.file));
     }
     const override = parseJsonc(local.text, local.file);
@@ -154,6 +156,37 @@ export function resolveConfigWithLocal(
     const config = validate(mergeConfig(base, override), failIn(local.file));
     checkAgent(config.agent, dir, failIn(local.file));
     return { root: dir, ...(project && { file: project.file }), localFile: local.file, ...resolved(config, dir) };
+}
+
+/**
+ * Refuses paths to read outside the workspace in a project config file (`file`): they are honoured only from the
+ * local override, which git ignores (`checkLocalReadPaths`), so that what the AI may read on a machine is that
+ * person's choice, never a commit's.
+ */
+function refuseSharedReadPaths(config: DomainTrailConfigFile, file: string, fail: (msg: string) => never): void {
+    const parts: [string, readonly string[] | undefined][] = [
+        ['agent.read.paths', config.agent?.read?.paths],
+        ['agent.answer.read.paths', config.agent?.answer?.read?.paths],
+        ['agent.run.read.paths', config.agent?.run?.read?.paths],
+    ];
+    const local = path.basename(localConfigFiles(file)[0]);
+    for (const [at, paths] of parts) if (paths?.length) fail(`'${at}' is read only from your local config file: move it to ${local} (git-ignored)`);
+}
+
+/** Whether the configuration reads anything outside the workspace (`agent.read*`). */
+export const readsOutside = (config: ResolvedConfig): boolean => config.agent.read.answer.length > 0 || config.agent.read.run.length > 0;
+
+/**
+ * Refuses the paths to read outside the workspace of a local override that git would commit (`state`: tracked, or
+ * not ignored): they are honoured only from one git ignores, or outside any repository. The CLI asks git and calls it
+ * after loading.
+ */
+export function checkLocalReadPaths(config: ResolvedConfig, state: 'tracked' | 'unignored' | 'ignored' | undefined): void {
+    if (!config.localFile || !readsOutside(config) || state === 'ignored' || state === undefined) return;
+    const name = path.basename(config.localFile);
+    throw new ConfigError(
+        `${config.localFile}: agent.read.paths (and agent.answer/run.read.paths) are read only from a local config file git ignores, and git ${state === 'tracked' ? 'tracks' : 'does not ignore'} this one: ${state === 'tracked' ? `\`git rm --cached ${name}\`, then ` : ''}add ${name} to .gitignore`,
+    );
 }
 
 /**

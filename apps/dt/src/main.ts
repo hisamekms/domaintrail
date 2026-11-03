@@ -2,7 +2,7 @@ import { GENERATED_MARKER } from '@domaintrail/generation';
 import { sourceSelection } from '@domaintrail/analysis';
 import { type CliDeps } from './cli/ports.js';
 import { type CliIO, consoleIO, runCli } from './cli/main.js';
-import { CONFIG_FILE_FORMAT, type ResolvedConfig } from './config/config.js';
+import { checkLocalReadPaths, CONFIG_FILE_FORMAT, ConfigError, readsOutside, type ResolvedConfig } from './config/config.js';
 import { type LanguageServerFiles } from './lsp/server.js';
 import { startLanguageServer } from './lsp/start.js';
 import {
@@ -17,7 +17,17 @@ import {
 } from '@domaintrail/workspace';
 
 /** domaintrail.jsonc, read by the workspace and resolved by the sections' owners as the app composes them. */
-const loadConfig = (opts: { start: string; configPath?: string }): Promise<ResolvedConfig> => readConfig(opts, CONFIG_FILE_FORMAT);
+const loadConfig = async (opts: { start: string; configPath?: string }): Promise<ResolvedConfig> => {
+    const config = await readConfig(opts, CONFIG_FILE_FORMAT);
+    // what the AI reads outside the workspace only from a local file git ignores: asked of git (fail closed)
+    if (config.localFile && readsOutside(config)) {
+        const state = await gitFileState(config.localFile).catch((e: unknown) => {
+            throw new ConfigError(`${config.localFile}: git could not tell whether it ignores this file (${e instanceof Error ? e.message : String(e)})`);
+        });
+        checkLocalReadPaths(config, state);
+    }
+    return config;
+};
 
 /** The sources the configuration names (the analysis's `sources`), found and read by the workspace. */
 const findDomainFiles = (root: string, sources: readonly string[], respectGitignore: boolean): Promise<string[]> =>

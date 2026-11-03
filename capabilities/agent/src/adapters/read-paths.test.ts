@@ -67,6 +67,54 @@ describe('the configuration: what may be read outside the workspace', () => {
     });
 });
 
+describe('where secrets live: never read', () => {
+    test('/, the home directory, a place of secrets or one holding it (or inside one, but /var and ~/Library): refused', async () => {
+        const d = await scratch();
+        const home = path.join(d, 'home');
+        await mkdir(path.join(home, '.ssh'), { recursive: true });
+        await mkdir(path.join(home, 'Library', 'Mobile Documents'), { recursive: true });
+        await mkdir(path.join(home, 'notes'), { recursive: true });
+        const ws = path.join(d, 'ws');
+        const why = (p: string): string | undefined => {
+            try {
+                checkReadPaths(
+                    { read: { paths: [p] } },
+                    ws,
+                    (m) => {
+                        throw new Error(m);
+                    },
+                    home,
+                );
+                return undefined;
+            } catch (e) {
+                return e instanceof Error ? e.message : String(e);
+            }
+        };
+        expect(why('/')).toBe(`'agent.read.paths' names "/": it is the root of the file system`);
+        expect(why('~')).toContain('it is your home directory');
+        expect(why('~/.ssh')).toContain('it is or holds ~/.ssh, where secrets live');
+        expect(why('~/.ssh/id_ed25519')).toContain('it is inside ~/.ssh');
+        expect(why('~/.config/gh')).toContain('it is inside ~/.config');
+        expect(why('~/.netrc')).toContain('~/.netrc');
+        expect(why('~/Library')).toContain('it is or holds ~/Library');
+        expect(why('/etc')).toContain('it is or holds /etc');
+        expect(why('/etc/hosts')).toContain('it is inside /etc');
+        expect(why('/private')).toContain('it is or holds');
+        // here the scratch home is below /var: either way, refused
+        expect(why('/var')).toContain('it is or holds');
+        // inside ~/Library and /var (the temporary directories): allowed
+        expect(why('~/Library/Mobile Documents')).toBeUndefined();
+        expect(why('~/notes')).toBeUndefined();
+        expect(why(path.join(d, 'other'))).toBeUndefined();
+        // holding the (scratch) home
+        expect(why(d)).toContain('it is or holds ~/');
+        // by a link: by what it is
+        await symlink(path.join(home, '.ssh'), path.join(d, 'keys'));
+        expect(why(path.join(d, 'keys'))).toContain('~/.ssh');
+        expect(readTargets([path.join(d, 'keys')], ws, home).skipped).toEqual([`${path.join(d, 'keys')} (it is or holds ~/.ssh, where secrets live)`]);
+    });
+});
+
 describe('the paths when the agent starts', () => {
     test('by their real paths, each once; a missing one, or one now inside the workspace, skipped and said', async () => {
         const d = await scratch();

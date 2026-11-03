@@ -399,11 +399,13 @@ describe('CLI with a local override (domaintrail.local.jsonc)', () => {
 
 describe('CLI with paths the AI reads outside the workspace (agent.read.paths)', () => {
     test('the startup lines say what each role reads there; a path inside the workspace is an error of the file declaring it', async () => {
-        const base = await project({
-            'ws/domaintrail.jsonc': '{ "agent": { "read": { "paths": ["../specs"] }, "run": { "read": { "paths": ["../tools.md"] } } } }',
-        });
+        const base = await project({ 'ws/domaintrail.jsonc': '{ "agent": { "run": { "model": "sonnet" } } }' });
         const ws = path.join(base, 'ws');
-        await writeFile(path.join(ws, 'domaintrail.local.jsonc'), '{ "agent": { "answer": { "read": { "paths": ["~/nowhere-domaintrail"] } } } }');
+        const local = path.join(ws, 'domaintrail.local.jsonc');
+        await writeFile(
+            local,
+            '{ "agent": { "read": { "paths": ["../specs"] }, "run": { "read": { "paths": ["../tools.md"] } }, "answer": { "read": { "paths": ["~/nowhere-domaintrail"] } } } }',
+        );
         const both = await run('-r', ws, 'agent', '--code', 'x');
         expect(both.out.slice(1)).toEqual([
             `AI answers read outside the workspace: ${path.join(base, 'specs')}, ~/nowhere-domaintrail`,
@@ -412,18 +414,38 @@ describe('CLI with paths the AI reads outside the workspace (agent.read.paths)',
         const runs = await run('-r', ws, 'agent', '--code', 'x', '--role', 'run');
         expect(runs.out.slice(1)).toEqual([`AI runs read (never write) outside the workspace: ${path.join(base, 'specs')}, ${path.join(base, 'tools.md')}`]);
         // a role with nothing outside
-        await writeFile(path.join(ws, 'domaintrail.local.jsonc'), '{ "agent": { "read": { "paths": [] } } }');
+        await writeFile(local, '{ "agent": { "run": { "read": { "paths": ["../tools.md"] } } } }');
         expect((await run('-r', ws, 'agent', '--code', 'x')).out.slice(1)).toEqual([
             'AI answers read the workspace only',
             `AI runs read (never write) outside the workspace: ${path.join(base, 'tools.md')}`,
         ]);
-        await writeFile(path.join(ws, 'domaintrail.local.jsonc'), '{ "agent": { "read": { "paths": ["docs"] } } }');
+        await writeFile(local, '{ "agent": { "read": { "paths": ["docs"] } } }');
         const inside = await run('-r', ws, 'check');
         expect(inside.code).toBe(2);
-        expect(inside.err.join('\n')).toContain(`${path.join(ws, 'domaintrail.local.jsonc')}: 'agent.read.paths' names "docs": it is inside the workspace`);
+        expect(inside.err.join('\n')).toContain(`${local}: 'agent.read.paths' names "docs": it is inside the workspace`);
         // nothing outside: no line
-        await rm(path.join(ws, 'domaintrail.local.jsonc'));
-        await writeFile(path.join(ws, 'domaintrail.jsonc'), '{}');
+        await rm(local);
         expect((await run('-r', ws, 'agent', '--code', 'x')).out).toHaveLength(1);
+    });
+
+    test('read paths only from a local file git ignores: in the project file, or a local file git would commit, an error', async () => {
+        const ws = await project({ 'domaintrail.jsonc': '{ "agent": { "answer": { "read": { "paths": ["../specs"] } } } }' });
+        const shared = await run('-r', ws, 'check');
+        expect(shared.code).toBe(2);
+        expect(shared.err.join('\n')).toContain(
+            `${path.join(ws, 'domaintrail.jsonc')}: 'agent.answer.read.paths' is read only from your local config file: move it to domaintrail.local.jsonc (git-ignored)`,
+        );
+        await writeFile(path.join(ws, 'domaintrail.jsonc'), '{}');
+        await writeFile(path.join(ws, 'domaintrail.local.jsonc'), '{ "agent": { "read": { "paths": ["../specs"] } } }');
+        execFileSync('git', ['init', '-q'], { cwd: ws });
+        const unignored = await run('-r', ws, 'check');
+        expect(unignored.code).toBe(2);
+        expect(unignored.err.join('\n')).toContain(
+            'are read only from a local config file git ignores, and git does not ignore this one: add domaintrail.local.jsonc to .gitignore',
+        );
+        await writeFile(path.join(ws, '.gitignore'), 'domaintrail.local.jsonc\n');
+        expect((await run('-r', ws, 'check')).err.join('\n')).not.toContain('read only from');
+        execFileSync('git', ['add', '-f', 'domaintrail.local.jsonc'], { cwd: ws });
+        expect((await run('-r', ws, 'check')).err.join('\n')).toContain('git tracks this one: `git rm --cached domaintrail.local.jsonc`, then add');
     });
 });
