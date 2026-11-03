@@ -20,6 +20,7 @@ import {
     type StartedSession,
 } from './ports.js';
 import { lookup, showJson, showText } from './show.js';
+import { approveSettings, NotApproved } from './trust.js';
 import guide from '../../../../docs/guide.md' with { type: 'text' };
 
 export interface CliIO {
@@ -323,7 +324,8 @@ Examples:
             .option('--host <host>', hostHelp)
             .option('--base <ref>', 'compare the model with this git revision (e.g. main, HEAD~3) instead of the previous save')
             .addOption(new Option('--agent <agent>', 'the agent to start in this process (an error if it cannot start)').choices(['claude']))
-            .option('--no-agent', 'do not start the agent in this process (start one later with `dt agent`)');
+            .option('--no-agent', 'do not start the agent in this process (start one later with `dt agent`)')
+            .option('--yes', 'approve changed security-relevant settings without asking (for scripts; they are printed)');
 
     const open = serveOptions(
         program
@@ -353,6 +355,7 @@ Examples:
         'host to bind (default: open.host, else 127.0.0.1; a non-loopback address serves the Live View read-only)',
     ).action(async (opts: ServeOptions) => {
         const cfg = await config();
+        await approve(cfg, opts.yes);
         const { UnknownRevisionError } = await import('@domaintrail/visualization');
         const port = opts.port ?? cfg.open.port;
         const host = opts.host ?? cfg.open.host;
@@ -421,6 +424,7 @@ Examples:
         'host to bind (default: collab.host, else 127.0.0.1; the dev identity mode allows loopback only)',
     ).action(async (opts: ServeOptions) => {
         const cfg = await config();
+        await approve(cfg, opts.yes);
         const { UnknownRevisionError } = await import('@domaintrail/visualization');
         const settings = sessionSettings(cfg, cfg.collab, opts);
         const server = await deps
@@ -532,6 +536,7 @@ Examples:
         .option('--once', 'handle one run (waiting for one if none is queued), then exit')
         .requiredOption('--code <code>', 'the one-time pairing code of `dt collab agent-link` (or `dt open agent-link`)')
         .option('--url <url>', "the agent API's address (default: the running server's, from .domaintrail/session/server.json)")
+        .option('--yes', 'approve changed security-relevant settings without asking (for scripts; they are printed)')
         .addHelpText(
             'after',
             `
@@ -551,8 +556,9 @@ Examples:
   dt agent --code <code> --once
   dt -r examples/shop agent --code <code>`,
         )
-        .action(async (opts: { agent: 'claude'; role?: AgentRole; once?: boolean; code: string; url?: string }) => {
+        .action(async (opts: { agent: 'claude'; role?: AgentRole; once?: boolean; code: string; url?: string; yes?: boolean }) => {
             const cfg = await config();
+            await approve(cfg, opts.yes);
             await printConfig(cfg, opts.role ? [opts.role] : AGENT_ROLES);
             const connect = { code: opts.code, ...(opts.url !== undefined && { url: opts.url }) };
             const agent = await deps
@@ -769,6 +775,18 @@ Examples:
         for (const line of readScopeLines(cfg, roles)) io.out(line);
     };
 
+    /** Starts only with approved security-relevant settings (`approveSettings`); refused: a one-line error. */
+    const approve = async (cfg: ResolvedConfig, yes: boolean | undefined): Promise<void> => {
+        await approveSettings(
+            cfg,
+            { ...(deps.trust && { trust: deps.trust }), ...(deps.confirm && { confirm: (q: string) => deps.confirm!(q) }), out: io.out },
+            yes ?? false,
+        ).catch((e: unknown) => {
+            if (e instanceof NotApproved) throw new CliError(e.message);
+            throw e;
+        });
+    };
+
     const config = async () => {
         const start = path.resolve(program.opts().root);
         const info = await stat(start).catch(() => undefined);
@@ -801,6 +819,8 @@ interface ServeOptions {
     base?: string;
     /** `false` with `--no-agent`, `claude` given explicitly, else undefined (started when usable). */
     agent?: 'claude' | false;
+    /** `--yes`: approve changed security-relevant settings without asking. */
+    yes?: boolean;
 }
 
 /**

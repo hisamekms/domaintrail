@@ -254,7 +254,8 @@ describe('a session in access mode (against a mock of Cloudflare)', () => {
         );
         const out: string[] = [];
         const err: string[] = [];
-        const code = await runCli(['-r', dir, 'collab', '--no-agent', '--port', '0'], { out: (l) => out.push(l), err: (l) => err.push(l) }, cliDeps());
+        // collab.access is approved with --yes (no terminal here)
+        const code = await runCli(['-r', dir, 'collab', '--no-agent', '--port', '0', '--yes'], { out: (l) => out.push(l), err: (l) => err.push(l) }, cliDeps());
         expect(code).toBe(1);
         expect(err.join('\n')).toContain('allowedHosts must include the host of publicUrl');
     });

@@ -4,6 +4,7 @@ import { type CliDeps } from './cli/ports.js';
 import { type CliIO, consoleIO, runCli } from './cli/main.js';
 import { checkLocalReadPaths, CONFIG_FILE_FORMAT, ConfigError, readsOutside, type ResolvedConfig } from './config/config.js';
 import { type LanguageServerFiles } from './lsp/server.js';
+import { fileTrustStore } from './cli/trust.js';
 import { startLanguageServer } from './lsp/start.js';
 import {
     createGeneratedOutput,
@@ -41,6 +42,17 @@ const languageServerFiles: LanguageServerFiles = {
     sourceScope: (root, sources, respectGitignore) => new SourceScope(root, sourceSelection(sources, respectGitignore)),
     findDomainFiles,
 };
+
+/** Asks `question` on the terminal (stderr), and whether the answer is yes. */
+async function askOnTerminal(question: string): Promise<boolean> {
+    const { createInterface } = await import('node:readline/promises');
+    const rl = createInterface({ input: process.stdin, output: process.stderr });
+    try {
+        return /^y(es)?$/i.test((await rl.question(question)).trim());
+    } finally {
+        rl.close();
+    }
+}
 
 /** What Ctrl+C stops, in the order registered; stopped in reverse (the agent in process before its server). */
 const interruptible: (() => Promise<unknown>)[] = [];
@@ -81,6 +93,8 @@ export function cliDeps(): CliDeps {
         issueOpenLink: async (root) => (await import('./wiring/session.js')).issueOpenLink(root),
         checkAgent: async () => (await import('@domaintrail/agent')).checkClaudeCode(),
         localConfigState: (file) => gitFileState(file),
+        trust: fileTrustStore(),
+        ...(process.stdin.isTTY && process.stderr.isTTY && { confirm: askOnTerminal }),
         startAgent: async (options) => {
             // the agent's `dt` and `dt fmt` / `dt check` after it: `agent.run.dt`, else this very CLI, with the runtime
             // and the entry running it now

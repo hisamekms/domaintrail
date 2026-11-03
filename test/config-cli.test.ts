@@ -406,16 +406,18 @@ describe('CLI with paths the AI reads outside the workspace (agent.read.paths)',
             local,
             '{ "agent": { "read": { "paths": ["../specs"] }, "run": { "read": { "paths": ["../tools.md"] } }, "answer": { "read": { "paths": ["~/nowhere-domaintrail"] } } } }',
         );
-        const both = await run('-r', ws, 'agent', '--code', 'x');
-        expect(both.out.slice(1)).toEqual([
+        const both = await run('-r', ws, 'agent', '--code', 'x', '--yes');
+        expect(both.out.filter((l) => l.startsWith('AI '))).toEqual([
             `AI answers read outside the workspace: ${path.join(base, 'specs')}, ~/nowhere-domaintrail`,
             `AI runs read (never write) outside the workspace: ${path.join(base, 'specs')}, ${path.join(base, 'tools.md')}`,
         ]);
-        const runs = await run('-r', ws, 'agent', '--code', 'x', '--role', 'run');
-        expect(runs.out.slice(1)).toEqual([`AI runs read (never write) outside the workspace: ${path.join(base, 'specs')}, ${path.join(base, 'tools.md')}`]);
+        const runs = await run('-r', ws, 'agent', '--code', 'x', '--yes', '--role', 'run');
+        expect(runs.out.filter((l) => l.startsWith('AI '))).toEqual([
+            `AI runs read (never write) outside the workspace: ${path.join(base, 'specs')}, ${path.join(base, 'tools.md')}`,
+        ]);
         // a role with nothing outside
         await writeFile(local, '{ "agent": { "run": { "read": { "paths": ["../tools.md"] } } } }');
-        expect((await run('-r', ws, 'agent', '--code', 'x')).out.slice(1)).toEqual([
+        expect((await run('-r', ws, 'agent', '--code', 'x', '--yes')).out.filter((l) => l.startsWith('AI '))).toEqual([
             'AI answers read the workspace only',
             `AI runs read (never write) outside the workspace: ${path.join(base, 'tools.md')}`,
         ]);
@@ -425,7 +427,7 @@ describe('CLI with paths the AI reads outside the workspace (agent.read.paths)',
         expect(inside.err.join('\n')).toContain(`${local}: 'agent.read.paths' names "docs": it is inside the workspace`);
         // nothing outside: no line
         await rm(local);
-        expect((await run('-r', ws, 'agent', '--code', 'x')).out).toHaveLength(1);
+        expect((await run('-r', ws, 'agent', '--code', 'x', '--yes')).out).toHaveLength(1);
     });
 
     test('read paths only from a local file git ignores: in the project file, or a local file git would commit, an error', async () => {
