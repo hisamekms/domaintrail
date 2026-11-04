@@ -8,9 +8,9 @@ import { buildPrompt, MAX_CHANGED_SHOWN, MAX_QUESTION, OUTCOME_MARKER, parseRepl
 import { changedPaths, changesOutsideSources, showPaths } from './subscriber.js';
 import { caseless, CONFIG_EDIT_DENIED, claudeArguments, READ_DENIED, scopedRules, toolNames } from '../adapters/claude-code.js';
 import { resultOf } from '../adapters/claude-stream.js';
-import { type Collaboration, REPLY_LIMITS, replyJsonSchema } from '@domaintrail/collaboration';
+import { type Collaboration, type JourneySummary, REPLY_LIMITS, replyJsonSchema } from '@domaintrail/collaboration';
 import { parseSse } from '../adapters/http-agent-api.js';
-import type { AgentPreviousRun, Json } from '@domaintrail/collaboration/protocol';
+import type { AgentJourneysBody, AgentPreviousRun, Json } from '@domaintrail/collaboration/protocol';
 
 /** The default tools of the agent (`session.agent.allowedTools`; the configuration's default is tested with it). */
 const DEFAULT_AGENT_TOOLS: readonly string[] = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)', 'Bash(dt guide:*)'];
@@ -318,6 +318,82 @@ describe("an interview's confirmed brief (the `/` commands)", () => {
         expect(prompt).toContain('dt has already written the brief into `domaintrail.journey.json`');
         expect(prompt).not.toContain('Replace an existing description only when');
         expect(block(buildPrompt(input([message]), new Map(), 'n'), 'n')).not.toHaveProperty('confirmedBrief');
+    });
+});
+
+describe("the session's current journey", () => {
+    const es: JourneySummary = {
+        key: 'es:Issuance',
+        kind: 'es',
+        name: 'Issuance',
+        state: 'active',
+        level: 'BigPicture',
+        use: 'modeling',
+        goal: 'BigPicture',
+        purpose: '発行の流れをつかむ',
+        scope: '申し込みから受け取りまで',
+        participants: ['店舗担当'],
+        stormings: ['Issuance'],
+    };
+    const billing: JourneySummary = {
+        key: 'billing-deep',
+        kind: 'model',
+        name: 'Billing の深掘り',
+        state: 'active',
+        pattern: 'OneContext',
+        goal: 'invariants',
+        purpose: '請求の型を生成する',
+        constraints: '決済代行の API はそのまま',
+        participants: [],
+        context: 'Billing',
+    };
+    const journeys: AgentJourneysBody = { current: 'es:Issuance', journeys: [es, billing], where: { here: 'exceptions', reached: false } };
+    const run = input([frozen({ kind: 'DtesStorming', storming: 'Issuance' }, 'カードを置いたら読み取りコマンドが動く流れを足して')]);
+
+    test("the run's data has the current journey with its brief and where it stands, and the others in a line each", () => {
+        const data = block(buildPrompt(run, new Map(), 'n', [], [], { journeys }), 'n') as { journeys: unknown };
+        expect(data.journeys).toEqual({
+            current: {
+                journey: 'es:Issuance: event storming of @{es:Issuance}, level BigPicture, use modeling — active',
+                here: 'exceptions',
+                purpose: '発行の流れをつかむ',
+                scope: '申し込みから受け取りまで',
+                participants: ['店舗担当'],
+            },
+            all: [
+                'es:Issuance: event storming of @{es:Issuance}, level BigPicture, use modeling — active',
+                'billing-deep: "Billing の深掘り", pattern OneContext on Billing, goal invariants — active',
+            ],
+        });
+        // a goal reached is said so; a modeling journey's brief keeps its constraints
+        const modeling = block(
+            buildPrompt(run, new Map(), 'n', [], [], { journeys: { ...journeys, current: 'billing-deep', where: { reached: true } } }),
+            'n',
+        ) as {
+            journeys: { current: Record<string, unknown> };
+        };
+        expect(modeling.journeys.current).toMatchObject({ here: 'goal reached', constraints: '決済代行の API はそのまま' });
+    });
+
+    test('rules 20 and 21: keep within its scope and level, else ask before writing', () => {
+        const prompt = buildPrompt(run, new Map(), 'n', [], [], { journeys });
+        for (const part of [
+            '20. `journeys`, when present: the journey file',
+            'add no command, policy, aggregate or read model, and mark no event `level design`',
+            'a modeling journey on one context (pattern `OneContext`): change that context only',
+            "21. When a request asks for more than the current journey's scope, level or goal allows",
+            'do not write anything: reply\n   "clarification" (rule 6)',
+            'ask whether to go beyond it',
+        ])
+            expect(prompt).toContain(part);
+    });
+
+    test("no journey, or none current: today's prompt", () => {
+        const today = buildPrompt(run, new Map(), 'n');
+        expect(today).not.toContain('20. `journeys`');
+        expect(block(today, 'n')).not.toHaveProperty('journeys');
+        expect(buildPrompt(run, new Map(), 'n', [], [], { journeys: { journeys: [] } })).toBe(today);
+        expect(buildPrompt(run, new Map(), 'n', [], [], { journeys: { journeys: [es, billing] } })).toBe(today);
     });
 });
 

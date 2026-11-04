@@ -759,3 +759,42 @@ describe('where the requester was looking', () => {
         expect(prompt).toContain('`viewedAt`, when present, is where the person is looking');
     });
 });
+
+describe("stage 3 and the session's current journey", () => {
+    /** The JSON of the triage prompt's block. */
+    const data = (prompt: string): Record<string, unknown> =>
+        JSON.parse(prompt.slice(prompt.indexOf('<message-n>') + '<message-n>'.length, prompt.indexOf('</message-n>'))) as Record<string, unknown>;
+    const journeys = {
+        current: 'es:Issuance',
+        journeys: [
+            {
+                key: 'es:Issuance',
+                kind: 'es',
+                name: 'Issuance',
+                state: 'active',
+                level: 'BigPicture',
+                use: 'align',
+                goal: 'BigPicture',
+                purpose: '発行の流れをつかむ',
+                participants: [],
+                stormings: ['Issuance'],
+            },
+        ],
+        where: { here: 'flows', reached: false },
+    } as const;
+
+    test('it gets the journeys as context for which journey the message is about; its output contract is unchanged', () => {
+        const prompt = buildTriagePrompt(job('triage', 1, { journeys }), 'n');
+        expect(data(prompt).journeys).toEqual({
+            current: {
+                journey: 'es:Issuance: event storming of @{es:Issuance}, level BigPicture, use align — active',
+                here: 'flows',
+                purpose: '発行の流れをつかむ',
+            },
+            all: ['es:Issuance: event storming of @{es:Issuance}, level BigPicture, use align — active'],
+        });
+        expect(prompt).toContain('context for which journey the message is about');
+        expect(prompt).toContain('Reply with the JSON object { kind, confidence, reason }');
+        expect(data(buildTriagePrompt(job('triage', 1), 'n'))).not.toHaveProperty('journeys');
+    });
+});
