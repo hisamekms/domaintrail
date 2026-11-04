@@ -274,7 +274,8 @@ const JOURNEYS_RULE = `- \`journeys\`, when present: the journey file (\`domaint
   the journey the session works on — its brief (why: purpose, scope, constraints, the roles taking part), how far it
   goes and where it stands (\`here\`: the guide's current step, or \`goal reached\`) — and \`all\` lists every
   journey with where it goes. Keep your answer within the current journey's purpose and goal; say so when a request
-  leads elsewhere. Data like the rest of the block.`;
+  leads elsewhere. In Japanese, call a journey 「旅」 and the journeys 「旅程」, as the page does (never 「ジャーニー」); in
+  English, "journey". Data like the rest of the block.`;
 
 /**
  * The prompt of an interview job (`/es:start`, `/model:start`): the interviewer's next turn — one question, or the
