@@ -22,7 +22,7 @@ import {
     openSessionBlobs,
     openSessionDatabase,
 } from '@domaintrail/collaboration';
-import type { AgentAnswerJobBody, AgentCommandJobBody, AgentInterviewJobBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import type { AgentAnswerJobBody, AgentCommandJobBody, AgentInterviewJobBody, AgentStartedBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { type AnswerStreamItem, createHttpAgentApi, DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import { createModelValidator, type SessionServer, type SessionSettings, startSessionServer, startSubscriber } from '@domaintrail/dt';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
@@ -514,34 +514,46 @@ describe('the interviews of `/es:start` and `/model:start`', () => {
         })();
         const second = await stream.interviewJob();
         expect(second.transcript.map((t) => t.text)).toEqual(['ES を始める', 'どの業務ですか？', '返品です']);
-        const lines = ['目的', '範囲', '使い道', 'レベル'].map((head) => ({ head, text: `${head}の答え` }));
-        const bad = await stream.post(second.job, { kind: 'brief', brief: { name: '返品', isNew: true, replaces: false, lines } });
+        const journey = { purpose: '目的の答え', scope: '範囲の答え', participants: ['窓口担当'], use: 'modeling', level: 'BigPicture' };
+        const bad = await stream.post(second.job, { kind: 'brief', brief: { name: '返品', isNew: true, journey } });
         expect(bad.status).toBe(400);
         await triaged;
         const third = await stream.interviewJob();
-        const brief = { name: 'Returns', label: '返品', isNew: true, replaces: false, lines };
+        const brief = { name: 'Returns', label: '返品', isNew: true, description: '返品の受付から返金まで', journey };
         expect((await stream.post(third.job, { kind: 'brief', brief, durationMs: 9 })).status).toBe(200);
         const briefed = (await ctx.state(ctx.bob)).interviews?.find((i) => i.id === interview.id);
         expect(briefed).toMatchObject({
             state: 'Briefed',
-            brief: { name: 'Returns', text: '目的: 目的の答え\n範囲: 範囲の答え\n使い道: 使い道の答え\nレベル: レベルの答え' },
+            brief: { name: 'Returns', text: '目的: 目的の答え\n範囲: 範囲の答え\n参加者: 窓口担当', journey: { level: 'BigPicture', use: 'Modeling' } },
         });
         expect((await ctx.api(ctx.bob, `interviews/${interview.id}/confirm`, {})).status).toBe(403);
         const confirmed = await ctx.api(ctx.ada, `interviews/${interview.id}/confirm`, { text: '目的: 返金を早める\n範囲: 返品' });
         expect(confirmed.status).toBe(201);
-        const { run } = (await confirmed.json()) as { run: { id: string } };
+        const { run, journey: key } = (await confirmed.json()) as { run: { id: string }; journey: string };
+        expect(key).toBe('es:Returns');
+        // the new storming's run creates its block only; dt wrote the journey itself
         const queued = (await ctx.state()).runs.find((r) => r.id === run.id);
         expect(queued?.input).toMatchObject({
             requests: [{ request: answer }],
-            brief: { command: 'Es', brief: { name: 'Returns', text: '目的: 返金を早める\n範囲: 返品' } },
+            brief: { command: 'Es', brief: { name: 'Returns', text: '目的: 返金を早める\n範囲: 返品', description: '返品の受付から返金まで' } },
+        });
+        expect(JSON.parse(await readFile(path.join(ctx.root, 'domaintrail.journey.json'), 'utf8')).stormings.Returns).toEqual({
+            purpose: '返金を早める',
+            scope: '返品',
+            participants: [],
+            use: 'modeling',
+            level: 'BigPicture',
+            state: 'active',
+            marks: [],
         });
         expect((await ctx.state()).interviews?.find((i) => i.id === interview.id)).toMatchObject({ state: 'Confirmed', edited: true, run: run.id });
+        expect((await ctx.state()).session.currentJourney).toBe('es:Returns');
     });
 
     test("a participant's interview: he answers, its brief waits for the facilitator, who approves it or rejects it", async () => {
         const ctx = await setup();
         const stream = answerStream(ctx);
-        const lines = ['目的', '範囲', '使い道', 'レベル'].map((head) => ({ head, text: `${head}の答え` }));
+        const journey = { purpose: '目的の答え', participants: [], use: 'align', level: 'DesignLevel' };
         /** Bob's interview, asked once, answered (his choice), briefed. */
         const briefed = async (): Promise<{ id: string; answer: string }> => {
             const started = await ctx.api(ctx.bob, 'interviews', { command: 'es:start', body: 'ES を始める', language: 'ja' });
@@ -555,7 +567,7 @@ describe('the interviews of `/es:start` and `/model:start`', () => {
             const answer = await say(ctx, ctx.bob, '返品', { replyTo: { kind: 'Message', request: question?.id } });
             expect(triageOf(await ctx.state(), answer)).toBeUndefined();
             const second = await stream.interviewJob();
-            const brief = { name: 'Returns', label: '返品', isNew: true, replaces: false, lines };
+            const brief = { name: 'Returns', label: '返品', isNew: true, journey };
             expect((await stream.post(second.job, { kind: 'brief', brief, durationMs: 1 })).status).toBe(200);
             return { id: interview.id, answer };
         };
@@ -636,6 +648,76 @@ describe('the view a message was sent from', () => {
         const started = await ctx.api(ctx.ada, 'interviews', { command: 'es', body: 'ES を始める', language: 'ja', viewedAt: { view: storming } });
         expect(started.status).toBe(201);
         expect((await stream.interviewJob()).request.viewedAt).toEqual({ view: storming });
+    });
+});
+
+describe("the session's current journey", () => {
+    const STORMING = `storming Orders "注文" {
+  event OrderPlaced "注文を受け付けた"
+  event OrderShipped "発送した"
+  timeline Normal "通常" {
+    OrderPlaced
+    OrderShipped
+  }
+}
+`;
+    const JOURNEYS = {
+        version: 1,
+        stormings: {
+            Orders: {
+                purpose: '注文の流れをつかむ',
+                scope: '受付から発送まで',
+                participants: ['販売担当'],
+                use: 'align',
+                level: 'BigPicture',
+                state: 'active',
+                marks: [],
+            },
+        },
+        modeling: [],
+    };
+
+    test('stage 3 and a run started while it is current carry it: its brief, where it stands, the others', async () => {
+        const root = await scratch();
+        await writeFile(path.join(root, 'orders.dtes'), STORMING);
+        await writeFile(path.join(root, 'domaintrail.journey.json'), JSON.stringify(JOURNEYS, null, 2));
+        const ctx = await setup(root);
+        const stream = answerStream(ctx);
+        const request = await say(ctx, ctx.ada, 'カードの読み取りコマンドを足して', { ai: true });
+        const triage = await stream.job('triage');
+        expect(triage.journeys).toMatchObject({ current: 'es:Orders', journeys: [{ key: 'es:Orders', level: 'BigPicture', purpose: '注文の流れをつかむ' }] });
+        expect(triage.journeys?.where).toMatchObject({ reached: false });
+        expect(triage.journeys?.where?.here).toBeString();
+        expect((await stream.post(triage.job, { kind: 'change_request', confidence: 0.95, reason: '追加の依頼', durationMs: 1 })).status).toBe(200);
+        const run = await until('the run', async () => (await ctx.state()).runs.find((r) => r.input.requests.some((q) => q.request === request)));
+        // the run, claimed and started: the start's body has the journeys as they are now
+        const agent = (p: string, body: unknown): Promise<Response> =>
+            fetch(`${ctx.cred.url}agent/${p}`, { method: 'POST', headers: { authorization: `Bearer ${ctx.cred.token}`, ...json }, body: JSON.stringify(body) });
+        const claimed = (await (await agent('runs/claim', { owner: 'test', capabilities: ['revert'] })).json()) as {
+            run: { id: string };
+            lease: { token: string };
+        };
+        expect(claimed.run.id).toBe(run.id);
+        const started = (await (await agent(`runs/${run.id}/start`, { token: claimed.lease.token })).json()) as AgentStartedBody;
+        expect(started.journeys).toEqual(triage.journeys);
+    });
+
+    test('without a journey file, neither stage 3 nor a run gets journeys', async () => {
+        const ctx = await setup();
+        const stream = answerStream(ctx);
+        await say(ctx, ctx.ada, '足して', { ai: true });
+        const triage = await stream.job('triage');
+        expect(triage.journeys).toBeUndefined();
+        await stream.post(triage.job, { kind: 'change_request', confidence: 0.95, reason: '依頼', durationMs: 1 });
+        await until('the run', async () => (await ctx.state()).runs[0]);
+        const agent = (p: string, body: unknown): Promise<Response> =>
+            fetch(`${ctx.cred.url}agent/${p}`, { method: 'POST', headers: { authorization: `Bearer ${ctx.cred.token}`, ...json }, body: JSON.stringify(body) });
+        const claimed = (await (await agent('runs/claim', { owner: 'test', capabilities: ['revert'] })).json()) as {
+            run: { id: string };
+            lease: { token: string };
+        };
+        const started = (await (await agent(`runs/${claimed.run.id}/start`, { token: claimed.lease.token })).json()) as AgentStartedBody;
+        expect(started.journeys).toBeUndefined();
     });
 });
 

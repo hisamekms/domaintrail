@@ -1,6 +1,7 @@
 // A `/es` or `/model` interview in the chat (the plan's round 5): a bar above the composer while it runs — the command's
 // name, whether the AI is thinking, and 中止 for its starter and the facilitator — and, once the AI wrote its brief, the
-// brief as a card: where it goes (a new storming or context, or that it replaces the current description), its lines
+// brief as a card: where it goes (a new storming or journey, or that it replaces the journey's brief), how far the
+// journey goes (the ES level and use; the pattern, goal and subject), its lines
 // with their heads, and for the facilitator 確定 / 編集して確定 / 中止 (their own interview) or 承認 / 編集して承認 / 却下
 // (a participant's, 却下 with an optional note); the others read it with 承認待ち (its starter can still stop it). A
 // rejected brief tells its starter so, with the note, until closed. The questions themselves are the AI's
@@ -8,15 +9,17 @@
 // interview awaits, its starter gets its choices as buttons (`InterviewChoices`): one pressed is sent as the answer at
 // once, or — when several make one answer — checked and sent together; the last, その他, takes them to the composer.
 import { useState, type ReactElement } from 'react';
-import { Check, LoaderCircle, Pencil, Send, Sparkles, X } from 'lucide-react';
+import { Check, Flag, LoaderCircle, Pencil, Send, Sparkles, X } from 'lucide-react';
 import { briefLines, commandId } from '@domaintrail/collaboration';
 import type { SendRequestBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { useLang } from '../i18n';
+import { Act } from '../shared/act';
 import type { Lang } from '@domaintrail/visualization';
 import { isAiAuthor, type AiSlot } from './ai';
 import { sessionApi } from './api';
 import { useChat } from './chat-context';
 import { failure } from './parts';
+import { ChoiceText } from './reply';
 import { runningInterview, type InterviewJson } from './slash';
 import type { SessionData } from './useSession';
 
@@ -34,7 +37,10 @@ export function interviewSlot(
     if (isAiAuthor(request.author)) return undefined;
     const interview = (state.interviews ?? []).find((i) => i.startedBy === request.author && (i.opening === request.id || heardBy(i, request.id, state)));
     if (!interview) return undefined;
-    const question = state.requests.find((r) => isAiAuthor(r.author) && r.replyTo?.kind === 'Message' && r.replyTo.request === request.id);
+    // dt's note after the brief is confirmed is not a question: it stands on its own row, after a new storming's run
+    const question = state.requests.find(
+        (r) => isAiAuthor(r.author) && r.replyTo?.kind === 'Message' && r.replyTo.request === request.id && r.journeyNote === undefined,
+    );
     if (question) return { kind: 'answer', answer: question.id };
     if (interview.state === 'Asking' && interview.awaiting === request.id) return { kind: 'pending' };
     return 'none';
@@ -68,6 +74,34 @@ export function rejectedOfMine(state: Pick<SessionStateBody, 'interviews'>, me: 
 }
 
 /** The running interview's bar and brief, above the composer; or my brief rejected. */
+/** A brief's title: the storming's label and ID, or the journey's name. */
+const briefTitle = (brief: NonNullable<Extract<InterviewJson, { state: 'Briefed' }>['brief']>): string => {
+    const name = brief.journey?.journeyName ?? brief.label;
+    return name ? `${name} · ${brief.name}` : brief.name;
+};
+
+/** How far the brief's journey goes, in one line: the ES level and use, or the pattern, goal and subject. */
+function BriefHowFar({ journey: j }: { readonly journey: NonNullable<Extract<InterviewJson, { state: 'Briefed' }>['brief']['journey']> }): ReactElement {
+    const { tx } = useChat();
+    const g = tx.chat.guide;
+    const parts =
+        j.level !== undefined
+            ? [g.levels[j.level] ?? j.level, j.use !== undefined ? tx.chat.journeys.uses[j.use === 'Modeling' ? 'modeling' : 'align'] : undefined]
+            : [
+                  j.pattern !== undefined ? (g.patterns[j.pattern] ?? j.pattern) : undefined,
+                  j.goal !== undefined ? g.goal(g.steps[j.goal] ?? j.goal) : undefined,
+                  // the subject as references, shown by their labels as links are (an ID alone read as a code)
+                  j.stormings.length > 0 ? j.stormings.map((x) => `ES「@{es:${x}}」`).join('、') : undefined,
+                  j.context !== undefined ? `@{${j.context}}` : undefined,
+              ];
+    return (
+        <p className="chat-brief-howfar">
+            <Flag size={12} aria-hidden />
+            <ChoiceText text={parts.filter((x) => x !== undefined).join(' · ')} />
+        </p>
+    );
+}
+
 export function InterviewPanel(props: { session: SessionData; live: boolean }) {
     const { tx } = useChat();
     const t = tx.chat.interview;
@@ -87,9 +121,9 @@ export function InterviewPanel(props: { session: SessionData; live: boolean }) {
                     <Sparkles size={13} aria-hidden className="chat-slash-icon" />
                     <span className="chat-interview-name">{tx.chat.slash.commands[commandId(rejected.command)]}</span>
                     <span className="chat-interview-state muted">{t.rejected}</span>
-                    <button className="chat-small" onClick={() => setClosed(rejected.id)}>
+                    <Act kind="open" onClick={() => setClosed(rejected.id)}>
                         {t.close}
-                    </button>
+                    </Act>
                 </div>
                 {rejected.note && (
                     <div className="chat-brief">
@@ -117,9 +151,9 @@ export function InterviewPanel(props: { session: SessionData; live: boolean }) {
         }
     };
     const stop = (
-        <button className="chat-small" disabled={busy} onClick={() => void act(() => sessionApi.stopInterview(interview.id))}>
-            <X size={12} aria-hidden /> {t.stop}
-        </button>
+        <Act kind="stop" icon={<X size={12} aria-hidden />} disabled={busy} onClick={() => void act(() => sessionApi.stopInterview(interview.id))}>
+            {t.stop}
+        </Act>
     );
     const brief = interview.state === 'Briefed' ? interview.brief : undefined;
     return (
@@ -143,12 +177,13 @@ export function InterviewPanel(props: { session: SessionData; live: boolean }) {
             {brief && (
                 <div className="chat-brief">
                     <div className="chat-brief-target">
-                        <span className="chat-brief-name">{brief.label ? `${brief.label} · ${brief.name}` : brief.name}</span>
-                        {brief.isNew && <span className="chat-brief-flag">{interview.command === 'Es' ? t.newStorming : t.newContext}</span>}
+                        <span className="chat-brief-name">{briefTitle(brief)}</span>
+                        {brief.isNew && <span className="chat-brief-flag">{interview.command === 'Es' ? t.newStorming : t.newJourney}</span>}
                         {brief.replaces && <span className="chat-brief-flag warn">{t.replaces}</span>}
                     </div>
+                    {brief.journey && <BriefHowFar journey={brief.journey} />}
                     {editing === undefined ? (
-                        <dl className="chat-brief-lines">
+                        <dl className="brief-lines chat-brief-lines">
                             {briefLines(brief.text).map((l, i) => (
                                 <div key={i} className="chat-brief-line">
                                     {l.head !== undefined && <dt>{l.head}</dt>}
@@ -188,9 +223,9 @@ export function InterviewPanel(props: { session: SessionData; live: boolean }) {
                                 aria-label={t.note}
                                 onChange={(e) => setRejecting(e.target.value)}
                             />
-                            <button type="submit" className="chat-small danger" disabled={busy}>
+                            <Act kind="danger" type="submit" disabled={busy}>
                                 {t.reject}
-                            </button>
+                            </Act>
                             <button type="button" className="icon-button" onClick={() => setRejecting(undefined)} aria-label={t.cancel}>
                                 <X size={13} aria-hidden />
                             </button>
@@ -199,36 +234,38 @@ export function InterviewPanel(props: { session: SessionData; live: boolean }) {
                         <div className="chat-brief-actions">
                             {editing === undefined ? (
                                 <>
-                                    <button
-                                        className="chat-small primary"
+                                    <Act
+                                        kind="decide"
+                                        icon={<Check size={12} aria-hidden />}
                                         disabled={busy}
                                         onClick={() => void act(() => sessionApi.confirmInterview(interview.id))}
                                     >
-                                        <Check size={12} aria-hidden /> {role === 'approve' ? t.approve : t.confirm}
-                                    </button>
-                                    <button className="chat-small" disabled={busy} onClick={() => setEditing(brief.text)}>
-                                        <Pencil size={12} aria-hidden /> {role === 'approve' ? t.editApprove : t.editConfirm}
-                                    </button>
+                                        {role === 'approve' ? t.approve : t.confirm}
+                                    </Act>
+                                    <Act kind="open" icon={<Pencil size={12} aria-hidden />} disabled={busy} onClick={() => setEditing(brief.text)}>
+                                        {role === 'approve' ? t.editApprove : t.editConfirm}
+                                    </Act>
                                     {role === 'approve' ? (
-                                        <button className="chat-small ghost" disabled={busy} onClick={() => setRejecting('')}>
+                                        <Act kind="danger" disabled={busy} onClick={() => setRejecting('')}>
                                             {t.reject}
-                                        </button>
+                                        </Act>
                                     ) : (
                                         stop
                                     )}
                                 </>
                             ) : (
                                 <>
-                                    <button
-                                        className="chat-small primary"
+                                    <Act
+                                        kind="decide"
+                                        icon={<Check size={12} aria-hidden />}
                                         disabled={busy || editing.trim() === ''}
                                         onClick={() => void act(() => sessionApi.confirmInterview(interview.id, editing))}
                                     >
-                                        <Check size={12} aria-hidden /> {role === 'approve' ? t.approve : t.confirm}
-                                    </button>
-                                    <button className="chat-small" disabled={busy} onClick={() => setEditing(undefined)}>
+                                        {role === 'approve' ? t.approve : t.confirm}
+                                    </Act>
+                                    <Act kind="stop" disabled={busy} onClick={() => setEditing(undefined)}>
                                         {t.cancel}
-                                    </button>
+                                    </Act>
                                 </>
                             )}
                         </div>
@@ -291,7 +328,8 @@ export interface ChoiceListProps {
 
 /**
  * The choices under the question: buttons in the action colour that send one at once, or (multiple) checkboxes and
- * 送る; always その他 last. Each choice is the AI's text shown as text.
+ * 送る; always その他 last. Each choice is the AI's text shown as text, an element it names by its label as a message
+ * names it (`ChoiceText`, no link); what is sent is the choice as written, its references whole.
  */
 export function ChoiceList(props: ChoiceListProps): ReactElement {
     const { choices, multiple, checked, busy, tx } = props;
@@ -302,27 +340,27 @@ export function ChoiceList(props: ChoiceListProps): ReactElement {
                 ? choices.map((c, i) => (
                       <label key={i} className={checked.has(i) ? 'interview-choice checked' : 'interview-choice'}>
                           <input type="checkbox" checked={checked.has(i)} disabled={busy} onChange={() => props.onToggle(i)} />
-                          {c}
+                          <ChoiceText text={c} />
                       </label>
                   ))
                 : choices.map((c, i) => (
-                      <button key={i} type="button" className="interview-choice" disabled={busy} onClick={() => props.onSend(c)}>
-                          {c}
-                      </button>
+                      <Act key={i} kind="send" disabled={busy} onClick={() => props.onSend(c)}>
+                          <ChoiceText text={c} />
+                      </Act>
                   ))}
             {multiple && (
-                <button
-                    type="button"
-                    className="interview-choice send"
+                <Act
+                    kind="send"
+                    icon={<Send size={12} aria-hidden />}
                     disabled={busy || picked.length === 0}
                     onClick={() => props.onSend(joinChoices(picked, props.lang))}
                 >
-                    <Send size={12} aria-hidden /> {tx.send}
-                </button>
+                    {tx.send}
+                </Act>
             )}
-            <button type="button" className="interview-choice other" disabled={busy} onClick={props.onOther}>
+            <Act kind="open" disabled={busy} onClick={props.onOther}>
                 {tx.other}
-            </button>
+            </Act>
         </div>
     );
 }

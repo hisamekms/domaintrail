@@ -1,6 +1,6 @@
-// The guide's map and what is known at once (guide.ts): from inline sources analyzed as the app does, the event
-// storming's path to its goal, the four modeling patterns with their growing BC rows, the person's ✓ marks, the map
-// without a goal, and the findings with where to go.
+// The guide's map and what is known at once (guide.ts): from inline sources analyzed as the app does, the goals read
+// from the journey file, the event storming's path to its goal, the four modeling patterns with their growing BC rows,
+// the person's ✓ marks, the current journey first, the map without a goal, and the findings with where to go.
 import { describe, expect, test } from 'bun:test';
 import type { Diagnostic } from '@domaintrail/kernel';
 import { analyzeDomain } from '@domaintrail/modeling';
@@ -13,12 +13,14 @@ import {
     guideMap,
     guideSnapshot,
     guideWorld,
+    journeyWhere,
     MODEL_PATTERNS,
     NO_GOAL,
     guideMarks,
     guideMaps,
     markableGuideMark,
     NO_MARKS,
+    placeSteps,
     readGuideGoal,
     type GuideGoal,
     type GuideWorkspace,
@@ -41,7 +43,8 @@ const FLOW = `  timeline Main {\n    Requested\n    Researched\n    Confirmed\n 
 /** A storming grown step by step: its brief, events, flow, an exception, a hotspot (open or resolved), Design Level. */
 function storming(parts: { brief?: true; events?: true; flow?: true; exception?: true; hotspot?: 'open' | 'resolved'; design?: true }): string {
     return [
-        parts.brief ? '/// 目的: 交付の流れをつかむ' : '',
+        // `///` is a short description of what the storming is, never its brief (the journey file holds that)
+        parts.brief ? '/// 住民票の交付' : '',
         'storming Issue "交付" {',
         parts.events ? EVENTS : '  event Requested',
         parts.flow ? FLOW : '',
@@ -55,9 +58,19 @@ function storming(parts: { brief?: true; events?: true; flow?: true; exception?:
 
 const STORMING_VIEW = { view: { kind: 'Storming', storming: 'Issue', level: 'BigPicture', exceptions: true } } as unknown as Collaboration.ViewedAt;
 const MODEL_VIEW = { view: { kind: 'ContextMap', all: false } } as unknown as Collaboration.ViewedAt;
-/** The ES level for every storming of these tests. */
-const esGoal = (level: 'BigPicture' | 'DesignLevel'): GuideGoal => ({
-    es: Object.fromEntries(['Issue', 'ConvenienceStoreIssuance', 'A', 'B'].map((id) => [id, { level }])),
+/** The ES journey of one storming (`Issue` by default). */
+const esGoal = (level: 'BigPicture' | 'DesignLevel', storming = 'Issue'): GuideGoal => ({ es: { [storming]: { level } } });
+
+/** The workspace with a journey file holding the ES journeys of these stormings (their brief: the step is done). */
+const journeyed = (ws: GuideWorkspace, ...stormings: string[]): GuideWorkspace => ({
+    ...ws,
+    journey: {
+        version: 1,
+        stormings: Object.fromEntries(
+            stormings.map((id) => [id, { purpose: '交付の流れをつかむ', participants: [], use: 'align', level: 'BigPicture', state: 'active', marks: [] }]),
+        ),
+        modeling: [],
+    },
 });
 const BIG_PICTURE = esGoal('BigPicture');
 /** One modeling journey, `j`. */
@@ -69,9 +82,14 @@ const one = (pattern: Collaboration.GuidePattern, goal?: string): GuideGoal => (
 const path = (map: Collaboration.GuideMap): string[] => map.steps.map((s) => `${s.key}:${s.state}${s.goal ? '!' : ''}${s.after ? '~' : ''}`);
 
 describe('the goal and the world', () => {
-    test('no goal is read for now: the map is "set the goal", whatever the files', async () => {
+    test('the goals are the journey file\'s: without one, the map is "set the goal", whatever the files', async () => {
         const ws = await workspace({ 'issue.dtes': storming({ brief: true, events: true }) });
         expect(readGuideGoal(ws)).toEqual(NO_GOAL);
+        expect(readGuideGoal(journeyed(ws, 'Issue'))).toEqual(BIG_PICTURE);
+        // an archived journey is out of the guide's goals
+        const archived = journeyed(ws, 'Issue');
+        const file = archived.journey!;
+        expect(readGuideGoal({ ...archived, journey: { ...file, stormings: { Issue: { ...file.stormings.Issue!, state: 'archived' } } } })).toEqual(NO_GOAL);
         const map = guideMap({ workspace: ws, goal: readGuideGoal(ws), marks: NO_MARKS, viewedAt: STORMING_VIEW });
         expect(map).toEqual({
             world: 'Storming',
@@ -79,8 +97,8 @@ describe('the goal and the world', () => {
             steps: [{ key: 'setGoal', state: 'Here', goal: false, after: false, markable: false, marked: false }],
             contexts: [],
         } as never);
-        // a modeling goal does not make a map in the storming world
-        expect(path(guideMap({ workspace: ws, goal: one('Strategic'), marks: NO_MARKS, viewedAt: STORMING_VIEW }))).toEqual(['setGoal:Here']);
+        // a journey is drawn whatever the world: the current journey is the session's, not the view's
+        expect(path(guideMap({ workspace: ws, goal: one('Whole'), marks: NO_MARKS, viewedAt: STORMING_VIEW }))[0]).toBe('terms:Here');
     });
 
     test('the world: the view, else the selection, else what the files hold', async () => {
@@ -102,8 +120,8 @@ describe('the event storming map', () => {
     test('Big Picture: the path to the questions, Design Level past the goal; here moves as the storming grows', async () => {
         const map = async (parts: Parameters<typeof storming>[0], goal: GuideGoal = BIG_PICTURE): Promise<string[]> =>
             path(guideMap({ workspace: await workspace({ 'issue.dtes': storming(parts) }), goal, marks: NO_MARKS, viewedAt: STORMING_VIEW }));
-        expect(await map({})).toEqual(['brief:Here', 'events:Todo', 'flows:Todo', 'exceptions:Todo', 'questions:Todo!', 'designLevel:Todo~']);
-        expect(await map({ brief: true })).toEqual(['brief:Done', 'events:Here', 'flows:Todo', 'exceptions:Todo', 'questions:Todo!', 'designLevel:Todo~']);
+        // its brief is its journey: done as soon as there is a map
+        expect(await map({})).toEqual(['brief:Done', 'events:Here', 'flows:Todo', 'exceptions:Todo', 'questions:Todo!', 'designLevel:Todo~']);
         expect(await map({ brief: true, events: true, flow: true })).toEqual([
             'brief:Done',
             'events:Done',
@@ -134,21 +152,38 @@ describe('the event storming map', () => {
         const ws = await workspace({
             'stages.dtes': await Bun.file(new URL('../../../../test/fixtures/stages/convenience-store-stages.dtes', import.meta.url)).text(),
         });
-        const map = guideMap({ workspace: ws, goal: BIG_PICTURE, marks: NO_MARKS });
+        const map = guideMap({ workspace: ws, goal: esGoal('BigPicture', 'ConvenienceStoreIssuance'), marks: NO_MARKS });
         expect(map.storming as string).toBe('ConvenienceStoreIssuance');
-        // its brief is missing; its first stage has no exception
-        expect(path(map).slice(0, 4)).toEqual(['brief:Here', 'events:Done', 'flows:Done', 'exceptions:Todo']);
+        // its first stage has no exception
+        expect(path(map).slice(0, 4)).toEqual(['brief:Done', 'events:Done', 'flows:Done', 'exceptions:Here']);
+        // a stage that needs none: a person marks the step done (the ES steps the files cannot always tell)
+        const marked = guideMap({
+            workspace: ws,
+            goal: esGoal('BigPicture', 'ConvenienceStoreIssuance'),
+            marks: guideMarks([{ journey: 'es:ConvenienceStoreIssuance', step: 'exceptions' }]),
+        });
+        expect(marked.steps.find((x) => x.key === 'exceptions')).toMatchObject({ state: 'Done', markable: true, marked: true });
     });
 
-    test('the storming in view, else the first', async () => {
-        const ws = await workspace({ 'a.dtes': 'storming A {\n  event X\n}', 'b.dtes': '/// b\nstorming B {\n  event Y\n}' });
-        const inView = { view: { kind: 'Storming', storming: 'B', level: 'BigPicture', exceptions: true } } as unknown as Collaboration.ViewedAt;
-        expect(guideMap({ workspace: ws, goal: BIG_PICTURE, marks: NO_MARKS, viewedAt: inView }).storming as string).toBe('B');
-        expect(
-            guideMap({ workspace: ws, goal: BIG_PICTURE, marks: NO_MARKS, focus: { kind: 'DtesElement', storming: 'B', local: 'Y' } as never })
-                .storming as string,
-        ).toBe('B');
-        expect(guideMap({ workspace: ws, goal: BIG_PICTURE, marks: NO_MARKS }).storming as string).toBe('A');
+    test('the current journey first, else the most recently created active one; a missing storming said so', async () => {
+        const ws = await workspace({ 'a.dtes': 'storming A {\n  event X\n}', 'b.dtes': 'storming B {\n  event Y\n}' });
+        const goal: GuideGoal = { es: { A: { level: 'BigPicture' }, B: { level: 'BigPicture' }, Gone: { level: 'DesignLevel' } } };
+        const first = (current?: string): string | undefined =>
+            guideMaps({ workspace: ws, goal, marks: NO_MARKS, ...(current !== undefined && { current }) })[0].storming as string | undefined;
+        expect(first('es:A')).toBe('A');
+        expect(first()).toBe('Gone');
+        // one no longer there: the default
+        expect(first('es:Nope')).toBe('Gone');
+        const maps = guideMaps({ workspace: ws, goal, marks: NO_MARKS, current: 'es:B' });
+        expect(maps.map((m) => [m.storming, m.missing ?? false])).toEqual([
+            ['B', false],
+            ['A', false],
+            ['Gone', true],
+        ] as never);
+        // with a journey file: the most recent active one (an archived or done one is not the default)
+        const file = journeyed(ws, 'A', 'B').journey!;
+        const withFile = { ...ws, journey: { ...file, stormings: { ...file.stormings, B: { ...file.stormings.B!, state: 'done' as const } } } };
+        expect(guideMaps({ workspace: withFile, goal: readGuideGoal(withFile), marks: NO_MARKS })[0].storming as string).toBe('A');
     });
 });
 
@@ -183,6 +218,41 @@ const COMMON = `shared context Common {
   primitive Amount: Decimal
 }`;
 
+describe('where 📍 sits', () => {
+    test('here is the first step not done after the last done one; an earlier one not done is unconfirmed', () => {
+        const at = (done: string, after = ''): string[] => placeSteps(done.split('').map((d, i) => ({ done: d === 'x', after: after[i] === '~' })));
+        expect(at('____')).toEqual(['Here', 'Todo', 'Todo', 'Todo']);
+        expect(at('xx__')).toEqual(['Done', 'Done', 'Here', 'Todo']);
+        // a judgment nobody marked before steps the files tell done: not here, unconfirmed
+        expect(at('_xx_')).toEqual(['Unconfirmed', 'Done', 'Done', 'Here']);
+        expect(at('x_x_x_')).toEqual(['Done', 'Unconfirmed', 'Done', 'Unconfirmed', 'Done', 'Here']);
+        // every step to the goal done but an earlier one: none is here
+        expect(at('_xxx')).toEqual(['Unconfirmed', 'Done', 'Done', 'Done']);
+        // a step past the goal is never here, and a done one past it does not move here
+        expect(at('x__x', '__~~')).toEqual(['Done', 'Here', 'Todo', 'Done']);
+    });
+});
+
+describe("where a journey stands (the chip's rule)", () => {
+    const file = (marks: readonly string[] = []): NonNullable<GuideWorkspace['journey']> =>
+        ({
+            version: 1,
+            stormings: { Issue: { purpose: 'p', participants: [], use: 'align', level: 'BigPicture', state: 'active', marks: [...marks] } },
+            modeling: [],
+        }) as unknown as NonNullable<GuideWorkspace['journey']>;
+    const STORMING = `storming Issue {\n${EVENTS}\n${FLOW}\n}`;
+
+    test("its 📍 step from the guide's map, the goal reached when every step to it is done, none for a journey gone", async () => {
+        const w = await workspace({ 'issue.dtes': STORMING });
+        const here = journeyWhere({ ...w, journey: file() }, 'es:Issue');
+        expect(here?.reached).toBe(false);
+        expect(here).toEqual({ here: 'exceptions', reached: false });
+        expect(journeyWhere({ ...w, journey: file(['exceptions', 'questions']) }, 'es:Issue')).toEqual({ reached: true });
+        expect(journeyWhere({ ...w, journey: file() }, 'es:Gone')).toBeUndefined();
+        expect(journeyWhere(w, 'es:Issue')).toBeUndefined();
+    });
+});
+
 describe('the modeling maps', () => {
     const map = async (files: Record<string, string>, goal: GuideGoal, marked: readonly string[] = []): Promise<Collaboration.GuideMap> =>
         guideMap({ workspace: await workspace(files), goal, marks: guideMarks(marked.map((step) => ({ journey: 'j', step }))), viewedAt: MODEL_VIEW });
@@ -190,7 +260,7 @@ describe('the modeling maps', () => {
     test('each pattern: its steps in order, ending at its goal (the last of its goals by default)', async () => {
         // a context with nothing in it yet
         const empty = { 'a.dt': 'context A {\n  id AId: UUID\n}' };
-        expect(path(await map(empty, one('Strategic')))).toEqual([
+        expect(path(await map(empty, one('Whole')))).toEqual([
             'terms:Here',
             'subdomains:Todo',
             'bcSplit:Todo',
@@ -198,13 +268,20 @@ describe('the modeling maps', () => {
             'contexts:Todo',
             'invariants:Todo!',
         ]);
-        expect(path(await map(empty, one('Strategic', 'contextMap'))).slice(3)).toEqual(['contextMap:Todo!', 'contexts:Todo~', 'invariants:Todo~']);
-        expect(path(await map(empty, one('FromStorming')))).toEqual(['review:Here', 'bcCarved:Done', 'aggregates:Todo', 'commands:Todo', 'invariants:Todo!']);
+        expect(path(await map(empty, one('Whole', 'contextMap'))).slice(3)).toEqual(['contextMap:Todo!', 'contexts:Todo~', 'invariants:Todo~']);
+        // a step before the last done one that is not done is unconfirmed: here is after it, the map never goes backwards
+        expect(path(await map(empty, one('FromStorming')))).toEqual([
+            'review:Unconfirmed',
+            'bcCarved:Done',
+            'aggregates:Here',
+            'commands:Todo',
+            'invariants:Todo!',
+        ]);
         expect(path(await map(empty, one('OneContext', 'commands')))).toEqual([
-            'terms:Here',
-            'aggregates:Todo',
+            'terms:Unconfirmed',
+            'aggregates:Unconfirmed',
             'values:Done',
-            'commands:Todo!',
+            'commands:Here!',
             'invariants:Todo~',
             'policies:Todo~',
         ]);
@@ -216,13 +293,13 @@ describe('the modeling maps', () => {
     });
 
     test('the steps the files cannot tell: done by a ✓ mark only, and only those', async () => {
-        const marked = await map({ 'sales.dt': SALES }, one('Strategic'), ['subdomains', 'bcSplit', 'terms', 'invariants']);
+        const marked = await map({ 'sales.dt': SALES }, one('Whole'), ['subdomains', 'bcSplit', 'terms', 'invariants']);
         expect(marked.steps.map((s): unknown[] => [s.key, s.state, s.markable, s.marked])).toEqual([
             ['terms', 'Done', false, false],
             ['subdomains', 'Done', true, true],
             ['bcSplit', 'Done', true, true],
-            // one context: no line on the context map yet, and not marked
-            ['contextMap', 'Here', true, false],
+            // one context: no line on the context map yet, and not marked; the steps after it done: unconfirmed
+            ['contextMap', 'Unconfirmed', true, false],
             // its one BC is in depth already
             ['contexts', 'Done', false, false],
             // a mark on a step the files tell changes nothing: Order has an invariant; that alone makes it done
@@ -251,11 +328,11 @@ describe('the modeling maps', () => {
         ]);
         // with the stormings, its commands step waits for a ref to the model
         const withStorming = await map({ 'sales.dt': SALES, 'issue.dtes': storming({ events: true }) }, goal, ['review']);
-        expect(path(withStorming)[3]).toBe('commands:Here');
+        expect(path(withStorming)[3]).toBe('commands:Unconfirmed');
     });
 
     test('pattern A: the rows grow under "each BC in depth", here while that step is', async () => {
-        const a = await map({ 'sales.dt': SALES, 'billing.dt': BILLING }, one('Strategic'), ['subdomains', 'bcSplit']);
+        const a = await map({ 'sales.dt': SALES, 'billing.dt': BILLING }, one('Whole'), ['subdomains', 'bcSplit']);
         // Billing refers to Sales: the context map has a line
         expect(path(a)).toEqual(['terms:Done', 'subdomains:Done', 'bcSplit:Done', 'contextMap:Done', 'contexts:Here', 'invariants:Todo!']);
         expect(a.contextsAt as string).toBe('contexts');
@@ -282,7 +359,7 @@ describe('the modeling maps', () => {
                 { id: 'from-es', name: 'ES から', pattern: 'FromStorming', stormings: [] },
             ],
         };
-        const maps = guideMaps({ workspace: ws, goal, marks: guideMarks([{ journey: 'from-es', step: 'review' }]), viewedAt: MODEL_VIEW });
+        const maps = guideMaps({ workspace: ws, goal, marks: guideMarks([{ journey: 'from-es', step: 'review' }]), viewedAt: MODEL_VIEW, current: 'billing' });
         expect(maps.map((m): unknown[] => [m.journey, m.journeyName, m.pattern])).toEqual([
             ['billing', 'Billing の深掘り', 'OneContext'],
             ['all', '全体の見直し', 'Review'],
@@ -290,22 +367,32 @@ describe('the modeling maps', () => {
         ]);
         // C on Billing: its one row; Billing has no terms of its own, an aggregate, no command
         expect(maps[0]?.contexts.map((r) => r.context as string)).toEqual(['Billing']);
-        expect(path(maps[0] as Collaboration.GuideMap).slice(0, 4)).toEqual(['terms:Here', 'aggregates:Done', 'values:Done', 'commands:Todo']);
+        expect(path(maps[0] as Collaboration.GuideMap).slice(0, 4)).toEqual(['terms:Unconfirmed', 'aggregates:Done', 'values:Done', 'commands:Here']);
         // B over no storming: no ref is waited for; the mark is this journey's only
         expect(path(maps[2] as Collaboration.GuideMap)[0]).toBe('review:Done');
         expect(path(maps[1] as Collaboration.GuideMap).slice(0, 2)).toEqual(['diagnostics:Done', 'termsAligned:Here']);
-        // the storming world: no modeling map
-        expect(guideMaps({ workspace: ws, goal, marks: NO_MARKS, viewedAt: STORMING_VIEW }).map((m) => m.steps[0].key as string)).toEqual(['setGoal']);
+        // no current journey: the most recently created first, whatever the world
+        expect(guideMaps({ workspace: ws, goal, marks: NO_MARKS, viewedAt: STORMING_VIEW }).map((m) => m.journey as string)).toEqual([
+            'from-es',
+            'billing',
+            'all',
+        ]);
         // a journey's marks stay its own: another journey's ✓ does not count
         expect(
             path(
-                guideMaps({ workspace: ws, goal, marks: guideMarks([{ journey: 'all', step: 'review' }]), viewedAt: MODEL_VIEW })[2] as Collaboration.GuideMap,
+                guideMaps({
+                    workspace: ws,
+                    goal,
+                    marks: guideMarks([{ journey: 'all', step: 'review' }]),
+                    viewedAt: MODEL_VIEW,
+                    current: 'billing',
+                })[2] as Collaboration.GuideMap,
             )[0],
-        ).toBe('review:Here');
+        ).toBe('review:Unconfirmed');
     });
 
     test('a BC row marked done by its context: done, and the next row not done is here', async () => {
-        const goal = one('Strategic');
+        const goal = one('Whole');
         const marks = guideMarks([
             { journey: 'j', step: 'subdomains' },
             { journey: 'j', step: 'bcSplit' },
@@ -328,7 +415,7 @@ describe('the modeling maps', () => {
 
     test('deterministic: the same workspace and goal give the same map', async () => {
         const ws = await workspace({ 'sales.dt': SALES, 'billing.dt': BILLING });
-        const input = { workspace: ws, goal: one('Strategic'), marks: guideMarks([{ journey: 'j', step: 'bcSplit' }]), viewedAt: MODEL_VIEW };
+        const input = { workspace: ws, goal: one('Whole'), marks: guideMarks([{ journey: 'j', step: 'bcSplit' }]), viewedAt: MODEL_VIEW };
         expect(guideMap(input)).toEqual(guideMap(input));
     });
 });
@@ -359,8 +446,8 @@ describe('what is known at once', () => {
         } as never);
         expect(found[2]?.target).toEqual({ kind: 'DtesElement', storming: 'ConvenienceStoreIssuance', local: 'Days' } as never);
         expect(found[3]?.target?.kind).toBe('DtesElement');
-        // a storming without stages and without exceptions: its flow
-        const flat = await workspace({ 'issue.dtes': storming({ brief: true, events: true, flow: true }) });
+        // a storming without stages and without exceptions: its flow (its journey written: no brief missing)
+        const flat = journeyed(await workspace({ 'issue.dtes': storming({ brief: true, events: true, flow: true }) }), 'Issue');
         expect(guideFindings(flat, 'Storming', flat.stormings[0]).map((f) => f.kind)).toEqual(['FlowWithoutExceptions']);
     });
 
@@ -403,7 +490,7 @@ describe('what is known at once', () => {
     });
 
     test('the snapshot: the map and the findings of its world', async () => {
-        const ws = await workspace({ 'issue.dtes': storming({ brief: true, events: true, flow: true }) });
+        const ws = journeyed(await workspace({ 'issue.dtes': storming({ brief: true, events: true, flow: true }) }), 'Issue');
         const snapshot = guideSnapshot({ workspace: ws, goal: BIG_PICTURE, marks: NO_MARKS, viewedAt: STORMING_VIEW });
         expect(path(snapshot.maps[0])[3]).toBe('exceptions:Here');
         expect(snapshot.findings.map((f) => f.kind)).toEqual(['FlowWithoutExceptions']);

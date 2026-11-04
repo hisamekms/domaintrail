@@ -1,6 +1,7 @@
 // The session's REST API as the page calls it (`/api/session/*`, ADR 0026). Called only once the page knows it is in
 // a session (the socket sent `session.state`): under `dt view` none of these requests is made.
 import type {
+    JourneyActedBody,
     AddressedBody,
     ApproveBody,
     ApprovedBody,
@@ -22,7 +23,7 @@ import type {
     StartInterviewBody,
     RevertRequestedBody,
 } from '@domaintrail/collaboration/protocol';
-import type { TargetStatus } from '@domaintrail/collaboration';
+import type { JourneyAct, TargetStatus } from '@domaintrail/collaboration';
 import { isSignInRedirect, reloadForSignIn, SAME_ORIGIN } from '../app/sign-in';
 
 /**
@@ -134,6 +135,17 @@ export const sessionApi = {
     queueRun: (body: QueueRunBody): Promise<{ run: { id: string } }> => call('runs', { method: 'POST', body }),
     /** Signs out (`dev`), or leaves an `access` session: `logout` is where the page goes then (Access's logout). */
     leave: (): Promise<{ left: boolean; logout?: string }> => call('leave', { method: 'POST', body: {} }),
+    /**
+     * An act on the journey file (a goal, a state, a mark): the facilitator's done (200), a participant's requested
+     * (202). `language`: the page's, for dt's note after a journey is marked done.
+     */
+    journeyAct: (act: JourneyAct, language?: 'ja' | 'en'): Promise<JourneyActedBody> =>
+        call('journey/acts', { method: 'POST', body: { act, ...(language && { language }) } }),
+    /** The session's current journey (null: the default): the facilitator's done, a participant's requested. */
+    chooseJourney: (journey: string | null): Promise<JourneyActedBody> => call('journey/current', { method: 'POST', body: { journey } }),
+    /** A request about the journeys approved or denied (the facilitator), or withdrawn (its requester). */
+    decideJourneyRequest: (id: string, decision: 'approve' | 'deny' | 'withdraw', language?: 'ja' | 'en'): Promise<unknown> =>
+        call(`journey/requests/${encodeURIComponent(id)}/${decision}`, { method: 'POST', body: language ? { language } : {} }),
     /** Places or takes off one of my marks (a vote or a reaction). */
     setMark: (body: SetMarkBody): Promise<MarkSetBody> => call('marks', { method: 'POST', body }),
     /** Approves an assumption of a completed run as it is (the facilitator): recorded, nothing sent to the AI. */

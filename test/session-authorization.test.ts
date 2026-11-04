@@ -4,7 +4,7 @@
  * that moving the rules of the work into the domain changes neither.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
@@ -133,33 +133,79 @@ describe('the operations reserved to the facilitator', () => {
         expect((await api(ada, 'marks', { target: { kind: 'Message', request }, sign: { kind: 'Reaction', emoji: '👍' }, placed: true })).status).toBe(200);
     });
 
-    test('a step of the guide is marked done by the facilitator only, for the session; a step the files tell is not marked', async () => {
-        const step = { kind: 'GuideStep', journey: 'billing', step: 'bcSplit' };
-        const done = { kind: 'Done' };
-        const marked = async (): Promise<unknown[]> => ((await state()).marks ?? []).filter((m: { target: { kind: string } }) => m.target.kind === 'GuideStep');
-        expect(await answer(await api(bob, 'marks', { target: step, sign: done, placed: true }))).toEqual([403, FACILITATOR_ONLY]);
-        expect((await api(ada, 'marks', { target: step, sign: done, placed: true })).status).toBe(200);
-        expect(await marked()).toMatchObject([{ participant: expect.any(String), target: step, sign: done }]);
-        // the sign must fit; a step the files tell, or none of the map's, is no target; a malformed one is refused
-        expect(await answer(await api(ada, 'marks', { target: step, sign: { kind: 'Reaction', emoji: '👍' }, placed: true }))).toEqual([
-            400,
-            { error: { type: 'MarkNotForTarget' } },
+    test("the journeys: the facilitator's acts are done (dt writes the file); a participant's are requests the facilitator decides", async () => {
+        const file = path.join(root, 'domaintrail.journey.json');
+        await writeFile(
+            file,
+            JSON.stringify({
+                version: 1,
+                stormings: {},
+                modeling: [
+                    {
+                        id: 'billing',
+                        name: 'Billing',
+                        purpose: '請求',
+                        participants: [],
+                        pattern: 'Whole',
+                        goal: 'invariants',
+                        state: 'active',
+                        marks: { steps: [], contexts: {} },
+                    },
+                ],
+            }),
+        );
+        const read = async (): Promise<{ modeling: { goal: string; marks: { steps: string[] } }[] }> => JSON.parse(await readFile(file, 'utf8'));
+        // the session's old way: a guide step marked in the session is no longer taken
+        expect(
+            (await api(ada, 'marks', { target: { kind: 'GuideStep', journey: 'billing', step: 'bcSplit' }, sign: { kind: 'Done' }, placed: true })).status,
+        ).toBe(400);
+        // the facilitator: done, written by dt in its stable order
+        expect(await answer(await api(ada, 'journey/acts', { act: { kind: 'mark', journey: 'billing', step: 'bcSplit', done: true } }))).toEqual([
+            200,
+            { done: true },
         ]);
-        expect(await answer(await api(ada, 'marks', { target: { kind: 'GuideStep', journey: 'billing', step: 'events' }, sign: done, placed: true }))).toEqual([
-            404,
-            { error: { type: 'MarkTargetNotFound' } },
+        expect((await read()).modeling[0]?.marks.steps).toEqual(['bcSplit']);
+        expect(await readFile(file, 'utf8')).toStartWith('{\n  "$schema": ');
+        // a goal the pattern does not allow, an act of no shape
+        expect((await api(ada, 'journey/acts', { act: { kind: 'goal', journey: 'billing', goal: 'commands' } })).status).toBe(400);
+        expect((await api(ada, 'journey/acts', { act: { kind: 'paint', journey: 'billing' } })).status).toBe(400);
+        // a participant: a request, nothing written yet
+        const asked = await answer(await api(bob, 'journey/acts', { act: { kind: 'goal', journey: 'billing', goal: 'contextMap' } }));
+        expect(asked).toMatchObject([202, { done: false, request: { act: { kind: 'goal', goal: 'contextMap' } } }]);
+        const id = (asked[1] as { request: { id: string } }).request.id;
+        expect((await read()).modeling[0]?.goal).toBe('invariants');
+        // only the facilitator decides it; approved, it is done as theirs
+        expect(await answer(await api(bob, `journey/requests/${id}/approve`, {}))).toEqual([403, FACILITATOR_ONLY]);
+        expect(await answer(await api(ada, `journey/requests/${id}/approve`, {}))).toEqual([200, { done: true }]);
+        expect((await read()).modeling[0]?.goal).toBe('contextMap');
+        expect((await api(ada, `journey/requests/${id}/approve`, {})).status).toBe(404);
+        // the current journey: the facilitator's at once (an event on the session), a participant's asked, then denied
+        expect(await answer(await api(ada, 'journey/current', { journey: 'billing' }))).toEqual([200, { done: true }]);
+        expect((await state()).session.currentJourney).toBe('billing');
+        const choose = await answer(await api(bob, 'journey/current', { journey: null }));
+        expect(choose[0]).toBe(202);
+        expect(await answer(await api(ada, `journey/requests/${(choose[1] as { request: { id: string } }).request.id}/deny`, {}))).toEqual([
+            200,
+            { done: true },
         ]);
-        expect((await api(ada, 'marks', { target: { kind: 'GuideStep', journey: 'billing', step: 'a b' }, sign: done, placed: true })).status).toBe(400);
-        // a participant neither takes it off: it stays
-        expect(await answer(await api(bob, 'marks', { target: step, sign: done, placed: false }))).toEqual([403, FACILITATOR_ONLY]);
-        expect(await marked()).toHaveLength(1);
-        // a BC row, by its context
-        const row = { kind: 'GuideStep', journey: 'billing', step: 'contexts', context: 'Billing' };
-        expect((await api(ada, 'marks', { target: row, sign: done, placed: true })).status).toBe(200);
-        expect((await api(ada, 'marks', { target: row, sign: done, placed: false })).status).toBe(200);
-        expect((await api(ada, 'marks', { target: { ...row, extra: 1 }, sign: done, placed: true })).status).toBe(400);
-        expect((await api(ada, 'marks', { target: step, sign: done, placed: false })).status).toBe(200);
-        expect(await marked()).toEqual([]);
+        expect((await state()).session.currentJourney).toBe('billing');
+        // a participant withdraws their own request
+        const archive = await answer(await api(bob, 'journey/acts', { act: { kind: 'state', journey: 'billing', state: 'archived' } }));
+        const archiveId = (archive[1] as { request: { id: string } }).request.id;
+        expect(await answer(await api(bob, `journey/requests/${archiveId}/withdraw`, {}))).toEqual([200, { done: true }]);
+        // each act and request recorded in the chat; a request's outcome on its own record, the act approved as the
+        // facilitator's (the file written above from outside dt may be recorded too: left out here)
+        const records = ((await state()).records ?? []).filter((r) => r.fact.kind !== 'FileChangedOutside');
+        const bobId = records.find((r) => r.fact.kind === 'JourneyRequested')?.by;
+        expect(bobId).toStartWith('dev:');
+        expect(records.map((r) => [r.by, r.fact])).toMatchObject([
+            ['local:facilitator', { kind: 'MarksChanged', marks: [{ step: 'bcSplit' }], done: true }],
+            [bobId, { kind: 'JourneyRequested', act: { kind: 'Goal', goal: 'contextMap' }, outcome: 'Approved', decidedBy: 'local:facilitator' }],
+            ['local:facilitator', { kind: 'GoalChanged', from: 'invariants', to: 'contextMap' }],
+            ['local:facilitator', { kind: 'CurrentChosen', journey: { journey: 'billing', label: 'Billing' } }],
+            [bobId, { kind: 'JourneyRequested', act: { kind: 'Choose' }, outcome: 'Denied' }],
+            [bobId, { kind: 'JourneyRequested', act: { kind: 'State', state: 'Archived' }, outcome: 'Withdrawn', decidedBy: bobId }],
+        ]);
     });
 
     test('dismissing a message has no route: 404', async () => {

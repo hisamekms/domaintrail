@@ -296,11 +296,11 @@ describe('the answerer role', () => {
 
     test("an interview's turn: the interviewer's prompt (what to find out, the language, the transcript), a question or a brief", async () => {
         const { api, push, results } = fakeApi();
-        const lines = ['目的', '範囲', '使い道', 'レベル'].map((head) => ({ head, text: 'x' }));
+        const journey = { purpose: '返金を早める', participants: ['窓口担当'], use: 'modeling', level: 'BigPicture' };
         const agent = fakeAgent([
             { structured: { kind: 'question', question: 'どの業務ですか？' }, text: '', model: 'opus' },
-            { structured: { kind: 'brief', brief: { name: 'Returns', label: '返品', isNew: true, replaces: false, lines } }, text: '' },
-            { structured: { kind: 'brief', brief: { name: '返品', isNew: true, replaces: false, lines } }, text: '' },
+            { structured: { kind: 'brief', brief: { name: 'Returns', label: '返品', isNew: true, journey } }, text: '' },
+            { structured: { kind: 'brief', brief: { name: '返品', isNew: true, journey } }, text: '' },
             {
                 structured: {
                     kind: 'question',
@@ -335,13 +335,15 @@ describe('the answerer role', () => {
             'One question per turn',
             'Write in Japanese',
             'the first and the last events',
-            '目的 / 範囲 / 使い道 / レベル',
+            '「どこまで進めますか」',
+            'participants: [roles]',
             '"focus": "@{es:Returns}"',
             'SO-FAR',
             '<interview-n1>',
         ])
             expect(prompt).toContain(part);
-        expect(prompt).toContain('their `///` descriptions above `storming`');
+        expect(prompt).toContain('`journeys` (the journey file');
+        expect(prompt).toContain('dt writes the brief into the journey');
         // choices when the question has natural candidates, from the workspace, kept out of the question's text
         for (const part of [
             'give them in `choices` (2 to\n  6',
@@ -358,7 +360,7 @@ describe('the answerer role', () => {
         push({ kind: 'job', job: interview(2, 'en') });
         await waitFor(() => results.length === 2);
         expect(agent.turns[1].turn.prompt).toContain('Write in English');
-        expect(results[1].result).toMatchObject({ kind: 'brief', brief: { name: 'Returns', label: '返品', isNew: true, lines } });
+        expect(results[1].result).toMatchObject({ kind: 'brief', brief: { name: 'Returns', label: '返品', isNew: true, journey } });
         // an invalid brief is reported as failed
         push({ kind: 'job', job: interview(3) });
         await waitFor(() => results.length === 3);
@@ -395,6 +397,31 @@ describe('the answerer role', () => {
         const model = buildInterviewPrompt(j('model:start'), 'n', { practice });
         expect([model.includes('STORMING'), model.includes('MODELING')]).toEqual([false, true]);
         expect(buildInterviewPrompt(j('es:start'), 'n')).not.toContain('How the people work');
+    });
+
+    test("the interviewer's choices name stormings and contexts as references, bare; the brief's subject by its ID", () => {
+        const model = buildInterviewPrompt(
+            {
+                job: 'j',
+                kind: 'interview',
+                interview: { id: 'i' },
+                request: { id: REQUEST },
+                author: 'Ada',
+                timeoutMs: 1,
+                command: 'model:start',
+                language: 'ja',
+                transcript: [],
+            } as unknown as AgentInterviewJobBody,
+            'n',
+        );
+        expect(model).not.toContain("stormings' IDs as choices");
+        expect(model).toContain('(the stormings as choices, each as its reference: @{es:Returns})');
+        expect(model).toContain('(the contexts as\n  choices, each as its reference: @{Billing})');
+        expect(model).toContain('a storming @{es:Returns}');
+        expect(model).toContain('a context @{Billing}');
+        expect(model).toContain('never inside backticks; the page shows them by their labels');
+        expect(model).toContain('never a reference (@{…}) nor a label');
+        expect(model).not.toContain('`@{es:Returns}`');
     });
 });
 
@@ -730,5 +757,44 @@ describe('where the requester was looking', () => {
         const prompt = buildInterviewPrompt(interview, 'n');
         expect(data(prompt, 'interview').viewedAt).toEqual(shown);
         expect(prompt).toContain('`viewedAt`, when present, is where the person is looking');
+    });
+});
+
+describe("stage 3 and the session's current journey", () => {
+    /** The JSON of the triage prompt's block. */
+    const data = (prompt: string): Record<string, unknown> =>
+        JSON.parse(prompt.slice(prompt.indexOf('<message-n>') + '<message-n>'.length, prompt.indexOf('</message-n>'))) as Record<string, unknown>;
+    const journeys = {
+        current: 'es:Issuance',
+        journeys: [
+            {
+                key: 'es:Issuance',
+                kind: 'es',
+                name: 'Issuance',
+                state: 'active',
+                level: 'BigPicture',
+                use: 'align',
+                goal: 'BigPicture',
+                purpose: '発行の流れをつかむ',
+                participants: [],
+                stormings: ['Issuance'],
+            },
+        ],
+        where: { here: 'flows', reached: false },
+    } as const;
+
+    test('it gets the journeys as context for which journey the message is about; its output contract is unchanged', () => {
+        const prompt = buildTriagePrompt(job('triage', 1, { journeys }), 'n');
+        expect(data(prompt).journeys).toEqual({
+            current: {
+                journey: 'es:Issuance: event storming of @{es:Issuance}, level BigPicture, use align — active',
+                here: 'flows',
+                purpose: '発行の流れをつかむ',
+            },
+            all: ['es:Issuance: event storming of @{es:Issuance}, level BigPicture, use align — active'],
+        });
+        expect(prompt).toContain('context for which journey the message is about');
+        expect(prompt).toContain('Reply with the JSON object { kind, confidence, reason }');
+        expect(data(buildTriagePrompt(job('triage', 1), 'n'))).not.toHaveProperty('journeys');
     });
 });

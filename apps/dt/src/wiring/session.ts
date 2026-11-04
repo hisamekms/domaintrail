@@ -22,6 +22,10 @@ import {
     createSessionAccess,
     createUnitOfWork,
     FACILITATOR_NAME,
+    agentJourneys,
+    type GuideWorkspace,
+    JOURNEY_FILE,
+    journeyWhere,
     FACILITATOR_PARTICIPANT,
     type IdentityKey,
     type IdentityProvider,
@@ -54,11 +58,12 @@ import { createSessionIdentities } from '../server/session/identities.js';
 import { createTriageStage } from '../server/session/triage.js';
 import { eventFor } from '../server/session/views.js';
 import { guideWorkspace, knownViewNames } from '../server/session/viewed-at.js';
+import { createSessionJourneys, rememberWrites } from '../server/session/journeys.js';
 import { createViewHttpServer } from '../server/http/server.js';
 import { isLoopbackBind, sessionHostPolicy } from '../server/http/access.js';
 import { SessionError, type SessionSettings } from '../cli/ports.js';
 import type { ViewService } from '@domaintrail/visualization';
-import { createWorkspaceSnapshot } from '@domaintrail/workspace';
+import { createGuardedTextFile, createWorkspaceSnapshot, watchFile } from '@domaintrail/workspace';
 import { processAlive } from './process.js';
 import { createModelValidator, createSourceFormatter } from './validator.js';
 import { prepareLiveView, serverUrl, watchLiveView, type ViewServerOptions } from './view.js';
@@ -301,8 +306,13 @@ export async function startSessionServer(options: SessionServerOptions): Promise
     try {
         const uow = createUnitOfWork(db);
         const snapshot = createWorkspaceSnapshot(options.root, sourceSelection(sources, respectGitignore));
+        // the journey file at the workspace root: dt writes it itself (atomically, never over another's write)
+        const journeyFile = createGuardedTextFile(path.join(options.root, JOURNEY_FILE));
+        // what dt wrote is remembered: a change of the file that is none of it was made outside dt (recorded in the chat)
+        const journeyWrites = rememberWrites(journeyFile);
         const collaboration = createCollaboration({
             uow,
+            journeys: journeyWrites,
             workspace: snapshot,
             blobs: await openSessionBlobs(state.state),
             validator: createModelValidator(),
@@ -403,6 +413,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                     expiries.set(connection.id, timer);
                 }
                 pages.set(connection.id, connection);
+                connection.send({ type: 'journey', journey: journeys.body() });
                 if (linkJoin && connection.data.role === 'facilitator')
                     void linkJoin.snapshot().then((snapshot) => connection.send({ type: 'join.requests', ...snapshot }), stateFailed);
                 void sendState(connection).then(() => {
@@ -439,6 +450,22 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         // stage 2 of the triage of the messages addressed to the AI: Clef when configured (ADR 0030)
         const classifier = messageClassifier(options, log);
         const debug = options.debug ?? (process.env[DEBUG_ENV] ? log : undefined);
+
+        // the journey file: read now, sent to every page on each change (dt's writes, git, another tool)
+        const journeys = createSessionJourneys({
+            session,
+            store: journeyWrites,
+            // an ES journey is named by its storming's label, as the page names it
+            labels: (key) => (key.startsWith('es:') ? guideWorkspace(view.state).stormings.find((s) => s.id === key.slice(3))?.label : undefined),
+            collaboration,
+            changed: (journey) => hub.publish({ type: 'journey', journey }),
+            // the relay is made below; a record is written only on a change after the first read
+            recorded: () => pump(),
+            now: () => clock.now(),
+            log,
+        });
+        await journeys.reload();
+        await journeys.restore();
 
         /** Sends a session's event to every page as its role sees it (a participant: the triages' outcomes only). */
         const publishEvent = (message: EventMessage): void => {
@@ -504,6 +531,17 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         });
         cursor = () => relay.cursor();
         const pump = (): Promise<void> => relay.pump();
+        /** The guide's workspace now: the view's model, stormings and findings, the journey file's findings, the file. */
+        const guideWorkspaceNow = (): GuideWorkspace => {
+            const seen = guideWorkspace(view.state);
+            const names = knownViewNames(view.state);
+            const file = journeys.file();
+            return {
+                ...seen,
+                diagnostics: [...seen.diagnostics, ...journeys.diagnostics({ contexts: names.contexts, stormings: names.stormings.keys() })],
+                ...(file && { journey: file }),
+            };
+        };
         const agent = createAgentApi({
             session,
             collaboration,
@@ -521,6 +559,15 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             onPresence: () => presenceChanged(),
             log,
             pair: (code) => access.redeemAgentCode({ session, code }),
+            journeys: async () => {
+                const file = journeys.file();
+                if (!file) return undefined;
+                const state = await collaboration.sessionState({ session });
+                const given = agentJourneys(file, state.ok ? state.value.session.currentJourney : undefined);
+                // where the current journey stands, by the chip's rule (the guide's map of it, from the files now)
+                const where = given.current === undefined ? undefined : journeyWhere(guideWorkspaceNow(), given.current);
+                return { ...given, ...(where && { where }) };
+            },
         });
         const stage = createTriageStage({
             session,
@@ -624,7 +671,8 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             agentPresence,
             retryAnswer: (request) => agent.answers.retry(request),
             knownViewNames: () => knownViewNames(view.state),
-            guideWorkspace: () => guideWorkspace(view.state),
+            guideWorkspace: guideWorkspaceNow,
+            journeys,
             log,
         });
         const http = createViewHttpServer({
@@ -651,6 +699,8 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         }
 
         watch = await watchLiveView(options, live, (payload) => hub.publish(payload), watcherHold);
+        // the journey file is watched on its own (it is no source): a change from git or another tool reaches the pages
+        const journeyWatch = await watchFile(journeyFile.path, () => void journeys.reload());
         await writeServerAddress(state.state, { url, agentUrl, ...(publicOrigin && { publicUrl: publicOrigin.origin }), session, pid: process.pid });
 
         const issueFacilitatorLink = async (): Promise<string> => {
@@ -715,6 +765,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                     await access.revokeLinks(session).catch(() => undefined);
                     if (linkMode) await access.signOutAll(session).catch(() => undefined);
                     await reverts.stop();
+                    await journeyWatch();
                     for (const timer of expiries.values()) clearTimeout(timer);
                     expiries.clear();
                     presence.dispose();

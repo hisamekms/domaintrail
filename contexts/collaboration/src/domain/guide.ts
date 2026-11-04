@@ -1,81 +1,55 @@
 // The guide's map and what is known at once (the plan's "ガイド (`/guide`)"): from the workspace as it is — the
-// stormings, the model, `dt check`'s findings — and the goal, a path of steps, each done, here or to do, ending at the
-// goal; steps past the goal are faint (`after`). Whether a step is done comes from the files, never from the AI; a step
-// the files cannot tell (the BCs are split, the subdomains classified, the terms aligned) is done when a person marked
-// it (`marked`, the session's ✓ marks). The path is the event storming's (brief → events → flows and stages →
-// exceptions → questions → Design Level; the goal Big Picture or Design Level), or a modeling pattern's (A–D, chosen in
-// `/model:start`), which grows a row per `.dt` context under its "each BC in depth" step. Without a goal the map is the
-// one step "set the goal": it is not guessed. What is known at once lists what the files show, each with where to go
-// (an element to select, a view to open), with no AI.
+// stormings, the model, `dt check`'s findings — and the journeys of the journey file (`domaintrail.journey.json`), a
+// path of steps, each done, here or to do, ending at the goal; steps past the goal are faint (`after`). Whether a step is
+// done comes from the files, never from the AI; a step the files cannot tell (the BCs are split, the subdomains
+// classified, the terms aligned) is done when a person marked it (`marked`, kept in the journey file). The path is the
+// event storming's (brief → events → flows and stages → exceptions → questions → Design Level; the goal Big Picture or
+// Design Level), or a modeling pattern's (A–D, chosen in `/model:start`), which grows a row per `.dt` context under its
+// "each BC in depth" step. Without a journey the map is the one step "set the goal": it is not guessed. What is known
+// at once lists what the files show, each with where to go (an element to select, a view to open), with no AI.
 //
-// The goals (the ES level per storming, the named modeling journeys) and the marks are to be kept in the journey file
-// (`domaintrail.journey.json`, a later phase): `readGuideGoal` is the one place that reads the goals, and finds none for
-// now; the marks are behind `GuideMarkStore`, which the session's marks implement for now. Pure and deterministic: the server computes the snapshot when `/guide` starts, the card shows it, and the AI is
-// given it as data.
+// `readGuideGoal` is the one place that reads the goals (from the journey file the workspace carries); the marks are
+// behind `GuideMarkStore`, which the journey file implements. The session's current journey comes first. Pure and
+// deterministic: the server computes the snapshot when `/guide` starts, the card shows it, the page computes the same
+// map live for the app bar's chip, and the AI is given it as data.
 import type { Diagnostic } from '@domaintrail/kernel';
 import type { DomainModel, ElementModel, FieldModel } from '@domaintrail/modeling';
 import { allTimelines, type NodeElement, type Storming } from '@domaintrail/storming';
 import { Collaboration, type Result } from '../generated/index.js';
 import { elementReference, parseElementReference } from './proposals.js';
+import { ES_GOALS, ES_STEPS, MARKABLE_STEPS, MODEL_PATTERNS, placeSteps, ROW_STEPS, SET_GOAL, type EsGoalLevel, type EsStep } from './guide-paths.js';
+import { esJourneyKey, journeyOf, type JourneyFile, type JourneyAct } from './journey.js';
 
-/** What the guide reads of the workspace: the model (none: no `.dt` that parses), the stormings and `dt check`'s findings. */
+/**
+ * What the guide reads of the workspace: the model (none: no `.dt` that parses), the stormings, `dt check`'s findings
+ * (the journey file's among them), and the journey file as read (none: no file).
+ */
 export interface GuideWorkspace {
     readonly model: DomainModel | null;
     readonly stormings: readonly Storming[];
     readonly diagnostics: readonly Diagnostic[];
+    readonly journey?: JourneyFile;
 }
 
-/** How far an event storming goes: Big Picture (to the questions) or Design Level. */
-export type EsGoalLevel = 'BigPicture' | 'DesignLevel';
-
-/** The steps of the event storming's path, in order. */
-export const ES_STEPS = ['brief', 'events', 'flows', 'exceptions', 'questions', 'designLevel'] as const;
-export type EsStep = (typeof ES_STEPS)[number];
-
-/** The step each event storming goal ends at. */
-export const ES_GOALS: Readonly<Record<EsGoalLevel, EsStep>> = { BigPicture: 'questions', DesignLevel: 'designLevel' };
-
-/** A modeling pattern: its steps in order, the steps it may end at (the last by default), and where the BC rows grow. */
-export interface GuidePatternPath {
-    readonly steps: readonly string[];
-    readonly goals: readonly string[];
-    readonly rowsAt: string;
-}
-
-/** The modeling patterns (A–D of `/model:start`). */
-export const MODEL_PATTERNS: Readonly<Record<Collaboration.GuidePattern, GuidePatternPath>> = {
-    // A. 全体から: terms → subdomains → BC split → context map → each BC in depth → invariants
-    Strategic: {
-        steps: ['terms', 'subdomains', 'bcSplit', 'contextMap', 'contexts', 'invariants'],
-        goals: ['contextMap', 'contexts', 'invariants'],
-        rowsAt: 'contexts',
-    },
-    // B. ES から: review the storming → BCs carved from it → aggregates → commands and events (with `ref`) → invariants
-    FromStorming: {
-        steps: ['review', 'bcCarved', 'aggregates', 'commands', 'invariants'],
-        goals: ['aggregates', 'commands', 'invariants'],
-        rowsAt: 'bcCarved',
-    },
-    // C. 1 つの BC を深掘り: terms → aggregates → values and IDs → commands → invariants → policies
-    OneContext: { steps: ['terms', 'aggregates', 'values', 'commands', 'invariants', 'policies'], goals: ['commands', 'invariants'], rowsAt: 'aggregates' },
-    // D. 既存モデルの見直し: diagnostics → terms aligned → boundaries reviewed → invariants strengthened
-    Review: { steps: ['diagnostics', 'termsAligned', 'boundaries', 'invariants'], goals: ['invariants'], rowsAt: 'boundaries' },
-};
-
-/** The patterns in the order `/model:start` offers them (A–D). */
-export const GUIDE_PATTERNS: readonly Collaboration.GuidePattern[] = ['Strategic', 'FromStorming', 'OneContext', 'Review'];
-
-/** The steps the files cannot tell: a person marks them done (✓). The context map is told by the files too. */
-export const MARKABLE_STEPS: ReadonlySet<string> = new Set(['subdomains', 'bcSplit', 'contextMap', 'review', 'termsAligned', 'boundaries']);
-
-/** The one step of a map without a goal. */
-export const SET_GOAL = 'setGoal';
-
-/** Every step key a map may show. */
-export const GUIDE_STEP_KEYS: ReadonlySet<string> = new Set([SET_GOAL, ...ES_STEPS, ...Object.values(MODEL_PATTERNS).flatMap((p) => p.steps)]);
-
-/** The steps under which a pattern grows its BC rows: a row is marked done by the context's name under one. */
-export const ROW_STEPS: ReadonlySet<string> = new Set(Object.values(MODEL_PATTERNS).map((p) => p.rowsAt));
+export {
+    ES_GOALS,
+    ES_LEVELS,
+    ES_MARKABLE,
+    ES_STEPS,
+    GUIDE_PATTERNS,
+    GUIDE_STEP_KEYS,
+    MARKABLE_STEPS,
+    MODEL_PATTERNS,
+    PATTERN_SUBJECT,
+    patternMarkable,
+    placeSteps,
+    ROW_STEPS,
+    SET_GOAL,
+    type StepPlace,
+    type EsGoalLevel,
+    type EsStep,
+    type GuidePatternPath,
+} from './guide-paths.js';
 
 /** The ES journey of a storming: how far it goes. */
 export interface EsJourney {
@@ -97,7 +71,7 @@ export interface ModelJourney {
 
 /**
  * The goals of the guide's maps: the ES level per storming (by its ID), and the modeling journeys, several allowed.
- * Neither for the world the person is in: the map is "set the goal".
+ * Neither: the map is "set the goal".
  */
 export interface GuideGoal {
     readonly es?: Readonly<Record<string, EsJourney>>;
@@ -107,16 +81,31 @@ export interface GuideGoal {
 /** No goal: the map is "set the goal". */
 export const NO_GOAL: GuideGoal = {};
 
-/**
- * The goals set for the workspace. They are to be kept in the journey file (`domaintrail.journey.json`, a later phase):
- * until then there are none, and the map asks to set them.
- */
-export function readGuideGoal(_workspace: GuideWorkspace): GuideGoal {
-    return NO_GOAL;
+/** The goals of a journey file: its journeys but the archived ones, in the file's order. */
+export function goalOf(file: JourneyFile): GuideGoal {
+    const es = Object.entries(file.stormings).filter(([, e]) => e.state !== 'archived');
+    const model = file.modeling.filter((m) => m.state !== 'archived');
+    return {
+        ...(es.length > 0 && { es: Object.fromEntries(es.map(([id, e]) => [id, { level: e.level }])) }),
+        ...(model.length > 0 && {
+            model: model.map((m): ModelJourney => ({
+                id: m.id,
+                name: m.name,
+                pattern: m.pattern,
+                goal: m.goal,
+                ...(m.from && 'stormings' in m.from && { stormings: m.from.stormings }),
+                ...(m.from && 'context' in m.from && { context: m.from.context }),
+            })),
+        }),
+    };
 }
 
-/** The key of a storming's ES journey (its marks are kept under it). */
-export const esJourneyKey = (storming: string): string => `es:${storming}`;
+/** The goals set for the workspace: the journey file's (none without one: the map asks to set them). */
+export function readGuideGoal(workspace: GuideWorkspace): GuideGoal {
+    return workspace.journey ? goalOf(workspace.journey) : NO_GOAL;
+}
+
+export { esJourneyKey };
 
 /** A mark of the guide: a step of a journey a person marked done, or a BC row of it (by the context's name). */
 export interface GuideMarkKey {
@@ -135,13 +124,34 @@ export interface GuideMarkReader {
 
 /**
  * Where the guide's marks are kept: read, set and cleared, keyed by journey and step (a BC row by the context's name
- * too). The session's marks keep them for now (`sessionGuideMarks`); the journey file will.
+ * too). The journey file keeps them (`journeyFileMarks` on the server, `pageGuideMarks` in the page).
  */
 export interface GuideMarkStore<E = never> {
     read(): readonly GuideMarkKey[];
     set(key: GuideMarkKey): Promise<Result<void, E>>;
     clear(key: GuideMarkKey): Promise<Result<void, E>>;
 }
+
+/** The marks a journey file holds, as keys. */
+export function journeyMarks(file: JourneyFile | undefined): readonly GuideMarkKey[] {
+    if (!file) return [];
+    return [
+        ...Object.entries(file.stormings).flatMap(([id, e]) => e.marks.map((step) => ({ journey: esJourneyKey(id), step }))),
+        ...file.modeling.flatMap((m) => [
+            ...m.marks.steps.map((step) => ({ journey: m.id, step })),
+            ...Object.entries(m.marks.contexts).flatMap(([context, steps]) => steps.map((step) => ({ journey: m.id, step, context }))),
+        ]),
+    ];
+}
+
+/** A mark set or cleared, as the act on the journey file. */
+export const markAct = (key: GuideMarkKey, done: boolean): JourneyAct => ({
+    kind: 'mark',
+    journey: key.journey,
+    step: key.step,
+    ...(key.context !== undefined && { context: key.context }),
+    done,
+});
 
 /** A reader of the marks given. */
 export function guideMarks(keys: readonly GuideMarkKey[]): GuideMarkReader {
@@ -225,13 +235,14 @@ export interface StormingFacts {
 
 const isResolved = (el: NodeElement): boolean => el.clauses.some((c) => c.type === 'status' && c.value === 'resolved');
 
-export function stormingFacts(storming: Storming): StormingFacts {
+/** What the map reads of a storming; its brief is its journey in the journey file (`journeyed`). */
+export function stormingFacts(storming: Storming, journeyed = false): StormingFacts {
     const nodes = storming.elements.filter((el): el is NodeElement => el.kind !== 'timeline' && el.kind !== 'stage');
     const timelines = allTimelines(storming);
     const hotspots = nodes.filter((n) => n.kind === 'hotspot');
     const count = (kind: NodeElement['kind']): number => nodes.filter((n) => n.kind === kind).length;
     return {
-        brief: (storming.doc ?? '').trim() !== '',
+        brief: journeyed,
         events: count('event'),
         flows: timelines.filter((t) => !t.exception).length,
         exceptions: timelines.filter((t) => t.exception).length,
@@ -391,6 +402,8 @@ export interface GuideMapInput {
     readonly marks: GuideMarkReader;
     readonly viewedAt?: Collaboration.ViewedAt;
     readonly focus?: Collaboration.ModelTarget;
+    /** The session's current journey (its key): its map comes first. Absent: the most recently created active one. */
+    readonly current?: string;
 }
 
 /** A step as the map is first built: done or not, goal, past the goal; `Here` is placed after. */
@@ -403,12 +416,12 @@ interface Laid {
     readonly marked: boolean;
 }
 
-/** The steps placed: done, the first not done up to the goal here, the rest to do. */
+/** The steps placed (`placeSteps`): done, here after the last done, the earlier not done unconfirmed, the rest to do. */
 function placed(steps: readonly Laid[]): [Collaboration.GuideStep, ...Collaboration.GuideStep[]] {
-    const here = steps.findIndex((s) => !s.done && !s.after);
+    const places = placeSteps(steps);
     const out = steps.map((s, i): Collaboration.GuideStep => ({
         key: stepKey(s.key),
-        state: s.done ? 'Done' : i === here ? 'Here' : 'Todo',
+        state: places[i] ?? 'Todo',
         goal: s.goal,
         after: s.after,
         markable: s.markable,
@@ -478,7 +491,8 @@ export const MAX_JOURNEY_MAPS = 10;
 
 /**
  * A modeling journey's map: its pattern's path to its goal over its subject — the context it deepens (C), the stormings
- * it carves from (B), else the whole model — with a row per context under the pattern's rows step.
+ * it carves from (B), else the whole model — with a row per context under the pattern's rows step. `missing` when the
+ * storming or context it names is not in the workspace.
  */
 export function journeyMap(workspace: GuideWorkspace, journey: ModelJourney, marks: GuideMarkReader): Collaboration.GuideMap {
     const { pattern } = journey;
@@ -486,8 +500,17 @@ export function journeyMap(workspace: GuideWorkspace, journey: ModelJourney, mar
     const all = contextFacts(workspace.model);
     const contexts = journey.context === undefined ? all : all.filter((c) => c.name === journey.context);
     const stormings = journey.stormings === undefined ? workspace.stormings : workspace.stormings.filter((s) => journey.stormings?.includes(s.id));
+    const missing =
+        (journey.context !== undefined && contexts.length === 0) || (journey.stormings !== undefined && stormings.length < journey.stormings.length);
     const rowDone = (c: ContextFacts): boolean => contextDone(c) || marks.has({ journey: journey.id, step: path.rowsAt, context: c.name });
-    const facts: ModelFacts = { contexts, model: workspace.model, stormings: stormings.map(stormingFacts), diagnostics: workspace.diagnostics, rowDone };
+    const journeyed = (s: Storming): boolean => workspace.journey?.stormings[s.id] !== undefined;
+    const facts: ModelFacts = {
+        contexts,
+        model: workspace.model,
+        stormings: stormings.map((s) => stormingFacts(s, journeyed(s))),
+        diagnostics: workspace.diagnostics,
+        rowDone,
+    };
     const steps = placed(laid(journey.id, path.steps, modelGoalStep(pattern, journey.goal), (k) => modelStepDone(k, pattern, facts), marks));
     const rowsHere = steps.some((s) => s.key === path.rowsAt && s.state === 'Here');
     const key = value(Collaboration.makeGuideJourneyKey(journey.id));
@@ -499,31 +522,90 @@ export function journeyMap(workspace: GuideWorkspace, journey: ModelJourney, mar
         steps,
         contexts: contextRows(journey.id, path.rowsAt, contexts, rowsHere, marks),
         contextsAt: stepKey(path.rowsAt),
+        ...(missing && { missing: true }),
     };
 }
 
+/** A storming's ES journey's map: the event storming's path to its level; `missing` when the storming is not in the workspace. */
+export function esJourneyMap(workspace: GuideWorkspace, storming: string, journey: EsJourney, marks: GuideMarkReader): Collaboration.GuideMap {
+    const found = workspace.stormings.find((s) => s.id === storming);
+    const facts = found && stormingFacts(found, true);
+    const id = esJourneyKey(storming);
+    const key = value(Collaboration.makeGuideJourneyKey(id));
+    const name = value(Collaboration.makeStormingName(storming));
+    const steps = laid(id, ES_STEPS, ES_GOALS[journey.level], (k) => esStepDone(k, facts), marks);
+    return {
+        world: 'Storming',
+        ...(key && { journey: key }),
+        ...(name && { storming: name }),
+        steps: placed(steps),
+        contexts: [],
+        ...(!found && { missing: true }),
+    };
+}
+
+/** The key of every journey of the goals, in the file's order (the stormings', then the modeling ones). */
+const goalKeys = (goal: GuideGoal): string[] => [...Object.keys(goal.es ?? {}).map(esJourneyKey), ...(goal.model ?? []).map((m) => m.id)];
+
+/** The map of one journey of the goals, by its key; undefined when the goals have none of that key. */
+export function guideJourneyMap(workspace: GuideWorkspace, goal: GuideGoal, key: string, marks: GuideMarkReader): Collaboration.GuideMap | undefined {
+    if (key.startsWith('es:')) {
+        const storming = key.slice(3);
+        const es = goal.es && Object.hasOwn(goal.es, storming) ? goal.es[storming] : undefined;
+        return es && esJourneyMap(workspace, storming, es, marks);
+    }
+    const m = goal.model?.find((j) => j.id === key);
+    return m && journeyMap(workspace, m, marks);
+}
+
+/** Where a journey stands: its 📍 step (none: every step to its goal is done, or none is placed), and whether its goal is reached. */
+export interface JourneyWhere {
+    readonly here?: string;
+    readonly reached: boolean;
+}
+
 /**
- * The guide's maps for the world the person is in: the event storming's path to its storming's goal (the storming in
- * view), or one map per modeling journey (the card offers a picker when there are several); "set the goal" when the
- * world has none (or the person is in neither).
+ * Where a journey stands now, by the chip's rule: here is the step after the last done (with every later step done,
+ * the earliest not confirmed); the goal is reached when every step up to it is done. Undefined when the journey has no
+ * map (not among the goals) or the storming or context it names is gone.
+ */
+export function journeyWhere(workspace: GuideWorkspace, key: string): JourneyWhere | undefined {
+    const map = guideJourneyMap(workspace, readGuideGoal(workspace), key, guideMarks(journeyMarks(workspace.journey)));
+    if (!map || map.missing === true) return undefined;
+    const here = (map.steps.find((s) => s.state === 'Here') ?? map.steps.find((s) => s.state === 'Unconfirmed'))?.key;
+    const reached = map.steps.filter((s) => !s.after).every((s) => s.state === 'Done');
+    return { ...(here !== undefined && { here }), reached };
+}
+
+/**
+ * The current journey's key among the goals: the one chosen when it is there; else the most recently created active
+ * one (the journey file's order: the last modeling journey, else the last storming's); else none.
+ */
+export function currentJourney(workspace: GuideWorkspace, goal: GuideGoal, chosen?: string): string | undefined {
+    const keys = goalKeys(goal);
+    if (chosen !== undefined && keys.includes(chosen)) return chosen;
+    const file = workspace.journey;
+    const active = keys.filter((k) => !file || journeyOf(file, k)?.entry.state === 'active');
+    const model = (goal.model ?? []).map((m) => m.id).filter((k) => active.includes(k));
+    return model.at(-1) ?? active.at(-1);
+}
+
+/**
+ * The guide's maps: the current journey's first (the session's, else the most recently created active one), then the
+ * others but the archived (at most `MAX_JOURNEY_MAPS`); "set the goal" in the world the person is in when there are
+ * none.
  */
 export function guideMaps(input: GuideMapInput): [Collaboration.GuideMap, ...Collaboration.GuideMap[]] {
     const { workspace, goal, marks } = input;
+    const current = currentJourney(workspace, goal, input.current);
+    const keys = goalKeys(goal);
+    const ordered = current === undefined ? keys : [current, ...keys.filter((k) => k !== current)];
+    const maps = ordered.slice(0, MAX_JOURNEY_MAPS).flatMap((k) => guideJourneyMap(workspace, goal, k, marks) ?? []);
+    const [first, ...rest] = maps;
+    if (first) return [first, ...rest];
     const world = guideWorld(workspace, input.viewedAt, input.focus);
-    if (world === 'Storming') {
-        const storming = guideStorming(workspace.stormings, input.viewedAt, input.focus);
-        const name = storming && value(Collaboration.makeStormingName(storming.id));
-        const journey = storming && goal.es?.[storming.id];
-        if (!storming || !journey) return [goalToSet(world, name)];
-        const facts = stormingFacts(storming);
-        const id = esJourneyKey(storming.id);
-        const key = value(Collaboration.makeGuideJourneyKey(id));
-        const steps = laid(id, ES_STEPS, ES_GOALS[journey.level], (k) => esStepDone(k, facts), marks);
-        return [{ world, ...(key && { journey: key }), ...(name && { storming: name }), steps: placed(steps), contexts: [] }];
-    }
-    const journeys = world === 'Model' ? (goal.model ?? []).slice(0, MAX_JOURNEY_MAPS) : [];
-    const [first, ...rest] = journeys.map((j) => journeyMap(workspace, j, marks));
-    return first ? [first, ...rest] : [goalToSet(world)];
+    const storming = world === 'Storming' ? guideStorming(workspace.stormings, input.viewedAt, input.focus) : undefined;
+    return [goalToSet(world, storming && value(Collaboration.makeStormingName(storming.id)))];
 }
 
 /** The first of the maps (the one map of the storming world, or the first modeling journey's). */
@@ -570,8 +652,8 @@ function stormingView(storming: string, stage?: string): Collaboration.ViewShown
 /** The long-label warning (S015): a note too small for its label. */
 const LONG_LABEL = 'S015';
 
-function stormingFindings(storming: Storming, diagnostics: readonly Diagnostic[]): Collaboration.GuideFinding[] {
-    const facts = stormingFacts(storming);
+function stormingFindings(storming: Storming, diagnostics: readonly Diagnostic[], journeyed: boolean): Collaboration.GuideFinding[] {
+    const facts = stormingFacts(storming, journeyed);
     const out: Collaboration.GuideFinding[] = [];
     const subject = storming.label ?? storming.id;
     if (!facts.brief) out.push(finding('StormingWithoutBrief', 1, { subject, ...ifTarget(parseElementReference(`@{es:${storming.id}}`)) }));
@@ -629,17 +711,24 @@ function diagnosticFindings(diagnostics: readonly Diagnostic[]): Collaboration.G
  */
 export function guideFindings(workspace: GuideWorkspace, world: Collaboration.GuideWorld, storming: Storming | undefined): Collaboration.GuideFinding[] {
     const esFile = (d: Diagnostic): boolean => d.file.endsWith('.dtes');
-    const es = world !== 'Model' && storming ? stormingFindings(storming, workspace.diagnostics) : [];
+    const es = world !== 'Model' && storming ? stormingFindings(storming, workspace.diagnostics, workspace.journey?.stormings[storming.id] !== undefined) : [];
     const model = world !== 'Storming' ? modelFindings(workspace.model) : [];
     const diagnostics = workspace.diagnostics.filter((d) => (world === 'Storming' ? esFile(d) : world === 'Model' ? !esFile(d) : true));
     return [...es, ...model, ...diagnosticFindings(diagnostics)].slice(0, GUIDE_LIMITS.findings);
 }
 
-/** The snapshot `/guide` keeps when it starts: the map and what is known at once. */
+/**
+ * The snapshot `/guide` keeps when it starts: the maps (the current journey's first) and what is known at once — in the
+ * world the person is in (the view's, the selection's, what the files hold), else the current journey's.
+ */
 export function guideSnapshot(input: GuideMapInput): Collaboration.GuideSnapshot {
     const maps = guideMaps(input);
-    const world = maps[0].world;
-    const storming = world === 'Model' ? undefined : guideStorming(input.workspace.stormings, input.viewedAt, input.focus);
+    const seen = guideWorld(input.workspace, input.viewedAt, input.focus);
+    const world = seen === 'None' ? maps[0].world : seen;
+    const first = maps[0];
+    const inMap = first.world === 'Storming' && first.storming !== undefined ? input.workspace.stormings.find((s) => s.id === first.storming) : undefined;
+    const storming =
+        world === 'Model' ? undefined : seen === 'Storming' || !inMap ? guideStorming(input.workspace.stormings, input.viewedAt, input.focus) : inMap;
     return { maps, findings: guideFindings(input.workspace, world, storming) };
 }
 
@@ -684,6 +773,7 @@ export function guideData(snapshot: {
             readonly marked?: boolean;
         }[];
         readonly contextsAt?: string;
+        readonly missing?: boolean;
     }[];
     readonly findings: readonly {
         readonly kind: string;
@@ -700,6 +790,7 @@ export function guideData(snapshot: {
             ...(m.journeyName !== undefined && { journeyName: m.journeyName }),
             ...(m.pattern !== undefined && { pattern: m.pattern }),
             ...(m.storming !== undefined && { storming: `@{es:${m.storming}}` }),
+            ...(m.missing === true && { missing: 'the storming or context this journey names is not in the workspace (renamed or removed)' }),
             goal: m.steps.find((s) => s.goal)?.key ?? null,
             here: m.steps.find((s) => s.state === 'Here')?.key ?? null,
             steps: m.steps.map(

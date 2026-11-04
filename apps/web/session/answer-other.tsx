@@ -6,6 +6,7 @@ import { X } from 'lucide-react';
 import { useChat } from './chat-context';
 import { ReplyText } from './reply';
 import { isMac } from './views';
+import { Act } from '../shared/act';
 
 /** The most characters of own words (the server's limit for an answer's text). */
 export const OTHER_MAX = 2000;
@@ -104,9 +105,9 @@ export function OtherDialog({
                 )}
                 <div className="answer-other-actions">
                     {readOnly ? (
-                        <button type="button" className="answer-other-button" onClick={onClose}>
+                        <Act kind="open" onClick={onClose}>
                             {o.close}
-                        </button>
+                        </Act>
                     ) : (
                         <>
                             {decidable && (
@@ -114,18 +115,12 @@ export function OtherDialog({
                                     {mac ? '⌘↵' : 'Ctrl↵'}
                                 </kbd>
                             )}
-                            <button type="button" className="answer-other-button" onClick={onClose}>
+                            <Act kind="stop" onClick={onClose}>
                                 {o.cancel}
-                            </button>
-                            <button
-                                type="button"
-                                className="answer-other-button primary"
-                                disabled={!decidable}
-                                onClick={decide}
-                                data-tooltip={o.decideHint(mac ? '⌘+Enter' : 'Ctrl+Enter')}
-                            >
+                            </Act>
+                            <Act kind="decide" disabled={!decidable} onClick={decide} data-tooltip={o.decideHint(mac ? '⌘+Enter' : 'Ctrl+Enter')}>
                                 {o.decide}
-                            </button>
+                            </Act>
                         </>
                     )}
                 </div>

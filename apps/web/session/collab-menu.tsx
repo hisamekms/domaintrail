@@ -25,6 +25,7 @@ import { Avatar, failure } from './parts';
 import { ParticipantsList, type PeopleFocus } from './participants';
 import type { SessionData } from './useSession';
 import { participantRows, type ViewScope, type ViewTarget } from './views';
+import { Act } from '../shared/act';
 
 /** How many avatars the button shows. */
 const AVATARS = 3;
@@ -229,7 +230,7 @@ export function CollabMenu(props: {
                                 <button
                                     key={item}
                                     role="menuitem"
-                                    className={item === 'end' ? 'danger' : undefined}
+                                    className={item === 'end' ? 'menu-danger' : undefined}
                                     data-item={item}
                                     {...(item === 'invite' && { 'data-tooltip': link ? tx.collab.makeInviteHint : tx.collab.inviteHint })}
                                     onClick={pick(run[item])}
@@ -244,9 +245,9 @@ export function CollabMenu(props: {
             {note && (
                 <div className="pane-menu-list session-menu-note collab-menu-note" role="status">
                     <p className="small">{note}</p>
-                    <button className="chat-small" onClick={() => setNote(undefined)}>
+                    <Act kind="open" onClick={() => setNote(undefined)}>
                         {tx.restoreFlow.close}
-                    </button>
+                    </Act>
                 </div>
             )}
             {ending && <EndDialog session={session} units={props.units} onClose={() => setEnding(false)} tx={tx} />}
@@ -325,8 +326,9 @@ function RestoreDialog(props: { session: SessionData; units: readonly ChangeUnit
                     <ul className="collab-restore-list">
                         {points.map((p) => (
                             <li key={p.revision}>
-                                <button
-                                    className="small"
+                                <Act
+                                    kind="open"
+                                    className="collab-restore-pick"
                                     data-revision={p.revision}
                                     data-tooltip={c.restorePick(p.number)}
                                     onClick={() => props.onPick(p.revision)}
@@ -335,7 +337,7 @@ function RestoreDialog(props: { session: SessionData; units: readonly ChangeUnit
                                         {time(p.takenAt)}
                                     </time>
                                     <span>{label(p)}</span>
-                                </button>
+                                </Act>
                             </li>
                         ))}
                     </ul>
@@ -398,12 +400,12 @@ function EndDialog(props: { session: SessionData; units: readonly ChangeUnit[]; 
                 <p>{c.endBody}</p>
                 {error && <p className="session-note session-error">{tx.error(error)}</p>}
                 <div className="session-buttons collab-dialog-buttons">
-                    <button className="small" onClick={onClose} disabled={busy}>
+                    <Act kind="stop" onClick={onClose} disabled={busy}>
                         {c.cancel}
-                    </button>
-                    <button className="primary danger collab-end-confirm" onClick={() => void end()} disabled={busy}>
+                    </Act>
+                    <Act kind="danger" className="collab-end-confirm" onClick={() => void end()} disabled={busy}>
                         {c.endConfirm}
-                    </button>
+                    </Act>
                 </div>
             </div>
         </dialog>

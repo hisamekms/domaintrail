@@ -1709,8 +1709,18 @@ This replaces where the guide's goal is read from (above) and where the intervie
   - In Collab the facilitator sets it, and everyone sees the same journey. The guide's card draws that journey's map.
   - In Solo the person sets it.
   - This replaces "each viewer remembers their choice" above.
-- **Seeing it in the UI:** the current journey, its brief, its goal and where it stands are visible in Solo and Collab
-  alike. Where this goes on the page is still open; a preview will compare the candidates.
+- **Seeing it in the UI: a chip in the app bar** (it concerns the whole page, in both worlds).
+  - It reads `🧭 <journey> · 📍 <step> → 🏁 <goal>`. When narrow it shrinks to `🧭 <journey>`, then to `🧭`. With no
+    journey it reads 「🧭 ゴールを決める」, which offers `/es:start` and `/model:start`.
+  - Pressing it opens the journeys panel:
+    - the current journey: its brief (purpose, scope, constraints, participants, source), its map, and the actions
+      ガイドを見る, ゴールを変える, ブリーフを見直す and 完了にする;
+    - the other journeys, ES and modeling, each with where it stands. Choosing one makes it the current journey.
+    - A line for new journeys (`/es:start` · `/model:start`) and the count of archived ones.
+  - Everyone can read the panel. A participant's choose, change, done or archive becomes a request to the facilitator.
+  - The guide card's heading names its journey; pressing the name opens the panel.
+  - The detail also shows, briefly, the ES journey of a selected storming, or the modeling journeys that include a
+    selected context.
 - **How journeys begin:**
   - **ES:** `/es:start` on a storming with no journey creates one. On a storming that has one, it revises its brief;
     there is still one journey per storming.
@@ -1726,3 +1736,129 @@ This replaces where the guide's goal is read from (above) and where the intervie
     - The facilitator, or the person in Solo, creates journeys directly.
     - Participants may run the commands, but their journey exists only once the facilitator approves its brief.
   - **Outside dt** (Claude Code): read only in 0.7.0. A `dt journey` command to write it can come later.
+
+### As built: the journey file, the current journey, the chip and the panel
+
+- **The file.** `domaintrail.journey.json` at the root (`JOURNEY_FILE`); `contexts/collaboration/src/domain/journey.ts`
+  reads it against its shape (what is valid kept, each problem with a JSON path and, through a small position-keeping
+  JSON reader, a line and column), writes it (`writeJourney`: `$schema`, `version`, `stormings` in the order written,
+  `modeling` likewise, each journey's keys in the schema's order, two-space indent, a final line break), and applies
+  the acts (`applyJourneyAct`: goal, state, mark) and a confirmed brief (`applyBrief`). The vocabulary moved to
+  `domain/guide-paths.ts`, shared by the engine, the file and the page: `GuidePattern` is `Whole | FromStorming |
+  OneContext | Review` (`Strategic` renamed, unreleased). The ES steps `exceptions` and `questions` became markable
+  (a stage that needs none, a storming that raised no question). `schema/journey.schema.json` is hand-written; a test
+  compares its enums, goals and marks per pattern with the code's. Not in the trust hash (the config files only).
+- **Writing.** `platform/workspace`'s `createGuardedTextFile`: atomic (a temporary file renamed over it), serialized in
+  the process, and only over the text read (`updateJourneys` tries once more from the file as it is; else
+  `JourneyFileChanged`); a file that does not read is never written over (`JourneyFileInvalid`).
+- **Seams.** `readGuideGoal` reads `GuideWorkspace.journey` (archived journeys left out). The marks are the file's
+  (`journeyMarks`, `journeyFileMarks`, the page's `pageGuideMarks` in `journey-view.ts`); `sessionGuideMarks` is gone.
+  **Decision: the session's old `Done` marks are ignored, not migrated** (never released; the `Mark` aggregate still
+  reads them, the guide does not; `POST /api/session/marks` refuses a `GuideStep` target, 400).
+- **Who.** The facilitator's acts are done at once (`actOnJourney`, `chooseJourney`: `FacilitatorOnly` otherwise).
+  **Decision: a participant's choose, goal, done, archive and mark become requests**, kept by the server in memory as
+  the `link` mode's join requests are (no existing flow fits: proposals and interview briefs both end in an AI run),
+  sent to every page with the file (`journey` message, `GET /api/session/journey`), approved (done as the
+  facilitator's), denied, or withdrawn by their requester (`POST /api/session/journey/{acts,current}`, 202 for a
+  request; `…/journey/requests/:id/{approve,deny,withdraw}`). A restart drops them. A participant's brief still waits
+  for the facilitator's confirmation, as before.
+- **Interviews.** `InterviewBrief` gained `journey: JourneyBrief?` (why: purpose, scope, constraints, participants as
+  roles; how far: `use` and `level`, or `pattern`, `goal`, `stormings`, `context`, `journeyName`, `continues`) and
+  `description` (a new storming's `///`). The interviewer writes `{ name?, label?, isNew, description?, journey }`; the
+  text is the why under the language's heads (目的 / 範囲 / 制約 / 参加者), and an edit reads them back
+  (`withEditedText`; an unknown head is refused). A new modeling journey's ID is derived from its name (its ASCII words,
+  else its subject in kebab case: `convenience-store-issuance`), `-2`… when taken. Confirming writes the journey (dt,
+  no AI run) and makes it the session's current journey; only a new storming queues a run, whose rule 16 creates the
+  `storming` block with its short description. `Confirmed.run` became optional. The interviewer is given the journeys
+  (`journeys` in the job) and asks 「どこまで進めますか」 as a choice, the use, the roles; `/model:start` asks continue or
+  new first, then the pattern (the fitting one first), the goal and the subject, then the why.
+- **Current journey.** `Session.currentJourney` with `chooseJourney` (`JourneyChosen`, wire `session.journey_chosen`).
+  The default (`currentJourney` in the engine, `defaultJourney` in the file module): the last active modeling journey,
+  else the last active storming's — the file's order stands for "most recently created". The guide snapshot puts the
+  current journey's map first; the latest card draws it live from the file; the `localStorage` picker is gone.
+- **Page.** `journey-view.ts` (the overview computed by the engine from the view payload and the file),
+  `journey-panel.tsx` (the chip, portalled into a new `app-bar-journey` slot after the world switch; the panel; the
+  goal menu, also on the card's 🏁), `journey-detail.tsx` (a storming's ES journey, a context's modeling journeys). An
+  ES journey is named by its storming's label. The chip narrows at `@container app-bar` 72rem (🧭 and the name) and
+  48rem (🧭).
+- **Watching.** The file is watched on its own (`watchFile`): a change from git or another tool is read again and sent
+  to the pages; the guide's workspace gets the file and its findings.
+- **Checks.** J001 (error: against the schema), J002 / J003 (warnings: a storming or context named but missing). A new
+  family J, as M, L and S are per kind of file; `schema/diagnostics.schema.json` allows `[MLSJ]`. `dt check` adds them
+  (exit 1 on J001); `generate ts` is not blocked by them. A missing subject marks the map `missing`.
+- **Agent.** The file is in the answerer's view and the runner's workspace like any file git does not ignore; it joins
+  the edit-denied names (`DT_WRITTEN_FILE_NAMES`). The answer, command and interview jobs carry `journeys` (the current
+  one's brief, every journey in a line); the prompts keep the AI within the current journey, and `/guide` suggests
+  `/model:start` from a storming whose ES journey reached its goal with `use: modeling`. `dt guide` describes the file
+  and asks the AI to rename journey keys with a storming or context.
+- **Real run** (2026-11-04, the real `claude`): an empty workspace — `/es:start`, Big Picture, use modeling, the file
+  written by dt and the storming created by the run with a one-line `///`; a ✓ on 問い and 🏁 → デザインレベル on the
+  card changed the file's `level` and `marks`. The shop with the convenience-store stages — `/model:start` B from the
+  storming to invariants, then C on Billing, switched in the panel; in Collab a participant's goal change approved by
+  the facilitator.
+
+### As built: the note after a brief is confirmed
+
+A confirmed `/es:start` or `/model:start` used to leave the thread on the person's last answer. Now dt posts a **note**
+there, from a fixed template and with no AI call.
+
+- **Stored as an AI reply.** It is a message of the AI (`Request.answer`) replying to the message the brief answered:
+  the last reply in the interview's thread, kept in the session (a reload and Collab show it) and in the session so
+  far the agents read. `Request.journeyNote: JourneyNote?` (`request.dt`, also on `RequestSent`) holds its buttons:
+  the journey's key, the suggested command and up to three places. Older messages have none.
+- **When.** On confirm (or a participant's brief approved), in the same transaction as the interview's confirmation;
+  for a new storming once the run that creates it ends (`noteStormingRun`, after each way a run ends, posted once):
+  created when it completed, else that it was not created and the journey stays as written.
+- **What** (`domain/journey-note.ts`, ja and en by the interview's language). Line 1: 「ブリーフを確定しました。ジャーニーに
+  「<label>」を加えました（ゴール：<level>）。」, 「ストーミング「<label>」を作り、ジャーニーに加えました（ゴール：…）。」,
+  「ブリーフを見直しました（<fields>が変わりました）。」 (name, purpose, scope, constraints, people, use, level,
+  pattern, goal, source compared between the file before and after), 「<facilitator>が承認し、ジャーニーに加えました（…）。」,
+  「ジャーニーに「<name>」を加えました（<pattern> → <goal>）。」. Line 2 from the guide's map of that journey (its 📍, the
+  chip's rule): 「いまは「<step>」の段階です。」 and the step's next sentence; the command where one fits —
+  exceptions → `/es:exceptions` (naming the first stage without one), Design Level → `/es:levels`, an ES goal reached
+  → `/model:start` (use modeling) or `/es:recap`, the brief → `/es:start` — and the source storming(s) to show for
+  ES を見直す and BC を切り出す. A storming with no events (a new one): 「まず出来事を出します。起きたことを話して
+  ください。」 with no button.
+- **Page.** The note is a normal AI reply; under its text `JourneyNoteActions` puts the command button and the places
+  as the guide card's (`guide-command`, `guide-go`) and ジャーニーを開く (the journeys panel). In Solo it is not the slot
+  under the message (that is the questions'), so a new storming's note comes after the run's card.
+- **Scratch run** (2026-11-04, a scripted interviewer and runner on a copy of the shop with the convenience-store
+  stages): `/es:start` on the existing storming, a new storming, a revision, `/model:start` B, and a revision in
+  English.
+
+### As built: records of what people do (2026-11-04)
+
+Many acts changed the journey file or the session and left no trace in the chat, so others in Collab did not notice.
+dt now writes a **record**: a small centred row like the session's start (`.chat-system` + `.chat-record`), muted,
+saying who did what in a few words, in the page's language (ja / en, the viewer's, as the session-start row).
+
+- **Kept in the session.** A new aggregate `SessionRecord` (`model/record.dt`: who, the fact, `replyTo` for a row at the
+  end of a thread, when, `revisedAt`), its table `session_records` (migration 15), sent whole with the state and as
+  `record.written` / `record.revised`, and told in the session so far (in English; a request's outcome is an entry of
+  its own when it was decided; an interview stopped or a brief rejected is left to the interview's own entries).
+- **The facts and their text** (`domain/records.ts`; the journey by its key and its name then, an ES journey by its
+  storming's label):
+  - goal: 「<name> がゴールを <old> → <new> に変えました」, naming the journey when it is not the current one
+    (「<name> が「<journey>」のゴールを…」);
+  - ✓: 「<name> が「例外」「問い」を済みにしました」 / 「…の済みを外しました」, a BC row by its context;
+  - 「<name> が「<journey>」を完了にしました」 / 「しまいました」 / 「戻しました」;
+  - 「<name> がいまのジャーニーを「<journey>」にしました」 (a person's choice only, never the default; not on a
+    confirmed brief, whose note says it);
+  - 「<participant> が「<journey>」のゴールを <goal> にするようお願いしています」, then on the same row
+    「…お願いしました。<facilitator> が承認しました」 / 「却下しました」 / 「<participant> が取り下げました」;
+  - 「<name> が中止しました」, 「<facilitator> が却下しました（<note>）」 at the end of the interview's thread;
+  - 「ジャーニーファイルが外で変わりました（「X」が増えた、「Y」のゴール A → B、「Z」が完了、「W」の済み、ほか n 件）」.
+- **The ✓ merge** (decided): a mark extends the last record of the session when that record is the same person's
+  marks on the same journey in the same direction and **nothing else came into the stream after it** (a message, a
+  card's run, a proposal, a command, a restore, another record). No time limit.
+- **Requests** (decided): **the outcome is written on the request's own row** — the row tells the whole request and
+  never stays 「お願いしています」 once decided; an approved act also gets its own record, by the facilitator who did it.
+  The requests are records, so the server rebuilds the waiting ones from them when it starts (a restart no longer drops
+  them). A request replaced by its requester's newer one is withdrawn.
+- **完了にする** also posts dt's note (the AI's message, answering none: `answer`'s message became optional): 「「<journey>」を
+  完了にしました。」 and the next step — an ES journey with `use: modeling` → `/model:start`, `align` → `/es:recap`, a
+  modeling journey 「次のジャーニーを選びましょう。」 with ジャーニーを開く only — in the language of the page that did it
+  (`language` on `…/journey/acts` and `…/requests/:id/approve`).
+- **Outside changes.** The file store remembers the texts dt wrote (`rememberWrites`, the last 20, remembered before the
+  write lands): a text read again that is none of them is a change from outside, summarized against the file as read
+  before (journeys added or removed, goals, states, marks, briefs); nothing when nothing that matters changed.

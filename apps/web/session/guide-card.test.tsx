@@ -1,13 +1,15 @@
 // The guide's card (guide-card.tsx, guide-view.ts): the map and what is known at once as soon as it starts, the AI
 // thinking, then its advice with its actions; the ES map and the modeling map with its BC rows (from the engine fed a
-// goal directly), the ✓ marks (the facilitator's, the latest card's), the picker of several journeys, the note on an
-// older card; and what the actions do: open a view, send the question to the AI.
+// journey file), the ✓ marks (the journey file's, on the latest card: anyone's, a participant's a request), the session's
+// current journey (its name opens the journeys panel, its 🏁 changes the goal), the note on an older card; and what the
+// actions do: open a view, send the question to the AI.
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { analyze } from '@domaintrail/analysis';
-import { guideMarks, guideSnapshot, NO_MARKS, type GuideGoal, type GuideWorkspace } from '@domaintrail/collaboration';
+import { goalOf, guideMarks, guideSnapshot, journeyMarks, NO_MARKS, type GuideGoal, type GuideWorkspace, type JourneyFile } from '@domaintrail/collaboration';
+import { journeyOverview } from './journey-view';
 import { MESSAGES } from '../i18n';
-import { exampleSources } from '../test-helpers';
+import { actKinds, decides, exampleSources } from '../test-helpers';
 import { ChatProvider, type ChatContextValue } from './chat-context';
 import { GuideCard } from './guide-card';
 import { askBody, guideAnswers, latestGuide, viewTargetOfShown, withMarks, type GuideMapJson, type GuideSnapshotJson } from './guide-view';
@@ -29,18 +31,58 @@ const MODEL_VIEW = { view: { kind: 'ContextMap', all: false } } as never;
 const STORMING_VIEW = { view: { kind: 'Storming', storming: 'Returns', level: 'BigPicture', exceptions: true } } as never;
 
 /** The snapshot the server keeps, as the page reads it (its JSON). */
-const snapshot = (goal: GuideGoal, viewedAt: never, marks = NO_MARKS): GuideSnapshotJson =>
-    JSON.parse(JSON.stringify(guideSnapshot({ workspace, goal, marks, viewedAt }))) as GuideSnapshotJson;
+const snapshot = (goal: GuideGoal, viewedAt: never, marks = NO_MARKS, file?: JourneyFile): GuideSnapshotJson =>
+    JSON.parse(JSON.stringify(guideSnapshot({ workspace: { ...workspace, ...(file && { journey: file }) }, goal, marks, viewedAt }))) as GuideSnapshotJson;
 
 const guide = (more: object = {}): never => ({ id: 'g1', kind: 'Guide', state: 'Working', startedBy: 'bob', opening: 'o', startedAt: at(1), ...more }) as never;
 
-function chat(me: 'f' | 'bob', slashCommands: unknown[], marks: unknown[] = []): ChatContextValue {
+/** A journey file of one ES journey and one modeling journey (B on the shop), its marks as given. */
+const FILE = (marks: readonly string[] = [], current: 'es' | 'model' = 'es'): JourneyFile => ({
+    version: 1,
+    stormings: { Returns: { purpose: '返品を速く', participants: ['窓口担当'], use: 'modeling', level: 'BigPicture', state: 'active', marks: [] } },
+    modeling:
+        current === 'model'
+            ? [
+                  {
+                      id: 'shop',
+                      name: 'ショップ',
+                      purpose: '注文から請求まで',
+                      participants: [],
+                      pattern: 'FromStorming',
+                      from: { stormings: ['Returns'] },
+                      goal: 'invariants',
+                      state: 'active',
+                      marks: { steps: marks, contexts: {} },
+                  },
+              ]
+            : [],
+});
+
+/** The journeys as the chat holds them: the file, its overview now (the current journey: `current`), the acts recorded. */
+function journeys(file: JourneyFile | null, current?: string, acts: unknown[] = []): ChatContextValue['journeys'] {
+    const ws = { ...workspace, ...(file && { journey: file }) };
     return {
+        body: { file, problems: [], requests: [] },
+        workspace: ws,
+        overview: journeyOverview(ws, current),
+        open: false,
+        setOpen: (open: boolean) => acts.push({ open }),
+        act: (a) => acts.push(a),
+        choose: (j) => acts.push({ choose: j }),
+        decide: () => {},
+        seeGuide: () => {},
+        notice: undefined,
+    };
+}
+
+function chat(me: 'f' | 'bob', slashCommands: unknown[], file: JourneyFile | null = null, current?: string): ChatContextValue {
+    return {
+        journeys: journeys(file, current),
         tx: t.session,
         session: {
             status: 'live',
             me: { participant: { id: me, role: me === 'f' ? 'facilitator' : 'participant' } },
-            state: { session: { state: 'Open', mode: 'Collab' }, slashCommands, requests: [], runs: [], marks, revisions: [] },
+            state: { session: { state: 'Open', mode: 'Collab' }, slashCommands, requests: [], runs: [], marks: [], revisions: [] },
         },
         onNavigate: () => {},
         openView: () => {},
@@ -72,7 +114,7 @@ describe("the guide's card", () => {
         expect(steps(html)).toEqual(['ゴールを決める:here', '…:todo after']);
         expect(html).toContain('ゴール: 未定');
         // the start of the storming's goal, into the composer
-        expect(html).toMatch(/<button[^>]*class="chat-small primary guide-command"[^>]*>.*?\/es:start<\/button>/);
+        expect(html).toMatch(/<button[^>]*class="act act-insert"[^>]*>.*?lucide-corner-down-left.*?\/es:start<\/button>/);
         // what the files show: Returns has two open questions, its flow no exception
         expect(html).toContain('すぐ分かること');
         expect(html).toContain('未解決の問い 2');
@@ -85,43 +127,50 @@ describe("the guide's card", () => {
     });
 
     test('the ES map with its goal: the steps to Big Picture, Design Level past it, here where the storming is', () => {
-        const command = guide({ guide: snapshot({ es: { Returns: { level: 'BigPicture' } } }, STORMING_VIEW) });
-        const html = render(command, chat('f', [command]));
+        const file = FILE();
+        const command = guide({ guide: snapshot(goalOf(file), STORMING_VIEW, NO_MARKS, file) });
+        const html = render(command, chat('f', [command], file));
         expect(steps(html)).toEqual(['ブリーフ:done', '出来事:done', '流れ・段階:done', '例外:here', '問い:todo goal', 'デザインレベル:todo after']);
         expect(html).toContain('ゴール: ビッグピクチャー');
         expect(html).toContain('aria-current="step"');
+        // the heading: the 🏁 changes the goal, the journey's name opens the journeys panel
+        expect(html).toContain('class="guide-goal-button" aria-expanded="false" data-tooltip="ゴールを変える"');
+        expect(html).toMatch(/class="guide-journey-button" data-tooltip="ジャーニーを開く">.*?返品<\/button>/);
+        // the exceptions and the questions: marked by a person when the files cannot tell
+        expect(html).toContain('aria-label="例外: 済みにする"');
     });
 
-    test('the modeling map (B) with its BC rows; the facilitator marks the steps the files cannot tell, the rows too', () => {
-        const goal: GuideGoal = { model: [{ id: 'shop', name: 'ショップ', pattern: 'FromStorming' }] };
-        const command = guide({ guide: snapshot(goal, MODEL_VIEW, guideMarks([{ journey: 'shop', step: 'review' }])) });
-        const marks = [{ participant: 'f', target: { kind: 'GuideStep', journey: 'shop', step: 'review' }, sign: { kind: 'Done' } }];
-        const html = render(command, chat('f', [command], marks));
+    test("the modeling map (B) with its BC rows; the marks are the journey file's, set by anyone (a participant's: a request)", () => {
+        const file = FILE(['review'], 'model');
+        const command = guide({ guide: snapshot(goalOf(file), MODEL_VIEW, guideMarks(journeyMarks(file)), file) });
+        const html = render(command, chat('f', [command], file, 'shop'));
         expect(steps(html)[0]).toBe('ES を見直す:done');
         expect(html).toContain('ゴール: 不変条件（ES から）');
         // a row per context
         expect([...html.matchAll(/<tr class="guide-row-[^"]*"><th scope="row">(\w+)/g)].map((m) => m[1])).toEqual(['Billing', 'Common', 'Sales']);
         expect(html).toContain('aria-label="ES を見直す: 済みを外す"');
         expect(html).toContain('aria-label="Billing: 済みにする"');
-        // a participant sees the marks, sets none
-        const theirs = render(command, chat('bob', [command], marks));
-        expect(theirs).not.toContain('済みにする');
-        expect(theirs).toContain('aria-label="人が済みにした"');
+        // the session's old ✓ marks count not: the file has none, the step is to do
+        const unmarked = FILE([], 'model');
+        expect(render(command, chat('f', [command], unmarked, 'shop'))).toContain('aria-label="ES を見直す: 済みにする"');
+        // a participant marks too (the facilitator is asked)
+        expect(render(command, chat('bob', [command], file, 'shop'))).toContain('aria-label="Billing: 済みにする"');
+        // a card in history: the map as kept, no marking
+        const older = render(command, chat('bob', [command, guide({ id: 'g2', startedAt: at(5) })], file, 'shop'));
+        expect(older).not.toContain('済みにする');
+        expect(older).toContain('aria-label="人が済みにした"');
     });
 
-    test('several modeling journeys: a picker, the first shown', () => {
-        const goal: GuideGoal = {
-            model: [
-                { id: 'billing', name: 'Billing の深掘り', pattern: 'OneContext', context: 'Billing' },
-                { id: 'all', name: '全体の見直し', pattern: 'Review' },
-            ],
-        };
-        const command = guide({ guide: snapshot(goal, MODEL_VIEW) });
-        const html = render(command, chat('f', [command]));
-        expect(html).toContain('<select class="guide-journeys" aria-label="道のり">');
-        expect(html).toContain('<option value="billing" selected="">Billing の深掘り</option>');
-        expect(html).toContain('<option value="all">全体の見直し</option>');
-        expect(html).toContain('· Billing の深掘り');
+    test("the session's current journey: the card draws it (no picker); one changed later shows on the latest card", () => {
+        const file = FILE(['review'], 'model');
+        const command = guide({ guide: snapshot(goalOf(file), MODEL_VIEW, guideMarks(journeyMarks(file)), file) });
+        const shop = render(command, chat('f', [command], file, 'shop'));
+        expect(shop).not.toContain('<select');
+        expect(shop).toContain('ショップ');
+        // made current in the panel: the latest card draws the storming's journey
+        const es = render(command, chat('f', [command], file, 'es:Returns'));
+        expect(steps(es)[0]).toBe('ブリーフ:done');
+        expect(es).toContain('ゴール: ビッグピクチャー');
     });
 
     test('its advice: the status, the steps with reasons, the command, the places, 「聞くことをメモ」; an older card says so', () => {
@@ -141,7 +190,7 @@ describe("the guide's card", () => {
         const html = render(command, chat('bob', [command, guide({ id: 'g2', startedAt: at(5) })]));
         expect(html).toContain('<p class="guide-status">例外を出すところです</p>');
         expect(html.match(/<li class="guide-advice-step">/g)).toHaveLength(2);
-        expect(html).toMatch(/class="chat-small primary guide-command"[^>]*>.*?\/es:exceptions<\/button>/);
+        expect(html).toMatch(/class="act act-insert"[^>]*>.*?\/es:exceptions<\/button>/);
         expect(html).toContain('aria-label="返品 を見る"');
         expect(html).toContain('aria-label="聞くことをメモ: 返品は何日まで？"');
         expect(html).toContain('「返品は何日まで？」');
@@ -150,6 +199,26 @@ describe("the guide's card", () => {
         expect(html).toContain('これより新しいガイドがあります');
         // stopped
         expect(render(guide({ state: 'Stopped' }), chat('bob', []))).toContain('中止しました');
+        // the buttons by what they do (docs/ui-rules.md): the command inserted, the places seen, the question sent
+        const advice = html.slice(html.indexOf('guide-advice'));
+        expect(actKinds(advice)).toEqual(['insert', 'see', 'see', 'send']);
+        expect(decides(html)).toBe(0);
+    });
+
+    test('the buttons as it starts: /es:start inserted, what is known seen, 中止 stops; the ✓ a checkbox with 済み / 済みにする', () => {
+        const command = guide({ guide: snapshot({}, STORMING_VIEW) });
+        const html = render(command, chat('bob', [command]));
+        expect(actKinds(html)).toEqual(['insert', 'see', 'see', 'see', 'stop']);
+        expect(decides(html)).toBeLessThanOrEqual(1);
+        const file = FILE(['review'], 'model');
+        const model = guide({ guide: snapshot(goalOf(file), MODEL_VIEW, guideMarks(journeyMarks(file)), file) });
+        const marks = render(model, chat('f', [model], file, 'shop'));
+        expect(marks).toMatch(
+            /<button type="button" class="act-mark on" aria-pressed="true" aria-label="ES を見直す: 済みを外す"[^>]*>.*?済み<\/span><\/button>/,
+        );
+        expect(marks).toMatch(
+            /<button type="button" class="act-mark" aria-pressed="false" aria-label="Billing: 済みにする"[^>]*>.*?済みにする<\/span><\/button>/,
+        );
     });
 });
 
@@ -178,8 +247,9 @@ describe('what the card reads and does', () => {
             { journey: 'j', step: 'contexts', context: 'Sales' },
             { journey: 'other', step: 'contextMap' },
         ]);
-        // subdomains no longer marked: to do again, and here; bcSplit marked now; another journey's mark counts not
-        expect(now.steps.map((s) => `${s.key}:${s.state}`)).toEqual(['terms:Done', 'subdomains:Here', 'bcSplit:Done', 'contextMap:Todo']);
+        // subdomains no longer marked: before bcSplit, marked now, it is unconfirmed; here moves after the last done step;
+        // another journey's mark counts not
+        expect(now.steps.map((s) => `${s.key}:${s.state}`)).toEqual(['terms:Done', 'subdomains:Unconfirmed', 'bcSplit:Done', 'contextMap:Here']);
         expect(now.contexts[0]).toMatchObject({ state: 'Done', marked: true });
         expect(withMarks({ ...map, journey: undefined } as GuideMapJson, [])).toEqual({ ...map, journey: undefined } as GuideMapJson);
     });

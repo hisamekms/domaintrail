@@ -88,6 +88,15 @@ export interface SlashCommandRepository {
     listBySession(session: SessionId): Collaboration.SlashCommand[];
 }
 
+/** The records of the sessions (the chat's small rows of what people did, and the journey file changed outside dt). */
+export interface RecordRepository {
+    load(id: Collaboration.SessionRecordId): Collaboration.SessionRecord | undefined;
+    /** Inserts or replaces it. */
+    save(record: Collaboration.SessionRecord): void;
+    /** The records of a session, in the order they were written. */
+    listBySession(session: SessionId): Collaboration.SessionRecord[];
+}
+
 /** The change proposals of the sessions. */
 export interface ProposalRepository {
     load(id: Collaboration.ChangeProposalId): Collaboration.ChangeProposal | undefined;
@@ -255,6 +264,7 @@ export interface Stores {
     readonly proposals: ProposalRepository;
     readonly interviews: InterviewRepository;
     readonly slashCommands: SlashCommandRepository;
+    readonly records: RecordRepository;
     readonly outbox: EventOutbox;
     readonly access: AccessStore;
     readonly operations: OperationLog;
@@ -334,8 +344,21 @@ export interface SourceFormatter {
 }
 
 /** Everything the use cases need. */
+/**
+ * The journey file (`domaintrail.journey.json` at the workspace root): its text, and a whole new text written
+ * atomically unless the file changed since its text `expected` was read (undefined: there was no file).
+ */
+export interface JourneyFileStore {
+    /** The file's text now; undefined when there is none. */
+    read(): Promise<string | undefined>;
+    /** Writes `text` unless the file is no longer `expected` (then false, nothing written). */
+    write(text: string, expected: string | undefined): Promise<boolean>;
+}
+
 export interface CollaborationDeps {
     readonly uow: UnitOfWork;
+    /** The journey file the interviews' briefs and the journey acts write (absent: none, `NoJourneyFile`). */
+    readonly journeys?: JourneyFileStore;
     readonly workspace: WorkspaceSnapshot;
     readonly blobs: SnapshotBlobs;
     readonly validator: ModelValidator;

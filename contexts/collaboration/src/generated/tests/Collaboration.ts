@@ -96,6 +96,12 @@ export interface Arbitraries {
     readonly BriefName: fc.Arbitrary<Collaboration.BriefName>;
     readonly BriefLabel: fc.Arbitrary<Collaboration.BriefLabel>;
     readonly BriefText: fc.Arbitrary<Collaboration.BriefText>;
+    readonly BriefField: fc.Arbitrary<Collaboration.BriefField>;
+    readonly RoleName: fc.Arbitrary<Collaboration.RoleName>;
+    readonly JourneyName: fc.Arbitrary<Collaboration.JourneyName>;
+    readonly ShortDescription: fc.Arbitrary<Collaboration.ShortDescription>;
+    readonly JourneyUse: fc.Arbitrary<Collaboration.JourneyUse>;
+    readonly JourneyBrief: fc.Arbitrary<Collaboration.JourneyBrief>;
     readonly InterviewBrief: fc.Arbitrary<Collaboration.InterviewBrief>;
     readonly AnswerChoice: fc.Arbitrary<Collaboration.AnswerChoice>;
     readonly AskedQuestion: fc.Arbitrary<Collaboration.AskedQuestion>;
@@ -141,11 +147,27 @@ export interface Arbitraries {
     readonly ProposalApproved: fc.Arbitrary<Collaboration.ProposalApproved>;
     readonly ProposalRejected: fc.Arbitrary<Collaboration.ProposalRejected>;
     readonly ProposalWithdrawn: fc.Arbitrary<Collaboration.ProposalWithdrawn>;
+    readonly SessionRecordId: fc.Arbitrary<Collaboration.SessionRecordId>;
+    readonly JourneyRequestId: fc.Arbitrary<Collaboration.JourneyRequestId>;
+    readonly JourneyLabel: fc.Arbitrary<Collaboration.JourneyLabel>;
+    readonly RecordedJourney: fc.Arbitrary<Collaboration.RecordedJourney>;
+    readonly JourneyStatus: fc.Arbitrary<Collaboration.JourneyStatus>;
+    readonly RecordedMark: fc.Arbitrary<Collaboration.RecordedMark>;
+    readonly RequestedJourneyAct: fc.Arbitrary<Collaboration.RequestedJourneyAct>;
+    readonly JourneyRequestOutcome: fc.Arbitrary<Collaboration.JourneyRequestOutcome>;
+    readonly JourneyFileChangeKind: fc.Arbitrary<Collaboration.JourneyFileChangeKind>;
+    readonly JourneyFileChange: fc.Arbitrary<Collaboration.JourneyFileChange>;
+    readonly RecordFact: fc.Arbitrary<Collaboration.RecordFact>;
+    readonly WrittenSessionRecord: fc.Arbitrary<Collaboration.WrittenSessionRecord>;
+    readonly SessionRecord: fc.Arbitrary<Collaboration.SessionRecord>;
+    readonly RecordWritten: fc.Arbitrary<Collaboration.RecordWritten>;
+    readonly RecordRevised: fc.Arbitrary<Collaboration.RecordRevised>;
     readonly RequestId: fc.Arbitrary<Collaboration.RequestId>;
     readonly PendingRequest: fc.Arbitrary<Collaboration.PendingRequest>;
     readonly ReplyTarget: fc.Arbitrary<Collaboration.ReplyTarget>;
     readonly ReplyableTarget: fc.Arbitrary<Collaboration.ReplyableTarget>;
     readonly RevertableRun: fc.Arbitrary<Collaboration.RevertableRun>;
+    readonly JourneyNote: fc.Arbitrary<Collaboration.JourneyNote>;
     readonly MentionableParticipant: fc.Arbitrary<Collaboration.MentionableParticipant>;
     readonly SentRequest: fc.Arbitrary<Collaboration.SentRequest>;
     readonly DismissedRequest: fc.Arbitrary<Collaboration.DismissedRequest>;
@@ -174,6 +196,7 @@ export interface Arbitraries {
     readonly SessionStarted: fc.Arbitrary<Collaboration.SessionStarted>;
     readonly SessionCollaborated: fc.Arbitrary<Collaboration.SessionCollaborated>;
     readonly ParticipantJoined: fc.Arbitrary<Collaboration.ParticipantJoined>;
+    readonly JourneyChosen: fc.Arbitrary<Collaboration.JourneyChosen>;
     readonly SessionClosed: fc.Arbitrary<Collaboration.SessionClosed>;
     readonly ElementName: fc.Arbitrary<Collaboration.ElementName>;
     readonly StormingName: fc.Arbitrary<Collaboration.StormingName>;
@@ -251,6 +274,10 @@ export interface Examples {
         readonly states?: { readonly Open?: readonly Collaboration.OpenChangeProposal[]; readonly Approved?: readonly Collaboration.ApprovedChangeProposal[]; readonly Rejected?: readonly Collaboration.RejectedChangeProposal[]; readonly Withdrawn?: readonly Collaboration.WithdrawnChangeProposal[] };
         readonly commands?: { readonly propose?: readonly Parameters<Collaboration.ChangeProposalCommands['propose']>[]; readonly approve?: readonly Parameters<Collaboration.ChangeProposalCommands['approve']>[]; readonly reject?: readonly Parameters<Collaboration.ChangeProposalCommands['reject']>[]; readonly withdraw?: readonly Parameters<Collaboration.ChangeProposalCommands['withdraw']>[] };
     };
+    readonly SessionRecord?: {
+        readonly states?: { readonly Written?: readonly Collaboration.WrittenSessionRecord[] };
+        readonly commands?: { readonly write?: readonly Parameters<Collaboration.SessionRecordCommands['write']>[]; readonly revise?: readonly Parameters<Collaboration.SessionRecordCommands['revise']>[] };
+    };
     readonly Request?: {
         readonly states?: { readonly Sent?: readonly Collaboration.SentRequest[]; readonly Dismissed?: readonly Collaboration.DismissedRequest[] };
         readonly commands?: { readonly send?: readonly Parameters<Collaboration.RequestCommands['send']>[]; readonly requestRevert?: readonly Parameters<Collaboration.RequestCommands['requestRevert']>[]; readonly answer?: readonly Parameters<Collaboration.RequestCommands['answer']>[] };
@@ -261,7 +288,7 @@ export interface Examples {
     };
     readonly Session?: {
         readonly states?: { readonly Open?: readonly Collaboration.OpenSession[]; readonly Closed?: readonly Collaboration.ClosedSession[] };
-        readonly commands?: { readonly start?: readonly Parameters<Collaboration.SessionCommands['start']>[]; readonly join?: readonly Parameters<Collaboration.SessionCommands['join']>[]; readonly collaborate?: readonly Parameters<Collaboration.SessionCommands['collaborate']>[]; readonly close?: readonly Parameters<Collaboration.SessionCommands['close']>[] };
+        readonly commands?: { readonly start?: readonly Parameters<Collaboration.SessionCommands['start']>[]; readonly join?: readonly Parameters<Collaboration.SessionCommands['join']>[]; readonly collaborate?: readonly Parameters<Collaboration.SessionCommands['collaborate']>[]; readonly chooseJourney?: readonly Parameters<Collaboration.SessionCommands['chooseJourney']>[]; readonly close?: readonly Parameters<Collaboration.SessionCommands['close']>[] };
     };
     readonly Triage?: {
         readonly states?: { readonly Pending?: readonly Collaboration.PendingTriage[]; readonly Decided?: readonly Collaboration.DecidedTriage[] };
@@ -283,13 +310,14 @@ export interface Options extends Generation {
 
 /** What `contract` tests: the constructors of domain primitives and the commands of aggregates, each optional. */
 export interface Implementation {
-    readonly make?: { readonly AgentRunId?: Collaboration.MakeAgentRunId; readonly ReplyKey?: Collaboration.MakeReplyKey; readonly AssumptionApprovalId?: Collaboration.MakeAssumptionApprovalId; readonly SlashCommandId?: Collaboration.MakeSlashCommandId; readonly CandidateLabel?: Collaboration.MakeCandidateLabel; readonly CandidateIndex?: Collaboration.MakeCandidateIndex; readonly Text?: Collaboration.MakeText; readonly LineNumber?: Collaboration.MakeLineNumber; readonly ColumnNumber?: Collaboration.MakeColumnNumber; readonly Tally?: Collaboration.MakeTally; readonly ContentHash?: Collaboration.MakeContentHash; readonly WorkspacePath?: Collaboration.MakeWorkspacePath; readonly GuideStepKey?: Collaboration.MakeGuideStepKey; readonly GuideJourneyKey?: Collaboration.MakeGuideJourneyKey; readonly InterviewId?: Collaboration.MakeInterviewId; readonly BriefName?: Collaboration.MakeBriefName; readonly BriefLabel?: Collaboration.MakeBriefLabel; readonly BriefText?: Collaboration.MakeBriefText; readonly AnswerChoice?: Collaboration.MakeAnswerChoice; readonly MarkId?: Collaboration.MakeMarkId; readonly Emoji?: Collaboration.MakeEmoji; readonly ChangeProposalId?: Collaboration.MakeChangeProposalId; readonly ProposalText?: Collaboration.MakeProposalText; readonly ProposalLabel?: Collaboration.MakeProposalLabel; readonly ProposalOptionIndex?: Collaboration.MakeProposalOptionIndex; readonly RequestId?: Collaboration.MakeRequestId; readonly RevisionId?: Collaboration.MakeRevisionId; readonly SessionId?: Collaboration.MakeSessionId; readonly ParticipantId?: Collaboration.MakeParticipantId; readonly DisplayName?: Collaboration.MakeDisplayName; readonly ElementName?: Collaboration.MakeElementName; readonly StormingName?: Collaboration.MakeStormingName; readonly StormingLocalName?: Collaboration.MakeStormingLocalName; readonly TimelineName?: Collaboration.MakeTimelineName; readonly StormingEventName?: Collaboration.MakeStormingEventName; readonly OccurrencePath?: Collaboration.MakeOccurrencePath; readonly TriageId?: Collaboration.MakeTriageId; readonly Confidence?: Collaboration.MakeConfidence; readonly Milliseconds?: Collaboration.MakeMilliseconds; readonly ContextName?: Collaboration.MakeContextName; readonly StageName?: Collaboration.MakeStageName; readonly CatalogQuery?: Collaboration.MakeCatalogQuery; readonly CatalogSection?: Collaboration.MakeCatalogSection };
+    readonly make?: { readonly AgentRunId?: Collaboration.MakeAgentRunId; readonly ReplyKey?: Collaboration.MakeReplyKey; readonly AssumptionApprovalId?: Collaboration.MakeAssumptionApprovalId; readonly SlashCommandId?: Collaboration.MakeSlashCommandId; readonly CandidateLabel?: Collaboration.MakeCandidateLabel; readonly CandidateIndex?: Collaboration.MakeCandidateIndex; readonly Text?: Collaboration.MakeText; readonly LineNumber?: Collaboration.MakeLineNumber; readonly ColumnNumber?: Collaboration.MakeColumnNumber; readonly Tally?: Collaboration.MakeTally; readonly ContentHash?: Collaboration.MakeContentHash; readonly WorkspacePath?: Collaboration.MakeWorkspacePath; readonly GuideStepKey?: Collaboration.MakeGuideStepKey; readonly GuideJourneyKey?: Collaboration.MakeGuideJourneyKey; readonly InterviewId?: Collaboration.MakeInterviewId; readonly BriefName?: Collaboration.MakeBriefName; readonly BriefLabel?: Collaboration.MakeBriefLabel; readonly BriefText?: Collaboration.MakeBriefText; readonly BriefField?: Collaboration.MakeBriefField; readonly RoleName?: Collaboration.MakeRoleName; readonly JourneyName?: Collaboration.MakeJourneyName; readonly ShortDescription?: Collaboration.MakeShortDescription; readonly AnswerChoice?: Collaboration.MakeAnswerChoice; readonly MarkId?: Collaboration.MakeMarkId; readonly Emoji?: Collaboration.MakeEmoji; readonly ChangeProposalId?: Collaboration.MakeChangeProposalId; readonly ProposalText?: Collaboration.MakeProposalText; readonly ProposalLabel?: Collaboration.MakeProposalLabel; readonly ProposalOptionIndex?: Collaboration.MakeProposalOptionIndex; readonly SessionRecordId?: Collaboration.MakeSessionRecordId; readonly JourneyRequestId?: Collaboration.MakeJourneyRequestId; readonly JourneyLabel?: Collaboration.MakeJourneyLabel; readonly RequestId?: Collaboration.MakeRequestId; readonly RevisionId?: Collaboration.MakeRevisionId; readonly SessionId?: Collaboration.MakeSessionId; readonly ParticipantId?: Collaboration.MakeParticipantId; readonly DisplayName?: Collaboration.MakeDisplayName; readonly ElementName?: Collaboration.MakeElementName; readonly StormingName?: Collaboration.MakeStormingName; readonly StormingLocalName?: Collaboration.MakeStormingLocalName; readonly TimelineName?: Collaboration.MakeTimelineName; readonly StormingEventName?: Collaboration.MakeStormingEventName; readonly OccurrencePath?: Collaboration.MakeOccurrencePath; readonly TriageId?: Collaboration.MakeTriageId; readonly Confidence?: Collaboration.MakeConfidence; readonly Milliseconds?: Collaboration.MakeMilliseconds; readonly ContextName?: Collaboration.MakeContextName; readonly StageName?: Collaboration.MakeStageName; readonly CatalogQuery?: Collaboration.MakeCatalogQuery; readonly CatalogSection?: Collaboration.MakeCatalogSection };
     readonly AgentRun?: Collaboration.AgentRunCommands;
     readonly AssumptionApproval?: Collaboration.AssumptionApprovalCommands;
     readonly SlashCommand?: Collaboration.SlashCommandCommands;
     readonly Interview?: Collaboration.InterviewCommands;
     readonly Mark?: Collaboration.MarkCommands;
     readonly ChangeProposal?: Collaboration.ChangeProposalCommands;
+    readonly SessionRecord?: Collaboration.SessionRecordCommands;
     readonly Request?: Collaboration.RequestCommands;
     readonly Revision?: Collaboration.RevisionCommands;
     readonly Session?: Collaboration.SessionCommands;
@@ -376,27 +404,33 @@ export function arbitraries(options: Options = {}): Arbitraries {
         GuideStepKey: () => testing.valid(given.GuideStepKey ?? testing.collide(testing.cast<Collaboration.GuideStepKey>(testing.base('String', { pattern: '^[a-zA-Z]+$', maxLength: 40 })), seed), (v) => Collaboration.checkGuideStepKey(v).length === 0, 'Collaboration.GuideStepKey'),
         GuideJourneyKey: () => testing.valid(given.GuideJourneyKey ?? testing.collide(testing.cast<Collaboration.GuideJourneyKey>(testing.base('String', { minLength: 1, maxLength: 100 })), seed), (v) => Collaboration.checkGuideJourneyKey(v).length === 0, 'Collaboration.GuideJourneyKey'),
         GuideWorld: () => given.GuideWorld ?? fc.constantFrom<Collaboration.GuideWorld>('None', 'Storming', 'Model'),
-        GuidePattern: () => given.GuidePattern ?? fc.constantFrom<Collaboration.GuidePattern>('Strategic', 'FromStorming', 'OneContext', 'Review'),
-        GuideStepState: () => given.GuideStepState ?? fc.constantFrom<Collaboration.GuideStepState>('Done', 'Here', 'Todo'),
+        GuidePattern: () => given.GuidePattern ?? fc.constantFrom<Collaboration.GuidePattern>('Whole', 'FromStorming', 'OneContext', 'Review'),
+        GuideStepState: () => given.GuideStepState ?? fc.constantFrom<Collaboration.GuideStepState>('Done', 'Here', 'Todo', 'Unconfirmed'),
         GuideStep: () => given.GuideStep ?? testing.cast<Collaboration.GuideStep>(fc.record({ key: a.GuideStepKey, state: a.GuideStepState, goal: testing.cast<boolean>(scalar.Bool), after: testing.cast<boolean>(scalar.Bool), markable: testing.cast<boolean>(scalar.Bool), marked: testing.cast<boolean>(scalar.Bool) })),
         GuideContextRow: () => given.GuideContextRow ?? testing.cast<Collaboration.GuideContextRow>(fc.record({ context: a.ContextName, shared: testing.cast<boolean>(scalar.Bool), aggregates: a.Tally, commands: a.Tally, invariants: a.Tally, state: a.GuideStepState, marked: testing.cast<boolean>(scalar.Bool) })),
-        GuideMap: () => given.GuideMap ?? testing.cast<Collaboration.GuideMap>(fc.record({ world: a.GuideWorld, journey: a.GuideJourneyKey, journeyName: testing.cast<string>(scalar.String), pattern: a.GuidePattern, storming: a.StormingName, steps: testing.many(a.GuideStep, 1, 12), contexts: testing.many(a.GuideContextRow, 0, 40), contextsAt: a.GuideStepKey }, { requiredKeys: ['world', 'steps', 'contexts'] })),
+        GuideMap: () => given.GuideMap ?? testing.cast<Collaboration.GuideMap>(fc.record({ world: a.GuideWorld, journey: a.GuideJourneyKey, journeyName: testing.cast<string>(scalar.String), pattern: a.GuidePattern, storming: a.StormingName, steps: testing.many(a.GuideStep, 1, 12), contexts: testing.many(a.GuideContextRow, 0, 40), contextsAt: a.GuideStepKey, missing: testing.cast<boolean>(scalar.Bool) }, { requiredKeys: ['world', 'steps', 'contexts'] })),
         GuideFindingKind: () => given.GuideFindingKind ?? fc.constantFrom<Collaboration.GuideFindingKind>('StormingWithoutBrief', 'StageWithoutExceptions', 'FlowWithoutExceptions', 'OpenHotspots', 'LongLabels', 'Errors', 'Warnings', 'ContextWithoutAggregates', 'AggregatesWithoutCommands', 'AggregatesWithoutInvariants'),
         GuideFinding: () => given.GuideFinding ?? testing.cast<Collaboration.GuideFinding>(fc.record({ kind: a.GuideFindingKind, count: a.Tally, subject: testing.cast<string>(scalar.String), target: a.ModelTarget, view: a.ViewShown }, { requiredKeys: ['kind', 'count'] })),
         GuideSnapshot: () => given.GuideSnapshot ?? testing.cast<Collaboration.GuideSnapshot>(fc.record({ maps: testing.many(a.GuideMap, 1, 10), findings: testing.many(a.GuideFinding, 0, 10) })),
         InterviewId: () => testing.valid(given.InterviewId ?? testing.collide(testing.cast<Collaboration.InterviewId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkInterviewId(v).length === 0, 'Collaboration.InterviewId'),
         InterviewCommand: () => given.InterviewCommand ?? fc.constantFrom<Collaboration.InterviewCommand>('Es', 'Model'),
         UiLanguage: () => given.UiLanguage ?? fc.constantFrom<Collaboration.UiLanguage>('Ja', 'En'),
-        BriefName: () => testing.valid(given.BriefName ?? testing.collide(testing.cast<Collaboration.BriefName>(testing.base('String', { pattern: '^[_a-zA-Z][A-Za-z0-9_]*$', maxLength: 100 })), seed), (v) => Collaboration.checkBriefName(v).length === 0, 'Collaboration.BriefName'),
+        BriefName: () => testing.valid(given.BriefName ?? testing.collide(testing.cast<Collaboration.BriefName>(testing.base('String', { pattern: '^[_a-zA-Z0-9][A-Za-z0-9_-]*$', maxLength: 100 })), seed), (v) => Collaboration.checkBriefName(v).length === 0, 'Collaboration.BriefName'),
         BriefLabel: () => testing.valid(given.BriefLabel ?? testing.collide(testing.cast<Collaboration.BriefLabel>(testing.base('String', { minLength: 1, maxLength: 100 })), seed), (v) => Collaboration.checkBriefLabel(v).length === 0, 'Collaboration.BriefLabel'),
         BriefText: () => testing.valid(given.BriefText ?? testing.collide(testing.cast<Collaboration.BriefText>(testing.base('String', { minLength: 1, maxLength: 1500 })), seed), (v) => Collaboration.checkBriefText(v).length === 0, 'Collaboration.BriefText'),
-        InterviewBrief: () => given.InterviewBrief ?? testing.cast<Collaboration.InterviewBrief>(fc.record({ name: a.BriefName, label: a.BriefLabel, isNew: testing.cast<boolean>(scalar.Bool), replaces: testing.cast<boolean>(scalar.Bool), text: a.BriefText }, { requiredKeys: ['name', 'isNew', 'replaces', 'text'] })),
-        AnswerChoice: () => testing.valid(given.AnswerChoice ?? testing.collide(testing.cast<Collaboration.AnswerChoice>(testing.base('String', { minLength: 1, maxLength: 40 })), seed), (v) => Collaboration.checkAnswerChoice(v).length === 0, 'Collaboration.AnswerChoice'),
+        BriefField: () => testing.valid(given.BriefField ?? testing.collide(testing.cast<Collaboration.BriefField>(testing.base('String', { minLength: 1, maxLength: 240 })), seed), (v) => Collaboration.checkBriefField(v).length === 0, 'Collaboration.BriefField'),
+        RoleName: () => testing.valid(given.RoleName ?? testing.collide(testing.cast<Collaboration.RoleName>(testing.base('String', { minLength: 1, maxLength: 60 })), seed), (v) => Collaboration.checkRoleName(v).length === 0, 'Collaboration.RoleName'),
+        JourneyName: () => testing.valid(given.JourneyName ?? testing.collide(testing.cast<Collaboration.JourneyName>(testing.base('String', { minLength: 1, maxLength: 100 })), seed), (v) => Collaboration.checkJourneyName(v).length === 0, 'Collaboration.JourneyName'),
+        ShortDescription: () => testing.valid(given.ShortDescription ?? testing.collide(testing.cast<Collaboration.ShortDescription>(testing.base('String', { minLength: 1, maxLength: 200 })), seed), (v) => Collaboration.checkShortDescription(v).length === 0, 'Collaboration.ShortDescription'),
+        JourneyUse: () => given.JourneyUse ?? fc.constantFrom<Collaboration.JourneyUse>('Align', 'Modeling'),
+        JourneyBrief: () => given.JourneyBrief ?? testing.cast<Collaboration.JourneyBrief>(fc.record({ purpose: a.BriefField, scope: a.BriefField, constraints: a.BriefField, participants: testing.many(a.RoleName, 0, 12), use: a.JourneyUse, level: a.StormingLevel, pattern: a.GuidePattern, goal: a.GuideStepKey, stormings: testing.many(a.StormingName, 0, 10), context: a.ContextName, journeyName: a.JourneyName, continues: testing.cast<boolean>(scalar.Bool) }, { requiredKeys: ['purpose', 'participants', 'stormings', 'continues'] })),
+        InterviewBrief: () => given.InterviewBrief ?? testing.cast<Collaboration.InterviewBrief>(fc.record({ name: a.BriefName, label: a.BriefLabel, isNew: testing.cast<boolean>(scalar.Bool), replaces: testing.cast<boolean>(scalar.Bool), text: a.BriefText, journey: a.JourneyBrief, description: a.ShortDescription }, { requiredKeys: ['name', 'isNew', 'replaces', 'text'] })),
+        AnswerChoice: () => testing.valid(given.AnswerChoice ?? testing.collide(testing.cast<Collaboration.AnswerChoice>(testing.base('String', { minLength: 1, maxLength: 200 })), seed), (v) => Collaboration.checkAnswerChoice(v).length === 0, 'Collaboration.AnswerChoice'),
         AskedQuestion: () => testing.valid(given.AskedQuestion ?? testing.cast<Collaboration.AskedQuestion>(fc.record({ question: a.RequestId, choices: testing.many(a.AnswerChoice, 0, 6), multiple: testing.cast<boolean>(scalar.Bool) })), (v) => Collaboration.checkAskedQuestion(v).length === 0, 'Collaboration.AskedQuestion'),
         BriefInstruction: () => given.BriefInstruction ?? testing.cast<Collaboration.BriefInstruction>(fc.record({ interview: a.InterviewId, command: a.InterviewCommand, brief: a.InterviewBrief })),
         AskingInterview: () => testing.withExamples(given.AskingInterview ?? testing.cast<Collaboration.AskingInterview>(fc.record({ state: fc.constant('Asking' as const), id: a.InterviewId, session: a.SessionId, command: a.InterviewCommand, startedBy: a.ParticipantId, opening: a.RequestId, focus: a.ModelTarget, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), awaiting: a.RequestId, asked: a.AskedQuestion }, { requiredKeys: ['state', 'id', 'session', 'command', 'startedBy', 'opening', 'language', 'startedAt'] })), options.examples?.Interview?.states?.Asking, () => [], 'Collaboration.AskingInterview'),
         BriefedInterview: () => testing.withExamples(given.BriefedInterview ?? testing.cast<Collaboration.BriefedInterview>(fc.record({ state: fc.constant('Briefed' as const), id: a.InterviewId, session: a.SessionId, command: a.InterviewCommand, startedBy: a.ParticipantId, opening: a.RequestId, focus: a.ModelTarget, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), brief: a.InterviewBrief, answered: a.RequestId, briefedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'command', 'startedBy', 'opening', 'language', 'startedAt', 'brief', 'answered', 'briefedAt'] })), options.examples?.Interview?.states?.Briefed, () => [], 'Collaboration.BriefedInterview'),
-        ConfirmedInterview: () => testing.withExamples(given.ConfirmedInterview ?? testing.cast<Collaboration.ConfirmedInterview>(fc.record({ state: fc.constant('Confirmed' as const), id: a.InterviewId, session: a.SessionId, command: a.InterviewCommand, startedBy: a.ParticipantId, opening: a.RequestId, focus: a.ModelTarget, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), brief: a.InterviewBrief, edited: testing.cast<boolean>(scalar.Bool), confirmedBy: a.ParticipantId, confirmedAt: testing.cast<Date>(scalar.Timestamp), run: a.AgentRunId }, { requiredKeys: ['state', 'id', 'session', 'command', 'startedBy', 'opening', 'language', 'startedAt', 'brief', 'edited', 'confirmedAt', 'run'] })), options.examples?.Interview?.states?.Confirmed, () => [], 'Collaboration.ConfirmedInterview'),
+        ConfirmedInterview: () => testing.withExamples(given.ConfirmedInterview ?? testing.cast<Collaboration.ConfirmedInterview>(fc.record({ state: fc.constant('Confirmed' as const), id: a.InterviewId, session: a.SessionId, command: a.InterviewCommand, startedBy: a.ParticipantId, opening: a.RequestId, focus: a.ModelTarget, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), brief: a.InterviewBrief, edited: testing.cast<boolean>(scalar.Bool), confirmedBy: a.ParticipantId, confirmedAt: testing.cast<Date>(scalar.Timestamp), run: a.AgentRunId }, { requiredKeys: ['state', 'id', 'session', 'command', 'startedBy', 'opening', 'language', 'startedAt', 'brief', 'edited', 'confirmedAt'] })), options.examples?.Interview?.states?.Confirmed, () => [], 'Collaboration.ConfirmedInterview'),
         StoppedInterview: () => testing.withExamples(given.StoppedInterview ?? testing.cast<Collaboration.StoppedInterview>(fc.record({ state: fc.constant('Stopped' as const), id: a.InterviewId, session: a.SessionId, command: a.InterviewCommand, startedBy: a.ParticipantId, opening: a.RequestId, focus: a.ModelTarget, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), stoppedBy: a.ParticipantId, stoppedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'command', 'startedBy', 'opening', 'language', 'startedAt', 'stoppedBy', 'stoppedAt'] })), options.examples?.Interview?.states?.Stopped, () => [], 'Collaboration.StoppedInterview'),
         RejectedInterview: () => testing.withExamples(given.RejectedInterview ?? testing.cast<Collaboration.RejectedInterview>(fc.record({ state: fc.constant('Rejected' as const), id: a.InterviewId, session: a.SessionId, command: a.InterviewCommand, startedBy: a.ParticipantId, opening: a.RequestId, focus: a.ModelTarget, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), brief: a.InterviewBrief, rejectedBy: a.ParticipantId, note: a.Text, rejectedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'command', 'startedBy', 'opening', 'language', 'startedAt', 'brief', 'rejectedBy', 'rejectedAt'] })), options.examples?.Interview?.states?.Rejected, () => [], 'Collaboration.RejectedInterview'),
         Interview: () => given.Interview ?? fc.oneof(a.AskingInterview, a.BriefedInterview, a.ConfirmedInterview, a.StoppedInterview, a.RejectedInterview),
@@ -404,7 +438,7 @@ export function arbitraries(options: Options = {}): Arbitraries {
         InterviewAnswered: () => given.InterviewAnswered ?? testing.cast<Collaboration.InterviewAnswered>(fc.record({ type: fc.constant('InterviewAnswered' as const), interviewId: a.InterviewId, message: a.RequestId, heardAt: testing.cast<Date>(scalar.Timestamp) })),
         InterviewQuestionAsked: () => given.InterviewQuestionAsked ?? testing.cast<Collaboration.InterviewQuestionAsked>(fc.record({ type: fc.constant('InterviewQuestionAsked' as const), interviewId: a.InterviewId, question: a.RequestId, choices: testing.many(a.AnswerChoice, 0, 6), multiple: testing.cast<boolean>(scalar.Bool), askedAt: testing.cast<Date>(scalar.Timestamp) })),
         InterviewBriefed: () => given.InterviewBriefed ?? testing.cast<Collaboration.InterviewBriefed>(fc.record({ type: fc.constant('InterviewBriefed' as const), interviewId: a.InterviewId, brief: a.InterviewBrief, answered: a.RequestId, briefedAt: testing.cast<Date>(scalar.Timestamp) })),
-        InterviewConfirmed: () => given.InterviewConfirmed ?? testing.cast<Collaboration.InterviewConfirmed>(fc.record({ type: fc.constant('InterviewConfirmed' as const), interviewId: a.InterviewId, brief: a.InterviewBrief, edited: testing.cast<boolean>(scalar.Bool), confirmedBy: a.ParticipantId, run: a.AgentRunId, confirmedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'interviewId', 'brief', 'edited', 'run', 'confirmedAt'] })),
+        InterviewConfirmed: () => given.InterviewConfirmed ?? testing.cast<Collaboration.InterviewConfirmed>(fc.record({ type: fc.constant('InterviewConfirmed' as const), interviewId: a.InterviewId, brief: a.InterviewBrief, edited: testing.cast<boolean>(scalar.Bool), confirmedBy: a.ParticipantId, run: a.AgentRunId, confirmedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'interviewId', 'brief', 'edited', 'confirmedAt'] })),
         InterviewStopped: () => given.InterviewStopped ?? testing.cast<Collaboration.InterviewStopped>(fc.record({ type: fc.constant('InterviewStopped' as const), interviewId: a.InterviewId, stoppedBy: a.ParticipantId, stoppedAt: testing.cast<Date>(scalar.Timestamp) })),
         InterviewRejected: () => given.InterviewRejected ?? testing.cast<Collaboration.InterviewRejected>(fc.record({ type: fc.constant('InterviewRejected' as const), interviewId: a.InterviewId, rejectedBy: a.ParticipantId, note: a.Text, rejectedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'interviewId', 'rejectedBy', 'rejectedAt'] })),
         MarkId: () => testing.valid(given.MarkId ?? testing.collide(testing.cast<Collaboration.MarkId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkMarkId(v).length === 0, 'Collaboration.MarkId'),
@@ -435,16 +469,32 @@ export function arbitraries(options: Options = {}): Arbitraries {
         ProposalApproved: () => given.ProposalApproved ?? testing.cast<Collaboration.ProposalApproved>(fc.record({ type: fc.constant('ProposalApproved' as const), proposalId: a.ChangeProposalId, approvedBy: a.ParticipantId, option: a.ProposalOptionIndex, editedHow: a.ProposalText, run: a.AgentRunId, approvedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'proposalId', 'approvedBy', 'run', 'approvedAt'] })),
         ProposalRejected: () => given.ProposalRejected ?? testing.cast<Collaboration.ProposalRejected>(fc.record({ type: fc.constant('ProposalRejected' as const), proposalId: a.ChangeProposalId, rejectedBy: a.ParticipantId, note: a.Text, rejectedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'proposalId', 'rejectedBy', 'rejectedAt'] })),
         ProposalWithdrawn: () => given.ProposalWithdrawn ?? testing.cast<Collaboration.ProposalWithdrawn>(fc.record({ type: fc.constant('ProposalWithdrawn' as const), proposalId: a.ChangeProposalId, withdrawnBy: a.ParticipantId, withdrawnAt: testing.cast<Date>(scalar.Timestamp) })),
+        SessionRecordId: () => testing.valid(given.SessionRecordId ?? testing.collide(testing.cast<Collaboration.SessionRecordId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkSessionRecordId(v).length === 0, 'Collaboration.SessionRecordId'),
+        JourneyRequestId: () => testing.valid(given.JourneyRequestId ?? testing.collide(testing.cast<Collaboration.JourneyRequestId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkJourneyRequestId(v).length === 0, 'Collaboration.JourneyRequestId'),
+        JourneyLabel: () => testing.valid(given.JourneyLabel ?? testing.collide(testing.cast<Collaboration.JourneyLabel>(testing.base('String', { minLength: 1, maxLength: 200 })), seed), (v) => Collaboration.checkJourneyLabel(v).length === 0, 'Collaboration.JourneyLabel'),
+        RecordedJourney: () => given.RecordedJourney ?? testing.cast<Collaboration.RecordedJourney>(fc.record({ journey: a.GuideJourneyKey, label: a.JourneyLabel })),
+        JourneyStatus: () => given.JourneyStatus ?? fc.constantFrom<Collaboration.JourneyStatus>('Active', 'Done', 'Archived'),
+        RecordedMark: () => given.RecordedMark ?? testing.cast<Collaboration.RecordedMark>(fc.record({ step: a.GuideStepKey, context: a.ContextName }, { requiredKeys: ['step'] })),
+        RequestedJourneyAct: () => given.RequestedJourneyAct ?? testing.cast<Collaboration.RequestedJourneyAct>(fc.oneof(fc.record({ kind: fc.constant('Choose' as const), journey: a.RecordedJourney }, { requiredKeys: ['kind'] }), fc.record({ kind: fc.constant('Goal' as const), journey: a.RecordedJourney, goal: a.GuideStepKey }), fc.record({ kind: fc.constant('State' as const), journey: a.RecordedJourney, state: a.JourneyStatus }), fc.record({ kind: fc.constant('Mark' as const), journey: a.RecordedJourney, mark: a.RecordedMark, done: testing.cast<boolean>(scalar.Bool) }))),
+        JourneyRequestOutcome: () => given.JourneyRequestOutcome ?? fc.constantFrom<Collaboration.JourneyRequestOutcome>('Approved', 'Denied', 'Withdrawn'),
+        JourneyFileChangeKind: () => given.JourneyFileChangeKind ?? fc.constantFrom<Collaboration.JourneyFileChangeKind>('Added', 'Removed', 'Goal', 'State', 'Marks', 'Brief'),
+        JourneyFileChange: () => given.JourneyFileChange ?? testing.cast<Collaboration.JourneyFileChange>(fc.record({ kind: a.JourneyFileChangeKind, journey: a.RecordedJourney, from: testing.cast<string>(scalar.String), to: testing.cast<string>(scalar.String) }, { requiredKeys: ['kind', 'journey'] })),
+        RecordFact: () => given.RecordFact ?? testing.cast<Collaboration.RecordFact>(fc.oneof(fc.record({ kind: fc.constant('GoalChanged' as const), journey: a.RecordedJourney, from: a.GuideStepKey, to: a.GuideStepKey, other: testing.cast<boolean>(scalar.Bool) }), fc.record({ kind: fc.constant('MarksChanged' as const), journey: a.RecordedJourney, done: testing.cast<boolean>(scalar.Bool), marks: testing.many(a.RecordedMark, 1, 40), other: testing.cast<boolean>(scalar.Bool) }), fc.record({ kind: fc.constant('StateChanged' as const), journey: a.RecordedJourney, state: a.JourneyStatus }), fc.record({ kind: fc.constant('CurrentChosen' as const), journey: a.RecordedJourney }), fc.record({ kind: fc.constant('JourneyRequested' as const), request: a.JourneyRequestId, act: a.RequestedJourneyAct, outcome: a.JourneyRequestOutcome, decidedBy: a.ParticipantId }, { requiredKeys: ['kind', 'request', 'act'] }), fc.record({ kind: fc.constant('InterviewStopped' as const), interview: a.InterviewId }), fc.record({ kind: fc.constant('BriefRejected' as const), interview: a.InterviewId, note: a.Text }, { requiredKeys: ['kind', 'interview'] }), fc.record({ kind: fc.constant('FileChangedOutside' as const), changes: testing.many(a.JourneyFileChange, 0, 10), more: a.Tally, unreadable: testing.cast<boolean>(scalar.Bool) }))),
+        WrittenSessionRecord: () => testing.withExamples(given.WrittenSessionRecord ?? testing.cast<Collaboration.WrittenSessionRecord>(fc.record({ state: fc.constant('Written' as const), id: a.SessionRecordId, session: a.SessionId, by: a.ParticipantId, fact: a.RecordFact, replyTo: a.RequestId, at: testing.cast<Date>(scalar.Timestamp), revisedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'fact', 'at'] })), options.examples?.SessionRecord?.states?.Written, () => [], 'Collaboration.WrittenSessionRecord'),
+        SessionRecord: () => given.SessionRecord ?? fc.oneof(a.WrittenSessionRecord),
+        RecordWritten: () => given.RecordWritten ?? testing.cast<Collaboration.RecordWritten>(fc.record({ type: fc.constant('RecordWritten' as const), recordId: a.SessionRecordId, session: a.SessionId, by: a.ParticipantId, fact: a.RecordFact, replyTo: a.RequestId, at: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'recordId', 'session', 'fact', 'at'] })),
+        RecordRevised: () => given.RecordRevised ?? testing.cast<Collaboration.RecordRevised>(fc.record({ type: fc.constant('RecordRevised' as const), recordId: a.SessionRecordId, fact: a.RecordFact, revisedAt: testing.cast<Date>(scalar.Timestamp) })),
         RequestId: () => testing.valid(given.RequestId ?? testing.collide(testing.cast<Collaboration.RequestId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkRequestId(v).length === 0, 'Collaboration.RequestId'),
         PendingRequest: () => given.PendingRequest ?? testing.cast<Collaboration.PendingRequest>(a.RequestId),
         ReplyTarget: () => given.ReplyTarget ?? testing.cast<Collaboration.ReplyTarget>(fc.oneof(fc.record({ kind: fc.constant('Run' as const), run: a.AgentRunId }), fc.record({ kind: fc.constant('Message' as const), request: a.RequestId }))),
         ReplyableTarget: () => given.ReplyableTarget ?? testing.cast<Collaboration.ReplyableTarget>(a.ReplyTarget),
         RevertableRun: () => given.RevertableRun ?? testing.cast<Collaboration.RevertableRun>(a.AgentRunId),
+        JourneyNote: () => given.JourneyNote ?? testing.cast<Collaboration.JourneyNote>(fc.record({ journey: a.GuideJourneyKey, command: a.SuggestedCommand, targets: testing.many(a.ModelTarget, 0, 3) }, { requiredKeys: ['journey', 'targets'] })),
         MentionableParticipant: () => given.MentionableParticipant ?? testing.cast<Collaboration.MentionableParticipant>(a.ParticipantId),
-        SentRequest: () => testing.withExamples(testing.valid(given.SentRequest ?? testing.cast<Collaboration.SentRequest>(fc.record({ state: fc.constant('Sent' as const), id: a.RequestId, session: a.SessionId, author: a.ParticipantId, targets: testing.many(a.TargetSnapshot, 0, 20), body: a.Text, sentAt: testing.cast<Date>(scalar.Timestamp), replyTo: a.ReplyTarget, mentions: testing.many(a.ParticipantId, 0, 20), reverts: a.AgentRunId, viewedAt: a.ViewedAt }, { requiredKeys: ['state', 'id', 'session', 'author', 'targets', 'body', 'sentAt', 'mentions'] })), (v) => Collaboration.checkSentRequest(v).length === 0, 'Collaboration.SentRequest'), options.examples?.Request?.states?.Sent, Collaboration.checkSentRequest, 'Collaboration.SentRequest'),
-        DismissedRequest: () => testing.withExamples(testing.valid(given.DismissedRequest ?? testing.cast<Collaboration.DismissedRequest>(fc.record({ state: fc.constant('Dismissed' as const), id: a.RequestId, session: a.SessionId, author: a.ParticipantId, targets: testing.many(a.TargetSnapshot, 0, 20), body: a.Text, sentAt: testing.cast<Date>(scalar.Timestamp), replyTo: a.ReplyTarget, mentions: testing.many(a.ParticipantId, 0, 20), reverts: a.AgentRunId, viewedAt: a.ViewedAt, dismissedBy: a.ParticipantId, dismissedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'author', 'targets', 'body', 'sentAt', 'mentions', 'dismissedBy', 'dismissedAt'] })), (v) => Collaboration.checkDismissedRequest(v).length === 0, 'Collaboration.DismissedRequest'), options.examples?.Request?.states?.Dismissed, Collaboration.checkDismissedRequest, 'Collaboration.DismissedRequest'),
+        SentRequest: () => testing.withExamples(testing.valid(given.SentRequest ?? testing.cast<Collaboration.SentRequest>(fc.record({ state: fc.constant('Sent' as const), id: a.RequestId, session: a.SessionId, author: a.ParticipantId, targets: testing.many(a.TargetSnapshot, 0, 20), body: a.Text, sentAt: testing.cast<Date>(scalar.Timestamp), replyTo: a.ReplyTarget, mentions: testing.many(a.ParticipantId, 0, 20), reverts: a.AgentRunId, viewedAt: a.ViewedAt, journeyNote: a.JourneyNote }, { requiredKeys: ['state', 'id', 'session', 'author', 'targets', 'body', 'sentAt', 'mentions'] })), (v) => Collaboration.checkSentRequest(v).length === 0, 'Collaboration.SentRequest'), options.examples?.Request?.states?.Sent, Collaboration.checkSentRequest, 'Collaboration.SentRequest'),
+        DismissedRequest: () => testing.withExamples(testing.valid(given.DismissedRequest ?? testing.cast<Collaboration.DismissedRequest>(fc.record({ state: fc.constant('Dismissed' as const), id: a.RequestId, session: a.SessionId, author: a.ParticipantId, targets: testing.many(a.TargetSnapshot, 0, 20), body: a.Text, sentAt: testing.cast<Date>(scalar.Timestamp), replyTo: a.ReplyTarget, mentions: testing.many(a.ParticipantId, 0, 20), reverts: a.AgentRunId, viewedAt: a.ViewedAt, journeyNote: a.JourneyNote, dismissedBy: a.ParticipantId, dismissedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'author', 'targets', 'body', 'sentAt', 'mentions', 'dismissedBy', 'dismissedAt'] })), (v) => Collaboration.checkDismissedRequest(v).length === 0, 'Collaboration.DismissedRequest'), options.examples?.Request?.states?.Dismissed, Collaboration.checkDismissedRequest, 'Collaboration.DismissedRequest'),
         Request: () => given.Request ?? fc.oneof(a.SentRequest, a.DismissedRequest),
-        RequestSent: () => given.RequestSent ?? testing.cast<Collaboration.RequestSent>(fc.record({ type: fc.constant('RequestSent' as const), requestId: a.RequestId, session: a.SessionId, author: a.ParticipantId, targets: testing.many(a.TargetSnapshot, 0, 20), body: a.Text, sentAt: testing.cast<Date>(scalar.Timestamp), replyTo: a.ReplyTarget, mentions: testing.many(a.ParticipantId, 0, 20), reverts: a.AgentRunId, viewedAt: a.ViewedAt }, { requiredKeys: ['type', 'requestId', 'session', 'author', 'targets', 'body', 'sentAt', 'mentions'] })),
+        RequestSent: () => given.RequestSent ?? testing.cast<Collaboration.RequestSent>(fc.record({ type: fc.constant('RequestSent' as const), requestId: a.RequestId, session: a.SessionId, author: a.ParticipantId, targets: testing.many(a.TargetSnapshot, 0, 20), body: a.Text, sentAt: testing.cast<Date>(scalar.Timestamp), replyTo: a.ReplyTarget, mentions: testing.many(a.ParticipantId, 0, 20), reverts: a.AgentRunId, viewedAt: a.ViewedAt, journeyNote: a.JourneyNote }, { requiredKeys: ['type', 'requestId', 'session', 'author', 'targets', 'body', 'sentAt', 'mentions'] })),
         RequestDismissed: () => given.RequestDismissed ?? testing.cast<Collaboration.RequestDismissed>(fc.record({ type: fc.constant('RequestDismissed' as const), requestId: a.RequestId, dismissedBy: a.ParticipantId, dismissedAt: testing.cast<Date>(scalar.Timestamp) })),
         RevisionId: () => testing.valid(given.RevisionId ?? testing.collide(testing.cast<Collaboration.RevisionId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkRevisionId(v).length === 0, 'Collaboration.RevisionId'),
         RestorableRevision: () => given.RestorableRevision ?? testing.cast<Collaboration.RestorableRevision>(a.RevisionId),
@@ -461,13 +511,14 @@ export function arbitraries(options: Options = {}): Arbitraries {
         ParticipantRole: () => given.ParticipantRole ?? fc.constantFrom<Collaboration.ParticipantRole>('Facilitator', 'Participant'),
         SessionMode: () => given.SessionMode ?? fc.constantFrom<Collaboration.SessionMode>('Solo', 'Collab'),
         ActiveSession: () => given.ActiveSession ?? testing.cast<Collaboration.ActiveSession>(a.SessionId),
-        OpenSession: () => testing.withExamples(testing.valid(given.OpenSession ?? testing.cast<Collaboration.OpenSession>(fc.record({ state: fc.constant('Open' as const), id: a.SessionId, facilitator: a.ParticipantId, mode: a.SessionMode, participants: testing.many(a.Participant, 1), startedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkOpenSession(v).length === 0, 'Collaboration.OpenSession'), options.examples?.Session?.states?.Open, Collaboration.checkOpenSession, 'Collaboration.OpenSession'),
-        ClosedSession: () => testing.withExamples(testing.valid(given.ClosedSession ?? testing.cast<Collaboration.ClosedSession>(fc.record({ state: fc.constant('Closed' as const), id: a.SessionId, facilitator: a.ParticipantId, mode: a.SessionMode, participants: testing.many(a.Participant, 1), startedAt: testing.cast<Date>(scalar.Timestamp), closedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkClosedSession(v).length === 0, 'Collaboration.ClosedSession'), options.examples?.Session?.states?.Closed, Collaboration.checkClosedSession, 'Collaboration.ClosedSession'),
+        OpenSession: () => testing.withExamples(testing.valid(given.OpenSession ?? testing.cast<Collaboration.OpenSession>(fc.record({ state: fc.constant('Open' as const), id: a.SessionId, facilitator: a.ParticipantId, mode: a.SessionMode, participants: testing.many(a.Participant, 1), startedAt: testing.cast<Date>(scalar.Timestamp), currentJourney: a.GuideJourneyKey }, { requiredKeys: ['state', 'id', 'facilitator', 'mode', 'participants', 'startedAt'] })), (v) => Collaboration.checkOpenSession(v).length === 0, 'Collaboration.OpenSession'), options.examples?.Session?.states?.Open, Collaboration.checkOpenSession, 'Collaboration.OpenSession'),
+        ClosedSession: () => testing.withExamples(testing.valid(given.ClosedSession ?? testing.cast<Collaboration.ClosedSession>(fc.record({ state: fc.constant('Closed' as const), id: a.SessionId, facilitator: a.ParticipantId, mode: a.SessionMode, participants: testing.many(a.Participant, 1), startedAt: testing.cast<Date>(scalar.Timestamp), currentJourney: a.GuideJourneyKey, closedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'facilitator', 'mode', 'participants', 'startedAt', 'closedAt'] })), (v) => Collaboration.checkClosedSession(v).length === 0, 'Collaboration.ClosedSession'), options.examples?.Session?.states?.Closed, Collaboration.checkClosedSession, 'Collaboration.ClosedSession'),
         Session: () => given.Session ?? fc.oneof(a.OpenSession, a.ClosedSession),
         Participant: () => given.Participant ?? testing.cast<Collaboration.Participant>(fc.record({ id: a.ParticipantId, name: a.DisplayName, role: a.ParticipantRole, joinedAt: testing.cast<Date>(scalar.Timestamp) })),
         SessionStarted: () => given.SessionStarted ?? testing.cast<Collaboration.SessionStarted>(fc.record({ type: fc.constant('SessionStarted' as const), sessionId: a.SessionId, facilitator: a.ParticipantId, name: a.DisplayName, mode: a.SessionMode, startedAt: testing.cast<Date>(scalar.Timestamp) })),
         SessionCollaborated: () => given.SessionCollaborated ?? testing.cast<Collaboration.SessionCollaborated>(fc.record({ type: fc.constant('SessionCollaborated' as const), sessionId: a.SessionId, collaboratedAt: testing.cast<Date>(scalar.Timestamp) })),
         ParticipantJoined: () => given.ParticipantJoined ?? testing.cast<Collaboration.ParticipantJoined>(fc.record({ type: fc.constant('ParticipantJoined' as const), sessionId: a.SessionId, participant: a.ParticipantId, name: a.DisplayName, joinedAt: testing.cast<Date>(scalar.Timestamp) })),
+        JourneyChosen: () => given.JourneyChosen ?? testing.cast<Collaboration.JourneyChosen>(fc.record({ type: fc.constant('JourneyChosen' as const), sessionId: a.SessionId, journey: a.GuideJourneyKey, chosenAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'sessionId', 'chosenAt'] })),
         SessionClosed: () => given.SessionClosed ?? testing.cast<Collaboration.SessionClosed>(fc.record({ type: fc.constant('SessionClosed' as const), sessionId: a.SessionId, closedAt: testing.cast<Date>(scalar.Timestamp) })),
         ElementName: () => testing.valid(given.ElementName ?? testing.collide(testing.cast<Collaboration.ElementName>(testing.base('String', { minLength: 1 })), seed), (v) => Collaboration.checkElementName(v).length === 0, 'Collaboration.ElementName'),
         StormingName: () => testing.valid(given.StormingName ?? testing.collide(testing.cast<Collaboration.StormingName>(testing.base('String', { minLength: 1 })), seed), (v) => Collaboration.checkStormingName(v).length === 0, 'Collaboration.StormingName'),
@@ -660,7 +711,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...(impl.make.BriefName ? testing.primitiveCases({
                 type: 'Collaboration.BriefName',
                 base: 'String',
-                hints: { pattern: '^[_a-zA-Z][A-Za-z0-9_]*$', maxLength: 100 },
+                hints: { pattern: '^[_a-zA-Z0-9][A-Za-z0-9_-]*$', maxLength: 100 },
                 invariants: ['valid'],
                 declared: [],
                 check: () => Collaboration.checkBriefName,
@@ -684,10 +735,46 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 check: () => Collaboration.checkBriefText,
                 make: impl.make.BriefText,
             }, options) : []),
+            ...(impl.make.BriefField ? testing.primitiveCases({
+                type: 'Collaboration.BriefField',
+                base: 'String',
+                hints: { minLength: 1, maxLength: 240 },
+                invariants: ['valid'],
+                declared: [],
+                check: () => Collaboration.checkBriefField,
+                make: impl.make.BriefField,
+            }, options) : []),
+            ...(impl.make.RoleName ? testing.primitiveCases({
+                type: 'Collaboration.RoleName',
+                base: 'String',
+                hints: { minLength: 1, maxLength: 60 },
+                invariants: ['valid'],
+                declared: [],
+                check: () => Collaboration.checkRoleName,
+                make: impl.make.RoleName,
+            }, options) : []),
+            ...(impl.make.JourneyName ? testing.primitiveCases({
+                type: 'Collaboration.JourneyName',
+                base: 'String',
+                hints: { minLength: 1, maxLength: 100 },
+                invariants: ['valid'],
+                declared: [],
+                check: () => Collaboration.checkJourneyName,
+                make: impl.make.JourneyName,
+            }, options) : []),
+            ...(impl.make.ShortDescription ? testing.primitiveCases({
+                type: 'Collaboration.ShortDescription',
+                base: 'String',
+                hints: { minLength: 1, maxLength: 200 },
+                invariants: ['valid'],
+                declared: [],
+                check: () => Collaboration.checkShortDescription,
+                make: impl.make.ShortDescription,
+            }, options) : []),
             ...(impl.make.AnswerChoice ? testing.primitiveCases({
                 type: 'Collaboration.AnswerChoice',
                 base: 'String',
-                hints: { minLength: 1, maxLength: 40 },
+                hints: { minLength: 1, maxLength: 200 },
                 invariants: ['valid'],
                 declared: [],
                 check: () => Collaboration.checkAnswerChoice,
@@ -747,6 +834,33 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 declared: [],
                 check: () => Collaboration.checkProposalOptionIndex,
                 make: impl.make.ProposalOptionIndex,
+            }, options) : []),
+            ...(impl.make.SessionRecordId ? testing.primitiveCases({
+                type: 'Collaboration.SessionRecordId',
+                base: 'UUID',
+                hints: {},
+                invariants: ['uuid'],
+                declared: [],
+                check: () => Collaboration.checkSessionRecordId,
+                make: impl.make.SessionRecordId,
+            }, options) : []),
+            ...(impl.make.JourneyRequestId ? testing.primitiveCases({
+                type: 'Collaboration.JourneyRequestId',
+                base: 'UUID',
+                hints: {},
+                invariants: ['uuid'],
+                declared: [],
+                check: () => Collaboration.checkJourneyRequestId,
+                make: impl.make.JourneyRequestId,
+            }, options) : []),
+            ...(impl.make.JourneyLabel ? testing.primitiveCases({
+                type: 'Collaboration.JourneyLabel',
+                base: 'String',
+                hints: { minLength: 1, maxLength: 200 },
+                invariants: ['valid'],
+                declared: [],
+                check: () => Collaboration.checkJourneyLabel,
+                make: impl.make.JourneyLabel,
             }, options) : []),
             ...(impl.make.RequestId ? testing.primitiveCases({
                 type: 'Collaboration.RequestId',
@@ -1180,7 +1294,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Interview.confirm',
                 run: impl.Interview.confirm,
-                input: () => fc.tuple(fc.oneof(a.BriefedInterview), fc.record({ confirmedBy: a.ParticipantId, confirmedByRole: a.ParticipantRole, confirmedBrief: a.InterviewBrief, edited: testing.cast<boolean>(scalar.Bool), run: a.AgentRunId, confirmedAt: testing.cast<Date>(scalar.Timestamp) })),
+                input: () => fc.tuple(fc.oneof(a.BriefedInterview), fc.record({ confirmedBy: a.ParticipantId, confirmedByRole: a.ParticipantRole, confirmedBrief: a.InterviewBrief, edited: testing.cast<boolean>(scalar.Bool), run: a.AgentRunId, confirmedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['confirmedBy', 'confirmedByRole', 'confirmedBrief', 'edited', 'confirmedAt'] })),
                 examples: options.examples?.Interview?.commands?.confirm ?? [],
                 factory: false,
                 requires: [{ name: 'facilitatorConfirms', error: 'FacilitatorOnly' }],
@@ -1299,6 +1413,32 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 counted: [],
             }, options),
         ]),
+        impl.SessionRecord && testing.suite('SessionRecord', [
+            ...testing.commandCases({
+                name: 'SessionRecord.write',
+                run: impl.SessionRecord.write,
+                input: () => fc.tuple(fc.record({ id: a.SessionRecordId, session: a.ActiveSession, by: a.ParticipantId, fact: a.RecordFact, replyTo: a.RequestId, at: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['id', 'session', 'fact', 'at'] })),
+                examples: options.examples?.SessionRecord?.commands?.write ?? [],
+                factory: true,
+                requires: [],
+                declaredRequires: [],
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'SessionRecord.revise',
+                run: impl.SessionRecord.revise,
+                input: () => fc.tuple(fc.oneof(a.WrittenSessionRecord), fc.record({ fact: a.RecordFact, revisedAt: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.SessionRecord?.commands?.revise ?? [],
+                factory: false,
+                requires: [],
+                declaredRequires: [],
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+        ]),
         impl.Request && testing.suite('Request', [
             ...testing.commandCases({
                 name: 'Request.send',
@@ -1331,7 +1471,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Request.answer',
                 run: impl.Request.answer,
-                input: () => fc.tuple(fc.record({ id: a.RequestId, session: a.ActiveSession, answers: a.RequestId, body: a.Text, sentAt: testing.cast<Date>(scalar.Timestamp) })),
+                input: () => fc.tuple(fc.record({ id: a.RequestId, session: a.ActiveSession, answers: a.RequestId, body: a.Text, sentAt: testing.cast<Date>(scalar.Timestamp), journeyNote: a.JourneyNote }, { requiredKeys: ['id', 'session', 'body', 'sentAt'] })),
                 examples: options.examples?.Request?.commands?.answer ?? [],
                 factory: true,
                 requires: [],
@@ -1413,6 +1553,20 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 requires: [{ name: 'solo', error: 'NotSolo' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkCollaborateSessionRequires,
+                invariants: () => Collaboration.checkSession,
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'Session.chooseJourney',
+                run: impl.Session.chooseJourney,
+                input: () => fc.tuple(fc.oneof(a.OpenSession), fc.record({ journey: a.GuideJourneyKey, chosenByRole: a.ParticipantRole, chosenAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['chosenByRole', 'chosenAt'] })),
+                examples: options.examples?.Session?.commands?.chooseJourney ?? [],
+                factory: false,
+                requires: [{ name: 'facilitatorChooses', error: 'FacilitatorOnly' }],
+                declaredRequires: [],
+                firstFailing: () => Collaboration.checkChooseJourneySessionRequires,
                 invariants: () => Collaboration.checkSession,
                 declaredInvariants: [],
                 stateful: true,

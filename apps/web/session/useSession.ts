@@ -2,7 +2,16 @@
 // the drafts in IndexedDB. The page is in a session only once the socket sent `session.state`; under `dt view` it never
 // does, so nothing here calls the session API or sends anything there.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Cursor, InviteStateBody, JoinRequestBody, Me, RunActivity, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
+import type {
+    Cursor,
+    InviteStateBody,
+    JoinRequestBody,
+    JourneyBody,
+    Me,
+    RunActivity,
+    SessionStateBody,
+    ViewLocation,
+} from '@domaintrail/collaboration/protocol';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import type { ViewSocket } from '../app/useViewSocket';
 import { reloadForSignIn } from '../app/sign-in';
@@ -54,7 +63,12 @@ export interface SessionData {
     readonly activities: Readonly<Record<string, RunActivity>>;
     /** `link`, the facilitator's page: the pending join requests and the live invite (undefined elsewhere). */
     readonly joining?: { readonly requests: readonly JoinRequestBody[]; readonly invite: InviteStateBody | null; readonly inviteUsedUp: boolean };
+    /** The journey file and the participants' requests about it, as the server last sent them (none yet: no file known). */
+    readonly journey: JourneyBody;
 }
+
+/** No journey file known (before the server says). */
+export const NO_JOURNEY: JourneyBody = { file: null, problems: [], requests: [] };
 
 const NO_ACTIVITIES: Readonly<Record<string, RunActivity>> = {};
 
@@ -71,6 +85,7 @@ export function useSession(socket: ViewSocket, current: ViewPayload | null): Ses
     const [error, setError] = useState<string | undefined>();
     const [activities, setActivities] = useState<Readonly<Record<string, RunActivity>>>(NO_ACTIVITIES);
     const [joining, setJoining] = useState<SessionData['joining']>();
+    const [journey, setJourney] = useState<JourneyBody>(NO_JOURNEY);
 
     useEffect(
         () =>
@@ -78,6 +93,7 @@ export function useSession(socket: ViewSocket, current: ViewPayload | null): Ses
                 if (m.type === 'session.activities') return setActivities(m.activities);
                 if (m.type === 'run.activity') return setActivities((a) => ({ ...a, [m.run]: m.activity }));
                 if (m.type === 'join.requests') return setJoining({ requests: m.requests, invite: m.invite, inviteUsedUp: m.inviteUsedUp ?? false });
+                if (m.type === 'journey') return setJourney(m.journey);
                 if (m.type === 'session.state') {
                     setEpoch((e) => e + 1);
                     setStatus('live');
@@ -146,9 +162,9 @@ export function useSession(socket: ViewSocket, current: ViewPayload | null): Ses
     return useMemo(
         () =>
             model.state && model.me
-                ? { me: model.me, state: model.state, peers, status, targets, epoch, error, activities, ...(joining && { joining }) }
+                ? { me: model.me, state: model.state, peers, status, targets, epoch, error, activities, journey, ...(joining && { joining }) }
                 : undefined,
-        [model.state, model.me, peers, status, targets, epoch, error, activities, joining],
+        [model.state, model.me, peers, status, targets, epoch, error, activities, joining, journey],
     );
 }
 

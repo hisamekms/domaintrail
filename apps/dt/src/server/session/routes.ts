@@ -38,6 +38,7 @@ import type { AccessPolicy, Authorization } from '../http/access.js';
 import { BodyError, mediaType, readJson, readText, sendError, sendJson } from '../http/json.js';
 import type { SessionSurface } from '../http/server.js';
 import { type Identified, type SessionIdentities } from './identities.js';
+import { journeyActInput, type NoteLanguage, type SessionJourneys } from './journeys.js';
 import { linkCookie, type LinkJoin } from './link-join.js';
 import {
     answer as answerInput,
@@ -119,6 +120,8 @@ export interface SessionHttpDeps {
     readonly knownViewNames?: () => KnownViewNames | undefined;
     /** What `/guide` reads of the workspace as it is now (absent: its map and what is known at once are not kept). */
     readonly guideWorkspace?: () => GuideWorkspace;
+    /** The journey file and the requests about it (absent: no journey routes). */
+    readonly journeys?: SessionJourneys;
     readonly log: (line: string) => void;
 }
 
@@ -151,6 +154,11 @@ export function statusOf(type: string): number {
         case 'NoSuchOption':
         case 'NoSuchCandidate':
         case 'WrongCommandType':
+        case 'InvalidBriefText':
+        case 'NotAJourneyGoal':
+        case 'NotAJourneyMark':
+        case 'NotAJourneyBrief':
+        case 'GuideMarksInJourneyFile':
             return 400;
         case 'NotTheInterviewer':
         case 'NotTheStarter':
@@ -178,6 +186,8 @@ export function statusOf(type: string): number {
         case 'RunOfAnotherSession':
         case 'TriageNotFound':
         case 'TriageOfAnotherSession':
+        case 'JourneyNotFound':
+        case 'NoJourneyFile':
             return 404;
         case 'BlobMissing':
         case 'ManualRecoveryNeeded':
@@ -203,6 +213,13 @@ export function errorAnswer(error: { readonly type: string; readonly message?: s
 const fail = <E extends { readonly type: string; readonly message?: string }>(res: ServerResponse, error: E): void => {
     const { status, body } = errorAnswer(error);
     sendJson(res, status, body);
+};
+
+/** A page's language sent with a journey act (`ja`, `en`, or none); false when it is something else (answered 400). */
+const noteLanguage = (res: ServerResponse, v: unknown): NoteLanguage | undefined | false => {
+    if (v === undefined || v === 'ja' || v === 'en') return v;
+    fail(res, { type: 'InvalidInput', field: 'language', message: 'Expected ja or en.' });
+    return false;
 };
 
 const bodyError = (res: ServerResponse, e: unknown): void => {
@@ -657,8 +674,14 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                     edited = read.value;
                 }
                 if (!(await interviewOfSession(res, id))) return;
-                const confirmed = await use.confirmInterview({ interview: knownInterviewId(id), actor: who(auth).actor, ...(edited && { text: edited }) });
-                await answer(res, confirmed, 201, (v) => ({ interview: v.interview, run: v.run }));
+                // the guide's workspace: dt's note in the thread says where the journey is and its next step
+                const confirmed = await use.confirmInterview({
+                    interview: knownInterviewId(id),
+                    actor: who(auth).actor,
+                    ...(edited && { text: edited }),
+                    ...(deps.guideWorkspace && { workspace: deps.guideWorkspace }),
+                });
+                await answer(res, confirmed, 201, (v) => ({ interview: v.interview, ...(v.run && { run: v.run }), journey: v.journey }));
             },
         },
         {
@@ -761,6 +784,79 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             },
         },
         {
+            method: 'GET',
+            path: /^\/api\/session\/journey$/,
+            role: 'participant',
+            // the journey file as the pages get it (also over the WebSocket, `journey`)
+            handle: async ({ res }) =>
+                deps.journeys
+                    ? sendJson(res, 200, { journey: deps.journeys.body() })
+                    : fail(res, { type: 'NoJourneyFile', message: 'This session has no journey file.' }),
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/journey\/acts$/,
+            role: 'participant',
+            handle: async ({ req, res, auth }) => {
+                // a goal changed, a state set, a mark set or cleared: the facilitator's done at once (dt writes the
+                // journey file), a participant's a request the facilitator approves
+                const journeys = deps.journeys;
+                if (!journeys) return fail(res, { type: 'NoJourneyFile', message: 'This session has no journey file.' });
+                const raw = await input(req, res, ['act', 'language']);
+                if (!raw) return;
+                const act = checked(res, journeyActInput(raw.act));
+                if (!act) return;
+                // the page's language: dt's note after a journey is marked done is written in it
+                const language = noteLanguage(res, raw.language);
+                if (language === false) return;
+                const me = who(auth);
+                const done = await journeys.act(me.actor, me.participant.identity.displayName, act, language);
+                if (!('done' in done)) return fail(res, done);
+                await deps.pump();
+                sendJson(res, done.done ? 200 : 202, done);
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/journey\/current$/,
+            role: 'participant',
+            handle: async ({ req, res, auth }) => {
+                // the session's current journey (null: the default): the facilitator's at once, a participant's requested
+                const journeys = deps.journeys;
+                if (!journeys) return fail(res, { type: 'NoJourneyFile', message: 'This session has no journey file.' });
+                const raw = await input(req, res, ['journey']);
+                if (!raw) return;
+                if (raw.journey !== null && (typeof raw.journey !== 'string' || raw.journey.length === 0 || raw.journey.length > 100))
+                    return fail(res, { type: 'InvalidInput', field: 'journey', message: 'Expected a journey key or null.' });
+                const me = who(auth);
+                const done = await journeys.choose(me.actor, me.participant.identity.displayName, raw.journey);
+                if (!('done' in done)) return fail(res, done);
+                await deps.pump();
+                sendJson(res, done.done ? 200 : 202, done);
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/journey\/requests\/([^/]+)\/(approve|deny|withdraw)$/,
+            role: 'participant',
+            handle: async ({ req, res, auth, params }) => {
+                const journeys = deps.journeys;
+                if (!journeys) return fail(res, { type: 'NoJourneyFile', message: 'This session has no journey file.' });
+                const id = checked(res, uuid(params[0], 'id'));
+                if (!id) return;
+                const raw = await input(req, res, ['language']);
+                if (!raw) return;
+                const language = noteLanguage(res, raw.language);
+                if (language === false) return;
+                const me = who(auth);
+                const done =
+                    params[1] === 'withdraw' ? await journeys.withdraw(me.actor, id) : await journeys.decide(me.actor, id, params[1] === 'approve', language);
+                if (!('done' in done)) return fail(res, done);
+                await deps.pump();
+                sendJson(res, 200, done);
+            },
+        },
+        {
             method: 'POST',
             path: /^\/api\/session\/marks$/,
             role: 'participant',
@@ -774,6 +870,11 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 if (!sign) return;
                 if (typeof raw.placed !== 'boolean') return fail(res, { type: 'InvalidInput', field: 'placed', message: 'Expected true or false.' });
                 const me = who(auth);
+                if (target.kind === 'GuideStep')
+                    return fail(res, {
+                        type: 'GuideMarksInJourneyFile',
+                        message: "The guide's marks are kept in the journey file: POST /api/session/journey/acts.",
+                    });
                 if (sign.kind === 'Vote' && me.role === 'facilitator')
                     return fail(res, { type: 'FacilitatorDoesNotVote', message: "The facilitator's answer is the decision: the facilitator does not vote." });
                 const set = await use.setMark({ session, actor: me.actor, target, sign, placed: raw.placed });

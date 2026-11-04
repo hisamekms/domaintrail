@@ -14,6 +14,7 @@ import { ChangeChip } from './card';
 import { changeGroups, changeKey, changeWhat, useModelChanges } from './changes';
 import { useTargetNaming } from './naming';
 import { diffLines, restoreProblem, timeline, type TimelineEntry } from './timeline';
+import { Act } from '../shared/act';
 
 type Tx = Messages['session'];
 type RevisionJson = SessionStateBody['revisions'][number];
@@ -199,12 +200,12 @@ function RevertDialog(props: { name: string; onRevert: () => void; onClose: () =
                 {u.confirm(name)}
             </h2>
             <div className="cancel-dialog-buttons">
-                <button ref={keep} type="button" className="cancel-dialog-button" onClick={onClose}>
+                <Act ref={keep} kind="stop" onClick={onClose}>
                     {u.cancel}
-                </button>
-                <button type="button" className="cancel-dialog-button danger revert-dialog-confirm" onClick={props.onRevert}>
+                </Act>
+                <Act kind="danger" className="revert-dialog-confirm" onClick={props.onRevert}>
                     {u.revert}
-                </button>
+                </Act>
             </div>
         </dialog>
     );
@@ -222,9 +223,9 @@ function RestoreBox(props: {
     const { flow, busy, tx } = props;
     const r = tx.restoreFlow;
     const close = (
-        <button className="small" onClick={props.onClose}>
+        <Act kind={flow.step === 'done' || flow.step === 'failed' ? 'open' : 'stop'} onClick={props.onClose}>
             {flow.step === 'done' || flow.step === 'failed' ? r.close : r.cancel}
-        </button>
+        </Act>
     );
     const body = ((): { text: string; error?: boolean; actions: ReactNode } => {
         switch (flow.step) {
@@ -232,18 +233,18 @@ function RestoreBox(props: {
                 return {
                     text: r.confirm(flow.what),
                     actions: (
-                        <button className="primary session-restore-confirm" disabled={busy} onClick={() => props.onRestore(flow.revision, false)}>
+                        <Act kind="decide" className="session-restore-confirm" disabled={busy} onClick={() => props.onRestore(flow.revision, false)}>
                             {r.restore(flow.what)}
-                        </button>
+                        </Act>
                     ),
                 };
             case 'external':
                 return {
                     text: r.external(flow.paths.join(', ')),
                     actions: (
-                        <button className="primary session-restore-two-step" disabled={busy} onClick={() => props.onRestore(flow.revision, true)}>
+                        <Act kind="decide" className="session-restore-two-step" disabled={busy} onClick={() => props.onRestore(flow.revision, true)}>
                             {r.recordThenRestore}
-                        </button>
+                        </Act>
                     ),
                 };
             case 'run':
@@ -251,17 +252,22 @@ function RestoreBox(props: {
                     ? {
                           text: r.cancelled,
                           actions: (
-                              <button className="primary" disabled={busy} onClick={() => props.onRestore(flow.revision, false)}>
+                              <Act kind="decide" disabled={busy} onClick={() => props.onRestore(flow.revision, false)}>
                                   {r.retry}
-                              </button>
+                              </Act>
                           ),
                       }
                     : {
                           text: r.run,
                           actions: (
-                              <button className="primary session-restore-cancel-run" disabled={busy} onClick={() => props.onCancelRun(flow.revision, flow.run)}>
+                              <Act
+                                  kind="stop"
+                                  className="session-restore-cancel-run"
+                                  disabled={busy}
+                                  onClick={() => props.onCancelRun(flow.revision, flow.run)}
+                              >
                                   {r.cancelRun}
-                              </button>
+                              </Act>
                           ),
                       };
             case 'manual':
@@ -269,9 +275,9 @@ function RestoreBox(props: {
                     text: r.manual(`${flow.cause}: ${flow.message}`),
                     error: true,
                     actions: (
-                        <button className="small" disabled={busy} onClick={() => props.onAsk(flow.preRestore)}>
+                        <Act kind="decide-sub" disabled={busy} onClick={() => props.onAsk(flow.preRestore)}>
                             {r.restorePre}
-                        </button>
+                        </Act>
                     ),
                 };
             case 'done':

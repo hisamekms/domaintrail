@@ -50,6 +50,7 @@ export function App() {
     const closeBaselineMenu = useCallback(() => setBaselineAnchor(null), []);
     /** The app bar's place for a session's controls of the whole page (the chat puts them there). */
     const [sessionSlot, setSessionSlot] = useState<HTMLDivElement | null>(null);
+    const [journeySlot, setJourneySlot] = useState<HTMLDivElement | null>(null);
 
     const workspace = useViewWorkspace(current, { mode, lang, theme });
     const { stormings, nav, worlds, settings, viewGraph } = workspace;
@@ -71,7 +72,7 @@ export function App() {
     };
 
     // in a session (dt session start) only: the session's chat, the facilitator's session pane and the others' cursors
-    const session = useSessionPage({ socket, current, workspace, panes, mode, openBest, barSlot: sessionSlot });
+    const session = useSessionPage({ socket, current, workspace, panes, mode, openBest, barSlot: sessionSlot, journeySlot });
 
     const locate = (d: Diagnostic) => {
         // e.g. syntax errors belong to no element: only their file can show them
@@ -103,6 +104,7 @@ export function App() {
                     />
                 }
                 sessionSlot={setSessionSlot}
+                journeySlot={setJourneySlot}
                 health={<HealthButton current={current} connection={connection} />}
                 settings={
                     <SettingsDialog
@@ -264,6 +266,7 @@ export function App() {
                             />
                         )}
                         headingAction={session.inspectorAction}
+                        {...(session.contextJourneys && { contextJourneys: session.contextJourneys })}
                         tab={inspectorTab}
                         onTab={setInspectorTab}
                         onSelect={(id) => select(id)}

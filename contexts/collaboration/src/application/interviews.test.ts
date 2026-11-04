@@ -1,7 +1,8 @@
-// The use cases of the `/` commands' interviews (the plan's round 5) over the real store (in-memory SQLite): start
-// (anyone, one at a time), the starter's messages going to the interview without triage while others are triaged, the
-// interviewer's questions and brief, confirm (the facilitator: a run whose input carries the brief; for a participant's
-// interview, the approval), reject and stop, and what the session so far says of them.
+// The use cases of the `/` commands' interviews (the plan's round 5 and "How journeys begin") over the real store
+// (in-memory SQLite) and a journey file in memory: start (anyone, one at a time), the starter's messages going to the
+// interview without triage while others are triaged, the interviewer's questions and brief, confirm (the facilitator:
+// dt writes the journey — an ES journey created or revised, a modeling journey new or continued — and a new storming
+// takes a run; for a participant's interview, the approval), reject and stop, and what the session so far says of them.
 import { describe, expect, test } from 'bun:test';
 import { Collaboration as C, type Result } from '../generated/index.js';
 import { AI_PARTICIPANT_ID } from '../domain/ai.js';
@@ -10,6 +11,8 @@ import { createUnitOfWork, openDatabase } from '../infrastructure/sqlite.js';
 import type { Actor } from './actor.js';
 import type { CollaborationDeps } from './ports.js';
 import { createCollaboration, type CollaborationUseCases } from './use-cases.js';
+import { readJourney, writeJourney } from '../domain/journey.js';
+import type { JourneyFileStore } from './ports.js';
 
 const value = <T, E>(r: Result<T, E>): T => {
     if (!r.ok) throw new Error(`unexpected error: ${JSON.stringify(r.error)}`);
@@ -29,7 +32,21 @@ const bob: Actor = { kind: 'participant', participant: bobId, role: 'Participant
 const carol: Actor = { kind: 'participant', participant: carolId, role: 'Participant' };
 const name = value(C.makeDisplayName('Ada'));
 
-function collaboration(): { use: CollaborationUseCases; db: ReturnType<typeof openDatabase> } {
+/** A journey file in memory: written only over the text read (as the real one). */
+function memoryJourneys(initial?: string): JourneyFileStore & { text(): string | undefined } {
+    let text = initial;
+    return {
+        read: async () => text,
+        write: async (next, expected) => {
+            if (text !== expected) return false;
+            text = next;
+            return true;
+        },
+        text: () => text,
+    };
+}
+
+function collaboration(journeys = memoryJourneys()): { use: CollaborationUseCases; db: ReturnType<typeof openDatabase>; journeys: typeof journeys } {
     const files = new Map<string, Uint8Array>([['sales/order.dt', new TextEncoder().encode('context Sales {}\n')]]);
     const blobs = new Map<string, Uint8Array>();
     let t = Date.parse('2026-11-03T09:00:00Z');
@@ -37,6 +54,7 @@ function collaboration(): { use: CollaborationUseCases; db: ReturnType<typeof op
     const db = openDatabase(':memory:');
     const deps: CollaborationDeps = {
         uow: createUnitOfWork(db),
+        journeys,
         workspace: {
             read: async () => ({ files: [...files].map(([path, bytes]) => ({ path, bytes, hash: sha256Hex(bytes) })), symlinks: [] }),
             write: async () => ({ ok: true }),
@@ -51,16 +69,21 @@ function collaboration(): { use: CollaborationUseCases; db: ReturnType<typeof op
         clock: { now: () => new Date((t += 1000)) },
         ids: { newId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}` },
     };
-    return { use: createCollaboration(deps), db };
+    return { use: createCollaboration(deps), db, journeys };
 }
 
 /** A Collab session with Bob and Carol joined. */
-async function collab(): Promise<{ use: CollaborationUseCases; session: C.SessionId; db: ReturnType<typeof openDatabase> }> {
-    const { use, db } = collaboration();
+async function collab(): Promise<{
+    use: CollaborationUseCases;
+    session: C.SessionId;
+    db: ReturnType<typeof openDatabase>;
+    journeys: ReturnType<typeof memoryJourneys>;
+}> {
+    const { use, db, journeys } = collaboration();
     const opened = value(await use.openSession({ mode: 'Collab', facilitator: facilitatorId, name }));
     value(await use.joinSession({ session: opened.session.id, participant: bobId, name: value(C.makeDisplayName('Bob')) }));
     value(await use.joinSession({ session: opened.session.id, participant: carolId, name: value(C.makeDisplayName('Carol')) }));
-    return { use, session: opened.session.id, db };
+    return { use, session: opened.session.id, db, journeys };
 }
 
 const say = (
@@ -71,19 +94,34 @@ const say = (
     extra: { mentions?: C.ParticipantId[]; replyTo?: C.ReplyTarget } = {},
 ) => use.sendMessage({ session, actor, targets: [], body: text(body), ...extra });
 
+const esJourney = (over: Partial<C.JourneyBrief> = {}): C.JourneyBrief => ({
+    purpose: value(C.makeBriefField('返金を早める')),
+    scope: value(C.makeBriefField('申請から返金まで')),
+    participants: [value(C.makeRoleName('窓口担当'))],
+    use: 'Modeling',
+    level: 'BigPicture',
+    stormings: [],
+    continues: false,
+    ...over,
+});
+
 const brief = (over: Partial<C.InterviewBrief> = {}): C.InterviewBrief => ({
     name: value(C.makeBriefName('Returns')),
     label: value(C.makeBriefLabel('返品')),
     isNew: true,
     replaces: false,
-    text: value(C.makeBriefText('目的: 返金を早める\n範囲: 申請から返金まで\n使い道: モデリングへ\nレベル: Big Picture')),
+    text: value(C.makeBriefText('目的: 返金を早める\n範囲: 申請から返金まで\n参加者: 窓口担当')),
+    journey: esJourney(),
+    description: value(C.makeShortDescription('返品の受付から返金まで')),
     ...over,
 });
 
-async function solo(): Promise<{ use: CollaborationUseCases; session: C.SessionId; db: ReturnType<typeof openDatabase> }> {
-    const { use, db } = collaboration();
+async function solo(
+    journeys = memoryJourneys(),
+): Promise<{ use: CollaborationUseCases; session: C.SessionId; db: ReturnType<typeof openDatabase>; journeys: ReturnType<typeof memoryJourneys> }> {
+    const { use, db } = collaboration(journeys);
     const session = value(await use.openSession({ mode: 'Solo', facilitator: facilitatorId, name })).session.id;
-    return { use, session, db };
+    return { use, session, db, journeys };
 }
 
 const start = (use: CollaborationUseCases, session: C.SessionId, actor: Actor = facilitator) =>
@@ -147,23 +185,172 @@ describe('interviews', () => {
         expect(q2.interview.asked).toEqual({ question: q2.question.id, choices: [], multiple: false });
     });
 
-    test('brief, then confirm: a run whose input carries the brief (edited); the facilitator only', async () => {
-        const { use, session } = await collab();
+    test('brief, then confirm: dt writes the journey (edited), a new storming takes a run; the facilitator only', async () => {
+        const { use, session, journeys } = await collab();
         const started = value(await start(use, session));
         const briefed = value(await use.briefInterview({ interview: started.interview.id, answered: started.request.id, brief: brief() }));
         expect(briefed).toMatchObject({ state: 'Briefed', answered: started.request.id });
         expect(error(await use.confirmInterview({ interview: started.interview.id, actor: bob }))).toEqual({ type: 'FacilitatorOnly' });
-        const edited = value(C.makeBriefText('目的: 返金を3日以内に\n範囲: 申請から返金まで'));
+        // a line without a known head is refused: nothing typed is lost
+        expect(
+            error(await use.confirmInterview({ interview: started.interview.id, actor: facilitator, text: value(C.makeBriefText('目的: x\nほか: y')) })),
+        ).toMatchObject({
+            type: 'InvalidBriefText',
+        });
+        expect(journeys.text()).toBeUndefined();
+        const edited = value(C.makeBriefText('目的: 返金を3日以内に\n範囲: 申請から返金まで\n参加者: 窓口担当、経理'));
         const confirmed = value(await use.confirmInterview({ interview: started.interview.id, actor: facilitator, text: edited }));
-        expect(confirmed.interview).toMatchObject({ state: 'Confirmed', edited: true, confirmedBy: facilitatorId, run: confirmed.run.id });
-        expect(confirmed.run.input.requests.map((r) => r.request)).toEqual([started.request.id]);
-        expect(confirmed.run.input.brief).toEqual({ interview: started.interview.id, command: 'Es', brief: { ...brief(), text: edited } });
+        const run = confirmed.run;
+        if (!run) throw new Error('a new storming takes a run');
+        expect(confirmed.journey).toBe('es:Returns');
+        expect(confirmed.interview).toMatchObject({ state: 'Confirmed', edited: true, confirmedBy: facilitatorId, run: run.id });
+        expect(run.input.requests.map((r) => r.request)).toEqual([started.request.id]);
+        expect(run.input.brief).toMatchObject({
+            interview: started.interview.id,
+            command: 'Es',
+            brief: { name: 'Returns', text: edited, description: '返品の受付から返金まで' },
+        });
+        // the journey file: written by dt, the why as edited, how far as briefed
+        expect(readJourney(journeys.text() ?? '').file.stormings).toEqual({
+            Returns: {
+                purpose: '返金を3日以内に',
+                scope: '申請から返金まで',
+                participants: ['窓口担当', '経理'],
+                use: 'modeling',
+                level: 'BigPicture',
+                state: 'active',
+                marks: [],
+            },
+        });
+        // it is the session's current journey now
+        expect(value(await use.sessionState({ session })).session.currentJourney as string | undefined).toBe('es:Returns');
         // ended: the starter's messages are triaged again
         expect(value(await say(use, session, facilitator, '@AI[p1] ありがとう', { mentions: [AI_PARTICIPANT_ID] })).triage).toBeDefined();
         const soFar = value(await use.sessionSoFar({ session }));
         expect(soFar.text).toContain('started the interview /es:start');
         expect(soFar.text).toContain('confirmed the brief of the interview /es:start after editing it');
         expect(soFar.text).toContain('目的: 返金を3日以内に');
+    });
+
+    test('/es:start on a storming with a journey revises its brief: no run, where it stands kept', async () => {
+        const file = writeJourney({
+            version: 1,
+            stormings: { Returns: { purpose: '前の目的', participants: [], use: 'align', level: 'BigPicture', state: 'active', marks: ['questions'] } },
+            modeling: [],
+        });
+        const { use, session, journeys } = await solo(memoryJourneys(file));
+        const started = value(await start(use, session));
+        const revised = brief({ isNew: false, replaces: true, journey: esJourney({ level: 'DesignLevel' }) });
+        value(await use.briefInterview({ interview: started.interview.id, answered: started.request.id, brief: revised }));
+        const confirmed = value(await use.confirmInterview({ interview: started.interview.id, actor: facilitator }));
+        expect(confirmed.run).toBeUndefined();
+        expect(confirmed.interview).toMatchObject({ state: 'Confirmed' });
+        // dt's note: the AI's reply to the message the brief answered, the fields that changed (no workspace: one line)
+        expect(confirmed.note).toMatchObject({
+            author: AI_PARTICIPANT_ID,
+            replyTo: { kind: 'Message', request: started.request.id },
+            body: 'ブリーフを見直しました（目的・範囲・参加者・使い道・レベルが変わりました）。',
+            journeyNote: { journey: 'es:Returns', targets: [] },
+        });
+        expect(value(await use.sessionState({ session })).requests.at(-1)?.journeyNote as unknown).toEqual({ journey: 'es:Returns', targets: [] });
+        expect(value(await use.sessionSoFar({ session })).text).toContain('ブリーフを見直しました');
+        expect(readJourney(journeys.text() ?? '').file.stormings.Returns).toEqual({
+            purpose: '返金を早める',
+            scope: '申請から返金まで',
+            participants: ['窓口担当'],
+            use: 'modeling',
+            level: 'DesignLevel',
+            state: 'active',
+            marks: ['questions'],
+        });
+    });
+
+    test('/model:start: a new journey appended (its ID derived), one continued in place; no run either way', async () => {
+        const { use, session, journeys } = await solo();
+        const model = (b: C.InterviewBrief) => async (): Promise<string> => {
+            const started = value(
+                await use.startInterview({ session, actor: facilitator, command: 'Model', body: text('モデリングを始める'), language: 'Ja' }),
+            );
+            value(await use.briefInterview({ interview: started.interview.id, answered: started.request.id, brief: b }));
+            const confirmed = value(await use.confirmInterview({ interview: started.interview.id, actor: facilitator }));
+            expect(confirmed.run).toBeUndefined();
+            return confirmed.journey;
+        };
+        const journey = (over: Partial<C.JourneyBrief>): C.JourneyBrief => ({
+            purpose: value(C.makeBriefField('請求を正す')),
+            participants: [],
+            stormings: [],
+            continues: false,
+            pattern: 'OneContext',
+            goal: value(C.makeGuideStepKey('invariants')),
+            context: value(C.makeContextName('Billing')),
+            journeyName: value(C.makeJourneyName('Billing の深掘り')),
+            ...over,
+        });
+        const fresh = brief({ name: value(C.makeBriefName('billing')), label: undefined, description: undefined, journey: journey({}) });
+        expect(await model(fresh)()).toBe('billing');
+        // another new one of the same name: the next free ID
+        expect(await model(fresh)()).toBe('billing-2');
+        // continued: its goal changed, in place
+        const cont = brief({
+            name: value(C.makeBriefName('billing')),
+            isNew: false,
+            replaces: true,
+            label: undefined,
+            description: undefined,
+            journey: journey({ continues: true, goal: value(C.makeGuideStepKey('commands')) }),
+        });
+        expect(await model(cont)()).toBe('billing');
+        const file = readJourney(journeys.text() ?? '').file;
+        expect(file.modeling.map((m) => [m.id, m.name, m.pattern, m.goal, m.from])).toEqual([
+            ['billing', 'Billing の深掘り', 'OneContext', 'commands', { context: 'Billing' }],
+            ['billing-2', 'Billing の深掘り', 'OneContext', 'invariants', { context: 'Billing' }],
+        ]);
+        expect(value(await use.sessionState({ session })).session.currentJourney as string | undefined).toBe('billing');
+    });
+
+    test("a new storming's note waits for its run: created when it completes, else not created; once", async () => {
+        const { use, session } = await solo();
+        const started = value(await start(use, session));
+        value(await use.briefInterview({ interview: started.interview.id, answered: started.request.id, brief: brief() }));
+        const confirmed = value(await use.confirmInterview({ interview: started.interview.id, actor: facilitator }));
+        expect(confirmed.note).toBeUndefined();
+        const notes = async (): Promise<string[]> =>
+            value(await use.sessionState({ session })).requests.flatMap((r) => (r.journeyNote ? [r.body as string] : []));
+        expect(await notes()).toEqual([]);
+        const claimed = value(await use.claimNextRun({ session, owner: 'test', leaseMs: 60_000 }));
+        value(await use.startRun({ run: claimed.run.id, token: claimed.lease.token }));
+        const facts = { exitCode: 0, formatted: 'Skipped', checked: 'Skipped' } as const;
+        value(await use.finishRun({ run: claimed.run.id, token: claimed.lease.token, facts }));
+        expect(await notes()).toEqual([
+            'ストーミング「返品」を作り、ジャーニーに加えました（ゴール：ビッグピクチャー）。\nまず出来事を出します。起きたことを話してください。',
+        ]);
+        // the same finish again (a replay): no second note
+        value(await use.finishRun({ run: claimed.run.id, token: claimed.lease.token, facts }));
+        expect(await notes()).toHaveLength(1);
+
+        // another new storming whose run is cancelled: not created, its journey kept
+        const other = value(await start(use, session));
+        value(
+            await use.briefInterview({
+                interview: other.interview.id,
+                answered: other.request.id,
+                brief: brief({ name: value(C.makeBriefName('Exchanges')), label: value(C.makeBriefLabel('交換')) }),
+            }),
+        );
+        const run = value(await use.confirmInterview({ interview: other.interview.id, actor: facilitator })).run;
+        if (!run) throw new Error('a new storming takes a run');
+        value(await use.cancelRun({ run: run.id, actor: facilitator }));
+        expect((await notes()).at(-1)).toBe('ストーミング「交換」を作れませんでした。ジャーニーはそのまま残しています。');
+    });
+
+    test('a journey file that does not read: nothing is written over it, the brief waits', async () => {
+        const { use, session, journeys } = await solo(memoryJourneys('{ "version": 1, "stormings": { "Returns": {} } }'));
+        const started = value(await start(use, session));
+        value(await use.briefInterview({ interview: started.interview.id, answered: started.request.id, brief: brief() }));
+        expect(error(await use.confirmInterview({ interview: started.interview.id, actor: facilitator }))).toMatchObject({ type: 'JourneyFileInvalid' });
+        expect(journeys.text()).toBe('{ "version": 1, "stormings": { "Returns": {} } }');
+        expect(value(await use.sessionState({ session })).interviews[0]?.state).toBe('Briefed');
     });
 
     test('a word on the brief takes it back to asking; stop ends it (the starter only); a reload reads it back', async () => {
@@ -205,9 +392,16 @@ describe('an interview a participant started', () => {
         const edited = value(C.makeBriefText('目的: 返金を3日以内に'));
         const approved = value(await use.confirmInterview({ interview: started.interview.id, actor: facilitator, text: edited }));
         expect(approved.interview).toMatchObject({ state: 'Confirmed', startedBy: bobId, confirmedBy: facilitatorId, edited: true });
-        // the run is queued by the facilitator, on the message the brief answered
+        // the new storming's run is queued by the facilitator, on the message the brief answered
         expect(approved.run).toMatchObject({ queuedBy: facilitatorId });
-        expect(approved.run.input.requests.map((r) => r.request)).toEqual([answer.request.id]);
+        expect(approved.run?.input.requests.map((r) => r.request)).toEqual([answer.request.id]);
+        // its note, once the run ends, names the facilitator who approved it
+        value(await use.cancelRun({ run: approved.run?.id ?? ('' as C.AgentRunId), actor: facilitator }));
+        const note = value(await use.sessionState({ session })).requests.find((r) => r.journeyNote);
+        expect(note).toMatchObject({
+            replyTo: { kind: 'Message', request: answer.request.id },
+            body: 'ストーミング「返品」を作れませんでした。ジャーニーはそのまま残しています。',
+        });
         expect(value(await use.sessionSoFar({ session })).text).toContain("Ada approved Bob's brief of the interview /es:start after editing it");
     });
 
@@ -223,6 +417,12 @@ describe('an interview a participant started', () => {
         expect(soFar.open.filter((o) => o.includes('interview'))).toEqual([]);
         const again = await createUnitOfWork(db).transaction((s) => s.interviews.listBySession(session));
         expect(again).toMatchObject([{ state: 'Rejected', note: '範囲が広すぎます' }]);
+        // a row for everyone at the end of the interview's thread: its last message
+        const state = value(await use.sessionState({ session }));
+        const last = state.requests.filter((r) => r.author === bobId).at(-1);
+        expect(state.records).toMatchObject([
+            { by: facilitatorId, fact: { kind: 'BriefRejected', interview: started.interview.id, note: '範囲が広すぎます' }, replyTo: last?.id },
+        ]);
         // ended: Bob's messages are triaged again, and another interview may start
         expect(value(await say(use, session, bob, '注文は取り消せる？')).interview).toBeUndefined();
         value(await start(use, session, carol));
@@ -238,6 +438,13 @@ describe('an interview a participant started', () => {
         });
         const second = value(await start(use, session, bob));
         expect(value(await use.stopInterview({ interview: second.interview.id, actor: bob }))).toMatchObject({ state: 'Stopped', stoppedBy: bobId });
+        // each stop a row at the end of its thread (here its opening message: no question yet)
+        expect(value(await use.sessionState({ session })).records).toMatchObject([
+            { by: facilitatorId, fact: { kind: 'InterviewStopped', interview: started.interview.id }, replyTo: started.request.id },
+            { by: bobId, fact: { kind: 'InterviewStopped', interview: second.interview.id }, replyTo: second.request.id },
+        ]);
+        // the session so far tells it with the interview, not twice
+        expect(value(await use.sessionSoFar({ session })).text).not.toContain('stopped it');
     });
 });
 

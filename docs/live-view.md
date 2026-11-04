@@ -3,7 +3,7 @@
 `dt open` watches the workspace, re-validates on every save and pushes updates to the browser over WebSocket. It
 serves the page at <http://127.0.0.1:4321> (`--port`, `--host`, or `open.port` / `open.host` in `domaintrail.jsonc`)
 and runs until Ctrl+C. [Getting started](getting-started.md#watch-it-in-the-live-view) shows what to look at first;
-this page describes every pane.
+this page describes every pane. How its buttons and spacing are built is in [UI rules](ui-rules.md).
 
 The app bar runs across the top; under it the screen has three columns: the left column — the navigator (the lists)
 on top and the detail of the selected item (the inspector) under it — the canvas, and, in a session, the chat at the
@@ -26,6 +26,19 @@ remembered per browser, so a reload comes back to them. At the right end: 問題
 number of errors, else warnings, as a badge; a click opens the problems in the left column's navigator, and closes it again), and in
 a session the collab menu, the AI's state and, in Solo, ⋯ (see below). On a narrow window the world switch shows its
 icons only, each named in its tooltip.
+
+In a session, after the world switch, the **current journey's chip** (the session has one current journey: the
+facilitator chooses it, the one person in Solo; with none chosen, the most recently created active one): 🧭 the journey
+· 📍 the step here → 🏁 the goal (✓ 到達 once it is reached). A narrower bar shows 🧭 and the journey's name, then 🧭
+alone. With no journey it reads 🧭 ゴールを決める. A dashed chip names a storming or context that is gone. The
+facilitator's chip counts the participants' requests waiting. Pressing it opens the **journeys panel** (everyone reads
+it): the requests waiting (承認 / 却下 for the facilitator; the requester's own, 承認待ち and 取り下げ); the current
+journey — its brief (目的, 範囲, 制約, 参加者, 使い道, もと), its map as the guide draws it, and ガイドを見る, ゴールを変える
+(the ES levels, or the goals of its pattern), ブリーフを見直す (`/es:start` or `/model:start` into the composer),
+完了にする, しまう; the other journeys with where each stands (このジャーニーにする makes one current); 新しいジャーニー (`/es:start`,
+`/model:start`); and the archived ones, counted, opened on demand (戻す). A participant's choice, goal, done, archive
+or mark becomes a request the facilitator approves in the panel. Everything comes from `domaintrail.journey.json`
+(see [`dt guide`](guide.md#the-journey-file)): a change to it from git or another tool shows at once.
 
 ## Left column
 
@@ -232,6 +245,9 @@ the bottom of the left column. Sub-tabs (on a second row when the column is narr
 to its kind, as it does in an aggregate's 発生させる Event list; persistent events have a database icon in the
 explorer.
 
+- In a session, a selected storming shows its event storming journey in brief (its purpose, where it stands, its
+  goal), and a selected context the modeling journeys over it (those that name it, and those over the whole model);
+  a row opens the journeys panel.
 - **状態遷移**: states and command transitions of the aggregate (`new` marks factory commands), for the aggregate and
   its states and commands; it pans and zooms like the main canvas and shows the selected state or command.
 - **振る舞い**: what a command takes, requires, changes, emits and returns, and the policies that trigger it.
@@ -391,9 +407,13 @@ The chat has two views:
   storming or context, or that it replaces the current description), four or five lines with heads (目的 / 範囲 / 使い道 /
   レベル for `/es:start`), and for the facilitator 確定 / 編集して確定 / 中止. A participant's brief waits for the
   facilitator: they see 承認 / 編集して承認 / 却下 (with an optional note, which its starter then reads), everyone else
-  承認待ち. A message instead of confirming takes it back to the questions. Confirmed, a run writes the brief as
-  the `///` description right above the `storming` (or the `context`), creating it when new; the inspector shows it
-  when the storming is selected. A question with natural candidates shows them as buttons under it for its starter
+  承認待ち. A message instead of confirming takes it back to the questions. Confirmed, dt writes the journey into
+  `domaintrail.journey.json` (a run only creates a new storming's block) and posts a **note** under the AI's name as
+  the last reply in the interview's thread, with no AI call: what was decided (「ジャーニーに「…」を加えました（ゴール：…）」,
+  the revised fields, who approved a participant's brief; for a new storming once its run ended, or that it could not
+  be created), then where the journey is and the next step (「いまは「例外」の段階です。次は「依頼・準備」の例外を
+  出しましょう。」), with the next command's button (into the composer), the source storming to show when that is the
+  step, and ジャーニーを開く. A question with natural candidates shows them as buttons under it for its starter
   (one sends it at once; several are checked and sent with 送る; その他 goes to the composer). The interview survives a reload. `/es:exceptions` (例外を洗い出す) has
   the AI list, for the storming in view (its stage or timeline when one is shown), the exceptions its main flow does
   not model yet: a card in the chat with each candidate (its label, the events as chips, how in a line, why), none
@@ -410,10 +430,12 @@ The chat has two views:
   event storming (brief, events, flows and stages, exceptions, questions, Design Level) or of a modeling journey (its
   pattern's steps, with a row per context: aggregates, commands, invariants), each done (✓), here (📍) or to do, up
   to the goal (🏁), the steps past it faint; whether a step is done comes from the files, and a step the files cannot
-  tell (the BCs are split, the terms aligned) is marked done by the facilitator with a small ✓ on the latest card —,
+  tell (the BCs are split, the terms aligned, a stage that needs no exception) is marked done with a small ✓ on the
+  latest card (kept in the journey file; a participant's ✓ is a request to the facilitator) —,
   then what is known at once (a stage without exceptions, open questions, long labels, a context without aggregates,
   errors…), each with a button that shows it. Until a goal is set, the map is one step, ゴールを決める, with
-  `/es:start` or `/model:start`. With several modeling journeys, a picker chooses the map (remembered per viewer). A few
+  `/es:start` or `/model:start`. The card draws the session's current journey: its 🏁 changes the goal, its name opens
+the journeys panel; the latest card follows the journey file as it is now. A few
   seconds later the AI's advice fills the card: where the person stands and why the step here is next, then one to
   three steps, each with its reason, the command that does it (a button that puts it in the composer), the places to
   show, and 聞くことをメモ for a question to the people (a message asking the AI to add it as a hotspot: a

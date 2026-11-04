@@ -86,6 +86,7 @@ import { chosenIndex } from './proposal-view';
 import { referencesAsText } from './references';
 import { TriageRecordPanel } from './triage-record';
 import { InterviewChoices, InterviewPanel, interviewSlot } from './interview';
+import { JourneyNoteActions } from './journey-note';
 import { CandidatesCard, commandSlot } from './candidates';
 import { GuideButton, startGuide, SuggestedMark } from './guide';
 import { GuideCard } from './guide-card';
@@ -113,6 +114,7 @@ import { latestRevision } from './state';
 import {
     agentStatus,
     arrivedBelow,
+    changedAt,
     elapsed,
     isFacilitator,
     mentionablePeople,
@@ -137,6 +139,12 @@ import { replyLooks, threadLines, type ReplyLook } from './threads';
 import { continued, isMac } from './views';
 import type { SentView, ViewScope, ViewTarget } from './views';
 import type { ComposerDraft, SessionData } from './useSession';
+import type { GuideWorkspace, JourneyAct } from '@domaintrail/collaboration';
+import { JourneyChip } from './journey-panel';
+import { journeyOverview } from './journey-view';
+import { latestGuide } from './guide-view';
+import { Act } from '../shared/act';
+import { RecordRow } from './record-row';
 
 type RequestJson = SessionData['state']['requests'][number];
 /** A unit to open and reveal in AI の作業 (the header status clicked); `n` tells a click on the same unit again apart. */
@@ -228,6 +236,13 @@ export function SessionChat(props: {
     onClose: () => void;
     /** The app bar's place for the collab menu and the AI's state (they concern the whole page). */
     barSlot: HTMLElement | null;
+    /** The app bar's place for the current journey's chip, after the world switch. */
+    journeySlot: HTMLElement | null;
+    /** What the guide reads of the workspace as the page holds it (the view's model, stormings, findings; the journey file). */
+    guideWorkspace: GuideWorkspace;
+    /** The journeys panel open (it is opened from the detail too). */
+    journeysOpen: boolean;
+    setJourneysOpen: (open: boolean) => void;
     /** A place of the chat or of AI の作業 to show (asked from elsewhere on the page). */
     goTo?: ChatGoTo | undefined;
 }) {
@@ -513,6 +528,37 @@ export function SessionChat(props: {
         [history],
     );
 
+    // the journeys: the overview computed live, the panel, the acts (a participant's become requests)
+    const lang = useLang();
+    const { journeysOpen, setJourneysOpen } = props;
+    const [journeyNotice, setJourneyNotice] = useState<{ readonly text: string; readonly error: boolean } | undefined>();
+    const overview = useMemo(() => journeyOverview(props.guideWorkspace, state.session.currentJourney), [props.guideWorkspace, state.session.currentJourney]);
+    const journeyDone = (r: { readonly done: boolean }): void => setJourneyNotice(r.done ? undefined : { text: tx.chat.journeys.requested, error: false });
+    const journeyFailed = (e: unknown): void => setJourneyNotice({ text: failure(e), error: true });
+    const journeys: ChatContextValue['journeys'] = {
+        body: session.journey,
+        workspace: props.guideWorkspace,
+        overview,
+        open: journeysOpen,
+        setOpen: (open) => {
+            setJourneysOpen(open);
+            if (!open) setJourneyNotice(undefined);
+        },
+        act: (act: JourneyAct) => void sessionApi.journeyAct(act, lang).then(journeyDone, journeyFailed),
+        choose: (journey) => void sessionApi.chooseJourney(journey).then(journeyDone, journeyFailed),
+        decide: (id, decision) => void sessionApi.decideJourneyRequest(id, decision, lang).then(() => setJourneyNotice(undefined), journeyFailed),
+        seeGuide: () => {
+            props.onOpen();
+            const latest = latestGuide(state);
+            if (latest && latest.state === 'Working') return jump(`command:${latest.id}`);
+            void startGuide(sessionApi, { body: tx.chat.slash.commands.guide, language: lang, viewedAt: props.viewedAt }).then(
+                () => setView('chat'),
+                journeyFailed,
+            );
+        },
+        notice: journeyNotice,
+    };
+
     const context: ChatContextValue = {
         session,
         tx,
@@ -539,10 +585,12 @@ export function SessionChat(props: {
         putCommand,
         focusComposer,
         replies,
+        journeys,
     };
 
     return (
         <ChatProvider value={context}>
+            <JourneyChip slot={props.journeySlot} />
             <div className="session-chat" ref={root}>
                 <SessionBar
                     slot={props.barSlot}
@@ -565,9 +613,9 @@ export function SessionChat(props: {
                     <p className="session-note chat-notice collab-ended">
                         {tx.closed}
                         {summary && (
-                            <button className="chat-small" onClick={() => setSummaryOpen(true)}>
+                            <Act kind="open" aria-haspopup="dialog" onClick={() => setSummaryOpen(true)}>
                                 {tx.collab.showSummary}
-                            </button>
+                            </Act>
                         )}
                     </p>
                 )}
@@ -762,9 +810,7 @@ function Stream({ shown }: { shown: Shown }) {
     // the AI's cards too (Solo): one appearing, or turning into its answer or run card, is a change of the stream
     const signature = shown.entries
         .map((e) =>
-            e.kind === 'item'
-                ? `${e.item.key}@${e.item.kind === 'card' ? e.item.updatedAt : e.item.at}`
-                : `ai:${e.request}=${e.content.kind === 'item' ? e.content.item.key : e.content.kind}`,
+            e.kind === 'item' ? `${e.item.key}@${changedAt(e.item)}` : `ai:${e.request}=${e.content.kind === 'item' ? e.content.item.key : e.content.kind}`,
         )
         .join('|');
     // the pane shown again, resized, or a bubble grown: still at the bottom
@@ -1009,9 +1055,21 @@ function streamRows(shown: Shown, tx: Tx): Row[] {
                 };
             case 'card':
                 return { key: item.key, kind: item.kind, author: undefined, render: () => <RunCard unit={item.unit} /> };
+            case 'record':
+                return {
+                    key: item.key,
+                    kind: item.kind,
+                    author: undefined,
+                    render: () => <RecordRow record={item.record} hangs={look.hangsOn !== undefined} />,
+                };
         }
     };
-    const toOf = (item: StreamItem): ReplyTo | undefined => (item.kind === 'message' ? item.request.replyTo : undefined);
+    const toOf = (item: StreamItem): ReplyTo | undefined =>
+        item.kind === 'message'
+            ? item.request.replyTo
+            : item.kind === 'record' && item.record.replyTo !== undefined
+              ? { kind: 'Message', request: item.record.replyTo }
+              : undefined;
     return shown.entries.map((entry, i): Row => {
         const look = looks[i] ?? { hangsOn: undefined, head: false, more: false, quote: false };
         if (entry.kind === 'item') return { id: rowId(entry.item), look, to: toOf(entry.item), ...itemRow(entry.item, look) };
@@ -1079,9 +1137,9 @@ function AiPendingCard({ request, givenUp }: { request: string; givenUp: boolean
                         <p className="chat-ai-given-up">
                             {tx.chat.ai.givenUp}
                             {control && (
-                                <button type="button" className="chat-small ghost" disabled={actions.busy} onClick={() => void actions.retryAnswer(request)}>
+                                <Act kind="send" disabled={actions.busy} onClick={() => void actions.retryAnswer(request)}>
                                     {tx.chat.ai.retry}
-                                </button>
+                                </Act>
                             )}
                         </p>
                     )}
@@ -1221,9 +1279,9 @@ function MessageRow({
                     <p className="chat-ai-given-up">
                         {tx.chat.ai.givenUp}
                         {control && (
-                            <button type="button" className="chat-small ghost" disabled={actions.busy} onClick={() => void actions.retryAnswer(r.id)}>
+                            <Act kind="send" disabled={actions.busy} onClick={() => void actions.retryAnswer(r.id)}>
                                 {tx.chat.ai.retry}
-                            </button>
+                            </Act>
                         )}
                     </p>
                 )}
@@ -1286,6 +1344,7 @@ function AiMessageRow({ request: r, continues, hangs }: { request: RequestJson; 
                     <MarkdownText text={r.body} onNavigate={onNavigate} />
                 </Clamped>
                 <InterviewChoices request={r.id} />
+                <JourneyNoteActions request={r} />
                 <ReactionRow target={{ kind: 'Message', request: r.id }} />
             </Bubble>
             <RowActions>
@@ -1342,8 +1401,8 @@ function MessageReferenceLine({ request }: { request: string }) {
     const ref = replies.messageReferenceOf(request);
     if (!ref) return null;
     const who = speakerName(ref.author, session.me.participant.id, nameOf, tx.chat.you);
-    // the AI's answer names elements as references: by their names here, as its bubble shows them
-    const head = isAiAuthor(ref.author) ? referencesAsText(ref.head, naming) : ref.head;
+    // the AI's answer names elements as references, and so does a choice picked: by their names here, as the bubble shows them
+    const head = referencesAsText(ref.head, naming);
     return (
         <button className="chat-reply-ref" onClick={() => jump(`message:${ref.request}`)} data-tooltip={tx.chat.replies.messageReferenceHint(who)}>
             <span className="chat-reply-ref-run">↩ {who}:</span> <span className="chat-reply-ref-head">{head}</span>
@@ -1405,9 +1464,9 @@ function SelectionBar() {
     return (
         <div className="chat-selection-bar" role="toolbar" aria-label={tx.chat.selected(n)}>
             <span className="chat-selection-count">{tx.chat.selected(n)}</span>
-            <button className="chat-small primary" disabled={n === 0 || actions.busy} onClick={() => void send()}>
-                <Bot size={12} aria-hidden /> {tx.chat.applySelected}
-            </button>
+            <Act kind="send" icon={<Bot size={12} aria-hidden />} disabled={n === 0 || actions.busy} onClick={() => void send()}>
+                {tx.chat.applySelected}
+            </Act>
             <button className="icon-button" onClick={() => selection.clear()} aria-label={tx.chat.clearSelection} data-tooltip={tx.chat.clearSelection}>
                 <X size={14} aria-hidden />
             </button>
@@ -1436,9 +1495,9 @@ function ProposalsBar() {
     return (
         <div className="chat-selection-bar" role="toolbar" aria-label={t.selected(n)}>
             <span className="chat-selection-count">{t.selected(n)}</span>
-            <button className="chat-small primary" disabled={n === 0 || actions.busy} onClick={() => void approve()}>
-                <Check size={12} aria-hidden /> {t.approveSelected(n)}
-            </button>
+            <Act kind="decide" icon={<Check size={12} aria-hidden />} disabled={n === 0 || actions.busy} onClick={() => void approve()}>
+                {t.approveSelected(n)}
+            </Act>
             <button className="icon-button" onClick={() => proposalPicks.clear()} aria-label={tx.chat.clearSelection} data-tooltip={tx.chat.clearSelection}>
                 <X size={14} aria-hidden />
             </button>
@@ -1455,9 +1514,9 @@ function UndoBar() {
         <div className="chat-undo" role="status">
             <span>{tx.chat.appliedAs}</span>
             {queued && (
-                <button className="chat-small" onClick={() => actions.undoNow()}>
+                <Act kind="stop" onClick={() => actions.undoNow()}>
                     {tx.chat.undo}
-                </button>
+                </Act>
             )}
             <button className="icon-button" onClick={() => actions.dismissUndo()} aria-label={tx.restoreFlow.close}>
                 <X size={13} aria-hidden />
@@ -1648,9 +1707,9 @@ function HistoryUnit({ unit, mark, open, onToggle }: { unit: ChangeUnit; mark: R
                                 unit={unit}
                                 compact
                                 actions={
-                                    <button className="chat-small" onClick={() => jump(`card:${unit.key}`)}>
-                                        <MessagesSquare size={12} aria-hidden /> {h.showInChat}
-                                    </button>
+                                    <Act kind="see" icon={<MessagesSquare size={12} aria-hidden />} onClick={() => jump(`card:${unit.key}`)}>
+                                        {h.showInChat}
+                                    </Act>
                                 }
                             />
                         </div>

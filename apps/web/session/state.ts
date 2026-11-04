@@ -11,6 +11,7 @@ type RevisionJson = SessionStateBody['revisions'][number];
 type SessionJson = SessionStateBody['session'];
 type MarkJson = SessionStateBody['marks'][number];
 type ApprovalJson = SessionStateBody['approvals'][number];
+type RecordJson = NonNullable<SessionStateBody['records']>[number];
 
 export interface SessionModel {
     readonly state: SessionStateBody | undefined;
@@ -97,6 +98,7 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
                 sentAt: e.sentAt,
                 ...(e.replyTo !== undefined && { replyTo: e.replyTo }),
                 mentions: e.mentions,
+                ...(e.journeyNote !== undefined && { journeyNote: e.journeyNote }),
                 state: 'Sent',
             };
             return { state: { ...at, requests: [...state.requests, request] }, refetch: false };
@@ -227,6 +229,10 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
         }
         case 'SessionCollaborated':
             return { state: session({ ...state.session, mode: 'Collab' }), refetch: false };
+        case 'JourneyChosen': {
+            const { currentJourney: _was, ...rest } = state.session;
+            return { state: session(e.journey === undefined ? rest : { ...rest, currentJourney: e.journey }), refetch: false };
+        }
         // the triages and proposals (ADR 0030): the state is fetched again to hold them (a participant's page gets the
         // triages' events without their records, and an event does not carry the triage or the proposal whole)
         case 'TriageOpened':
@@ -254,6 +260,26 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
         case 'CandidatesApplied':
         case 'SlashCommandStopped':
             return { state: at, refetch: true };
+        // the records carry themselves whole: a new one added, one written again (marks merged, a request's outcome)
+        case 'RecordWritten': {
+            const records = state.records ?? [];
+            if (records.some((r) => r.id === e.recordId)) return { state: at, refetch: false };
+            const record: RecordJson = {
+                state: 'Written',
+                id: e.recordId,
+                session: e.session,
+                ...(e.by !== undefined && { by: e.by }),
+                fact: e.fact,
+                ...(e.replyTo !== undefined && { replyTo: e.replyTo }),
+                at: e.at,
+            };
+            return { state: { ...at, records: [...records, record] }, refetch: false };
+        }
+        case 'RecordRevised': {
+            const records = state.records ?? [];
+            if (!records.some((r) => r.id === e.recordId)) return { state: at, refetch: true };
+            return { state: { ...at, records: replaceById(records, e.recordId, (r) => ({ ...r, fact: e.fact, revisedAt: e.revisedAt })) }, refetch: false };
+        }
     }
 }
 

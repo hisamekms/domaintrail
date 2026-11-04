@@ -103,11 +103,18 @@ export function caseless(rule: string): string {
 export const CONFIG_FILE_NAMES: readonly string[] = ['domaintrail.jsonc', 'domaintrail.json', 'domaintrail.local.jsonc', 'domaintrail.local.json'];
 
 /**
- * What no agent edits or writes, at any depth: the configuration files. A runner that wrote `domaintrail.local.jsonc`
- * (ignored by git, so out of sight) could widen what the next agent may read or run; the scan after a run would stop
- * the subscriber, but the file would stay for the next start. Deny rules win over every allow rule.
+ * The files only dt writes, which the agents read (the plan's "The journey file"): the journey file, whose briefs,
+ * goals and marks change only by people's explicit acts in the session.
  */
-export const CONFIG_EDIT_DENIED: readonly string[] = CONFIG_FILE_NAMES.flatMap((name) => [
+export const DT_WRITTEN_FILE_NAMES: readonly string[] = ['domaintrail.journey.json'];
+
+/**
+ * What no agent edits or writes, at any depth: the configuration files, and the files only dt writes. A runner that
+ * wrote `domaintrail.local.jsonc` (ignored by git, so out of sight) could widen what the next agent may read or run;
+ * the scan after a run would stop the subscriber, but the file would stay for the next start. Deny rules win over
+ * every allow rule.
+ */
+export const CONFIG_EDIT_DENIED: readonly string[] = [...CONFIG_FILE_NAMES, ...DT_WRITTEN_FILE_NAMES].flatMap((name) => [
     `Edit(./${name})`,
     `Edit(**/${name})`,
     `Edit(./${caseless(name)})`,

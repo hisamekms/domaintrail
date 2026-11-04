@@ -1,8 +1,8 @@
 // What the guide's card shows, without React (the plan's "ガイド (`/guide`)"): the guide commands of the session and
 // which is the latest; the snapshot's map as the latest card shows it, the person's ✓ marks as they are now laid over
-// it (a card in history keeps its map as it was); the marks behind `GuideMarkStore` as the page keeps them (the
-// session's marks, for now); a finding's view as the page opens it; and the message 「聞くことをメモ」 sends.
-import { guideMarksOf, ok, type GuideMarkKey, type GuideMarkStore, type MarkTargetData, type Result } from '@domaintrail/collaboration';
+// it (a card in history keeps its map as it was; the marks are the journey file's, `journey-view.ts`); a finding's
+// view as the page opens it; and the message 「聞くことをメモ」 sends.
+import { placeSteps, type GuideMarkKey } from '@domaintrail/collaboration';
 import type { SendRequestBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { mentionName } from './mentions';
 import type { SlashCommandJson } from './slash';
@@ -35,10 +35,10 @@ export function guideAnswers(state: Pick<SessionStateBody, 'slashCommands'>): Re
     return new Set((state.slashCommands ?? []).flatMap((c) => (isGuide(c) && c.state === 'Answered' ? [c.answer] : [])));
 }
 
-/** The steps placed again: the first not done up to the goal is here. */
+/** The steps placed again (`placeSteps`): here after the last done, the earlier not done unconfirmed. */
 function replaced(steps: readonly GuideStepJson[]): GuideStepJson[] {
-    const here = steps.findIndex((s) => s.state !== 'Done' && !s.after);
-    return steps.map((s, i): GuideStepJson => ({ ...s, state: s.state === 'Done' ? 'Done' : i === here ? 'Here' : 'Todo' }));
+    const places = placeSteps(steps.map((s) => ({ done: s.state === 'Done', after: s.after })));
+    return steps.map((s, i): GuideStepJson => ({ ...s, state: places[i] ?? 'Todo' }));
 }
 
 /**
@@ -64,29 +64,6 @@ export function withMarks(map: GuideMapJson, marks: readonly GuideMarkKey[]): Gu
     });
     const [first, ...rest] = replaced(steps);
     return { ...map, steps: first ? [first, ...rest] : map.steps, contexts };
-}
-
-/** The target of a mark: a step of a journey, or a BC row by its context. */
-export const guideMarkTarget = (key: GuideMarkKey): MarkTargetData => ({
-    kind: 'GuideStep',
-    journey: key.journey,
-    step: key.step,
-    ...(key.context !== undefined && { context: key.context }),
-});
-
-/**
- * The guide's marks as the page keeps them: the session's placed marks read, set and cleared through the page's mark
- * setting (`marking.set`, which says itself when the server refuses).
- */
-export function pageGuideMarks(
-    state: Pick<SessionStateBody, 'marks'>,
-    set: (target: MarkTargetData, sign: { readonly kind: 'Done' }, placed: boolean) => void,
-): GuideMarkStore {
-    const write = async (key: GuideMarkKey, placed: boolean): Promise<Result<void, never>> => {
-        set(guideMarkTarget(key), { kind: 'Done' }, placed);
-        return ok(undefined);
-    };
-    return { read: () => guideMarksOf(state.marks ?? []), set: (k) => write(k, true), clear: (k) => write(k, false) };
 }
 
 const VIEW_LEVELS = { BigPicture: 'big-picture', DesignLevel: 'design-level' } as const;

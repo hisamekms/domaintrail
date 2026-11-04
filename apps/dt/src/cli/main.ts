@@ -6,7 +6,8 @@ import { contextNames, formatDomain } from '@domaintrail/modeling';
 import { formatStorming, isStormingFile } from '@domaintrail/storming';
 import { generateTypeScript, policyModes, staysInside, testsWarnings } from '@domaintrail/generation';
 import { type Analysis, analyze } from '@domaintrail/analysis';
-import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/kernel';
+import { compareDiagnostics, formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/kernel';
+import { JOURNEY_FILE, journeyDiagnostics, journeyNames } from '@domaintrail/collaboration';
 import { checkTestsTypes, checkTsContexts, ConfigError, type ResolvedConfig } from '../config/config.js';
 import { guideTopic, parseGuide, practiceOf, quickReference } from './guide.js';
 import {
@@ -72,10 +73,33 @@ interface JsonReport {
  * Checks the workspace. In text mode the diagnostics and the summary are printed; in JSON mode they are put into
  * `report`, printed by the caller.
  */
+/**
+ * The journey file's findings (`domaintrail.journey.json` at the root, when there is one): J001 when it does not read
+ * against its schema (an error), J002 / J003 when a journey names a storming or a context the workspace lacks.
+ */
+async function journeyCheck(root: string, analysis: Analysis): Promise<Analysis> {
+    const text = await readFile(path.join(root, JOURNEY_FILE), 'utf8').catch((e: NodeJS.ErrnoException) => {
+        if (e.code === 'ENOENT') return undefined;
+        throw e;
+    });
+    if (text === undefined) return analysis;
+    const names = journeyNames(
+        analysis.model ? contextNames(analysis.model) : [],
+        analysis.stormings.stormings.map((s) => s.id),
+    );
+    const found = journeyDiagnostics(text, names);
+    if (found.length === 0) return analysis;
+    return {
+        ...analysis,
+        diagnostics: [...analysis.diagnostics, ...found].sort(compareDiagnostics),
+        ok: analysis.ok && !found.some((d) => d.severity === 'error'),
+    };
+}
+
 async function runCheck(config: ResolvedConfig, io: CliIO, deps: CliDeps, report?: JsonReport): Promise<Analysis> {
     const root = config.root;
     const sources = await deps.loadWorkspace(root, config.sources, config.respectGitignore);
-    const analysis = await analyze(sources);
+    const analysis = await journeyCheck(root, await analyze(sources));
     const errors = analysis.diagnostics.filter((d) => d.severity === 'error').length;
     const warnings = analysis.diagnostics.length - errors;
     const noFiles = noSourcesMessage(config);
@@ -204,7 +228,8 @@ Examples:
                 return;
             }
             // a storming is exploration: its errors are reported but never block generation (ADR 0024)
-            const modelErrors = a.diagnostics.some((d) => d.severity === 'error' && !isStormingFile(d.file));
+            // nor do the journey file's: generation reads the .dt files only
+            const modelErrors = a.diagnostics.some((d) => d.severity === 'error' && !isStormingFile(d.file) && d.file !== JOURNEY_FILE);
             if (modelErrors || !a.model) {
                 fail('Generation skipped because the model has errors.', 1);
                 return;

@@ -122,7 +122,10 @@ export function startAnswerer(deps: AnswererDeps, options: AnswererOptions = {})
         const result = await deps.agent.interview({ prompt: buildInterviewPrompt(job, deps.nonce(), practice ?? {}), signal });
         const meta = { ...(result.model && { model: result.model }), durationMs: elapsed() };
         if (result.error !== undefined) return { error: result.error, ...meta };
-        const read = readInterviewerReply(outputOf(result));
+        const read = readInterviewerReply(outputOf(result), {
+            command: job.command === 'es:start' ? 'Es' : 'Model',
+            language: job.language === 'en' ? 'En' : 'Ja',
+        });
         if (!read.ok) return { error: `invalid output (${read.error.path})`, ...meta };
         const reply = read.value;
         if (reply.kind === 'brief') return { kind: 'brief', brief: briefData(reply.brief), ...meta };

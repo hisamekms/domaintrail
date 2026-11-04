@@ -7,7 +7,11 @@ import { describe, expect, test } from 'bun:test';
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MESSAGES } from '../i18n';
+import { actKinds, check, decides } from '../test-helpers';
 import { ChatProvider, type ChatContextValue } from './chat-context';
+import { TargetNamingProvider } from './naming';
+import { MentionedText } from './parts';
+import type { NamingContext } from './targets';
 import {
     awaitedChoices,
     briefRole,
@@ -19,6 +23,7 @@ import {
     rejectedOfMine,
     type ChoiceListProps,
 } from './interview';
+import { Act } from '../shared/act';
 
 const t = MESSAGES.ja;
 const at = '2026-11-03T09:00:00.000Z';
@@ -66,11 +71,12 @@ function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
     return [node, ...elements(node.props.children as ReactNode)];
 }
 
-/** The text of an element's children. */
+/** The text of an element's children (a choice's as written: `ChoiceText`'s `text`). */
 function textOf(node: ReactNode): string {
     if (typeof node === 'string' || typeof node === 'number') return String(node);
     if (Array.isArray(node)) return node.map(textOf).join('');
-    return isValidElement<{ children?: ReactNode }>(node) ? textOf(node.props.children) : '';
+    if (!isValidElement<{ children?: ReactNode; text?: unknown }>(node)) return '';
+    return typeof node.props.text === 'string' ? node.props.text : textOf(node.props.children);
 }
 
 function list(more: Partial<ChoiceListProps> = {}) {
@@ -92,7 +98,7 @@ function list(more: Partial<ChoiceListProps> = {}) {
         ...more,
     };
     const tree = elements(ChoiceList(props));
-    const buttons = tree.filter((e) => e.type === 'button');
+    const buttons = tree.filter((e) => e.type === 'button' || e.type === Act);
     return { sent, toggled, other: () => other, tree, buttons, html: renderToStaticMarkup(<ChoiceList {...props} />) };
 }
 
@@ -117,7 +123,7 @@ describe('the choices', () => {
     test('multiple: checkboxes and 送る (disabled until one is checked), the checked ones sent joined in their order', () => {
         const none = list({ multiple: true });
         expect(none.tree.filter((e) => e.type === 'input' && e.props.type === 'checkbox')).toHaveLength(3);
-        expect(none.buttons.map((b) => b.props.className)).toEqual(['interview-choice send', 'interview-choice other']);
+        expect(none.buttons.map((b) => b.props.kind)).toEqual(['send', 'open']);
         expect(none.buttons[0].props.disabled).toBe(true);
         const input = none.tree.find((e) => e.type === 'input');
         if (!input) throw new Error('no checkbox');
@@ -145,6 +151,100 @@ describe('the choices', () => {
     });
 });
 
+describe('a choice that names an element by reference', () => {
+    // a storming with a label, one without, and a context with a label
+    const naming = async (mode: NamingContext['mode'] = 'label'): Promise<NamingContext> => {
+        const a = await check({
+            'konbini.dtes': 'storming ConvenienceStoreIssuance "住民票などのコンビニ交付（ビッグピクチャ）" {\n  event Issued "交付した"\n}\n',
+            'bare.dtes': 'storming Bare {\n  event Done\n}\n',
+            'billing.dt': 'context Billing "請求" {\n}\n',
+        });
+        return { mode, model: a.model ?? null, stormings: a.stormings.stormings.map((s) => ({ id: s.id, storming: s })) };
+    };
+    const choices = ['@{es:ConvenienceStoreIssuance}', '@{es:Bare}', '@{Billing}', '@{es:Gone}', '@{es:ConvenienceStoreIssuance/Issued} から'];
+    const html = (ctx: NamingContext, more: Partial<ChoiceListProps> = {}): string =>
+        renderToStaticMarkup(<TargetNamingProvider value={ctx}>{list({ choices, ...more }).tree[0]}</TargetNamingProvider>);
+    /** The buttons' (or the checkboxes' labels') texts, as shown. */
+    const shown = (markup: string): string[] =>
+        // the single ones: send buttons (送る, after the checkboxes, opens with its icon); the several: labels
+        [
+            ...markup.matchAll(
+                /<(?:button[^>]*class="act act-send"[^>]*>(?!<svg)|label[^>]*class="interview-choice(?:| checked)"[^>]*>)(.*?)<\/(?:button|label)>/gu,
+            ),
+        ].map((m) => (m[1] ?? '').replace(/<[^>]+>/gu, ''));
+
+    test('shows the label, else the name; a missing one as written, as messages do; never a link', async () => {
+        const ctx = await naming();
+        const single = html(ctx);
+        expect(shown(single)).toEqual(['住民票などのコンビニ交付（ビッグピクチャ）', 'Bare', '請求', 'Gone', '交付した から']);
+        expect(single).toContain('<span class="choice-text"><span class="reply-element">住民票などのコンビニ交付（ビッグピクチャ）</span></span>');
+        expect(single).toContain('<span class="reply-element unresolved">Gone</span>');
+        expect(single).not.toContain('<a');
+        expect(single).not.toContain('@{');
+        // the display setting, as for messages
+        expect(shown(html(await naming('name')))[0]).toBe('ConvenienceStoreIssuance');
+        // checkboxes: the same
+        expect(shown(html(ctx, { multiple: true }))).toEqual(['住民票などのコンビニ交付（ビッグピクチャ）', 'Bare', '請求', 'Gone', '交付した から']);
+    });
+
+    test('sends the reference as written, so the AI gets the ID; several joined keep theirs', () => {
+        const single = list({ choices });
+        click(single.buttons[0]);
+        expect(single.sent).toEqual(['@{es:ConvenienceStoreIssuance}']);
+        expect(choiceAnswerBody('q1', single.sent[0] ?? '').body).toBe('@{es:ConvenienceStoreIssuance}');
+        const several = list({ choices, multiple: true, checked: new Set([0, 2]) });
+        click(several.buttons[0]);
+        expect(several.sent).toEqual(['@{es:ConvenienceStoreIssuance}、@{Billing}']);
+    });
+
+    test("the person's message with the choice shows the label, as a link like any reference", async () => {
+        const ctx = await naming();
+        const markup = renderToStaticMarkup(
+            <TargetNamingProvider value={ctx}>
+                <MentionedText body="@{es:ConvenienceStoreIssuance}" targets={[]} statuses={[]} onNavigate={() => {}} tx={t.session} />
+            </TargetNamingProvider>,
+        );
+        expect(markup).toBe('<a class="reply-element">住民票などのコンビニ交付（ビッグピクチャ）</a>');
+    });
+});
+
+describe("the brief's subject", () => {
+    test('a storming and a context by their labels, as links show them, not their IDs', async () => {
+        const a = await check({
+            'konbini.dtes': 'storming ConvenienceStoreIssuance "住民票などのコンビニ交付" {\n  event Issued "交付した"\n}\n',
+            'billing.dt': 'context Billing "請求" {\n}\n',
+        });
+        const ctx: NamingContext = { mode: 'label', model: a.model ?? null, stormings: a.stormings.stormings.map((s) => ({ id: s.id, storming: s })) };
+        const briefOf = (journey: Record<string, unknown>): unknown =>
+            interview({
+                startedBy: 'f',
+                state: 'Briefed',
+                asked: undefined,
+                brief: { name: 'm', label: 'モデル', isNew: true, replaces: false, text: '目的: x', journey: { stormings: [], ...journey } },
+                answered: 'a1',
+                briefedAt: at,
+            });
+        const howFar = (i: unknown): string => {
+            const session = {
+                status: 'live',
+                me: { participant: { id: 'f', role: 'facilitator' } },
+                state: { session: { state: 'Open', mode: 'Solo' }, interviews: [i], requests: [], runs: [] },
+            };
+            const html = renderToStaticMarkup(
+                <TargetNamingProvider value={ctx}>
+                    <ChatProvider value={{ tx: t.session, session } as unknown as ChatContextValue}>
+                        <InterviewPanel session={session as never} live />
+                    </ChatProvider>
+                </TargetNamingProvider>,
+            );
+            return (/<p class="chat-brief-howfar">(.*?)<\/p>/u.exec(html)?.[1] ?? '').replace(/<[^>]+>/gu, '');
+        };
+        const fromStorming = howFar(briefOf({ pattern: 'FromStorming', goal: 'invariants', stormings: ['ConvenienceStoreIssuance'] }));
+        expect(fromStorming).toContain('ES「住民票などのコンビニ交付」');
+        expect(fromStorming).not.toContain('ConvenienceStoreIssuance');
+        expect(howFar(briefOf({ pattern: 'OneContext', goal: 'invariants', context: 'Billing' }))).toContain('請求');
+    });
+});
 describe('under the message of the AI', () => {
     const chat = (me: string, i: unknown): ChatContextValue =>
         ({
@@ -209,6 +309,13 @@ describe("the brief's card, by who looks", () => {
     test("the facilitator's own brief: 確定 / 編集して確定 / 中止, as before; participants wait for it", () => {
         expect(buttons(panel('f', briefed('f')))).toEqual(['確定', '編集して確定', '中止']);
         expect(buttons(panel('bob', briefed('f')))).toEqual([]);
+    });
+
+    test('the buttons by what they do (docs/ui-rules.md): one decide, editing opens, 却下 is danger, 中止 stops', () => {
+        expect(actKinds(panel('f', briefed('bob')))).toEqual(['decide', 'open', 'danger']);
+        expect(actKinds(panel('f', briefed('f')))).toEqual(['decide', 'open', 'stop']);
+        expect(actKinds(panel('bob', briefed('bob')))).toEqual(['stop']);
+        expect(decides(panel('f', briefed('bob')))).toBe(1);
     });
 
     test('while it asks, its starter and the facilitator may stop it', () => {
