@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import type { DisplayMode, Lang, StructureLevel, ViewLevel } from '@domaintrail/visualization';
+import { DIAGRAM_TEXTS, type DisplayMode, type Lang } from '@domaintrail/visualization';
 import type { ElementKind } from '@domaintrail/modeling';
-import type { StormingElementKind as EsElementKind } from '@domaintrail/storming';
 import type { Connection } from './app/useViewSocket';
 import type { CatalogSectionKey } from './model-utils';
 import type { ElementChange, Role } from '@domaintrail/collaboration/protocol';
@@ -30,9 +29,9 @@ type TriageVerdict = Collaboration.TriageVerdict;
 type ProposalState = Collaboration.ChangeProposal['state'];
 
 const ja = {
-    added: '追加',
-    changed: '変更',
-    removed: '削除',
+    added: DIAGRAM_TEXTS.ja.added,
+    changed: DIAGRAM_TEXTS.ja.changed,
+    removed: DIAGRAM_TEXTS.ja.removed,
     none: 'なし',
     shared: '共有',
     /** After a context's name. */
@@ -85,12 +84,12 @@ const ja = {
     healthRows: { status: 'モデル', files: 'ファイル', version: 'バージョン', updated: '更新', connection: '接続' },
 
     // the worlds (the app bar), the views and the view bar
-    worlds: { model: 'ドメインモデル', storming: 'イベントストーミング' },
+    worlds: DIAGRAM_TEXTS.ja.worlds,
     worldsLabel: '世界',
     /** The domain model's views, in the view bar's switch. */
     modelViews: { contextMap: 'マップ', structure: '構造', catalog: 'カタログ' },
     modelViewsLabel: '見方',
-    views: { contextMap: 'コンテキストマップ', structure: '構造図', catalog: 'カタログ', storming: 'イベントストーミング' },
+    views: { ...DIAGRAM_TEXTS.ja.views, catalog: 'カタログ', storming: 'イベントストーミング' },
     showAllContexts: '共有・外部の BC も表示',
     structureMode: '構造図の表示',
     structureLevels: {
@@ -124,12 +123,7 @@ const ja = {
         withLegend: '凡例を含める',
     },
     /** The line above a printed or exported diagram: what it is and how it is shown. */
-    sheet: {
-        structureLevels: { detail: '詳細', overview: '概観', aggregates: '集約' } as Record<StructureLevel, string>,
-        allContexts: 'すべてのコンテキスト',
-        withExceptions: '例外を含む',
-        withoutExceptions: '例外を除く',
-    },
+    sheet: DIAGRAM_TEXTS.ja.sheet,
     transitionLabels: '遷移のラベル',
     transitionLabelModes: {
         command: { label: 'コマンド', hint: 'コマンドだけを表示' },
@@ -149,18 +143,15 @@ const ja = {
     noStormings: 'ストーミングがありません（.dtes ファイルに storming を書くと表示されます）',
     stormingPicker: '表示するストーミング',
     stormingLevel: '抽象度',
-    stormingLevels: {
-        'big-picture': { label: 'ビッグピクチャー', hint: 'イベント・タイムライン・ホットスポットだけを表示' },
-        'design-level': { label: 'デザインレベル', hint: 'コマンド・ポリシー・アクター・外部システム・集約・リードモデルも表示' },
-    } as Record<ViewLevel, { label: string; hint: string }>,
+    stormingLevels: DIAGRAM_TEXTS.ja.stormingLevels,
     timelineFilter: 'タイムライン',
-    allTimelines: 'すべて（統合）',
+    allTimelines: DIAGRAM_TEXTS.ja.allTimelines,
     /** A stage's view in the timeline picker: its main flow and its exceptions. */
     stageView: (stage: string) => `${stage}（例外を含む）`,
     /** A timeline of a stage in the timeline picker. */
-    stageTimeline: (stage: string, timeline: string) => `${stage} / ${timeline}`,
+    stageTimeline: DIAGRAM_TEXTS.ja.stageTimeline,
     /** An exception in the timeline picker. */
-    exceptionTimeline: (name: string) => `例外：${name}`,
+    exceptionTimeline: DIAGRAM_TEXTS.ja.exceptionTimeline,
     /** The storming's 絞り込み of the exceptions (on the integrated canvas and a stage). */
     showExceptions: '例外を表示',
     staleStorming: (file: string) => `${file} に構文エラーがあるため、最後に解析できた内容を表示しています`,
@@ -185,53 +176,24 @@ const ja = {
     hideStubs: 'スタブを表示しない',
 
     // legend
-    legend: '凡例',
+    legend: DIAGRAM_TEXTS.ja.legend,
     openLegend: '凡例を開く',
     closeLegend: '凡例を閉じる',
-    legendRows: {
-        mapReferences: 'ID だけで依存（ID 参照の件数）',
-        mapDependsOn: '型も借りて依存（型の借用の件数）',
-        owns: '所有（集約の内部）',
-        focusReferences: '参照（ID で別の集約・BC へ）',
-        focusValue: '値・型の借用（値オブジェクト / ユニオン / 列挙型 など）',
-        references: '参照（ID で別の集約へ）',
-        value: '値（値オブジェクト / ユニオンを持つ）',
-        aggregateReferences: '参照（ID で別の集約へ。エンティティや値オブジェクトを経由するものも含む）',
-        aggregateValue: '別の集約を値として持つ',
-        transition: 'コマンドによる遷移（⇒ 発生させるドメインイベント）',
-        esCausal: '型レベルの因果（起こりうる関係。実際に起きたとは限らない）',
-        esSequence: 'タイムラインの時間順',
-        esException: '例外の時間順',
-        esRejoin: '例外から本流へ戻る',
-        esRelated: '関連（アクター・リードモデル・対象の集約）',
-        esHotspot: 'ホットスポットの対象（向きを持たない）',
-    },
-    stormingArrowNote: '矢印は因果と時間の向き',
-    stubNote: '点線枠の小さな箱は別の BC の要素（スタブ）',
-    aggregateStubNote: '点線枠の小さな箱は別の BC の集約（スタブ）',
-    arrowNote: '矢印の先が依存先',
-    internalNote: '状態の箱の中の ↻ は状態を変えないコマンド',
+    legendRows: DIAGRAM_TEXTS.ja.legendRows,
+    stormingArrowNote: DIAGRAM_TEXTS.ja.stormingArrowNote,
+    stubNote: DIAGRAM_TEXTS.ja.stubNote,
+    aggregateStubNote: DIAGRAM_TEXTS.ja.aggregateStubNote,
+    arrowNote: DIAGRAM_TEXTS.ja.arrowNote,
+    internalNote: DIAGRAM_TEXTS.ja.internalNote,
 
     // inspector: an element of a storming
-    esKinds: {
-        event: 'イベント',
-        command: 'コマンド',
-        policy: 'ポリシー',
-        actor: 'アクター',
-        external: '外部システム',
-        aggregate: '集約',
-        readmodel: 'リードモデル',
-        hotspot: 'ホットスポット',
-        timeline: 'タイムライン',
-        group: 'グループ',
-        stage: '段階',
-    } as Record<EsElementKind, string>,
+    esKinds: DIAGRAM_TEXTS.ja.esKinds,
     notInStorming: (id: string) => `${id} はストーミングにありません`,
     inStorming: 'ストーミング',
     /** An event marked `level design`: hidden at Big Picture. */
     designLevelOnly: 'デザインレベルのみ',
     /** A resolved hotspot: its chip in the storming legend's key, and its note's tooltip (what was agreed). */
-    resolvedHotspot: '解決済みのホットスポット',
+    resolvedHotspot: DIAGRAM_TEXTS.ja.resolvedHotspot,
     resolvedHotspotTip: (resolution: string): string => (resolution ? `解決済み: ${resolution}` : '解決済み'),
     groupEvents: 'グループのイベント（順序なし）',
     stageMain: '本流',
@@ -363,7 +325,7 @@ const ja = {
 
     // inspector
     counted: (title: string, n: number) => `${title}（${n}）`,
-    tabs: { structure: '構造', states: '状態遷移', behavior: '振る舞い', events: 'イベント', references: '参照', source: 'ソース' },
+    tabs: { structure: '構造', states: DIAGRAM_TEXTS.ja.tabs.states, behavior: '振る舞い', events: 'イベント', references: '参照', source: 'ソース' },
     reveal: { contextMap: 'コンテキストマップ', structure: '構造図', catalog: 'カタログ' },
     backTo: (name: string) => `${name} に戻る`,
     notInModel: (id: string) => `${id} は現在のモデルにありません。`,
@@ -1080,9 +1042,9 @@ const ja = {
 export type Messages = typeof ja;
 
 const en: Messages = {
-    added: 'Added',
-    changed: 'Changed',
-    removed: 'Removed',
+    added: DIAGRAM_TEXTS.en.added,
+    changed: DIAGRAM_TEXTS.en.changed,
+    removed: DIAGRAM_TEXTS.en.removed,
     none: 'None',
     shared: 'Shared',
     sharedTag: 'shared',
@@ -1129,11 +1091,11 @@ const en: Messages = {
     healthLabel: (health) => `Status: ${health}`,
     healthRows: { status: 'Model', files: 'Files', version: 'Version', updated: 'Updated', connection: 'Connection' },
 
-    worlds: { model: 'Domain model', storming: 'Event Storming' },
+    worlds: DIAGRAM_TEXTS.en.worlds,
     worldsLabel: 'World',
     modelViews: { contextMap: 'Map', structure: 'Structure', catalog: 'Catalog' },
     modelViewsLabel: 'View',
-    views: { contextMap: 'Context Map', structure: 'Structure', catalog: 'Catalog', storming: 'Event Storming' },
+    views: { ...DIAGRAM_TEXTS.en.views, catalog: 'Catalog', storming: 'Event Storming' },
     showAllContexts: 'Also show shared and external BCs',
     structureMode: 'Structure view',
     structureLevels: {
@@ -1165,12 +1127,7 @@ const en: Messages = {
         withHeading: 'Include the heading',
         withLegend: 'Include the legend',
     },
-    sheet: {
-        structureLevels: { detail: 'Detail', overview: 'Overview', aggregates: 'Aggregates' },
-        allContexts: 'All contexts',
-        withExceptions: 'with exceptions',
-        withoutExceptions: 'without exceptions',
-    },
+    sheet: DIAGRAM_TEXTS.en.sheet,
     transitionLabels: 'Transition labels',
     transitionLabelModes: {
         command: { label: 'Command', hint: 'Show the commands only' },
@@ -1187,15 +1144,12 @@ const en: Messages = {
     noStormings: 'No stormings (write a storming in a .dtes file to see it here)',
     stormingPicker: 'Storming to show',
     stormingLevel: 'Level',
-    stormingLevels: {
-        'big-picture': { label: 'Big Picture', hint: 'Events, timelines and hotspots only' },
-        'design-level': { label: 'Design Level', hint: 'Also commands, policies, actors, external systems, aggregates and read models' },
-    },
+    stormingLevels: DIAGRAM_TEXTS.en.stormingLevels,
     timelineFilter: 'Timeline',
-    allTimelines: 'All (integrated)',
+    allTimelines: DIAGRAM_TEXTS.en.allTimelines,
     stageView: (stage) => `${stage} (with its exceptions)`,
-    stageTimeline: (stage, timeline) => `${stage} / ${timeline}`,
-    exceptionTimeline: (name) => `Exception: ${name}`,
+    stageTimeline: DIAGRAM_TEXTS.en.stageTimeline,
+    exceptionTimeline: DIAGRAM_TEXTS.en.exceptionTimeline,
     showExceptions: 'Show exceptions',
     staleStorming: (file) => `${file} has syntax errors: showing what it was when it last parsed`,
 
@@ -1217,50 +1171,21 @@ const en: Messages = {
     showStubs: 'Show as stubs',
     hideStubs: 'Hide the stubs',
 
-    legend: 'Legend',
+    legend: DIAGRAM_TEXTS.en.legend,
     openLegend: 'Open the legend',
     closeLegend: 'Close the legend',
-    legendRows: {
-        mapReferences: 'Depends by IDs only (ID references)',
-        mapDependsOn: 'Also borrows types (borrowed types)',
-        owns: 'Owns (inside an aggregate)',
-        focusReferences: 'References (by ID, another aggregate or BC)',
-        focusValue: 'Value or borrowed type (Value Object, Union, Enum…)',
-        references: 'References (by ID, another aggregate)',
-        value: 'Value (holds a Value Object or Union)',
-        aggregateReferences: 'References (by ID, another aggregate, also through entities and value objects)',
-        aggregateValue: 'Holds another aggregate as a value',
-        transition: 'Transition by a command (⇒ events it raises)',
-        esCausal: 'Type-level cause (a possibility, not something that happened)',
-        esSequence: 'Time order of a timeline',
-        esException: 'Time order of an exception',
-        esRejoin: 'An exception returning to the main flow (then)',
-        esRelated: 'Related (actor, read model, target aggregate)',
-        esHotspot: 'A hotspot’s subject (no direction)',
-    },
-    stormingArrowNote: 'Arrows point along causes and time',
-    stubNote: 'Small dashed boxes are elements of other BCs (stubs)',
-    aggregateStubNote: 'Small dashed boxes are aggregates of other BCs (stubs)',
-    arrowNote: 'Arrows point at the dependency',
-    internalNote: '↻ in a state’s box: a command that keeps the state',
+    legendRows: DIAGRAM_TEXTS.en.legendRows,
+    stormingArrowNote: DIAGRAM_TEXTS.en.stormingArrowNote,
+    stubNote: DIAGRAM_TEXTS.en.stubNote,
+    aggregateStubNote: DIAGRAM_TEXTS.en.aggregateStubNote,
+    arrowNote: DIAGRAM_TEXTS.en.arrowNote,
+    internalNote: DIAGRAM_TEXTS.en.internalNote,
 
-    esKinds: {
-        event: 'Event',
-        command: 'Command',
-        policy: 'Policy',
-        actor: 'Actor',
-        external: 'External system',
-        aggregate: 'Aggregate',
-        readmodel: 'Read model',
-        hotspot: 'Hotspot',
-        timeline: 'Timeline',
-        group: 'Group',
-        stage: 'Stage',
-    },
+    esKinds: DIAGRAM_TEXTS.en.esKinds,
     notInStorming: (id) => `${id} is not in the storming`,
     inStorming: 'Storming',
     designLevelOnly: 'Design Level only',
-    resolvedHotspot: 'Resolved hotspot',
+    resolvedHotspot: DIAGRAM_TEXTS.en.resolvedHotspot,
     resolvedHotspotTip: (resolution) => (resolution ? `Resolved: ${resolution}` : 'Resolved'),
     groupEvents: 'Events of the group (no order)',
     stageMain: 'Main flows',
@@ -1381,7 +1306,7 @@ const en: Messages = {
     copyCode: 'Copy the code',
 
     counted: (title, n) => `${title} (${n})`,
-    tabs: { structure: 'Structure', states: 'States', behavior: 'Behavior', events: 'Events', references: 'References', source: 'Source' },
+    tabs: { structure: 'Structure', states: DIAGRAM_TEXTS.en.tabs.states, behavior: 'Behavior', events: 'Events', references: 'References', source: 'Source' },
     reveal: { contextMap: 'Context Map', structure: 'Structure', catalog: 'Catalog' },
     backTo: (name) => `Back to ${name}`,
     notInModel: (id) => `${id} is not in the current model.`,

@@ -200,7 +200,8 @@ instead: it prints as a page, its list without the panes around it (it has no ex
 - **SVG**: the same as a portable SVG — plain shapes and text, no embedded HTML, the colours as attributes, the fonts as
   the page's font stack ending with a generic family — that opens in browsers, Figma and Inkscape. Each note's label is
   broken into lines, shrunk and cut short with «…» as on the canvas (measured in the page's fonts); a viewer without
-  those fonts draws the same lines in its own, a little wider or narrower.
+  those fonts draws the same lines in its own, a little wider or narrower. `dt export svg` draws the same SVG without
+  a browser, for a document's figures built in CI ([`dt guide export`](guide.md#sharing-the-sources-and-the-diagrams)).
 - **PDF（印刷画面から保存）**: the 印刷 action; the print dialog saves the PDF.
 - **見出しを含める** (off by default): the heading line above the diagram in a PNG or SVG (a printed sheet always has it).
 - **凡例を含める** (off by default): the view's legend under the diagram, at the left, in a PNG, an SVG and a print.
@@ -214,7 +215,7 @@ The two options are remembered per browser. A file is named from IDs, not labels
 
 ソース一式をダウンロード (en: Download sources (.zip)), in the collab menu (under `dt open`, its ⋯), is for everyone on
 the page: the facilitator and every participant. It saves `<workspace>-sources.zip`, the same archive as
-[`dt export sources`](guide.md#sharing-the-sources): the `.dt` and `.dtes` files `dt check` analyzes and the config
+[`dt export sources`](guide.md#sharing-the-sources-and-the-diagrams): the `.dt` and `.dtes` files `dt check` analyzes and the config
 file, below a folder named after the workspace, made from the files on disk when it is clicked — never the local
 override, `.domaintrail`, `.git`, generated output, symlinks or files git ignores. The server serves it at
 `GET /api/export/sources.zip` behind the page's own sign-in (no identity: 401; a Host or Origin not allowed: 403), as

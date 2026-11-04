@@ -1,14 +1,15 @@
 // A diagram as a portable SVG: plain shapes and text, no `foreignObject`, no classes and no external resources, so that
 // it opens alike in browsers, design tools (Figma's import) and editors (Inkscape), and rasterizes to a PNG without
-// tainting a canvas. It draws the scene as the canvas does (styles.css's `.dn` / `.dg` / `.di` / `.de` rules, mirrored
-// here as attributes, in the light theme's colours): a box's text is laid out line by line with the page's own fonts
-// (as a generic family stack) and wrapped, shrunk and cut short with «…» as the canvas does (`note-fit.ts`), measured
-// by the caller (a canvas's `measureText` in the page; a fixed measure in tests).
-import { TRANSITION_LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, TRANSITION_SUB_SIZE } from '@domaintrail/visualization';
-import { BADGE, badgeWidth, checkPath, DIAG_RADIUS, RESOLVED_MARK } from '../diagram-items';
-import type { LegendContent } from '../legend';
-import { fitLabel, NOTE_KINDS, type LabelFit } from '../note-fit';
-import { sceneItems, type EdgeProps, type GroupProps, type InternalProps, type NodeProps, type Rect, type Scene } from '../scene';
+// tainting a canvas. It draws the scene as the Live View's canvas does (styles.css's `.dn` / `.dg` / `.di` / `.de`
+// rules, mirrored here as attributes, in the colours of a palette resolved from styles.css's custom properties): a box's
+// text is laid out line by line in the given font stacks and wrapped, shrunk and cut short with «…» as the canvas does
+// (`note-fit.ts`), measured by the caller (a canvas's `measureText` in the page; a table of the fonts' widths in
+// `dt export svg`, `text-measure.ts`; a fixed measure in tests).
+import { TRANSITION_LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, TRANSITION_SUB_SIZE } from '../graph/ir.js';
+import type { LegendContent } from './legend.js';
+import { BADGE, badgeWidth, checkPath, DIAG_RADIUS, RESOLVED_MARK } from './marks.js';
+import { fitLabel, NOTE_KINDS, type LabelFit } from './note-fit.js';
+import { sceneItems, type EdgeProps, type GroupProps, type InternalProps, type NodeProps, type Rect, type Scene } from './scene.js';
 
 /** The CSS custom properties (styles.css) the drawing takes its colours from. */
 export const PALETTE_VARS = [
@@ -118,6 +119,8 @@ export interface PortableSvgInput {
     palette: Palette;
     fonts: Fonts;
     measure: TextMeasure;
+    /** The background, under the diagram and around its edges' labels (default white, `PAPER`). */
+    paper?: Rgba | undefined;
 }
 
 /** A drawn SVG and its size in px. */
@@ -135,8 +138,8 @@ const MARGIN = 24;
 /** Between the heading and the diagram, and between the diagram and the legend. */
 const GAP = 16;
 const HEADING_SIZE = 14;
-/** The background (the paper). */
-const PAPER: Rgba = { hex: '#ffffff', alpha: 1 };
+/** The background (the paper), unless another is given: white, whatever the theme of the page exporting it. */
+export const PAPER: Rgba = { hex: '#ffffff', alpha: 1 };
 
 // ---------- text ----------
 
@@ -467,6 +470,7 @@ class Drawing {
         private readonly palette: Palette,
         fonts: Fonts,
         private readonly measure: TextMeasure,
+        private readonly paper: Rgba,
     ) {
         this.markers = new Markers(palette);
         this.sans = fonts.sans;
@@ -850,8 +854,11 @@ class Drawing {
                 const at = { x: cx, y: l.centre + (ascent - descent) / 2, ...fontAttrs(l.font), 'text-anchor': 'middle' };
                 // the halo: the same text stroked in the paper's colour, under it (paint-order is not read everywhere)
                 return (
-                    tag('text', { ...at, ...paint('fill', PAPER), ...paint('stroke', PAPER), 'stroke-width': 4, 'stroke-linejoin': 'round' }, xml(l.text)) +
-                    tag('text', { ...at, ...paint('fill', l.fill) }, xml(l.text))
+                    tag(
+                        'text',
+                        { ...at, ...paint('fill', this.paper), ...paint('stroke', this.paper), 'stroke-width': 4, 'stroke-linejoin': 'round' },
+                        xml(l.text),
+                    ) + tag('text', { ...at, ...paint('fill', l.fill) }, xml(l.text))
                 );
             })
             .join('');
@@ -984,12 +991,14 @@ class Drawing {
 }
 
 /**
- * The scene as a portable SVG on white: the heading (if any) at the top, the diagram, and the legend (if any) under
- * it at the left, with a margin around all. Its size is in px of the page (1 px per layout unit).
+ * The scene as a portable SVG on its paper (white unless given): the heading (if any) at the top, the diagram, and
+ * the legend (if any) under it at the left, with a margin around all. Its size is in px of the page (1 px per layout
+ * unit).
  */
 export function portableSvg(input: PortableSvgInput): PortableSvg {
     const { scene, bounds, palette, fonts, measure } = input;
-    const draw = new Drawing(palette, fonts, measure);
+    const paper = input.paper ?? PAPER;
+    const draw = new Drawing(palette, fonts, measure, paper);
     const parts: string[] = [];
     let top = MARGIN;
     let width = bounds.w;
@@ -1021,7 +1030,7 @@ export function portableSvg(input: PortableSvgInput): PortableSvg {
         tag(
             'svg',
             { xmlns: 'http://www.w3.org/2000/svg', width: w, height: h, viewBox: `0 0 ${w} ${h}` },
-            tag('defs', {}, draw.markers.toString()) + tag('rect', { width: w, height: h, ...paint('fill', PAPER) }) + parts.join(''),
+            tag('defs', {}, draw.markers.toString()) + tag('rect', { width: w, height: h, ...paint('fill', paper) }) + parts.join(''),
         );
     return { svg, width: w, height: h };
 }

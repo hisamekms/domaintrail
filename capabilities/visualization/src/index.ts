@@ -34,6 +34,83 @@ export { dependencyCounts } from './core/graph/context-map.js';
 export { LEVEL_KINDS, VIEW_LEVELS, type GridCell, type RenderGraph, type StageGrid, type ViewLevel, type ViewOptions } from './core/storming/ir.js';
 export { stormingViewKey } from './core/storming/graph.js';
 
+// ---- core: the drawing of a laid-out graph, shared by the Live View's canvas and `dt export svg` ------------------
+export {
+    edgeItemId,
+    ghostItemId,
+    graphNodeOf,
+    internalItemId,
+    nodeItemId,
+    rectCenter,
+    rectContains,
+    sceneItems,
+    unionRects,
+    type ChangeMark,
+    type DiagMark,
+    type EdgeProps,
+    type EdgeTone,
+    type GroupProps,
+    type InternalProps,
+    type NodeProps,
+    type Point,
+    type Rect,
+    type Scene,
+    type SceneEdge,
+    type SceneGroup,
+    type SceneId,
+    type SceneInternal,
+    type SceneItem,
+    type SceneItemType,
+    type SceneNode,
+} from './core/drawing/scene.js';
+export { buildScene, ownerElement, type RenderOptions } from './core/drawing/build-scene.js';
+export { exportBounds, graphBounds } from './core/drawing/bounds.js';
+export { BADGE, badgeWidth, checkPath, DIAG_RADIUS, RESOLVED_MARK } from './core/drawing/marks.js';
+export { fitLabel, fontSizes, NOTE_KINDS, type LabelFit } from './core/drawing/note-fit.js';
+export { DIAGRAM_TEXTS, type DiagramTexts } from './core/drawing/texts.js';
+export {
+    legendContent,
+    legendKindNames,
+    legendRows,
+    STORMING_LEGEND_KINDS,
+    type LegendContent,
+    type LegendKind,
+    type LegendRow,
+    type LegendView,
+} from './core/drawing/legend.js';
+export {
+    exportFileName,
+    nameIn,
+    sheetHeading,
+    slug,
+    stormingSheetSubject,
+    type Named,
+    type SheetSubject,
+    type StormingOutline,
+    type StormingScope,
+} from './core/drawing/sheet.js';
+export { tableMeasure } from './core/drawing/text-measure.js';
+export { styleFonts, stylePalette, styleTokens, tokenColour, type DiagramTheme, type StyleTokens } from './core/drawing/palette.js';
+export {
+    breakUnits,
+    ellipsize,
+    noteText,
+    PALETTE_VARS,
+    PAPER,
+    portableSvg,
+    wrapLines,
+    xml,
+    type Font,
+    type Fonts,
+    type NoteText,
+    type Palette,
+    type PaletteVar,
+    type PortableSvg,
+    type PortableSvgInput,
+    type Rgba,
+    type TextMeasure,
+} from './core/drawing/portable-svg.js';
+
 // ---- application: the view service and its ports ---------------------------------------------------------------
 export { createViewService, type ViewService, type ViewServiceDeps } from './application/view-service.js';
 export {
