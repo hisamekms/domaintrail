@@ -169,6 +169,9 @@ describe('the journeys panel', () => {
         expect(text(current)).toContain('制約会計はそのまま');
         expect(text(current)).toContain('もとBilling');
         expect(current).toContain('guide-path');
+        // the map under the title: its goal, not the journey's name again
+        expect(current.match(/Billing の深掘り/g)).toHaveLength(1);
+        expect(current).not.toContain('guide-journey');
         for (const action of ['ガイドを見る', 'ゴールを変える', 'ブリーフを見直す', '完了にする', 'しまう']) expect(text(current)).toContain(action);
         const others = html.slice(html.indexOf('journeys-others'), html.indexOf('journeys-new'));
         expect([...others.matchAll(/<span class="journeys-row-name">([^<]*)<\/span>/g)].map((m) => m[1])).toEqual(['返品', 'ショップ']);

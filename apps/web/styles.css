@@ -2502,7 +2502,7 @@ select,
     }
 }
 /* the journeys panel: the current journey (its brief, its map, its actions), the other journeys, the new ones, the
-   archived; the participants' requests at the top */
+   archived; the participants' requests at the top. One plain surface, its groups apart by space (16px), never boxes */
 .journeys-panel {
     position: absolute;
     top: calc(100% + 6px);
@@ -2510,12 +2510,12 @@ select,
     z-index: 45;
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
+    gap: var(--space-4);
     width: 26rem;
     max-width: calc(100vw - 24px);
     max-height: min(40rem, calc(100vh - 70px));
     overflow: auto;
-    padding: var(--space-2) var(--space-3);
+    padding: var(--space-3);
     background: var(--surface-raised);
     border: 1px solid var(--brand-wash-border);
     border-radius: 10px;
@@ -2541,14 +2541,24 @@ select,
 .journeys-panel .journeys-close {
     margin-left: var(--space-1);
 }
+/* the current journey, on the panel's surface (no wash: the map's dots read on it): its name and kind; 12px, its brief;
+   12px, its map with the goal close under it; 16px, its actions */
 .journeys-current {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
-    padding: var(--space-2);
-    border: 1px solid var(--brand-wash-border);
-    border-radius: 8px;
-    background: var(--brand-wash);
+}
+.journeys-current > .brief-lines,
+.journeys-current > .guide-map {
+    margin-top: var(--space-3);
+}
+.journeys-current > .journeys-next {
+    margin-top: var(--space-2);
+}
+.journeys-current > .journeys-actions {
+    margin-top: var(--space-4);
+}
+.journeys-current > .journeys-goals {
+    margin-top: var(--space-2);
 }
 .journeys-current-head {
     display: flex;
@@ -2573,18 +2583,6 @@ select,
     align-items: center;
     gap: 3px;
     color: var(--warning);
-}
-.journeys-brief {
-    display: grid;
-    grid-template-columns: max-content 1fr;
-    gap: 2px var(--space-2);
-    margin: 0;
-}
-.journeys-brief dt {
-    color: var(--muted);
-}
-.journeys-brief dd {
-    margin: 0;
 }
 .journeys-actions,
 .journeys-goals,
@@ -8435,8 +8433,9 @@ label.proposal-option {
     color: var(--muted);
     box-sizing: border-box;
 }
+/* done: the brand's ring and check on its wash, apart from the not-done grey ring on any surface */
 .guide-step.done .guide-dot {
-    border-color: var(--brand-wash-border);
+    border-color: var(--brand);
     background: var(--brand-wash);
     color: var(--brand);
 }
@@ -8455,7 +8454,7 @@ label.proposal-option {
     color: var(--guide-goal);
 }
 .guide-step.after {
-    opacity: 0.45;
+    opacity: 0.6;
 }
 /* an earlier step not done (a judgment nobody marked): a hollow dashed ring, 未確認 */
 .guide-step.unconfirmed .guide-dot {
@@ -8535,7 +8534,7 @@ label.proposal-option {
     height: 16px;
 }
 .guide-row-done .guide-dot {
-    border-color: var(--brand-wash-border);
+    border-color: var(--brand);
     background: var(--brand-wash);
     color: var(--brand);
 }
@@ -8603,12 +8602,17 @@ label.proposal-option {
 .guide-status {
     margin: 0;
 }
+/* the advice: inside a step ≤ 8px (its title, reason, actions, question), between the steps twice that; the status
+   sentence and the steps apart as two groups */
+.guide-advice {
+    margin-top: var(--space-3);
+}
 .guide-steps {
-    margin: var(--space-1) 0 0;
+    margin: var(--space-3) 0 0;
     padding-left: 1.5em;
 }
 .guide-advice-step + .guide-advice-step {
-    margin-top: var(--space-2);
+    margin-top: var(--space-4);
 }
 .guide-step-text {
     display: block;
@@ -8620,11 +8624,20 @@ label.proposal-option {
     font-size: var(--fs-small);
     line-height: var(--lh-small);
 }
+.guide-step-reason {
+    margin-top: 2px;
+}
+.guide-question {
+    margin-top: var(--space-1);
+}
 .guide-actions {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-1) 6px;
     margin: 4px 0 0;
+}
+.guide-advice .guide-actions {
+    margin-top: var(--space-2);
 }
 .session-chat .guide-command {
     display: inline-flex;
@@ -8784,7 +8797,7 @@ label.proposal-option {
     min-width: 0;
 }
 .chat-brief {
-    padding: var(--space-2) var(--space-3) var(--space-2);
+    padding: var(--space-3);
     border-top: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
     background: var(--surface-raised);
     border-radius: 0 0 8px 8px;
@@ -8794,7 +8807,7 @@ label.proposal-option {
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-1) var(--space-2);
-    margin-bottom: var(--space-1);
+    margin-bottom: 2px;
 }
 .chat-brief-name {
     font-weight: var(--fw-strong);
@@ -8809,28 +8822,39 @@ label.proposal-option {
     background: var(--neutral-tint);
     color: var(--text);
 }
-.chat-brief-lines {
+/* the brief's lines, in the chat's card and in the journeys panel: one grid, the labels in one aligned column (muted,
+   normal weight), a row of 8px between the lines; the chat's lines are wrapped one by one (display: contents), a line
+   without a label spans the row */
+.brief-lines {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--space-2) var(--space-3);
     margin: 0;
+}
+.brief-lines dt {
+    grid-column: 1;
+    font-weight: normal;
+    color: var(--muted);
+    white-space: nowrap;
+}
+.brief-lines dd {
+    grid-column: 2;
+    margin: 0;
+}
+.chat-brief-lines {
+    margin-top: var(--space-3);
     font-size: var(--fs-body, inherit);
     line-height: 1.5;
 }
 .chat-brief-line {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    column-gap: var(--space-2);
-}
-.chat-brief-line dt {
-    font-weight: var(--fw-strong);
-    white-space: nowrap;
-}
-.chat-brief-line dd {
-    margin: 0;
-    grid-column: 2;
+    display: contents;
 }
 .chat-brief-line dd:only-child {
     grid-column: 1 / -1;
 }
 .chat-brief-edit {
+    display: block;
+    margin-top: var(--space-3);
     width: 100%;
     box-sizing: border-box;
     resize: vertical;
@@ -8846,13 +8870,17 @@ label.proposal-option {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
-    margin-top: var(--space-2);
+    margin-top: var(--space-4);
 }
 .chat-brief-waiting {
-    margin: var(--space-2) 0 0;
+    margin: var(--space-4) 0 0;
+}
+/* waiting and its 止める: one group */
+.chat-brief-waiting + .chat-brief-actions {
+    margin-top: var(--space-2);
 }
 .chat-brief .chat-apply-note {
-    margin: var(--space-2) 0 0;
+    margin: var(--space-4) 0 0;
 }
 /* the note of a rejected brief, to its starter */
 .chat-brief-note {

@@ -177,7 +177,7 @@ export function InterviewPanel(props: { session: SessionData; live: boolean }) {
                     </div>
                     {brief.journey && <BriefHowFar journey={brief.journey} />}
                     {editing === undefined ? (
-                        <dl className="chat-brief-lines">
+                        <dl className="brief-lines chat-brief-lines">
                             {briefLines(brief.text).map((l, i) => (
                                 <div key={i} className="chat-brief-line">
                                     {l.head !== undefined && <dt>{l.head}</dt>}

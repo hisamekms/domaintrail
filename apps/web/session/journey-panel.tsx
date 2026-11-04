@@ -239,7 +239,7 @@ function Current({ item, onClose }: { readonly item: JourneyItem; readonly onClo
                     </span>
                 )}
             </div>
-            <dl className="journeys-brief">
+            <dl className="brief-lines journeys-brief">
                 <dt>{t.brief.purpose}</dt>
                 <dd>{s.purpose}</dd>
                 {s.scope !== undefined && (
@@ -273,7 +273,7 @@ function Current({ item, onClose }: { readonly item: JourneyItem; readonly onClo
                     </>
                 )}
             </dl>
-            {item.map && <GuideMapView map={item.map} live={live} />}
+            {item.map && <GuideMapView map={item.map} live={live} named={false} />}
             {item.reached && s.kind === 'es' && s.use === 'modeling' && live && (
                 <p className="journeys-next">
                     <CircleCheck size={12} aria-hidden /> {t.toModeling}
