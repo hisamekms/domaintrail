@@ -10,6 +10,7 @@ import type { Collaboration } from './generated/index.js';
 import type { RunActivity, RunActivityPhase } from './domain/activity.js';
 import type { TemplateContext } from './domain/templates.js';
 import type { JourneyAct, JourneyFile, JourneyProblem, JourneySummary } from './domain/journey.js';
+import type { JourneyWhere } from './domain/guide.js';
 
 export type { RunActivity, RunActivityPhase, RevertChanges, RevertFile, TemplateContext };
 
@@ -730,6 +731,8 @@ export interface AgentStartedBody {
     readonly sessionSoFar?: AgentSessionSoFar;
     /** The session so far after the entry `since` of the start's body: for a warm process that saw it up to there. */
     readonly sessionSoFarSince?: AgentSessionSoFar;
+    /** The journeys when the run starts (the current one, where it stands, the others): what the work is for and how far it goes. */
+    readonly journeys?: AgentJourneysBody;
 }
 
 /**
@@ -917,6 +920,8 @@ export interface AgentInterviewJobBody {
 export interface AgentJourneysBody {
     readonly current?: string;
     readonly journeys: readonly JourneySummary[];
+    /** Where the current journey stands (its 📍 step, the chip's rule; `journeyWhere` of `domain/guide.ts`); absent: not known. */
+    readonly where?: JourneyWhere;
 }
 
 /** An answer job about a triage as the answerer gets it. */

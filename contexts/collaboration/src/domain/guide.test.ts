@@ -13,6 +13,7 @@ import {
     guideMap,
     guideSnapshot,
     guideWorld,
+    journeyWhere,
     MODEL_PATTERNS,
     NO_GOAL,
     guideMarks,
@@ -229,6 +230,26 @@ describe('where 📍 sits', () => {
         expect(at('_xxx')).toEqual(['Unconfirmed', 'Done', 'Done', 'Done']);
         // a step past the goal is never here, and a done one past it does not move here
         expect(at('x__x', '__~~')).toEqual(['Done', 'Here', 'Todo', 'Done']);
+    });
+});
+
+describe("where a journey stands (the chip's rule)", () => {
+    const file = (marks: readonly string[] = []): NonNullable<GuideWorkspace['journey']> =>
+        ({
+            version: 1,
+            stormings: { Issue: { purpose: 'p', participants: [], use: 'align', level: 'BigPicture', state: 'active', marks: [...marks] } },
+            modeling: [],
+        }) as unknown as NonNullable<GuideWorkspace['journey']>;
+    const STORMING = `storming Issue {\n${EVENTS}\n${FLOW}\n}`;
+
+    test("its 📍 step from the guide's map, the goal reached when every step to it is done, none for a journey gone", async () => {
+        const w = await workspace({ 'issue.dtes': STORMING });
+        const here = journeyWhere({ ...w, journey: file() }, 'es:Issue');
+        expect(here?.reached).toBe(false);
+        expect(here).toEqual({ here: 'exceptions', reached: false });
+        expect(journeyWhere({ ...w, journey: file(['exceptions', 'questions']) }, 'es:Issue')).toEqual({ reached: true });
+        expect(journeyWhere({ ...w, journey: file() }, 'es:Gone')).toBeUndefined();
+        expect(journeyWhere(w, 'es:Issue')).toBeUndefined();
     });
 });
 

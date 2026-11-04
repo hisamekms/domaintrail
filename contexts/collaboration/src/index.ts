@@ -234,6 +234,7 @@ export {
     goalOf,
     guideJourneyMap,
     journeyMarks,
+    journeyWhere,
     markAct,
     PATTERN_SUBJECT,
     patternMarkable,
@@ -246,6 +247,7 @@ export {
     type GuideMapInput,
     type GuidePatternPath,
     type GuideWorkspace,
+    type JourneyWhere,
     type StormingFacts,
 } from './domain/guide.js';
 // the journey file (`domaintrail.journey.json`): its shape, reading and writing it, the acts that change it, its checks
