@@ -2383,6 +2383,11 @@ select,
 .app-bar-session:empty {
     display: none;
 }
+/* the session's controls' place until they arrive: blank, at the width they had (app/shell.tsx) */
+.app-bar-session-pending {
+    flex: none;
+    height: 1px;
+}
 /* the session's controls in the app bar (the chat's own look, `.session-chat`, laid out in a row); the collab menu's
    popover opens leftward from the bar's right end */
 .session-chat.session-bar {
@@ -3471,6 +3476,11 @@ svg.chat-launcher-mark {
     flex: 1;
     position: relative;
     min-height: 0;
+    transition: opacity var(--motion-canvas-in) var(--motion-ease-enter);
+}
+/* the diagram area waits for its data, and only it: blank until the first payload, then it fades in */
+.view-area:not(.drawn) {
+    opacity: 0;
 }
 .catalog {
     position: absolute;
@@ -3947,6 +3957,8 @@ svg.chat-launcher-mark {
     --motion-medium: 180ms;
     /* a chat row growing to its new content (the AI's card turning into its answer), the content fading in */
     --motion-grow: 250ms;
+    /* the diagram area appearing once its first data is drawn */
+    --motion-canvas-in: 120ms;
     --motion-ease-enter: cubic-bezier(0, 0, 0.2, 1);
     --motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
     --motion-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
@@ -3961,6 +3973,7 @@ svg.chat-launcher-mark {
         --motion-dialog-out: 0ms;
         --motion-medium: 0ms;
         --motion-grow: 0ms;
+        --motion-canvas-in: 0ms;
     }
 }
 
@@ -3975,6 +3988,11 @@ svg.chat-launcher-mark {
 .app.motion-exit {
     --pane-duration: var(--motion-exit);
     --pane-easing: var(--motion-ease-exit);
+}
+/* the first display: the panes are drawn where they settle, without moving, until the person acts on the page */
+.app.motion-none {
+    --pane-duration: 0ms;
+    --pane-easing: linear;
 }
 /* the left pane's list comes out from under the activity bar */
 .left-main {

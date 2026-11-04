@@ -47,6 +47,9 @@ describe('Live View', () => {
     test('serves the page and the current state', async () => {
         const html = await (await fetch(server.url)).text();
         expect(html).toContain('<div id="root"></div>');
+        // the read-only Live View has no session: its boot block names the workspace only
+        const boot = /<script type="application\/json" id="dt-boot">(.*?)<\/script>/.exec(html)?.[1];
+        expect(JSON.parse(boot ?? 'null')).toEqual({ workspaceName: path.basename(dir) });
         const state = (await (await fetch(`${server.url}api/state`)).json()) as ViewPayload;
         expect(state.status).toBe('ok');
         expect(state.files).toEqual([

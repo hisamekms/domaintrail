@@ -81,15 +81,28 @@ export function detailSize(saved: number | null, column: number): number {
     return clampSize(saved ?? column * DETAIL_SHARE, DETAIL_MIN, detailMax(column));
 }
 
-/** `uiScale`: how much larger the UI is than at a 16px root (the text size), which the default sizes follow. */
-export function usePanes(uiScale = 1): Panes {
+/**
+ * The detail's height as drawn (its outer box): the rail's (`rail`) while it is closed; open, its size in its column
+ * (`detailSize`) once the column is measured, and none before (`column` 0), so that the first frame is drawn at the
+ * measured split: a height that is not set is not one a transition starts from.
+ */
+export function drawnDetailHeight(open: boolean, saved: number | null, column: number, rail: number): number | undefined {
+    if (!open) return rail;
+    return column > 0 ? detailSize(saved, column) : undefined;
+}
+
+/**
+ * `uiScale`: how much larger the UI is than at a 16px root (the text size), which the default sizes follow;
+ * `conversationOpenAtStart`: the conversation is open from the start (a session's page: the server said so, `boot.ts`).
+ */
+export function usePanes(uiScale = 1, conversationOpenAtStart = false): Panes {
     const [leftSaved, setLeftSaved] = usePersistentState('domaintrail.layout.explorer', true);
     const [inspectorOpen, setDetailOpen] = usePersistentState('domaintrail.layout.inspector', true);
     // the sizes are null until the reader drags the pane: then they follow the text size
     const [explorerWidthSaved, setExplorerWidth] = usePersistentState<number | null>('domaintrail.layout.explorerWidth', null);
     const [leftView, setLeftView] = usePersistentState<LeftView>('domaintrail.layout.leftView', 'tree');
     const [detailHeight, setDetailHeight] = usePersistentState<number | null>('domaintrail.layout.detailHeight', null);
-    const [conversationOpen, setConversationOpen] = useState(false);
+    const [conversationOpen, setConversationOpen] = useState(conversationOpenAtStart);
     const [conversationWidthSaved, setConversationWidth] = usePersistentState<number | null>('domaintrail.layout.conversationWidth', null);
     const legends = useLegends();
     const [inspectorTab, setInspectorTab] = usePersistentState<InspectorTab>('domaintrail.inspector.tab', 'structure');

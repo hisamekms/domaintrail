@@ -289,7 +289,11 @@ describe('a session in dev mode', () => {
         const res = await fetch(`${server.url}api/state`, { headers: { cookie: bob } });
         expect(res.status).toBe(200);
         expect(((await res.json()) as ViewPayload).files).toEqual(['ordering.dtes', 'shop.dt']);
-        expect(await (await fetch(server.url, { headers: { cookie: bob } })).text()).toContain('<div id="root"></div>');
+        const html = await (await fetch(server.url, { headers: { cookie: bob } })).text();
+        expect(html).toContain('<div id="root"></div>');
+        // the page's first frame has the chat's column and the workspace's name (the boot block)
+        const boot = /<script type="application\/json" id="dt-boot">(.*?)<\/script>/.exec(html)?.[1];
+        expect(JSON.parse(boot ?? 'null')).toEqual({ workspaceName: path.basename(root), session: { mode: 'Collab' } });
     });
 
     test('the baseline, shared by every page, is changed by the facilitator only; the view is read by any participant', async () => {

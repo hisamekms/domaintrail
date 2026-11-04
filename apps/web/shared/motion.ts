@@ -91,17 +91,52 @@ export function paneMotion(before: readonly boolean[], after: readonly boolean[]
     return last;
 }
 
-/** The motion of the panes whose open states are `open` (see `paneMotion`), kept until they change again. */
-export function usePaneMotion(open: readonly boolean[]): PaneMotion {
+/** The panes' motion as drawn: `none` (instant) until the person acts on the page. */
+export type ShownPaneMotion = PaneMotion | 'none';
+
+/**
+ * The panes' motion as drawn: none until the person acted on the page (`acted`). Before that, nothing they did opened or
+ * closed a pane: what changes is the page settling as it loads (the chat's column once the session arrives, the left
+ * column's split once it is measured), which is drawn in place rather than played.
+ */
+export function shownPaneMotion(acted: boolean, motion: PaneMotion): ShownPaneMotion {
+    return acted ? motion : 'none';
+}
+
+/**
+ * Whether the person acted on the page yet: pressed on it or typed. Taken in the capture phase on the window, so that
+ * it is true by the time what they pressed opens a pane (the same event).
+ */
+export function usePersonActed(): boolean {
+    const [acted, setActed] = useState(false);
+    useEffect(() => {
+        if (acted) return;
+        const act = (): void => setActed(true);
+        window.addEventListener('pointerdown', act, true);
+        window.addEventListener('keydown', act, true);
+        return () => {
+            window.removeEventListener('pointerdown', act, true);
+            window.removeEventListener('keydown', act, true);
+        };
+    }, [acted]);
+    return acted;
+}
+
+/**
+ * The motion of the panes whose open states are `open` (see `paneMotion`), kept until they change again; none on the
+ * first display, until the person acts (see `shownPaneMotion`).
+ */
+export function usePaneMotion(open: readonly boolean[]): ShownPaneMotion {
+    const acted = usePersonActed();
     const key = open.join();
     const [state, setState] = useState<{ key: string; open: readonly boolean[]; motion: PaneMotion }>({ key, open, motion: 'enter' });
     if (state.key !== key) {
         // derived from the previous render's states, during the render: the new widths get the new timing at once
         const next = { key, open, motion: paneMotion(state.open, open, state.motion) };
         setState(next);
-        return next.motion;
+        return shownPaneMotion(acted, next.motion);
     }
-    return state.motion;
+    return shownPaneMotion(acted, state.motion);
 }
 
 /**
