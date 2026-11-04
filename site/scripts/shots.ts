@@ -4,10 +4,10 @@
 // For each scene it copies an example to a scratch directory, starts `dt open --no-agent` (or `dt collab`) on a port
 // from SHOTS_PORT (4750 by default) up, and drives the page with Playwright. In place of Claude Code, a scripted
 // answerer (the real `startAnswerer` of @domaintrail/agent, paired as `dt agent` is) answers the interview, the
-// candidates and the guide with fixed replies, so the screens are the real UI with known contents. A capture whose UI is
-// not on this branch yet (the journey chip) is written as a marked placeholder; the run lists them at its end.
+// candidates and the guide with fixed replies, so the screens are the real UI with known contents.
 //
-// It needs the root's `bun install` (it imports the workspace packages) and a Chrome: PLAYWRIGHT_MODULE names the
+// It needs the root's `bun install` and `bun run build` (it imports the workspace packages, and `dt open` serves the
+// built page) and a Chrome: PLAYWRIGHT_MODULE names the
 // playwright package to use (else `playwright` as installed, else the one of playwright-cli under mise), and
 // PLAYWRIGHT_CHANNEL the browser channel (`chrome` by default). Run it with a scratch state env (DOMAINTRAIL_STATE_DIR,
 // XDG_STATE_HOME, XDG_CACHE_HOME): the sessions it starts are kept in the state directory.
@@ -35,6 +35,9 @@ import { ES, ES_EXAMPLES, SITE, dtStart } from './dt.ts';
 const OUT = join(SITE, 'public', 'shots', ES);
 const STORMING = 'CertificateIssuance';
 const ref = (local: string): string => `@{es:${STORMING}/${local}}`;
+// the scripted interview's questions: each turn is told by the question its transcript already holds
+const STORMING_QUESTION = 'どのストーミングのブリーフを決めますか？';
+const GOAL_QUESTION = 'どこまで進めますか？';
 
 // ---- Playwright, without a dependency of the site's own ----
 
@@ -66,13 +69,27 @@ const structured = (value: Record<string, unknown>): AnswerTurnResult => ({ stru
 const scriptedAgent: AnswerAgent = {
     triage: async () => structured({ kind: 'neither', confidence: 0.95, reason: 'site shots' }),
     answer: async () => structured({ kind: 'neither', reason: 'site shots' }),
-    interview: async () =>
-        structured({
-            kind: 'question',
-            question: 'このストーミングは、何のために行いますか？',
-            choices: ['いまの流れを知る', '流れを良くする', '新しく設計する'],
-            multiple: false,
-        }),
+    // /es:start: the storming (a choice by its label), then how far (a choice), then the brief
+    interview: async (turn) => {
+        if (turn.prompt.includes(GOAL_QUESTION))
+            return structured({
+                kind: 'brief',
+                brief: {
+                    name: STORMING,
+                    isNew: false,
+                    journey: {
+                        purpose: '住民票をコンビニで取る流れを知り、つまずくところを見つける',
+                        scope: '住民票を頼まれてから、提出先に受け取ってもらうまで',
+                        participants: ['窓口担当', '申請者'],
+                        use: 'modeling',
+                        level: 'BigPicture',
+                    },
+                },
+            });
+        if (turn.prompt.includes(STORMING_QUESTION))
+            return structured({ kind: 'question', question: GOAL_QUESTION, choices: ['Big Picture', 'デザインレベル'], multiple: false });
+        return structured({ kind: 'question', question: STORMING_QUESTION, choices: [`@{es:${STORMING}}`, '新しいストーミング'], multiple: false });
+    },
     command: async (turn) => {
         if (turn.type === 'candidates')
             return structured({
@@ -167,8 +184,8 @@ function waitFor(child: ChildProcess, pattern: RegExp, ms = 60_000): Promise<str
     });
 }
 
-/** A scratch copy of an example (or an empty workspace), `edit` applied to its storming. */
-function workspace(name: string, example: string | undefined, edit?: (dtes: string) => string): string {
+/** A scratch copy of an example (or an empty workspace), `edit` applied to its storming; `journey: false` without its journey file. */
+function workspace(name: string, example: string | undefined, edit?: (dtes: string) => string, journey = true): string {
     const root = join(WORK, name);
     rmSync(root, { recursive: true, force: true });
     if (example) cpSync(join(ES_EXAMPLES, example), root, { recursive: true });
@@ -179,6 +196,7 @@ function workspace(name: string, example: string | undefined, edit?: (dtes: stri
     // the copy is outside site/: its $schema path would point nowhere
     const config = join(root, 'domaintrail.jsonc');
     writeFileSync(config, readFileSync(config, 'utf8').replace(/^\s*"\$schema".*\n/m, ''));
+    if (!journey) rmSync(join(root, 'domaintrail.journey.json'), { force: true });
     const file = join(root, 'stormings', 'certificate.dtes');
     if (edit && existsSync(file)) writeFileSync(file, edit(readFileSync(file, 'utf8')));
     return root;
@@ -206,6 +224,8 @@ async function startSession(root: string, mode: 'open' | 'collab'): Promise<Sess
 // ---- the page ----
 
 const COMPOSER = '.chat-composer [contenteditable]';
+// the chat's column (the journey chip's wrap in the app bar also carries .session-chat)
+const CHAT = '.session-chat:not(.session-bar):not(.journey-chip-wrap)';
 
 async function openPage(browser: Browser, url: string, width = 1440, height = 900, waitApp = true): Promise<Page> {
     const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, locale: 'ja-JP', colorScheme: 'light' });
@@ -224,13 +244,8 @@ async function world(page: Page, label: 'イベントストーミング' | 'ド�
         .or(page.getByRole('radio', { name: label }))
         .first()
         .click();
+    // the legend starts hidden (each view keeps its own toggle), so the diagram is not covered
     await page.waitForTimeout(1200);
-    // the legend, open on a first visit, would cover the diagram: closed (the browser remembers it)
-    const legend = page.locator('.legend button').first();
-    if ((await legend.count()) > 0 && (await legend.isVisible())) {
-        await legend.click();
-        await page.waitForTimeout(500);
-    }
 }
 
 async function slash(page: Page, command: string): Promise<void> {
@@ -256,24 +271,13 @@ async function settle(page: Page, ms = 20_000): Promise<void> {
 
 async function shot(page: Page, name: string, selector?: string): Promise<void> {
     const path = join(OUT, `${name}.png`);
+    // no hover left on a row (its floating actions)
+    await page.mouse.move(1, 1);
+    await page.waitForTimeout(300);
     if (selector) await page.locator(selector).last().screenshot({ path });
     else await page.screenshot({ path });
     console.log(`  shot ${name}`);
 }
-
-/** A capture whose UI is not here yet: a marked placeholder, so that the site builds. */
-async function placeholder(browser: Browser, name: string, missing: string): Promise<void> {
-    const page = await browser.newPage({ viewport: { width: 960, height: 300 }, deviceScaleFactor: 2 });
-    await page.setContent(
-        `<body style="margin:0;font-family:ui-monospace,Menlo,monospace;background:#f8f9fc"><div style="box-sizing:border-box;height:300px;margin:0;border:2px dashed #c7cbf0;border-radius:12px;display:grid;place-content:center;text-align:center;gap:10px"><b style="color:#a15c07">PLACEHOLDER — not on this branch yet</b><b style="color:#4338ca;font-size:26px">${name}</b><span style="color:#4d526e">${missing}</span></div></body>`,
-    );
-    await page.screenshot({ path: join(OUT, `${name}.png`) });
-    await page.close();
-    placeholders.push(`${name}: ${missing}`);
-    console.log(`  placeholder ${name} (${missing})`);
-}
-
-const placeholders: string[] = [];
 
 // ---- the scenes ----
 
@@ -284,9 +288,8 @@ interface Scene {
 
 const SCENES: readonly Scene[] = [
     {
-        // nothing written yet: the event storming world says how to start; the guide's map is "set the goal"; the
-        // interview's first question with its choices
-        writes: ['empty-world', 'guide-nogoal', 'interview-choice', 'journey-chip'],
+        // nothing written yet: the event storming world says how to start; the guide's map is "set the goal"
+        writes: ['empty-world', 'guide-nogoal'],
         run: async (browser) => {
             const s = await startSession(workspace('empty', undefined), 'open');
             try {
@@ -296,11 +299,47 @@ const SCENES: readonly Scene[] = [
                 await page.locator('button.chat-guide').click();
                 await settle(page);
                 await shot(page, 'guide-nogoal', '.guide-card');
-                if ((await page.locator('.journey-chip').count()) > 0) await shot(page, 'journey-chip', '.app-bar');
-                else await placeholder(browser, 'journey-chip', 'the journey chip in the app bar (🧭 journey · 📍 step → 🏁 goal)');
+            } finally {
+                await s.stop();
+            }
+        },
+    },
+    {
+        // the brief: /es:start on the events with no journey yet, its choices (the storming by its label, how far),
+        // the brief, the note once confirmed, then the journey's chip and its panel
+        writes: ['interview-choice', 'brief', 'completion-note', 'journey-chip', 'journey-panel'],
+        run: async (browser) => {
+            const s = await startSession(workspace('certificate', 'events', undefined, false), 'open');
+            try {
+                const page = await openPage(browser, s.url);
+                await world(page, 'イベントストーミング');
                 await slash(page, '/es:start');
                 await settle(page);
-                await shot(page, 'interview-choice', '.session-chat:not(.session-bar)');
+                await page.locator('.interview-choices').waitFor({ timeout: 20_000 });
+                await shot(page, 'interview-choice', CHAT);
+                await page.locator('.interview-choices button').first().click();
+                await page.getByText(GOAL_QUESTION).last().waitFor({ timeout: 20_000 });
+                await settle(page);
+                await page.locator('.interview-choices button').first().click();
+                await page.locator('.chat-brief').waitFor({ timeout: 20_000 });
+                await settle(page);
+                await shot(page, 'brief', '.chat-interview');
+                await page.locator('.chat-brief-actions button', { hasText: '確定' }).first().click();
+                await page.locator('.journey-note-actions').waitFor({ timeout: 20_000 });
+                await settle(page);
+                await shot(page, 'completion-note', CHAT);
+                // the app bar from its left end to the chip
+                const chip = await page.locator('button.journey-chip').boundingBox();
+                const bar = await page.locator('.app-bar').boundingBox();
+                await page.screenshot({
+                    path: join(OUT, 'journey-chip.png'),
+                    clip: { x: 0, y: bar.y, width: Math.ceil(chip.x + chip.width + 16), height: Math.ceil(bar.height) },
+                });
+                console.log('  shot journey-chip');
+                await page.locator('button.journey-chip').click();
+                await page.locator('.journeys-panel').waitFor({ timeout: 10_000 });
+                await page.waitForTimeout(600);
+                await shot(page, 'journey-panel', '.journeys-panel');
             } finally {
                 await s.stop();
             }
@@ -338,7 +377,7 @@ const SCENES: readonly Scene[] = [
                 await settle(page);
                 const boxes = page.locator('.candidates input[type=checkbox]');
                 for (let i = 0; i < Math.min(3, await boxes.count()); i++) await boxes.nth(i).check();
-                await shot(page, 'exceptions-candidates', '.session-chat:not(.session-bar)');
+                await shot(page, 'exceptions-candidates', CHAT);
                 await page.locator('button.chat-guide').click();
                 await settle(page);
                 await shot(page, 'guide-card', '.guide-card');
@@ -417,5 +456,4 @@ try {
     await browser.close();
     rmSync(WORK, { recursive: true, force: true });
 }
-if (placeholders.length > 0) console.log(`placeholders (not on this branch yet):\n  ${placeholders.join('\n  ')}`);
 process.exit(failed > 0 ? 1 : 0);
