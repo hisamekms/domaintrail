@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createHold, growMotion, paneMotion, parseDuration, type HoldClock } from './motion';
+import { createHold, growMotion, paneMotion, parseDuration, shownPaneMotion, type HoldClock } from './motion';
 import { centeredCamera, isLaidOut } from '../view/center';
 
 const styles = readFileSync(join(import.meta.dir, '..', 'styles.css'), 'utf8');
@@ -190,5 +190,20 @@ describe("the canvas's center while it changes size", () => {
         expect(isLaidOut({ w: 0, h: 300 })).toBe(false);
         expect(isLaidOut({ w: 300, h: 0 })).toBe(false);
         expect(isLaidOut({ w: 300, h: 200 })).toBe(true);
+    });
+});
+
+describe('the panes on the first display', () => {
+    test('do not move until the person acts on the page; then at the pace of the change', () => {
+        expect(shownPaneMotion(false, 'enter')).toBe('none');
+        expect(shownPaneMotion(false, 'exit')).toBe('none');
+        expect(shownPaneMotion(true, 'enter')).toBe('enter');
+        expect(shownPaneMotion(true, 'exit')).toBe('exit');
+    });
+
+    test('no motion is instant for every pane: their transitions all take the pane duration, 0ms then', () => {
+        expect(styles).toMatch(/\.app\.motion-none \{\s*--pane-duration: 0ms;/);
+        const panes = [...styles.matchAll(/transition: (\w+) var\(--pane-duration\)/g)].map((m) => m[1]);
+        expect(panes.length).toBeGreaterThanOrEqual(5);
     });
 });

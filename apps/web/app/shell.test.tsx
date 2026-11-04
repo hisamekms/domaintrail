@@ -53,6 +53,10 @@ describe('the app bar', () => {
         expect(appBar).toContain('<span class="activity-badge badge-error">2</span>');
     });
 
+    test('on the first display the panes do not move (no motion until the person acts)', () => {
+        expect(html).toContain('<div class="app motion-none">');
+    });
+
     test('the activity bar keeps the tree and the changes', () => {
         const rail = html.slice(html.indexOf('class="activity-bar"'));
         expect([...rail.slice(0, rail.indexOf('</div>')).matchAll(/aria-label="([^"]+)"/g)].map((m) => m[1])).toEqual(['サイドバーの一覧', '木', '差分']);
@@ -62,9 +66,9 @@ describe('the app bar', () => {
 describe('the left column', () => {
     const left = html.slice(html.indexOf('<div class="left open"'), html.indexOf('<div class="main">'));
 
-    // not laid out here: the column has no height, so the detail keeps its minimum
-    test('the navigator on top, then the splitter, then the detail (the inspector) at its height', () => {
-        const order = ['class="navigator"', 'class="resizer resizer-y resizer-grip"', 'class="detail open" style="height:140px"', 'inspector-slot'].map((c) =>
+    // not laid out here: the column is not measured, so the detail has no height yet (the first frame takes the measured one)
+    test('the navigator on top, then the splitter, then the detail (the inspector), its height left to the measure', () => {
+        const order = ['class="navigator"', 'class="resizer resizer-y resizer-grip"', 'class="detail open"><div class="rail"', 'inspector-slot'].map((c) =>
             left.indexOf(c),
         );
         expect(order.every((at) => at >= 0)).toBe(true);

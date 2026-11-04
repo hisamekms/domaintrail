@@ -93,3 +93,17 @@ export interface ViewPayload {
     base: BaseView | null;
     layoutEngine: string;
 }
+
+/** The id of the JSON block (`<script type="application/json">`) the server writes the page's `PageBoot` into. */
+export const PAGE_BOOT_ID = 'dt-boot';
+
+/**
+ * What the server knows of the page before any payload, written into the page it serves (`PAGE_BOOT_ID`) so that the
+ * page's first frame already has it: the app bar's name, and the conversation's column in a session.
+ */
+export interface PageBoot {
+    /** The workspace's name (the last folder of its root), as the app bar shows it. */
+    readonly workspaceName?: string;
+    /** The page is served by a session (`dt open`: Solo, `dt collab`: Collab), so it has the chat; absent for the read-only Live View. */
+    readonly session?: { readonly mode: 'Solo' | 'Collab' };
+}

@@ -155,7 +155,7 @@ export function ViewWorkspace(props: {
     return (
         <section className="center">
             <ViewBar workspace={workspace} current={current} mode={mode} bar={bar} exportTarget={exportTarget} />
-            <div className="view-area">
+            <div className={`view-area${current ? ' drawn' : ''}`}>
                 <FlowCanvas onMount={onMount} />
                 {isCanvas(view) && props.overlay}
                 {isCanvas(view) && !nothing && (

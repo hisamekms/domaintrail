@@ -1,13 +1,13 @@
-import { useRef, type ReactNode } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Diff, FolderTree, PanelBottomOpen, TriangleAlert, type LucideIcon } from 'lucide-react';
 // the approved logo (assets/brand, never redrawn), bundled into dist/web with a hashed name: one per theme
 import logoDark from '../../../assets/brand/logo-dark.svg';
 import logoLight from '../../../assets/brand/logo-light.svg';
 import { useT } from '../i18n';
-import { Resizer, useElementHeight } from '../shared/layout';
+import { readStored, Resizer, useElementHeight, writeStored } from '../shared/layout';
 import { usePaneMotion } from '../shared/motion';
 import { Tooltips } from '../tooltip';
-import { DETAIL_MIN, detailMax, detailSize, type LeftView, type Panes } from './panes';
+import { DETAIL_MIN, detailMax, detailSize, drawnDetailHeight, type LeftView, type Panes } from './panes';
 
 /** Width of the activity bar (the collapsed left column); see styles.css. */
 const BAR_WIDTH = 44;
@@ -25,6 +25,39 @@ const MIN_CANVAS_WIDTH = 320;
 export interface Conversation {
     readonly content: ReactNode;
     readonly launcher: ReactNode;
+}
+
+/** A session serving the page (its mode, from the page's boot) and whether its controls of the whole page arrived. */
+export interface SessionBarState {
+    readonly mode: 'Solo' | 'Collab';
+    readonly ready: boolean;
+}
+
+/** Where the width the session's controls last had in the app bar is kept, per mode. */
+export const sessionBarKey = (mode: SessionBarState['mode']): string => `domaintrail.layout.sessionBar.${mode}`;
+
+/**
+ * The width to keep for the session's controls in the app bar while they have not arrived (`ready` false): the one they
+ * had when the page was last shown in this mode (null: none known, nothing is kept). Once they are there their width is
+ * followed and remembered, for the next time.
+ */
+function useSessionBarSpace(slot: RefObject<HTMLDivElement | null>, session: SessionBarState | undefined): number | null {
+    const mode = session?.mode;
+    const ready = session?.ready ?? false;
+    const [kept] = useState(() => (mode ? readStored<number | null>(sessionBarKey(mode), null) : null));
+    useLayoutEffect(() => {
+        const el = slot.current;
+        if (!mode || !ready || !el) return;
+        const remember = (): void => {
+            const width = Math.round(el.getBoundingClientRect().width);
+            if (width > 0) writeStored(sessionBarKey(mode), width);
+        };
+        remember();
+        const observer = new ResizeObserver(remember);
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [slot, mode, ready]);
+    return mode && !ready && kept !== null && kept > 0 ? kept : null;
 }
 
 /** A list of the left pane, with the badge of its button in the activity bar and the count its accessible name tells. */
@@ -56,6 +89,8 @@ export function AppShell(props: {
     sessionSlot: (slot: HTMLDivElement | null) => void;
     /** Where a session puts the current journey's chip, after the world switch. */
     journeySlot?: (slot: HTMLDivElement | null) => void;
+    /** The session serving the page, known from the start (the page's boot): its controls' place is kept until they arrive. */
+    session?: SessionBarState | undefined;
     lists: Record<LeftView, LeftList>;
     /** At the foot of the left column (at the bottom of its activity bar when collapsed). */
     health: ReactNode;
@@ -82,8 +117,18 @@ export function AppShell(props: {
     const column = useRef<HTMLElement>(null);
     const columnHeight = useElementHeight(column);
     const detail = detailSize(detailHeight, columnHeight);
-    // opening and closing panes move at different paces (the motion section of styles.css)
+    // opening and closing panes move at different paces (the motion section of styles.css); not on the first display
     const motion = usePaneMotion([leftOpen, detailOpen, conversationShown]);
+    const { sessionSlot } = props;
+    const slot = useRef<HTMLDivElement | null>(null);
+    const setSlot = useCallback(
+        (el: HTMLDivElement | null): void => {
+            slot.current = el;
+            sessionSlot(el);
+        },
+        [sessionSlot],
+    );
+    const sessionSpace = useSessionBarSpace(slot, props.session);
 
     return (
         <div className={`app motion-${motion}`}>
@@ -103,7 +148,10 @@ export function AppShell(props: {
                 <div className="app-bar-journey" ref={props.journeySlot} />
                 <span className="app-bar-space" />
                 <ProblemsButton panes={panes} list={props.lists.problems} />
-                <div className="app-bar-session" ref={props.sessionSlot} />
+                <div className="app-bar-session" ref={setSlot}>
+                    {/* the session's controls' place, kept until they arrive (a quiet blank, the width they had) */}
+                    {sessionSpace !== null && <span className="app-bar-session-pending" style={{ width: sessionSpace }} aria-hidden />}
+                </div>
             </header>
             <div className="app-body">
                 <div className={`left${leftOpen ? ' open' : ''}`} style={{ width: leftWidth }}>
@@ -153,7 +201,10 @@ export function AppShell(props: {
                                 grip
                             />
                             {/* the detail stays mounted while closed, so that it keeps its tab, its scroll and its diagram's camera */}
-                            <div className={`detail${detailOpen ? ' open' : ''}`} style={{ height: detailOpen ? detail : RAIL_SIZE }}>
+                            <div
+                                className={`detail${detailOpen ? ' open' : ''}`}
+                                style={{ height: drawnDetailHeight(detailOpen, detailHeight, columnHeight, RAIL_SIZE) }}
+                            >
                                 <div className="rail" inert={detailOpen}>
                                     <button
                                         className="icon-button"
