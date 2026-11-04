@@ -1,6 +1,6 @@
 // What `/` lists in the composer: the commands first (all, for everyone; one of a running kind disabled), the templates by what is open and
 // selected, filtered by ID and by the name in the UI language; a template picked; a running interview's messages in Solo;
-// which command may start now; the hint's button and the marks of what it suggests.
+// which command may start now; the guide's button and the marks of what it suggests.
 import { describe, expect, test } from 'bun:test';
 import type { MessageTemplateBody } from '@domaintrail/collaboration/protocol';
 import { interviewSlot } from './interview';
@@ -10,8 +10,8 @@ import { MESSAGES } from '../i18n';
 import {
     canStartCommand,
     COMMAND_IDS,
-    hintButton,
-    hintSuggestions,
+    guideButton,
+    guideSuggestions,
     slashItems,
     slashQuery,
     templateContexts,
@@ -23,7 +23,7 @@ import {
 const commandNames = MESSAGES.ja.session.chat.slash.commands;
 const everyone = (): boolean => true;
 const ES = ['es:start', 'es:exceptions', 'es:gaps', 'es:levels', 'es:names', 'es:recap'].map((id) => `command:${id}`);
-const COMMANDS = ['command:hint', ...ES, 'command:model:start'];
+const COMMANDS = ['command:guide', ...ES, 'command:model:start'];
 const storming = (level: string): SlashScope['view'] => ({ kind: 'storming', level });
 const event: SlashScope['selected'] = {
     target: { target: { kind: 'DtesElement', storming: 'Returns', local: 'ReturnRequested' }, label: '返品が依頼された' },
@@ -56,10 +56,10 @@ describe('/ in the composer', () => {
         expect(templateContexts({ view: { kind: 'model' }, selected: state }).has('state')).toBe(true);
     });
 
-    test('commands first (the hint, then grouped by prefix with :start first), then the templates of what is open and selected', () => {
-        // the hint (where a beginner starts), es:start, the other ES commands in the order of the work (the flow, its
+    test('commands first (the guide, then grouped by prefix with :start first), then the templates of what is open and selected', () => {
+        // the guide (where a beginner starts), es:start, the other ES commands in the order of the work (the flow, its
         // details, the session), model:start
-        expect(COMMAND_IDS).toEqual(['hint', 'es:start', 'es:exceptions', 'es:gaps', 'es:levels', 'es:names', 'es:recap', 'model:start']);
+        expect(COMMAND_IDS).toEqual(['guide', 'es:start', 'es:exceptions', 'es:gaps', 'es:levels', 'es:names', 'es:recap', 'model:start']);
         expect(ids({ scope: { view: storming('big-picture') } })).toEqual([...COMMANDS, 'template:next-events', 'template:hotspots']);
         expect(ids({ scope: { view: storming('design-level'), selected: event } })).toEqual([
             ...COMMANDS,
@@ -87,17 +87,18 @@ describe('/ in the composer', () => {
         expect(ids({ query: 'モデ' })).toEqual(['command:model:start']);
         expect(ids({ query: 'まとめ' })).toEqual(['command:es:recap']);
         expect(ids({ query: '名前' })).toEqual(['command:es:names']);
-        expect(ids({ query: 'ヒント' })).toEqual(['command:hint']);
-        expect(ids({ query: 'hint' })).toEqual(['command:hint']);
-        // the former ID lists nothing
+        expect(ids({ query: 'ガイド' })).toEqual(['command:guide']);
+        expect(ids({ query: 'guide' })).toEqual(['command:guide']);
+        // the former IDs list nothing
+        expect(ids({ query: 'hint' })).toEqual([]);
         expect(ids({ query: 'es:next' })).toEqual([]);
-        // a command put in the composer by a step of /hint (`/es:gaps`): its query lists it alone
+        // a command put in the composer by a step of /guide (`/es:gaps`): its query lists it alone
         expect(ids({ query: slashQuery('/es:gaps') ?? '' })).toEqual(['command:es:gaps']);
         const en = MESSAGES.en.session.chat.slash.commands;
         expect(ids({ query: 'model', lang: 'en', commandNames: en })).toEqual(['command:model:start']);
         expect(ids({ query: 'exceptions', lang: 'en', commandNames: en })).toEqual(['command:es:exceptions']);
         expect(ids({ query: 'gaps', lang: 'en', commandNames: en })).toEqual(['command:es:gaps']);
-        expect(ids({ query: 'a hint', lang: 'en', commandNames: en })).toEqual(['command:hint']);
+        expect(ids({ query: 'Guide', lang: 'en', commandNames: en })).toEqual(['command:guide']);
         expect(ids({ query: 'issues', lang: 'en' })).toEqual(['template:review']);
         expect(ids({ query: '気になる' })).toEqual(['template:review']);
         expect(ids({ query: 'zzz' })).toEqual([]);
@@ -156,33 +157,33 @@ describe('which command may start now', () => {
         expect(can({})).toEqual(COMMAND_IDS);
     });
 
-    test('the hint button: hidden with no answerer, disabled while a hint runs (anyone may press it)', () => {
-        expect(hintButton({}, true)).toBe('ready');
-        expect(hintButton({}, false)).toBe('hidden');
-        expect(hintButton({ slashCommands: [{ kind: 'Hint', state: 'Working' }] } as never, true)).toBe('disabled');
-        expect(hintButton({ slashCommands: [{ kind: 'Hint', state: 'Answered' }] } as never, true)).toBe('ready');
+    test('the guide button: hidden with no answerer, disabled while a guide runs (anyone may press it)', () => {
+        expect(guideButton({}, true)).toBe('ready');
+        expect(guideButton({}, false)).toBe('hidden');
+        expect(guideButton({ slashCommands: [{ kind: 'Guide', state: 'Working' }] } as never, true)).toBe('disabled');
+        expect(guideButton({ slashCommands: [{ kind: 'Guide', state: 'Answered' }] } as never, true)).toBe('ready');
         // an interview running does not hold it up
-        expect(hintButton({ interviews: [{ state: 'Asking' }] } as never, true)).toBe('ready');
+        expect(guideButton({ interviews: [{ state: 'Asking' }] } as never, true)).toBe('ready');
     });
 
-    test('the commands the latest answered hint suggests: by their IDs, until another hint is answered', () => {
+    test('the commands the latest answered guide suggests: by their IDs, until another guide is answered', () => {
         const hint = (id: string, state: string, commands: (string | undefined)[] = []) =>
             ({
                 id,
-                kind: 'Hint',
+                kind: 'Guide',
                 state,
                 ...(state === 'Answered' && {
                     next: { status: 's', steps: commands.map((command) => ({ text: 't', reason: 'r', ...(command && { command }) })) },
                 }),
             }) as never;
-        expect([...hintSuggestions({})]).toEqual([]);
-        expect([...hintSuggestions({ slashCommands: [hint('a', 'Answered', ['EsGaps', undefined, 'ModelStart'])] })]).toEqual(['es:gaps', 'model:start']);
-        // a newer hint answered takes over; one still working or stopped does not
+        expect([...guideSuggestions({})]).toEqual([]);
+        expect([...guideSuggestions({ slashCommands: [hint('a', 'Answered', ['EsGaps', undefined, 'ModelStart'])] })]).toEqual(['es:gaps', 'model:start']);
+        // a newer guide answered takes over; one still working or stopped does not
         const both = [hint('a', 'Answered', ['EsGaps']), hint('b', 'Answered', ['EsRecap'])];
-        expect([...hintSuggestions({ slashCommands: both })]).toEqual(['es:recap']);
-        expect([...hintSuggestions({ slashCommands: [...both, hint('c', 'Working'), hint('d', 'Stopped')] })]).toEqual(['es:recap']);
-        // another answer command's answer is no hint
-        expect([...hintSuggestions({ slashCommands: [{ id: 'r', kind: 'EsRecap', state: 'Answered', answer: 'x' } as never] })]).toEqual([]);
+        expect([...guideSuggestions({ slashCommands: both })]).toEqual(['es:recap']);
+        expect([...guideSuggestions({ slashCommands: [...both, hint('c', 'Working'), hint('d', 'Stopped')] })]).toEqual(['es:recap']);
+        // another answer command's answer is no guide
+        expect([...guideSuggestions({ slashCommands: [{ id: 'r', kind: 'EsRecap', state: 'Answered', answer: 'x' } as never] })]).toEqual([]);
     });
 
     test('none while an interview runs; a command not while one of its kind runs', () => {
@@ -216,10 +217,24 @@ describe("a command's place in the chat", () => {
         expect(keys('Collab', [command('EsExceptions', 'Applied'), command('EsRecap', 'Working')])).toEqual(['command:c-EsExceptions', 'command:c-EsRecap']);
         expect(keys('Collab', [command('EsRecap', 'Answered')])).toEqual([]);
         expect(keys('Solo', [command('EsRecap', 'Working')])).toEqual([]);
-        // a hint stored listed with none (an `/es:next` started with no storming in view, read as a Hint): the card says
+        // a guide stored listed with none (an `/es:next` started with no storming in view, read as a Guide): the card says
         // so until its starter closes it
-        expect(keys('Solo', [command('Hint', 'Listed', { candidates: [] })])).toEqual(['command:c-Hint']);
-        expect(commandSlot({ slashCommands: [command('Hint', 'Listed', { candidates: [] })] }, { id: 'o' })).toBe('none');
-        expect(keys('Solo', [command('Hint', 'Stopped')])).toEqual([]);
+        expect(keys('Solo', [command('Guide', 'Listed', { candidates: [] })])).toEqual(['command:c-Guide']);
+        expect(commandSlot({ slashCommands: [command('Guide', 'Listed', { candidates: [] })] }, { id: 'o' })).toBe('none');
+        // a guide is its card always, Solo or Collab, stopped too; its answer is in it, not a message of its own
+        expect(keys('Solo', [command('Guide', 'Stopped')])).toEqual(['command:c-Guide']);
+        expect(keys('Solo', [command('Guide', 'Working')])).toEqual(['command:c-Guide']);
+        expect(commandSlot({ slashCommands: [command('Guide', 'Working')] }, { id: 'o' })).toBe('none');
+        const answer = { id: 'a', author: 'ai', sentAt: at(3), body: 'x', targets: [], mentions: [] };
+        const opening = { id: 'o', author: 'f', sentAt: at(2), body: 'ガイド', targets: [], mentions: [] };
+        expect(
+            streamItems({
+                runs: [],
+                revisions: [],
+                requests: [opening, answer] as never,
+                slashCommands: [command('Guide', 'Answered', { answer: 'a' })],
+                session: { mode: 'Collab' } as never,
+            }).map((i) => i.key),
+        ).toEqual(['message:o', 'command:c-Guide']);
     });
 });

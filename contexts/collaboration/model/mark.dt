@@ -11,9 +11,12 @@ context Collaboration {
     invariant singleEmoji "正規化した絵文字1つ"
   }
 
-  /// 印の種類。票（♡）は問いの選択肢と前提の選び方に参加者が付け、反応（絵文字）はメッセージと AI のターンに誰でも付ける。
+  /// 印の種類。票（♡）は問いの選択肢と前提の選び方に参加者が付け、反応（絵文字）はメッセージと AI のターンに誰でも付け、
+  /// 済み（✓）はガイドの地図の区切りにファシリテーターが付ける。
   union MarkSign "印の種類" {
     Vote "票" {}
+    /// ファイルからは決められない区切りを、人が済みにした。
+    Done "済み" {}
     /// 利用者が選んだ絵文字。どの絵文字にもアプリは意味を与えない。
     Reaction "反応" {
       emoji: Emoji
@@ -42,12 +45,19 @@ context Collaboration {
       assumption: Tally "前提の番号"
       alternative: ReplyKey? "別案（なければ前提のまま）"
     }
+    /// ガイドの地図の、人が済みにする区切り（BC を分けた、など）か BC の行（コンテキストの名前で）。道のりごとに1つ
+    /// （誰が付けたかによらない）。
+    GuideStep "ガイドの区切り" {
+      journey: GuideJourneyKey "道のり"
+      step: GuideStepKey "区切り"
+      context: ContextName? "BC の行"
+    }
   }
 
   /// いま印を付け外しできると、付け外しのときに確かめた対象: セッションにあり、票なら締め切られていない。
   verified OpenMarkTarget "付け外しできる対象" of MarkTarget for SessionId errors MarkTargetNotFound, MarkTargetClosed
 
-  /// 参加者が対象に付ける印。票と反応は同じ仕組み（だれが・なにに・どの印を）で、対象の種類ごとの規則（同じ組で1つだけ、
+  /// 参加者が対象に付ける印。票と反応と済みは同じ仕組み（だれが・なにに・どの印を）で、対象の種類ごとの規則（同じ組で1つだけ、
   /// 締め切り、だれが付けられるか、1つの対象に付く絵文字の種類の上限）はコード（`domain/marks.ts`）が決める。外した印は残し、
   /// 付け直しは新しい印になる。
   aggregate Mark "印" {
@@ -58,9 +68,9 @@ context Collaboration {
     sign: MarkSign
     placedAt: Timestamp "付けた日時"
 
-    /// 票は問いの選択肢と前提の選び方に、反応はメッセージと AI のターンに付ける。
+    /// 票は問いの選択肢と前提の選び方に、反応はメッセージと AI のターンに、済みはガイドの区切りに付ける。
     invariant fitsTarget "印の種類が対象に合う" {
-      (sign.kind == MarkSign.Vote implies (target.kind == MarkTarget.QuestionOption or target.kind == MarkTarget.AssumptionChoice)) and (sign.kind == MarkSign.Reaction implies (target.kind == MarkTarget.Message or target.kind == MarkTarget.Turn))
+      (sign.kind == MarkSign.Vote implies (target.kind == MarkTarget.QuestionOption or target.kind == MarkTarget.AssumptionChoice)) and (sign.kind == MarkSign.Reaction implies (target.kind == MarkTarget.Message or target.kind == MarkTarget.Turn)) and ((sign.kind == MarkSign.Done) == (target.kind == MarkTarget.GuideStep))
     }
 
     state Placed "付いている"
@@ -71,12 +81,16 @@ context Collaboration {
     create command place(id: MarkId, session: ActiveSession, participant: ParticipantId, role: ParticipantRole, target: OpenMarkTarget, sign: MarkSign, placedAt: Timestamp) "印を付ける"
       -> Placed
       requires fitsTarget "印の種類が対象に合う" {
-        (sign.kind == MarkSign.Vote implies (target.kind == MarkTarget.QuestionOption or target.kind == MarkTarget.AssumptionChoice)) and (sign.kind == MarkSign.Reaction implies (target.kind == MarkTarget.Message or target.kind == MarkTarget.Turn))
+        (sign.kind == MarkSign.Vote implies (target.kind == MarkTarget.QuestionOption or target.kind == MarkTarget.AssumptionChoice)) and (sign.kind == MarkSign.Reaction implies (target.kind == MarkTarget.Message or target.kind == MarkTarget.Turn)) and ((sign.kind == MarkSign.Done) == (target.kind == MarkTarget.GuideStep))
       } else MarkNotForTarget
       /// ファシリテーターは票を入れない（回答が決定になる）。
       requires participantsVote "票は参加者だけ" {
         sign.kind == MarkSign.Vote implies role == ParticipantRole.Participant
       } else FacilitatorDoesNotVote
+      /// ガイドの区切りを済みにするのはファシリテーター（ひとりのセッションではその人）。
+      requires facilitatorMarksSteps "区切りを済みにするのはファシリテーター" {
+        sign.kind == MarkSign.Done implies role == ParticipantRole.Facilitator
+      } else FacilitatorOnly
       emits MarkPlaced
 
     /// 締め切られた票は外せない（対象を付け外しできると確かめてから外す）。
@@ -102,13 +116,13 @@ context Collaboration {
     removedAt: Timestamp
   }
 
-  /// 印の対象がセッションにない（メッセージ・実行・問い・選択肢・前提・別案のどれか）。
+  /// 印の対象がセッションにない（メッセージ・実行・問い・選択肢・前提・別案・人が済みにする区切りのどれか）。
   error MarkTargetNotFound "印の対象なし"
 
   /// 票が締め切られている（回答した・別案を選んだ・あとの実行が同じ依頼を扱った・実行が確認待ちでない）。
   error MarkTargetClosed "締め切られた票"
 
-  /// 印の種類が対象に合わない（票は選択肢と前提に、反応はメッセージとターンに）。
+  /// 印の種類が対象に合わない（票は選択肢と前提に、反応はメッセージとターンに、済みはガイドの区切りに）。
   error MarkNotForTarget "対象に合わない印"
 
   /// ファシリテーターは票を入れない。

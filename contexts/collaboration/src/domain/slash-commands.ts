@@ -3,7 +3,7 @@
 // `/es:names`) has the read-only answerer list candidate changes — each a short label, the elements it touches, how in
 // one line, why — of which the facilitator checks some and applies them as one run (whoever started it: applying is
 // the approval); an answer command
-// (`/es:recap`, `/hint`) has it answer in the chat. `/hint` (ヒントをもらう, formerly `/es:next`) coaches the person
+// (`/es:recap`, `/guide`) has it answer in the chat. `/guide` (ガイド, formerly `/hint` and `/es:next`) coaches the person
 // through event storming and modeling alike, in a shape of its own (`NextAnswer`: a status and one to three steps,
 // each maybe with a command the page offers as a button), from which the server writes the message. Either way the starter's message (the command's name) goes to the answerer with the command's prompt,
 // without triage.
@@ -21,7 +21,7 @@ import { REPLY_LIMITS } from './reply.js';
 export type SlashCommandType = 'candidates' | 'answer';
 
 /**
- * What the answerer writes for a command: candidates, an answer in Markdown, or the next steps (`/hint`: an answer
+ * What the answerer writes for a command: candidates, an answer in Markdown, or the next steps (`/guide`: an answer
  * the server writes from them).
  */
 export type CommandReplyShape = SlashCommandType | 'next';
@@ -41,7 +41,7 @@ export interface SlashCommandSpec {
 
 /**
  * The commands by their stable IDs (what one types after `/`): the ES ones in the order of the work on a storming — the
- * flow (exceptions, gaps), then its details (levels, names), then the session (recap) — and `hint`, which has no
+ * flow (exceptions, gaps), then its details (levels, names), then the session (recap) — and `guide`, which has no
  * prefix (it is about the event storming and the modeling alike). Where `/` lists them is the page's.
  */
 export const SLASH_COMMANDS = {
@@ -50,7 +50,7 @@ export const SLASH_COMMANDS = {
     'es:levels': { kind: 'EsLevels', type: 'candidates', reply: 'candidates', needsStorming: true },
     'es:names': { kind: 'EsNames', type: 'candidates', reply: 'candidates', needsStorming: true },
     'es:recap': { kind: 'EsRecap', type: 'answer', reply: 'answer', needsStorming: false },
-    hint: { kind: 'Hint', type: 'answer', reply: 'next', needsStorming: false },
+    guide: { kind: 'Guide', type: 'answer', reply: 'next', needsStorming: false },
 } as const satisfies Record<string, SlashCommandSpec>;
 
 export type SlashCommandName = keyof typeof SLASH_COMMANDS;
@@ -112,7 +112,7 @@ export function stormingInView(
     return undefined;
 }
 
-/** The commands a step of `/hint` may suggest, by their IDs (the interviews included: `/es:start`, `/model:start`). */
+/** The commands a step of `/guide` may suggest, by their IDs (the interviews included: `/es:start`, `/model:start`). */
 export const SUGGESTED_COMMANDS = {
     'es:start': 'EsStart',
     'es:exceptions': 'EsExceptions',
@@ -138,7 +138,7 @@ export function suggestedCommandId(c: Collaboration.SuggestedCommand): Suggested
     return found;
 }
 
-/** The limits of `/hint`'s answer. */
+/** The limits of `/guide`'s answer. */
 export const NEXT_LIMITS = {
     /** Where the work stands, in one line. */
     status: 200,
@@ -148,16 +148,25 @@ export const NEXT_LIMITS = {
     text: 120,
     /** Why that step, in one line. */
     reason: 200,
+    /** Where to go for a step (elements, stages): more are dropped. */
+    targets: 3,
+    /** What to ask the people, a question in one line. */
+    ask: 200,
 } as const;
 
-/** A step of `/hint` as the answerer sends it: what to do, why, the command's ID when one does it. */
+/**
+ * A step of `/guide` as the answerer sends it: what to do, why, the command's ID when one does it, where to go (element
+ * references), what to ask the people.
+ */
 export interface NextStepData {
     readonly text: string;
     readonly reason: string;
     readonly command?: SuggestedCommandId;
+    readonly targets?: readonly string[];
+    readonly ask?: string;
 }
 
-/** `/hint`'s answer as the answerer sends it. */
+/** `/guide`'s answer as the answerer sends it. */
 export interface NextAnswerData {
     readonly status: string;
     readonly steps: readonly NextStepData[];
@@ -171,7 +180,7 @@ export interface CandidateData {
     readonly reason?: string;
 }
 
-/** The answerer's reply to a command: its candidates, or its answer (with the next steps it was written from, `/hint`). */
+/** The answerer's reply to a command: its candidates, or its answer (with the next steps it was written from, `/guide`). */
 export type CommandReply =
     | { readonly kind: 'candidates'; readonly candidates: readonly Collaboration.CommandCandidate[] }
     | { readonly kind: 'answer'; readonly answer: string; readonly next?: Collaboration.NextAnswer };
@@ -208,15 +217,18 @@ function readCandidate(raw: unknown, path: string): Result<Collaboration.Command
     return ok({ label: made.value, targets: targets.value, how: how.value, ...(reason && { reason: reason.value }) });
 }
 
-/** A line of `/hint`: within its limit, its line breaks as spaces (it is shown on one line). */
+/** A line of `/guide`: within its limit, its line breaks as spaces (it is shown on one line). */
 function readNextLine(v: unknown, path: string, max: number): Result<Collaboration.ProposalText, CommandProblem> {
     return readProposalText(typeof v === 'string' ? v.replace(/\s*[\n\r]+\s*/gu, ' ') : v, path, max);
 }
 
-/** One step of `/hint`: `{ text, reason, command? }`; a command that is not one of `SUGGESTED_COMMANDS` is dropped. */
+/**
+ * One step of `/guide`: `{ text, reason, command?, targets?, ask? }`; a command that is not one of `SUGGESTED_COMMANDS`
+ * is dropped, as a malformed reference is.
+ */
 function readNextStep(raw: unknown, path: string): Result<Collaboration.NextStep, CommandProblem> {
     if (!isObject(raw)) return err({ path, message: 'Expected an object.' });
-    const unknown = extra(raw, ['text', 'reason', 'command'], path);
+    const unknown = extra(raw, ['text', 'reason', 'command', 'targets', 'ask'], path);
     if (unknown) return err(unknown);
     const text = readNextLine(raw.text, `${path}.text`, NEXT_LIMITS.text);
     if (!text.ok) return text;
@@ -224,10 +236,14 @@ function readNextStep(raw: unknown, path: string): Result<Collaboration.NextStep
     if (!reason.ok) return reason;
     const id = typeof raw.command === 'string' ? raw.command.replace(/^\//u, '') : undefined;
     const command = id !== undefined && isSuggestedCommandId(id) ? SUGGESTED_COMMANDS[id] : undefined;
-    return ok({ text: text.value, reason: reason.value, ...(command && { command }) });
+    const targets = readTargets(raw.targets ?? [], `${path}.targets`, NEXT_LIMITS.targets);
+    if (!targets.ok) return targets;
+    const ask = raw.ask === undefined ? undefined : readNextLine(raw.ask, `${path}.ask`, NEXT_LIMITS.ask);
+    if (ask && !ask.ok) return ask;
+    return ok({ text: text.value, reason: reason.value, ...(command && { command }), targets: targets.value, ...(ask && { ask: ask.value }) });
 }
 
-/** `/hint`'s reply, `{ kind: 'next', status, steps }`: the first `NEXT_LIMITS.steps` steps kept, none refused. */
+/** `/guide`'s reply, `{ kind: 'next', status, steps }`: the first `NEXT_LIMITS.steps` steps kept, none refused. */
 function readNextAnswer(raw: Record<string, unknown>): Result<Collaboration.NextAnswer, CommandProblem> {
     const unknown = extra(raw, ['kind', 'status', 'steps'], 'reply');
     if (unknown) return err(unknown);
@@ -246,7 +262,7 @@ function readNextAnswer(raw: Record<string, unknown>): Result<Collaboration.Next
 }
 
 /**
- * The message of `/hint`'s answer, in Markdown: the status, then the steps as a numbered list, each with its reason
+ * The message of `/guide`'s answer, in Markdown: the status, then the steps as a numbered list, each with its reason
  * and its command's ID (\`/es:gaps\`), so that the session so far and any reader without the page's buttons read it
  * whole.
  */
@@ -255,18 +271,24 @@ export function nextAnswerText(next: Pick<Collaboration.NextAnswer, 'status' | '
     return [next.status, '', ...steps].join('\n');
 }
 
-/** `/hint`'s answer as the answerer sends it (and the server reads it again). */
+/** `/guide`'s answer as the answerer sends it (and the server reads it again). */
 export function nextAnswerData(next: Pick<Collaboration.NextAnswer, 'status' | 'steps'>): NextAnswerData {
     return {
         status: next.status,
-        steps: next.steps.map((s) => ({ text: s.text, reason: s.reason, ...(s.command && { command: suggestedCommandId(s.command) }) })),
+        steps: next.steps.map((s) => ({
+            text: s.text,
+            reason: s.reason,
+            ...(s.command && { command: suggestedCommandId(s.command) }),
+            ...(s.targets.length > 0 && { targets: s.targets.map(elementReference) }),
+            ...(s.ask !== undefined && { ask: s.ask }),
+        })),
     };
 }
 
 /**
  * The answerer's JSON for a command whose reply is `shape`: `{ kind: 'candidates', candidates }` (the first
  * `CANDIDATE_LIMITS.candidates` kept, none is a list too), `{ kind: 'answer', answer }` (Markdown within the answers'
- * limit) or `{ kind: 'next', status, steps }` (`/hint`: read as an answer, its message written from them),
+ * limit) or `{ kind: 'next', status, steps }` (`/guide`: read as an answer, its message written from them),
  * validated. Another kind is refused.
  */
 export function readCommandReply(raw: unknown, shape: CommandReplyShape): Result<CommandReply, CommandProblem> {
@@ -328,6 +350,9 @@ export function commandJsonSchema(shape: CommandReplyShape): Record<string, unkn
                             text: str(NEXT_LIMITS.text),
                             reason: str(NEXT_LIMITS.reason),
                             command: { type: 'string', enum: [...SUGGESTED_COMMAND_IDS] },
+                            // `@{` and `}` around an identifier
+                            targets: { type: 'array', items: str(PROPOSAL_LIMITS.reference + 3), maxItems: NEXT_LIMITS.targets },
+                            ask: str(NEXT_LIMITS.ask),
                         },
                         required: ['text', 'reason'],
                         additionalProperties: false,
@@ -387,12 +412,12 @@ export function chosenIndices(
 
 export const slashCommandCommands: Collaboration.SlashCommandCommands = {
     start: decide<Collaboration.StartSlashCommandDecision>(Collaboration.SlashCommandShape, (params) => {
-        const { id, kind, startedBy, opening, scope, language, startedAt } = params;
+        const { id, kind, startedBy, opening, scope, language, startedAt, guide } = params;
         // the session without its evidence: the aggregate stores the base type
         const session: Collaboration.SessionId = params.session;
         return ok({
             Working: {
-                set: { id, session, kind, startedBy, opening, scope, language, startedAt },
+                set: { id, session, kind, startedBy, opening, scope, language, startedAt, guide },
                 events: {
                     SlashCommandStarted: {
                         type: 'SlashCommandStarted',
@@ -404,6 +429,7 @@ export const slashCommandCommands: Collaboration.SlashCommandCommands = {
                         ...(scope && { scope }),
                         language,
                         startedAt,
+                        ...(guide && { guide }),
                     },
                 },
             },

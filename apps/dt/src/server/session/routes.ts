@@ -24,6 +24,7 @@ import {
     interviewCommandOf,
     SLASH_COMMAND_NAMES,
     slashCommandOf,
+    type GuideWorkspace,
     type KnownViewNames,
     readBriefText,
     resolveViewedAt,
@@ -116,6 +117,8 @@ export interface SessionHttpDeps {
      * as sent). Absent: views are kept as sent.
      */
     readonly knownViewNames?: () => KnownViewNames | undefined;
+    /** What `/guide` reads of the workspace as it is now (absent: its map and what is known at once are not kept). */
+    readonly guideWorkspace?: () => GuideWorkspace;
     readonly log: (line: string) => void;
 }
 
@@ -721,6 +724,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                     language: raw.language === 'en' ? 'En' : 'Ja',
                     ...(focus && { focus }),
                     ...(viewed && { viewedAt: viewed }),
+                    ...(spec.kind === 'Guide' && deps.guideWorkspace && { workspace: deps.guideWorkspace() }),
                 });
                 await answer(res, started, 201, (v) => ({ command: v.command, request: v.request }));
             },

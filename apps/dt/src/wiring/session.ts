@@ -53,7 +53,7 @@ import { createLinkJoin, INVITE_PATH, INVITE_TTL_MS, type LinkJoin } from '../se
 import { createSessionIdentities } from '../server/session/identities.js';
 import { createTriageStage } from '../server/session/triage.js';
 import { eventFor } from '../server/session/views.js';
-import { knownViewNames } from '../server/session/viewed-at.js';
+import { guideWorkspace, knownViewNames } from '../server/session/viewed-at.js';
 import { createViewHttpServer } from '../server/http/server.js';
 import { isLoopbackBind, sessionHostPolicy } from '../server/http/access.js';
 import { SessionError, type SessionSettings } from '../cli/ports.js';
@@ -624,6 +624,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             agentPresence,
             retryAnswer: (request) => agent.answers.retry(request),
             knownViewNames: () => knownViewNames(view.state),
+            guideWorkspace: () => guideWorkspace(view.state),
             log,
         });
         const http = createViewHttpServer({

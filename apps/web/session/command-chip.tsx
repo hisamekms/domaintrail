@@ -2,14 +2,14 @@
 // in the person's row — the icon, the `/` ID in monospace and the name — instead of the name as plain text. Pressing
 // the chip shows what the command does (the line `/`'s list shows beside its name). Which message is an opening is
 // `slash.ts`'s (`commandOfOpening`, from the server's state); this only draws it.
-import { BetweenHorizontalStart, GitBranch, Layers, Lightbulb, ScrollText, Sparkles, Tags, type LucideIcon } from 'lucide-react';
+import { BetweenHorizontalStart, Compass, GitBranch, Layers, ScrollText, Sparkles, Tags, type LucideIcon } from 'lucide-react';
 import { useRef, useState, type ReactElement } from 'react';
 import { useDismiss } from '../shared/layout';
 import type { CommandId } from './slash';
 
 /** Each command's icon, in `/`'s list and on its chip. */
 export const COMMAND_ICONS: Readonly<Record<CommandId, LucideIcon>> = {
-    hint: Lightbulb,
+    guide: Compass,
     'es:start': Sparkles,
     'model:start': Sparkles,
     'es:exceptions': GitBranch,

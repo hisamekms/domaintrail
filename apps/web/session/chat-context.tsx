@@ -11,6 +11,7 @@ import type { MessageReference, ReplyDraft, ReplyReference } from './replies';
 import type { RevisionTools } from './revisions';
 import type { ModelTarget } from './targets';
 import type { SessionData } from './useSession';
+import type { ViewTarget } from './views';
 
 export type Tx = Messages['session'];
 
@@ -22,6 +23,8 @@ export interface ChatContextValue {
     /** A participant's avatar URL, when their page tells one. */
     readonly avatarOf: (id: string) => string | undefined;
     readonly onNavigate: (target: ModelTarget) => void;
+    /** Opens a view (a storming's stage, a context's structure): the guide's places. */
+    readonly openView: (target: ViewTarget) => void;
     /** The facilitator, in an open session: the actions are offered. */
     readonly control: boolean;
     /** The session is `dt open`'s (one person, every message to the AI): what only makes sense with others is hidden. */

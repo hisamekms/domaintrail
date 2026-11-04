@@ -736,26 +736,43 @@ describe('the candidate and answer commands of the `/` list', () => {
         expect(state.slashCommands?.find((c) => c.id === command.id)).toMatchObject({ state: 'Answered', answer: answer?.id });
     });
 
-    test('/hint: anyone, with no storming in view; its steps read again, the message written from them, the steps kept', async () => {
+    test('/guide: anyone, with no storming in view; its steps read again, the message written from them, the steps kept', async () => {
         const root = await scratch();
         await writeFile(path.join(root, 'orders.dtes'), STORMING);
         const ctx = await setup(root);
-        // the former ID is no command any more
+        // the former IDs are no commands any more
         expect((await ctx.api(ctx.bob, 'commands', { command: 'es:next', body: '次にやること', language: 'ja' })).status).toBe(400);
-        const started = await ctx.api(ctx.bob, 'commands', { command: 'hint', body: 'ヒントをもらう', language: 'ja' });
+        expect((await ctx.api(ctx.bob, 'commands', { command: 'hint', body: 'ヒントをもらう', language: 'ja' })).status).toBe(400);
+        const started = await ctx.api(ctx.bob, 'commands', { command: 'guide', body: 'ガイド', language: 'ja' });
         expect(started.status).toBe(201);
-        const { command, request } = (await started.json()) as { command: { id: string; state: string; scope?: string }; request: { id: string } };
+        const { command, request } = (await started.json()) as {
+            command: {
+                id: string;
+                state: string;
+                scope?: string;
+                guide?: { maps: { world: string; steps: { key: string; state: string }[] }[]; findings: { kind: string }[] };
+            };
+            request: { id: string };
+        };
         expect(command).toMatchObject({ state: 'Working' });
         expect(command.scope).toBeUndefined();
+        // its snapshot, at once: no view, a model and a storming (neither world), no goal set (the map asks for one), and
+        // what the files show
+        expect(command.guide?.maps).toEqual([
+            { world: 'None', steps: [{ key: 'setGoal', state: 'Here', goal: false, after: false, markable: false, marked: false }], contexts: [] },
+        ] as never);
+        expect(command.guide?.findings.length).toBeGreaterThan(0);
         const stream = answerStream(ctx);
         const job = await stream.commandJob();
-        expect(job).toMatchObject({ kind: 'command', name: 'hint', type: 'next', author: 'Bob' });
+        expect(job).toMatchObject({ kind: 'command', name: 'guide', type: 'next', author: 'Bob' });
+        // the AI is given the snapshot with the command
+        expect(job.command).toMatchObject({ guide: { maps: [{ world: 'None' }] } });
         // a plain answer is not what it takes
         expect((await stream.post(job.job, { kind: 'answer', answer: 'x', durationMs: 1 })).status).toBe(409);
         const again = await stream.commandJob();
         const steps = [
             { text: '例外を洗い出す', reason: '例外がない', command: 'es:exceptions' },
-            { text: '専門家に聞く', reason: '未決のホットスポット', command: 'es:nope' },
+            { text: '専門家に聞く', reason: '未決のホットスポット', command: 'es:nope', targets: ['@{es:Orders}'], ask: '何日かかる？' },
             { text: 'モデリングを始める', reason: 'Design Level まで進んだ', command: 'model:start' },
         ];
         expect((await stream.post(again.job, { kind: 'next', status: 'Big Picture: 通常フローまで', steps, durationMs: 2 })).status).toBe(200);
@@ -770,9 +787,9 @@ describe('the candidate and answer commands of the `/` list', () => {
             next: {
                 status: 'Big Picture: 通常フローまで',
                 steps: [
-                    { text: '例外を洗い出す', reason: '例外がない', command: 'EsExceptions' },
-                    { text: '専門家に聞く', reason: '未決のホットスポット' },
-                    { text: 'モデリングを始める', reason: 'Design Level まで進んだ', command: 'ModelStart' },
+                    { text: '例外を洗い出す', reason: '例外がない', command: 'EsExceptions', targets: [] },
+                    { text: '専門家に聞く', reason: '未決のホットスポット', targets: [{ kind: 'DtesStorming', storming: 'Orders' }], ask: '何日かかる？' },
+                    { text: 'モデリングを始める', reason: 'Design Level まで進んだ', command: 'ModelStart', targets: [] },
                 ],
             },
         });

@@ -6,6 +6,7 @@ import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { listedParticipants, type Peers } from './presence';
 import { changeUnits, type ChangeUnit } from './history';
 import { timeline } from './timeline';
+import { guideAnswers } from './guide-view';
 import { slashCommandSpec } from '@domaintrail/collaboration';
 import { AI_CANDIDATE, AI_NAME, AI_PARTICIPANT, isSolo, type AiSlot, type ProposalJson } from './ai';
 import type { PersonCandidate } from './mentions';
@@ -219,15 +220,23 @@ export function streamItems(
             items.push({ kind: 'restored', key: `restored:${r.id}`, at: r.takenAt, revision, from: numbers.get(from), work });
         }
     }
-    for (const request of state.requests) items.push({ kind: 'message', key: `message:${request.id}`, at: request.sentAt, request });
+    // a guide's answer is its card's: not a message of its own
+    const answers = guideAnswers(state);
+    for (const request of state.requests)
+        if (!answers.has(request.id)) items.push({ kind: 'message', key: `message:${request.id}`, at: request.sentAt, request });
     for (const unit of changeUnits(state)) items.push({ kind: 'card', key: `card:${unit.key}`, at: unit.start, updatedAt: unit.at, unit });
     for (const proposal of state.proposals ?? []) items.push({ kind: 'proposal', key: `proposal:${proposal.id}`, at: proposal.proposedAt, proposal });
     // an answer command's answer is the AI's message: its card says only that the AI works on it (in Solo, its slot
-    // does), or that it had nothing to work on (a hint stored from when it was `/es:next` and had no storming in view:
-    // listed with none, until closed)
+    // does), or that it had nothing to work on (a guide stored from when it was `/es:next` and had no storming in view:
+    // listed with none, until closed); a guide is its card always, the map and what is known at once at once, its
+    // answer in it
     const solo = state.session !== undefined && isSolo({ session: state.session });
     for (const command of state.slashCommands ?? []) {
-        const card = slashCommandSpec(command.kind).type === 'candidates' || (command.state === 'Working' && !solo) || command.state === 'Listed';
+        const card =
+            command.kind === 'Guide' ||
+            slashCommandSpec(command.kind).type === 'candidates' ||
+            (command.state === 'Working' && !solo) ||
+            command.state === 'Listed';
         if (card) items.push({ kind: 'command', key: `command:${command.id}`, at: command.startedAt, command });
     }
     // by time; items at the same moment keep the order they were pushed in (a message before the card applying it)

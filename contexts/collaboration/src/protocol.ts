@@ -826,7 +826,7 @@ export interface AgentCommandJobBody {
     readonly command: Json<Collaboration.SlashCommand>;
     /** The command's stable ID (`es:exceptions`). */
     readonly name: string;
-    /** What the answerer returns: candidates, an answer, or the next steps (`/hint`, an answer written from them). */
+    /** What the answerer returns: candidates, an answer, or the next steps (`/guide`, an answer written from them). */
     readonly type: 'candidates' | 'answer' | 'next';
     /** The starter's opening message. */
     readonly request: Json<Collaboration.Request>;
@@ -942,7 +942,7 @@ export type AgentCommandResultBody = (
     readonly durationMs: number;
 };
 
-/** `/hint`'s answer as the answerer writes it (`NextAnswerData` of `domain/slash-commands.ts`): the status and the steps. */
+/** `/guide`'s answer as the answerer writes it (`NextAnswerData` of `domain/slash-commands.ts`): the status and the steps. */
 export interface NextAnswerBody {
     readonly status: string;
     readonly steps: readonly { readonly text: string; readonly reason: string; readonly command?: string }[];

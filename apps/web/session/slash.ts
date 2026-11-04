@@ -1,8 +1,8 @@
 // What `/` lists in the composer (the plan's "message templates", round 4, and "`/` commands", round 5), without
 // React: the commands — interviews (`/es:start`, `/model:start`), candidate commands (`/es:exceptions`, `/es:gaps`,
-// `/es:levels`, `/es:names`: the AI lists changes to check) and answer commands (`/es:recap`, `/hint`: the AI
+// `/es:levels`, `/es:names`: the AI lists changes to check) and answer commands (`/es:recap`, `/guide`: the AI
 // answers) — and the templates (built in, then the team's
-// from `domaintrail.jsonc`: each only puts its text in the composer). `/hint` (the coach, for the event storming and the
+// from `domaintrail.jsonc`: each only puts its text in the composer). `/guide` (the coach, for the event storming and the
 // modeling alike) comes first; then the commands grouped by their prefix (`es:`, then `model:`), each group's `:start`
 // first, so that `/es` lists the ES commands. The list depends on what is open and
 // selected (`TemplateContext`); filtering after `/` matches an item's stable English ID and its name in the UI
@@ -36,11 +36,11 @@ export type CommandType = 'interview' | 'candidates' | 'answer';
 const PREFIXES = ['es', 'model'] as const;
 
 /**
- * The commands' IDs, in the order `/` lists them: `/hint` first (where a beginner starts: it says what to do next),
+ * The commands' IDs, in the order `/` lists them: `/guide` first (where a beginner starts: it says what to do next),
  * then by prefix, each prefix's `:start` (an interview) first.
  */
 export const COMMAND_IDS: readonly CommandId[] = [
-    'hint',
+    'guide',
     ...PREFIXES.flatMap((prefix) =>
         [...Object.keys(INTERVIEW_COMMANDS).filter(isInterviewCommandId), ...SLASH_COMMAND_NAMES].filter((id) => id.startsWith(`${prefix}:`)),
     ),
@@ -256,20 +256,20 @@ export function canStartCommand(state: Pick<SessionStateBody, 'interviews' | 'sl
 }
 
 /**
- * The hint button of the composer (ヒントをもらう): hidden when the person cannot have a hint at all (no answerer
- * connected: the commands go unanswered), disabled while a hint runs, else ready.
+ * The guide button of the composer (ガイド): hidden when the person cannot have a guide at all (no answerer
+ * connected: the commands go unanswered), disabled while a guide runs, else ready.
  */
-export function hintButton(state: Pick<SessionStateBody, 'interviews' | 'slashCommands'>, answerer: boolean): 'ready' | 'disabled' | 'hidden' {
+export function guideButton(state: Pick<SessionStateBody, 'interviews' | 'slashCommands'>, answerer: boolean): 'ready' | 'disabled' | 'hidden' {
     if (!answerer) return 'hidden';
-    return canStartCommand(state, 'hint') ? 'ready' : 'disabled';
+    return canStartCommand(state, 'guide') ? 'ready' : 'disabled';
 }
 
 /**
- * The commands the latest hint answered in the session suggests (its steps' commands, by their IDs): `/` marks them
- * (☆ ヒントのおすすめ) until another hint is answered.
+ * The commands the latest guide answered in the session suggests (its steps' commands, by their IDs): `/` marks them
+ * (☆ ガイドのおすすめ) until another guide is answered.
  */
-export function hintSuggestions(state: Pick<SessionStateBody, 'slashCommands'>): ReadonlySet<string> {
-    const latest = (state.slashCommands ?? []).findLast((c) => c.kind === 'Hint' && c.state === 'Answered');
+export function guideSuggestions(state: Pick<SessionStateBody, 'slashCommands'>): ReadonlySet<string> {
+    const latest = (state.slashCommands ?? []).findLast((c) => c.kind === 'Guide' && c.state === 'Answered');
     if (latest?.state !== 'Answered' || !latest.next) return new Set();
     return new Set(latest.next.steps.flatMap((s) => (s.command ? [suggestedCommandId(s.command)] : [])));
 }

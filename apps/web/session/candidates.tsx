@@ -7,7 +7,7 @@
 // stops it.
 // Applied, the ones chosen stay checked, the others dimmed, with a link to the run. Nothing to work on (no storming in
 // view) or no candidate: one short line, an answer command's too (a hint
-// stored from when `/hint` was `/es:next` and needed a storming). An answer command (`/es:recap`) has a card
+// stored from when `/guide` was `/es:next` and needed a storming). An answer command (`/es:recap`) has a card
 // otherwise only while the AI works, in Collab (in Solo its pending slot under the message says so); its answer is the
 // AI's message.
 import { useState } from 'react';
@@ -34,6 +34,8 @@ export function commandSlot(
 ): AiSlot | 'none' | undefined {
     const c = (state.slashCommands ?? []).find((x) => x.opening === request.id);
     if (!c) return undefined;
+    // a guide's card follows, its answer in it
+    if (c.kind === 'Guide') return 'none';
     if (c.state === 'Answered') return { kind: 'answer', answer: c.answer };
     if (c.state === 'Working' && slashCommandSpec(c.kind).type === 'answer') return { kind: 'pending' };
     return 'none';

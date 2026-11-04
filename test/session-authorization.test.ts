@@ -133,6 +133,35 @@ describe('the operations reserved to the facilitator', () => {
         expect((await api(ada, 'marks', { target: { kind: 'Message', request }, sign: { kind: 'Reaction', emoji: '👍' }, placed: true })).status).toBe(200);
     });
 
+    test('a step of the guide is marked done by the facilitator only, for the session; a step the files tell is not marked', async () => {
+        const step = { kind: 'GuideStep', journey: 'billing', step: 'bcSplit' };
+        const done = { kind: 'Done' };
+        const marked = async (): Promise<unknown[]> => ((await state()).marks ?? []).filter((m: { target: { kind: string } }) => m.target.kind === 'GuideStep');
+        expect(await answer(await api(bob, 'marks', { target: step, sign: done, placed: true }))).toEqual([403, FACILITATOR_ONLY]);
+        expect((await api(ada, 'marks', { target: step, sign: done, placed: true })).status).toBe(200);
+        expect(await marked()).toMatchObject([{ participant: expect.any(String), target: step, sign: done }]);
+        // the sign must fit; a step the files tell, or none of the map's, is no target; a malformed one is refused
+        expect(await answer(await api(ada, 'marks', { target: step, sign: { kind: 'Reaction', emoji: '👍' }, placed: true }))).toEqual([
+            400,
+            { error: { type: 'MarkNotForTarget' } },
+        ]);
+        expect(await answer(await api(ada, 'marks', { target: { kind: 'GuideStep', journey: 'billing', step: 'events' }, sign: done, placed: true }))).toEqual([
+            404,
+            { error: { type: 'MarkTargetNotFound' } },
+        ]);
+        expect((await api(ada, 'marks', { target: { kind: 'GuideStep', journey: 'billing', step: 'a b' }, sign: done, placed: true })).status).toBe(400);
+        // a participant neither takes it off: it stays
+        expect(await answer(await api(bob, 'marks', { target: step, sign: done, placed: false }))).toEqual([403, FACILITATOR_ONLY]);
+        expect(await marked()).toHaveLength(1);
+        // a BC row, by its context
+        const row = { kind: 'GuideStep', journey: 'billing', step: 'contexts', context: 'Billing' };
+        expect((await api(ada, 'marks', { target: row, sign: done, placed: true })).status).toBe(200);
+        expect((await api(ada, 'marks', { target: row, sign: done, placed: false })).status).toBe(200);
+        expect((await api(ada, 'marks', { target: { ...row, extra: 1 }, sign: done, placed: true })).status).toBe(400);
+        expect((await api(ada, 'marks', { target: step, sign: done, placed: false })).status).toBe(200);
+        expect(await marked()).toEqual([]);
+    });
+
     test('dismissing a message has no route: 404', async () => {
         const request = await send(bob, 'Something.');
         for (const cookie of [bob, ada]) {

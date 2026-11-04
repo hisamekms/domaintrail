@@ -1548,6 +1548,59 @@ button and the answer's icon follow the new name. A guide answer is a **guide ca
 
 **Scope: 0.7.0.** The ES map, and all four modeling patterns with the growing BC map.
 
+### As built: the guide (0.7.0, without the goals)
+
+The goals and the `/es:start` / `/model:start` vocabulary were left out when the journey file was decided (below): the
+guide reads no goal yet, so every map is "set the goal" until that phase. The rest is built.
+
+- **Rename.** `/hint` is `/guide` 「ガイド」 / "Guide", `SlashCommandKind.Guide`, the `Compass` icon (command chip, `/`'s
+  list, composer button, the card's mark). A command stored as `EsNext` or `Hint`, and its `SlashCommandStarted`, are
+  read as `Guide` (`legacy.ts`); `hint` and `es:next` are no command IDs (400).
+- **Engine** (`contexts/collaboration/src/domain/guide.ts`, pure). From `GuideWorkspace` (the model, the stormings, `dt
+  check`'s findings), `GuideGoal` and the marks it computes the world (the view's; none while nothing is written; else
+  the selection's or what the files hold) and the maps:
+  - ES (`ES_STEPS`, done rules): brief (`///`), events (≥ 5), flows (a main timeline), exceptions (each stage has one;
+    without stages, one), questions (hotspots, all resolved), Design Level (a command and an aggregate). Goal: Big
+    Picture → questions, Design Level → designLevel; the steps past it `after`.
+  - Modeling: `MODEL_PATTERNS` A–D (`Strategic`, `FromStorming`, `OneContext`, `Review`) with their steps, goals (the
+    last by default) and rows step (`contexts`, `bcCarved`, `aggregates`, `boundaries`). A row per `.dt` context, in the
+    model's order: aggregates, commands, invariants; done when each aggregate has a command and an invariant (a shared
+    context always), or marked. `MARKABLE_STEPS` (subdomains, bcSplit, contextMap, review, termsAligned, boundaries) are
+    done by a mark (the context map also by a cross-context reference).
+  - **Seams for the journey file.** `readGuideGoal(workspace)` is the one reader of the goals and returns none. The goal
+    is `{ es?: { [storming]: { level } }, model?: ModelJourney[] }`, a journey `{ id, name, pattern, goal?, stormings?
+    (B), context? (C) }`; a map per modeling journey (`guideMaps`, at most 10), each over its subject. Marks are behind
+    `GuideMarkStore` (`read`, `set`, `clear`, keyed `{ journey, step, context? }`); the session implements it for now
+    (`sessionGuideMarks`, the page's `pageGuideMarks`): a `Done` mark on a `GuideStep { journey, step, context? }`
+    target, the session's (taken off whoever placed it), placed and cleared by the facilitator only (`FacilitatorOnly`
+    otherwise: in Solo the one person is the facilitator).
+  - **What is known at once** (`guideFindings`, at most 10): in the storming world the storming without `///`, the
+    stages without exceptions (or the flows, without stages), open hotspots, long labels (S015); in the model world
+    contexts without aggregates, aggregates without commands or invariants; errors and warnings of the world's files.
+    Each carries an element to select (`target`) or a view to open (`view`: the stage at Big Picture with its
+    exceptions, the context's structure).
+- **Kept on the command.** `POST /api/session/commands` for `guide` computes the snapshot (`guideSnapshot`) from the view
+  the server shows, at once, and keeps it on the command and its `SlashCommandStarted` (`guide: GuideSnapshot?`, in
+  `guide.dt`): the card shows it as soon as the command exists, and in history as it was. An older guide has none.
+- **Steps with actions.** `NextStep` gained `targets` (up to 3 element references: an element, a stage or timeline, a
+  hotspot, a storming) and `ask` (a question, one line); older steps read with none.
+- **The prompt** gives the AI `guide` in the data block (`guideData`: per map the world, journey, goal, the step here,
+  each step's state, the rows; the findings with `goTo` / `open` references) and asks it to build on the map, explain
+  why the step here is next, and give one to three steps with a command, places and a question. A map without a goal
+  makes setting it the first step. The labels in it are data (the injection rule).
+- **The card** (`guide-card.tsx`): a guide is always a card in the stream (Solo and Collab), its answer message hidden.
+  Under the compass and ガイド: the journey picker (several maps; the choice in `localStorage`), the map (steps on a
+  wrapping line, the dot ✓ / 📍 / 🏁, past the goal faint; the goal line; the rows as a small table; the start buttons
+  when no goal), すぐ分かること (an icon, the line, 見る / 図で見る), then ガイドが考えています… (中止 for its starter and
+  the facilitator), the advice (status; steps with reason, the command button, a button per place, 聞くことをメモ), or
+  中止しました. The latest card lays the marks as they are now over its map; the facilitator's ✓ toggles sit on the
+  markable steps and the rows. 聞くことをメモ sends `@AI` 「<place> に問いを足して: <question>」 with the place as the
+  target: the facilitator's runs, a participant's becomes a proposal. A card that is not the latest says これより新しいガイド
+  があります. A stage or timeline target opens its view.
+- **Real run and screenshots**: the scratch run of 2026-11-03 (`/guide` on an empty workspace, after `/es:start`,
+  and in both worlds of the shop with the convenience-store stages); goal-set maps were rendered from the engine fed a
+  goal (no seam in the app).
+
 ## The journey file: briefs, goals and marks out of `///` (decided 2026-11-03)
 
 This replaces where the guide's goal is read from (above) and where the interviews' briefs are written (`/es:start`,

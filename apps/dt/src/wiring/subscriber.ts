@@ -312,7 +312,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
 
 /**
  * `dt check`'s findings on the workspace now, one line each (`file:line:column severity code: message`): on the `.dtes`
- * files only (`stormings`: what `/es:names` reads) or on all of them (`workspace`: what `/hint` reads).
+ * files only (`stormings`: what `/es:names` reads) or on all of them (`workspace`: what `/guide` reads).
  */
 export async function workspaceDiagnostics(
     reader: { readSources(): Promise<readonly { path: string; text: string }[]> },
