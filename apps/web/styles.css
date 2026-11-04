@@ -412,6 +412,11 @@
     --space-3: 12px;
     --space-4: 16px;
     --space-5: 24px;
+    /* the spacing rhythm (docs/ui-rules.md): inside a group at most --gap-inside, between groups at least --gap-between
+       (twice it), a change of turn --gap-turn */
+    --gap-inside: var(--space-2);
+    --gap-between: var(--space-4);
+    --gap-turn: var(--space-5);
 }
 
 /* Dark theme: set by the app on <html data-theme="dark"> (the OS setting, or the user's choice in the header). It
@@ -1004,12 +1009,12 @@ button.es-action:hover,
     background: var(--brand-wash);
     color: var(--brand);
 }
-button.es-action.primary {
+button.es-action.filled {
     border-color: var(--brand);
     background: var(--brand);
     color: var(--on-brand);
 }
-button.es-action.primary:hover {
+button.es-action.filled:hover {
     background: var(--brand);
     color: var(--on-brand);
     filter: brightness(1.1);
@@ -2510,7 +2515,7 @@ select,
     z-index: 45;
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--gap-between);
     width: 26rem;
     max-width: calc(100vw - 24px);
     max-height: min(40rem, calc(100vh - 70px));
@@ -2541,24 +2546,21 @@ select,
 .journeys-panel .journeys-close {
     margin-left: var(--space-1);
 }
-/* the current journey, on the panel's surface (no wash: the map's dots read on it): its name and kind; 12px, its brief;
-   12px, its map with the goal close under it; 16px, its actions */
+/* the current journey, on the panel's surface (no wash: the map's dots read on it), in groups apart by --gap-between:
+   its name and kind; its brief; its map with the goal close under it (and the next step's command); its actions, the
+   goal menu close under them */
 .journeys-current {
     display: flex;
     flex-direction: column;
 }
 .journeys-current > .brief-lines,
-.journeys-current > .guide-map {
-    margin-top: var(--space-3);
-}
-.journeys-current > .journeys-next {
-    margin-top: var(--space-2);
-}
+.journeys-current > .guide-map,
 .journeys-current > .journeys-actions {
-    margin-top: var(--space-4);
+    margin-top: var(--gap-between);
 }
+.journeys-current > .journeys-next,
 .journeys-current > .journeys-goals {
-    margin-top: var(--space-2);
+    margin-top: var(--gap-inside);
 }
 .journeys-current-head {
     display: flex;
@@ -2591,7 +2593,7 @@ select,
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-1);
+    gap: var(--space-1) var(--gap-inside);
     margin: 0;
 }
 .journeys-next {
@@ -2650,7 +2652,7 @@ select,
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-1) var(--space-2);
+    gap: var(--space-1) var(--gap-inside);
     padding: var(--space-1) var(--space-2);
     border: 1px solid var(--border);
     border-left: 3px solid var(--brand);
@@ -2659,7 +2661,7 @@ select,
 .journeys-request-actions {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-1);
+    gap: var(--gap-inside);
     margin-left: auto;
 }
 /* the guide card's heading: the goal (🏁: change it) and the journey (opens the panel) */
@@ -3817,16 +3819,6 @@ svg.chat-launcher-mark {
     gap: 6px;
     margin-top: 8px;
 }
-.reveal button {
-    font: inherit;
-    font-size: 0.8125rem;
-    padding: 2px 10px;
-    border: 1px solid var(--violet-border);
-    border-radius: 999px;
-    color: var(--accent);
-    background: var(--violet-soft);
-    cursor: pointer;
-}
 .inspector-diags {
     margin-top: 8px;
 }
@@ -4587,24 +4579,6 @@ del.was.block {
 .session-section h3 {
     margin: 14px 0 6px;
 }
-.session-panel button:not(.icon-button) {
-    font: inherit;
-    font-size: 0.8125rem;
-    padding: 3px 8px;
-    border: 1px solid var(--border-strong);
-    border-radius: 5px;
-    background: var(--panel);
-}
-.session-panel button.primary {
-    margin-top: 6px;
-    border-color: var(--accent);
-    background: var(--accent);
-    color: var(--on-action);
-}
-.session-panel button:disabled {
-    opacity: 0.5;
-    cursor: default;
-}
 .session-buttons {
     display: flex;
     flex-wrap: wrap;
@@ -4809,15 +4783,8 @@ del.was.block {
 .session-revision-actions {
     margin-top: 4px;
 }
-.session-panel button.small {
-    font-size: 0.75rem;
-    padding: 1px 6px;
-}
 .session-restore p {
     margin: 0 0 6px;
-}
-.session-restore .session-buttons button.primary {
-    margin-top: 0;
 }
 /* the collab menu's 以前の状態に復元: the earlier states, newest first, each a row to choose */
 .collab-restore-list {
@@ -4830,13 +4797,13 @@ del.was.block {
     max-height: 50vh;
     overflow-y: auto;
 }
-.collab-restore-list button {
+.collab-restore-list button.act {
     display: flex;
     gap: var(--space-2);
     align-items: baseline;
     width: 100%;
-    text-align: left;
 }
+
 .collab-restore-list .collab-restore-number {
     font-variant-numeric: tabular-nums;
     color: var(--muted);
@@ -5027,16 +4994,6 @@ del.was.block {
         opacity: 0.3;
     }
 }
-.session-chat button.chat-small {
-    flex: none;
-    font-size: var(--fs-small);
-    font-weight: var(--fw-strong);
-    line-height: 1.25rem;
-    padding: 0 var(--space-2);
-    border: 1px solid var(--border-strong);
-    border-radius: 5px;
-    background: var(--panel);
-}
 .chat-notice {
     flex: none;
     margin: var(--space-1) var(--space-4);
@@ -5056,12 +5013,12 @@ del.was.block {
     margin: 0;
     padding: 0;
 }
-/* the stream is separated by space: --space-5 between turns, --space-1 between messages of one speaker (.continued) and
-   --space-2 between the blocks of a message; no rules nor boxes */
+/* the stream is separated by space (docs/ui-rules.md): --gap-turn between turns, --space-1 between messages of one
+   speaker (.continued) and --gap-inside between the blocks of a message; no rules nor boxes */
 .chat-item {
     /* its own formatting context: the row's negative margins do not fold into the item's */
     display: flow-root;
-    margin-top: var(--space-5);
+    margin-top: var(--gap-turn);
 }
 .chat-system {
     display: flex;
@@ -5992,7 +5949,7 @@ button.add-to-request.added:hover {
     background: var(--hover);
     outline: none;
 }
-.session-chat .collab-menu-actions > button.danger {
+.session-chat .collab-menu-actions > button.menu-danger {
     color: var(--status-danger-ink);
 }
 /* the menu's note (a link copied) opens under the button, from its left */
@@ -6051,11 +6008,6 @@ button.add-to-request.added:hover {
 }
 .collab-dialog-buttons {
     justify-content: flex-end;
-}
-.collab-end-confirm.primary.danger {
-    background: var(--status-danger-ink);
-    border-color: var(--status-danger-ink);
-    color: var(--on-status);
 }
 .collab-unfinished {
     padding: 8px 10px;
@@ -6368,9 +6320,6 @@ button.add-to-request.added:hover {
     gap: var(--space-2);
     padding-top: var(--space-2);
 }
-.session-chat button.chat-small svg {
-    vertical-align: -1px;
-}
 
 /* ---------- composer size ---------- */
 
@@ -6667,27 +6616,6 @@ button.add-to-request.added:hover {
     gap: var(--space-2);
     margin-top: var(--space-4);
 }
-.cancel-dialog button.cancel-dialog-button {
-    height: 30px;
-    padding: 0 14px;
-    border: 1px solid var(--border-strong);
-    border-radius: 8px;
-    background: var(--surface-raised);
-    color: var(--text);
-    font: inherit;
-    font-weight: var(--fw-strong);
-    cursor: pointer;
-}
-.cancel-dialog button.cancel-dialog-button:focus-visible,
-.cancel-dialog button.cancel-dialog-button:focus {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-}
-.cancel-dialog button.cancel-dialog-button.danger {
-    border-color: var(--status-danger-ink);
-    background: var(--status-danger-ink);
-    color: var(--on-status);
-}
 .chat-apply {
     display: inline-flex;
     align-items: center;
@@ -6715,14 +6643,6 @@ button.add-to-request.added:hover {
     padding: 2px var(--space-2);
     font: inherit;
     font-size: var(--fs-small);
-}
-.session-chat button.primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--on-action);
-}
-.session-chat button.primary:disabled {
-    opacity: 0.5;
 }
 .chat-tray:empty {
     display: none;
@@ -6772,7 +6692,7 @@ button.add-to-request.added:hover {
     box-shadow: 0 2px 8px var(--shadow);
     cursor: pointer;
 }
-.pane-menu-list > button.danger {
+.pane-menu-list > button.menu-danger {
     color: var(--status-danger-ink);
 }
 .session-menu-note {
@@ -7183,39 +7103,13 @@ button.add-to-request.added:hover {
     flex-direction: column;
     gap: var(--space-3);
 }
+/* a card's buttons: one group, its main decision first */
 .reply-actions {
     display: flex;
-}
-/* the buttons of a decision: small and strong; 回答を送る the primary, 承認 and 送り直す ghosts in the accent */
-.session-chat .reply-section button.chat-small {
-    display: inline-flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-1);
-    font-size: var(--fs-small);
-    font-weight: var(--fw-strong);
-    line-height: var(--lh-small);
-    white-space: nowrap;
-    border-radius: 6px;
+    gap: var(--gap-inside);
 }
-.session-chat .reply-section button.chat-small.primary {
-    padding: var(--space-1) var(--space-3);
-}
-.session-chat .reply-section button.chat-small.ghost {
-    padding: 2px var(--space-2);
-    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-    color: var(--accent);
-}
-.session-chat .reply-section button.chat-small.ghost:hover:not(:disabled) {
-    background: var(--selected-bg);
-}
-.session-chat .reply-section button.chat-small:disabled {
-    opacity: 0.5;
-    cursor: default;
-}
-.session-chat .reply-section button.chat-small svg {
-    vertical-align: 0;
-}
-
 /* the mark at the start of a card or row once decided: ◉ / ☑ in the accent for what was chosen, ○ / ☐ muted */
 .choice-mark {
     flex: none;
@@ -7873,23 +7767,6 @@ button.add-to-request.added:hover {
     gap: 8px;
     margin-top: 12px;
 }
-.answer-other-dialog button.answer-other-button {
-    font: inherit;
-    font-size: 0.8125rem;
-    padding: 3px 12px;
-    border: 1px solid var(--border-strong);
-    border-radius: 5px;
-    background: var(--panel);
-}
-.answer-other-dialog button.answer-other-button.primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--on-action);
-}
-.answer-other-dialog button.answer-other-button:disabled {
-    opacity: 0.5;
-    cursor: default;
-}
 
 /* ---------- chunk titles ---------- */
 
@@ -7931,18 +7808,8 @@ button.add-to-request.added:hover {
 .session-chat button.changed-elements-see {
     flex: none;
     margin-left: var(--space-1);
-    padding: 0 var(--space-2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--panel);
-    color: var(--muted);
-    font-weight: var(--fw-strong);
-    cursor: pointer;
 }
-.session-chat button.changed-elements-see:hover {
-    background: var(--hover);
-    color: var(--text);
-}
+
 /* an element changed: its mark (＋ ✎ −, in the diff's added, changed, removed on their background), then `#` its own
    name in the accent; a removed one muted and struck through */
 .change-chip {
@@ -8365,7 +8232,7 @@ label.proposal-option {
 .guide-card {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
+    gap: var(--gap-between);
     font-size: var(--fs-body);
     line-height: var(--lh-body);
 }
@@ -8461,29 +8328,6 @@ label.proposal-option {
     border-style: dashed;
     background: transparent;
 }
-.session-chat button.guide-mark,
-.session-chat .guide-mark {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    padding: 0;
-    border: 1px dashed var(--border-strong);
-    border-radius: 4px;
-    background: transparent;
-    color: var(--muted);
-    cursor: pointer;
-}
-.session-chat .guide-mark.on {
-    border-style: solid;
-    border-color: var(--brand-wash-border);
-    background: var(--brand-wash);
-    color: var(--brand);
-}
-.session-chat .guide-mark:disabled {
-    cursor: default;
-}
 /* the goal, the journey's name and a missing subject: each whole, on a line of its own when they do not fit together */
 .guide-goal {
     display: flex;
@@ -8573,20 +8417,7 @@ label.proposal-option {
     flex: 1;
     min-width: 0;
 }
-.session-chat button.guide-go,
-.session-chat button.guide-ask {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    border: 1px solid var(--brand-wash-border);
-    background: var(--brand-wash);
-    color: var(--brand);
-}
-/* a place's name, cut with an ellipsis when it is longer than the card */
-.session-chat button.guide-go {
-    max-width: 100%;
-    min-width: 0;
-}
+/* a place's name in a see button, cut with an ellipsis when it is longer than the card */
 .guide-go-name {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -8602,17 +8433,15 @@ label.proposal-option {
 .guide-status {
     margin: 0;
 }
-/* the advice: inside a step ≤ 8px (its title, reason, actions, question), between the steps twice that; the status
-   sentence and the steps apart as two groups */
-.guide-advice {
-    margin-top: var(--space-3);
-}
+/* the advice, a group of the card (its gap apart from the map and what is known at once): inside a step ≤ 8px (its
+   title, reason, actions, question), between the steps twice that; the status sentence and the steps apart as two
+   groups */
 .guide-steps {
-    margin: var(--space-3) 0 0;
+    margin: var(--gap-between) 0 0;
     padding-left: 1.5em;
 }
 .guide-advice-step + .guide-advice-step {
-    margin-top: var(--space-4);
+    margin-top: var(--gap-between);
 }
 .guide-step-text {
     display: block;
@@ -8630,29 +8459,25 @@ label.proposal-option {
 .guide-question {
     margin-top: var(--space-1);
 }
+/* a step's actions: wrapping, a see link's text needs the wider column gap to read apart from its neighbour */
 .guide-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-1) 6px;
-    margin: 4px 0 0;
+    gap: var(--space-1) var(--space-3);
+    margin: var(--space-1) 0 0;
 }
 .guide-advice .guide-actions,
 /* dt's note after a brief is confirmed: its buttons under the text, as an interview's choices sit */
 .journey-note-actions {
-    margin-top: var(--space-2);
+    margin-top: var(--gap-inside);
 }
-.session-chat .guide-command {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-}
-/* an interview's choices under the question it awaits (its starter only): compact action buttons, the brand on a pale
-   wash of it, wrapping; several to check (a checkbox in each) and 送る filled; その他 last, outlined only */
+/* an interview's choices under the question it awaits (its starter only), wrapping: single ones are send buttons
+   (shared/act.tsx); several to check are these labels, a checkbox in each, on the same pale wash, then 送る */
 .interview-choices {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-1) 6px;
-    margin-top: var(--space-2);
+    gap: var(--space-1) var(--space-2);
+    margin-top: var(--gap-inside);
 }
 .session-chat .interview-choice {
     display: inline-flex;
@@ -8678,27 +8503,6 @@ label.proposal-option {
 .session-chat .interview-choice input {
     margin: 0;
     accent-color: var(--brand);
-}
-.session-chat .interview-choice.send {
-    border-color: var(--brand);
-    background: var(--brand);
-    color: var(--on-brand);
-}
-.session-chat .interview-choice.other {
-    background: transparent;
-}
-.session-chat .interview-choice:disabled {
-    border-color: var(--disabled-border);
-    background: var(--disabled-bg);
-    color: var(--disabled-text);
-    cursor: default;
-}
-.session-chat button.chat-small.guide-command {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    font-family: var(--mono);
-    font-weight: var(--fw-strong);
 }
 /* the facilitator's record of a triage: small muted lines under the message, the stage that decided strong */
 .triage-record {
@@ -8844,7 +8648,7 @@ label.proposal-option {
     margin: 0;
 }
 .chat-brief-lines {
-    margin-top: var(--space-3);
+    margin-top: var(--gap-between);
     font-size: var(--fs-body, inherit);
     line-height: 1.5;
 }
@@ -8856,7 +8660,7 @@ label.proposal-option {
 }
 .chat-brief-edit {
     display: block;
-    margin-top: var(--space-3);
+    margin-top: var(--gap-between);
     width: 100%;
     box-sizing: border-box;
     resize: vertical;
@@ -8871,18 +8675,18 @@ label.proposal-option {
 .chat-brief-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-2);
-    margin-top: var(--space-4);
+    gap: var(--gap-inside);
+    margin-top: var(--gap-between);
 }
 .chat-brief-waiting {
-    margin: var(--space-4) 0 0;
+    margin: var(--gap-between) 0 0;
 }
 /* waiting and its 止める: one group */
 .chat-brief-waiting + .chat-brief-actions {
-    margin-top: var(--space-2);
+    margin-top: var(--gap-inside);
 }
 .chat-brief .chat-apply-note {
-    margin: var(--space-4) 0 0;
+    margin: var(--gap-between) 0 0;
 }
 /* the note of a rejected brief, to its starter */
 .chat-brief-note {
@@ -8996,4 +8800,141 @@ label.proposal-option {
         overflow: visible;
         padding: 0;
     }
+}
+
+/* ---------- actions: the text buttons by what pressing them does (shared/act.tsx, docs/ui-rules.md) ---------- */
+
+/* one shape for all; the kind gives the look: filled decides, the wash sends, ↵ and the code font fill the composer,
+   brand text moves, a grey outline opens or decides on the side, muted stops, red refuses */
+button.act {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    max-width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 2px var(--space-2);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+    text-align: left;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+button.act svg {
+    flex: none;
+}
+.act.act-decide {
+    border-color: var(--brand);
+    background: var(--brand);
+    color: var(--on-brand);
+    font-weight: var(--fw-strong);
+}
+.act.act-decide-sub,
+.act.act-open {
+    border-color: var(--border-strong);
+    color: var(--text);
+}
+.act.act-send {
+    border-color: var(--brand-wash-border);
+    background: var(--brand-wash);
+    color: var(--brand);
+    font-weight: var(--fw-strong);
+}
+.act.act-insert {
+    border-color: var(--brand-wash-border);
+    color: var(--brand);
+    font-family: var(--mono);
+}
+.act.act-see {
+    padding-inline: 0;
+    color: var(--brand);
+}
+.act.act-stop {
+    border-color: var(--border-strong);
+    color: var(--muted);
+}
+.act.act-danger {
+    border-color: color-mix(in srgb, var(--status-danger-ink) 50%, transparent);
+    color: var(--status-danger-ink);
+}
+.act.act-decide-sub:hover:not(:disabled),
+.act.act-open:hover:not(:disabled),
+.act.act-stop:hover:not(:disabled) {
+    background: var(--hover);
+}
+.act.act-send:hover:not(:disabled),
+.act.act-insert:hover:not(:disabled) {
+    border-color: var(--brand);
+}
+.act.act-insert:hover:not(:disabled) {
+    background: var(--brand-wash);
+}
+.act.act-see:hover:not(:disabled) {
+    text-decoration: underline;
+}
+.act.act-danger:hover:not(:disabled) {
+    background: var(--status-danger-bg);
+}
+button.act:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+/* the ✓ of the journey's map: a checkbox and 済み / 済みにする, small under the step */
+.act-mark {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    max-width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+button.act-mark {
+    cursor: pointer;
+}
+button.act-mark:disabled {
+    cursor: default;
+}
+.act-mark-box {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 14px;
+    height: 14px;
+    border: 1.5px solid var(--border-strong);
+    border-radius: 3px;
+    color: var(--on-brand);
+}
+.act-mark.on {
+    color: var(--text);
+}
+.act-mark.on .act-mark-box {
+    border-color: var(--brand);
+    background: var(--brand);
+}
+button.act-mark:hover:not(:disabled) .act-mark-box {
+    border-color: var(--brand);
+}
+/* under a step of the map: the box over its word, kept whole in the step's narrow column, as small as the label */
+.guide-step .act-mark {
+    flex-direction: column;
+    gap: 1px;
+    font-size: 0.625rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+.guide-step .act-mark-box {
+    width: 12px;
+    height: 12px;
 }

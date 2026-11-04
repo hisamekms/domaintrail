@@ -9,7 +9,7 @@ import { analyze } from '@domaintrail/analysis';
 import { goalOf, guideMarks, guideSnapshot, journeyMarks, NO_MARKS, type GuideGoal, type GuideWorkspace, type JourneyFile } from '@domaintrail/collaboration';
 import { journeyOverview } from './journey-view';
 import { MESSAGES } from '../i18n';
-import { exampleSources } from '../test-helpers';
+import { actKinds, decides, exampleSources } from '../test-helpers';
 import { ChatProvider, type ChatContextValue } from './chat-context';
 import { GuideCard } from './guide-card';
 import { askBody, guideAnswers, latestGuide, viewTargetOfShown, withMarks, type GuideMapJson, type GuideSnapshotJson } from './guide-view';
@@ -114,7 +114,7 @@ describe("the guide's card", () => {
         expect(steps(html)).toEqual(['ゴールを決める:here', '…:todo after']);
         expect(html).toContain('ゴール: 未定');
         // the start of the storming's goal, into the composer
-        expect(html).toMatch(/<button[^>]*class="chat-small primary guide-command"[^>]*>.*?\/es:start<\/button>/);
+        expect(html).toMatch(/<button[^>]*class="act act-insert"[^>]*>.*?lucide-corner-down-left.*?\/es:start<\/button>/);
         // what the files show: Returns has two open questions, its flow no exception
         expect(html).toContain('すぐ分かること');
         expect(html).toContain('未解決の問い 2');
@@ -190,7 +190,7 @@ describe("the guide's card", () => {
         const html = render(command, chat('bob', [command, guide({ id: 'g2', startedAt: at(5) })]));
         expect(html).toContain('<p class="guide-status">例外を出すところです</p>');
         expect(html.match(/<li class="guide-advice-step">/g)).toHaveLength(2);
-        expect(html).toMatch(/class="chat-small primary guide-command"[^>]*>.*?\/es:exceptions<\/button>/);
+        expect(html).toMatch(/class="act act-insert"[^>]*>.*?\/es:exceptions<\/button>/);
         expect(html).toContain('aria-label="返品 を見る"');
         expect(html).toContain('aria-label="聞くことをメモ: 返品は何日まで？"');
         expect(html).toContain('「返品は何日まで？」');
@@ -199,6 +199,26 @@ describe("the guide's card", () => {
         expect(html).toContain('これより新しいガイドがあります');
         // stopped
         expect(render(guide({ state: 'Stopped' }), chat('bob', []))).toContain('中止しました');
+        // the buttons by what they do (docs/ui-rules.md): the command inserted, the places seen, the question sent
+        const advice = html.slice(html.indexOf('guide-advice'));
+        expect(actKinds(advice)).toEqual(['insert', 'see', 'see', 'send']);
+        expect(decides(html)).toBe(0);
+    });
+
+    test('the buttons as it starts: /es:start inserted, what is known seen, 中止 stops; the ✓ a checkbox with 済み / 済みにする', () => {
+        const command = guide({ guide: snapshot({}, STORMING_VIEW) });
+        const html = render(command, chat('bob', [command]));
+        expect(actKinds(html)).toEqual(['insert', 'see', 'see', 'see', 'stop']);
+        expect(decides(html)).toBeLessThanOrEqual(1);
+        const file = FILE(['review'], 'model');
+        const model = guide({ guide: snapshot(goalOf(file), MODEL_VIEW, guideMarks(journeyMarks(file)), file) });
+        const marks = render(model, chat('f', [model], file, 'shop'));
+        expect(marks).toMatch(
+            /<button type="button" class="act-mark on" aria-pressed="true" aria-label="ES を見直す: 済みを外す"[^>]*>.*?済み<\/span><\/button>/,
+        );
+        expect(marks).toMatch(
+            /<button type="button" class="act-mark" aria-pressed="false" aria-label="Billing: 済みにする"[^>]*>.*?済みにする<\/span><\/button>/,
+        );
     });
 });
 

@@ -1,4 +1,4 @@
-import { PanelBottomClose, Undo2 } from 'lucide-react';
+import { Eye, PanelBottomClose, Undo2 } from 'lucide-react';
 import { createContext, useContext, type ReactNode } from 'react';
 import {
     type CommandModel,
@@ -46,6 +46,7 @@ import { diffRows, rowClass, type RowChange } from './row-diff';
 import { SourceView, type SourceFocus } from './source';
 import { isStormingSelection, stormingSelectionName } from './storming';
 import { usagesOf } from './usages';
+import { Act } from './shared/act';
 
 export type InspectorTab = 'structure' | 'states' | 'behavior' | 'events' | 'references' | 'source';
 
@@ -244,9 +245,9 @@ export function Inspector(props: InspectorProps) {
                             <div className="reveal">
                                 <span className="muted small">{tx.showIn}</span>
                                 {revealTargets(r).map((t) => (
-                                    <button key={t} onClick={() => props.onReveal(t, selected)}>
+                                    <Act key={t} kind="see" icon={<Eye size={12} aria-hidden />} onClick={() => props.onReveal(t, selected)}>
                                         {tx.reveal[t]}
-                                    </button>
+                                    </Act>
                                 ))}
                             </div>
                         )}
@@ -621,7 +622,9 @@ function ContextBody({ model, ctx, onSelect, onFocus }: { model: DomainModel; ct
         <>
             {!supporting.has(ctx) && (
                 <p>
-                    <button onClick={() => onFocus(ctx)}>{tx.focusContext}</button>
+                    <Act kind="see" icon={<Eye size={12} aria-hidden />} onClick={() => onFocus(ctx)}>
+                        {tx.focusContext}
+                    </Act>
                 </p>
             )}
             <Dependencies title={tx.dependencies} groups={groups.filter((g) => g.from === ctx)} other={(g) => g.to} onSelect={onSelect} />

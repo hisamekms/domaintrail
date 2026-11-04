@@ -13,6 +13,7 @@ import { Check, Flag, LoaderCircle, Pencil, Send, Sparkles, X } from 'lucide-rea
 import { briefLines, commandId } from '@domaintrail/collaboration';
 import type { SendRequestBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { useLang } from '../i18n';
+import { Act } from '../shared/act';
 import type { Lang } from '@domaintrail/visualization';
 import { isAiAuthor, type AiSlot } from './ai';
 import { sessionApi } from './api';
@@ -120,9 +121,9 @@ export function InterviewPanel(props: { session: SessionData; live: boolean }) {
                     <Sparkles size={13} aria-hidden className="chat-slash-icon" />
                     <span className="chat-interview-name">{tx.chat.slash.commands[commandId(rejected.command)]}</span>
                     <span className="chat-interview-state muted">{t.rejected}</span>
-                    <button className="chat-small" onClick={() => setClosed(rejected.id)}>
+                    <Act kind="open" onClick={() => setClosed(rejected.id)}>
                         {t.close}
-                    </button>
+                    </Act>
                 </div>
                 {rejected.note && (
                     <div className="chat-brief">
@@ -150,9 +151,9 @@ export function InterviewPanel(props: { session: SessionData; live: boolean }) {
         }
     };
     const stop = (
-        <button className="chat-small" disabled={busy} onClick={() => void act(() => sessionApi.stopInterview(interview.id))}>
-            <X size={12} aria-hidden /> {t.stop}
-        </button>
+        <Act kind="stop" icon={<X size={12} aria-hidden />} disabled={busy} onClick={() => void act(() => sessionApi.stopInterview(interview.id))}>
+            {t.stop}
+        </Act>
     );
     const brief = interview.state === 'Briefed' ? interview.brief : undefined;
     return (
@@ -222,9 +223,9 @@ export function InterviewPanel(props: { session: SessionData; live: boolean }) {
                                 aria-label={t.note}
                                 onChange={(e) => setRejecting(e.target.value)}
                             />
-                            <button type="submit" className="chat-small danger" disabled={busy}>
+                            <Act kind="danger" type="submit" disabled={busy}>
                                 {t.reject}
-                            </button>
+                            </Act>
                             <button type="button" className="icon-button" onClick={() => setRejecting(undefined)} aria-label={t.cancel}>
                                 <X size={13} aria-hidden />
                             </button>
@@ -233,36 +234,38 @@ export function InterviewPanel(props: { session: SessionData; live: boolean }) {
                         <div className="chat-brief-actions">
                             {editing === undefined ? (
                                 <>
-                                    <button
-                                        className="chat-small primary"
+                                    <Act
+                                        kind="decide"
+                                        icon={<Check size={12} aria-hidden />}
                                         disabled={busy}
                                         onClick={() => void act(() => sessionApi.confirmInterview(interview.id))}
                                     >
-                                        <Check size={12} aria-hidden /> {role === 'approve' ? t.approve : t.confirm}
-                                    </button>
-                                    <button className="chat-small" disabled={busy} onClick={() => setEditing(brief.text)}>
-                                        <Pencil size={12} aria-hidden /> {role === 'approve' ? t.editApprove : t.editConfirm}
-                                    </button>
+                                        {role === 'approve' ? t.approve : t.confirm}
+                                    </Act>
+                                    <Act kind="open" icon={<Pencil size={12} aria-hidden />} disabled={busy} onClick={() => setEditing(brief.text)}>
+                                        {role === 'approve' ? t.editApprove : t.editConfirm}
+                                    </Act>
                                     {role === 'approve' ? (
-                                        <button className="chat-small ghost" disabled={busy} onClick={() => setRejecting('')}>
+                                        <Act kind="danger" disabled={busy} onClick={() => setRejecting('')}>
                                             {t.reject}
-                                        </button>
+                                        </Act>
                                     ) : (
                                         stop
                                     )}
                                 </>
                             ) : (
                                 <>
-                                    <button
-                                        className="chat-small primary"
+                                    <Act
+                                        kind="decide"
+                                        icon={<Check size={12} aria-hidden />}
                                         disabled={busy || editing.trim() === ''}
                                         onClick={() => void act(() => sessionApi.confirmInterview(interview.id, editing))}
                                     >
-                                        <Check size={12} aria-hidden /> {role === 'approve' ? t.approve : t.confirm}
-                                    </button>
-                                    <button className="chat-small" disabled={busy} onClick={() => setEditing(undefined)}>
+                                        {role === 'approve' ? t.approve : t.confirm}
+                                    </Act>
+                                    <Act kind="stop" disabled={busy} onClick={() => setEditing(undefined)}>
                                         {t.cancel}
-                                    </button>
+                                    </Act>
                                 </>
                             )}
                         </div>
@@ -341,23 +344,23 @@ export function ChoiceList(props: ChoiceListProps): ReactElement {
                       </label>
                   ))
                 : choices.map((c, i) => (
-                      <button key={i} type="button" className="interview-choice" disabled={busy} onClick={() => props.onSend(c)}>
+                      <Act key={i} kind="send" disabled={busy} onClick={() => props.onSend(c)}>
                           <ChoiceText text={c} />
-                      </button>
+                      </Act>
                   ))}
             {multiple && (
-                <button
-                    type="button"
-                    className="interview-choice send"
+                <Act
+                    kind="send"
+                    icon={<Send size={12} aria-hidden />}
                     disabled={busy || picked.length === 0}
                     onClick={() => props.onSend(joinChoices(picked, props.lang))}
                 >
-                    <Send size={12} aria-hidden /> {tx.send}
-                </button>
+                    {tx.send}
+                </Act>
             )}
-            <button type="button" className="interview-choice other" disabled={busy} onClick={props.onOther}>
+            <Act kind="open" disabled={busy} onClick={props.onOther}>
                 {tx.other}
-            </button>
+            </Act>
         </div>
     );
 }

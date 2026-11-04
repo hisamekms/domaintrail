@@ -31,6 +31,7 @@ import { ReplyText } from './reply';
 import { runningLabel, turnState } from './status';
 import { CancelButton, RowActions, StateLabel, StatusSlot } from './status-slot';
 import { elapsed, oneLine, revisionLookup, type AgentMessage, type ReplyView, type RequestProgress } from './stream';
+import { Act } from '../shared/act';
 
 type RunJson = CardRun['run'];
 
@@ -533,9 +534,9 @@ export function ChangedElements({ kind, base, result, about }: { kind: 'run' | '
                 <ChangeChip key={changeKey(c)} change={c} />
             ))}
             {shown.more > 0 && <span className="changed-elements-more">{h.more(shown.more)}</span>}
-            <button type="button" className="changed-elements-see" onClick={() => revisions.showChanges({ base, result, about })}>
+            <Act kind="open" className="changed-elements-see" aria-haspopup="dialog" onClick={() => revisions.showChanges({ base, result, about })}>
                 {tx.chat.showChanges}
-            </button>
+            </Act>
         </p>
     );
 }
@@ -667,14 +668,15 @@ function AnswerForm({ run, reply }: { run: RunJson; reply: ReplyView }) {
                     })}
                 </ol>
                 <div className="reply-actions">
-                    <button
+                    <Act
+                        kind="send"
                         type="submit"
-                        className="chat-small primary"
+                        icon={<Bot size={12} aria-hidden />}
                         disabled={!answer || actions.busy}
                         data-tooltip={answer ? undefined : tx.chat.answerNeeded}
                     >
-                        <Bot size={12} aria-hidden /> {tx.chat.answerAndRerun}
-                    </button>
+                        {tx.chat.answerAndRerun}
+                    </Act>
                 </div>
             </form>
             <OtherDialog
@@ -769,9 +771,14 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
                                 {text}
                                 <div className="reply-row-actions">
                                     <span className="reply-row-start">
-                                        <button type="button" className="chat-small ghost" disabled={actions.busy} onClick={() => void actions.approve(run, i)}>
-                                            <Check size={12} aria-hidden /> {tx.chat.approve}
-                                        </button>
+                                        <Act
+                                            kind="decide"
+                                            icon={<Check size={12} aria-hidden />}
+                                            disabled={actions.busy}
+                                            onClick={() => void actions.approve(run, i)}
+                                        >
+                                            {tx.chat.approve}
+                                        </Act>
                                     </span>
                                     {keptVote}
                                 </div>
@@ -808,15 +815,15 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
                                             <li key={alt.id} className="reply-card stack">
                                                 {label}
                                                 <div className="reply-row-actions">
-                                                    <button
-                                                        type="button"
-                                                        className="chat-small ghost"
+                                                    <Act
+                                                        kind="send"
+                                                        icon={<Bot size={12} aria-hidden />}
                                                         disabled={actions.busy}
                                                         data-tooltip={tx.chat.pickAlternative}
                                                         onClick={() => void actions.pick(run, i, alt.id, tx.chat.alternativeNote(a.text, alt.label))}
                                                     >
-                                                        <Bot size={12} aria-hidden /> {tx.chat.resend}
-                                                    </button>
+                                                        {tx.chat.resend}
+                                                    </Act>
                                                     {vote}
                                                 </div>
                                             </li>

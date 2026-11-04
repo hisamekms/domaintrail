@@ -3,7 +3,7 @@
 `dt open` watches the workspace, re-validates on every save and pushes updates to the browser over WebSocket. It
 serves the page at <http://127.0.0.1:4321> (`--port`, `--host`, or `open.port` / `open.host` in `domaintrail.jsonc`)
 and runs until Ctrl+C. [Getting started](getting-started.md#watch-it-in-the-live-view) shows what to look at first;
-this page describes every pane.
+this page describes every pane. How its buttons and spacing are built is in [UI rules](ui-rules.md).
 
 The app bar runs across the top; under it the screen has three columns: the left column — the navigator (the lists)
 on top and the detail of the selected item (the inspector) under it — the canvas, and, in a session, the chat at the

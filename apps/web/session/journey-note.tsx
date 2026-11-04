@@ -2,10 +2,11 @@
 // step's command (into the composer, as the guide card's command buttons), the place it shows (the source storming),
 // and 「🧭 旅程を開く」 (the journeys panel). The note's text is the message's body, shown as any AI reply.
 import type { ReactElement } from 'react';
-import { Compass, CornerDownLeft, Eye } from 'lucide-react';
+import { Compass, Eye } from 'lucide-react';
 import { suggestedCommandId } from '@domaintrail/collaboration';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { useT } from '../i18n';
+import { Act } from '../shared/act';
 import { useChat } from './chat-context';
 import { useTargetNaming } from './naming';
 import { commandButton } from './next-steps';
@@ -27,30 +28,27 @@ export function JourneyNoteActions({ request }: { readonly request: RequestJson 
     return (
         <p className="guide-actions journey-note-actions">
             {id && button !== 'hidden' && (
-                <button
-                    type="button"
-                    className="chat-small primary guide-command"
+                <Act
+                    kind="insert"
                     disabled={button === 'disabled'}
                     data-tooltip={tx.chat.candidates.putCommand}
                     aria-label={`/${id}: ${tx.chat.candidates.putCommand}`}
                     onClick={() => putCommand(id)}
                 >
-                    <CornerDownLeft size={12} aria-hidden />/{id}
-                </button>
+                    /{id}
+                </Act>
             )}
             {note.targets.map((p) => {
                 const name = targetLabel(p, naming, all).name;
                 return (
-                    <button key={targetKey(p)} type="button" className="chat-small guide-go" aria-label={t.goTo(name)} onClick={() => onNavigate(p)}>
-                        <Eye size={12} aria-hidden />
+                    <Act key={targetKey(p)} kind="see" icon={<Eye size={12} aria-hidden />} aria-label={t.goTo(name)} onClick={() => onNavigate(p)}>
                         <span className="guide-go-name">{name}</span>
-                    </button>
+                    </Act>
                 );
             })}
-            <button type="button" className="chat-small guide-go" onClick={() => journeys.setOpen(true)}>
-                <Compass size={12} aria-hidden />
+            <Act kind="open" icon={<Compass size={12} aria-hidden />} onClick={() => journeys.setOpen(true)}>
                 {t.openJourneys}
-            </button>
+            </Act>
         </p>
     );
 }

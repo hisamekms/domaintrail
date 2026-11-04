@@ -142,6 +142,7 @@ import type { GuideWorkspace, JourneyAct } from '@domaintrail/collaboration';
 import { JourneyChip } from './journey-panel';
 import { journeyOverview } from './journey-view';
 import { latestGuide } from './guide-view';
+import { Act } from '../shared/act';
 
 type RequestJson = SessionData['state']['requests'][number];
 /** A unit to open and reveal in AI の作業 (the header status clicked); `n` tells a click on the same unit again apart. */
@@ -610,9 +611,9 @@ export function SessionChat(props: {
                     <p className="session-note chat-notice collab-ended">
                         {tx.closed}
                         {summary && (
-                            <button className="chat-small" onClick={() => setSummaryOpen(true)}>
+                            <Act kind="open" aria-haspopup="dialog" onClick={() => setSummaryOpen(true)}>
                                 {tx.collab.showSummary}
-                            </button>
+                            </Act>
                         )}
                     </p>
                 )}
@@ -1124,9 +1125,9 @@ function AiPendingCard({ request, givenUp }: { request: string; givenUp: boolean
                         <p className="chat-ai-given-up">
                             {tx.chat.ai.givenUp}
                             {control && (
-                                <button type="button" className="chat-small ghost" disabled={actions.busy} onClick={() => void actions.retryAnswer(request)}>
+                                <Act kind="send" disabled={actions.busy} onClick={() => void actions.retryAnswer(request)}>
                                     {tx.chat.ai.retry}
-                                </button>
+                                </Act>
                             )}
                         </p>
                     )}
@@ -1266,9 +1267,9 @@ function MessageRow({
                     <p className="chat-ai-given-up">
                         {tx.chat.ai.givenUp}
                         {control && (
-                            <button type="button" className="chat-small ghost" disabled={actions.busy} onClick={() => void actions.retryAnswer(r.id)}>
+                            <Act kind="send" disabled={actions.busy} onClick={() => void actions.retryAnswer(r.id)}>
                                 {tx.chat.ai.retry}
-                            </button>
+                            </Act>
                         )}
                     </p>
                 )}
@@ -1451,9 +1452,9 @@ function SelectionBar() {
     return (
         <div className="chat-selection-bar" role="toolbar" aria-label={tx.chat.selected(n)}>
             <span className="chat-selection-count">{tx.chat.selected(n)}</span>
-            <button className="chat-small primary" disabled={n === 0 || actions.busy} onClick={() => void send()}>
-                <Bot size={12} aria-hidden /> {tx.chat.applySelected}
-            </button>
+            <Act kind="send" icon={<Bot size={12} aria-hidden />} disabled={n === 0 || actions.busy} onClick={() => void send()}>
+                {tx.chat.applySelected}
+            </Act>
             <button className="icon-button" onClick={() => selection.clear()} aria-label={tx.chat.clearSelection} data-tooltip={tx.chat.clearSelection}>
                 <X size={14} aria-hidden />
             </button>
@@ -1482,9 +1483,9 @@ function ProposalsBar() {
     return (
         <div className="chat-selection-bar" role="toolbar" aria-label={t.selected(n)}>
             <span className="chat-selection-count">{t.selected(n)}</span>
-            <button className="chat-small primary" disabled={n === 0 || actions.busy} onClick={() => void approve()}>
-                <Check size={12} aria-hidden /> {t.approveSelected(n)}
-            </button>
+            <Act kind="decide" icon={<Check size={12} aria-hidden />} disabled={n === 0 || actions.busy} onClick={() => void approve()}>
+                {t.approveSelected(n)}
+            </Act>
             <button className="icon-button" onClick={() => proposalPicks.clear()} aria-label={tx.chat.clearSelection} data-tooltip={tx.chat.clearSelection}>
                 <X size={14} aria-hidden />
             </button>
@@ -1501,9 +1502,9 @@ function UndoBar() {
         <div className="chat-undo" role="status">
             <span>{tx.chat.appliedAs}</span>
             {queued && (
-                <button className="chat-small" onClick={() => actions.undoNow()}>
+                <Act kind="stop" onClick={() => actions.undoNow()}>
                     {tx.chat.undo}
-                </button>
+                </Act>
             )}
             <button className="icon-button" onClick={() => actions.dismissUndo()} aria-label={tx.restoreFlow.close}>
                 <X size={13} aria-hidden />
@@ -1694,9 +1695,9 @@ function HistoryUnit({ unit, mark, open, onToggle }: { unit: ChangeUnit; mark: R
                                 unit={unit}
                                 compact
                                 actions={
-                                    <button className="chat-small" onClick={() => jump(`card:${unit.key}`)}>
-                                        <MessagesSquare size={12} aria-hidden /> {h.showInChat}
-                                    </button>
+                                    <Act kind="see" icon={<MessagesSquare size={12} aria-hidden />} onClick={() => jump(`card:${unit.key}`)}>
+                                        {h.showInChat}
+                                    </Act>
                                 }
                             />
                         </div>

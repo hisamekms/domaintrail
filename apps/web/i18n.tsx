@@ -893,6 +893,7 @@ const ja = {
                 // an earlier step not done: a judgment nobody marked yet
                 unconfirmed: '未確認',
                 mark: '済みにする',
+                markedShort: '済み',
                 unmark: '済みを外す',
                 marked: '人が済みにした',
                 rows: { aggregates: '集約', commands: 'コマンド', invariants: '不変条件', shared: '共有' },
@@ -1937,6 +1938,7 @@ const en: Messages = {
                 done: 'Done',
                 unconfirmed: 'Not confirmed',
                 mark: 'Mark done',
+                markedShort: 'Done',
                 unmark: 'Unmark',
                 marked: 'Marked done by a person',
                 rows: { aggregates: 'Aggregates', commands: 'Commands', invariants: 'Invariants', shared: 'Shared' },
