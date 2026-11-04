@@ -147,6 +147,21 @@ export interface Arbitraries {
     readonly ProposalApproved: fc.Arbitrary<Collaboration.ProposalApproved>;
     readonly ProposalRejected: fc.Arbitrary<Collaboration.ProposalRejected>;
     readonly ProposalWithdrawn: fc.Arbitrary<Collaboration.ProposalWithdrawn>;
+    readonly SessionRecordId: fc.Arbitrary<Collaboration.SessionRecordId>;
+    readonly JourneyRequestId: fc.Arbitrary<Collaboration.JourneyRequestId>;
+    readonly JourneyLabel: fc.Arbitrary<Collaboration.JourneyLabel>;
+    readonly RecordedJourney: fc.Arbitrary<Collaboration.RecordedJourney>;
+    readonly JourneyStatus: fc.Arbitrary<Collaboration.JourneyStatus>;
+    readonly RecordedMark: fc.Arbitrary<Collaboration.RecordedMark>;
+    readonly RequestedJourneyAct: fc.Arbitrary<Collaboration.RequestedJourneyAct>;
+    readonly JourneyRequestOutcome: fc.Arbitrary<Collaboration.JourneyRequestOutcome>;
+    readonly JourneyFileChangeKind: fc.Arbitrary<Collaboration.JourneyFileChangeKind>;
+    readonly JourneyFileChange: fc.Arbitrary<Collaboration.JourneyFileChange>;
+    readonly RecordFact: fc.Arbitrary<Collaboration.RecordFact>;
+    readonly WrittenSessionRecord: fc.Arbitrary<Collaboration.WrittenSessionRecord>;
+    readonly SessionRecord: fc.Arbitrary<Collaboration.SessionRecord>;
+    readonly RecordWritten: fc.Arbitrary<Collaboration.RecordWritten>;
+    readonly RecordRevised: fc.Arbitrary<Collaboration.RecordRevised>;
     readonly RequestId: fc.Arbitrary<Collaboration.RequestId>;
     readonly PendingRequest: fc.Arbitrary<Collaboration.PendingRequest>;
     readonly ReplyTarget: fc.Arbitrary<Collaboration.ReplyTarget>;
@@ -259,6 +274,10 @@ export interface Examples {
         readonly states?: { readonly Open?: readonly Collaboration.OpenChangeProposal[]; readonly Approved?: readonly Collaboration.ApprovedChangeProposal[]; readonly Rejected?: readonly Collaboration.RejectedChangeProposal[]; readonly Withdrawn?: readonly Collaboration.WithdrawnChangeProposal[] };
         readonly commands?: { readonly propose?: readonly Parameters<Collaboration.ChangeProposalCommands['propose']>[]; readonly approve?: readonly Parameters<Collaboration.ChangeProposalCommands['approve']>[]; readonly reject?: readonly Parameters<Collaboration.ChangeProposalCommands['reject']>[]; readonly withdraw?: readonly Parameters<Collaboration.ChangeProposalCommands['withdraw']>[] };
     };
+    readonly SessionRecord?: {
+        readonly states?: { readonly Written?: readonly Collaboration.WrittenSessionRecord[] };
+        readonly commands?: { readonly write?: readonly Parameters<Collaboration.SessionRecordCommands['write']>[]; readonly revise?: readonly Parameters<Collaboration.SessionRecordCommands['revise']>[] };
+    };
     readonly Request?: {
         readonly states?: { readonly Sent?: readonly Collaboration.SentRequest[]; readonly Dismissed?: readonly Collaboration.DismissedRequest[] };
         readonly commands?: { readonly send?: readonly Parameters<Collaboration.RequestCommands['send']>[]; readonly requestRevert?: readonly Parameters<Collaboration.RequestCommands['requestRevert']>[]; readonly answer?: readonly Parameters<Collaboration.RequestCommands['answer']>[] };
@@ -291,13 +310,14 @@ export interface Options extends Generation {
 
 /** What `contract` tests: the constructors of domain primitives and the commands of aggregates, each optional. */
 export interface Implementation {
-    readonly make?: { readonly AgentRunId?: Collaboration.MakeAgentRunId; readonly ReplyKey?: Collaboration.MakeReplyKey; readonly AssumptionApprovalId?: Collaboration.MakeAssumptionApprovalId; readonly SlashCommandId?: Collaboration.MakeSlashCommandId; readonly CandidateLabel?: Collaboration.MakeCandidateLabel; readonly CandidateIndex?: Collaboration.MakeCandidateIndex; readonly Text?: Collaboration.MakeText; readonly LineNumber?: Collaboration.MakeLineNumber; readonly ColumnNumber?: Collaboration.MakeColumnNumber; readonly Tally?: Collaboration.MakeTally; readonly ContentHash?: Collaboration.MakeContentHash; readonly WorkspacePath?: Collaboration.MakeWorkspacePath; readonly GuideStepKey?: Collaboration.MakeGuideStepKey; readonly GuideJourneyKey?: Collaboration.MakeGuideJourneyKey; readonly InterviewId?: Collaboration.MakeInterviewId; readonly BriefName?: Collaboration.MakeBriefName; readonly BriefLabel?: Collaboration.MakeBriefLabel; readonly BriefText?: Collaboration.MakeBriefText; readonly BriefField?: Collaboration.MakeBriefField; readonly RoleName?: Collaboration.MakeRoleName; readonly JourneyName?: Collaboration.MakeJourneyName; readonly ShortDescription?: Collaboration.MakeShortDescription; readonly AnswerChoice?: Collaboration.MakeAnswerChoice; readonly MarkId?: Collaboration.MakeMarkId; readonly Emoji?: Collaboration.MakeEmoji; readonly ChangeProposalId?: Collaboration.MakeChangeProposalId; readonly ProposalText?: Collaboration.MakeProposalText; readonly ProposalLabel?: Collaboration.MakeProposalLabel; readonly ProposalOptionIndex?: Collaboration.MakeProposalOptionIndex; readonly RequestId?: Collaboration.MakeRequestId; readonly RevisionId?: Collaboration.MakeRevisionId; readonly SessionId?: Collaboration.MakeSessionId; readonly ParticipantId?: Collaboration.MakeParticipantId; readonly DisplayName?: Collaboration.MakeDisplayName; readonly ElementName?: Collaboration.MakeElementName; readonly StormingName?: Collaboration.MakeStormingName; readonly StormingLocalName?: Collaboration.MakeStormingLocalName; readonly TimelineName?: Collaboration.MakeTimelineName; readonly StormingEventName?: Collaboration.MakeStormingEventName; readonly OccurrencePath?: Collaboration.MakeOccurrencePath; readonly TriageId?: Collaboration.MakeTriageId; readonly Confidence?: Collaboration.MakeConfidence; readonly Milliseconds?: Collaboration.MakeMilliseconds; readonly ContextName?: Collaboration.MakeContextName; readonly StageName?: Collaboration.MakeStageName; readonly CatalogQuery?: Collaboration.MakeCatalogQuery; readonly CatalogSection?: Collaboration.MakeCatalogSection };
+    readonly make?: { readonly AgentRunId?: Collaboration.MakeAgentRunId; readonly ReplyKey?: Collaboration.MakeReplyKey; readonly AssumptionApprovalId?: Collaboration.MakeAssumptionApprovalId; readonly SlashCommandId?: Collaboration.MakeSlashCommandId; readonly CandidateLabel?: Collaboration.MakeCandidateLabel; readonly CandidateIndex?: Collaboration.MakeCandidateIndex; readonly Text?: Collaboration.MakeText; readonly LineNumber?: Collaboration.MakeLineNumber; readonly ColumnNumber?: Collaboration.MakeColumnNumber; readonly Tally?: Collaboration.MakeTally; readonly ContentHash?: Collaboration.MakeContentHash; readonly WorkspacePath?: Collaboration.MakeWorkspacePath; readonly GuideStepKey?: Collaboration.MakeGuideStepKey; readonly GuideJourneyKey?: Collaboration.MakeGuideJourneyKey; readonly InterviewId?: Collaboration.MakeInterviewId; readonly BriefName?: Collaboration.MakeBriefName; readonly BriefLabel?: Collaboration.MakeBriefLabel; readonly BriefText?: Collaboration.MakeBriefText; readonly BriefField?: Collaboration.MakeBriefField; readonly RoleName?: Collaboration.MakeRoleName; readonly JourneyName?: Collaboration.MakeJourneyName; readonly ShortDescription?: Collaboration.MakeShortDescription; readonly AnswerChoice?: Collaboration.MakeAnswerChoice; readonly MarkId?: Collaboration.MakeMarkId; readonly Emoji?: Collaboration.MakeEmoji; readonly ChangeProposalId?: Collaboration.MakeChangeProposalId; readonly ProposalText?: Collaboration.MakeProposalText; readonly ProposalLabel?: Collaboration.MakeProposalLabel; readonly ProposalOptionIndex?: Collaboration.MakeProposalOptionIndex; readonly SessionRecordId?: Collaboration.MakeSessionRecordId; readonly JourneyRequestId?: Collaboration.MakeJourneyRequestId; readonly JourneyLabel?: Collaboration.MakeJourneyLabel; readonly RequestId?: Collaboration.MakeRequestId; readonly RevisionId?: Collaboration.MakeRevisionId; readonly SessionId?: Collaboration.MakeSessionId; readonly ParticipantId?: Collaboration.MakeParticipantId; readonly DisplayName?: Collaboration.MakeDisplayName; readonly ElementName?: Collaboration.MakeElementName; readonly StormingName?: Collaboration.MakeStormingName; readonly StormingLocalName?: Collaboration.MakeStormingLocalName; readonly TimelineName?: Collaboration.MakeTimelineName; readonly StormingEventName?: Collaboration.MakeStormingEventName; readonly OccurrencePath?: Collaboration.MakeOccurrencePath; readonly TriageId?: Collaboration.MakeTriageId; readonly Confidence?: Collaboration.MakeConfidence; readonly Milliseconds?: Collaboration.MakeMilliseconds; readonly ContextName?: Collaboration.MakeContextName; readonly StageName?: Collaboration.MakeStageName; readonly CatalogQuery?: Collaboration.MakeCatalogQuery; readonly CatalogSection?: Collaboration.MakeCatalogSection };
     readonly AgentRun?: Collaboration.AgentRunCommands;
     readonly AssumptionApproval?: Collaboration.AssumptionApprovalCommands;
     readonly SlashCommand?: Collaboration.SlashCommandCommands;
     readonly Interview?: Collaboration.InterviewCommands;
     readonly Mark?: Collaboration.MarkCommands;
     readonly ChangeProposal?: Collaboration.ChangeProposalCommands;
+    readonly SessionRecord?: Collaboration.SessionRecordCommands;
     readonly Request?: Collaboration.RequestCommands;
     readonly Revision?: Collaboration.RevisionCommands;
     readonly Session?: Collaboration.SessionCommands;
@@ -449,6 +469,21 @@ export function arbitraries(options: Options = {}): Arbitraries {
         ProposalApproved: () => given.ProposalApproved ?? testing.cast<Collaboration.ProposalApproved>(fc.record({ type: fc.constant('ProposalApproved' as const), proposalId: a.ChangeProposalId, approvedBy: a.ParticipantId, option: a.ProposalOptionIndex, editedHow: a.ProposalText, run: a.AgentRunId, approvedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'proposalId', 'approvedBy', 'run', 'approvedAt'] })),
         ProposalRejected: () => given.ProposalRejected ?? testing.cast<Collaboration.ProposalRejected>(fc.record({ type: fc.constant('ProposalRejected' as const), proposalId: a.ChangeProposalId, rejectedBy: a.ParticipantId, note: a.Text, rejectedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'proposalId', 'rejectedBy', 'rejectedAt'] })),
         ProposalWithdrawn: () => given.ProposalWithdrawn ?? testing.cast<Collaboration.ProposalWithdrawn>(fc.record({ type: fc.constant('ProposalWithdrawn' as const), proposalId: a.ChangeProposalId, withdrawnBy: a.ParticipantId, withdrawnAt: testing.cast<Date>(scalar.Timestamp) })),
+        SessionRecordId: () => testing.valid(given.SessionRecordId ?? testing.collide(testing.cast<Collaboration.SessionRecordId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkSessionRecordId(v).length === 0, 'Collaboration.SessionRecordId'),
+        JourneyRequestId: () => testing.valid(given.JourneyRequestId ?? testing.collide(testing.cast<Collaboration.JourneyRequestId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkJourneyRequestId(v).length === 0, 'Collaboration.JourneyRequestId'),
+        JourneyLabel: () => testing.valid(given.JourneyLabel ?? testing.collide(testing.cast<Collaboration.JourneyLabel>(testing.base('String', { minLength: 1, maxLength: 200 })), seed), (v) => Collaboration.checkJourneyLabel(v).length === 0, 'Collaboration.JourneyLabel'),
+        RecordedJourney: () => given.RecordedJourney ?? testing.cast<Collaboration.RecordedJourney>(fc.record({ journey: a.GuideJourneyKey, label: a.JourneyLabel })),
+        JourneyStatus: () => given.JourneyStatus ?? fc.constantFrom<Collaboration.JourneyStatus>('Active', 'Done', 'Archived'),
+        RecordedMark: () => given.RecordedMark ?? testing.cast<Collaboration.RecordedMark>(fc.record({ step: a.GuideStepKey, context: a.ContextName }, { requiredKeys: ['step'] })),
+        RequestedJourneyAct: () => given.RequestedJourneyAct ?? testing.cast<Collaboration.RequestedJourneyAct>(fc.oneof(fc.record({ kind: fc.constant('Choose' as const), journey: a.RecordedJourney }, { requiredKeys: ['kind'] }), fc.record({ kind: fc.constant('Goal' as const), journey: a.RecordedJourney, goal: a.GuideStepKey }), fc.record({ kind: fc.constant('State' as const), journey: a.RecordedJourney, state: a.JourneyStatus }), fc.record({ kind: fc.constant('Mark' as const), journey: a.RecordedJourney, mark: a.RecordedMark, done: testing.cast<boolean>(scalar.Bool) }))),
+        JourneyRequestOutcome: () => given.JourneyRequestOutcome ?? fc.constantFrom<Collaboration.JourneyRequestOutcome>('Approved', 'Denied', 'Withdrawn'),
+        JourneyFileChangeKind: () => given.JourneyFileChangeKind ?? fc.constantFrom<Collaboration.JourneyFileChangeKind>('Added', 'Removed', 'Goal', 'State', 'Marks', 'Brief'),
+        JourneyFileChange: () => given.JourneyFileChange ?? testing.cast<Collaboration.JourneyFileChange>(fc.record({ kind: a.JourneyFileChangeKind, journey: a.RecordedJourney, from: testing.cast<string>(scalar.String), to: testing.cast<string>(scalar.String) }, { requiredKeys: ['kind', 'journey'] })),
+        RecordFact: () => given.RecordFact ?? testing.cast<Collaboration.RecordFact>(fc.oneof(fc.record({ kind: fc.constant('GoalChanged' as const), journey: a.RecordedJourney, from: a.GuideStepKey, to: a.GuideStepKey, other: testing.cast<boolean>(scalar.Bool) }), fc.record({ kind: fc.constant('MarksChanged' as const), journey: a.RecordedJourney, done: testing.cast<boolean>(scalar.Bool), marks: testing.many(a.RecordedMark, 1, 40), other: testing.cast<boolean>(scalar.Bool) }), fc.record({ kind: fc.constant('StateChanged' as const), journey: a.RecordedJourney, state: a.JourneyStatus }), fc.record({ kind: fc.constant('CurrentChosen' as const), journey: a.RecordedJourney }), fc.record({ kind: fc.constant('JourneyRequested' as const), request: a.JourneyRequestId, act: a.RequestedJourneyAct, outcome: a.JourneyRequestOutcome, decidedBy: a.ParticipantId }, { requiredKeys: ['kind', 'request', 'act'] }), fc.record({ kind: fc.constant('InterviewStopped' as const), interview: a.InterviewId }), fc.record({ kind: fc.constant('BriefRejected' as const), interview: a.InterviewId, note: a.Text }, { requiredKeys: ['kind', 'interview'] }), fc.record({ kind: fc.constant('FileChangedOutside' as const), changes: testing.many(a.JourneyFileChange, 0, 10), more: a.Tally, unreadable: testing.cast<boolean>(scalar.Bool) }))),
+        WrittenSessionRecord: () => testing.withExamples(given.WrittenSessionRecord ?? testing.cast<Collaboration.WrittenSessionRecord>(fc.record({ state: fc.constant('Written' as const), id: a.SessionRecordId, session: a.SessionId, by: a.ParticipantId, fact: a.RecordFact, replyTo: a.RequestId, at: testing.cast<Date>(scalar.Timestamp), revisedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'fact', 'at'] })), options.examples?.SessionRecord?.states?.Written, () => [], 'Collaboration.WrittenSessionRecord'),
+        SessionRecord: () => given.SessionRecord ?? fc.oneof(a.WrittenSessionRecord),
+        RecordWritten: () => given.RecordWritten ?? testing.cast<Collaboration.RecordWritten>(fc.record({ type: fc.constant('RecordWritten' as const), recordId: a.SessionRecordId, session: a.SessionId, by: a.ParticipantId, fact: a.RecordFact, replyTo: a.RequestId, at: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'recordId', 'session', 'fact', 'at'] })),
+        RecordRevised: () => given.RecordRevised ?? testing.cast<Collaboration.RecordRevised>(fc.record({ type: fc.constant('RecordRevised' as const), recordId: a.SessionRecordId, fact: a.RecordFact, revisedAt: testing.cast<Date>(scalar.Timestamp) })),
         RequestId: () => testing.valid(given.RequestId ?? testing.collide(testing.cast<Collaboration.RequestId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkRequestId(v).length === 0, 'Collaboration.RequestId'),
         PendingRequest: () => given.PendingRequest ?? testing.cast<Collaboration.PendingRequest>(a.RequestId),
         ReplyTarget: () => given.ReplyTarget ?? testing.cast<Collaboration.ReplyTarget>(fc.oneof(fc.record({ kind: fc.constant('Run' as const), run: a.AgentRunId }), fc.record({ kind: fc.constant('Message' as const), request: a.RequestId }))),
@@ -799,6 +834,33 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 declared: [],
                 check: () => Collaboration.checkProposalOptionIndex,
                 make: impl.make.ProposalOptionIndex,
+            }, options) : []),
+            ...(impl.make.SessionRecordId ? testing.primitiveCases({
+                type: 'Collaboration.SessionRecordId',
+                base: 'UUID',
+                hints: {},
+                invariants: ['uuid'],
+                declared: [],
+                check: () => Collaboration.checkSessionRecordId,
+                make: impl.make.SessionRecordId,
+            }, options) : []),
+            ...(impl.make.JourneyRequestId ? testing.primitiveCases({
+                type: 'Collaboration.JourneyRequestId',
+                base: 'UUID',
+                hints: {},
+                invariants: ['uuid'],
+                declared: [],
+                check: () => Collaboration.checkJourneyRequestId,
+                make: impl.make.JourneyRequestId,
+            }, options) : []),
+            ...(impl.make.JourneyLabel ? testing.primitiveCases({
+                type: 'Collaboration.JourneyLabel',
+                base: 'String',
+                hints: { minLength: 1, maxLength: 200 },
+                invariants: ['valid'],
+                declared: [],
+                check: () => Collaboration.checkJourneyLabel,
+                make: impl.make.JourneyLabel,
             }, options) : []),
             ...(impl.make.RequestId ? testing.primitiveCases({
                 type: 'Collaboration.RequestId',
@@ -1351,6 +1413,32 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 counted: [],
             }, options),
         ]),
+        impl.SessionRecord && testing.suite('SessionRecord', [
+            ...testing.commandCases({
+                name: 'SessionRecord.write',
+                run: impl.SessionRecord.write,
+                input: () => fc.tuple(fc.record({ id: a.SessionRecordId, session: a.ActiveSession, by: a.ParticipantId, fact: a.RecordFact, replyTo: a.RequestId, at: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['id', 'session', 'fact', 'at'] })),
+                examples: options.examples?.SessionRecord?.commands?.write ?? [],
+                factory: true,
+                requires: [],
+                declaredRequires: [],
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'SessionRecord.revise',
+                run: impl.SessionRecord.revise,
+                input: () => fc.tuple(fc.oneof(a.WrittenSessionRecord), fc.record({ fact: a.RecordFact, revisedAt: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.SessionRecord?.commands?.revise ?? [],
+                factory: false,
+                requires: [],
+                declaredRequires: [],
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+        ]),
         impl.Request && testing.suite('Request', [
             ...testing.commandCases({
                 name: 'Request.send',
@@ -1383,7 +1471,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Request.answer',
                 run: impl.Request.answer,
-                input: () => fc.tuple(fc.record({ id: a.RequestId, session: a.ActiveSession, answers: a.RequestId, body: a.Text, sentAt: testing.cast<Date>(scalar.Timestamp), journeyNote: a.JourneyNote }, { requiredKeys: ['id', 'session', 'answers', 'body', 'sentAt'] })),
+                input: () => fc.tuple(fc.record({ id: a.RequestId, session: a.ActiveSession, answers: a.RequestId, body: a.Text, sentAt: testing.cast<Date>(scalar.Timestamp), journeyNote: a.JourneyNote }, { requiredKeys: ['id', 'session', 'body', 'sentAt'] })),
                 examples: options.examples?.Request?.commands?.answer ?? [],
                 factory: true,
                 requires: [],

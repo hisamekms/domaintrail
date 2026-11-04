@@ -417,6 +417,12 @@ describe('an interview a participant started', () => {
         expect(soFar.open.filter((o) => o.includes('interview'))).toEqual([]);
         const again = await createUnitOfWork(db).transaction((s) => s.interviews.listBySession(session));
         expect(again).toMatchObject([{ state: 'Rejected', note: '範囲が広すぎます' }]);
+        // a row for everyone at the end of the interview's thread: its last message
+        const state = value(await use.sessionState({ session }));
+        const last = state.requests.filter((r) => r.author === bobId).at(-1);
+        expect(state.records).toMatchObject([
+            { by: facilitatorId, fact: { kind: 'BriefRejected', interview: started.interview.id, note: '範囲が広すぎます' }, replyTo: last?.id },
+        ]);
         // ended: Bob's messages are triaged again, and another interview may start
         expect(value(await say(use, session, bob, '注文は取り消せる？')).interview).toBeUndefined();
         value(await start(use, session, carol));
@@ -432,6 +438,13 @@ describe('an interview a participant started', () => {
         });
         const second = value(await start(use, session, bob));
         expect(value(await use.stopInterview({ interview: second.interview.id, actor: bob }))).toMatchObject({ state: 'Stopped', stoppedBy: bobId });
+        // each stop a row at the end of its thread (here its opening message: no question yet)
+        expect(value(await use.sessionState({ session })).records).toMatchObject([
+            { by: facilitatorId, fact: { kind: 'InterviewStopped', interview: started.interview.id }, replyTo: started.request.id },
+            { by: bobId, fact: { kind: 'InterviewStopped', interview: second.interview.id }, replyTo: second.request.id },
+        ]);
+        // the session so far tells it with the interview, not twice
+        expect(value(await use.sessionSoFar({ session })).text).not.toContain('stopped it');
     });
 });
 

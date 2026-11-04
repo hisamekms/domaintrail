@@ -69,6 +69,15 @@ interface Words {
     readonly approvedRevised: (by: string, changed: string | undefined) => string;
     readonly here: (step: string) => string;
     readonly next: NextWords;
+    readonly completed: CompletedWords;
+}
+
+/** The note after a journey is marked done (完了にする): what was decided, and the next step. */
+interface CompletedWords {
+    readonly done: (label: string) => string;
+    readonly toModeling: string;
+    readonly recap: string;
+    readonly others: string;
 }
 
 /** The next step of each place, as a sentence. */
@@ -187,6 +196,12 @@ const JA: Words = {
         reachedRecap: 'ゴールに着いています。ここまでをまとめましょう。',
         reached: 'ゴールに着いています。',
     },
+    completed: {
+        done: (label) => `「${label}」を完了にしました。`,
+        toModeling: '次はこのストーミングからモデリングを始めましょう。',
+        recap: '次はここまでをまとめましょう。',
+        others: '次のジャーニーを選びましょう。',
+    },
 };
 
 const EN: Words = {
@@ -270,9 +285,21 @@ const EN: Words = {
         reachedRecap: 'The goal is reached. Recap what you have.',
         reached: 'The goal is reached.',
     },
+    completed: {
+        done: (label) => `“${label}” is complete.`,
+        toModeling: 'Next, start modeling from this storming.',
+        recap: 'Next, recap what you have.',
+        others: 'Choose another journey from the journeys.',
+    },
 };
 
 const wordsOf = (language: Lang): Words => (language === 'En' ? EN : JA);
+
+/** A step's, an ES level's or a modeling goal's name in a language (the key itself when it has none). */
+export const stepWord = (language: Lang, key: string): string => {
+    const w = wordsOf(language);
+    return (w.levels as Readonly<Record<string, string>>)[key] ?? w.steps[key] ?? key;
+};
 
 // ---- Line 1: what was decided ----
 
@@ -472,4 +499,25 @@ export function decidedOf(input: {
     const label = input.label ?? input.brief.label ?? input.brief.name;
     const level = now.level ?? 'BigPicture';
     return input.brief.isNew ? { kind: 'esCreated', label, level } : { kind: 'esAdded', label, level };
+}
+
+/**
+ * The note after a journey is marked done (完了にする), in the completion note's form: line 1 says it is complete,
+ * line 2 the next step — for an ES journey `/model:start` when its use is modeling, else `/es:recap` (the next-step
+ * table's goal reached); a modeling journey has no command, only ジャーニーを開く.
+ */
+export function completionNote(input: {
+    readonly journey: string;
+    readonly label: string;
+    readonly language: Lang;
+    /** The ES journey's use (absent: a modeling journey). */
+    readonly use?: 'align' | 'modeling';
+}): JourneyNoteText {
+    const w = wordsOf(input.language).completed;
+    const es = input.journey.startsWith('es:');
+    const command: Collaboration.SuggestedCommand | undefined = !es ? undefined : input.use === 'modeling' ? 'ModelStart' : 'EsRecap';
+    const next = !es ? w.others : command === 'ModelStart' ? w.toModeling : w.recap;
+    const key = Collaboration.makeGuideJourneyKey(input.journey);
+    if (!key.ok) throw new Error(`Not a journey key: ${input.journey}`);
+    return { body: `${w.done(input.label)}\n${next}`, note: { journey: key.value, ...(command && { command }), targets: [] } };
 }

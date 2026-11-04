@@ -10,7 +10,9 @@
 //   `/model:start`) started, their brief, confirmed or approved by the facilitator (with its run), rejected (with the
 //   note) or stopped; the other `/` commands started, their candidates, those applied (by whom, with the run) or the
 //   command stopped; restores; files changed outside the session (a
-//   snapshot whose content differs from the revision before it);
+//   snapshot whose content differs from the revision before it); the records of what people did on the journeys (a
+//   goal, marks, done, archived, the current journey, a request and its outcome) and of the journey file changed
+//   outside dt;
 // - what is open now: the AI's questions awaiting an answer, the proposals awaiting approval, a running interview or
 //   command, the messages waiting for the AI, the queue.
 //
@@ -29,6 +31,7 @@ import { briefLines, commandId } from './interviews.js';
 import { elementReference } from './proposals.js';
 import { slashCommandName } from './slash-commands.js';
 import { revertStatus } from './revert.js';
+import { recordText } from './records.js';
 
 /** The limits of the timeline: the newest entries in full, then one line each, the rest counted (configurable later). */
 export const TIMELINE_LIMITS = { full: 30, lines: 100 } as const;
@@ -50,6 +53,8 @@ export interface TimelineRecords {
     readonly interviews?: readonly Collaboration.Interview[];
     /** The candidate and answer commands of the `/` list (absent: none). */
     readonly slashCommands?: readonly Collaboration.SlashCommand[];
+    /** The records of what people did and of the journey file changed outside dt (absent: none). */
+    readonly records?: readonly Collaboration.SessionRecord[];
     /**
      * What a run changed in the model's words (element names, by run ID), when the caller measured it; a run without
      * one is told by the files its revisions differ by.
@@ -57,7 +62,7 @@ export interface TimelineRecords {
     readonly elementChanges?: ReadonlyMap<string, readonly string[]>;
 }
 
-export type TimelineEntryKind = 'message' | 'answer' | 'turn' | 'proposal' | 'interview' | 'command' | 'restore' | 'external';
+export type TimelineEntryKind = 'message' | 'answer' | 'turn' | 'proposal' | 'interview' | 'command' | 'restore' | 'external' | 'record';
 
 /** One entry of the timeline: its number (from 1, in time order), when, and its full and one-line texts. */
 export interface TimelineEntry {
@@ -298,6 +303,37 @@ function numbered(records: TimelineRecords): { readonly entries: TimelineEntry[]
                     return { full: line, line };
                 },
             });
+    }
+
+    // the records as the chat shows them (in English), but those the interviews tell; a request's outcome is an entry of its own, when it was decided,
+    // so that a warm agent given only the newer entries hears it
+    for (const r of records.records ?? []) {
+        const f = r.fact;
+        // an interview stopped or its brief rejected is told with the interview already
+        if (f.kind === 'InterviewStopped' || f.kind === 'BriefRejected') continue;
+        const asked = f.kind === 'JourneyRequested' ? { ...r, fact: { kind: f.kind, request: f.request, act: f.act } } : r;
+        drafts.push({
+            at: r.at,
+            kind: 'record',
+            key: `record:${r.id}`,
+            render: () => {
+                const line = recordText(asked, 'En', nameOf);
+                return { full: line, line: cut(line, LINE_CHARS) };
+            },
+        });
+        if (f.kind === 'JourneyRequested' && f.outcome !== undefined && f.decidedBy !== undefined) {
+            const outcome = f.outcome === 'Approved' ? 'approved' : f.outcome === 'Denied' ? 'denied' : 'withdrew';
+            const by = r.by === undefined ? 'a participant' : nameOf(r.by);
+            drafts.push({
+                at: r.revisedAt ?? r.at,
+                kind: 'record',
+                key: `record-decided:${r.id}`,
+                render: (ref) => {
+                    const line = `${nameOf(f.decidedBy ?? '')} ${outcome} ${f.outcome === 'Withdrawn' ? 'their' : `${by}'s`} request (${ref(`record:${r.id}`) ?? 'an earlier request'})`;
+                    return { full: line, line };
+                },
+            });
+        }
     }
 
     let previous: Collaboration.Revision | undefined;

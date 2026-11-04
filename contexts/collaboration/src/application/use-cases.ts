@@ -24,6 +24,7 @@ import { publish, queueRequests, type NoRequests } from './queueing.js';
 import { createConversation, invalidTargets, overrideAnsweredTriages, sendIn, type ConversationUseCases } from './conversation.js';
 import { createInterviews, noteStormingRun, type InterviewUseCases } from './interviews.js';
 import { createJourneys, type JourneyUseCases } from './journeys.js';
+import { createRecords, type RecordUseCases } from './records.js';
 import { createSlashCommands, type SlashCommandUseCases } from './slash-commands.js';
 import { notAllowed, notFound, type InvalidTarget, type NotAllowed, type NotAParticipant, type NotFound } from './errors.js';
 import { restorableRevision, storeVerifications } from './verifications.js';
@@ -176,6 +177,8 @@ export interface SessionState {
     readonly interviews: readonly Collaboration.Interview[];
     /** The candidate and answer commands of the `/` list, in the order they were started. */
     readonly slashCommands: readonly Collaboration.SlashCommand[];
+    /** The records of what people did (and of the journey file changed outside dt), in the order they were written. */
+    readonly records: readonly Collaboration.SessionRecord[];
 }
 
 /** What setting a mark changed: the mark placed (none when it was there already or taken off) and the marks removed. */
@@ -249,7 +252,7 @@ export type RestoreError =
     | Collaboration.ExternalChangesSinceSnapshot
     | ManualRecoveryNeeded;
 
-export interface CollaborationUseCases extends ConversationUseCases, InterviewUseCases, SlashCommandUseCases, JourneyUseCases {
+export interface CollaborationUseCases extends ConversationUseCases, InterviewUseCases, SlashCommandUseCases, JourneyUseCases, RecordUseCases {
     /**
      * Opens a session with its facilitator, in `mode` (Collab when not given), and records the workspace as its first
      * revision (SessionStart). `openSession` applies the rules between the modes (decision 13) on top of it.
@@ -805,7 +808,10 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
         return found.map((p, i) => ({ run: p, changes: changes[i] }));
     };
 
-    const useCases: Omit<CollaborationUseCases, keyof ConversationUseCases | keyof InterviewUseCases | keyof SlashCommandUseCases | keyof JourneyUseCases> = {
+    const useCases: Omit<
+        CollaborationUseCases,
+        keyof ConversationUseCases | keyof InterviewUseCases | keyof SlashCommandUseCases | keyof JourneyUseCases | keyof RecordUseCases
+    > = {
         async startSession({ facilitator, name, mode = 'Collab' }) {
             const captured = await capture(deps);
             if (!captured.ok) return captured;
@@ -1615,6 +1621,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     proposals: stores.proposals.listBySession(session),
                     interviews: stores.interviews.listBySession(session),
                     slashCommands: stores.slashCommands.listBySession(session),
+                    records: stores.records.listBySession(session),
                 });
             });
         },
@@ -1646,5 +1653,6 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
         ...createInterviews(deps),
         ...createJourneys(deps),
         ...createSlashCommands(deps),
+        ...createRecords(deps),
     };
 }

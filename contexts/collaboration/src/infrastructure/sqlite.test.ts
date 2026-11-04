@@ -118,6 +118,7 @@ describe('schema and transactions', () => {
             'restore_operations',
             'revisions',
             'run_requests',
+            'session_records',
             'sessions',
             'sign_ins',
             'slash_commands',

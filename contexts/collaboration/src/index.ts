@@ -292,6 +292,7 @@ export {
 export {
     BRIEF_FIELDS,
     changedBriefFields,
+    completionNote,
     decidedOf,
     journeyNext,
     journeyNote,
@@ -300,7 +301,22 @@ export {
     type JourneyNext,
     type JourneyNoteInput,
     type JourneyNoteText,
+    stepWord,
 } from './domain/journey-note.js';
+// the chat's records of what people did, and of the journey file changed outside dt: their facts and their text
+export {
+    actFact,
+    isOpenRequest,
+    journeyActOf,
+    journeyFileChanges,
+    MAX_FILE_CHANGES,
+    mergedMarks,
+    recordCommands,
+    recordedJourney,
+    recordText,
+    requestedAct,
+    type JourneyLabels,
+} from './domain/records.js';
 export { checkTemplates, TEMPLATE_CONTEXTS, TEMPLATE_LIMITS, type MessageTemplateConfig, type TemplateContext } from './domain/templates.js';
 // where the requester was looking when they sent a message
 export {
@@ -354,6 +370,7 @@ export {
     type TriageStepInput,
 } from './application/conversation.js';
 export { journeyFileMarks, journeyKeyOf, readJourneys, updateJourneys, type JourneyUseCases, type JourneyWriteError } from './application/journeys.js';
+export { type OpenJourneyRequest, type RecordUseCases, type RequestedAct } from './application/records.js';
 export { type SlashCommandJob, type SlashCommandStartedResult, type SlashCommandUseCases, type WrongCommandType } from './application/slash-commands.js';
 export { type InterviewJob, type InterviewStarted as InterviewStartedResult, type InterviewUseCases } from './application/interviews.js';
 export { actorOf, type Actor } from './application/actor.js';

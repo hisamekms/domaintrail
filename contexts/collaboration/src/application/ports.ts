@@ -88,6 +88,15 @@ export interface SlashCommandRepository {
     listBySession(session: SessionId): Collaboration.SlashCommand[];
 }
 
+/** The records of the sessions (the chat's small rows of what people did, and the journey file changed outside dt). */
+export interface RecordRepository {
+    load(id: Collaboration.SessionRecordId): Collaboration.SessionRecord | undefined;
+    /** Inserts or replaces it. */
+    save(record: Collaboration.SessionRecord): void;
+    /** The records of a session, in the order they were written. */
+    listBySession(session: SessionId): Collaboration.SessionRecord[];
+}
+
 /** The change proposals of the sessions. */
 export interface ProposalRepository {
     load(id: Collaboration.ChangeProposalId): Collaboration.ChangeProposal | undefined;
@@ -255,6 +264,7 @@ export interface Stores {
     readonly proposals: ProposalRepository;
     readonly interviews: InterviewRepository;
     readonly slashCommands: SlashCommandRepository;
+    readonly records: RecordRepository;
     readonly outbox: EventOutbox;
     readonly access: AccessStore;
     readonly operations: OperationLog;
