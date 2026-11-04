@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
+import { usePersistentState } from '../shared/layout';
 import type { View } from './navigation';
 
 /**
@@ -13,6 +14,20 @@ export const WORLDS: readonly World[] = ['model', 'storming'];
 export type ModelView = 'contextMap' | 'structure' | 'catalog';
 
 export const MODEL_VIEWS: readonly ModelView[] = ['contextMap', 'structure', 'catalog'];
+
+/** localStorage key of the view shown (its kind; the world is derived from it), remembered per browser. */
+export const VIEW_KEY = 'domaintrail.view';
+
+/** localStorage key of the domain model's view to return to from the storming world, remembered per browser. */
+export const MODEL_VIEW_KEY = 'domaintrail.modelView';
+
+const isModelView = (v: unknown): v is ModelView => MODEL_VIEWS.some((m) => m === v);
+
+/** The domain model's view a stored value names; anything else (nothing stored, an old value): the structure. */
+export const rememberedModelView = (stored: unknown): ModelView => (isModelView(stored) ? stored : 'structure');
+
+/** The view a stored value names; anything else (nothing stored, an old value): the structure. */
+export const rememberedView = (stored: unknown): View => ({ kind: stored === 'storming' ? 'storming' : rememberedModelView(stored) });
 
 export const worldOf = (view: View['kind']): World => (view === 'storming' ? 'storming' : 'model');
 
@@ -29,10 +44,12 @@ export interface Worlds {
 }
 
 export function useWorlds(view: View, setView: (v: View) => void): Worlds {
-    const [lastModelView, setLastModelView] = useState<ModelView>('structure');
+    const [stored, setLastModelView] = usePersistentState<ModelView>(MODEL_VIEW_KEY, 'structure');
+    const lastModelView = rememberedModelView(stored);
     useEffect(() => {
-        setLastModelView((last) => lastModelViewAfter(last, view.kind));
-    }, [view.kind]);
+        const next = lastModelViewAfter(lastModelView, view.kind);
+        if (next !== lastModelView) setLastModelView(next);
+    }, [view.kind, lastModelView, setLastModelView]);
     const world = worldOf(view.kind);
     const setWorld = useCallback(
         (w: World): void => {

@@ -21,7 +21,8 @@ and the canvas keeps what is at its center in place whenever its size changes (a
 It holds only what concerns the whole page. At the left, DomainTrail and the workspace's name (the folder of
 `domaintrail.jsonc`), then the world switch: **ドメインモデル** (the `.dt` model, seen through three views) and
 **イベントストーミング** (the `.dtes` stormings; it can be chosen with no storming yet, and then says how to start one).
-Switching worlds returns to the view, the storming and the conditions last used in each. At the right end: 問題 (the
+Switching worlds returns to the view, the storming and the conditions last used in each; the world and its view are
+remembered per browser, so a reload comes back to them. At the right end: 問題 (the
 number of errors, else warnings, as a badge; a click opens the problems in the left column's navigator, and closes it again), and in
 a session the collab menu, the AI's state and, in Solo, ⋯ (see below). On a narrow window the world switch shows its
 icons only, each named in its tooltip.
