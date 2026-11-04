@@ -13,7 +13,6 @@ import {
     Check,
     CircleX,
     Compass,
-    CornerDownLeft,
     Eye,
     FileText,
     Flag,
@@ -28,6 +27,7 @@ import {
 } from 'lucide-react';
 import { suggestedCommandId } from '@domaintrail/collaboration';
 import { useT } from '../i18n';
+import { Act, MarkToggle } from '../shared/act';
 import { GoalMenu } from './journey-panel';
 import { pageGuideMarks } from './journey-view';
 import { AI_NAME } from './ai';
@@ -174,22 +174,15 @@ export function GuideMapView({
                             <span className="guide-step-label">{label}</span>
                             {state && <span className="visually-hidden">{state}</span>}
                             {s.markable && marker && (
-                                <button
-                                    type="button"
-                                    className={`guide-mark${s.marked ? ' on' : ''}`}
-                                    aria-pressed={s.marked}
-                                    aria-label={`${label}: ${s.marked ? t.unmark : t.mark}`}
-                                    data-tooltip={s.marked ? t.unmark : t.mark}
-                                    onClick={() => toggle(s.key, !s.marked)}
-                                >
-                                    <Check size={10} aria-hidden />
-                                </button>
+                                <MarkToggle
+                                    on={s.marked}
+                                    text={s.marked ? t.markedShort : t.mark}
+                                    label={`${label}: ${s.marked ? t.unmark : t.mark}`}
+                                    tooltip={s.marked ? t.unmark : t.mark}
+                                    onToggle={() => toggle(s.key, !s.marked)}
+                                />
                             )}
-                            {s.markable && !marker && s.marked && (
-                                <span className="guide-mark on" role="img" aria-label={t.marked} data-tooltip={t.marked}>
-                                    <Check size={10} aria-hidden />
-                                </span>
-                            )}
+                            {s.markable && !marker && s.marked && <MarkToggle on text={t.markedShort} label={t.marked} tooltip={t.marked} readOnly />}
                         </li>
                     );
                 })}
@@ -237,17 +230,16 @@ export function GuideMapView({
             {setGoal && live && (
                 <p className="guide-actions">
                     {starts.map((id) => (
-                        <button
+                        <Act
                             key={id}
-                            type="button"
-                            className="chat-small primary guide-command"
+                            kind="insert"
                             disabled={commandButton(session.state, id) === 'disabled'}
                             data-tooltip={tx.chat.candidates.putCommand}
                             aria-label={`/${id}: ${tx.chat.candidates.putCommand}`}
                             onClick={() => putCommand(id)}
                         >
-                            <CornerDownLeft size={12} aria-hidden />/{id}
-                        </button>
+                            /{id}
+                        </Act>
                     ))}
                 </p>
             )}
@@ -276,17 +268,14 @@ export function GuideMapView({
                                 <td>{r.invariants}</td>
                                 <td>
                                     {marker && map.contextsAt !== undefined ? (
-                                        <button
-                                            type="button"
-                                            className={`guide-mark${r.state === 'Done' ? ' on' : ''}`}
-                                            aria-pressed={r.marked}
-                                            aria-label={`${r.context}: ${r.marked ? t.unmark : t.mark}`}
-                                            data-tooltip={r.marked ? t.unmark : r.state === 'Done' ? t.done : t.mark}
+                                        <MarkToggle
+                                            on={r.state === 'Done'}
+                                            text={r.state === 'Done' ? t.markedShort : t.mark}
+                                            label={`${r.context}: ${r.marked ? t.unmark : t.mark}`}
+                                            tooltip={r.marked ? t.unmark : r.state === 'Done' ? t.done : t.mark}
                                             disabled={r.state === 'Done' && !r.marked}
-                                            onClick={() => toggle(map.contextsAt ?? '', !r.marked, r.context)}
-                                        >
-                                            <Check size={10} aria-hidden />
-                                        </button>
+                                            onToggle={() => toggle(map.contextsAt ?? '', !r.marked, r.context)}
+                                        />
                                     ) : (
                                         <StepDot step={{ key: r.context, state: r.state, goal: false, after: false, markable: false, marked: r.marked }} />
                                     )}
@@ -320,10 +309,9 @@ function AtOnce({ findings }: { readonly findings: readonly GuideFindingJson[] }
                             <Icon size={13} aria-hidden className="guide-finding-icon" />
                             <span className="guide-finding-text">{text}</span>
                             {go && (
-                                <button type="button" className="chat-small guide-go" aria-label={`${text}: ${label}`} onClick={go}>
-                                    <Eye size={12} aria-hidden />
+                                <Act kind="see" icon={<Eye size={12} aria-hidden />} aria-label={`${text}: ${label}`} onClick={go}>
                                     {label}
-                                </button>
+                                </Act>
                             )}
                         </li>
                     );
@@ -345,9 +333,8 @@ function Advice({ command: c, live }: { readonly command: SlashCommandJson; read
             <p className="guide-thinking muted">
                 <LoaderCircle size={12} aria-hidden className="spin" /> {t.thinking}
                 {mine && (
-                    <button
-                        type="button"
-                        className="chat-small ghost"
+                    <Act
+                        kind="stop"
                         disabled={busy}
                         onClick={() => {
                             setBusy(true);
@@ -358,7 +345,7 @@ function Advice({ command: c, live }: { readonly command: SlashCommandJson; read
                         }}
                     >
                         {t.stop}
-                    </button>
+                    </Act>
                 )}
                 {error && <span className="chat-error"> {error}</span>}
             </p>
@@ -411,44 +398,41 @@ export function GuideAdvice({ next, live }: { readonly next: GuideAdviceJson; re
                             {(button !== 'hidden' || places.length > 0 || (s.ask !== undefined && live)) && (
                                 <span className="guide-actions">
                                     {id && button !== 'hidden' && (
-                                        <button
-                                            type="button"
-                                            className="chat-small primary guide-command"
+                                        <Act
+                                            kind="insert"
                                             disabled={button === 'disabled'}
                                             data-tooltip={tx.chat.candidates.putCommand}
                                             aria-label={`/${id}: ${tx.chat.candidates.putCommand}`}
                                             onClick={() => putCommand(id)}
                                         >
-                                            <CornerDownLeft size={12} aria-hidden />/{id}
-                                        </button>
+                                            /{id}
+                                        </Act>
                                     )}
                                     {places.map((p) => {
                                         const name = targetLabel(p, naming, all).name;
                                         return (
-                                            <button
+                                            <Act
                                                 key={targetKey(p)}
-                                                type="button"
-                                                className="chat-small guide-go"
+                                                kind="see"
+                                                icon={<Eye size={12} aria-hidden />}
                                                 aria-label={t.goTo(name)}
                                                 onClick={() => onNavigate(p)}
                                             >
-                                                <Eye size={12} aria-hidden />
                                                 <span className="guide-go-name">{name}</span>
-                                            </button>
+                                            </Act>
                                         );
                                     })}
                                     {s.ask !== undefined && live && (
-                                        <button
-                                            type="button"
-                                            className="chat-small guide-ask"
+                                        <Act
+                                            kind="send"
+                                            icon={asked.has(i) ? <Check size={12} aria-hidden /> : <NotebookPen size={12} aria-hidden />}
                                             disabled={asked.has(i)}
                                             data-tooltip={t.askHint}
                                             aria-label={`${t.ask}: ${s.ask}`}
                                             onClick={() => void ask(i, s.ask ?? '', places[0])}
                                         >
-                                            {asked.has(i) ? <Check size={12} aria-hidden /> : <NotebookPen size={12} aria-hidden />}
                                             {t.ask}
-                                        </button>
+                                        </Act>
                                     )}
                                 </span>
                             )}

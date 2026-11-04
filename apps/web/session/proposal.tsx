@@ -18,6 +18,7 @@ import { chosenIndex, editableHow, existingTargets, headHow, shownOptionHow, sho
 import { ReplyText } from './reply';
 import { StatusSlot } from './status-slot';
 import { targetKey, type ModelTarget } from './targets';
+import { Act } from '../shared/act';
 
 /** The AI's mark, as on its turns. */
 export const AiAvatar = () => (
@@ -192,12 +193,12 @@ export function ProposalCard({ proposal: p, continues }: { proposal: ProposalJso
                                 onChange={(e) => setDraft(e.target.value)}
                             />
                             <div className="reply-actions">
-                                <button type="submit" className="chat-small primary" disabled={actions.busy || draft.trim() === ''}>
-                                    <Check size={12} aria-hidden /> {t.approve}
-                                </button>
-                                <button type="button" className="chat-small" onClick={() => setMode('view')}>
+                                <Act kind="decide" type="submit" icon={<Check size={12} aria-hidden />} disabled={actions.busy || draft.trim() === ''}>
+                                    {t.approve}
+                                </Act>
+                                <Act kind="stop" onClick={() => setMode('view')}>
                                     {t.cancel}
-                                </button>
+                                </Act>
                             </div>
                         </form>
                     )}
@@ -218,9 +219,9 @@ export function ProposalCard({ proposal: p, continues }: { proposal: ProposalJso
                                 aria-label={t.note}
                                 onChange={(e) => setNote(e.target.value)}
                             />
-                            <button type="submit" className="chat-small danger" disabled={actions.busy}>
+                            <Act kind="danger" type="submit" disabled={actions.busy}>
                                 {t.reject}
-                            </button>
+                            </Act>
                             <button type="button" className="icon-button" onClick={() => setMode('view')} aria-label={t.cancel}>
                                 <X size={13} aria-hidden />
                             </button>
@@ -228,30 +229,30 @@ export function ProposalCard({ proposal: p, continues }: { proposal: ProposalJso
                     )}
                     {mode === 'view' && deciding && (
                         <div className="reply-actions">
-                            <button type="button" className="chat-small primary" disabled={actions.busy} onClick={() => approve()}>
-                                <Check size={12} aria-hidden /> {t.approve}
-                            </button>
-                            <button
-                                type="button"
-                                className="chat-small ghost"
+                            <Act kind="decide" icon={<Check size={12} aria-hidden />} disabled={actions.busy} onClick={() => approve()}>
+                                {t.approve}
+                            </Act>
+                            <Act
+                                kind="open"
+                                icon={<Pencil size={12} aria-hidden />}
                                 onClick={() => {
                                     setDraft(editableHow(p.content, chosen));
                                     setMode('edit');
                                 }}
                             >
-                                <Pencil size={12} aria-hidden /> {t.edit}
-                            </button>
-                            <button type="button" className="chat-small ghost" onClick={() => setMode('reject')}>
+                                {t.edit}
+                            </Act>
+                            <Act kind="danger" onClick={() => setMode('reject')}>
                                 {t.reject}
-                            </button>
+                            </Act>
                         </div>
                     )}
                     {open && !deciding && <p className="proposal-waiting">{t.waiting}</p>}
                     {open && live && mine && !deciding && (
                         <div className="reply-actions">
-                            <button type="button" className="chat-small ghost" disabled={actions.busy} onClick={() => void actions.withdrawProposal(p.id)}>
+                            <Act kind="stop" disabled={actions.busy} onClick={() => void actions.withdrawProposal(p.id)}>
                                 {t.withdraw}
-                            </button>
+                            </Act>
                         </div>
                     )}
                     {p.state === 'Approved' && (

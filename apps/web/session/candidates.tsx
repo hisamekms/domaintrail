@@ -23,6 +23,7 @@ import { AiAvatar, TargetRow } from './proposal';
 import { ReplyText } from './reply';
 import { sessionApi } from './api';
 import type { SlashCommandJson } from './slash';
+import { Act } from '../shared/act';
 
 /**
  * The AI's card under a command's opening message (Solo): an answer command's answer, or pending while the AI works on
@@ -75,9 +76,9 @@ export function CandidatesCard({ command: c, continues }: { command: SlashComman
     const choosing = c.state === 'Listed' && facilitator;
     const empty = c.state === 'Listed' && candidates.length === 0;
     const stop = (label: string) => (
-        <button type="button" className="chat-small ghost" disabled={busy} onClick={() => void act(() => sessionApi.stopCommand(c.id))}>
+        <Act kind="stop" disabled={busy} onClick={() => void act(() => sessionApi.stopCommand(c.id))}>
             {label}
-        </button>
+        </Act>
     );
     return (
         <div className={`chat-row proposal-row candidates-row state-${c.state}`}>
@@ -137,14 +138,14 @@ export function CandidatesCard({ command: c, continues }: { command: SlashComman
                     )}
                     {choosing && !empty && (
                         <div className="reply-actions">
-                            <button
-                                type="button"
-                                className="chat-small primary"
+                            <Act
+                                kind="decide"
+                                icon={<Check size={12} aria-hidden />}
                                 disabled={busy || checked.size === 0}
                                 onClick={() => void act(() => sessionApi.applyCandidates(c.id, [...checked]))}
                             >
-                                <Check size={12} aria-hidden /> {t.apply}
-                            </button>
+                                {t.apply}
+                            </Act>
                             {stop(t.stop)}
                         </div>
                     )}

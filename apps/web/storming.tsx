@@ -270,7 +270,7 @@ function Row({ icon: Icon, label, className, children }: { icon: LucideIcon; lab
 /** An action of the detail: an icon in the brand colour (filled when `primary`), its name as the tooltip. */
 function Action({ icon: Icon, label, primary, onClick }: { icon: LucideIcon; label: string; primary?: boolean; onClick: () => void }): ReactNode {
     return (
-        <button type="button" className={`es-action${primary ? ' primary' : ''}`} aria-label={label} {...{ [TOOLTIP_ATTR]: label }} onClick={onClick}>
+        <button type="button" className={`es-action${primary ? ' filled' : ''}`} aria-label={label} {...{ [TOOLTIP_ATTR]: label }} onClick={onClick}>
             <Icon size={14} aria-hidden />
         </button>
     );

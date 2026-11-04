@@ -114,7 +114,7 @@ describe("the guide's card", () => {
         expect(steps(html)).toEqual(['ゴールを決める:here', '…:todo after']);
         expect(html).toContain('ゴール: 未定');
         // the start of the storming's goal, into the composer
-        expect(html).toMatch(/<button[^>]*class="chat-small primary guide-command"[^>]*>.*?\/es:start<\/button>/);
+        expect(html).toMatch(/<button[^>]*class="act act-insert"[^>]*>.*?lucide-corner-down-left.*?\/es:start<\/button>/);
         // what the files show: Returns has two open questions, its flow no exception
         expect(html).toContain('すぐ分かること');
         expect(html).toContain('未解決の問い 2');
@@ -190,7 +190,7 @@ describe("the guide's card", () => {
         const html = render(command, chat('bob', [command, guide({ id: 'g2', startedAt: at(5) })]));
         expect(html).toContain('<p class="guide-status">例外を出すところです</p>');
         expect(html.match(/<li class="guide-advice-step">/g)).toHaveLength(2);
-        expect(html).toMatch(/class="chat-small primary guide-command"[^>]*>.*?\/es:exceptions<\/button>/);
+        expect(html).toMatch(/class="act act-insert"[^>]*>.*?\/es:exceptions<\/button>/);
         expect(html).toContain('aria-label="返品 を見る"');
         expect(html).toContain('aria-label="聞くことをメモ: 返品は何日まで？"');
         expect(html).toContain('「返品は何日まで？」');

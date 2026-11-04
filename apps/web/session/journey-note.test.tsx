@@ -46,15 +46,15 @@ const render = (request: object, value = chat()): string =>
 describe("dt's note after a brief is confirmed", () => {
     test('the next command into the composer, then 旅程を開く', () => {
         const html = render({ journeyNote: { journey: 'es:Issue', command: 'EsExceptions', targets: [] } });
-        expect(html).toMatch(/<button[^>]*class="chat-small primary guide-command"[^>]*>.*?\/es:exceptions<\/button>/);
-        expect(html).toMatch(/class="chat-small guide-go"[^>]*>.*?lucide-compass.*?旅程を開く<\/button>/);
+        expect(html).toMatch(/<button[^>]*class="act act-insert"[^>]*>.*?\/es:exceptions<\/button>/);
+        expect(html).toMatch(/class="act act-open"[^>]*>.*?lucide-compass.*?旅程を開く<\/button>/);
         // the session over: only 旅程を開く
-        expect(render({ journeyNote: { journey: 'es:Issue', command: 'EsExceptions', targets: [] } }, chat(false))).not.toContain('guide-command');
+        expect(render({ journeyNote: { journey: 'es:Issue', command: 'EsExceptions', targets: [] } }, chat(false))).not.toContain('act-insert');
     });
 
     test('the source storming to show; nothing for a message without a note', () => {
         const html = render({ journeyNote: { journey: 'issuance', targets: [{ kind: 'DtesStorming', storming: 'Issue' }] } });
-        expect(html).not.toContain('guide-command');
+        expect(html).not.toContain('act-insert');
         expect(html).toContain('lucide-eye');
         expect(html).toContain('Issue');
         expect(render({})).toBe('');

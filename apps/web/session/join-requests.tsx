@@ -7,6 +7,7 @@ import { sessionApi } from './api';
 import { useChat } from './chat-context';
 import { failure } from './parts';
 import type { SessionData } from './useSession';
+import { Act } from '../shared/act';
 
 export function JoinRequests(props: { session: SessionData }) {
     const { tx } = useChat();
@@ -44,12 +45,12 @@ export function JoinRequests(props: { session: SessionData }) {
                     <time className="join-request-time muted small" dateTime={r.requestedAt}>
                         {time(r.requestedAt)}
                     </time>
-                    <button className="chat-small primary" disabled={busy.has(r.id)} onClick={decide(r.id, 'approve')}>
+                    <Act kind="decide" disabled={busy.has(r.id)} onClick={decide(r.id, 'approve')}>
                         {tx.chat.joinApprove}
-                    </button>
-                    <button className="chat-small" disabled={busy.has(r.id)} onClick={decide(r.id, 'deny')}>
+                    </Act>
+                    <Act kind="danger" disabled={busy.has(r.id)} onClick={decide(r.id, 'deny')}>
                         {tx.chat.joinDeny}
-                    </button>
+                    </Act>
                 </div>
             ))}
             {usedUp && (

@@ -23,6 +23,7 @@ import {
     rejectedOfMine,
     type ChoiceListProps,
 } from './interview';
+import { Act } from '../shared/act';
 
 const t = MESSAGES.ja;
 const at = '2026-11-03T09:00:00.000Z';
@@ -97,7 +98,7 @@ function list(more: Partial<ChoiceListProps> = {}) {
         ...more,
     };
     const tree = elements(ChoiceList(props));
-    const buttons = tree.filter((e) => e.type === 'button');
+    const buttons = tree.filter((e) => e.type === 'button' || e.type === Act);
     return { sent, toggled, other: () => other, tree, buttons, html: renderToStaticMarkup(<ChoiceList {...props} />) };
 }
 
@@ -122,7 +123,7 @@ describe('the choices', () => {
     test('multiple: checkboxes and 送る (disabled until one is checked), the checked ones sent joined in their order', () => {
         const none = list({ multiple: true });
         expect(none.tree.filter((e) => e.type === 'input' && e.props.type === 'checkbox')).toHaveLength(3);
-        expect(none.buttons.map((b) => b.props.className)).toEqual(['interview-choice send', 'interview-choice other']);
+        expect(none.buttons.map((b) => b.props.kind)).toEqual(['send', 'open']);
         expect(none.buttons[0].props.disabled).toBe(true);
         const input = none.tree.find((e) => e.type === 'input');
         if (!input) throw new Error('no checkbox');
@@ -165,9 +166,12 @@ describe('a choice that names an element by reference', () => {
         renderToStaticMarkup(<TargetNamingProvider value={ctx}>{list({ choices, ...more }).tree[0]}</TargetNamingProvider>);
     /** The buttons' (or the checkboxes' labels') texts, as shown. */
     const shown = (markup: string): string[] =>
-        [...markup.matchAll(/<(?:button|label)[^>]*class="interview-choice(?:| checked)"[^>]*>(.*?)<\/(?:button|label)>/gu)].map((m) =>
-            (m[1] ?? '').replace(/<[^>]+>/gu, ''),
-        );
+        // the single ones: send buttons (送る, after the checkboxes, opens with its icon); the several: labels
+        [
+            ...markup.matchAll(
+                /<(?:button[^>]*class="act act-send"[^>]*>(?!<svg)|label[^>]*class="interview-choice(?:| checked)"[^>]*>)(.*?)<\/(?:button|label)>/gu,
+            ),
+        ].map((m) => (m[1] ?? '').replace(/<[^>]+>/gu, ''));
 
     test('shows the label, else the name; a missing one as written, as messages do; never a link', async () => {
         const ctx = await naming();

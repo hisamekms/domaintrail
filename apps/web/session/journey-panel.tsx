@@ -7,24 +7,10 @@
 // it; a participant's choose, goal, done or archive is a request the facilitator approves here.
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import { createPortal } from 'react-dom';
-import {
-    Archive,
-    ArchiveRestore,
-    Check,
-    ChevronDown,
-    ChevronRight,
-    CircleCheck,
-    Compass,
-    CornerDownLeft,
-    Flag,
-    MapPin,
-    NotebookPen,
-    Plus,
-    TriangleAlert,
-    X,
-} from 'lucide-react';
+import { Archive, ArchiveRestore, Check, ChevronDown, ChevronRight, CircleCheck, Compass, Flag, MapPin, Plus, TriangleAlert, X } from 'lucide-react';
 import type { JourneyAct } from '@domaintrail/collaboration';
 import type { JourneyRequestBody } from '@domaintrail/collaboration/protocol';
+import { Act } from '../shared/act';
 import { useChat } from './chat-context';
 import { GuideMapView } from './guide-card';
 import { goalChoices, type JourneyItem } from './journey-view';
@@ -175,26 +161,29 @@ export function JourneysPanel({ onClose }: { readonly onClose: () => void }): Re
                     <Plus size={12} aria-hidden />
                     <span>{t.newJourney}</span>
                     {(['es:start', 'model:start'] as const).map((id) => (
-                        <button
+                        <Act
                             key={id}
-                            type="button"
-                            className="chat-small guide-command"
+                            kind="insert"
                             disabled={commandButton(session.state, id) === 'disabled'}
                             aria-label={`/${id}: ${tx.chat.candidates.putCommand}`}
                             data-tooltip={tx.chat.candidates.putCommand}
                             onClick={() => start(id)}
                         >
-                            <CornerDownLeft size={12} aria-hidden />/{id}
-                        </button>
+                            /{id}
+                        </Act>
                     ))}
                 </p>
             )}
             {overview.archived.length > 0 && (
                 <div className="journeys-archived">
-                    <button type="button" className="chat-small ghost" aria-expanded={archivedOpen} onClick={() => setArchivedOpen(!archivedOpen)}>
-                        {archivedOpen ? <ChevronDown size={12} aria-hidden /> : <ChevronRight size={12} aria-hidden />}
+                    <Act
+                        kind="open"
+                        icon={archivedOpen ? <ChevronDown size={12} aria-hidden /> : <ChevronRight size={12} aria-hidden />}
+                        aria-expanded={archivedOpen}
+                        onClick={() => setArchivedOpen(!archivedOpen)}
+                    >
                         {t.archived(overview.archived.length)}
-                    </button>
+                    </Act>
                     {archivedOpen && (
                         <ul>
                             {overview.archived.map((j) => (
@@ -277,50 +266,46 @@ function Current({ item, onClose }: { readonly item: JourneyItem; readonly onClo
             {item.reached && s.kind === 'es' && s.use === 'modeling' && live && (
                 <p className="journeys-next">
                     <CircleCheck size={12} aria-hidden /> {t.toModeling}
-                    <button
-                        type="button"
-                        className="chat-small primary guide-command"
+                    <Act
+                        kind="insert"
+                        aria-label={`/model:start: ${tx.chat.candidates.putCommand}`}
+                        data-tooltip={tx.chat.candidates.putCommand}
                         onClick={() => {
                             putCommand('model:start');
                             onClose();
                         }}
                     >
-                        <CornerDownLeft size={12} aria-hidden />
                         /model:start
-                    </button>
+                    </Act>
                 </p>
             )}
             {live && (
                 <p className="journeys-actions">
-                    <button type="button" className="chat-small" onClick={() => (journeys.seeGuide(), onClose())}>
-                        <Compass size={12} aria-hidden />
-                        {t.seeGuide}
-                    </button>
-                    <button type="button" className="chat-small" aria-expanded={goalOpen} onClick={() => setGoalOpen(!goalOpen)}>
-                        <Flag size={12} aria-hidden />
+                    {s.state !== 'done' && (
+                        <Act kind="decide" icon={<Check size={12} aria-hidden />} onClick={() => act({ kind: 'state', journey: s.key, state: 'done' })}>
+                            {t.markDone}
+                        </Act>
+                    )}
+                    <Act kind="open" icon={<Flag size={12} aria-hidden />} aria-expanded={goalOpen} onClick={() => setGoalOpen(!goalOpen)}>
                         {t.changeGoal}
-                    </button>
-                    <button
-                        type="button"
-                        className="chat-small"
+                        <ChevronDown size={12} aria-hidden />
+                    </Act>
+                    <Act
+                        kind="insert"
+                        data-tooltip={tx.chat.candidates.putCommand}
                         onClick={() => {
                             putCommand(s.kind === 'es' ? 'es:start' : 'model:start');
                             onClose();
                         }}
                     >
-                        <NotebookPen size={12} aria-hidden />
                         {t.reviseBrief}
-                    </button>
-                    {s.state !== 'done' && (
-                        <button type="button" className="chat-small" onClick={() => act({ kind: 'state', journey: s.key, state: 'done' })}>
-                            <Check size={12} aria-hidden />
-                            {t.markDone}
-                        </button>
-                    )}
-                    <button type="button" className="chat-small ghost" onClick={() => act({ kind: 'state', journey: s.key, state: 'archived' })}>
-                        <Archive size={12} aria-hidden />
+                    </Act>
+                    <Act kind="decide-sub" icon={<Archive size={12} aria-hidden />} onClick={() => act({ kind: 'state', journey: s.key, state: 'archived' })}>
                         {t.archive}
-                    </button>
+                    </Act>
+                    <Act kind="see" icon={<Compass size={12} aria-hidden />} onClick={() => (journeys.seeGuide(), onClose())}>
+                        {t.seeGuide}
+                    </Act>
                 </p>
             )}
             {goalOpen && <GoalMenu item={item} onDone={() => setGoalOpen(false)} />}
@@ -338,20 +323,19 @@ export function GoalMenu({ item, onDone }: { readonly item: JourneyItem; readonl
     return (
         <div className="journeys-goals" role="radiogroup" aria-label={t.changeGoal}>
             {choices.map((g) => (
-                <button
+                <Act
                     key={g}
-                    type="button"
+                    kind={g === s.goal ? 'decide' : 'decide-sub'}
                     role="radio"
                     aria-checked={g === s.goal}
-                    className={`chat-small${g === s.goal ? ' primary' : ''}`}
+                    icon={<Flag size={12} aria-hidden />}
                     onClick={() => {
                         if (g !== s.goal) journeys.act({ kind: 'goal', journey: s.key, goal: g });
                         onDone();
                     }}
                 >
-                    <Flag size={12} aria-hidden />
                     {name(g, s.kind)}
-                </button>
+                </Act>
             ))}
         </div>
     );
@@ -375,14 +359,17 @@ function OtherRow({ item, archived = false }: { readonly item: JourneyItem; read
             </span>
             {live &&
                 (archived ? (
-                    <button type="button" className="chat-small ghost" onClick={() => journeys.act({ kind: 'state', journey: s.key, state: 'active' })}>
-                        <ArchiveRestore size={12} aria-hidden />
+                    <Act
+                        kind="decide-sub"
+                        icon={<ArchiveRestore size={12} aria-hidden />}
+                        onClick={() => journeys.act({ kind: 'state', journey: s.key, state: 'active' })}
+                    >
                         {t.restore}
-                    </button>
+                    </Act>
                 ) : (
-                    <button type="button" className="chat-small" onClick={() => journeys.choose(s.key)}>
+                    <Act kind="decide-sub" onClick={() => journeys.choose(s.key)}>
                         {t.choose}
-                    </button>
+                    </Act>
                 ))}
         </li>
     );
@@ -428,19 +415,19 @@ function Requests({ requests }: { readonly requests: readonly JourneyRequestBody
                     </span>
                     {facilitator ? (
                         <span className="journeys-request-actions">
-                            <button type="button" className="chat-small primary" onClick={() => journeys.decide(r.id, 'approve')}>
+                            <Act kind="decide" icon={<Check size={12} aria-hidden />} onClick={() => journeys.decide(r.id, 'approve')}>
                                 {t.approve}
-                            </button>
-                            <button type="button" className="chat-small ghost" onClick={() => journeys.decide(r.id, 'deny')}>
+                            </Act>
+                            <Act kind="danger" onClick={() => journeys.decide(r.id, 'deny')}>
                                 {t.deny}
-                            </button>
+                            </Act>
                         </span>
                     ) : (
                         <span className="journeys-request-actions">
                             <span className="muted">{t.waiting}</span>
-                            <button type="button" className="chat-small ghost" onClick={() => journeys.decide(r.id, 'withdraw')}>
+                            <Act kind="stop" onClick={() => journeys.decide(r.id, 'withdraw')}>
                                 {t.withdraw}
-                            </button>
+                            </Act>
                         </span>
                     )}
                 </li>

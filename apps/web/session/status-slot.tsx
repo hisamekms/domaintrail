@@ -10,6 +10,7 @@ import type { MarkState, MessageMark } from './cards';
 import { useChat } from './chat-context';
 import { unitName, type ChangeUnit } from './history';
 import { cancelPrompt, slotLabels, STATE_GLYPH } from './status';
+import { Act } from '../shared/act';
 
 /** A state as the slot shows it: its glyph (a pulsing dot while running) and its word, in the state's color. */
 export function StateLabel({ state, label }: { state: MarkState; label: string }) {
@@ -143,12 +144,12 @@ export function CancelDialog({ unit, onClose }: { unit: ChangeUnit; onClose: () 
             </p>
             {prompt.lost && <p className="cancel-dialog-lost">{prompt.lost}</p>}
             <div className="cancel-dialog-buttons">
-                <button ref={keep} type="button" className="cancel-dialog-button" onClick={onClose}>
+                <Act ref={keep} kind="stop" onClick={onClose}>
                     {d.keep}
-                </button>
-                <button type="button" className="cancel-dialog-button danger" onClick={confirm}>
+                </Act>
+                <Act kind="danger" onClick={confirm}>
                     {d.confirm}
-                </button>
+                </Act>
             </div>
         </dialog>
     );
