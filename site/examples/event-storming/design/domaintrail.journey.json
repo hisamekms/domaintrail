@@ -1,0 +1,15 @@
+{
+  "$schema": "../../../../schema/journey.schema.json",
+  "version": 1,
+  "stormings": {
+    "CertificateIssuance": {
+      "purpose": "住民票をコンビニで取る流れを知り、つまずくところを見つける",
+      "scope": "住民票を頼まれてから、提出先に受け取ってもらうまで",
+      "participants": ["窓口担当", "申請者"],
+      "use": "modeling",
+      "level": "DesignLevel",
+      "state": "active",
+      "marks": []
+    }
+  }
+}

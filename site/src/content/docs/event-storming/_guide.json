@@ -1,0 +1,12 @@
+{
+  "$comment": "This guide's group in the sidebar (astro.config.mjs reads it): its label, its place among the guides, and its items — a page by its slug in this directory, or a directory, listed by the pages' sidebar.order.",
+  "label": { "ja": "Event Storming ガイド", "en": "Event Storming guide" },
+  "order": 1,
+  "items": [
+    "index",
+    "roles",
+    { "directory": "workshop", "label": { "ja": "ワークショップの道のり", "en": "The workshop, step by step" } },
+    "lost",
+    { "directory": "appendix", "label": { "ja": "付録", "en": "Appendices" } }
+  ]
+}

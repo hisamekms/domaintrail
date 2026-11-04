@@ -61,6 +61,10 @@
     "dt": "bun ./bin/dt.ts",
     "tree-sitter": "bun ./scripts/tree-sitter.ts",
     "session:seed": "bun ./scripts/session-seed.ts",
+    "site:dev": "bun run --cwd site dev",
+    "site:build": "bun run --cwd site build",
+    "site:shots": "bun run --cwd site shots",
+    "site:examples": "bun run --cwd site examples:check",
     "version": "bun ./scripts/zed-version.ts && git add editors/zed && bun run langium:generate && bun ./bin/dt.ts generate ts && git add shared/kernel/src/generated contexts/modeling/src/generated contexts/collaboration/src/generated",
     "prepack": "bun run build"
   },

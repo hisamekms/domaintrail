@@ -1,0 +1,4 @@
+# the site is a package of its own, outside the root's workspaces: `bun install` here writes site/bun.lock
+[install]
+# install only versions published at least 3 days ago, as the root does (../bunfig.toml)
+minimumReleaseAge = 259200

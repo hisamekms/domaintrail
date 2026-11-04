@@ -1,0 +1,92 @@
+/// 住民票をコンビニで取って、頼まれた先に出すまで。
+storming CertificateIssuance "住民票のコンビニ交付" {
+  event CertificateRequested "住民票を頼まれた"
+  event MethodResearched "取り方を調べた"
+  event CopiesConfirmed "部数を確かめた"
+  event LeftWithCard "カードを持って出た"
+  event CardMissing "カードが見つからなかった"
+  event CounterChosen "窓口で取ることにした"
+  event StoreVisited "コンビニに行った"
+  event OutsideServiceHours "利用時間外だった"
+  event VisitPostponed "日を改めた"
+  event CopierNotSupported "コピー機が非対応だった"
+  event MovedToSupportedStore "対応店舗へ移った"
+  event MenuSelected "行政サービスを選んだ"
+  event CardExpired "カードの期限が切れていた"
+  event RenewalApplied "市役所で更新を申請した"
+  event CardRead "カードを読み取った"
+  event PinLocked "暗証番号がロックされた"
+  event PinReset "市役所で再設定した"
+  event PinEntered "暗証番号を入力した"
+  event OptionsSelected "種類と部数を選んだ"
+  event FeePaid "手数料を払った"
+  event CertificateIssued "証明書が発行された"
+  event CardCollected "カードを回収した"
+  event ContentChecked "内容を確かめた"
+  event CertificateSubmitted "証明書を提出した"
+  event CertificateAccepted "受け取ってもらえた"
+  event CertificateRejected "受け取りを断られた"
+  event ReissueDecided "取り直すことにした"
+
+  stage Preparation "依頼・準備" {
+    timeline PreparationFlow "通常" {
+      CertificateRequested
+      MethodResearched
+      CopiesConfirmed
+      LeftWithCard
+    }
+    exception NoCard "カードが見つからない" {
+      CopiesConfirmed
+      CardMissing
+      CounterChosen
+    }
+  }
+  stage AtStore "コンビニでの発行" after Preparation {
+    timeline IssuanceFlow "通常" {
+      StoreVisited
+      MenuSelected
+      CardRead
+      PinEntered
+      OptionsSelected
+      FeePaid
+      CertificateIssued
+      CardCollected
+    }
+    exception OutsideHours "利用時間外" {
+      StoreVisited
+      OutsideServiceHours
+      VisitPostponed
+      then StoreVisited
+    }
+    exception CopierUnsupported "コピー機が非対応" {
+      StoreVisited
+      CopierNotSupported
+      MovedToSupportedStore
+      then StoreVisited
+    }
+    exception Expired "カードの期限切れ" {
+      MenuSelected
+      CardExpired
+      RenewalApplied
+    }
+    exception Locked "暗証番号のロック" {
+      CardRead
+      PinLocked
+      PinReset
+      then PinEntered
+    }
+  }
+  stage Submission "提出" after AtStore {
+    timeline SubmissionFlow "通常" {
+      ContentChecked
+      CertificateSubmitted
+      CertificateAccepted
+    }
+    exception Rejected "受け取ってもらえない" {
+      CertificateSubmitted
+      CertificateRejected
+      ReissueDecided
+      then StoreVisited
+    }
+  }
+}

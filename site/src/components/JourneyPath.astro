@@ -1,0 +1,35 @@
+---
+// The workshop's path, as the guide's map draws it: done (before the step here), here (📍) and the goals (🏁).
+import Icon, { type IconName } from './Icon.astro';
+import { STEPS, stepPath, withBase, type StepKey } from '../journey';
+
+interface Props {
+    /** the chapter's step; none on the overview */
+    here?: StepKey;
+}
+
+const { here } = Astro.props;
+const at = here ? STEPS.findIndex((s) => s.key === here) : -1;
+---
+
+<nav class="journey not-content" aria-label="ワークショップの道のり">
+    <ol>
+        {
+            STEPS.map((s, i) => (
+                <li class:list={['js', { here: i === at, done: at >= 0 && i < at, goal: Boolean(s.goal) }]}>
+                    <a href={withBase(stepPath(s.key))} aria-current={i === at ? 'step' : undefined}>
+                        <span class="dot">
+                            <Icon name={(i === at ? 'map-pin' : s.icon) as IconName} size={19} />
+                        </span>
+                        <span class="t">{s.label}</span>
+                        {s.goal && (
+                            <span class="g">
+                                <Icon name="flag" size={11} /> {s.goal}
+                            </span>
+                        )}
+                    </a>
+                </li>
+            ))
+        }
+    </ol>
+</nav>

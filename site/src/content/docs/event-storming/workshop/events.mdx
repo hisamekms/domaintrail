@@ -1,0 +1,76 @@
+---
+title: 出来事
+description: 業務で起きたことを話し、AI が過去形の短い付箋にする。/es:names と /es:gaps。
+sidebar:
+  label: 出来事
+  order: 3
+  attrs:
+    data-n: '3'
+---
+
+import Chapter from '../../../../components/Chapter.astro';
+import FourCards from '../../../../components/FourCards.astro';
+import BeforeAfter from '../../../../components/BeforeAfter.astro';
+
+<Chapter here="events" />
+
+<p class="lead">業務で起きたことを、順番を気にせずに話します。AI が1つずつ、過去形の短い付箋（出来事）にします。</p>
+
+## この章の4つ
+
+<FourCards map="ガイドの地図で「出来事」に ✓ が付きます（出来事が5つ以上）。">
+  <Fragment slot="goal">
+    範囲の最初から最後まで、業務で起きる出来事を出し切る。
+  </Fragment>
+  <Fragment slot="people">
+    <ul>
+      <li>実際に起きたことを、ふだんの言葉で話す</li>
+      <li>付箋の言葉が業務の言葉か確かめる</li>
+    </ul>
+  </Fragment>
+  <Fragment slot="dt">
+    <ul>
+      <li>話したことを AI に送る</li>
+      <li><code>/es:names</code> で名前を揃える</li>
+      <li>流れができたら <code>/es:gaps</code> で間を埋める</li>
+    </ul>
+  </Fragment>
+  <Fragment slot="done">
+    <ul>
+      <li>出来事が5つ以上ある</li>
+      <li>範囲の最初と最後の出来事がある</li>
+    </ul>
+  </Fragment>
+</FourCards>
+
+## 空のストーミングから、出来事の並んだ画面へ
+
+<BeforeAfter
+  before="storming-empty"
+  beforeKind="shot"
+  beforeLabel="いま：ブリーフだけのストーミング"
+  after="events-loose"
+  afterLabel="この章のあと：出来事が出そろった（まだ並べていない）"
+/>
+
+## 進め方
+
+1. **最初と最後から話す**　「住民票を頼まれた」「受け取ってもらえた」。ブリーフの範囲と同じになる。
+2. **間を話す**　順番は気にしない。話しながら思い出したことも出す。
+3. **AI に送る**　`@AI` を付けて送るか、ファシリテーターが会話のメッセージを選んで「AI に送る」（Shift／⌘ で複数選んで「まとめて送る」）。AI が付箋を書き、全員の画面に出る。
+4. **名前を揃える**　`/es:names` を送る。過去形でないもの、同じことの別名、長すぎるもの、技術の言葉が候補に出る。ファシリテーターが選んで反映する。
+5. **間を埋める**　次の章で流れを並べたあと、`/es:gaps` で隣り合う出来事の間の抜けを探す。
+
+| 良い付箋 | 直したい付箋 | なぜ |
+|---|---|---|
+| 手数料を払った | 手数料支払処理 | 出来事は過去形の事実 |
+| カードを読み取った | CardReader が読み込んだ | 業務の言葉で書く |
+| 種類と部数を選んだ | 交付する証明書の種類・記載事項・部数を画面で選択した | 12字ほどまで。詳しくは `///` へ |
+
+:::tip[コツ]
+1つの付箋に1つの事実。長い付箋はたいてい2つの出来事か、説明です。付箋は12字ほどまでにし、詳しいことは AI に頼んで説明（`///`）に回します。
+:::
+
+:::caution[よくあるつまずき]
+ファシリテーターが自分で付箋を書き始めない。参加者の言葉を AI に送るのが仕事です。言い回しの議論が長引いたら、問い（6章）として残して先へ進みます。
+:::

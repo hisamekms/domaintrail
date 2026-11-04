@@ -1,0 +1,85 @@
+---
+title: デザインレベル
+description: 出来事の原因（コマンド・ポリシー）、判断に使う情報（リードモデル）、決める集約を置く。/es:levels とデザインレベルだけの出来事。
+sidebar:
+  label: デザインレベル
+  order: 7
+  attrs:
+    data-n: '7'
+  badge:
+    text: DL
+    variant: success
+---
+
+import Chapter from '../../../../components/Chapter.astro';
+import FourCards from '../../../../components/FourCards.astro';
+import BeforeAfter from '../../../../components/BeforeAfter.astro';
+import Figure from '../../../../components/Figure.astro';
+
+<Chapter here="design" />
+
+<p class="lead">流れに合意できたら、出来事ごとに「何がそれを起こしたか」を置きます。ゴールが Design Level のときだけ進む段階です。</p>
+
+## この章の4つ
+
+<FourCards map="ガイドの地図で「デザインレベル」に ✓ が付きます（コマンドと集約が1つ以上）。Design Level のゴール（🏁）はここです。">
+  <Fragment slot="goal">
+    出来事の原因と、それを決める場所（集約）をはっきりさせ、モデリングに渡せる形にする。
+  </Fragment>
+  <Fragment slot="people">
+    <ul>
+      <li>だれが何をして、その出来事が起きたかを話す</li>
+      <li>「〜したら〜する」という決まりを話す</li>
+    </ul>
+  </Fragment>
+  <Fragment slot="dt">
+    <ul>
+      <li>ビューバーのレベルを Design Level にする</li>
+      <li>AI がコマンド・ポリシー・集約・リードモデルを書く</li>
+      <li><code>/es:levels</code> でレベルを見直す</li>
+    </ul>
+  </Fragment>
+  <Fragment slot="done">
+    <ul>
+      <li>コマンドが1つ以上ある</li>
+      <li>集約が1つ以上ある</li>
+    </ul>
+  </Fragment>
+</FourCards>
+
+## Big Picture から、Design Level へ
+
+<BeforeAfter
+  before="atstore-questions"
+  beforeLabel="いま：Big Picture の「コンビニでの発行」"
+  after="atstore-design"
+  afterLabel="この章のあと：Design Level（例外は隠している）"
+  caption="出来事の上に、その原因のコマンドと、だれが・何を見て・どこで決めるかが立つ"
+/>
+
+## 置くもの
+
+| 付箋 | 問いかけ | 例 |
+|---|---|---|
+| コマンド | だれが何をしようとして、その出来事が起きた？ | 手数料を払う → 手数料を払った |
+| アクター／外部システム | それをするのはだれ？ どのシステム？ | 申請者、市区町村のシステム |
+| ポリシー | 「〜したら〜する」決まりは？ | 払われたら発行する |
+| リードモデル | 決めるのに何を見る？ | 交付できる証明書 |
+| 集約 | どこで決める？ 何が整合を守る？ | 交付、本人確認 |
+
+<Figure name="issuance-timeline-design" alt="本流「通常」の Design Level" caption="1つの流れのビュー：その流れの出来事と、それを起こすコマンド・ポリシー" />
+
+## 進め方
+
+1. **レベルを切り替える**　ビューバーのレベルを Design Level（顕微鏡のアイコン）にする。Big Picture（望遠鏡）に戻せば、元の流れだけが見える。
+2. **段階ごとに原因を話す**　「申請者が暗証番号を入れて照合する」。AI がコマンド、アクター、集約を書き、出来事とつなぐ。
+3. **決まりを話す**　「払われたら発行する」。AI がポリシーにする。
+4. **細かい出来事を分ける**　仕組みの細部（予約、承認、内部の失敗や再試行）は、デザインレベルだけの出来事にする（`level design`）。`/es:levels` を送ると、そうすべき出来事・外すべき出来事が候補に出る。
+
+:::tip[コツ]
+デザインレベルだけの出来事は、Big Picture では隠れます。前後の出来事はつながったまま描かれるので、みんなで合意した流れは崩れません。Big Picture でも見せたい出来事は、`/es:levels` で外します。
+:::
+
+:::caution[よくあるつまずき]
+つながりは「起こりうる」ことで、実行の手順ではありません。複数のアクターはどちらか、`emits` はありうる結果です。条件分岐や順番を書き込もうとしないでください。それはモデリング（`.dt`）で決めます。
+:::

@@ -26,6 +26,9 @@
     "tree-sitter-domaintrail/bindings/**",
     "editors/zed/target/**",
     "editors/zed/grammars/**",
-    ".domaintrail/**"
+    ".domaintrail/**",
+    // the guide's site: its own package (Astro), whose tsconfig extends `astro/tsconfigs/strict` from its own
+    // dependencies, installed only to build the site (not in the root's `bun install`, nor in CI's checks)
+    "site/**"
   ]
 }
