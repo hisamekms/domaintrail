@@ -89,13 +89,14 @@ function BriefHowFar({ journey: j }: { readonly journey: NonNullable<Extract<Int
             : [
                   j.pattern !== undefined ? (g.patterns[j.pattern] ?? j.pattern) : undefined,
                   j.goal !== undefined ? g.goal(g.steps[j.goal] ?? j.goal) : undefined,
-                  j.stormings.length > 0 ? j.stormings.map((x) => `ES「${x}」`).join('、') : undefined,
-                  j.context,
+                  // the subject as references, shown by their labels as links are (an ID alone read as a code)
+                  j.stormings.length > 0 ? j.stormings.map((x) => `ES「@{es:${x}}」`).join('、') : undefined,
+                  j.context !== undefined ? `@{${j.context}}` : undefined,
               ];
     return (
         <p className="chat-brief-howfar">
             <Flag size={12} aria-hidden />
-            {parts.filter((x) => x !== undefined).join(' · ')}
+            <ChoiceText text={parts.filter((x) => x !== undefined).join(' · ')} />
         </p>
     );
 }

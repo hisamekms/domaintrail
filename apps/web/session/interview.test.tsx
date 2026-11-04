@@ -204,6 +204,43 @@ describe('a choice that names an element by reference', () => {
     });
 });
 
+describe("the brief's subject", () => {
+    test('a storming and a context by their labels, as links show them, not their IDs', async () => {
+        const a = await check({
+            'konbini.dtes': 'storming ConvenienceStoreIssuance "住民票などのコンビニ交付" {\n  event Issued "交付した"\n}\n',
+            'billing.dt': 'context Billing "請求" {\n}\n',
+        });
+        const ctx: NamingContext = { mode: 'label', model: a.model ?? null, stormings: a.stormings.stormings.map((s) => ({ id: s.id, storming: s })) };
+        const briefOf = (journey: Record<string, unknown>): unknown =>
+            interview({
+                startedBy: 'f',
+                state: 'Briefed',
+                asked: undefined,
+                brief: { name: 'm', label: 'モデル', isNew: true, replaces: false, text: '目的: x', journey: { stormings: [], ...journey } },
+                answered: 'a1',
+                briefedAt: at,
+            });
+        const howFar = (i: unknown): string => {
+            const session = {
+                status: 'live',
+                me: { participant: { id: 'f', role: 'facilitator' } },
+                state: { session: { state: 'Open', mode: 'Solo' }, interviews: [i], requests: [], runs: [] },
+            };
+            const html = renderToStaticMarkup(
+                <TargetNamingProvider value={ctx}>
+                    <ChatProvider value={{ tx: t.session, session } as unknown as ChatContextValue}>
+                        <InterviewPanel session={session as never} live />
+                    </ChatProvider>
+                </TargetNamingProvider>,
+            );
+            return (/<p class="chat-brief-howfar">(.*?)<\/p>/u.exec(html)?.[1] ?? '').replace(/<[^>]+>/gu, '');
+        };
+        const fromStorming = howFar(briefOf({ pattern: 'FromStorming', goal: 'invariants', stormings: ['ConvenienceStoreIssuance'] }));
+        expect(fromStorming).toContain('ES「住民票などのコンビニ交付」');
+        expect(fromStorming).not.toContain('ConvenienceStoreIssuance');
+        expect(howFar(briefOf({ pattern: 'OneContext', goal: 'invariants', context: 'Billing' }))).toContain('請求');
+    });
+});
 describe('under the message of the AI', () => {
     const chat = (me: string, i: unknown): ChatContextValue =>
         ({
