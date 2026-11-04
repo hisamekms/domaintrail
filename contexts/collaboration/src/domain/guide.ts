@@ -558,6 +558,25 @@ export function guideJourneyMap(workspace: GuideWorkspace, goal: GuideGoal, key:
     return m && journeyMap(workspace, m, marks);
 }
 
+/** Where a journey stands: its 📍 step (none: every step to its goal is done, or none is placed), and whether its goal is reached. */
+export interface JourneyWhere {
+    readonly here?: string;
+    readonly reached: boolean;
+}
+
+/**
+ * Where a journey stands now, by the chip's rule: here is the step after the last done (with every later step done,
+ * the earliest not confirmed); the goal is reached when every step up to it is done. Undefined when the journey has no
+ * map (not among the goals) or the storming or context it names is gone.
+ */
+export function journeyWhere(workspace: GuideWorkspace, key: string): JourneyWhere | undefined {
+    const map = guideJourneyMap(workspace, readGuideGoal(workspace), key, guideMarks(journeyMarks(workspace.journey)));
+    if (!map || map.missing === true) return undefined;
+    const here = (map.steps.find((s) => s.state === 'Here') ?? map.steps.find((s) => s.state === 'Unconfirmed'))?.key;
+    const reached = map.steps.filter((s) => !s.after).every((s) => s.state === 'Done');
+    return { ...(here !== undefined && { here }), reached };
+}
+
 /**
  * The current journey's key among the goals: the one chosen when it is there; else the most recently created active
  * one (the journey file's order: the last modeling journey, else the last storming's); else none.

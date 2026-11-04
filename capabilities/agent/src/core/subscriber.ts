@@ -302,12 +302,15 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
             const soFar = started.sessionSoFar;
             const soFarSince = started.sessionSoFarSince ?? soFar;
             if (soFar) lastSoFar = soFar.last;
+            // the journeys when it starts: the run keeps within the current one
+            const journeys = started.journeys ? { journeys: started.journeys } : {};
             try {
                 outcome = await deps.runner.run({
-                    prompt: buildPrompt(input, names, nonce, previousRuns, revert, { ...(soFar && { sessionSoFar: soFar.text }), ...practice }),
+                    prompt: buildPrompt(input, names, nonce, previousRuns, revert, { ...(soFar && { sessionSoFar: soFar.text }), ...practice, ...journeys }),
                     ...(sinceLast && {
                         continuedPrompt: buildPrompt(input, names, nonce, previousRuns, revert, {
                             ...practice,
+                            ...journeys,
                             changedSinceYourLastRun: sinceLast,
                             ...(soFarSince && { sessionSoFar: soFarSince.text }),
                         }),

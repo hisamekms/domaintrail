@@ -10,8 +10,8 @@
 // `MAX_ATTEMPTS` times, then given up until an answerer connects — each new stream gives the given-up jobs another
 // round — or the facilitator retries it), and the jobs of an answerer that disconnects are handed to another one, or wait.
 //
-// Each job carries what its prompt needs: the message, its author's name, and for stage 3 the chat around it and the
-// open proposals; for an answer or a proposal the session so far — whole, and since the last entry the stream's previous
+// Each job carries what its prompt needs: the message, its author's name, the journeys, and for stage 3 the chat around
+// it and the open proposals; for an answer or a proposal the session so far — whole, and since the last entry the stream's previous
 // such job was given (a warm answerer took that one) — the run the message replies to with its changes, and the latest
 // revision (what the answer reads). The result is AI output: validated against its shape and limits before anything is
 // written.
@@ -333,6 +333,8 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
                     chat: chatWindow(state, job.request.id),
                     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- as above
                     openProposals: open as unknown as NonNullable<AgentAnswerJobBody['openProposals']>,
+                    // which journey the message is likely about
+                    ...(await journeysNow()),
                 },
             };
         }

@@ -8,6 +8,7 @@ import type {
     AgentFailReason,
     AgentReplyBody,
     AgentFinishBody,
+    AgentJourneysBody,
     AgentLease,
     AgentPreviousRun,
     AgentParticipantsBody,
@@ -69,6 +70,8 @@ export interface Started {
     readonly sessionSoFar?: AgentSessionSoFar;
     /** The session so far after the `since` the start was given. */
     readonly sessionSoFarSince?: AgentSessionSoFar;
+    /** The journeys when the run starts (absent: no journey file, or an older server). */
+    readonly journeys?: AgentJourneysBody;
 }
 
 /** The agent API of the session server (loopback, bearer token). */

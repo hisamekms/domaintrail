@@ -23,7 +23,9 @@ import {
     createUnitOfWork,
     FACILITATOR_NAME,
     agentJourneys,
+    type GuideWorkspace,
     JOURNEY_FILE,
+    journeyWhere,
     FACILITATOR_PARTICIPANT,
     type IdentityKey,
     type IdentityProvider,
@@ -522,6 +524,17 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         });
         cursor = () => relay.cursor();
         const pump = (): Promise<void> => relay.pump();
+        /** The guide's workspace now: the view's model, stormings and findings, the journey file's findings, the file. */
+        const guideWorkspaceNow = (): GuideWorkspace => {
+            const seen = guideWorkspace(view.state);
+            const names = knownViewNames(view.state);
+            const file = journeys.file();
+            return {
+                ...seen,
+                diagnostics: [...seen.diagnostics, ...journeys.diagnostics({ contexts: names.contexts, stormings: names.stormings.keys() })],
+                ...(file && { journey: file }),
+            };
+        };
         const agent = createAgentApi({
             session,
             collaboration,
@@ -543,7 +556,10 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 const file = journeys.file();
                 if (!file) return undefined;
                 const state = await collaboration.sessionState({ session });
-                return agentJourneys(file, state.ok ? state.value.session.currentJourney : undefined);
+                const given = agentJourneys(file, state.ok ? state.value.session.currentJourney : undefined);
+                // where the current journey stands, by the chip's rule (the guide's map of it, from the files now)
+                const where = given.current === undefined ? undefined : journeyWhere(guideWorkspaceNow(), given.current);
+                return { ...given, ...(where && { where }) };
             },
         });
         const stage = createTriageStage({
@@ -648,16 +664,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             agentPresence,
             retryAnswer: (request) => agent.answers.retry(request),
             knownViewNames: () => knownViewNames(view.state),
-            guideWorkspace: () => {
-                const seen = guideWorkspace(view.state);
-                const names = knownViewNames(view.state);
-                const file = journeys.file();
-                return {
-                    ...seen,
-                    diagnostics: [...seen.diagnostics, ...journeys.diagnostics({ contexts: names.contexts, stormings: names.stormings.keys() })],
-                    ...(file && { journey: file }),
-                };
-            },
+            guideWorkspace: guideWorkspaceNow,
             journeys,
             log,
         });

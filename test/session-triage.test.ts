@@ -22,7 +22,7 @@ import {
     openSessionBlobs,
     openSessionDatabase,
 } from '@domaintrail/collaboration';
-import type { AgentAnswerJobBody, AgentCommandJobBody, AgentInterviewJobBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import type { AgentAnswerJobBody, AgentCommandJobBody, AgentInterviewJobBody, AgentStartedBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { type AnswerStreamItem, createHttpAgentApi, DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import { createModelValidator, type SessionServer, type SessionSettings, startSessionServer, startSubscriber } from '@domaintrail/dt';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
@@ -648,6 +648,76 @@ describe('the view a message was sent from', () => {
         const started = await ctx.api(ctx.ada, 'interviews', { command: 'es', body: 'ES を始める', language: 'ja', viewedAt: { view: storming } });
         expect(started.status).toBe(201);
         expect((await stream.interviewJob()).request.viewedAt).toEqual({ view: storming });
+    });
+});
+
+describe("the session's current journey", () => {
+    const STORMING = `storming Orders "注文" {
+  event OrderPlaced "注文を受け付けた"
+  event OrderShipped "発送した"
+  timeline Normal "通常" {
+    OrderPlaced
+    OrderShipped
+  }
+}
+`;
+    const JOURNEYS = {
+        version: 1,
+        stormings: {
+            Orders: {
+                purpose: '注文の流れをつかむ',
+                scope: '受付から発送まで',
+                participants: ['販売担当'],
+                use: 'align',
+                level: 'BigPicture',
+                state: 'active',
+                marks: [],
+            },
+        },
+        modeling: [],
+    };
+
+    test('stage 3 and a run started while it is current carry it: its brief, where it stands, the others', async () => {
+        const root = await scratch();
+        await writeFile(path.join(root, 'orders.dtes'), STORMING);
+        await writeFile(path.join(root, 'domaintrail.journey.json'), JSON.stringify(JOURNEYS, null, 2));
+        const ctx = await setup(root);
+        const stream = answerStream(ctx);
+        const request = await say(ctx, ctx.ada, 'カードの読み取りコマンドを足して', { ai: true });
+        const triage = await stream.job('triage');
+        expect(triage.journeys).toMatchObject({ current: 'es:Orders', journeys: [{ key: 'es:Orders', level: 'BigPicture', purpose: '注文の流れをつかむ' }] });
+        expect(triage.journeys?.where).toMatchObject({ reached: false });
+        expect(triage.journeys?.where?.here).toBeString();
+        expect((await stream.post(triage.job, { kind: 'change_request', confidence: 0.95, reason: '追加の依頼', durationMs: 1 })).status).toBe(200);
+        const run = await until('the run', async () => (await ctx.state()).runs.find((r) => r.input.requests.some((q) => q.request === request)));
+        // the run, claimed and started: the start's body has the journeys as they are now
+        const agent = (p: string, body: unknown): Promise<Response> =>
+            fetch(`${ctx.cred.url}agent/${p}`, { method: 'POST', headers: { authorization: `Bearer ${ctx.cred.token}`, ...json }, body: JSON.stringify(body) });
+        const claimed = (await (await agent('runs/claim', { owner: 'test', capabilities: ['revert'] })).json()) as {
+            run: { id: string };
+            lease: { token: string };
+        };
+        expect(claimed.run.id).toBe(run.id);
+        const started = (await (await agent(`runs/${run.id}/start`, { token: claimed.lease.token })).json()) as AgentStartedBody;
+        expect(started.journeys).toEqual(triage.journeys);
+    });
+
+    test('without a journey file, neither stage 3 nor a run gets journeys', async () => {
+        const ctx = await setup();
+        const stream = answerStream(ctx);
+        await say(ctx, ctx.ada, '足して', { ai: true });
+        const triage = await stream.job('triage');
+        expect(triage.journeys).toBeUndefined();
+        await stream.post(triage.job, { kind: 'change_request', confidence: 0.95, reason: '依頼', durationMs: 1 });
+        await until('the run', async () => (await ctx.state()).runs[0]);
+        const agent = (p: string, body: unknown): Promise<Response> =>
+            fetch(`${ctx.cred.url}agent/${p}`, { method: 'POST', headers: { authorization: `Bearer ${ctx.cred.token}`, ...json }, body: JSON.stringify(body) });
+        const claimed = (await (await agent('runs/claim', { owner: 'test', capabilities: ['revert'] })).json()) as {
+            run: { id: string };
+            lease: { token: string };
+        };
+        const started = (await (await agent(`runs/${claimed.run.id}/start`, { token: claimed.lease.token })).json()) as AgentStartedBody;
+        expect(started.journeys).toBeUndefined();
     });
 });
 
