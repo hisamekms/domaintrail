@@ -1825,3 +1825,40 @@ there, from a fixed template and with no AI call.
 - **Scratch run** (2026-11-04, a scripted interviewer and runner on a copy of the shop with the convenience-store
   stages): `/es:start` on the existing storming, a new storming, a revision, `/model:start` B, and a revision in
   English.
+
+### As built: records of what people do (2026-11-04)
+
+Many acts changed the journey file or the session and left no trace in the chat, so others in Collab did not notice.
+dt now writes a **record**: a small centred row like the session's start (`.chat-system` + `.chat-record`), muted,
+saying who did what in a few words, in the page's language (ja / en, the viewer's, as the session-start row).
+
+- **Kept in the session.** A new aggregate `SessionRecord` (`model/record.dt`: who, the fact, `replyTo` for a row at the
+  end of a thread, when, `revisedAt`), its table `session_records` (migration 15), sent whole with the state and as
+  `record.written` / `record.revised`, and told in the session so far (in English; a request's outcome is an entry of
+  its own when it was decided; an interview stopped or a brief rejected is left to the interview's own entries).
+- **The facts and their text** (`domain/records.ts`; the journey by its key and its name then, an ES journey by its
+  storming's label):
+  - goal: 「<name> がゴールを <old> → <new> に変えました」, naming the journey when it is not the current one
+    (「<name> が「<journey>」のゴールを…」);
+  - ✓: 「<name> が「例外」「問い」を済みにしました」 / 「…の済みを外しました」, a BC row by its context;
+  - 「<name> が「<journey>」を完了にしました」 / 「しまいました」 / 「戻しました」;
+  - 「<name> がいまのジャーニーを「<journey>」にしました」 (a person's choice only, never the default; not on a
+    confirmed brief, whose note says it);
+  - 「<participant> が「<journey>」のゴールを <goal> にするようお願いしています」, then on the same row
+    「…お願いしました。<facilitator> が承認しました」 / 「却下しました」 / 「<participant> が取り下げました」;
+  - 「<name> が中止しました」, 「<facilitator> が却下しました（<note>）」 at the end of the interview's thread;
+  - 「ジャーニーファイルが外で変わりました（「X」が増えた、「Y」のゴール A → B、「Z」が完了、「W」の済み、ほか n 件）」.
+- **The ✓ merge** (decided): a mark extends the last record of the session when that record is the same person's
+  marks on the same journey in the same direction and **nothing else came into the stream after it** (a message, a
+  card's run, a proposal, a command, a restore, another record). No time limit.
+- **Requests** (decided): **the outcome is written on the request's own row** — the row tells the whole request and
+  never stays 「お願いしています」 once decided; an approved act also gets its own record, by the facilitator who did it.
+  The requests are records, so the server rebuilds the waiting ones from them when it starts (a restart no longer drops
+  them). A request replaced by its requester's newer one is withdrawn.
+- **完了にする** also posts dt's note (the AI's message, answering none: `answer`'s message became optional): 「「<journey>」を
+  完了にしました。」 and the next step — an ES journey with `use: modeling` → `/model:start`, `align` → `/es:recap`, a
+  modeling journey 「次のジャーニーを選びましょう。」 with ジャーニーを開く only — in the language of the page that did it
+  (`language` on `…/journey/acts` and `…/requests/:id/approve`).
+- **Outside changes.** The file store remembers the texts dt wrote (`rememberWrites`, the last 20, remembered before the
+  write lands): a text read again that is none of them is a change from outside, summarized against the file as read
+  before (journeys added or removed, goals, states, marks, briefs); nothing when nothing that matters changed.
