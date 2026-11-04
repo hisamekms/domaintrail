@@ -91,6 +91,11 @@ export interface SessionIdentitiesDeps {
     readonly maxParticipants: number;
     /** The cookie of a sign-in (`dev`, `link`). Default: `DEV_COOKIE`. */
     readonly cookieName?: string;
+    /**
+     * `access`: an identity seen for the first time joined while being identified (no route of its own publishes it):
+     * e.g. send the join to the pages, awaited before the request goes on.
+     */
+    readonly joined?: (participant: Collaboration.ParticipantId) => Promise<void>;
 }
 
 /** The cookies of a request by name (the first of a name wins). */
@@ -189,7 +194,12 @@ export function createSessionIdentities(deps: SessionIdentitiesDeps): SessionIde
             if (!identity) return undefined;
             const who = await identified(identity);
             if (who.role === 'facilitator') return who;
-            return (await join(identity)).ok ? who : undefined;
+            const known = joined.has(participantOf(identity));
+            const joinedAs = await join(identity);
+            if (!joinedAs.ok) return undefined;
+            // the others' pages learn of a newcomer from the join's event: published now, not with the next change
+            if (!known) await deps.joined?.(joinedAs.value);
+            return who;
         },
 
         async signIn(name) {

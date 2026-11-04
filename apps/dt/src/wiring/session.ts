@@ -355,6 +355,12 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             access,
             collaboration,
             maxParticipants: config.maxParticipants,
+            // `access`: a newcomer joins while identified; the pages learn of it now (the relay is made below, before
+            // the server listens)
+            joined: async (participant) => {
+                await pump();
+                log(`joined: ${participant}`);
+            },
         });
         // `link`: the sign-ins of an earlier server (whatever mode it had) end now: everyone is approved again, the
         // facilitator signs in with this server's link
