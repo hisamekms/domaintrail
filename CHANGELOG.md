@@ -9,6 +9,208 @@ code).
 **After upgrading domaintrail**, read the **Upgrading** section of every version between the one you had and the new
 one, oldest first, and follow its steps. This file is in the package: `node_modules/domaintrail/CHANGELOG.md`.
 
+## [0.7.0] - 2026-11-04
+
+### Added
+
+- **Event Storming** (`.dtes`, `dt guide storming`, ADR 0024): stormings as text next to the `.dt` model — events,
+  commands, policies, actors, external systems, aggregates, read models, hotspots, timelines and groups, with `ref`s to
+  the model's events, aggregates and commands. `level design` keeps an event out of Big Picture; `stage … after …`,
+  `exception` and `then` lay a storming out in time order, the stages left to right, one straight main flow and the
+  exceptions below. Rules S001–S022 check the storming and its `ref`s (`dt guide storming-rules`). `dt check`, `dt fmt`
+  and `dt lsp` (diagnostics, formatting, hover, outline, go to definition) take `.dtes` files, which the default
+  `sources` now find; `dt generate ts` reads the `.dt` files only.
+- **Modes: the Live View with the chat and an AI** (`dt guide session`, ADR 0030; the AI is Claude Code):
+  - `dt open` — the Live View for you alone, signed in with a one-time link (`dt open link` prints another); every
+    message goes to the AI. `dt open --host <address>` serves a read-only Live View, without the chat.
+  - `dt collab` — a collaboration session: several people on the same Live View, a chat about the model's and the
+    stormings' elements (`#` names elements, `@` people), replies, votes and reactions; the facilitator decides what
+    changes. Identity `dev` (a name, on loopback), `access` (Cloudflare Access) or `link`: `dt collab --tunnel`
+    starts a Cloudflare quick tunnel, people join with an invite link (`dt collab invite`) and the facilitator lets
+    each one in.
+  - `dt agent` — the AI on the running session, from another terminal or machine (`dt collab agent-link` pairs it);
+    `dt open` and `dt collab` start one in process when `claude` is usable.
+  - Each message to the AI is triaged: a question gets a read-only answer, a request becomes a run that edits the
+    `.dt` / `.dtes` files, or a change proposal the facilitator approves. The AI is given the session so far and the
+    view each message was sent from.
+  - Every run leaves a revision of the workspace. The facilitator reverts one work item from its card (only its
+    changes, keeping later ones), or restores an earlier state from the collab menu.
+  - The **AI work** tab: what waits for an answer, runs, is queued and is done, what a running run is doing, and the
+    changes of each work item in the model's words.
+  - Config sections `open`, `collab`, `agent`, `classifier` (an optional Cloudflare classifier for the triage) and
+    `templates` (`dt guide session-config`).
+- **`/` commands in the chat**: `/es:start` and `/model:start` start an interview, one question at a time, with
+  choices to pick (one sends at once, several are checked, "other" is always offered; everyone sees them, the starter
+  answers), ending in a brief the facilitator confirms. For the storming in view, `/es:exceptions`, `/es:gaps`,
+  `/es:levels` and `/es:names` list candidates (exceptions, missing events, events to move between levels, labels to
+  rename) to check and apply in one run, and `/es:recap` sums up the session. `/guide` shows a map from the brief to
+  the goal, what the files show at once, and the AI's advice with actions; its suggested commands get a star in the
+  `/` list. Templates, built in and the team's, put the beginning of a message in the composer. Anyone runs the
+  commands; the facilitator approves what changes files.
+- **The journey file** (`domaintrail.journey.json`, `dt guide journey`, schema in `schema/journey.schema.json`): what
+  the work in the workspace is for and how far it has come — one Event Storming journey per storming and named
+  modeling journeys (patterns `Whole`, `FromStorming`, `OneContext`, `Review`), with their briefs, goals and marks.
+  It is tracked by git and written by dt only. Rules J001 (the file reads against its schema, error), J002 and J003
+  (a journey names a missing storming or context, warnings).
+  - The session has one current journey: its chip in the app bar opens the journeys panel (brief, map, goal, done,
+    archive, the other journeys); a participant's change is a request the facilitator approves.
+  - The chat records what people do as small rows (goals, marks, journeys switched, requests and their decisions).
+    Confirming a brief or completing a journey posts a note with the next step and its buttons.
+  - The AI's answers, commands and runs get the current journey; runs keep within its scope and level, and ask
+    before going beyond it.
+- **The Live View's new layout** (`docs/live-view.md`): an app bar with the world switch (domain model / Event
+  Storming, each remembering its view), the current journey and the problems; a left column with the navigator over the
+  detail (the inspector) and a splitter between them; the chat as a column at the right; and one view bar over the
+  canvas for every view (view switch, subject, level, filter, export). The Event Storming world has its own navigator
+  (stormings, stages, timelines) and a detail for a storming's elements. A text size setting (four steps), and an
+  empty view says how to start its world.
+- **Printing and exporting** (`docs/live-view.md`): printing draws the current diagram alone, fitted to one page, with
+  a heading line; the view bar's Export menu prints and saves PNG, a portable SVG (plain shapes and text, for browsers,
+  Figma and Inkscape) and PDF, optionally with the heading and the legend. "Close up the gaps" lays every diagram out
+  more compactly.
+- **`dt export`** (`dt guide export`): `dt export svg` draws a Live View diagram as the same SVG without a browser
+  (deterministic, for documentation built in CI); `dt export sources` writes the `.dt` and `.dtes` files and the
+  config as one ZIP archive, also offered in the Live View's menu (Download sources (.zip)).
+- **`dt session prune`**: lists (and with `--yes` removes) the state of workspaces that no longer exist, or with
+  `--older-than <days>` that are unused.
+- **`domaintrail.local.jsonc`**: a git-ignored override merged into the config; read paths outside the workspace for
+  the AI (`agent.read.paths`) are taken from it only. Changes to security-relevant settings ask for approval at start
+  (remembered in `~/.config/domaintrail/trust.json`; `--yes` without a terminal).
+- **DSL**: the declaration keywords may name fields, parameters, terms, commands and discriminators, and any keyword
+  may name an enum value or a union variant; value objects and unions may be recursive when each has a finite value
+  (M012); value objects take field sets (`with`).
+- **Generated TypeScript** (ADR 0028): `check<Aggregate>Common`, the aggregate's own invariants checked once; contract
+  tests draw recursive types (`generate.ts.tests.maxRecursionDepth`, default 4, or per type); and
+  `generate.ts.contexts.<Ctx>.module`, so that contexts generated into different packages import each other.
+- `dt guide` topics: `storming`, `storming-refs`, `storming-views`, `storming-rules`, `storming-practice`,
+  `modeling-practice`, `journey`, `export` and `session` (with `session-config`, `session-revisions`,
+  `session-agent`). The AI is given the ways of working and may run `dt guide`.
+
+### Changed
+
+- **Generated TypeScript** (ADR 0028; see Upgrading):
+  - A command takes its parameters as one object after the aggregate, typed `<Command><Aggregate>Params`
+    (`cancel(order, { reason })`); decisions, requirement checks and contract-test inputs take it too.
+  - An ID or domain primitive on `UUID` checks the form (RFC 9562): `make<Name>` returns
+    `Result<Name, Invalid<Name>>` with the invariant `uuid`, and an invariant of its own cannot be named `uuid` (M002).
+  - The slot of an aggregate's invariant declared without an expression takes `<Aggregate>Common`.
+  - The contract tests import their support from `domaintrail/testing`, a subpath of the package, and check at load
+    that it matches the domaintrail that generated them; fast-check is an optional peer dependency.
+  - Generated checks read like the model (`A && !B` for a violated `A implies B`, the lambda names of the `.dt`,
+    `'…'` strings), and the target of `references` is a `@see {@link …}`.
+- **M025** (error): a context's description (`///`) is written once across its files. A second one was dropped
+  silently, depending on the file names; now each later one is reported with the place of the kept one.
+- **dt keeps its files outside the workspace** (`dt guide config`): the session, the server's address and the record
+  of `dt generate ts` in `~/.local/state/domaintrail/<workspace>/` (`$XDG_STATE_HOME`, or `DOMAINTRAIL_STATE_DIR`),
+  the layouts in `~/.cache/domaintrail/<workspace>/` (`$XDG_CACHE_HOME`); on Windows under `%LOCALAPPDATA%`. The
+  first command that uses them moves an existing `.domaintrail/` there.
+- The model in the Live View payload and in `dt show --format json` has a new shape: `{ contexts, elements }` lists
+  in declaration order, each element a variant by `kind`, enum values as `{ name, label }`, binary operators by name
+  (`eq`, `and`, …). The generated TypeScript does not change because of it.
+- Node.js 22.13 or later is required (22.12 before).
+- The Live View draws its diagrams with React Flow instead of tldraw, so they stay on screen behind any https origin:
+  a drag always pans (`H`, the hand tool, is gone), Shift + drag draws a selection box, and tldraw's other shortcuts
+  are gone; `+`, `-` and `Shift+0/1/2` stay.
+- The Live View has the DomainTrail logo and one colour system for both themes: Event Storming notes in their
+  conventional colours, the model's kinds by hue, shape and stereotype, and selection, changes and diagnostics as
+  overlays that never recolour a node.
+- Each canvas keeps its own legend toggle, hidden by default.
+- Names show by their label by default; a missing or blank label falls back to the name.
+
+### Removed
+
+- `dt view`: use `dt open` (`--port`, `--host`, `--base` as before). It now fails, naming the replacement.
+- The `view` section of `domaintrail.jsonc`: it is `open`. A config with `view` is refused when loaded, saying where
+  each key went.
+- `tests/_testing.ts` in the generated contract tests (replaced by `domaintrail/testing`); one written earlier is
+  removed by `dt generate ts`.
+
+### Fixed
+
+- A reload of the Live View comes back to the world, storming and view shown before, and draws its first frame where
+  the layout settles (the columns, the app bar and the view bar no longer move after it).
+- The language server reads the sources in the order `dt check` does (by code point).
+- The Live View's source highlights a keyword after `.` as a name.
+- Generation refuses a symbolic link on every directory it writes to.
+- Internal: the code is split into contexts, capabilities, the platform, the shared kernel and apps, with boundaries
+  checked by tests (ADR 0025, ADR 0027); contributors see `CONTRIBUTING.md`.
+
+### Upgrading
+
+Upgrade Node.js first if needed (22.13 or later), then the config, then the model, then generate and fix the code.
+
+1. **`dt view` → `dt open`.** Replace it in scripts and docs; its options are the same:
+
+   ```sh
+   dt view --port 8080 --base main   # before (0.6.0)
+   dt open --port 8080 --base main   # after (0.7.0)
+   ```
+
+   In `domaintrail.jsonc`, rename the section `view` to `open` (dt refuses the old one until you do):
+
+   ```jsonc
+   "view": { "port": 8080 }   // before
+   "open": { "port": 8080 }   // after
+   ```
+
+   If the config sets `sources` and you add stormings, list a `.dtes` glob too (`"**/*.dtes"`); the default finds both.
+2. **`.domaintrail/` moves out of the workspace.** Run `dt open` or `dt generate ts` once: it prints
+   `Moved .domaintrail/ to ~/.local/state/domaintrail/<workspace>/` and deletes the emptied directory. Stop any
+   `dt view` of the older version first. The record of `dt generate ts` is not moved: after the next run, delete by hand
+   the generated files of earlier runs that it no longer writes (a moved output directory, a removed context). The
+   `.domaintrail` entry in `.gitignore` may then be removed. In CI or containers, set `DOMAINTRAIL_STATE_DIR` to a
+   writable directory if the home directory is not.
+3. **M025.** Where a context split across files has `///` above `context X` in more than one file, merge them into
+   one (keep it in `context.dt`, with the context-wide types) and delete the others:
+
+   ```dt
+   // before: sales/order.dt and sales/customer.dt both had
+   /// Orders and customers.
+   context Sales { ... }
+   // after: only sales/context.dt has the ///; the other files write `context Sales { ... }` without it
+   ```
+
+   Run `dt check` until it exits 0 (M011 also reports an element whose name clashes with a new generated name, such as
+   `<Command><Aggregate>Params`).
+4. **Regenerate** with `dt generate ts`, then type-check and fix the code:
+   - **Command parameters are one object.** Callers and implementations name each parameter:
+
+     ```ts
+     // before (0.6.0)
+     orderCommands.cancel(order, reason);
+     orderCommands.place(id, customer);
+     cancel: decide<Sales.CancelOrderDecision>(Sales.OrderShape, { Draft: (order, reason) => … }),
+     // after (0.7.0)
+     orderCommands.cancel(order, { reason });
+     orderCommands.place({ id, customer });
+     cancel: decide<Sales.CancelOrderDecision>(Sales.OrderShape, { Draft: (order, { reason }) => … }),
+     ```
+
+     The same holds for hand-written requirement checks and the examples given to contract tests
+     (`[order, { reason }]`).
+   - **IDs and primitives on `UUID` return a `Result`.** Handle it; a value that is a UUID by construction may be
+     unwrapped, a failure being a bug. Fixtures and tests must use UUIDs:
+
+     ```ts
+     // before (0.6.0)
+     const id = Sales.makeOrderId(crypto.randomUUID());
+     // after (0.7.0)
+     const made = Sales.makeOrderId(crypto.randomUUID());
+     if (!made.ok) throw new Error(`not a UUID: ${made.error.value}`);
+     const id = made.value;
+     ```
+
+     Rename an invariant of your own named `uuid` on such a type (M002).
+   - **Invariants without an expression on an aggregate**: type their implementation (the `…DeclaredChecks` slot)
+     with `<Aggregate>Common` instead of a state's type.
+   - **Contract tests**: import `cases`, `suite`, `Suite` and `TestCase` from `domaintrail/testing` (no longer from
+     the generated `tests/_testing.ts` or `tests/index.ts`); keep `domaintrail` and `fast-check` as dev dependencies.
+     After every later upgrade of domaintrail, run `dt generate ts` again: the generated tests fail to load with
+     another minor version.
+5. **Readers of the model's JSON** (`dt show --format json`, or the Live View's payload) read the new shape:
+   `contexts` and `elements` are lists (find an element by `name` and `context`, not by key), elements are told apart
+   by `kind`, and an enum value is `{ name, label }`.
+
 ## [0.6.0] - 2026-10-28
 
 ### Added
@@ -296,6 +498,7 @@ The first published version.
 - The Live View (`dt view`): the context map, the structure diagram (three levels), the catalog, the state diagram,
   the inspector with the source, problems and changes, updated on every save; in Japanese or English, light or dark.
 
+[0.7.0]: https://github.com/hisamekms/domaintrail/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/hisamekms/domaintrail/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/hisamekms/domaintrail/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/hisamekms/domaintrail/compare/v0.3.0...v0.4.0
