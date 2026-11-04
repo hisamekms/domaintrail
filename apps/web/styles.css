@@ -5037,6 +5037,20 @@ del.was.block {
 .chat-system .chat-time {
     order: 3;
 }
+/* a record of what a person did (records.ts): the session-start row's look, centred; records next to each other a
+   group's inside apart; one at the end of an interview's thread after the avatar column, on the thread's line */
+.chat-record {
+    justify-content: center;
+    text-align: center;
+}
+.chat-record.hangs {
+    justify-content: flex-start;
+    gap: var(--gap-inside);
+    text-align: left;
+}
+.chat-item-record + .chat-item-record:not(.chat-thread-reply) {
+    margin-top: var(--gap-inside);
+}
 .chat-message {
     display: flex;
     align-items: flex-start;

@@ -114,6 +114,7 @@ import { latestRevision } from './state';
 import {
     agentStatus,
     arrivedBelow,
+    changedAt,
     elapsed,
     isFacilitator,
     mentionablePeople,
@@ -143,6 +144,7 @@ import { JourneyChip } from './journey-panel';
 import { journeyOverview } from './journey-view';
 import { latestGuide } from './guide-view';
 import { Act } from '../shared/act';
+import { RecordRow } from './record-row';
 
 type RequestJson = SessionData['state']['requests'][number];
 /** A unit to open and reveal in AI の作業 (the header status clicked); `n` tells a click on the same unit again apart. */
@@ -542,9 +544,9 @@ export function SessionChat(props: {
             setJourneysOpen(open);
             if (!open) setJourneyNotice(undefined);
         },
-        act: (act: JourneyAct) => void sessionApi.journeyAct(act).then(journeyDone, journeyFailed),
+        act: (act: JourneyAct) => void sessionApi.journeyAct(act, lang).then(journeyDone, journeyFailed),
         choose: (journey) => void sessionApi.chooseJourney(journey).then(journeyDone, journeyFailed),
-        decide: (id, decision) => void sessionApi.decideJourneyRequest(id, decision).then(() => setJourneyNotice(undefined), journeyFailed),
+        decide: (id, decision) => void sessionApi.decideJourneyRequest(id, decision, lang).then(() => setJourneyNotice(undefined), journeyFailed),
         seeGuide: () => {
             props.onOpen();
             const latest = latestGuide(state);
@@ -808,9 +810,7 @@ function Stream({ shown }: { shown: Shown }) {
     // the AI's cards too (Solo): one appearing, or turning into its answer or run card, is a change of the stream
     const signature = shown.entries
         .map((e) =>
-            e.kind === 'item'
-                ? `${e.item.key}@${e.item.kind === 'card' ? e.item.updatedAt : e.item.at}`
-                : `ai:${e.request}=${e.content.kind === 'item' ? e.content.item.key : e.content.kind}`,
+            e.kind === 'item' ? `${e.item.key}@${changedAt(e.item)}` : `ai:${e.request}=${e.content.kind === 'item' ? e.content.item.key : e.content.kind}`,
         )
         .join('|');
     // the pane shown again, resized, or a bubble grown: still at the bottom
@@ -1055,9 +1055,21 @@ function streamRows(shown: Shown, tx: Tx): Row[] {
                 };
             case 'card':
                 return { key: item.key, kind: item.kind, author: undefined, render: () => <RunCard unit={item.unit} /> };
+            case 'record':
+                return {
+                    key: item.key,
+                    kind: item.kind,
+                    author: undefined,
+                    render: () => <RecordRow record={item.record} hangs={look.hangsOn !== undefined} />,
+                };
         }
     };
-    const toOf = (item: StreamItem): ReplyTo | undefined => (item.kind === 'message' ? item.request.replyTo : undefined);
+    const toOf = (item: StreamItem): ReplyTo | undefined =>
+        item.kind === 'message'
+            ? item.request.replyTo
+            : item.kind === 'record' && item.record.replyTo !== undefined
+              ? { kind: 'Message', request: item.record.replyTo }
+              : undefined;
     return shown.entries.map((entry, i): Row => {
         const look = looks[i] ?? { hangsOn: undefined, head: false, more: false, quote: false };
         if (entry.kind === 'item') return { id: rowId(entry.item), look, to: toOf(entry.item), ...itemRow(entry.item, look) };

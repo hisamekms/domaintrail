@@ -67,6 +67,8 @@ export function threadLines(entries: readonly ChatEntry[]): ThreadLine[] {
     const items = entries.flatMap((e): StreamItem[] => (e.kind === 'item' ? [e.item] : e.content.kind === 'item' ? [e.content.item] : []));
     for (const i of items) if (i.kind === 'card') for (const { run } of i.unit.runs) cardOf.set(run.id, i.key);
     const toOf = (item: StreamItem): string | undefined => {
+        // a record at the end of an interview's thread replies to its last message
+        if (item.kind === 'record') return item.record.replyTo === undefined ? undefined : `message:${item.record.replyTo}`;
         if (item.kind !== 'message') return undefined;
         const to = item.request.replyTo;
         if (to?.kind === 'Message') return `message:${to.request}`;
