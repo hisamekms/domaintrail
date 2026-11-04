@@ -8503,7 +8503,7 @@ label.proposal-option {
 .journey-note-actions {
     margin-top: var(--gap-inside);
 }
-/* an interview's choices under the question it awaits (its starter only), wrapping: single ones are send buttons
+/* an interview's choices under the question it awaits, wrapping. Its starter's: single ones are send buttons
    (shared/act.tsx); several to check are these labels, a checkbox in each, on the same pale wash, then 送る */
 .interview-choices {
     display: flex;
@@ -8535,6 +8535,19 @@ label.proposal-option {
 .session-chat .interview-choice input {
     margin: 0;
     accent-color: var(--brand);
+}
+/* the same choices as anyone else reads them: grey, nothing to press */
+.interview-choices-seen {
+    margin-bottom: 0;
+    padding: 0;
+    list-style: none;
+}
+.session-chat .interview-choices-seen .interview-choice,
+.session-chat .interview-choices-seen .interview-choice:hover {
+    border-color: var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: default;
 }
 /* the facilitator's record of a triage: small muted lines under the message, the stage that decided strong */
 .triage-record {

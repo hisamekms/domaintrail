@@ -8,6 +8,7 @@
 // messages in the stream; in Solo each sits under the answer it follows (`interviewSlot`). Under the question the
 // interview awaits, its starter gets its choices as buttons (`InterviewChoices`): one pressed is sent as the answer at
 // once, or — when several make one answer — checked and sent together; the last, その他, takes them to the composer.
+// Everyone else in a Collab session reads the same choices as a quiet list (`SeenChoices`): nothing to press.
 import { useState, type ReactElement } from 'react';
 import { Check, Flag, LoaderCircle, Pencil, Send, Sparkles, X } from 'lucide-react';
 import { briefLines, commandId } from '@domaintrail/collaboration';
@@ -277,27 +278,29 @@ export function InterviewPanel(props: { session: SessionData; live: boolean }) {
     );
 }
 
-/** The choices of the question the interview awaits an answer to, for its starter. */
+/** The choices of the question the interview awaits an answer to. */
 export interface AwaitedChoices {
     /** The AI's question (its message). */
     readonly question: string;
     readonly choices: readonly string[];
     /** Several make one answer: checked, then sent together. */
     readonly multiple: boolean;
+    /** Whether this page answers with them: its starter's, live. Anyone else reads them. */
+    readonly mine: boolean;
 }
 
 /**
  * The choices to show under a message of the AI: only when it is the question the running interview awaits an answer
- * to (none once its starter answered, or the next question came), only for its starter on a live page, only when it
- * has any. The others in a Collab session do not see them: the starter's answer shows as a message.
+ * to (none once its starter answered, or the next question came), only when it has any. Everyone sees them (the plan:
+ * everyone sees the questions); only the starter, on a live page, answers with them: the interview hears only their
+ * messages, so the others read them, and the starter's answer shows as a message.
  */
 export function awaitedChoices(state: Pick<SessionStateBody, 'interviews'>, request: string, me: string, live: boolean): AwaitedChoices | undefined {
-    if (!live) return undefined;
     const i = runningInterview(state);
-    if (!i || i.state !== 'Asking' || i.startedBy !== me || i.awaiting !== undefined) return undefined;
+    if (!i || i.state !== 'Asking' || i.awaiting !== undefined) return undefined;
     const asked = i.asked;
     if (!asked || asked.question !== request || asked.choices.length === 0) return undefined;
-    return { question: asked.question, choices: asked.choices, multiple: asked.multiple };
+    return { question: asked.question, choices: asked.choices, multiple: asked.multiple, mine: live && i.startedBy === me };
 }
 
 /** Several choices as one answer, in their order: joined with 「、」 in Japanese, ", " in English. */
@@ -365,7 +368,23 @@ export function ChoiceList(props: ChoiceListProps): ReactElement {
     );
 }
 
-/** The choices of the question the interview awaits, under the AI's message, for its starter (nothing otherwise). */
+/**
+ * The choices for anyone but the interview's starter: the same texts, nothing to press (the interview hears only its
+ * starter), drawn as a quiet list.
+ */
+export function SeenChoices(props: { readonly choices: readonly string[]; readonly label: string }): ReactElement {
+    return (
+        <ul className="interview-choices interview-choices-seen" aria-label={props.label}>
+            {props.choices.map((c, i) => (
+                <li key={i} className="interview-choice">
+                    <ChoiceText text={c} />
+                </li>
+            ))}
+        </ul>
+    );
+}
+
+/** The choices of the question the interview awaits, under the AI's message: its starter answers with them, the others read them. */
 export function InterviewChoices({ request }: { request: string }) {
     const { session, tx, focusComposer } = useChat();
     const lang = useLang();
@@ -377,6 +396,7 @@ export function InterviewChoices({ request }: { request: string }) {
     const [sent, setSent] = useState(false);
     const [error, setError] = useState<string | undefined>();
     if (!awaited || sent) return null;
+    if (!awaited.mine) return <SeenChoices choices={awaited.choices} label={tx.chat.interview.choices.label} />;
     const send = async (text: string): Promise<void> => {
         setBusy(true);
         try {
