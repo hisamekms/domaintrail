@@ -52,14 +52,16 @@ describe('line 1: what was decided', () => {
     test('an existing storming: the brief confirmed, the journey added with its goal', async () => {
         const ws = await workspace({ 'a.dtes': await stages() }, file({ ConvenienceStoreIssuance: esEntry() }));
         const ja = journeyNote({ journey: ES_KEY, decided: { kind: 'esAdded', label: LABEL, level: 'BigPicture' }, language: 'Ja', workspace: ws });
-        expect(ja.body.split('\n')[0]).toBe(`ブリーフを確定しました。旅程に「${LABEL}」を加えました（ゴール：ビッグピクチャー）。`);
+        expect(ja.body.split('\n')[0]).toBe(`ブリーフを確定しました。ジャーニーに「${LABEL}」を加えました（ゴール：ビッグピクチャー）。`);
         const en = journeyNote({ journey: ES_KEY, decided: { kind: 'esAdded', label: 'Issuance', level: 'DesignLevel' }, language: 'En', workspace: ws });
         expect(en.body.split('\n')[0]).toBe('Brief confirmed. Added “Issuance” to the journeys (goal: Design Level).');
     });
 
     test('a new storming: created and added once its run ended; first the events, with no button', () => {
         const ja = journeyNote({ journey: 'es:Returns', decided: { kind: 'esCreated', label: '返品', level: 'BigPicture' }, language: 'Ja' });
-        expect(ja.body).toBe('ストーミング「返品」を作り、旅程に加えました（ゴール：ビッグピクチャー）。\nまず出来事を出します。起きたことを話してください。');
+        expect(ja.body).toBe(
+            'ストーミング「返品」を作り、ジャーニーに加えました（ゴール：ビッグピクチャー）。\nまず出来事を出します。起きたことを話してください。',
+        );
         expect(ja.note).toEqual({ journey: 'es:Returns' as Collaboration.GuideJourneyKey, targets: [] });
         const en = journeyNote({ journey: 'es:Returns', decided: { kind: 'esCreated', label: 'Returns', level: 'BigPicture' }, language: 'En' });
         expect(en.body).toBe('Created the storming “Returns” and added it to the journeys (goal: Big Picture).\nFirst, the events: tell what happens.');
@@ -67,7 +69,7 @@ describe('line 1: what was decided', () => {
 
     test('a new storming whose run did not complete: said briefly, one line, the journey kept', () => {
         expect(journeyNote({ journey: 'es:Returns', decided: { kind: 'esNotCreated', label: '返品' }, language: 'Ja' }).body).toBe(
-            'ストーミング「返品」を作れませんでした。旅程はそのまま残しています。',
+            'ストーミング「返品」を作れませんでした。ジャーニーはそのまま残しています。',
         );
         expect(journeyNote({ journey: 'es:Returns', decided: { kind: 'esNotCreated', label: 'Returns' }, language: 'En' }).body).toBe(
             'Could not create the storming “Returns”. Its journey is kept as written.',
@@ -91,7 +93,7 @@ describe('line 1: what was decided', () => {
             language: 'Ja',
             approvedBy: '佐藤',
         });
-        expect(added.body.split('\n')[0]).toBe('佐藤が承認し、旅程に加えました（ゴール：ビッグピクチャー）。');
+        expect(added.body.split('\n')[0]).toBe('佐藤が承認し、ジャーニーに加えました（ゴール：ビッグピクチャー）。');
         const model = journeyNote({
             journey: 'issuance',
             decided: { kind: 'modelAdded', name: '交付', pattern: 'OneContext', goal: 'commands' },
@@ -105,7 +107,7 @@ describe('line 1: what was decided', () => {
             language: 'Ja',
             approvedBy: '佐藤',
         });
-        expect(created.body.split('\n')[0]).toBe('佐藤が承認し、ストーミング「返品」を作って旅程に加えました（ゴール：ビッグピクチャー）。');
+        expect(created.body.split('\n')[0]).toBe('佐藤が承認し、ストーミング「返品」を作ってジャーニーに加えました（ゴール：ビッグピクチャー）。');
         const revised = journeyNote({ journey: 'es:Returns', decided: { kind: 'revised', changed: ['goal'] }, language: 'Ja', approvedBy: '佐藤' });
         expect(revised.body.split('\n')[0]).toBe('佐藤が承認し、ブリーフを見直しました（ゴールが変わりました）。');
     });
@@ -118,7 +120,7 @@ describe('line 1: what was decided', () => {
             language: 'Ja',
             workspace: ws,
         });
-        expect(ja.body.split('\n')[0]).toBe('旅程に「交付のモデル」を加えました（ES から → 不変条件）。');
+        expect(ja.body.split('\n')[0]).toBe('ジャーニーに「交付のモデル」を加えました（ES から → 不変条件）。');
         const en = journeyNote({
             journey: 'issuance',
             decided: { kind: 'modelAdded', name: 'Issuance', pattern: 'Whole', goal: 'contextMap' },

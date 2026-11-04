@@ -80,6 +80,12 @@ export interface SessionStateBody {
     readonly interviews?: Json<readonly Collaboration.Interview[]>;
     /** The candidate and answer commands of the `/` list, in the order they were started (absent from a server before them). */
     readonly slashCommands?: Json<readonly Collaboration.SlashCommand[]>;
+    /**
+     * The records of what people did (a goal changed, marks, a journey done or archived, the current journey chosen, a
+     * request and its outcome, an interview stopped, a brief rejected) and of the journey file changed outside dt, in
+     * the order they were written (absent from a server before them).
+     */
+    readonly records?: Json<readonly Collaboration.SessionRecord[]>;
     /** The team's message templates (`templates` in domaintrail.jsonc), shown after the built-in ones (absent: none). */
     readonly templates?: readonly MessageTemplateBody[];
     /** Whether an agent is connected, per role, and how many triages, answers and runs wait for one. */
@@ -194,6 +200,8 @@ export const EVENT_MESSAGE_TYPES = {
     SlashCommandAnswered: 'command.answered',
     CandidatesApplied: 'command.candidates_applied',
     SlashCommandStopped: 'command.stopped',
+    RecordWritten: 'record.written',
+    RecordRevised: 'record.revised',
 } as const satisfies Record<Collaboration.PersistentEvent['type'], string>;
 
 type EventType = Collaboration.PersistentEvent['type'];

@@ -11,6 +11,7 @@ type RevisionJson = SessionStateBody['revisions'][number];
 type SessionJson = SessionStateBody['session'];
 type MarkJson = SessionStateBody['marks'][number];
 type ApprovalJson = SessionStateBody['approvals'][number];
+type RecordJson = NonNullable<SessionStateBody['records']>[number];
 
 export interface SessionModel {
     readonly state: SessionStateBody | undefined;
@@ -259,6 +260,26 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
         case 'CandidatesApplied':
         case 'SlashCommandStopped':
             return { state: at, refetch: true };
+        // the records carry themselves whole: a new one added, one written again (marks merged, a request's outcome)
+        case 'RecordWritten': {
+            const records = state.records ?? [];
+            if (records.some((r) => r.id === e.recordId)) return { state: at, refetch: false };
+            const record: RecordJson = {
+                state: 'Written',
+                id: e.recordId,
+                session: e.session,
+                ...(e.by !== undefined && { by: e.by }),
+                fact: e.fact,
+                ...(e.replyTo !== undefined && { replyTo: e.replyTo }),
+                at: e.at,
+            };
+            return { state: { ...at, records: [...records, record] }, refetch: false };
+        }
+        case 'RecordRevised': {
+            const records = state.records ?? [];
+            if (!records.some((r) => r.id === e.recordId)) return { state: at, refetch: true };
+            return { state: { ...at, records: replaceById(records, e.recordId, (r) => ({ ...r, fact: e.fact, revisedAt: e.revisedAt })) }, refetch: false };
+        }
     }
 }
 

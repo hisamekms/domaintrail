@@ -6037,6 +6037,667 @@ export interface NoSuchOption {
 }
 
 /**
+ * 記録ID
+ * 記録の識別子。
+ * @invariant uuid: the form of a UUID (RFC 9562): 8-4-4-4-12 hexadecimal digits, in either case, of any version
+ * Make it with `makeSessionRecordId`; never `as SessionRecordId` (see dt guide lint).
+ * @see contexts/collaboration/model/record.dt:3
+ */
+export type SessionRecordId = string & { readonly __domain: 'Collaboration.SessionRecordId' };
+
+/**
+ * A value that violates an invariant of SessionRecordId.
+ * @see contexts/collaboration/model/record.dt:3
+ */
+export interface InvalidSessionRecordId {
+    readonly type: 'InvalidSessionRecordId';
+    readonly value: string;
+    /** The violated invariant. */
+    readonly invariant: 'uuid';
+}
+
+/**
+ * Creates a SessionRecordId, checking its invariants: generated as `makeSessionRecordId`, or written by hand.
+ * @see contexts/collaboration/model/record.dt:3
+ */
+export type MakeSessionRecordId = (value: string) => Result<SessionRecordId, InvalidSessionRecordId>;
+
+/**
+ * The invariants of SessionRecordId that a value violates, in declaration order after 'uuid'; empty when it is a SessionRecordId.
+ * @see contexts/collaboration/model/record.dt:3
+ */
+export function checkSessionRecordId(value: string): readonly InvalidSessionRecordId['invariant'][] {
+    const violated: InvalidSessionRecordId['invariant'][] = [];
+    if (!(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value))) violated.push('uuid');
+    return violated;
+}
+
+/**
+ * Creates a SessionRecordId, checking its invariants with `checkSessionRecordId`: the first one violated is reported.
+ * @see contexts/collaboration/model/record.dt:3
+ */
+export const makeSessionRecordId: MakeSessionRecordId = (value) => {
+    const [invariant] = checkSessionRecordId(value);
+    if (invariant === undefined) return ok(value as SessionRecordId);
+    return err({ type: 'InvalidSessionRecordId', value, invariant });
+};
+
+/**
+ * 道のりのお願いID
+ * 参加者の道のりのお願い（ファシリテーターへ）の識別子。
+ * @invariant uuid: the form of a UUID (RFC 9562): 8-4-4-4-12 hexadecimal digits, in either case, of any version
+ * Make it with `makeJourneyRequestId`; never `as JourneyRequestId` (see dt guide lint).
+ * @see contexts/collaboration/model/record.dt:6
+ */
+export type JourneyRequestId = string & { readonly __domain: 'Collaboration.JourneyRequestId' };
+
+/**
+ * A value that violates an invariant of JourneyRequestId.
+ * @see contexts/collaboration/model/record.dt:6
+ */
+export interface InvalidJourneyRequestId {
+    readonly type: 'InvalidJourneyRequestId';
+    readonly value: string;
+    /** The violated invariant. */
+    readonly invariant: 'uuid';
+}
+
+/**
+ * Creates a JourneyRequestId, checking its invariants: generated as `makeJourneyRequestId`, or written by hand.
+ * @see contexts/collaboration/model/record.dt:6
+ */
+export type MakeJourneyRequestId = (value: string) => Result<JourneyRequestId, InvalidJourneyRequestId>;
+
+/**
+ * The invariants of JourneyRequestId that a value violates, in declaration order after 'uuid'; empty when it is a JourneyRequestId.
+ * @see contexts/collaboration/model/record.dt:6
+ */
+export function checkJourneyRequestId(value: string): readonly InvalidJourneyRequestId['invariant'][] {
+    const violated: InvalidJourneyRequestId['invariant'][] = [];
+    if (!(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value))) violated.push('uuid');
+    return violated;
+}
+
+/**
+ * Creates a JourneyRequestId, checking its invariants with `checkJourneyRequestId`: the first one violated is reported.
+ * @see contexts/collaboration/model/record.dt:6
+ */
+export const makeJourneyRequestId: MakeJourneyRequestId = (value) => {
+    const [invariant] = checkJourneyRequestId(value);
+    if (invariant === undefined) return ok(value as JourneyRequestId);
+    return err({ type: 'InvalidJourneyRequestId', value, invariant });
+};
+
+/**
+ * 記録の道のりの名前
+ * 記録したときの道のりの名前（ES はストーミングのラベル、モデリングは道のりの名前）。あとで名前が変わっても、記録は変わらない。
+ * @invariant valid: length(value) >= 1 and length(value) <= 200
+ * Make it with `makeJourneyLabel`; never `as JourneyLabel` (see dt guide lint).
+ * @see contexts/collaboration/model/record.dt:9
+ */
+export type JourneyLabel = string & { readonly __domain: 'Collaboration.JourneyLabel' };
+
+/**
+ * A value that violates an invariant of JourneyLabel.
+ * @see contexts/collaboration/model/record.dt:9
+ */
+export interface InvalidJourneyLabel {
+    readonly type: 'InvalidJourneyLabel';
+    readonly value: string;
+    /** The violated invariant. */
+    readonly invariant: 'valid';
+}
+
+/**
+ * Creates a JourneyLabel, checking its invariants: generated as `makeJourneyLabel`, or written by hand.
+ * @see contexts/collaboration/model/record.dt:9
+ */
+export type MakeJourneyLabel = (value: string) => Result<JourneyLabel, InvalidJourneyLabel>;
+
+/**
+ * The invariants of JourneyLabel that a value violates, in declaration order; empty when it is a JourneyLabel.
+ * @see contexts/collaboration/model/record.dt:9
+ */
+export function checkJourneyLabel(value: string): readonly InvalidJourneyLabel['invariant'][] {
+    const violated: InvalidJourneyLabel['invariant'][] = [];
+    if (!((value.length >= 1) && (value.length <= 200))) violated.push('valid');
+    return violated;
+}
+
+/**
+ * Creates a JourneyLabel, checking its invariants with `checkJourneyLabel`: the first one violated is reported.
+ * @see contexts/collaboration/model/record.dt:9
+ */
+export const makeJourneyLabel: MakeJourneyLabel = (value) => {
+    const [invariant] = checkJourneyLabel(value);
+    if (invariant === undefined) return ok(value as JourneyLabel);
+    return err({ type: 'InvalidJourneyLabel', value, invariant });
+};
+
+/**
+ * 記録の道のり
+ * 記録が名指す道のり: 鍵と、記録したときの名前。
+ * @see contexts/collaboration/model/record.dt:12
+ */
+export interface RecordedJourney {
+    /** 道のり */
+    readonly journey: GuideJourneyKey;
+    /** 名前 */
+    readonly label: JourneyLabel;
+}
+
+/**
+ * Whether two RecordedJourney values are equal: by all their fields (ADR 0016).
+ * @see contexts/collaboration/model/record.dt:12
+ */
+export function equalRecordedJourney(a: RecordedJourney, b: RecordedJourney): boolean {
+    return a.journey === b.journey && a.label === b.label;
+}
+
+/**
+ * 道のりの状態
+ * 道のりの状態（道のりのファイルの `state`）。
+ * @see contexts/collaboration/model/record.dt:18
+ */
+export type JourneyStatus =
+    | 'Active' // 進行中
+    | 'Done' // 完了
+    | 'Archived'; // しまった
+
+/**
+ * 済みの区切り
+ * 済みにした・外した区切り1つ（BC の行ならコンテキストの名前で）。
+ * @see contexts/collaboration/model/record.dt:21
+ */
+export interface RecordedMark {
+    /** 区切り */
+    readonly step: GuideStepKey;
+    /** BC の行 */
+    readonly context?: ContextName;
+}
+
+/**
+ * Whether two RecordedMark values are equal: by all their fields (ADR 0016).
+ * @see contexts/collaboration/model/record.dt:21
+ */
+export function equalRecordedMark(a: RecordedMark, b: RecordedMark): boolean {
+    return a.step === b.step && sameOptional(a.context, b.context, ($82: ContextName, $83: ContextName) => $82 === $83);
+}
+
+/**
+ * お願いした操作
+ * 参加者がファシリテーターにお願いした、道のりの操作。
+ * @see contexts/collaboration/model/record.dt:27
+ */
+export type RequestedJourneyAct =
+    /**
+     * いまの道のりにする
+     * いまの道のりにする（ない: 決めない）。
+     */
+    | {
+          readonly kind: 'Choose';
+          /** 道のり */
+          readonly journey?: RecordedJourney;
+      }
+    /** ゴールを変える */
+    | {
+          readonly kind: 'Goal';
+          /** 道のり */
+          readonly journey: RecordedJourney;
+          /** ゴール */
+          readonly goal: GuideStepKey;
+      }
+    /** 状態を変える */
+    | {
+          readonly kind: 'State';
+          /** 道のり */
+          readonly journey: RecordedJourney;
+          /** 状態 */
+          readonly state: JourneyStatus;
+      }
+    /** 済みを付け外す */
+    | {
+          readonly kind: 'Mark';
+          /** 道のり */
+          readonly journey: RecordedJourney;
+          /** 区切り */
+          readonly mark: RecordedMark;
+          /** 済みにする */
+          readonly done: boolean;
+      };
+
+/**
+ * Whether two RequestedJourneyAct values are equal: by `kind` and the fields of the variant (ADR 0016).
+ * @see contexts/collaboration/model/record.dt:27
+ */
+export function equalRequestedJourneyAct(a: RequestedJourneyAct, b: RequestedJourneyAct): boolean {
+    if (a.kind !== b.kind) return false;
+    if (a.kind === 'Choose') {
+        const y = b as Extract<RequestedJourneyAct, { readonly kind: 'Choose' }>;
+        return sameOptional(a.journey, y.journey, equalRecordedJourney);
+    }
+    if (a.kind === 'Goal') {
+        const y = b as Extract<RequestedJourneyAct, { readonly kind: 'Goal' }>;
+        return equalRecordedJourney(a.journey, y.journey) && a.goal === y.goal;
+    }
+    if (a.kind === 'State') {
+        const y = b as Extract<RequestedJourneyAct, { readonly kind: 'State' }>;
+        return equalRecordedJourney(a.journey, y.journey) && a.state === y.state;
+    }
+    if (a.kind === 'Mark') {
+        const y = b as Extract<RequestedJourneyAct, { readonly kind: 'Mark' }>;
+        return equalRecordedJourney(a.journey, y.journey) && equalRecordedMark(a.mark, y.mark) && a.done === y.done;
+    }
+    return true;
+}
+
+/**
+ * お願いの行方
+ * お願いがどうなったか。
+ * @see contexts/collaboration/model/record.dt:48
+ */
+export type JourneyRequestOutcome =
+    | 'Approved' // 承認
+    | 'Denied' // 却下
+    | 'Withdrawn'; // 取り下げ
+
+/**
+ * 外での変わり方
+ * 道のりのファイルが dt の外（git、エディタ）で変わったところの種類。
+ * @see contexts/collaboration/model/record.dt:51
+ */
+export type JourneyFileChangeKind =
+    | 'Added' // 道のりが増えた
+    | 'Removed' // 道のりがなくなった
+    | 'Goal' // ゴール
+    | 'State' // 状態
+    | 'Marks' // 済み
+    | 'Brief'; // ブリーフ
+
+/**
+ * 外で変わったところ
+ * 道のりのファイルが dt の外で変わったところ1つ。
+ * @see contexts/collaboration/model/record.dt:61
+ */
+export interface JourneyFileChange {
+    /** 種類 */
+    readonly kind: JourneyFileChangeKind;
+    /** 道のり */
+    readonly journey: RecordedJourney;
+    /** 前 — ゴール・状態の前（ゴールは区切りの鍵、状態は `JourneyStatus` の名前）。 */
+    readonly from?: string;
+    /** あと — ゴール・状態のあと。 */
+    readonly to?: string;
+}
+
+/**
+ * Whether two JourneyFileChange values are equal: by all their fields (ADR 0016).
+ * @see contexts/collaboration/model/record.dt:61
+ */
+export function equalJourneyFileChange(a: JourneyFileChange, b: JourneyFileChange): boolean {
+    return a.kind === b.kind && equalRecordedJourney(a.journey, b.journey) && sameOptional(a.from, b.from, ($84: string, $85: string) => $84 === $85) && sameOptional(a.to, b.to, ($86: string, $87: string) => $86 === $87);
+}
+
+/**
+ * 記録したこと
+ * 記録したこと。人の操作（誰がしたかは記録の `by`）か、dt の外での道のりのファイルの変わり。
+ * @see contexts/collaboration/model/record.dt:71
+ */
+export type RecordFact =
+    /**
+     * ゴールを変えた
+     * ゴールを変えた（カードの 🏁、パネルのゴールのメニュー）。
+     */
+    | {
+          readonly kind: 'GoalChanged';
+          /** 道のり */
+          readonly journey: RecordedJourney;
+          /** 前のゴール */
+          readonly from: GuideStepKey;
+          /** 新しいゴール */
+          readonly to: GuideStepKey;
+          /** ほかの道のり — いまの道のりでない（文で道のりを名指す）。 */
+          readonly other: boolean;
+      }
+    /**
+     * 済みを付け外した
+     * 区切りを済みにした・済みを外した。同じ人が続けて同じ向きに付け外すと、1つの記録にまとまる。
+     */
+    | {
+          readonly kind: 'MarksChanged';
+          /** 道のり */
+          readonly journey: RecordedJourney;
+          /** 済みにした */
+          readonly done: boolean;
+          /** 区切り */
+          readonly marks: readonly [RecordedMark, ...RecordedMark[]];
+          /** ほかの道のり */
+          readonly other: boolean;
+      }
+    /**
+     * 状態を変えた
+     * 完了にした・しまった・戻した。
+     */
+    | {
+          readonly kind: 'StateChanged';
+          /** 道のり */
+          readonly journey: RecordedJourney;
+          /** 状態 */
+          readonly state: JourneyStatus;
+      }
+    /**
+     * いまの道のりにした
+     * いまの道のりを決めた（人の操作だけ。決めていないときの既定の道のりは記録しない）。
+     */
+    | {
+          readonly kind: 'CurrentChosen';
+          /** 道のり */
+          readonly journey: RecordedJourney;
+      }
+    /**
+     * お願いした
+     * 参加者がファシリテーターにお願いした。決まると、同じ記録に行方を書き足す。
+     */
+    | {
+          readonly kind: 'JourneyRequested';
+          /** お願い */
+          readonly request: JourneyRequestId;
+          /** 操作 */
+          readonly act: RequestedJourneyAct;
+          /** 行方 */
+          readonly outcome?: JourneyRequestOutcome;
+          /** 決めた人 — 決めた人（承認・却下はファシリテーター、取り下げはお願いした人）。 */
+          readonly decidedBy?: ParticipantId;
+      }
+    /**
+     * 聞き取りを中止した
+     * 聞き取りを中止した（その聞き取りのスレッドの最後に）。
+     */
+    | {
+          readonly kind: 'InterviewStopped';
+          /**
+           * 聞き取り
+           * @see {@link Interview}
+           */
+          readonly interview: InterviewId;
+      }
+    /**
+     * 要約を却下した
+     * 参加者の聞き取りの要約を却下した（スレッドの最後に、皆に見える）。
+     */
+    | {
+          readonly kind: 'BriefRejected';
+          /**
+           * 聞き取り
+           * @see {@link Interview}
+           */
+          readonly interview: InterviewId;
+          /** ひとこと */
+          readonly note?: Text;
+      }
+    /**
+     * 外で変わった
+     * 道のりのファイルが dt の外で変わった（dt が書いたものは記録しない）。
+     */
+    | {
+          readonly kind: 'FileChangedOutside';
+          /** 変わったところ */
+          readonly changes: readonly JourneyFileChange[];
+          /** ほか — 挙げきれなかった変わりの数。 */
+          readonly more: Tally;
+          /** 読めない — 変わったあとのファイルが読めない。 */
+          readonly unreadable: boolean;
+      };
+
+/**
+ * Whether two RecordFact values are equal: by `kind` and the fields of the variant (ADR 0016).
+ * @see contexts/collaboration/model/record.dt:71
+ */
+export function equalRecordFact(a: RecordFact, b: RecordFact): boolean {
+    if (a.kind !== b.kind) return false;
+    if (a.kind === 'GoalChanged') {
+        const y = b as Extract<RecordFact, { readonly kind: 'GoalChanged' }>;
+        return equalRecordedJourney(a.journey, y.journey) && a.from === y.from && a.to === y.to && a.other === y.other;
+    }
+    if (a.kind === 'MarksChanged') {
+        const y = b as Extract<RecordFact, { readonly kind: 'MarksChanged' }>;
+        return equalRecordedJourney(a.journey, y.journey) && a.done === y.done && sameList(a.marks, y.marks, equalRecordedMark) && a.other === y.other;
+    }
+    if (a.kind === 'StateChanged') {
+        const y = b as Extract<RecordFact, { readonly kind: 'StateChanged' }>;
+        return equalRecordedJourney(a.journey, y.journey) && a.state === y.state;
+    }
+    if (a.kind === 'CurrentChosen') {
+        const y = b as Extract<RecordFact, { readonly kind: 'CurrentChosen' }>;
+        return equalRecordedJourney(a.journey, y.journey);
+    }
+    if (a.kind === 'JourneyRequested') {
+        const y = b as Extract<RecordFact, { readonly kind: 'JourneyRequested' }>;
+        return a.request === y.request && equalRequestedJourneyAct(a.act, y.act) && sameOptional(a.outcome, y.outcome, ($88: string, $89: string) => $88 === $89) && sameOptional(a.decidedBy, y.decidedBy, ($90: ParticipantId, $91: ParticipantId) => $90 === $91);
+    }
+    if (a.kind === 'InterviewStopped') {
+        const y = b as Extract<RecordFact, { readonly kind: 'InterviewStopped' }>;
+        return a.interview === y.interview;
+    }
+    if (a.kind === 'BriefRejected') {
+        const y = b as Extract<RecordFact, { readonly kind: 'BriefRejected' }>;
+        return a.interview === y.interview && sameOptional(a.note, y.note, ($92: Text, $93: Text) => $92 === $93);
+    }
+    if (a.kind === 'FileChangedOutside') {
+        const y = b as Extract<RecordFact, { readonly kind: 'FileChangedOutside' }>;
+        return sameList(a.changes, y.changes, equalJourneyFileChange) && a.more === y.more && a.unreadable === y.unreadable;
+    }
+    return true;
+}
+
+/**
+ * Fields shared by every state of 記録 (SessionRecord).
+ * @see contexts/collaboration/model/record.dt:126
+ */
+export interface SessionRecordCommon {
+    /** 記録ID */
+    readonly id: SessionRecordId;
+    /**
+     * セッション
+     * @see {@link Session}
+     */
+    readonly session: SessionId;
+    /** した人 — した人（外での変わりにはない）。 */
+    readonly by?: ParticipantId;
+    /** 記録したこと */
+    readonly fact: RecordFact;
+    /**
+     * スレッドの最後 — スレッドの最後に置く記録（聞き取りの中止・却下）なら、そのスレッドの最後のメッセージ。
+     * @see {@link Request}
+     */
+    readonly replyTo?: RequestId;
+    /** 記録日時 */
+    readonly at: Timestamp;
+    /** 書き足した日時 — 書き足した日時（済みのまとめ、お願いの行方）。 */
+    readonly revisedAt?: Timestamp;
+}
+
+/**
+ * 記録済み
+ * @see contexts/collaboration/model/record.dt:138
+ */
+export interface WrittenSessionRecord extends SessionRecordCommon {
+    readonly state: 'Written';
+}
+
+/**
+ * 記録
+ * セッションのチャットに dt が書く小さな記録の行（セッション開始の行と同じ見た目）。人の操作のうち、ほかの行が残らない
+ * もの（ゴール・済み・完了・しまう・戻す・いまの道のり・お願いとその行方・中止・却下）と、dt の外での道のりのファイルの変わりを
+ * 残す。誰がしたか（外での変わりにはない）、何を、いつ。セッションに残り、どのページにも届き、AI が読むここまでの経緯にも入る。
+ * @see contexts/collaboration/model/record.dt:126
+ */
+export type SessionRecord = WrittenSessionRecord;
+
+/**
+ * The fields of SessionRecord as data for `decide`: the common fields, and the fields of each state on top of them.
+ * @see contexts/collaboration/model/record.dt:126
+ */
+export const SessionRecordShape: Shape = {
+    fields: ['id', 'session', 'by', 'fact', 'replyTo', 'at', 'revisedAt'],
+    states: { Written: [] },
+};
+
+/**
+ * The invariants of SessionRecord (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.
+ * @see contexts/collaboration/model/record.dt:126
+ */
+export function checkSessionRecordCommon(_sessionRecord: SessionRecordCommon): readonly never[] {
+    return [];
+}
+
+/**
+ * The parameters of SessionRecord.write, by name.
+ * @see contexts/collaboration/model/record.dt:140
+ */
+export interface WriteSessionRecordParams {
+    /** 記録ID */
+    readonly id: SessionRecordId;
+    /** セッション */
+    readonly session: ActiveSession;
+    /** 参加者ID */
+    readonly by?: ParticipantId;
+    /** 記録したこと */
+    readonly fact: RecordFact;
+    /** 依頼ID */
+    readonly replyTo?: RequestId;
+    readonly at: Timestamp;
+}
+
+/**
+ * SessionRecord.write (new -> Written) — factory
+ * 記録する
+ * @emits RecordWritten — exactly once when the command succeeds
+ * @see contexts/collaboration/model/record.dt:140
+ */
+export type WriteSessionRecord = (
+    params: WriteSessionRecordParams,
+) => Result<{
+    readonly Written: {
+        readonly aggregate: WrittenSessionRecord;
+        readonly events: { readonly RecordWritten: RecordWritten };
+    };
+}, never>;
+
+/**
+ * SessionRecord.write, decided by one function; implement it with `decide(SessionRecordShape, …)` from the runtime.
+ * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
+ * new -> Written — set: every field
+ * @emits RecordWritten — exactly once when the command succeeds
+ * @see contexts/collaboration/model/record.dt:140
+ */
+export type WriteSessionRecordDecision = (
+    params: WriteSessionRecordParams,
+) => Result<{
+    readonly Written: {
+        readonly set: { readonly id: SessionRecordId; readonly session: SessionId; readonly by: ParticipantId | undefined; readonly fact: RecordFact; readonly replyTo: RequestId | undefined; readonly at: Timestamp; readonly revisedAt: Timestamp | undefined };
+        readonly events: { readonly RecordWritten: RecordWritten };
+    };
+}, never>;
+
+/**
+ * The parameters of SessionRecord.revise, by name.
+ * @see contexts/collaboration/model/record.dt:145
+ */
+export interface ReviseSessionRecordParams {
+    /** 記録したこと */
+    readonly fact: RecordFact;
+    readonly revisedAt: Timestamp;
+}
+
+/**
+ * SessionRecord.revise (Written -> Written)
+ * 記録を書き足す
+ * 記録を書き足す: 済みの付け外しを続けてまとめる、お願いに行方を書く。どう書き足すかはコード（`domain/records.ts`）が決める。
+ * @changes fact, revisedAt
+ * @emits RecordRevised — exactly once when the command succeeds
+ * @see contexts/collaboration/model/record.dt:145
+ */
+export type ReviseSessionRecord = (
+    sessionRecord: WrittenSessionRecord,
+    params: ReviseSessionRecordParams,
+) => Result<{
+    readonly Written: {
+        readonly aggregate: WrittenSessionRecord;
+        readonly events: { readonly RecordRevised: RecordRevised };
+    };
+}, never>;
+
+/**
+ * SessionRecord.revise, decided per source state; implement it with `decide(SessionRecordShape, …)` from the runtime.
+ * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
+ * @changes fact, revisedAt
+ * Written -> Written — set: fact, revisedAt; carried over: id, session, by, replyTo, at
+ * @see contexts/collaboration/model/record.dt:145
+ */
+export type ReviseSessionRecordDecision = {
+    /** @emits RecordRevised — exactly once when the command succeeds */
+    readonly Written: (sessionRecord: WrittenSessionRecord, params: ReviseSessionRecordParams) => Result<{
+        readonly Written: {
+            readonly set: { readonly fact: RecordFact; readonly revisedAt: Timestamp | undefined };
+            readonly events: { readonly RecordRevised: RecordRevised };
+        };
+    }, never>;
+};
+
+/**
+ * Command contracts of SessionRecord. Implement this interface by hand.
+ * Commands are pure functions of the aggregate and their parameters: no I/O, no clock, no randomness. IDs and times are passed in as parameters.
+ * @see contexts/collaboration/model/record.dt:126
+ */
+export interface SessionRecordCommands {
+    /** 記録する */
+    readonly write: WriteSessionRecord;
+    /** 記録を書き足す */
+    readonly revise: ReviseSessionRecord;
+}
+
+/**
+ * Events that the commands of SessionRecord may emit.
+ * @see contexts/collaboration/model/record.dt:126
+ */
+export type SessionRecordEvent = RecordWritten | RecordRevised;
+
+/**
+ * 記録した
+ * @persistent Persisted: storing this event is part of its contract.
+ * @see contexts/collaboration/model/record.dt:151
+ */
+export interface RecordWritten {
+    readonly type: 'RecordWritten';
+    /** 記録ID */
+    readonly recordId: SessionRecordId;
+    /** セッション */
+    readonly session: SessionId;
+    /** 参加者ID */
+    readonly by?: ParticipantId;
+    /** 記録したこと */
+    readonly fact: RecordFact;
+    /** 依頼ID */
+    readonly replyTo?: RequestId;
+    readonly at: Timestamp;
+}
+
+/**
+ * 記録を書き足した
+ * @persistent Persisted: storing this event is part of its contract.
+ * @see contexts/collaboration/model/record.dt:160
+ */
+export interface RecordRevised {
+    readonly type: 'RecordRevised';
+    /** 記録ID */
+    readonly recordId: SessionRecordId;
+    /** 記録したこと */
+    readonly fact: RecordFact;
+    readonly revisedAt: Timestamp;
+}
+
+/**
  * 依頼ID
  * 依頼の識別子。
  * @invariant uuid: the form of a UUID (RFC 9562): 8-4-4-4-12 hexadecimal digits, in either case, of any version
@@ -6201,7 +6862,7 @@ export interface JourneyNote {
  * @see contexts/collaboration/model/request.dt:31
  */
 export function equalJourneyNote(a: JourneyNote, b: JourneyNote): boolean {
-    return a.journey === b.journey && sameOptional(a.command, b.command, ($82: string, $83: string) => $82 === $83) && sameList(a.targets, b.targets, equalModelTarget);
+    return a.journey === b.journey && sameOptional(a.command, b.command, ($94: string, $95: string) => $94 === $95) && sameList(a.targets, b.targets, equalModelTarget);
 }
 
 /**
@@ -6310,7 +6971,7 @@ export function checkRequestCommon(request: RequestCommon): readonly ('atMostTwe
     if (!(request.targets.length <= 20)) violated.push('atMostTwentyTargets');
     if (!(distinct(request.targets, (t, t2) => equalModelTarget(t.target, t2.target)))) violated.push('distinctTargets');
     if (!(request.mentions.length <= 20)) violated.push('atMostTwentyMentions');
-    if (!(distinct(request.mentions, ($84: ParticipantId, $85: ParticipantId) => $84 === $85))) violated.push('distinctMentions');
+    if (!(distinct(request.mentions, ($96: ParticipantId, $97: ParticipantId) => $96 === $97))) violated.push('distinctMentions');
     if (!(request.targets.every((t) => !(t.target.kind === 'Workspace')))) violated.push('noWorkspaceTarget');
     return violated;
 }
@@ -6416,7 +7077,7 @@ export function checkSendRequestRequires(params: SendRequestParams): 'atMostTwen
     if (!(distinct(params.targets, (t, t2) => equalModelTarget(t.target, t2.target)))) return 'distinctTargets';
     if (!(params.targets.every((t) => !(t.target.kind === 'Workspace')))) return 'noWorkspaceTarget';
     if (!(params.mentions.length <= 20)) return 'atMostTwentyMentions';
-    if (!(distinct(params.mentions, ($86: ParticipantId, $87: ParticipantId) => $86 === $87))) return 'distinctMentions';
+    if (!(distinct(params.mentions, ($98: ParticipantId, $99: ParticipantId) => $98 === $99))) return 'distinctMentions';
     return undefined;
 }
 
@@ -6485,7 +7146,7 @@ export function checkRequestRevertRequestRequires(params: RequestRevertRequestPa
 
 /**
  * The parameters of Request.answer, by name.
- * @see contexts/collaboration/model/request.dt:101
+ * @see contexts/collaboration/model/request.dt:102
  */
 export interface AnswerRequestParams {
     /** 依頼ID */
@@ -6493,7 +7154,7 @@ export interface AnswerRequestParams {
     /** セッション */
     readonly session: ActiveSession;
     /** 答えるメッセージ */
-    readonly answers: RequestId;
+    readonly answers?: RequestId;
     /** 文章 */
     readonly body: Text;
     readonly sentAt: Timestamp;
@@ -6505,9 +7166,10 @@ export interface AnswerRequestParams {
  * Request.answer (new -> Sent) — factory
  * AI が答える
  * 読むだけの AI（回答役）が、相談のメッセージに答える。書き手は AI（`ai`）で、答えたメッセージへの返信。対象も言及もない。
- * 聞き取りを確定したあとの dt のお知らせも、これで AI の名で書く（`journeyNote` を添える）。
+ * 聞き取りを確定したあとの dt のお知らせも、これで AI の名で書く（`journeyNote` を添える）。道のりを完了にしたあとのお知らせは
+ * 答えるメッセージがなく、返信にならない。
  * @emits RequestSent — exactly once when the command succeeds
- * @see contexts/collaboration/model/request.dt:101
+ * @see contexts/collaboration/model/request.dt:102
  */
 export type AnswerRequest = (
     params: AnswerRequestParams,
@@ -6523,7 +7185,7 @@ export type AnswerRequest = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
  * new -> Sent — set: every field
  * @emits RequestSent — exactly once when the command succeeds
- * @see contexts/collaboration/model/request.dt:101
+ * @see contexts/collaboration/model/request.dt:102
  */
 export type AnswerRequestDecision = (
     params: AnswerRequestParams,
@@ -6557,7 +7219,7 @@ export type RequestEvent = RequestSent;
 /**
  * 依頼送信
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/request.dt:106
+ * @see contexts/collaboration/model/request.dt:107
  */
 export interface RequestSent {
     readonly type: 'RequestSent';
@@ -6588,7 +7250,7 @@ export interface RequestSent {
  * 依頼見送り
  * 以前のセッションのアウトボックスに残る見送り。いまは発行しないが、読み直し（再生）のために残す。
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/request.dt:123
+ * @see contexts/collaboration/model/request.dt:124
  */
 export interface RequestDismissed {
     readonly type: 'RequestDismissed';
@@ -6602,7 +7264,7 @@ export interface RequestDismissed {
 /**
  * 依頼なし
  * 指定した依頼がない。
- * @see contexts/collaboration/model/request.dt:130
+ * @see contexts/collaboration/model/request.dt:131
  */
 export interface RequestNotFound {
     readonly type: 'RequestNotFound';
@@ -6613,7 +7275,7 @@ export interface RequestNotFound {
 /**
  * 別のセッションの依頼
  * 依頼は別のセッションのもの。
- * @see contexts/collaboration/model/request.dt:135
+ * @see contexts/collaboration/model/request.dt:136
  */
 export interface RequestOfAnotherSession {
     readonly type: 'RequestOfAnotherSession';
@@ -6624,7 +7286,7 @@ export interface RequestOfAnotherSession {
 /**
  * 見送り済みの依頼
  * 依頼はすでに見送られている。
- * @see contexts/collaboration/model/request.dt:140
+ * @see contexts/collaboration/model/request.dt:141
  */
 export interface RequestAlreadyDismissed {
     readonly type: 'RequestAlreadyDismissed';
@@ -6635,7 +7297,7 @@ export interface RequestAlreadyDismissed {
 /**
  * 参加者でない人の言及
  * 言及した人は、そのセッションの参加者ではない。
- * @see contexts/collaboration/model/request.dt:145
+ * @see contexts/collaboration/model/request.dt:146
  */
 export interface MentionedNotAParticipant {
     readonly type: 'MentionedNotAParticipant';
@@ -6646,7 +7308,7 @@ export interface MentionedNotAParticipant {
 /**
  * 実行なし
  * 返信先の実行がない。
- * @see contexts/collaboration/model/request.dt:150
+ * @see contexts/collaboration/model/request.dt:151
  */
 export interface RunNotFound {
     readonly type: 'RunNotFound';
@@ -6657,7 +7319,7 @@ export interface RunNotFound {
 /**
  * 別のセッションの実行
  * 返信先の実行は別のセッションのもの。
- * @see contexts/collaboration/model/request.dt:155
+ * @see contexts/collaboration/model/request.dt:156
  */
 export interface RunOfAnotherSession {
     readonly type: 'RunOfAnotherSession';
@@ -6668,7 +7330,7 @@ export interface RunOfAnotherSession {
 /**
  * 返信できない実行
  * 返信先の実行は、まだ終わっていないか確認待ち（返信できるのは完了・失敗・辞退・中止・打ち消しの実行）。
- * @see contexts/collaboration/model/request.dt:160
+ * @see contexts/collaboration/model/request.dt:161
  */
 export interface RunNotReplyable {
     readonly type: 'RunNotReplyable';
@@ -6679,7 +7341,7 @@ export interface RunNotReplyable {
 /**
  * 打ち消せない実行
  * 打ち消す実行は、ファイルの変更を記録していない（変更のない実行、結果のない実行）か、もう打ち消された・打ち消しの待ちや最中。
- * @see contexts/collaboration/model/request.dt:165
+ * @see contexts/collaboration/model/request.dt:166
  */
 export interface RunNotRevertable {
     readonly type: 'RunNotRevertable';
@@ -6690,7 +7352,7 @@ export interface RunNotRevertable {
 /**
  * 言及する人が多すぎる
  * 本文で言及する人が20人を超える。
- * @see contexts/collaboration/model/request.dt:170
+ * @see contexts/collaboration/model/request.dt:171
  */
 export interface TooManyMentions {
     readonly type: 'TooManyMentions';
@@ -6699,7 +7361,7 @@ export interface TooManyMentions {
 /**
  * 言及する人の重複
  * 本文で同じ人を2回言及している。
- * @see contexts/collaboration/model/request.dt:173
+ * @see contexts/collaboration/model/request.dt:174
  */
 export interface DuplicateMention {
     readonly type: 'DuplicateMention';
@@ -6708,7 +7370,7 @@ export interface DuplicateMention {
 /**
  * 対象が多すぎる
  * 依頼の対象が20件を超える。
- * @see contexts/collaboration/model/request.dt:176
+ * @see contexts/collaboration/model/request.dt:177
  */
 export interface TooManyTargets {
     readonly type: 'TooManyTargets';
@@ -6717,7 +7379,7 @@ export interface TooManyTargets {
 /**
  * 対象の重複
  * 依頼の対象に同じものが2回ある。
- * @see contexts/collaboration/model/request.dt:179
+ * @see contexts/collaboration/model/request.dt:180
  */
 export interface DuplicateTarget {
     readonly type: 'DuplicateTarget';
@@ -6726,7 +7388,7 @@ export interface DuplicateTarget {
 /**
  * 対象にワークスペース全体
  * 依頼の対象にワークスペース全体がある（ワークスペース全体は、対象を挙げないことで表す）。
- * @see contexts/collaboration/model/request.dt:182
+ * @see contexts/collaboration/model/request.dt:183
  */
 export interface WorkspaceTarget {
     readonly type: 'WorkspaceTarget';
@@ -8387,7 +9049,7 @@ export function equalModelTarget(a: ModelTarget, b: ModelTarget): boolean {
     if (a.kind !== b.kind) return false;
     if (a.kind === 'Workspace') {
         const y = b as Extract<ModelTarget, { readonly kind: 'Workspace' }>;
-        return sameOptional(a.scope, y.scope, ($88: string, $89: string) => $88 === $89);
+        return sameOptional(a.scope, y.scope, ($100: string, $101: string) => $100 === $101);
     }
     if (a.kind === 'DtElement') {
         const y = b as Extract<ModelTarget, { readonly kind: 'DtElement' }>;
@@ -8467,7 +9129,7 @@ export interface TargetSnapshot {
  * @see contexts/collaboration/model/target.dt:60
  */
 export function equalTargetSnapshot(a: TargetSnapshot, b: TargetSnapshot): boolean {
-    return equalModelTarget(a.target, b.target) && a.sourceRevision === b.sourceRevision && sameOptional(a.label, b.label, ($90: string, $91: string) => $90 === $91) && sameOptional(a.range, b.range, equalSourceRange);
+    return equalModelTarget(a.target, b.target) && a.sourceRevision === b.sourceRevision && sameOptional(a.label, b.label, ($102: string, $103: string) => $102 === $103) && sameOptional(a.range, b.range, equalSourceRange);
 }
 
 /**
@@ -8684,7 +9346,7 @@ export interface TriageStep {
  * @see contexts/collaboration/model/triage.dt:39
  */
 export function equalTriageStep(a: TriageStep, b: TriageStep): boolean {
-    return a.stage === b.stage && a.verdict === b.verdict && sameOptional(a.confidence, b.confidence, ($92: Confidence, $93: Confidence) => Number($92) === Number($93)) && sameOptional(a.reason, b.reason, ($94: Text, $95: Text) => $94 === $95) && sameOptional(a.model, b.model, ($96: string, $97: string) => $96 === $97) && a.durationMs === b.durationMs && sameOptional(a.error, b.error, ($98: Text, $99: Text) => $98 === $99) && a.at.getTime() === b.at.getTime();
+    return a.stage === b.stage && a.verdict === b.verdict && sameOptional(a.confidence, b.confidence, ($104: Confidence, $105: Confidence) => Number($104) === Number($105)) && sameOptional(a.reason, b.reason, ($106: Text, $107: Text) => $106 === $107) && sameOptional(a.model, b.model, ($108: string, $109: string) => $108 === $109) && a.durationMs === b.durationMs && sameOptional(a.error, b.error, ($110: Text, $111: Text) => $110 === $111) && a.at.getTime() === b.at.getTime();
 }
 
 /**
@@ -8741,7 +9403,7 @@ export function equalTriageOutcome(a: TriageOutcome, b: TriageOutcome): boolean 
     if (a.kind !== b.kind) return false;
     if (a.kind === 'Answer') {
         const y = b as Extract<TriageOutcome, { readonly kind: 'Answer' }>;
-        return a.answer === y.answer && sameOptional(a.readRevision, y.readRevision, ($100: RevisionId, $101: RevisionId) => $100 === $101);
+        return a.answer === y.answer && sameOptional(a.readRevision, y.readRevision, ($112: RevisionId, $113: RevisionId) => $112 === $113);
     }
     if (a.kind === 'Proposal') {
         const y = b as Extract<TriageOutcome, { readonly kind: 'Proposal' }>;
@@ -9729,15 +10391,15 @@ export function equalViewShown(a: ViewShown, b: ViewShown): boolean {
     }
     if (a.kind === 'Structure') {
         const y = b as Extract<ViewShown, { readonly kind: 'Structure' }>;
-        return a.level === y.level && sameList(a.focus, y.focus, ($102: ContextName, $103: ContextName) => $102 === $103);
+        return a.level === y.level && sameList(a.focus, y.focus, ($114: ContextName, $115: ContextName) => $114 === $115);
     }
     if (a.kind === 'Catalog') {
         const y = b as Extract<ViewShown, { readonly kind: 'Catalog' }>;
-        return sameOptional(a.query, y.query, ($104: CatalogQuery, $105: CatalogQuery) => $104 === $105) && sameList(a.sections, y.sections, ($106: CatalogSection, $107: CatalogSection) => $106 === $107) && sameList(a.contexts, y.contexts, ($108: ContextName, $109: ContextName) => $108 === $109);
+        return sameOptional(a.query, y.query, ($116: CatalogQuery, $117: CatalogQuery) => $116 === $117) && sameList(a.sections, y.sections, ($118: CatalogSection, $119: CatalogSection) => $118 === $119) && sameList(a.contexts, y.contexts, ($120: ContextName, $121: ContextName) => $120 === $121);
     }
     if (a.kind === 'Storming') {
         const y = b as Extract<ViewShown, { readonly kind: 'Storming' }>;
-        return a.storming === y.storming && a.level === y.level && sameOptional(a.timeline, y.timeline, ($110: TimelineName, $111: TimelineName) => $110 === $111) && sameOptional(a.stage, y.stage, ($112: StageName, $113: StageName) => $112 === $113) && a.exceptions === y.exceptions;
+        return a.storming === y.storming && a.level === y.level && sameOptional(a.timeline, y.timeline, ($122: TimelineName, $123: TimelineName) => $122 === $123) && sameOptional(a.stage, y.stage, ($124: StageName, $125: StageName) => $124 === $125) && a.exceptions === y.exceptions;
     }
     return true;
 }
@@ -9761,14 +10423,14 @@ export interface ViewedAt {
  * @see contexts/collaboration/model/view.dt:51
  */
 export function equalViewedAt(a: ViewedAt, b: ViewedAt): boolean {
-    return equalViewShown(a.view, b.view) && sameOptional(a.states, b.states, ($114: ElementName, $115: ElementName) => $114 === $115);
+    return equalViewShown(a.view, b.view) && sameOptional(a.states, b.states, ($126: ElementName, $127: ElementName) => $126 === $127);
 }
 
 /** Events of Collaboration that are persisted (declared `persistent`). */
-export type PersistentEvent = RunQueued | RunReverted | RevertLeftToAgent | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | SlashCommandStarted | CandidatesListed | SlashCommandAnswered | CandidatesApplied | SlashCommandStopped | InterviewStarted | InterviewAnswered | InterviewQuestionAsked | InterviewBriefed | InterviewConfirmed | InterviewStopped | InterviewRejected | MarkPlaced | MarkRemoved | ChangeProposed | ProposalApproved | ProposalRejected | ProposalWithdrawn | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | SessionStarted | SessionCollaborated | ParticipantJoined | JourneyChosen | SessionClosed | TriageOpened | TriageStepRecorded | TriageDecided | TriageOverridden | TriageReaddressed | TriageConcluded;
+export type PersistentEvent = RunQueued | RunReverted | RevertLeftToAgent | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | SlashCommandStarted | CandidatesListed | SlashCommandAnswered | CandidatesApplied | SlashCommandStopped | InterviewStarted | InterviewAnswered | InterviewQuestionAsked | InterviewBriefed | InterviewConfirmed | InterviewStopped | InterviewRejected | MarkPlaced | MarkRemoved | ChangeProposed | ProposalApproved | ProposalRejected | ProposalWithdrawn | RecordWritten | RecordRevised | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | SessionStarted | SessionCollaborated | ParticipantJoined | JourneyChosen | SessionClosed | TriageOpened | TriageStepRecorded | TriageDecided | TriageOverridden | TriageReaddressed | TriageConcluded;
 
 /** Events of Collaboration. */
-export type DomainEvent = RunQueued | RunReverted | RevertLeftToAgent | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | SlashCommandStarted | CandidatesListed | SlashCommandAnswered | CandidatesApplied | SlashCommandStopped | InterviewStarted | InterviewAnswered | InterviewQuestionAsked | InterviewBriefed | InterviewConfirmed | InterviewStopped | InterviewRejected | MarkPlaced | MarkRemoved | ChangeProposed | ProposalApproved | ProposalRejected | ProposalWithdrawn | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | SessionStarted | SessionCollaborated | ParticipantJoined | JourneyChosen | SessionClosed | TriageOpened | TriageStepRecorded | TriageDecided | TriageOverridden | TriageReaddressed | TriageConcluded;
+export type DomainEvent = RunQueued | RunReverted | RevertLeftToAgent | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | SlashCommandStarted | CandidatesListed | SlashCommandAnswered | CandidatesApplied | SlashCommandStopped | InterviewStarted | InterviewAnswered | InterviewQuestionAsked | InterviewBriefed | InterviewConfirmed | InterviewStopped | InterviewRejected | MarkPlaced | MarkRemoved | ChangeProposed | ProposalApproved | ProposalRejected | ProposalWithdrawn | RecordWritten | RecordRevised | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | SessionStarted | SessionCollaborated | ParticipantJoined | JourneyChosen | SessionClosed | TriageOpened | TriageStepRecorded | TriageDecided | TriageOverridden | TriageReaddressed | TriageConcluded;
 
 /** Aggregates of Collaboration. */
-export type Aggregate = AgentRun | AssumptionApproval | SlashCommand | Interview | Mark | ChangeProposal | Request | Revision | Session | Triage;
+export type Aggregate = AgentRun | AssumptionApproval | SlashCommand | Interview | Mark | ChangeProposal | SessionRecord | Request | Revision | Session | Triage;

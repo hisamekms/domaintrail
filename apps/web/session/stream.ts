@@ -18,6 +18,7 @@ type RunJson = SessionStateBody['runs'][number];
 type FrozenRequest = RunJson['input']['requests'][number];
 type FailureReason = Extract<RunJson, { state: 'Failed' }>['reason'];
 type RevisionJson = SessionStateBody['revisions'][number];
+export type RecordJson = NonNullable<SessionStateBody['records']>[number];
 type ReplyJson = Extract<RunJson, { state: 'Declined' }>['reply'];
 export type RequestProgress = ReplyJson['requests'][number]['status'];
 
@@ -122,6 +123,11 @@ export type StreamItem =
      * it had nothing to work on, where it started.
      */
     | { readonly kind: 'command'; readonly key: string; readonly at: string; readonly command: SlashCommandJson }
+    /**
+     * A record of what a person did (or of the journey file changed outside dt): a small row, where it was written;
+     * `updatedAt` when it was written again (marks merged, a request's outcome).
+     */
+    | { readonly kind: 'record'; readonly key: string; readonly at: string; readonly updatedAt: string; readonly record: RecordJson }
     | {
           readonly kind: 'restored';
           readonly key: string;
@@ -206,7 +212,9 @@ export function agentMessage(run: RunJson, lookup: ReturnType<typeof revisionLoo
  * they were made, the cards of the `/` commands where they started, and the revisions restored.
  */
 export function streamItems(
-    state: Pick<SessionStateBody, 'runs' | 'revisions' | 'requests' | 'proposals' | 'slashCommands'> & { readonly session?: SessionStateBody['session'] },
+    state: Pick<SessionStateBody, 'runs' | 'revisions' | 'requests' | 'proposals' | 'slashCommands' | 'records'> & {
+        readonly session?: SessionStateBody['session'];
+    },
 ): StreamItem[] {
     const numbers = new Map(timeline(state).map((e) => [e.revision.id, e.number]));
     const byId = new Map(state.revisions.map((r) => [r.id, r]));
@@ -220,6 +228,9 @@ export function streamItems(
             items.push({ kind: 'restored', key: `restored:${r.id}`, at: r.takenAt, revision, from: numbers.get(from), work });
         }
     }
+    // a record before what was written with it (a journey marked done, then dt's note)
+    for (const record of state.records ?? [])
+        items.push({ kind: 'record', key: `record:${record.id}`, at: record.at, updatedAt: record.revisedAt ?? record.at, record });
     // a guide's answer is its card's: not a message of its own
     const answers = guideAnswers(state);
     for (const request of state.requests)
@@ -297,7 +308,7 @@ export function placeAiSlots(items: readonly StreamItem[], slots: ReadonlyMap<st
 }
 
 /** When an item last changed: a card when its runs did, anything else when it was added. */
-export const changedAt = (item: StreamItem): string => (item.kind === 'card' ? item.updatedAt : item.at);
+export const changedAt = (item: StreamItem): string => (item.kind === 'card' || item.kind === 'record' ? item.updatedAt : item.at);
 
 /** The status of the session's agent at a glance. */
 export type AgentStatus =
@@ -419,12 +430,13 @@ export function headerParticipants(state: Pick<SessionStateBody, 'session' | 'fa
 }
 
 /**
- * How many items of the stream changed after `seen` (an ISO time: when the chat was last shown): the messages sent and
- * the cards whose runs moved on (each change of a run's state counts). Nothing is unread before the chat was ever shown.
+ * How many items of the stream changed after `seen` (an ISO time: when the chat was last shown): the messages sent, the
+ * cards whose runs moved on (each change of a run's state counts) and the records written (or written again). Nothing
+ * is unread before the chat was ever shown.
  */
 export function unreadCount(items: readonly StreamItem[], seen: string | undefined): number {
     if (seen === undefined) return 0;
-    return items.filter((i) => (i.kind === 'message' || i.kind === 'card') && changedAt(i) > seen).length;
+    return items.filter((i) => (i.kind === 'message' || i.kind === 'card' || i.kind === 'record') && changedAt(i) > seen).length;
 }
 
 /**

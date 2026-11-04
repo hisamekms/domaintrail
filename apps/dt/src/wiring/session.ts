@@ -58,7 +58,7 @@ import { createSessionIdentities } from '../server/session/identities.js';
 import { createTriageStage } from '../server/session/triage.js';
 import { eventFor } from '../server/session/views.js';
 import { guideWorkspace, knownViewNames } from '../server/session/viewed-at.js';
-import { createSessionJourneys } from '../server/session/journeys.js';
+import { createSessionJourneys, rememberWrites } from '../server/session/journeys.js';
 import { createViewHttpServer } from '../server/http/server.js';
 import { isLoopbackBind, sessionHostPolicy } from '../server/http/access.js';
 import { SessionError, type SessionSettings } from '../cli/ports.js';
@@ -308,9 +308,11 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         const snapshot = createWorkspaceSnapshot(options.root, sourceSelection(sources, respectGitignore));
         // the journey file at the workspace root: dt writes it itself (atomically, never over another's write)
         const journeyFile = createGuardedTextFile(path.join(options.root, JOURNEY_FILE));
+        // what dt wrote is remembered: a change of the file that is none of it was made outside dt (recorded in the chat)
+        const journeyWrites = rememberWrites(journeyFile);
         const collaboration = createCollaboration({
             uow,
-            journeys: journeyFile,
+            journeys: journeyWrites,
             workspace: snapshot,
             blobs: await openSessionBlobs(state.state),
             validator: createModelValidator(),
@@ -452,13 +454,18 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         // the journey file: read now, sent to every page on each change (dt's writes, git, another tool)
         const journeys = createSessionJourneys({
             session,
-            store: journeyFile,
+            store: journeyWrites,
+            // an ES journey is named by its storming's label, as the page names it
+            labels: (key) => (key.startsWith('es:') ? guideWorkspace(view.state).stormings.find((s) => s.id === key.slice(3))?.label : undefined),
             collaboration,
             changed: (journey) => hub.publish({ type: 'journey', journey }),
+            // the relay is made below; a record is written only on a change after the first read
+            recorded: () => pump(),
             now: () => clock.now(),
             log,
         });
         await journeys.reload();
+        await journeys.restore();
 
         /** Sends a session's event to every page as its role sees it (a participant: the triages' outcomes only). */
         const publishEvent = (message: EventMessage): void => {

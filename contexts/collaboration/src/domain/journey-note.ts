@@ -3,7 +3,7 @@
 // added, the storming created, the brief revised, a participant's brief approved); line 2 says where the journey is
 // (its map's 📍 step, by the same rule as the chip) and the next step. The next step's command (into the composer) or
 // the place it shows (the source storming) is kept on the message (`JourneyNote`) for the page's buttons, beside
-// 「🧭 旅程を開く」. The brief itself is not repeated: the journeys panel shows it.
+// 「🧭 ジャーニーを開く」. The brief itself is not repeated: the journeys panel shows it.
 //
 // One place for the template and the next-step table, in Japanese and English (the interview's language). Pure.
 import { Collaboration } from '../generated/index.js';
@@ -69,6 +69,15 @@ interface Words {
     readonly approvedRevised: (by: string, changed: string | undefined) => string;
     readonly here: (step: string) => string;
     readonly next: NextWords;
+    readonly completed: CompletedWords;
+}
+
+/** The note after a journey is marked done (完了にする): what was decided, and the next step. */
+interface CompletedWords {
+    readonly done: (label: string) => string;
+    readonly toModeling: string;
+    readonly recap: string;
+    readonly others: string;
 }
 
 /** The next step of each place, as a sentence. */
@@ -144,14 +153,14 @@ const JA: Words = {
     list: '・',
     goal: (goal) => `ゴール：${goal}`,
     how: (pattern, goal) => `${pattern} → ${goal}`,
-    esAdded: (label, how) => `ブリーフを確定しました。旅程に「${label}」を加えました（${how}）。`,
-    esCreated: (label, how) => `ストーミング「${label}」を作り、旅程に加えました（${how}）。`,
-    esNotCreated: (label) => `ストーミング「${label}」を作れませんでした。旅程はそのまま残しています。`,
-    modelAdded: (name, how) => `旅程に「${name}」を加えました（${how}）。`,
+    esAdded: (label, how) => `ブリーフを確定しました。ジャーニーに「${label}」を加えました（${how}）。`,
+    esCreated: (label, how) => `ストーミング「${label}」を作り、ジャーニーに加えました（${how}）。`,
+    esNotCreated: (label) => `ストーミング「${label}」を作れませんでした。ジャーニーはそのまま残しています。`,
+    modelAdded: (name, how) => `ジャーニーに「${name}」を加えました（${how}）。`,
     revised: (changed) =>
         changed === undefined ? 'ブリーフを見直しました（変わったところはありません）。' : `ブリーフを見直しました（${changed}が変わりました）。`,
-    approvedAdded: (by, how) => `${by}が承認し、旅程に加えました（${how}）。`,
-    approvedCreated: (by, label, how) => `${by}が承認し、ストーミング「${label}」を作って旅程に加えました（${how}）。`,
+    approvedAdded: (by, how) => `${by}が承認し、ジャーニーに加えました（${how}）。`,
+    approvedCreated: (by, label, how) => `${by}が承認し、ストーミング「${label}」を作ってジャーニーに加えました（${how}）。`,
     approvedRevised: (by, changed) =>
         changed === undefined
             ? `${by}が承認し、ブリーフを見直しました（変わったところはありません）。`
@@ -186,6 +195,12 @@ const JA: Words = {
         reachedToModeling: 'ゴールに着いています。次はモデリングを始めましょう。',
         reachedRecap: 'ゴールに着いています。ここまでをまとめましょう。',
         reached: 'ゴールに着いています。',
+    },
+    completed: {
+        done: (label) => `「${label}」を完了にしました。`,
+        toModeling: '次はこのストーミングからモデリングを始めましょう。',
+        recap: '次はここまでをまとめましょう。',
+        others: '次のジャーニーを選びましょう。',
     },
 };
 
@@ -270,9 +285,21 @@ const EN: Words = {
         reachedRecap: 'The goal is reached. Recap what you have.',
         reached: 'The goal is reached.',
     },
+    completed: {
+        done: (label) => `“${label}” is complete.`,
+        toModeling: 'Next, start modeling from this storming.',
+        recap: 'Next, recap what you have.',
+        others: 'Choose another journey from the journeys.',
+    },
 };
 
 const wordsOf = (language: Lang): Words => (language === 'En' ? EN : JA);
+
+/** A step's, an ES level's or a modeling goal's name in a language (the key itself when it has none). */
+export const stepWord = (language: Lang, key: string): string => {
+    const w = wordsOf(language);
+    return (w.levels as Readonly<Record<string, string>>)[key] ?? w.steps[key] ?? key;
+};
 
 // ---- Line 1: what was decided ----
 
@@ -472,4 +499,25 @@ export function decidedOf(input: {
     const label = input.label ?? input.brief.label ?? input.brief.name;
     const level = now.level ?? 'BigPicture';
     return input.brief.isNew ? { kind: 'esCreated', label, level } : { kind: 'esAdded', label, level };
+}
+
+/**
+ * The note after a journey is marked done (完了にする), in the completion note's form: line 1 says it is complete,
+ * line 2 the next step — for an ES journey `/model:start` when its use is modeling, else `/es:recap` (the next-step
+ * table's goal reached); a modeling journey has no command, only ジャーニーを開く.
+ */
+export function completionNote(input: {
+    readonly journey: string;
+    readonly label: string;
+    readonly language: Lang;
+    /** The ES journey's use (absent: a modeling journey). */
+    readonly use?: 'align' | 'modeling';
+}): JourneyNoteText {
+    const w = wordsOf(input.language).completed;
+    const es = input.journey.startsWith('es:');
+    const command: Collaboration.SuggestedCommand | undefined = !es ? undefined : input.use === 'modeling' ? 'ModelStart' : 'EsRecap';
+    const next = !es ? w.others : command === 'ModelStart' ? w.toModeling : w.recap;
+    const key = Collaboration.makeGuideJourneyKey(input.journey);
+    if (!key.ok) throw new Error(`Not a journey key: ${input.journey}`);
+    return { body: `${w.done(input.label)}\n${next}`, note: { journey: key.value, ...(command && { command }), targets: [] } };
 }

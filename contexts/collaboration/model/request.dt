@@ -97,8 +97,9 @@ context Collaboration {
       emits RequestSent
 
     /// 読むだけの AI（回答役）が、相談のメッセージに答える。書き手は AI（`ai`）で、答えたメッセージへの返信。対象も言及もない。
-    /// 聞き取りを確定したあとの dt のお知らせも、これで AI の名で書く（`journeyNote` を添える）。
-    create command answer(id: RequestId, session: ActiveSession, answers: RequestId "答えるメッセージ", body: Text, sentAt: Timestamp, journeyNote: JourneyNote?) "AI が答える"
+    /// 聞き取りを確定したあとの dt のお知らせも、これで AI の名で書く（`journeyNote` を添える）。道のりを完了にしたあとのお知らせは
+    /// 答えるメッセージがなく、返信にならない。
+    create command answer(id: RequestId, session: ActiveSession, answers: RequestId? "答えるメッセージ", body: Text, sentAt: Timestamp, journeyNote: JourneyNote?) "AI が答える"
       -> Sent
       emits RequestSent
   }

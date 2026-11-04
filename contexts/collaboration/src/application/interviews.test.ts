@@ -323,7 +323,7 @@ describe('interviews', () => {
         const facts = { exitCode: 0, formatted: 'Skipped', checked: 'Skipped' } as const;
         value(await use.finishRun({ run: claimed.run.id, token: claimed.lease.token, facts }));
         expect(await notes()).toEqual([
-            'ストーミング「返品」を作り、旅程に加えました（ゴール：ビッグピクチャー）。\nまず出来事を出します。起きたことを話してください。',
+            'ストーミング「返品」を作り、ジャーニーに加えました（ゴール：ビッグピクチャー）。\nまず出来事を出します。起きたことを話してください。',
         ]);
         // the same finish again (a replay): no second note
         value(await use.finishRun({ run: claimed.run.id, token: claimed.lease.token, facts }));
@@ -341,7 +341,7 @@ describe('interviews', () => {
         const run = value(await use.confirmInterview({ interview: other.interview.id, actor: facilitator })).run;
         if (!run) throw new Error('a new storming takes a run');
         value(await use.cancelRun({ run: run.id, actor: facilitator }));
-        expect((await notes()).at(-1)).toBe('ストーミング「交換」を作れませんでした。旅程はそのまま残しています。');
+        expect((await notes()).at(-1)).toBe('ストーミング「交換」を作れませんでした。ジャーニーはそのまま残しています。');
     });
 
     test('a journey file that does not read: nothing is written over it, the brief waits', async () => {
@@ -400,7 +400,7 @@ describe('an interview a participant started', () => {
         const note = value(await use.sessionState({ session })).requests.find((r) => r.journeyNote);
         expect(note).toMatchObject({
             replyTo: { kind: 'Message', request: answer.request.id },
-            body: 'ストーミング「返品」を作れませんでした。旅程はそのまま残しています。',
+            body: 'ストーミング「返品」を作れませんでした。ジャーニーはそのまま残しています。',
         });
         expect(value(await use.sessionSoFar({ session })).text).toContain("Ada approved Bob's brief of the interview /es:start after editing it");
     });
@@ -417,6 +417,12 @@ describe('an interview a participant started', () => {
         expect(soFar.open.filter((o) => o.includes('interview'))).toEqual([]);
         const again = await createUnitOfWork(db).transaction((s) => s.interviews.listBySession(session));
         expect(again).toMatchObject([{ state: 'Rejected', note: '範囲が広すぎます' }]);
+        // a row for everyone at the end of the interview's thread: its last message
+        const state = value(await use.sessionState({ session }));
+        const last = state.requests.filter((r) => r.author === bobId).at(-1);
+        expect(state.records).toMatchObject([
+            { by: facilitatorId, fact: { kind: 'BriefRejected', interview: started.interview.id, note: '範囲が広すぎます' }, replyTo: last?.id },
+        ]);
         // ended: Bob's messages are triaged again, and another interview may start
         expect(value(await say(use, session, bob, '注文は取り消せる？')).interview).toBeUndefined();
         value(await start(use, session, carol));
@@ -432,6 +438,13 @@ describe('an interview a participant started', () => {
         });
         const second = value(await start(use, session, bob));
         expect(value(await use.stopInterview({ interview: second.interview.id, actor: bob }))).toMatchObject({ state: 'Stopped', stoppedBy: bobId });
+        // each stop a row at the end of its thread (here its opening message: no question yet)
+        expect(value(await use.sessionState({ session })).records).toMatchObject([
+            { by: facilitatorId, fact: { kind: 'InterviewStopped', interview: started.interview.id }, replyTo: started.request.id },
+            { by: bobId, fact: { kind: 'InterviewStopped', interview: second.interview.id }, replyTo: second.request.id },
+        ]);
+        // the session so far tells it with the interview, not twice
+        expect(value(await use.sessionSoFar({ session })).text).not.toContain('stopped it');
     });
 });
 

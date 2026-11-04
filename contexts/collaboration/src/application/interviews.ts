@@ -21,6 +21,7 @@ import type { CollaborationDeps, Stores } from './ports.js';
 import { publish, queueRequests, type FreezeError } from './queueing.js';
 import { sendIn, type SendMessageError } from './conversation.js';
 import { storeVerifications } from './verifications.js';
+import { writeRecord } from './records.js';
 
 type SessionId = Collaboration.SessionId;
 type InterviewId = Collaboration.InterviewId;
@@ -366,6 +367,8 @@ export function createInterviews(deps: CollaborationDeps): InterviewUseCases {
                 if (!rejected.ok) return rejected;
                 stores.interviews.save(rejected.value.Rejected.aggregate);
                 publish(stores, i.session, rejected.value.Rejected.events, at);
+                // a row for everyone at the end of the interview's thread (its starter's notice stays as well)
+                recordInThread(stores, ids.newId(), active.value, i, actor.participant, { kind: 'BriefRejected', interview: i.id, ...(note && { note }) }, at);
                 return ok(rejected.value.Rejected.aggregate);
             });
         },
@@ -383,6 +386,7 @@ export function createInterviews(deps: CollaborationDeps): InterviewUseCases {
                 if (!stopped.ok) return stopped;
                 stores.interviews.save(stopped.value.Stopped.aggregate);
                 publish(stores, i.session, stopped.value.Stopped.events, at);
+                recordInThread(stores, ids.newId(), active.value, i, actor.participant, { kind: 'InterviewStopped', interview: i.id }, at);
                 return ok(stopped.value.Stopped.aggregate);
             });
         },
@@ -458,6 +462,20 @@ export async function noteStormingRun(deps: CollaborationDeps, run: Collaboratio
         });
         return postNote(stores, deps.ids.newId(), active.value, answered, text, deps.clock.now());
     });
+}
+
+/** A record at the end of an interview's thread (replying to its last message), inside the caller's transaction. */
+function recordInThread(
+    stores: Stores,
+    id: string,
+    session: Collaboration.ActiveSession,
+    interview: Collaboration.Interview,
+    by: Collaboration.ParticipantId,
+    fact: Collaboration.RecordFact,
+    at: Date,
+): void {
+    const last = interviewMessages(interview, stores.requests.listBySession(interview.session)).at(-1);
+    writeRecord(stores, id, { session, by, fact, ...(last && { replyTo: last.id }), at });
 }
 
 /** The success value of a command that cannot fail. */

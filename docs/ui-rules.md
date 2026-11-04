@@ -11,11 +11,11 @@ Every text button is an `<Act kind="…">` (`apps/web/shared/act.tsx`). The kind
 | Kind | What a press does | Look | Examples |
 |---|---|---|---|
 | `decide` | files or the session change now | brand fill | 確定 / 承認 a brief, 採用したものを反映, 承認 a request, 完了にする, the current goal in ゴールを変える |
-| `decide-sub` | a secondary decision beside the main one | grey outline | しまう, この旅にする, 戻す, the other goals |
+| `decide-sub` | a secondary decision beside the main one | grey outline | しまう, このジャーニーにする, 戻す, the other goals |
 | `send` | a message goes to the chat and the AI acts | pale brand wash | an interview's choice (single: sent at once), 送る for several, 聞くことをメモ, 回答を送る, 送り直す |
 | `insert` | a command goes into the composer only; the person sends it | brand outline, ↵ (added by `Act`), the code font | `/es:start`, `/es:exceptions`, the journeys panel's new journeys, the completion note's command, ブリーフを見直す |
 | `see` | moves to a place; nothing changes | brand text and its icon, no border, underlined on hover | 👁 見る, ガイドを見る, チャットで見る, the detail's 見る: 構造図 and この BC だけを構造図で見る |
-| `open` | opens or closes a menu, the composer, a form, a dialog or a panel | grey outline | ゴールを変える ▾, 編集して確定, その他（自分で書く）, 旅程を開く, 変更を見る, 閉じる |
+| `open` | opens or closes a menu, the composer, a form, a dialog or a panel | grey outline | ゴールを変える ▾, 編集して確定, その他（自分で書く）, ジャーニーを開く, 変更を見る, 閉じる |
 | `stop` | stops or cancels | grey outline, muted text | 中止, キャンセル, 取り下げ, 実行を中止 |
 | `danger` | refuses, or cannot be undone | red outline | 却下, a run's 打ち消す, ending the collab (終える) |
 

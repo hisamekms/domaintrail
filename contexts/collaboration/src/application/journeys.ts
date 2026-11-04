@@ -7,10 +7,23 @@
 // (`journeyFileMarks`, the `GuideMarkStore`).
 import { Collaboration, err, ok, type Result } from '../generated/index.js';
 import { journeyMarks, markAct, type GuideMarkStore } from '../domain/guide.js';
-import { applyJourneyAct, readJourney, writeJourney, type JourneyAct, type JourneyActError, type JourneyFile, type JourneyProblem } from '../domain/journey.js';
-import { sessionCommands } from '../domain/commands.js';
+import {
+    applyJourneyAct,
+    journeyOf,
+    readJourney,
+    writeJourney,
+    type JourneyAct,
+    type JourneyActError,
+    type JourneyFile,
+    type JourneyProblem,
+} from '../domain/journey.js';
+import { requestCommands, sessionCommands } from '../domain/commands.js';
+import { completionNote } from '../domain/journey-note.js';
+import { knownRequestId } from '../domain/ids.js';
+import { actFact, type JourneyLabels } from '../domain/records.js';
+import { recordAct } from './records.js';
 import type { Actor } from './actor.js';
-import type { CollaborationDeps, JourneyFileStore } from './ports.js';
+import type { CollaborationDeps, JourneyFileStore, Stores } from './ports.js';
 import { publish } from './queueing.js';
 import { storeVerifications } from './verifications.js';
 
@@ -76,33 +89,69 @@ type Closed = Collaboration.SessionNotFound | Collaboration.SessionAlreadyClosed
 export interface JourneyUseCases {
     /**
      * An act on the journey file (a goal changed, a state set, a mark set or cleared) by the facilitator (the one person in
-     * Solo); anyone else's is `FacilitatorOnly`. dt writes the file itself.
+     * Solo); anyone else's is `FacilitatorOnly`. dt writes the file itself. With a `session`, the act is recorded in its
+     * chat when it changed the file (`records.ts`: a mark may extend the last record), and a journey marked done gets
+     * dt's note with the next step (`completionNote`, in `language`).
      */
     actOnJourney(input: {
         readonly actor: Actor;
         readonly act: JourneyAct;
+        readonly session?: Collaboration.SessionId;
+        /** The journeys' names for the record (an ES journey's: its storming's label). */
+        readonly labels?: JourneyLabels;
+        /** The language of the note after a journey is marked done (absent: Japanese). */
+        readonly language?: Collaboration.UiLanguage;
     }): Promise<Result<JourneyFile, Collaboration.FacilitatorOnly | JourneyActError | JourneyWriteError>>;
-    /** The session's current journey chosen (none: the most recently created active one) by the facilitator. */
+    /**
+     * The session's current journey chosen (none: the most recently created active one) by the facilitator; a journey
+     * chosen (not the default) is recorded in the chat.
+     */
     chooseJourney(input: {
         readonly session: Collaboration.SessionId;
         readonly actor: Actor;
         readonly journey?: Collaboration.GuideJourneyKey;
+        readonly labels?: JourneyLabels;
     }): Promise<Result<Collaboration.OpenSession, Collaboration.FacilitatorOnly | Collaboration.SessionNotFound | Closed>>;
 }
 
 export function createJourneys(deps: CollaborationDeps): JourneyUseCases {
-    const { uow, clock } = deps;
+    const { uow, clock, ids } = deps;
     return {
-        async actOnJourney({ actor, act }) {
+        async actOnJourney({ actor, act, session, labels, language }) {
             if (actor.role !== 'Facilitator') return err({ type: 'FacilitatorOnly' });
+            let before: JourneyFile | undefined;
             const r = await updateJourneys<undefined, JourneyActError>(deps.journeys, (file) => {
+                before = file;
                 const applied = applyJourneyAct(file, act);
                 return applied.ok ? ok({ file: applied.value, value: undefined }) : applied;
             });
-            return r.ok ? ok(r.value.file) : r;
+            if (!r.ok) return r;
+            // recorded when it changed the file (a mark already set, a goal already the goal: nothing happened)
+            if (session && before && writeJourney(before) !== writeJourney(r.value.file))
+                await uow.transaction(async (stores) => {
+                    const active = await storeVerifications(stores).makeActiveSession(session);
+                    if (!active.ok) return;
+                    const at = clock.now();
+                    const current = stores.sessions.load(session)?.currentJourney;
+                    const fact = actFact({ act, before, ...(current !== undefined && { current }), ...(labels && { labels }) });
+                    if (!fact) return;
+                    recordAct(stores, ids.newId(), { session: active.value, by: actor.participant, fact, at });
+                    if (fact.kind === 'StateChanged' && fact.state === 'Done') {
+                        const ref = before && journeyOf(before, act.journey);
+                        const note = completionNote({
+                            journey: act.journey,
+                            label: fact.journey.label,
+                            language: language ?? 'Ja',
+                            ...(ref?.kind === 'es' && { use: ref.entry.use }),
+                        });
+                        postCompletionNote(stores, ids.newId(), active.value, note.body, note.note, at);
+                    }
+                });
+            return ok(r.value.file);
         },
 
-        async chooseJourney({ session, actor, journey }) {
+        async chooseJourney({ session, actor, journey, labels }) {
+            const file = journey === undefined ? undefined : (await readJourneys(deps.journeys)).file;
             return uow.transaction(async (stores) => {
                 const active = await storeVerifications(stores).makeActiveSession(session);
                 if (!active.ok) return active;
@@ -113,6 +162,12 @@ export function createJourneys(deps: CollaborationDeps): JourneyUseCases {
                 if (!chosen.ok) return chosen;
                 stores.sessions.save(chosen.value.Open.aggregate);
                 publish(stores, session, chosen.value.Open.events, at);
+                // a person's choice is recorded (the default, none chosen, is not)
+                const fact =
+                    journey === undefined || journey === found.currentJourney
+                        ? undefined
+                        : actFact({ act: { kind: 'choose', journey }, before: file, ...(labels && { labels }) });
+                if (fact) recordAct(stores, ids.newId(), { session: active.value, by: actor.participant, fact, at });
                 return ok(chosen.value.Open.aggregate);
             });
         },
@@ -124,3 +179,20 @@ export const journeyKeyOf = (key: string): Collaboration.GuideJourneyKey | undef
     const made = Collaboration.makeGuideJourneyKey(key);
     return made.ok ? made.value : undefined;
 };
+
+/** dt's note after a journey is marked done: the AI's message, answering none, inside the caller's transaction. */
+function postCompletionNote(
+    stores: Stores,
+    id: string,
+    session: Collaboration.ActiveSession,
+    text: string,
+    journeyNote: Collaboration.JourneyNote,
+    at: Date,
+): void {
+    const body = Collaboration.makeText(text);
+    if (!body.ok) return;
+    const sent = requestCommands.answer({ id: knownRequestId(id), session, body: body.value, sentAt: at, journeyNote });
+    if (!sent.ok) return;
+    stores.requests.save(sent.value.Sent.aggregate);
+    publish(stores, session, sent.value.Sent.events, at);
+}

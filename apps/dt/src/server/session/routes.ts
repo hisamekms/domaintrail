@@ -38,7 +38,7 @@ import type { AccessPolicy, Authorization } from '../http/access.js';
 import { BodyError, mediaType, readJson, readText, sendError, sendJson } from '../http/json.js';
 import type { SessionSurface } from '../http/server.js';
 import { type Identified, type SessionIdentities } from './identities.js';
-import { journeyActInput, type SessionJourneys } from './journeys.js';
+import { journeyActInput, type NoteLanguage, type SessionJourneys } from './journeys.js';
 import { linkCookie, type LinkJoin } from './link-join.js';
 import {
     answer as answerInput,
@@ -213,6 +213,13 @@ export function errorAnswer(error: { readonly type: string; readonly message?: s
 const fail = <E extends { readonly type: string; readonly message?: string }>(res: ServerResponse, error: E): void => {
     const { status, body } = errorAnswer(error);
     sendJson(res, status, body);
+};
+
+/** A page's language sent with a journey act (`ja`, `en`, or none); false when it is something else (answered 400). */
+const noteLanguage = (res: ServerResponse, v: unknown): NoteLanguage | undefined | false => {
+    if (v === undefined || v === 'ja' || v === 'en') return v;
+    fail(res, { type: 'InvalidInput', field: 'language', message: 'Expected ja or en.' });
+    return false;
 };
 
 const bodyError = (res: ServerResponse, e: unknown): void => {
@@ -795,12 +802,15 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 // journey file), a participant's a request the facilitator approves
                 const journeys = deps.journeys;
                 if (!journeys) return fail(res, { type: 'NoJourneyFile', message: 'This session has no journey file.' });
-                const raw = await input(req, res, ['act']);
+                const raw = await input(req, res, ['act', 'language']);
                 if (!raw) return;
                 const act = checked(res, journeyActInput(raw.act));
                 if (!act) return;
+                // the page's language: dt's note after a journey is marked done is written in it
+                const language = noteLanguage(res, raw.language);
+                if (language === false) return;
                 const me = who(auth);
-                const done = await journeys.act(me.actor, me.participant.identity.displayName, act);
+                const done = await journeys.act(me.actor, me.participant.identity.displayName, act, language);
                 if (!('done' in done)) return fail(res, done);
                 await deps.pump();
                 sendJson(res, done.done ? 200 : 202, done);
@@ -829,13 +839,18 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             method: 'POST',
             path: /^\/api\/session\/journey\/requests\/([^/]+)\/(approve|deny|withdraw)$/,
             role: 'participant',
-            handle: async ({ res, auth, params }) => {
+            handle: async ({ req, res, auth, params }) => {
                 const journeys = deps.journeys;
                 if (!journeys) return fail(res, { type: 'NoJourneyFile', message: 'This session has no journey file.' });
                 const id = checked(res, uuid(params[0], 'id'));
                 if (!id) return;
+                const raw = await input(req, res, ['language']);
+                if (!raw) return;
+                const language = noteLanguage(res, raw.language);
+                if (language === false) return;
                 const me = who(auth);
-                const done = params[1] === 'withdraw' ? journeys.withdraw(me.actor, id) : await journeys.decide(me.actor, id, params[1] === 'approve');
+                const done =
+                    params[1] === 'withdraw' ? await journeys.withdraw(me.actor, id) : await journeys.decide(me.actor, id, params[1] === 'approve', language);
                 if (!('done' in done)) return fail(res, done);
                 await deps.pump();
                 sendJson(res, 200, done);

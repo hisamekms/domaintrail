@@ -128,5 +128,40 @@ describe('the session server and the journey file', () => {
         await until((b) => b.file?.modeling.length === 1);
         await writeFile(path.join(root, 'domaintrail.journey.json'), journey({ modeling: [] }));
         await until((b) => b.file?.modeling.length === 0);
+
+        // each change dt did not write is recorded in the chat, with what changed (an ES journey by its storming's label)
+        type Fact = { kind: string; changes?: { kind: string; journey: { label: string } }[]; journey?: { label: string } };
+        const facts = async (): Promise<Fact[]> =>
+            (
+                (await (await fetch(`${server?.url}api/session/state`, { headers: { cookie } })).json()) as {
+                    records?: { fact: Fact }[];
+                }
+            ).records?.map((r) => r.fact) ?? [];
+        const recorded = async (n: number): Promise<Fact[]> => {
+            for (let i = 0; i < 100; i++) {
+                const f = await facts();
+                if (f.length >= n) return f;
+                await Bun.sleep(50);
+            }
+            return facts();
+        };
+        // the first: the file appeared (two journeys added); the second: one removed
+        expect((await recorded(2)).map((f) => f.changes?.map((c) => [c.kind, c.journey.label]))).toEqual([
+            [
+                ['Added', '交付'],
+                ['Added', 'Billing の深掘り'],
+            ],
+            [['Removed', 'Billing の深掘り']],
+        ]);
+        // dt's own write: the act recorded as the act, not as a change from outside
+        const acted = await fetch(`${server.url}api/session/journey/acts`, {
+            method: 'POST',
+            headers: { cookie, 'content-type': 'application/json' },
+            body: JSON.stringify({ act: { kind: 'goal', journey: 'es:Issue', goal: 'DesignLevel' }, language: 'ja' }),
+        });
+        expect(acted.status).toBe(200);
+        await until((b) => JSON.stringify(b.file).includes('DesignLevel'));
+        await Bun.sleep(300);
+        expect((await facts()).map((f) => f.kind)).toEqual(['FileChangedOutside', 'FileChangedOutside', 'GoalChanged']);
     });
 });

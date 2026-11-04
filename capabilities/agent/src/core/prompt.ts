@@ -350,7 +350,7 @@ const JOURNEY_RULES = `
    - a modeling journey on one context (pattern \`OneContext\`): change that context only; leave the other contexts
      as they are;
    - any journey: stay within its subject, its purpose and scope, and what its goal needs.
-   In Japanese, call a journey 「旅」 and the journeys 「旅程」, as the page does (never 「ジャーニー」); in English, "journey".
+   In Japanese, call a journey 「ジャーニー」, as the page does (「旅」 is acceptable, but prefer ジャーニー); in English, "journey".
 21. When a request asks for more than the current journey's scope, level or goal allows (rule 20) — e.g. commands or
    policies on a Big Picture storming, another context on a \`OneContext\` journey — do not write anything: reply
    "clarification" (rule 6), naming what is outside the journey and why, and ask whether to go beyond it; offer as

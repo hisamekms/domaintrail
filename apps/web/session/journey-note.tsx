@@ -1,6 +1,6 @@
 // The buttons of dt's note after an interview's brief is confirmed (a message of the AI with a `journeyNote`): the next
 // step's command (into the composer, as the guide card's command buttons), the place it shows (the source storming),
-// and 「🧭 旅程を開く」 (the journeys panel). The note's text is the message's body, shown as any AI reply.
+// and 「🧭 ジャーニーを開く」 (the journeys panel). The note's text is the message's body, shown as any AI reply.
 import type { ReactElement } from 'react';
 import { Compass, Eye } from 'lucide-react';
 import { suggestedCommandId } from '@domaintrail/collaboration';

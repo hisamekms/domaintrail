@@ -134,7 +134,8 @@ export const requestCommands: Collaboration.RequestCommands = {
     // the read-only answerer's answer: written as the AI, a reply to the message it answers, with no target or mention;
     // also dt's note after an interview's brief is confirmed (its journey and next step's buttons on `journeyNote`)
     answer: decide<Collaboration.AnswerRequestDecision>(Collaboration.RequestShape, ({ id, session, answers, body, sentAt, journeyNote }) => {
-        const replyTo: Collaboration.ReplyTarget = { kind: 'Message', request: answers };
+        // dt's note after a journey is marked done answers no message: not a reply
+        const replyTo: Collaboration.ReplyTarget | undefined = answers === undefined ? undefined : { kind: 'Message', request: answers };
         const author = AI_PARTICIPANT_ID;
         return ok({
             Sent: {
@@ -148,7 +149,7 @@ export const requestCommands: Collaboration.RequestCommands = {
                         targets: [],
                         body,
                         sentAt,
-                        replyTo,
+                        ...(replyTo && { replyTo }),
                         mentions: [],
                         ...(journeyNote && { journeyNote }),
                     },

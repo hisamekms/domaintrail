@@ -189,6 +189,23 @@ describe('the operations reserved to the facilitator', () => {
             { done: true },
         ]);
         expect((await state()).session.currentJourney).toBe('billing');
+        // a participant withdraws their own request
+        const archive = await answer(await api(bob, 'journey/acts', { act: { kind: 'state', journey: 'billing', state: 'archived' } }));
+        const archiveId = (archive[1] as { request: { id: string } }).request.id;
+        expect(await answer(await api(bob, `journey/requests/${archiveId}/withdraw`, {}))).toEqual([200, { done: true }]);
+        // each act and request recorded in the chat; a request's outcome on its own record, the act approved as the
+        // facilitator's (the file written above from outside dt may be recorded too: left out here)
+        const records = ((await state()).records ?? []).filter((r) => r.fact.kind !== 'FileChangedOutside');
+        const bobId = records.find((r) => r.fact.kind === 'JourneyRequested')?.by;
+        expect(bobId).toStartWith('dev:');
+        expect(records.map((r) => [r.by, r.fact])).toMatchObject([
+            ['local:facilitator', { kind: 'MarksChanged', marks: [{ step: 'bcSplit' }], done: true }],
+            [bobId, { kind: 'JourneyRequested', act: { kind: 'Goal', goal: 'contextMap' }, outcome: 'Approved', decidedBy: 'local:facilitator' }],
+            ['local:facilitator', { kind: 'GoalChanged', from: 'invariants', to: 'contextMap' }],
+            ['local:facilitator', { kind: 'CurrentChosen', journey: { journey: 'billing', label: 'Billing' } }],
+            [bobId, { kind: 'JourneyRequested', act: { kind: 'Choose' }, outcome: 'Denied' }],
+            [bobId, { kind: 'JourneyRequested', act: { kind: 'State', state: 'Archived' }, outcome: 'Withdrawn', decidedBy: bobId }],
+        ]);
     });
 
     test('dismissing a message has no route: 404', async () => {
