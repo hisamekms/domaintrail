@@ -8636,7 +8636,9 @@ label.proposal-option {
     gap: var(--space-1) 6px;
     margin: 4px 0 0;
 }
-.guide-advice .guide-actions {
+.guide-advice .guide-actions,
+/* dt's note after a brief is confirmed: its buttons under the text, as an interview's choices sit */
+.journey-note-actions {
     margin-top: var(--space-2);
 }
 .session-chat .guide-command {

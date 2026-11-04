@@ -86,6 +86,7 @@ import { chosenIndex } from './proposal-view';
 import { referencesAsText } from './references';
 import { TriageRecordPanel } from './triage-record';
 import { InterviewChoices, InterviewPanel, interviewSlot } from './interview';
+import { JourneyNoteActions } from './journey-note';
 import { CandidatesCard, commandSlot } from './candidates';
 import { GuideButton, startGuide, SuggestedMark } from './guide';
 import { GuideCard } from './guide-card';
@@ -1330,6 +1331,7 @@ function AiMessageRow({ request: r, continues, hangs }: { request: RequestJson; 
                     <MarkdownText text={r.body} onNavigate={onNavigate} />
                 </Clamped>
                 <InterviewChoices request={r.id} />
+                <JourneyNoteActions request={r} />
                 <ReactionRow target={{ kind: 'Message', request: r.id }} />
             </Bubble>
             <RowActions>

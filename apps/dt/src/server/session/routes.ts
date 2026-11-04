@@ -667,7 +667,13 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                     edited = read.value;
                 }
                 if (!(await interviewOfSession(res, id))) return;
-                const confirmed = await use.confirmInterview({ interview: knownInterviewId(id), actor: who(auth).actor, ...(edited && { text: edited }) });
+                // the guide's workspace: dt's note in the thread says where the journey is and its next step
+                const confirmed = await use.confirmInterview({
+                    interview: knownInterviewId(id),
+                    actor: who(auth).actor,
+                    ...(edited && { text: edited }),
+                    ...(deps.guideWorkspace && { workspace: deps.guideWorkspace }),
+                });
                 await answer(res, confirmed, 201, (v) => ({ interview: v.interview, ...(v.run && { run: v.run }), journey: v.journey }));
             },
         },

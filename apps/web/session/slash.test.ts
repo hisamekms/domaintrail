@@ -147,6 +147,10 @@ describe('/ in the composer', () => {
         const briefed = { ...state, interviews: [{ ...(interview as object), state: 'Briefed', answered: 'a2' }] } as never;
         expect(interviewSlot(briefed, { id: 'a2', author: 'me' })).toBe('none');
         expect(interviewSlot(state, { id: 'q1', author: 'ai' })).toBeUndefined();
+        // confirmed: dt's note replying to the last answer is no question under it (its own row, after a run's card)
+        const note = { ...(msg('n', 'ai', 4, 'a2') as object), journeyNote: { journey: 'es:Returns', targets: [] } } as never;
+        const confirmed = { interviews: [{ ...(interview as object), state: 'Confirmed', confirmedAt: at(4) }], requests: [...state.requests, note] } as never;
+        expect(interviewSlot(confirmed, { id: 'a2', author: 'me' })).toBe('none');
     });
 });
 

@@ -98,7 +98,7 @@ export const requestCommands: Collaboration.RequestCommands = {
         return ok({
             Sent: {
                 // a reply names the run it answers; whether it runs is the facilitator's to decide, as for any message
-                set: { id, session, author, targets, body, sentAt, replyTo, mentions, reverts: undefined, viewedAt },
+                set: { id, session, author, targets, body, sentAt, replyTo, mentions, reverts: undefined, viewedAt, journeyNote: undefined },
                 events: {
                     RequestSent: {
                         type: 'RequestSent',
@@ -125,20 +125,34 @@ export const requestCommands: Collaboration.RequestCommands = {
         const reverts: Collaboration.AgentRunId = params.reverts;
         return ok({
             Sent: {
-                set: { id, session, author, targets: [], body, sentAt, replyTo: undefined, mentions: [], reverts, viewedAt: undefined },
+                set: { id, session, author, targets: [], body, sentAt, replyTo: undefined, mentions: [], reverts, viewedAt: undefined, journeyNote: undefined },
                 events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, mentions: [], reverts } },
             },
         });
     }),
 
-    // the read-only answerer's answer: written as the AI, a reply to the message it answers, with no target or mention
-    answer: decide<Collaboration.AnswerRequestDecision>(Collaboration.RequestShape, ({ id, session, answers, body, sentAt }) => {
+    // the read-only answerer's answer: written as the AI, a reply to the message it answers, with no target or mention;
+    // also dt's note after an interview's brief is confirmed (its journey and next step's buttons on `journeyNote`)
+    answer: decide<Collaboration.AnswerRequestDecision>(Collaboration.RequestShape, ({ id, session, answers, body, sentAt, journeyNote }) => {
         const replyTo: Collaboration.ReplyTarget = { kind: 'Message', request: answers };
         const author = AI_PARTICIPANT_ID;
         return ok({
             Sent: {
-                set: { id, session, author, targets: [], body, sentAt, replyTo, mentions: [], reverts: undefined, viewedAt: undefined },
-                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, replyTo, mentions: [] } },
+                set: { id, session, author, targets: [], body, sentAt, replyTo, mentions: [], reverts: undefined, viewedAt: undefined, journeyNote },
+                events: {
+                    RequestSent: {
+                        type: 'RequestSent',
+                        requestId: id,
+                        session,
+                        author,
+                        targets: [],
+                        body,
+                        sentAt,
+                        replyTo,
+                        mentions: [],
+                        ...(journeyNote && { journeyNote }),
+                    },
+                },
             },
         });
     }),

@@ -22,7 +22,7 @@ import type { CollaborationDeps, Lease, OutboxEntry, RestoreOperation, StoredRun
 import { analysisOf, capture, sourcesOf, type BlobMissing, type Captured } from './snapshots.js';
 import { publish, queueRequests, type NoRequests } from './queueing.js';
 import { createConversation, invalidTargets, overrideAnsweredTriages, sendIn, type ConversationUseCases } from './conversation.js';
-import { createInterviews, type InterviewUseCases } from './interviews.js';
+import { createInterviews, noteStormingRun, type InterviewUseCases } from './interviews.js';
 import { createJourneys, type JourneyUseCases } from './journeys.js';
 import { createSlashCommands, type SlashCommandUseCases } from './slash-commands.js';
 import { notAllowed, notFound, type InvalidTarget, type NotAllowed, type NotAParticipant, type NotFound } from './errors.js';
@@ -707,6 +707,13 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
         return { revision: record(stores, run.session, { kind: 'RunResult', run: run.id }, captured, at), changed: true };
     };
 
+    /** A run just ended (not replayed): dt's note when it was to create a new storming (`noteStormingRun`). */
+    const noted = async <R extends Result<{ readonly run: Collaboration.AgentRun; readonly replayed: boolean }, unknown>>(ended: Promise<R>): Promise<R> => {
+        const r = await ended;
+        if (r.ok && !r.value.replayed) await noteStormingRun(deps, r.value.run);
+        return r;
+    };
+
     /**
      * Ends a running run without `dt fmt`/`dt check` (a question, a decline): the workspace now is its result revision
      * (the base itself when nothing changed). The same call again with the same lease returns the same run.
@@ -1077,83 +1084,95 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             const captured = await capture(deps);
             if (!captured.ok) return captured;
             const diff = diagnosticsDiff(baseAnalysis.value.diagnostics, captured.value.analysis.diagnostics);
-            return uow.transaction((stores) => {
-                const r = running(stores, run, token, clock.now());
-                if (!r.ok) return r;
-                const at = clock.now();
-                const report = runReport(facts, diff);
-                // the reply is checked before the result is recorded: a refused reply records nothing
-                const check = agentRunCommands.finish(r.value, { report, resultRevision: r.value.baseRevision, changed: false, reply, finishedAt: at });
-                if (!check.ok && check.error.type === 'InvalidReply') return err(check.error);
-                const result = resultOf(stores, r.value, captured.value, at);
-                const finished = agentRunCommands.finish(r.value, {
-                    report,
-                    resultRevision: result.revision.id,
-                    changed: result.changed,
-                    reply,
-                    finishedAt: at,
-                });
-                // `changed` is decided from the revisions above, and the reply was checked
-                if (!finished.ok) throw new Error(`Finishing run ${run} failed: ${finished.error.type}`);
-                const outcome = finished.value.Completed ?? finished.value.Failed;
-                stores.runs.save(outcome.aggregate);
-                stores.runs.endLease(run, token);
-                publish(stores, r.value.session, outcome.events, at);
-                // the messages the run answered instead of editing were questions after all (decision 18)
-                if (outcome.aggregate.state === 'Completed') overrideAnsweredTriages(stores, outcome.aggregate, at);
-                return ok({ run: outcome.aggregate, replayed: false, diff });
-            });
+            return noted(
+                uow.transaction((stores) => {
+                    const r = running(stores, run, token, clock.now());
+                    if (!r.ok) return r;
+                    const at = clock.now();
+                    const report = runReport(facts, diff);
+                    // the reply is checked before the result is recorded: a refused reply records nothing
+                    const check = agentRunCommands.finish(r.value, { report, resultRevision: r.value.baseRevision, changed: false, reply, finishedAt: at });
+                    if (!check.ok && check.error.type === 'InvalidReply') return err(check.error);
+                    const result = resultOf(stores, r.value, captured.value, at);
+                    const finished = agentRunCommands.finish(r.value, {
+                        report,
+                        resultRevision: result.revision.id,
+                        changed: result.changed,
+                        reply,
+                        finishedAt: at,
+                    });
+                    // `changed` is decided from the revisions above, and the reply was checked
+                    if (!finished.ok) throw new Error(`Finishing run ${run} failed: ${finished.error.type}`);
+                    const outcome = finished.value.Completed ?? finished.value.Failed;
+                    stores.runs.save(outcome.aggregate);
+                    stores.runs.endLease(run, token);
+                    publish(stores, r.value.session, outcome.events, at);
+                    // the messages the run answered instead of editing were questions after all (decision 18)
+                    if (outcome.aggregate.state === 'Completed') overrideAnsweredTriages(stores, outcome.aggregate, at);
+                    return ok({ run: outcome.aggregate, replayed: false, diff });
+                }),
+            );
         },
 
         async askClarification({ run, token, question, reply }) {
-            return endWithoutChecks(run, token, 'NeedsClarification', (r, revision, at) => {
-                const asked = agentRunCommands.askClarification(r, { question, reply, resultRevision: revision, finishedAt: at });
-                return asked.ok ? ok(asked.value.NeedsClarification) : asked;
-            });
+            return noted(
+                endWithoutChecks(run, token, 'NeedsClarification', (r, revision, at) => {
+                    const asked = agentRunCommands.askClarification(r, { question, reply, resultRevision: revision, finishedAt: at });
+                    return asked.ok ? ok(asked.value.NeedsClarification) : asked;
+                }),
+            );
         },
 
         async declineRun({ run, token, reply }) {
-            return endWithoutChecks(run, token, 'Declined', (r, revision, at) => {
-                const declined = agentRunCommands.decline(r, { reply, resultRevision: revision, finishedAt: at });
-                return declined.ok ? ok(declined.value.Declined) : declined;
-            });
+            return noted(
+                endWithoutChecks(run, token, 'Declined', (r, revision, at) => {
+                    const declined = agentRunCommands.decline(r, { reply, resultRevision: revision, finishedAt: at });
+                    return declined.ok ? ok(declined.value.Declined) : declined;
+                }),
+            );
         },
 
         async failRun({ run, token, reason }) {
-            return uow.transaction((stores) => {
-                const replay = replayOf(stores, run, token);
-                if (replay) return replay.state === 'Failed' ? ok({ run: replay, replayed: true }) : err(notAllowed('fail', replay.state));
-                const r = running(stores, run, token, clock.now());
-                if (!r.ok) return r;
-                const at = clock.now();
-                const failed = agentRunCommands.fail(r.value, { reason, finishedAt: at });
-                if (!failed.ok) throw new Error(`Failing run ${run} failed: ${failed.error.type}`);
-                stores.runs.save(failed.value.Failed.aggregate);
-                stores.runs.endLease(run, token);
-                publish(stores, r.value.session, failed.value.Failed.events, at);
-                return ok({ run: failed.value.Failed.aggregate, replayed: false });
-            });
+            return noted(
+                uow.transaction((stores) => {
+                    const replay = replayOf(stores, run, token);
+                    if (replay) return replay.state === 'Failed' ? ok({ run: replay, replayed: true }) : err(notAllowed('fail', replay.state));
+                    const r = running(stores, run, token, clock.now());
+                    if (!r.ok) return r;
+                    const at = clock.now();
+                    const failed = agentRunCommands.fail(r.value, { reason, finishedAt: at });
+                    if (!failed.ok) throw new Error(`Failing run ${run} failed: ${failed.error.type}`);
+                    stores.runs.save(failed.value.Failed.aggregate);
+                    stores.runs.endLease(run, token);
+                    publish(stores, r.value.session, failed.value.Failed.events, at);
+                    return ok({ run: failed.value.Failed.aggregate, replayed: false });
+                }),
+            );
         },
 
         async cancelRun({ run, actor }) {
-            return uow.transaction((stores) => {
-                const stored = stores.runs.load(run);
-                if (!stored) return err(notFound('AgentRun', run));
-                const r = stored.run;
-                if (r.state !== 'Queued' && r.state !== 'Running') return err(notAllowed('cancel', r.state));
-                const at = clock.now();
-                const cancelled = agentRunCommands.cancel(r, { cancelledBy: actor.participant, cancelledByRole: actor.role, cancelledAt: at });
-                if (!cancelled.ok) return cancelled;
-                const { Cancelled } = cancelled.value;
-                stores.runs.save(Cancelled.aggregate);
-                stores.runs.endLease(run, undefined);
-                publish(stores, r.session, Cancelled.events, at);
-                return ok(Cancelled.aggregate);
-            });
+            const cancelled = await uow.transaction(
+                (stores): Result<Collaboration.CancelledAgentRun, NotFound | NotAllowed | Collaboration.FacilitatorOnly> => {
+                    const stored = stores.runs.load(run);
+                    if (!stored) return err(notFound('AgentRun', run));
+                    const r = stored.run;
+                    if (r.state !== 'Queued' && r.state !== 'Running') return err(notAllowed('cancel', r.state));
+                    const at = clock.now();
+                    const cancelled = agentRunCommands.cancel(r, { cancelledBy: actor.participant, cancelledByRole: actor.role, cancelledAt: at });
+                    if (!cancelled.ok) return cancelled;
+                    const { Cancelled } = cancelled.value;
+                    stores.runs.save(Cancelled.aggregate);
+                    stores.runs.endLease(run, undefined);
+                    publish(stores, r.session, Cancelled.events, at);
+                    return ok(Cancelled.aggregate);
+                },
+            );
+            if (cancelled.ok) await noteStormingRun(deps, cancelled.value);
+            return cancelled;
         },
 
         async expireLeases() {
-            return uow.transaction((stores) => {
+            const expired = await uow.transaction((stores) => {
                 const now = clock.now();
                 const failed: Collaboration.FailedAgentRun[] = [];
                 const released: AgentRunId[] = [];
@@ -1171,6 +1190,8 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 }
                 return { failed, released };
             });
+            for (const run of expired.failed) await noteStormingRun(deps, run);
+            return expired;
         },
 
         async requestRevert({ session, actor, run, body }) {
