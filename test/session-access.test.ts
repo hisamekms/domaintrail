@@ -399,6 +399,42 @@ describe('a session in access mode (against a mock of Cloudflare)', () => {
         }
     });
 
+    test('an Access participant joins: the facilitator’s page on loopback is told at once, and sees them online', async () => {
+        // another workspace: a fresh session, with only the facilitator in it
+        const other = await start({ root: await workspace() });
+        try {
+            await other.ready;
+            const fac = header('fay');
+            expect((await fetch(other.facilitatorLink, { headers: fac, redirect: 'manual' })).status).toBe(303);
+            // the facilitator's page on the machine (Host 127.0.0.1), connected before anyone else came
+            const page = await socket(other, fac);
+            try {
+                await until(() => page.received.some((m) => m.type === 'presence.snapshot'));
+                // Eve comes through Access (the tunnel's host): her page's first request joins her, then her page connects
+                const eve = { ...header('eve'), Host: 'session.example.com', Origin: 'https://session.example.com' };
+                expect((await fetch(`${other.url}api/session/me`, { headers: eve })).status).toBe(200);
+                const theirs = await socket(other, eve);
+                try {
+                    theirs.ws.send(JSON.stringify({ type: 'presence.update', location: { kind: 'dt', viewKey: 'contextMap', layoutKey: 'g#1' } }));
+                    const eveId = 'access:eve-0000-uuid';
+                    // the facilitator's page learns she joined (her row) and where she is (online), without a reload
+                    await until(() =>
+                        page.received.some((m) => m.type === 'session.participant_joined' && (m.event as { participant?: string }).participant === eveId),
+                    );
+                    await until(() =>
+                        page.received.some((m) => m.type === 'presence.update' && (m.presence as { participant: { id: string } }).participant.id === eveId),
+                    );
+                } finally {
+                    theirs.ws.close();
+                }
+            } finally {
+                page.ws.close();
+            }
+        } finally {
+            await other.stop();
+        }
+    });
+
     test('a session closed with a page of an Access user open: the user is identified no more', async () => {
         const dir = await workspace();
         const other = await startSessionServer({

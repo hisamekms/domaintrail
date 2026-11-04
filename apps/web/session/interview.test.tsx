@@ -1,7 +1,7 @@
-// An interview's choices in the chat (interview.tsx): shown under the question the interview awaits, to its starter only
-// and only until it is answered (also after a reload: they come with the interview in the session's state); one choice
-// pressed is sent at once as a reply to the question, several are checked and sent joined, and その他 always comes last
-// and goes to the composer. The brief's card by who looks: the facilitator confirms their own or approves (or rejects)
+// An interview's choices in the chat (interview.tsx): shown under the question the interview awaits, to everyone, and
+// only until it is answered (also after a reload: they come with the interview in the session's state); its starter
+// answers with them — one choice pressed is sent at once as a reply to the question, several are checked and sent
+// joined, and その他 always comes last and goes to the composer — and the others read them, with nothing to press. The brief's card by who looks: the facilitator confirms their own or approves (or rejects)
 // a participant's; the others read it with 承認待ち.
 import { describe, expect, test } from 'bun:test';
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
@@ -45,15 +45,18 @@ const interview = (more: object = {}) =>
 const state = (i: unknown) => ({ interviews: [i] }) as never;
 
 describe('which choices show', () => {
-    test("under the question awaited, to its starter on a live page; the session's state (as reloaded) carries them", () => {
-        expect(awaitedChoices(state(interview()), 'q1', 'f', true)).toEqual({ question: 'q1', choices: ['返品', '交換', '修理'], multiple: false });
+    test("under the question awaited, to everyone; its starter's on a live page; the session's state (as reloaded) carries them", () => {
+        const choices = { question: 'q1', choices: ['返品', '交換', '修理'], multiple: false };
+        expect(awaitedChoices(state(interview()), 'q1', 'f', true)).toEqual({ ...choices, mine: true });
         const multiple = interview({ asked: { question: 'q1', choices: ['PO', '開発者'], multiple: true } });
-        expect(awaitedChoices(state(multiple), 'q1', 'f', true)).toMatchObject({ multiple: true });
+        expect(awaitedChoices(state(multiple), 'q1', 'f', true)).toMatchObject({ multiple: true, mine: true });
+        // the others read them (the facilitator too, when a participant started it), as does a page that is not live
+        expect(awaitedChoices(state(interview()), 'q1', 'bob', true)).toEqual({ ...choices, mine: false });
+        expect(awaitedChoices(state(interview({ startedBy: 'bob' })), 'q1', 'f', true)).toEqual({ ...choices, mine: false });
+        expect(awaitedChoices(state(interview()), 'q1', 'f', false)).toEqual({ ...choices, mine: false });
     });
 
-    test('none for the others, a closed page, another message, once answered, without choices, or once briefed', () => {
-        expect(awaitedChoices(state(interview()), 'q1', 'bob', true)).toBeUndefined();
-        expect(awaitedChoices(state(interview()), 'q1', 'f', false)).toBeUndefined();
+    test('none under another message, once answered, without choices, or once briefed', () => {
         expect(awaitedChoices(state(interview()), 'q0', 'f', true)).toBeUndefined();
         // answered: the interview waits for the AI again (the choices were dropped with it)
         expect(awaitedChoices(state(interview({ awaiting: 'a1', asked: undefined })), 'q1', 'f', true)).toBeUndefined();
@@ -263,11 +266,22 @@ describe('under the message of the AI', () => {
             </ChatProvider>,
         );
 
-    test('its starter sees them; the others, another message, or after the answer: nothing', () => {
+    test('its starter answers with them; another message, or after the answer: nothing', () => {
         expect(render(chat('f', interview()))).toContain('その他（自分で書く）');
-        expect(render(chat('bob', interview()))).toBe('');
         expect(render(chat('f', interview()), 'q0')).toBe('');
         expect(render(chat('f', interview({ awaiting: 'a1', asked: undefined })))).toBe('');
+    });
+
+    test('the others read the same choices: a list, nothing to press, no その他; gone once answered', () => {
+        for (const html of [render(chat('bob', interview())), render(chat('f', interview({ startedBy: 'bob' })))]) {
+            expect(html).toContain('<ul class="interview-choices interview-choices-seen" aria-label="答えの選択肢">');
+            expect([...html.matchAll(/<li class="interview-choice">/g)]).toHaveLength(3);
+            for (const c of ['返品', '交換', '修理']) expect(html).toContain(c);
+            expect(html).not.toContain('<button');
+            expect(html).not.toContain('<input');
+            expect(html).not.toContain('その他（自分で書く）');
+        }
+        expect(render(chat('bob', interview({ awaiting: 'a1', asked: undefined })))).toBe('');
     });
 });
 
