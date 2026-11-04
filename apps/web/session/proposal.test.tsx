@@ -135,7 +135,7 @@ describe("the proposal's card", () => {
         for (const gone of ['何を', 'どこを', 'どう', '.dt']) expect(text(html)).not.toContain(gone);
         expect(html).toContain('class="chat-chip chat-target proposal-target"');
         expect(html).not.toContain('type="radio"');
-        expect((html.match(/chat-small primary/g) ?? []).length).toBe(1);
+        expect((html.match(/act act-decide/g) ?? []).length).toBe(1);
     });
 
     test('with options, for the facilitator: a radio per option, the recommendation chosen and marked, one 承認', () => {

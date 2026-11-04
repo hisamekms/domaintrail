@@ -1,0 +1,165 @@
+context Collaboration {
+  /// 記録の識別子。
+  id SessionRecordId "記録ID": UUID
+
+  /// 参加者の道のりのお願い（ファシリテーターへ）の識別子。
+  id JourneyRequestId "道のりのお願いID": UUID
+
+  /// 記録したときの道のりの名前（ES はストーミングのラベル、モデリングは道のりの名前）。あとで名前が変わっても、記録は変わらない。
+  primitive JourneyLabel "記録の道のりの名前": String { length(value) >= 1 and length(value) <= 200 }
+
+  /// 記録が名指す道のり: 鍵と、記録したときの名前。
+  value RecordedJourney "記録の道のり" {
+    journey: GuideJourneyKey "道のり"
+    label: JourneyLabel "名前"
+  }
+
+  /// 道のりの状態（道のりのファイルの `state`）。
+  enum JourneyStatus "道のりの状態" { Active "進行中" Done "完了" Archived "しまった" }
+
+  /// 済みにした・外した区切り1つ（BC の行ならコンテキストの名前で）。
+  value RecordedMark "済みの区切り" {
+    step: GuideStepKey "区切り"
+    context: ContextName? "BC の行"
+  }
+
+  /// 参加者がファシリテーターにお願いした、道のりの操作。
+  union RequestedJourneyAct "お願いした操作" {
+    /// いまの道のりにする（ない: 決めない）。
+    Choose "いまの道のりにする" {
+      journey: RecordedJourney? "道のり"
+    }
+    Goal "ゴールを変える" {
+      journey: RecordedJourney "道のり"
+      goal: GuideStepKey "ゴール"
+    }
+    State "状態を変える" {
+      journey: RecordedJourney "道のり"
+      state: JourneyStatus "状態"
+    }
+    Mark "済みを付け外す" {
+      journey: RecordedJourney "道のり"
+      mark: RecordedMark "区切り"
+      done: Bool "済みにする"
+    }
+  }
+
+  /// お願いがどうなったか。
+  enum JourneyRequestOutcome "お願いの行方" { Approved "承認" Denied "却下" Withdrawn "取り下げ" }
+
+  /// 道のりのファイルが dt の外（git、エディタ）で変わったところの種類。
+  enum JourneyFileChangeKind "外での変わり方" {
+    Added "道のりが増えた"
+    Removed "道のりがなくなった"
+    Goal "ゴール"
+    State "状態"
+    Marks "済み"
+    Brief "ブリーフ"
+  }
+
+  /// 道のりのファイルが dt の外で変わったところ1つ。
+  value JourneyFileChange "外で変わったところ" {
+    kind: JourneyFileChangeKind "種類"
+    journey: RecordedJourney "道のり"
+    /// ゴール・状態の前（ゴールは区切りの鍵、状態は `JourneyStatus` の名前）。
+    from: String? "前"
+    /// ゴール・状態のあと。
+    to: String? "あと"
+  }
+
+  /// 記録したこと。人の操作（誰がしたかは記録の `by`）か、dt の外での道のりのファイルの変わり。
+  union RecordFact "記録したこと" {
+    /// ゴールを変えた（カードの 🏁、パネルのゴールのメニュー）。
+    GoalChanged "ゴールを変えた" {
+      journey: RecordedJourney "道のり"
+      from: GuideStepKey "前のゴール"
+      to: GuideStepKey "新しいゴール"
+      /// いまの道のりでない（文で道のりを名指す）。
+      other: Bool "ほかの道のり"
+    }
+    /// 区切りを済みにした・済みを外した。同じ人が続けて同じ向きに付け外すと、1つの記録にまとまる。
+    MarksChanged "済みを付け外した" {
+      journey: RecordedJourney "道のり"
+      done: Bool "済みにした"
+      marks: RecordedMark[1..40] "区切り"
+      other: Bool "ほかの道のり"
+    }
+    /// 完了にした・しまった・戻した。
+    StateChanged "状態を変えた" {
+      journey: RecordedJourney "道のり"
+      state: JourneyStatus "状態"
+    }
+    /// いまの道のりを決めた（人の操作だけ。決めていないときの既定の道のりは記録しない）。
+    CurrentChosen "いまの道のりにした" {
+      journey: RecordedJourney "道のり"
+    }
+    /// 参加者がファシリテーターにお願いした。決まると、同じ記録に行方を書き足す。
+    JourneyRequested "お願いした" {
+      request: JourneyRequestId "お願い"
+      act: RequestedJourneyAct "操作"
+      outcome: JourneyRequestOutcome? "行方"
+      /// 決めた人（承認・却下はファシリテーター、取り下げはお願いした人）。
+      decidedBy: ParticipantId? "決めた人"
+    }
+    /// 聞き取りを中止した（その聞き取りのスレッドの最後に）。
+    InterviewStopped "聞き取りを中止した" {
+      references interview: InterviewId -> Interview "聞き取り"
+    }
+    /// 参加者の聞き取りの要約を却下した（スレッドの最後に、皆に見える）。
+    BriefRejected "要約を却下した" {
+      references interview: InterviewId -> Interview "聞き取り"
+      note: Text? "ひとこと"
+    }
+    /// 道のりのファイルが dt の外で変わった（dt が書いたものは記録しない）。
+    FileChangedOutside "外で変わった" {
+      changes: JourneyFileChange[0..10] "変わったところ"
+      /// 挙げきれなかった変わりの数。
+      more: Tally "ほか"
+      /// 変わったあとのファイルが読めない。
+      unreadable: Bool "読めない"
+    }
+  }
+
+  /// セッションのチャットに dt が書く小さな記録の行（セッション開始の行と同じ見た目）。人の操作のうち、ほかの行が残らない
+  /// もの（ゴール・済み・完了・しまう・戻す・いまの道のり・お願いとその行方・中止・却下）と、dt の外での道のりのファイルの変わりを
+  /// 残す。誰がしたか（外での変わりにはない）、何を、いつ。セッションに残り、どのページにも届き、AI が読むここまでの経緯にも入る。
+  aggregate SessionRecord "記録" {
+    id: SessionRecordId
+    references session: SessionId -> Session
+    /// した人（外での変わりにはない）。
+    by: ParticipantId? "した人"
+    fact: RecordFact "記録したこと"
+    /// スレッドの最後に置く記録（聞き取りの中止・却下）なら、そのスレッドの最後のメッセージ。
+    references replyTo: RequestId? -> Request "スレッドの最後"
+    at: Timestamp "記録日時"
+    /// 書き足した日時（済みのまとめ、お願いの行方）。
+    revisedAt: Timestamp? "書き足した日時"
+
+    state Written "記録済み"
+
+    create command write(id: SessionRecordId, session: ActiveSession, by: ParticipantId?, fact: RecordFact, replyTo: RequestId?, at: Timestamp) "記録する"
+      -> Written
+      emits RecordWritten
+
+    /// 記録を書き足す: 済みの付け外しを続けてまとめる、お願いに行方を書く。どう書き足すかはコード（`domain/records.ts`）が決める。
+    command revise(fact: RecordFact, revisedAt: Timestamp) "記録を書き足す"
+      Written -> Written
+      changes fact, revisedAt
+      emits RecordRevised
+  }
+
+  persistent event RecordWritten "記録した" {
+    recordId: SessionRecordId
+    session: SessionId
+    by: ParticipantId?
+    fact: RecordFact
+    replyTo: RequestId?
+    at: Timestamp
+  }
+
+  persistent event RecordRevised "記録を書き足した" {
+    recordId: SessionRecordId
+    fact: RecordFact
+    revisedAt: Timestamp
+  }
+}

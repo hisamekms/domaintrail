@@ -14,6 +14,8 @@ export { GitIgnore, repositoryTop } from './infrastructure/gitignore.js';
 // what git itself says of them, where it speaks for the root (every source of ignores, `core.excludesFile` included)
 export { gitFileState, gitIgnoredEntries, gitNestedRepositories, gitReadableFiles, type GitFilesOptions } from './infrastructure/git-files.js';
 export { createGitRefWatcher, createWorkspaceWatcher } from './infrastructure/watchers.js';
+// a file dt writes itself beside the sources (the journey file): read and written whole, atomically, never over another's write; watched alone
+export { createGuardedTextFile, watchFile, type GuardedTextFile } from './infrastructure/guarded-file.js';
 // the workspace's state and cache directories, outside it (ADR 0026, State outside the workspace)
 export {
     currentEnvironment,

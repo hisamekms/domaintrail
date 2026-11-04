@@ -6,6 +6,7 @@
 //   `.dtes` storming element:        `@{es:Returns/ReturnRequested}` (the storming's ID / the element's local ID, the
 //                                    `storming` and `local` of a `DtesElement` target)
 //   `.dtes` storming as a whole:     `@{es:Returns}` (the storming's ID, the `storming` of a `DtesStorming` target)
+//   `.dt` context:                   `@{Billing}` (its name; shown by its label, as an interview's choice names it)
 //
 // A token is `@{`, an identifier without whitespace, braces or `@`, and `}` (spaces around it or a `/` are dropped). A
 // request body's mention is `@name[n]` (no braces), so the two never read as each other. `\@{` is a literal `@{` (the
@@ -14,7 +15,7 @@
 // resolves — any kind of storming declaration, by ID or label — is `resolveTarget`'s (`targets.ts`), shared with the
 // proposal chips. Pure: no React.
 import type { ModelTarget, NamingContext } from './targets';
-import { targetName, targetShortName } from './targets';
+import { contextName, targetName, targetShortName } from './targets';
 
 /** A piece of reply text: text as written, or an element reference (its target and the identifier written). */
 export type ReplySegment = { readonly kind: 'text'; readonly text: string } | { readonly kind: 'ref'; readonly target: ModelTarget; readonly id: string };
@@ -80,7 +81,7 @@ export function parseReplyText(text: string): ReplySegment[] {
  * What a reference shows: its own name in the display setting when it resolves now (a state or a command without its
  * aggregate, a storming element of any kind — a note, a timeline or an exception, a group, a stage — without its
  * storming, a storming by its title; as `resolveTarget` reads it), with its whole name as `path` when that says more;
- * else its identifier (`plainIdentifier`: of a storming or a storming element, its own ID).
+ * a context by its own name (`contextName`); else its identifier (`plainIdentifier`: of a storming or a storming element, its own ID).
  */
 export function referenceText(
     ref: Extract<ReplySegment, { kind: 'ref' }>,
@@ -91,6 +92,9 @@ export function referenceText(
         const full = targetName(ref.target, naming);
         return { text: name, resolved: true, ...(full !== undefined && full !== name && { path: full }) };
     }
+    // a context (`@{Billing}`), when no storming has its name
+    const context = naming && contextName(ref.target, naming);
+    if (context !== undefined) return { text: context, resolved: true };
     return { text: plainIdentifier(ref.id), resolved: false };
 }
 

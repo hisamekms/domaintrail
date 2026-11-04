@@ -1,23 +1,21 @@
 // The interviewer's output (a question or a brief) read as untrusted AI output, a brief as the person edits it, and the
 // team's templates as the config file has them.
 import { describe, expect, test } from 'bun:test';
-import { briefData, briefLines, interviewerJsonSchema, readBriefText, readChoices, readInterviewerReply } from './interviews.js';
+import { briefData, briefLines, interviewerJsonSchema, readBriefText, readChoices, readInterviewerReply, withEditedText } from './interviews.js';
 import { checkTemplates } from './templates.js';
 
-const lines = [
-    { head: '目的', text: '返金を早める' },
-    { head: '範囲', text: '申請から返金まで' },
-    { head: '使い道', text: 'モデリングへ' },
-    { head: 'レベル', text: 'Big Picture' },
-];
+const ES = { command: 'Es', language: 'Ja' } as const;
+const MODEL = { command: 'Model', language: 'Ja' } as const;
+const esJourney = { purpose: '返金を早める', scope: '申請から返金まで', participants: ['窓口担当', 'システム担当'], use: 'modeling', level: 'BigPicture' };
 
 describe("the interviewer's reply", () => {
-    test('a question, or a brief whose lines become its text (a new one replaces nothing)', () => {
-        expect(readInterviewerReply({ kind: 'question', question: ' どの業務？ ' })).toEqual({
+    test('a question, or an ES brief: the storming and its journey, its why as the text (a new one replaces nothing)', () => {
+        expect(readInterviewerReply({ kind: 'question', question: ' どの業務？ ' }, ES)).toEqual({
             ok: true,
             value: { kind: 'question', question: 'どの業務？', choices: [], multiple: false },
         });
-        const read = readInterviewerReply({ kind: 'brief', brief: { name: 'Returns', label: '返品', isNew: true, replaces: true, lines } });
+        const raw = { name: 'Returns', label: '返品', isNew: true, description: '返品の受付から返金まで', journey: esJourney };
+        const read = readInterviewerReply({ kind: 'brief', brief: raw }, ES);
         expect(read as unknown).toEqual({
             ok: true,
             value: {
@@ -27,48 +25,168 @@ describe("the interviewer's reply", () => {
                     label: '返品',
                     isNew: true,
                     replaces: false,
-                    text: '目的: 返金を早める\n範囲: 申請から返金まで\n使い道: モデリングへ\nレベル: Big Picture',
+                    text: '目的: 返金を早める\n範囲: 申請から返金まで\n参加者: 窓口担当、システム担当',
+                    journey: {
+                        purpose: '返金を早める',
+                        scope: '申請から返金まで',
+                        participants: ['窓口担当', 'システム担当'],
+                        stormings: [],
+                        continues: false,
+                        use: 'Modeling',
+                        level: 'BigPicture',
+                    },
+                    description: '返品の受付から返金まで',
                 },
             },
         });
-        if (read.ok && read.value.kind === 'brief') expect(briefData(read.value.brief).lines).toEqual(lines);
+        // sent again as the agent read it, it reads the same
+        if (read.ok && read.value.kind === 'brief') expect(readInterviewerReply({ kind: 'brief', brief: briefData(read.value.brief) }, ES)).toEqual(read);
+        // in English: the heads of the language
+        const en = readInterviewerReply({ kind: 'brief', brief: raw }, { command: 'Es', language: 'En' });
+        expect(en.ok && en.value.kind === 'brief' && (en.value.brief.text as string).split('\n')[0]).toBe('Purpose: 返金を早める');
     });
 
-    test('refused: an unknown kind or field, a name that is no identifier, too few lines, a head with a colon, a line break', () => {
-        const brief = (b: object) => readInterviewerReply({ kind: 'brief', brief: { name: 'Returns', isNew: false, replaces: true, lines, ...b } });
-        expect(readInterviewerReply({ kind: 'answer', answer: 'x' })).toMatchObject({ ok: false, error: { path: 'reply.kind' } });
-        expect(readInterviewerReply({ kind: 'question', question: 'x', extra: 1 })).toMatchObject({ ok: false, error: { path: 'reply.extra' } });
-        expect(brief({ name: '返品' })).toMatchObject({ ok: false, error: { path: 'reply.brief.name' } });
-        expect(brief({ lines: lines.slice(0, 2) })).toMatchObject({ ok: false, error: { path: 'reply.brief.lines' } });
-        expect(brief({ lines: [{ head: '目的:', text: 'x' }, ...lines.slice(1)] })).toMatchObject({ ok: false, error: { path: 'reply.brief.lines[0].head' } });
-        expect(brief({ lines: [{ head: '目的', text: 'a\nb' }, ...lines.slice(1)] })).toMatchObject({
-            ok: false,
-            error: { path: 'reply.brief.lines[0].text' },
+    test('a modeling brief: a new journey (its ID from its name) or one continued; the pattern, its goal and subject', () => {
+        const fresh = readInterviewerReply(
+            {
+                kind: 'brief',
+                brief: {
+                    isNew: true,
+                    journey: {
+                        purpose: '請求を正す',
+                        participants: [],
+                        name: 'Billing の深掘り',
+                        pattern: 'OneContext',
+                        goal: 'invariants',
+                        context: 'Billing',
+                    },
+                },
+            },
+            MODEL,
+        );
+        expect(fresh).toMatchObject({
+            ok: true,
+            value: {
+                brief: {
+                    name: 'billing',
+                    isNew: true,
+                    replaces: false,
+                    journey: { pattern: 'OneContext', goal: 'invariants', context: 'Billing', journeyName: 'Billing の深掘り' },
+                },
+            },
         });
+        const continued = readInterviewerReply(
+            {
+                kind: 'brief',
+                brief: { name: 'from-es', isNew: false, journey: { purpose: 'x', participants: [], pattern: 'FromStorming', stormings: ['Issue'] } },
+            },
+            MODEL,
+        );
+        // a name with no ASCII word: the ID from the subject
+        const ja = readInterviewerReply(
+            {
+                kind: 'brief',
+                brief: {
+                    isNew: true,
+                    journey: { purpose: 'x', participants: [], name: 'コンビニ交付のモデル', pattern: 'FromStorming', stormings: ['ConvenienceStoreIssuance'] },
+                },
+            },
+            MODEL,
+        );
+        expect(ja).toMatchObject({ ok: true, value: { brief: { name: 'convenience-store-issuance' } } });
+        expect(continued).toMatchObject({
+            ok: true,
+            value: { brief: { name: 'from-es', replaces: true, journey: { continues: true, stormings: ['Issue'] } } },
+        });
+        if (fresh.ok && fresh.value.kind === 'brief')
+            expect(readInterviewerReply({ kind: 'brief', brief: briefData(fresh.value.brief) }, MODEL)).toEqual(fresh);
+    });
+
+    test("the brief's subject is the ID, also when it repeats the reference the person picked as a choice", () => {
+        const subject = (j: object) =>
+            readInterviewerReply({ kind: 'brief', brief: { isNew: true, journey: { purpose: 'x', participants: [], name: 'n', ...j } } }, MODEL);
+        expect(subject({ pattern: 'FromStorming', stormings: ['@{es:ConvenienceStoreIssuance}', ' @{ ConvenienceStoreIssuance } '] })).toMatchObject({
+            ok: true,
+            value: { brief: { journey: { stormings: ['ConvenienceStoreIssuance'] } } },
+        });
+        expect(subject({ pattern: 'OneContext', context: '@{Billing}' })).toMatchObject({ ok: true, value: { brief: { journey: { context: 'Billing' } } } });
+    });
+
+    test('refused: an unknown kind or field, a name that is no identifier, a journey that does not fit its command', () => {
+        const brief = (b: object, j: object = {}, ctx: typeof ES | typeof MODEL = ES) =>
+            readInterviewerReply({ kind: 'brief', brief: { name: 'Returns', isNew: false, ...b, journey: { ...esJourney, ...j } } }, ctx);
+        expect(readInterviewerReply({ kind: 'answer', answer: 'x' }, ES)).toMatchObject({ ok: false, error: { path: 'reply.kind' } });
+        expect(readInterviewerReply({ kind: 'question', question: 'x', extra: 1 }, ES)).toMatchObject({ ok: false, error: { path: 'reply.extra' } });
+        expect(brief({ name: '返品' })).toMatchObject({ ok: false, error: { path: 'reply.brief.name' } });
+        expect(brief({}, { level: 'Somewhere' })).toMatchObject({ ok: false, error: { path: 'reply.brief.journey.level' } });
+        expect(brief({}, { purpose: 'a\nb' })).toMatchObject({ ok: false, error: { path: 'reply.brief.journey.purpose' } });
+        expect(brief({}, { pattern: 'Whole' })).toMatchObject({ ok: false, error: { path: 'reply.brief.journey.pattern' } });
+        // a modeling brief: no ES fields, a pattern, a goal it allows, its subject
+        const model = { use: undefined, level: undefined };
+        expect(brief({ name: 'j' }, { ...model, pattern: 'Review', goal: 'commands' }, MODEL)).toMatchObject({
+            ok: false,
+            error: { path: 'reply.brief.journey.goal' },
+        });
+        expect(brief({ name: 'j' }, { ...model, pattern: 'FromStorming' }, MODEL)).toMatchObject({
+            ok: false,
+            error: { path: 'reply.brief.journey.stormings' },
+        });
+        expect(brief({ name: 'Not A Slug' }, { ...model, pattern: 'Review' }, MODEL)).toMatchObject({ ok: false, error: { path: 'reply.brief.name' } });
         expect(brief({})).toMatchObject({ ok: true, value: { brief: { replaces: true, isNew: false } } });
         expect(interviewerJsonSchema()).toMatchObject({ required: ['kind'], properties: { kind: { enum: ['question', 'brief'] } } });
     });
 
+    test('a brief edited: its why read back by its heads (either language), the rest of the journey kept', () => {
+        const read = readInterviewerReply({ kind: 'brief', brief: { name: 'Returns', isNew: true, journey: esJourney } }, ES);
+        if (!read.ok || read.value.kind !== 'brief') throw new Error('no brief');
+        const brief = read.value.brief;
+        const edited = withEditedText(brief, '目的: 返金を一日で\nScope: 申請だけ\n参加者: 窓口担当、経理' as never);
+        expect(edited).toMatchObject({
+            ok: true,
+            value: { journey: { purpose: '返金を一日で', scope: '申請だけ', participants: ['窓口担当', '経理'], level: 'BigPicture' } },
+        });
+        expect(withEditedText(brief, '範囲: x' as never)).toMatchObject({ ok: false });
+        expect(withEditedText(brief, '目的: x\nなにか: y' as never)).toMatchObject({ ok: false, error: { path: 'text[1]' } });
+    });
+
     test("a question's choices: kept with `multiple`; the schema bounds them", () => {
         expect(
-            readInterviewerReply({ kind: 'question', question: '誰が参加しますか？', choices: ['業務担当', '開発者', 'PO'], multiple: true }) as unknown,
+            readInterviewerReply({ kind: 'question', question: '誰が参加しますか？', choices: ['業務担当', '開発者', 'PO'], multiple: true }, ES) as unknown,
         ).toEqual({
             ok: true,
             value: { kind: 'question', question: '誰が参加しますか？', choices: ['業務担当', '開発者', 'PO'], multiple: true },
         });
         // `multiple` without choices means nothing
-        expect(readInterviewerReply({ kind: 'question', question: 'なぜ？', multiple: true })).toMatchObject({
+        expect(readInterviewerReply({ kind: 'question', question: 'なぜ？', multiple: true }, ES)).toMatchObject({
             ok: true,
             value: { choices: [], multiple: false },
         });
-        expect(readInterviewerReply({ kind: 'question', question: 'x', choices: 'a, b' })).toMatchObject({ ok: false, error: { path: 'reply.choices' } });
-        expect(readInterviewerReply({ kind: 'question', question: 'x', choices: ['a', 'b'], multiple: 'yes' })).toMatchObject({
+        expect(readInterviewerReply({ kind: 'question', question: 'x', choices: 'a, b' }, ES)).toMatchObject({ ok: false, error: { path: 'reply.choices' } });
+        expect(readInterviewerReply({ kind: 'question', question: 'x', choices: ['a', 'b'], multiple: 'yes' }, ES)).toMatchObject({
             ok: false,
             error: { path: 'reply.multiple' },
         });
         expect(interviewerJsonSchema()).toMatchObject({
-            properties: { choices: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 40 } }, multiple: { type: 'boolean' } },
+            properties: { choices: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 200 } }, multiple: { type: 'boolean' } },
         });
+    });
+
+    test('a choice that names elements by reference: kept whole, its length counted as the page shows it (by name)', () => {
+        const id = 'AVeryLongStormingIdentifierForTheIssuance';
+        // a reference longer than 40 as written, shorter as shown; one alone is kept whole, even when its name is long
+        expect(readChoices([`@{es:${id.slice(0, 30)}}`, '@{Billing}', `@{es:${id}}`]) as readonly string[]).toEqual([
+            `@{es:${id.slice(0, 30)}}`,
+            '@{Billing}',
+            `@{es:${id}}`,
+        ]);
+        expect(readChoices([`@{es:Returns/${id.slice(0, 30)}} から`, 'b']) as readonly string[]).toEqual([`@{es:Returns/${id.slice(0, 30)}} から`, 'b']);
+        // cut in its text, never inside a reference: one that does not fit is left out
+        const [cut] = readChoices([`${'あ'.repeat(30)}@{es:${id}}`, 'b']) as readonly string[];
+        expect(cut).toBe(`${'あ'.repeat(30)}…`);
+        const [tail] = readChoices([`@{es:Returns} ${'い'.repeat(50)}`, 'b']) as readonly string[];
+        expect(tail).toBe(`@{es:Returns} ${'い'.repeat(31)}…`);
+        // too long as written: dropped
+        expect(readChoices([`@{es:${'x'.repeat(196)}}`, 'a', 'b']) as readonly string[]).toEqual(['a', 'b']);
     });
 
     test('choices are cleaned, not refused: blanks and non-strings dropped, one line, cut to 40, duplicates dropped, six at most', () => {

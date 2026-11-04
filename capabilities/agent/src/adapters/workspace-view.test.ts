@@ -78,6 +78,20 @@ describe("the answerer's view of the workspace", () => {
         expect(existsSync(dir)).toBe(false);
     });
 
+    test('the journey file is in the view, next to the sources and the config; the runner may never edit it', async () => {
+        const root = await scratch();
+        await writeFile(path.join(root, 'shop.dt'), 'context Shop {}\n');
+        await writeFile(path.join(root, 'domaintrail.jsonc'), '{}\n');
+        await writeFile(path.join(root, 'domaintrail.journey.json'), '{ "version": 1 }\n');
+        const view = createWorkspaceView({ root, parent: await scratch() });
+        const dir = await view.refresh();
+        expect(await files(dir)).toEqual(['domaintrail.journey.json', 'domaintrail.jsonc', 'shop.dt']);
+        expect(await readFile(path.join(dir, 'domaintrail.journey.json'), 'utf8')).toBe('{ "version": 1 }\n');
+        await view.dispose();
+        const { CONFIG_EDIT_DENIED } = await import('./claude-code.js');
+        expect(CONFIG_EDIT_DENIED).toEqual(expect.arrayContaining(['Edit(./domaintrail.journey.json)', 'Edit(**/domaintrail.journey.json)']));
+    });
+
     test("git's allowlist: regular files only, nothing of .git, .domaintrail or node_modules at any depth, no link above a file", async () => {
         const root = await scratch();
         const outside = await scratch();

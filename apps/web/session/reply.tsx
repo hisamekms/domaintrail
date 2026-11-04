@@ -3,7 +3,7 @@
 // questions with their options — as plain text, never markup; element references in it (`references.ts`) are named in
 // the display setting and link to the element. Nothing here can be chosen yet: the options are shown as they will be
 // offered, disabled.
-import { Fragment } from 'react';
+import { Fragment, type ReactElement } from 'react';
 import type { Messages } from '../i18n';
 import { bodyText } from './mentions';
 import { useTargetNaming } from './naming';
@@ -36,6 +36,28 @@ export function ReplyText({ text, onNavigate }: { text: string; onNavigate: Navi
                 );
             })}
         </>
+    );
+}
+
+/**
+ * Text of a choice (an interview's button or checkbox): its element references by their own name, as `ReplyText` shows
+ * them (the whole path in the tooltip, unresolved ones as their identifier), but never links: pressing it answers.
+ * One element: a single wrapper, so a choice in a flex button stays one line of text.
+ */
+export function ChoiceText({ text }: { text: string }): ReactElement {
+    const naming = useTargetNaming();
+    return (
+        <span className="choice-text">
+            {parseReplyText(text).map((seg, i) => {
+                if (seg.kind === 'text') return <Fragment key={i}>{seg.text}</Fragment>;
+                const shown = referenceText(seg, naming);
+                return (
+                    <span key={i} className={shown.resolved ? 'reply-element' : 'reply-element unresolved'} {...(shown.path && { 'data-tooltip': shown.path })}>
+                        {shown.text}
+                    </span>
+                );
+            })}
+        </span>
     );
 }
 

@@ -58,3 +58,13 @@ export async function viewPayloads(...steps: (readonly SourceFile[])[]): Promise
     }
     return payloads;
 }
+
+/** The kinds of the text buttons in some markup (shared/act.tsx: `act act-<kind>`), in their order. */
+export function actKinds(html: string): string[] {
+    return [...html.matchAll(/class="act act-([a-z-]+)/g)].map((m) => m[1] ?? '');
+}
+
+/** How many `decide` buttons some markup has: the one-decide rule (docs/ui-rules.md) holds it at one per place. */
+export function decides(html: string): number {
+    return actKinds(html).filter((k) => k === 'decide').length;
+}

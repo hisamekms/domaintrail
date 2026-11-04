@@ -158,6 +158,13 @@ validation live with the package that uses it, as `validate…(section, fail)` a
 `apps/dt/src/config` composes them (the checks in a fixed order, the first error wins) and the workspace reads the file.
 A new setting goes to its owner and into `schema/domaintrail.schema.json`, which a test compares with the composed keys.
 
+## The page's UI
+
+The Live View's page (`apps/web`) follows [the UI rules](docs/ui-rules.md): every text button is an `<Act kind="…">`
+whose look says what pressing it does (decide, send, insert, see, open, stop or danger; one decide per place), and
+spacing follows the rhythm of `--gap-inside`, `--gap-between` and `--gap-turn`. `apps/web/ui-rules.test.ts` holds both;
+an exception goes into its lists with a reason.
+
 ## Tests
 
 Three kinds of test, by what a test crosses:

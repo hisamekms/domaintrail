@@ -4,15 +4,15 @@
 // soon as the command starts (the server kept them on the command); then the AI's advice: a spinner while it thinks,
 // then a status and one to three steps with their reasons and actions — the command (into the composer), the places
 // (shown on the canvas), 「聞くことをメモ」 (a message asking the AI for a hotspot: a participant's is approved by the
-// facilitator). With several modeling journeys, a picker (each viewer's choice remembered). The latest card lays the
-// person's ✓ marks as they are now over its map, and the facilitator sets them there; a card in history keeps its map
-// as it was, with a note.
+// facilitator). The card draws the session's current journey (its name opens the journeys panel, its 🏁 changes the
+// goal); the latest card draws it as the files and the journey file tell it now, marks included (a ✓ set there is the
+// facilitator's, a participant's a request); a card in history keeps its map as it was, with a note.
 import { useState, type ReactElement } from 'react';
 import {
     Box,
     Check,
     CircleX,
-    CornerDownLeft,
+    Compass,
     Eye,
     FileText,
     Flag,
@@ -27,6 +27,9 @@ import {
 } from 'lucide-react';
 import { suggestedCommandId } from '@domaintrail/collaboration';
 import { useT } from '../i18n';
+import { Act, MarkToggle } from '../shared/act';
+import { GoalMenu } from './journey-panel';
+import { pageGuideMarks } from './journey-view';
 import { AI_NAME } from './ai';
 import { sessionApi } from './api';
 import { Bubble } from './bubble';
@@ -35,7 +38,6 @@ import { GuideMark } from './guide';
 import {
     askBody,
     latestGuide,
-    pageGuideMarks,
     viewTargetOfShown,
     withMarks,
     type GuideAdviceJson,
@@ -53,24 +55,6 @@ import type { SlashCommandJson } from './slash';
 import { latestRevision } from './state';
 import { targetKey, type ModelTarget } from './targets';
 
-/** Where each viewer's choice of journey is remembered. */
-const JOURNEY_KEY = 'domaintrail.guide.journey';
-
-const remembered = (): string | undefined => {
-    try {
-        return localStorage.getItem(JOURNEY_KEY) ?? undefined;
-    } catch {
-        return undefined;
-    }
-};
-const remember = (id: string): void => {
-    try {
-        localStorage.setItem(JOURNEY_KEY, id);
-    } catch {
-        // not kept: the first journey next time
-    }
-};
-
 /** The icon of each kind of finding. */
 const FINDING_ICONS: Readonly<Record<string, LucideIcon>> = {
     StormingWithoutBrief: FileText,
@@ -86,17 +70,15 @@ const FINDING_ICONS: Readonly<Record<string, LucideIcon>> = {
 };
 
 export function GuideCard({ command: c, continues }: { readonly command: SlashCommandJson; readonly continues: boolean }): ReactElement {
-    const { tx, session } = useChat();
+    const { tx, session, journeys } = useChat();
     const t = tx.chat.guide;
     const live = session.status === 'live' && session.state.session.state === 'Open';
     const latest = latestGuide(session.state)?.id === c.id;
     const maps = c.guide?.maps ?? [];
-    const [chosen, setChosen] = useState<string | undefined>(remembered);
-    const map = maps.find((m) => m.journey === chosen) ?? maps[0];
-    const choose = (id: string): void => {
-        setChosen(id);
-        remember(id);
-    };
+    // the session's current journey: drawn now on the latest card, as kept on the others
+    const current = journeys.overview.current;
+    const now = live && latest && current?.map ? current.map : undefined;
+    const map = now ?? maps.find((m) => m.journey !== undefined && m.journey === current?.summary.key) ?? maps[0];
     return (
         <div className={`chat-row guide-row state-${c.state}`}>
             <Bubble
@@ -109,16 +91,7 @@ export function GuideCard({ command: c, continues }: { readonly command: SlashCo
             >
                 <section className="guide-card" aria-label={t.answer}>
                     {!latest && <p className="guide-older muted">{t.older}</p>}
-                    {maps.length > 1 && (
-                        <select className="guide-journeys" aria-label={t.journey} value={map?.journey ?? ''} onChange={(e) => choose(e.target.value)}>
-                            {maps.map((m) => (
-                                <option key={m.journey ?? ''} value={m.journey ?? ''}>
-                                    {m.journeyName ?? m.journey}
-                                </option>
-                            ))}
-                        </select>
-                    )}
-                    {map && <GuideMapView map={map} live={live && latest} />}
+                    {map && <GuideMapView map={map} live={live && latest} heading />}
                     {c.guide && c.guide.findings.length > 0 && <AtOnce findings={c.guide.findings} />}
                     <Advice command={c} live={live} />
                 </section>
@@ -127,10 +100,14 @@ export function GuideCard({ command: c, continues }: { readonly command: SlashCo
     );
 }
 
-/** A step's dot: ✓ done, 📍 here, 🏁 the goal to reach, else empty. */
-function StepDot({ step }: { readonly step: GuideStepJson }): ReactElement {
+/** A step's dot: ✓ done, 📍 here, 🏁 the goal to reach, a dashed ring not confirmed, else empty. */
+function StepDot({ step, unconfirmed }: { readonly step: GuideStepJson; readonly unconfirmed?: string }): ReactElement {
     const Icon = step.state === 'Done' ? Check : step.state === 'Here' ? MapPin : step.goal ? Flag : undefined;
-    return <span className="guide-dot">{Icon && <Icon size={12} aria-hidden />}</span>;
+    return (
+        <span className="guide-dot" {...(step.state === 'Unconfirmed' && unconfirmed !== undefined && { 'data-tooltip': unconfirmed })}>
+            {Icon && <Icon size={12} aria-hidden />}
+        </span>
+    );
 }
 
 /** The goal's name: the event storming's level, or the modeling step it ends at. */
@@ -143,14 +120,30 @@ function goalName(map: GuideMapJson, t: ReturnType<typeof useChat>['tx']['chat']
     return pattern ? `${step}（${pattern}）` : step;
 }
 
-/** The map: the steps on a wrapping line, the goal, the BC rows; the facilitator marks the steps the files cannot tell. */
-export function GuideMapView({ map: kept, live }: { readonly map: GuideMapJson; readonly live: boolean }): ReactElement {
-    const { tx, session, marking, putCommand } = useChat();
+/**
+ * The map: the steps on a wrapping line, the goal, the BC rows; a person marks the steps the files cannot tell (the
+ * facilitator's mark is set at once, a participant's is a request). With `heading`, the journey's name (it opens the
+ * journeys panel) and its 🏁 (it changes the goal). Without `named`, no journey's name under the map (the journeys panel,
+ * whose title already says it).
+ */
+export function GuideMapView({
+    map: kept,
+    live,
+    heading = false,
+    named = true,
+}: {
+    readonly map: GuideMapJson;
+    readonly live: boolean;
+    readonly heading?: boolean;
+    readonly named?: boolean;
+}): ReactElement {
+    const { tx, session, journeys, putCommand } = useChat();
     const t = tx.chat.guide;
-    const store = pageGuideMarks(session.state, (target, sign, placed) => marking.set(target, sign, placed));
+    const store = pageGuideMarks(journeys.body.file, (act) => journeys.act(act));
     // the latest card: the marks as they are now
     const map = live ? withMarks(kept, store.read()) : kept;
-    const facilitator = live && session.me.participant.role === 'facilitator';
+    // anyone marks on a live map: the facilitator's mark is set, a participant's asked of the facilitator
+    const marker = live;
     const journey = map.journey;
     const toggle = (step: string, on: boolean, context?: string): void => {
         if (journey === undefined) return;
@@ -161,38 +154,35 @@ export function GuideMapView({ map: kept, live }: { readonly map: GuideMapJson; 
     const goal = goalName(map, t);
     const starts =
         map.world === 'Storming' ? (['es:start'] as const) : map.world === 'Model' ? (['model:start'] as const) : (['es:start', 'model:start'] as const);
+    const item = [journeys.overview.current, ...journeys.overview.others].find((j) => j && j.summary.key === journey);
+    const [goalOpen, setGoalOpen] = useState(false);
+    const title = named ? (item?.summary.name ?? map.journeyName ?? map.storming) : undefined;
     return (
         <div className="guide-map">
-            <ol className="guide-path">
+            {/* one row, a column per step (the labels wrap within their column): no connector dangles at a line's end */}
+            <ol className="guide-path" style={{ gridTemplateColumns: `repeat(${map.steps.length + (setGoal ? 1 : 0)}, minmax(0, 1fr))` }}>
                 {map.steps.map((s) => {
                     const label = t.steps[s.key] ?? s.key;
-                    const state = s.state === 'Done' ? t.done : s.state === 'Here' ? t.here : undefined;
+                    const state = s.state === 'Done' ? t.done : s.state === 'Here' ? t.here : s.state === 'Unconfirmed' ? t.unconfirmed : undefined;
                     return (
                         <li
                             key={s.key}
                             className={`guide-step ${s.state.toLowerCase()}${s.goal ? ' goal' : ''}${s.after ? ' after' : ''}`}
                             {...(s.state === 'Here' && { 'aria-current': 'step' as const })}
                         >
-                            <StepDot step={s} />
+                            <StepDot step={s} unconfirmed={t.unconfirmed} />
                             <span className="guide-step-label">{label}</span>
                             {state && <span className="visually-hidden">{state}</span>}
-                            {s.markable && facilitator && (
-                                <button
-                                    type="button"
-                                    className={`guide-mark${s.marked ? ' on' : ''}`}
-                                    aria-pressed={s.marked}
-                                    aria-label={`${label}: ${s.marked ? t.unmark : t.mark}`}
-                                    data-tooltip={s.marked ? t.unmark : t.mark}
-                                    onClick={() => toggle(s.key, !s.marked)}
-                                >
-                                    <Check size={10} aria-hidden />
-                                </button>
+                            {s.markable && marker && (
+                                <MarkToggle
+                                    on={s.marked}
+                                    text={s.marked ? t.markedShort : t.mark}
+                                    label={`${label}: ${s.marked ? t.unmark : t.mark}`}
+                                    tooltip={s.marked ? t.unmark : t.mark}
+                                    onToggle={() => toggle(s.key, !s.marked)}
+                                />
                             )}
-                            {s.markable && !facilitator && s.marked && (
-                                <span className="guide-mark on" role="img" aria-label={t.marked} data-tooltip={t.marked}>
-                                    <Check size={10} aria-hidden />
-                                </span>
-                            )}
+                            {s.markable && !marker && s.marked && <MarkToggle on text={t.markedShort} label={t.marked} tooltip={t.marked} readOnly />}
                         </li>
                     );
                 })}
@@ -204,24 +194,52 @@ export function GuideMapView({ map: kept, live }: { readonly map: GuideMapJson; 
                 )}
             </ol>
             <p className="guide-goal">
-                <Flag size={12} aria-hidden />
-                {goal ? t.goal(goal) : t.noGoal}
-                {map.journeyName && <span className="guide-journey muted"> · {map.journeyName}</span>}
+                {heading && live && item && !setGoal ? (
+                    <button
+                        type="button"
+                        className="guide-goal-button"
+                        aria-expanded={goalOpen}
+                        data-tooltip={t.changeGoal}
+                        onClick={() => setGoalOpen(!goalOpen)}
+                    >
+                        <Flag size={12} aria-hidden />
+                        {goal ? t.goal(goal) : t.noGoal}
+                    </button>
+                ) : (
+                    <span className="guide-goal-text">
+                        <Flag size={12} aria-hidden />
+                        {goal ? t.goal(goal) : t.noGoal}
+                    </span>
+                )}
+                {title !== undefined &&
+                    (heading && live ? (
+                        <button type="button" className="guide-journey-button" data-tooltip={t.openJourneys} onClick={() => journeys.setOpen(true)}>
+                            <Compass size={12} aria-hidden />
+                            {title}
+                        </button>
+                    ) : (
+                        <span className="guide-journey muted">{title}</span>
+                    ))}
+                {map.missing === true && (
+                    <span className="guide-missing">
+                        <TriangleAlert size={12} aria-hidden /> {t.missing}
+                    </span>
+                )}
             </p>
+            {goalOpen && item && <GoalMenu item={item} onDone={() => setGoalOpen(false)} />}
             {setGoal && live && (
                 <p className="guide-actions">
                     {starts.map((id) => (
-                        <button
+                        <Act
                             key={id}
-                            type="button"
-                            className="chat-small primary guide-command"
+                            kind="insert"
                             disabled={commandButton(session.state, id) === 'disabled'}
                             data-tooltip={tx.chat.candidates.putCommand}
                             aria-label={`/${id}: ${tx.chat.candidates.putCommand}`}
                             onClick={() => putCommand(id)}
                         >
-                            <CornerDownLeft size={12} aria-hidden />/{id}
-                        </button>
+                            /{id}
+                        </Act>
                     ))}
                 </p>
             )}
@@ -249,18 +267,15 @@ export function GuideMapView({ map: kept, live }: { readonly map: GuideMapJson; 
                                 <td>{r.commands}</td>
                                 <td>{r.invariants}</td>
                                 <td>
-                                    {facilitator && map.contextsAt !== undefined ? (
-                                        <button
-                                            type="button"
-                                            className={`guide-mark${r.state === 'Done' ? ' on' : ''}`}
-                                            aria-pressed={r.marked}
-                                            aria-label={`${r.context}: ${r.marked ? t.unmark : t.mark}`}
-                                            data-tooltip={r.marked ? t.unmark : r.state === 'Done' ? t.done : t.mark}
+                                    {marker && map.contextsAt !== undefined ? (
+                                        <MarkToggle
+                                            on={r.state === 'Done'}
+                                            text={r.state === 'Done' ? t.markedShort : t.mark}
+                                            label={`${r.context}: ${r.marked ? t.unmark : t.mark}`}
+                                            tooltip={r.marked ? t.unmark : r.state === 'Done' ? t.done : t.mark}
                                             disabled={r.state === 'Done' && !r.marked}
-                                            onClick={() => toggle(map.contextsAt ?? '', !r.marked, r.context)}
-                                        >
-                                            <Check size={10} aria-hidden />
-                                        </button>
+                                            onToggle={() => toggle(map.contextsAt ?? '', !r.marked, r.context)}
+                                        />
                                     ) : (
                                         <StepDot step={{ key: r.context, state: r.state, goal: false, after: false, markable: false, marked: r.marked }} />
                                     )}
@@ -294,10 +309,9 @@ function AtOnce({ findings }: { readonly findings: readonly GuideFindingJson[] }
                             <Icon size={13} aria-hidden className="guide-finding-icon" />
                             <span className="guide-finding-text">{text}</span>
                             {go && (
-                                <button type="button" className="chat-small guide-go" aria-label={`${text}: ${label}`} onClick={go}>
-                                    <Eye size={12} aria-hidden />
+                                <Act kind="see" icon={<Eye size={12} aria-hidden />} aria-label={`${text}: ${label}`} onClick={go}>
                                     {label}
-                                </button>
+                                </Act>
                             )}
                         </li>
                     );
@@ -319,9 +333,8 @@ function Advice({ command: c, live }: { readonly command: SlashCommandJson; read
             <p className="guide-thinking muted">
                 <LoaderCircle size={12} aria-hidden className="spin" /> {t.thinking}
                 {mine && (
-                    <button
-                        type="button"
-                        className="chat-small ghost"
+                    <Act
+                        kind="stop"
                         disabled={busy}
                         onClick={() => {
                             setBusy(true);
@@ -332,7 +345,7 @@ function Advice({ command: c, live }: { readonly command: SlashCommandJson; read
                         }}
                     >
                         {t.stop}
-                    </button>
+                    </Act>
                 )}
                 {error && <span className="chat-error"> {error}</span>}
             </p>
@@ -385,44 +398,41 @@ export function GuideAdvice({ next, live }: { readonly next: GuideAdviceJson; re
                             {(button !== 'hidden' || places.length > 0 || (s.ask !== undefined && live)) && (
                                 <span className="guide-actions">
                                     {id && button !== 'hidden' && (
-                                        <button
-                                            type="button"
-                                            className="chat-small primary guide-command"
+                                        <Act
+                                            kind="insert"
                                             disabled={button === 'disabled'}
                                             data-tooltip={tx.chat.candidates.putCommand}
                                             aria-label={`/${id}: ${tx.chat.candidates.putCommand}`}
                                             onClick={() => putCommand(id)}
                                         >
-                                            <CornerDownLeft size={12} aria-hidden />/{id}
-                                        </button>
+                                            /{id}
+                                        </Act>
                                     )}
                                     {places.map((p) => {
                                         const name = targetLabel(p, naming, all).name;
                                         return (
-                                            <button
+                                            <Act
                                                 key={targetKey(p)}
-                                                type="button"
-                                                className="chat-small guide-go"
+                                                kind="see"
+                                                icon={<Eye size={12} aria-hidden />}
                                                 aria-label={t.goTo(name)}
                                                 onClick={() => onNavigate(p)}
                                             >
-                                                <Eye size={12} aria-hidden />
                                                 <span className="guide-go-name">{name}</span>
-                                            </button>
+                                            </Act>
                                         );
                                     })}
                                     {s.ask !== undefined && live && (
-                                        <button
-                                            type="button"
-                                            className="chat-small guide-ask"
+                                        <Act
+                                            kind="send"
+                                            icon={asked.has(i) ? <Check size={12} aria-hidden /> : <NotebookPen size={12} aria-hidden />}
                                             disabled={asked.has(i)}
                                             data-tooltip={t.askHint}
                                             aria-label={`${t.ask}: ${s.ask}`}
                                             onClick={() => void ask(i, s.ask ?? '', places[0])}
                                         >
-                                            {asked.has(i) ? <Check size={12} aria-hidden /> : <NotebookPen size={12} aria-hidden />}
                                             {t.ask}
-                                        </button>
+                                        </Act>
                                     )}
                                 </span>
                             )}

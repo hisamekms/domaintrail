@@ -15,7 +15,14 @@ export const sessionCommands: Collaboration.SessionCommands = {
     start: decide<Collaboration.StartSessionDecision>(Collaboration.SessionShape, ({ id, facilitator, name, mode, startedAt }) =>
         ok({
             Open: {
-                set: { id, facilitator, mode, participants: [{ id: facilitator, name, role: 'Facilitator', joinedAt: startedAt }], startedAt },
+                set: {
+                    id,
+                    facilitator,
+                    mode,
+                    participants: [{ id: facilitator, name, role: 'Facilitator', joinedAt: startedAt }],
+                    startedAt,
+                    currentJourney: undefined,
+                },
                 events: { SessionStarted: { type: 'SessionStarted', sessionId: id, facilitator, name, mode, startedAt } },
             },
         }),
@@ -50,6 +57,20 @@ export const sessionCommands: Collaboration.SessionCommands = {
         },
     }),
 
+    // the current journey (the guide's card and the app bar's chip): the facilitator's, the one person's in Solo
+    chooseJourney: decide<Collaboration.ChooseJourneySessionDecision>(Collaboration.SessionShape, {
+        Open: (session, params) => {
+            if (Collaboration.checkChooseJourneySessionRequires(session, params) === 'facilitatorChooses') return err({ type: 'FacilitatorOnly' });
+            const { journey, chosenAt } = params;
+            return ok({
+                Open: {
+                    set: { currentJourney: journey },
+                    events: { JourneyChosen: { type: 'JourneyChosen', sessionId: session.id, ...(journey !== undefined && { journey }), chosenAt } },
+                },
+            });
+        },
+    }),
+
     close: decide<Collaboration.CloseSessionDecision>(Collaboration.SessionShape, {
         Open: (session, params) => {
             if (Collaboration.checkCloseSessionRequires(session, params) === 'facilitatorCloses') return err({ type: 'FacilitatorOnly' });
@@ -77,7 +98,7 @@ export const requestCommands: Collaboration.RequestCommands = {
         return ok({
             Sent: {
                 // a reply names the run it answers; whether it runs is the facilitator's to decide, as for any message
-                set: { id, session, author, targets, body, sentAt, replyTo, mentions, reverts: undefined, viewedAt },
+                set: { id, session, author, targets, body, sentAt, replyTo, mentions, reverts: undefined, viewedAt, journeyNote: undefined },
                 events: {
                     RequestSent: {
                         type: 'RequestSent',
@@ -104,20 +125,35 @@ export const requestCommands: Collaboration.RequestCommands = {
         const reverts: Collaboration.AgentRunId = params.reverts;
         return ok({
             Sent: {
-                set: { id, session, author, targets: [], body, sentAt, replyTo: undefined, mentions: [], reverts, viewedAt: undefined },
+                set: { id, session, author, targets: [], body, sentAt, replyTo: undefined, mentions: [], reverts, viewedAt: undefined, journeyNote: undefined },
                 events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, mentions: [], reverts } },
             },
         });
     }),
 
-    // the read-only answerer's answer: written as the AI, a reply to the message it answers, with no target or mention
-    answer: decide<Collaboration.AnswerRequestDecision>(Collaboration.RequestShape, ({ id, session, answers, body, sentAt }) => {
-        const replyTo: Collaboration.ReplyTarget = { kind: 'Message', request: answers };
+    // the read-only answerer's answer: written as the AI, a reply to the message it answers, with no target or mention;
+    // also dt's note after an interview's brief is confirmed (its journey and next step's buttons on `journeyNote`)
+    answer: decide<Collaboration.AnswerRequestDecision>(Collaboration.RequestShape, ({ id, session, answers, body, sentAt, journeyNote }) => {
+        // dt's note after a journey is marked done answers no message: not a reply
+        const replyTo: Collaboration.ReplyTarget | undefined = answers === undefined ? undefined : { kind: 'Message', request: answers };
         const author = AI_PARTICIPANT_ID;
         return ok({
             Sent: {
-                set: { id, session, author, targets: [], body, sentAt, replyTo, mentions: [], reverts: undefined, viewedAt: undefined },
-                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, replyTo, mentions: [] } },
+                set: { id, session, author, targets: [], body, sentAt, replyTo, mentions: [], reverts: undefined, viewedAt: undefined, journeyNote },
+                events: {
+                    RequestSent: {
+                        type: 'RequestSent',
+                        requestId: id,
+                        session,
+                        author,
+                        targets: [],
+                        body,
+                        sentAt,
+                        ...(replyTo && { replyTo }),
+                        mentions: [],
+                        ...(journeyNote && { journeyNote }),
+                    },
+                },
             },
         });
     }),

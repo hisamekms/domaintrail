@@ -160,7 +160,7 @@ describe('the detail of a storming element', () => {
 
     test('the actions: icons in the brand colour, ask the AI first and filled; none without a session that takes messages', async () => {
         const event = await detail('ShipmentCancelled', { session: detailSession().session });
-        expect(event).toContain('class="es-action primary" aria-label="Ask the AI"');
+        expect(event).toContain('class="es-action filled" aria-label="Ask the AI"');
         expect(event).toContain('class="es-action" aria-label="Add a question"');
         const policy = await detail('CleanupAfterCancel', { session: detailSession().session });
         expect(policy).toContain(row('Ask the AI'));
@@ -189,7 +189,7 @@ describe('the detail of a storming element', () => {
         });
         expect(html).toContain('<span class="es-problem-text" data-tooltip="S018">It returns to no main flow</span>');
         expect(html).toContain('<span class="es-problem-text" data-tooltip="S999">Something new.</span>');
-        expect(html).toContain('class="es-action primary" aria-label="Have the AI fix it"');
+        expect(html).toContain('class="es-action filled" aria-label="Have the AI fix it"');
         expect(html.indexOf('es-problem')).toBeLessThan(html.indexOf('es-row'));
         expect(problemText({ code: 'S010', message: 'x' }, MESSAGES.ja.esDetail.problems)).toBe('.dt に対応するものがない');
         expect(MESSAGES.en.esDetail.begin.fix('#X[1]', 'No main flow')).toBe('Fix the problem in #X[1] (No main flow)');

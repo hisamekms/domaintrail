@@ -26,6 +26,7 @@ import {
 import {
     AGENT_EVENT_TYPES,
     AGENT_FAIL_REASONS,
+    type AgentJourneysBody,
     type AgentParticipantsBody,
     type AgentSessionBody,
     type AgentSessionSoFar,
@@ -69,6 +70,8 @@ export interface AgentApiDeps {
     readonly log?: (line: string) => void;
     /** Uses a one-time pairing code: whether it was valid (`POST /agent/pair` then answers the token). Absent: no pairing. */
     readonly pair?: (code: string) => Promise<boolean>;
+    /** The journeys as the answerer and a starting run are given them (absent: none given). */
+    readonly journeys?: () => Promise<AgentJourneysBody | undefined>;
 }
 
 export interface AgentApi {
@@ -116,6 +119,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         pump: deps.pump,
         ...(deps.onPresence && { onPresence: deps.onPresence }),
         token: deps.token,
+        ...(deps.journeys && { journeys: deps.journeys }),
         log: deps.log ?? (() => {}),
     });
 
@@ -260,6 +264,8 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
                 };
                 const sessionSoFar = await soFar();
                 const sessionSoFarSince = typeof since === 'number' ? await soFar(since) : undefined;
+                // the journeys as they are now, as the answerer gets them: the run keeps within the current one
+                const journeys = await deps.journeys?.().catch(() => undefined);
                 return answer(res, started, (v) => ({
                     run: v.run,
                     baseRevision: v.base,
@@ -267,6 +273,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
                     ...(revert.length > 0 && { revert }),
                     ...(sessionSoFar && { sessionSoFar }),
                     ...(sessionSoFarSince && { sessionSoFarSince }),
+                    ...(journeys && { journeys }),
                 }));
             }
             case 'heartbeat': {

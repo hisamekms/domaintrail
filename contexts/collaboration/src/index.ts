@@ -132,6 +132,11 @@ export {
     briefData,
     briefLines,
     briefText,
+    BRIEF_HEADS,
+    journeyBriefText,
+    withEditedText,
+    type BriefContext,
+    type JourneyBriefData,
     commandId,
     interviewerJsonSchema,
     interviewMessages,
@@ -222,6 +227,19 @@ export {
     readGuideGoal,
     SET_GOAL,
     stormingFacts,
+    currentJourney,
+    ES_LEVELS,
+    ES_MARKABLE,
+    esJourneyMap,
+    goalOf,
+    guideJourneyMap,
+    journeyMarks,
+    journeyWhere,
+    markAct,
+    PATTERN_SUBJECT,
+    patternMarkable,
+    placeSteps,
+    type StepPlace,
     type ContextFacts,
     type EsGoalLevel,
     type EsStep,
@@ -229,8 +247,76 @@ export {
     type GuideMapInput,
     type GuidePatternPath,
     type GuideWorkspace,
+    type JourneyWhere,
     type StormingFacts,
 } from './domain/guide.js';
+// the journey file (`domaintrail.journey.json`): its shape, reading and writing it, the acts that change it, its checks
+export {
+    agentJourneys,
+    applyBrief,
+    applyJourneyAct,
+    defaultJourney,
+    EMPTY_JOURNEYS,
+    JOURNEY_FILE,
+    JOURNEY_ID,
+    JOURNEY_LIMITS,
+    JOURNEY_SCHEMA_REF,
+    JOURNEY_STATES,
+    JOURNEY_USES,
+    JOURNEY_VERSION,
+    journeyDiagnostics,
+    journeyIdFor,
+    journeyKeys,
+    journeyNames,
+    journeyOf,
+    journeySummaries,
+    missingOf,
+    readJourney,
+    writeJourney,
+    type EsJourneyEntry,
+    type JourneyAct,
+    type JourneyActError,
+    type JourneyFile,
+    type JourneyFrom,
+    type JourneyNames,
+    type JourneyProblem,
+    type JourneyRead,
+    type JourneyRef,
+    type JourneyRuleId,
+    type JourneyState,
+    type JourneySummary,
+    type JourneyUse,
+    type ModelJourneyEntry,
+} from './domain/journey.js';
+// dt's note in the interview's thread once a brief is confirmed: what was decided, where the journey is, the next step
+export {
+    BRIEF_FIELDS,
+    changedBriefFields,
+    completionNote,
+    decidedOf,
+    journeyNext,
+    journeyNote,
+    type BriefFieldKey,
+    type JourneyDecided,
+    type JourneyNext,
+    type JourneyNoteInput,
+    type JourneyNoteText,
+    stepWord,
+} from './domain/journey-note.js';
+// the chat's records of what people did, and of the journey file changed outside dt: their facts and their text
+export {
+    actFact,
+    isOpenRequest,
+    journeyActOf,
+    journeyFileChanges,
+    MAX_FILE_CHANGES,
+    mergedMarks,
+    recordCommands,
+    recordedJourney,
+    recordText,
+    requestedAct,
+    type JourneyLabels,
+} from './domain/records.js';
 export { checkTemplates, TEMPLATE_CONTEXTS, TEMPLATE_LIMITS, type MessageTemplateConfig, type TemplateContext } from './domain/templates.js';
 // where the requester was looking when they sent a message
 export {
@@ -283,7 +369,8 @@ export {
     type TriageProgress,
     type TriageStepInput,
 } from './application/conversation.js';
-export { guideMarkTarget, sessionGuideMarks, type NotAGuideMark } from './application/guide-marks.js';
+export { journeyFileMarks, journeyKeyOf, readJourneys, updateJourneys, type JourneyUseCases, type JourneyWriteError } from './application/journeys.js';
+export { type OpenJourneyRequest, type RecordUseCases, type RequestedAct } from './application/records.js';
 export { type SlashCommandJob, type SlashCommandStartedResult, type SlashCommandUseCases, type WrongCommandType } from './application/slash-commands.js';
 export { type InterviewJob, type InterviewStarted as InterviewStartedResult, type InterviewUseCases } from './application/interviews.js';
 export { actorOf, type Actor } from './application/actor.js';
@@ -340,6 +427,7 @@ export {
 export {
     type Clock,
     type CollaborationDeps,
+    type JourneyFileStore,
     type ModelValidator,
     type OutboxEntry,
     type SignIn,

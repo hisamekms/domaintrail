@@ -42,6 +42,8 @@ import {
 } from './targets';
 import { agentStatus, latestAt, streamItems, unreadCount, unreadMentions } from './stream';
 import { defaultDraftStorage, useComposerDraft, usePresence, useSession } from './useSession';
+import { journeyOverview, journeysOfContext, journeysOfStorming, pageGuideWorkspace } from './journey-view';
+import { JourneyDetail } from './journey-detail';
 
 export interface SessionPage {
     /** The session's chat for `AppShell`'s `conversation`, for everyone; undefined outside a session. */
@@ -58,6 +60,8 @@ export interface SessionPage {
     readonly ended: boolean;
     /** An AI is connected to the live chat (every role) and the person may start `/es`: an empty view points to it. */
     readonly aiReady: boolean;
+    /** A selected context's modeling journeys, in brief (the detail). */
+    readonly contextJourneys?: (context: string) => ReactNode;
 }
 
 export function useSessionPage(input: {
@@ -71,11 +75,23 @@ export function useSessionPage(input: {
     openBest: (id: string) => void;
     /** The app bar's place for the session's controls of the whole page (the collab menu, the AI's state). */
     barSlot: HTMLElement | null;
+    /** The app bar's place for the current journey's chip, after the world switch. */
+    journeySlot: HTMLElement | null;
 }): SessionPage {
     const { socket, current, workspace, panes } = input;
     const { canvas, stormings, nav, settings, viewGraph } = workspace;
     const { view } = nav;
     const session = useSession(socket, current);
+    // what the guide reads, as the page holds it: the chip, the panel and the guide card's maps are computed from it
+    const journeyFile = session?.journey.file;
+    const guideWorkspace = useMemo(() => pageGuideWorkspace(current, journeyFile), [current, journeyFile]);
+    // the journeys panel: opened from the chip, the guide card and the detail
+    const [journeysOpen, setJourneysOpen] = useState(false);
+    const chosenJourney = session?.state.session.currentJourney;
+    const overview = useMemo(() => journeyOverview(guideWorkspace, chosenJourney), [guideWorkspace, chosenJourney]);
+    const allJourneys = [overview.current, ...overview.others, ...overview.archived].flatMap((j) => (j ? [j] : []));
+    const currentKey = overview.current?.summary.key;
+    const openJourneys = (): void => setJourneysOpen(true);
     // what the chat holds when the page first has the session is its history (clamped), even with the chat closed
     if (session) PAGE_REVEAL.history(session.state.session.id, () => revealKeys(session.state));
     const model = current?.model ?? null;
@@ -411,6 +427,18 @@ export function useSessionPage(input: {
             openMessage: (id) => go('message', id),
             openRun: (id) => go('run', id),
             openRuns: (id) => go('unit', id),
+            journeys: (storming) => {
+                const keys = new Set(
+                    journeysOfStorming(journeyFile, storming)
+                        .filter((j) => j.kind === 'es')
+                        .map((j) => j.key),
+                );
+                return <JourneyDetail items={allJourneys.filter((j) => keys.has(j.summary.key))} current={currentKey} onOpen={openJourneys} empty />;
+            },
+        },
+        contextJourneys: (context) => {
+            const keys = new Set(journeysOfContext(journeyFile, context).map((j) => j.key));
+            return <JourneyDetail items={allJourneys.filter((j) => keys.has(j.summary.key))} current={currentKey} onOpen={openJourneys} />;
         },
         conversation: {
             content: (
@@ -431,6 +459,10 @@ export function useSessionPage(input: {
                         onOpen={() => setConversationOpen(true)}
                         onClose={() => setConversationOpen(false)}
                         barSlot={input.barSlot}
+                        journeySlot={input.journeySlot}
+                        guideWorkspace={guideWorkspace}
+                        journeysOpen={journeysOpen}
+                        setJourneysOpen={setJourneysOpen}
                     />
                 </TargetNamingProvider>
             ),

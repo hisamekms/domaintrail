@@ -251,6 +251,8 @@ export interface StormingDetailSession {
     readonly openRun: (run: string) => void;
     /** AI の作業, at the unit of a run. */
     readonly openRuns: (run: string) => void;
+    /** The storming's journey, in brief (the whole storming selected). */
+    readonly journeys?: (storming: string) => ReactNode;
 }
 
 /** A row of the detail: a grey icon naming it (its name as the tooltip), and its content. */
@@ -268,7 +270,7 @@ function Row({ icon: Icon, label, className, children }: { icon: LucideIcon; lab
 /** An action of the detail: an icon in the brand colour (filled when `primary`), its name as the tooltip. */
 function Action({ icon: Icon, label, primary, onClick }: { icon: LucideIcon; label: string; primary?: boolean; onClick: () => void }): ReactNode {
     return (
-        <button type="button" className={`es-action${primary ? ' primary' : ''}`} aria-label={label} {...{ [TOOLTIP_ATTR]: label }} onClick={onClick}>
+        <button type="button" className={`es-action${primary ? ' filled' : ''}`} aria-label={label} {...{ [TOOLTIP_ATTR]: label }} onClick={onClick}>
             <Icon size={14} aria-hidden />
         </button>
     );
@@ -373,6 +375,7 @@ export function StormingDetails({
                     </div>
                 ))}
                 {item.doc && <p className="doc">{item.doc}</p>}
+                {declaration === undefined && session?.journeys?.(storming.id)}
                 {declaration?.kind === 'event' && (
                     <EventRows
                         storming={storming}

@@ -302,3 +302,14 @@ export function targetShortName(target: ModelTarget, ctx: NamingContext): string
             return targetName(t, ctx);
     }
 }
+
+/**
+ * A `.dt` reference that names a context (`@{Billing}`), in the display mode: a context is no element a request is
+ * about (`resolveTarget` passes it over for a storming of that name), but a reference may name one (an interview's
+ * choice of the context to dig into). Undefined for anything else.
+ */
+export function contextName(target: ModelTarget, ctx: NamingContext): string | undefined {
+    if (target.kind !== 'DtElement' || !ctx.model) return undefined;
+    const r = resolve(ctx.model, target.element);
+    return r?.kind === 'context' ? nameIn(ctx.mode, r.name, r.label) : undefined;
+}

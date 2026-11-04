@@ -40,8 +40,8 @@ const LISTS: readonly LeftView[] = ['tree', 'problems', 'changes'];
 const RAIL_LISTS: readonly LeftView[] = ['tree', 'changes'];
 
 /**
- * The page's layout: the app bar across the top — the brand and the workspace's name, the world switch, then what
- * concerns the whole page (問題, and a session's people, AI state and menu) — and under it three columns: the left
+ * The page's layout: the app bar across the top — the brand and the workspace's name, the world switch, a session's
+ * current journey, then what concerns the whole page (問題, and a session's people, AI state and menu) — and under it three columns: the left
  * column — its activity bar, the navigator (the lists) over the detail (the inspector) with a splitter between them,
  * and the health and the settings at its foot — the canvas with its banners, and the conversation at the right end,
  * when there is one. What goes in each place is the caller's.
@@ -54,6 +54,8 @@ export function AppShell(props: {
     world: ReactNode;
     /** Where a session puts its controls of the whole page, at the right end of the app bar. */
     sessionSlot: (slot: HTMLDivElement | null) => void;
+    /** Where a session puts the current journey's chip, after the world switch. */
+    journeySlot?: (slot: HTMLDivElement | null) => void;
     lists: Record<LeftView, LeftList>;
     /** At the foot of the left column (at the bottom of its activity bar when collapsed). */
     health: ReactNode;
@@ -98,6 +100,7 @@ export function AppShell(props: {
                     )}
                 </span>
                 {props.world}
+                <div className="app-bar-journey" ref={props.journeySlot} />
                 <span className="app-bar-space" />
                 <ProblemsButton panes={panes} list={props.lists.problems} />
                 <div className="app-bar-session" ref={props.sessionSlot} />

@@ -30,6 +30,7 @@ export {
     claudeArguments,
     CONFIG_EDIT_DENIED,
     CONFIG_FILE_NAMES,
+    DT_WRITTEN_FILE_NAMES,
     createClaudeCodeRunner,
     extraReadRules,
     type AgentCommand,

@@ -20,7 +20,7 @@ import {
     slashCommandName,
     viewedAtData,
 } from '@domaintrail/collaboration';
-import type { AgentPreviousRun, AgentRevertedRun, Json } from '@domaintrail/collaboration/protocol';
+import type { AgentJourneysBody, AgentPreviousRun, AgentRevertedRun, Json } from '@domaintrail/collaboration/protocol';
 
 /**
  * The marker of the former outcome line, `DT-OUTCOME: {…}` as the reply's last line: still read when the agent gives no
@@ -307,6 +307,56 @@ function approvedProposalsOf(input: Json<Collaboration.RunInput>, proposals: Jso
     }));
 }
 
+/**
+ * The journeys as the AI reads them (the answerer's prompts and the runs' alike): the current one with its brief and
+ * where it stands (`here`: its 📍 step, or its goal reached), the others in a line each.
+ */
+export function journeysShown(body: AgentJourneysBody | undefined): Record<string, unknown> | undefined {
+    if (!body || body.journeys.length === 0) return undefined;
+    const line = (j: (typeof body.journeys)[number]): string =>
+        `${j.key}: ${j.kind === 'es' ? `event storming of @{es:${j.name}}, level ${j.level}, use ${j.use}` : `"${j.name}", pattern ${j.pattern}${j.stormings ? ` from ${j.stormings.map((x) => `@{es:${x}}`).join(', ')}` : ''}${j.context ? ` on ${j.context}` : ''}, goal ${j.goal}`} — ${j.state}`;
+    const current = body.journeys.find((j) => j.key === body.current);
+    const here = body.where?.reached ? 'goal reached' : body.where?.here;
+    return {
+        ...(current && {
+            current: {
+                journey: line(current),
+                ...(here !== undefined && { here }),
+                purpose: current.purpose,
+                ...(current.scope !== undefined && { scope: current.scope }),
+                ...(current.constraints !== undefined && { constraints: current.constraints }),
+                ...(current.participants.length > 0 && { participants: current.participants }),
+            },
+        }),
+        all: body.journeys.map(line),
+    };
+}
+
+/**
+ * The rules on the current journey (20, 21), for a run that is given one: keep within its scope and level, and ask
+ * before going beyond it.
+ */
+const JOURNEY_RULES = `
+20. \`journeys\`, when present: the journey file (\`domaintrail.journey.json\`, which only dt writes: never edit it).
+   \`journeys.current\` is the journey the session works on: what it is and how far it goes (\`journey\`: an event
+   storming of a storming at a level, \`BigPicture\` or \`DesignLevel\`, with its use; or a modeling journey with its
+   pattern, its subject — the stormings it is \`from\`, or the one context it is \`on\` — and its goal), where it
+   stands (\`here\`: the guide's current step, or \`goal reached\`) and its brief (purpose, scope, constraints, the
+   roles taking part). \`journeys.all\` lists every journey in a line each, for reference only. Work within the current
+   journey's scope and level:
+   - an event storming at \`BigPicture\`: the business events and their flow only (events, stages, timelines,
+     exceptions, hotspots); add no command, policy, aggregate or read model, and mark no event \`level design\`
+     (rule 15);
+   - a modeling journey on one context (pattern \`OneContext\`): change that context only; leave the other contexts
+     as they are;
+   - any journey: stay within its subject, its purpose and scope, and what its goal needs.
+   In Japanese, call a journey 「ジャーニー」, as the page does (「旅」 is acceptable, but prefer ジャーニー); in English, "journey".
+21. When a request asks for more than the current journey's scope, level or goal allows (rule 20) — e.g. commands or
+   policies on a Big Picture storming, another context on a \`OneContext\` journey — do not write anything: reply
+   "clarification" (rule 6), naming what is outside the journey and why, and ask whether to go beyond it; offer as
+   options to go beyond it, and to do only what is within it. \`answersToYourQuestions\` that says to go beyond it,
+   \`approvedProposals\` and \`chosenCandidates\` are the people's decision: carry them out as they are.`;
+
 /** Most paths `changedSinceYourLastRun` names; past them, how many more. */
 export const MAX_CHANGED_SHOWN = 100;
 
@@ -321,6 +371,8 @@ export interface PromptContext {
     readonly sessionSoFar?: string;
     /** The ways of working, of which the prompt takes those of the DSLs the requests are about. */
     readonly practice?: Practice;
+    /** The journeys when the run starts: with a current one, the run keeps within it (rules 20, 21); none: as without. */
+    readonly journeys?: AgentJourneysBody;
 }
 
 /** The changed paths as the prompt shows them: at most `MAX_CHANGED_SHOWN`, then how many more (read the files then). */
@@ -354,6 +406,9 @@ export function buildPrompt(
             ...(reverts !== undefined && { revertsRun: reverts }),
         };
     });
+    // the journeys only with a current one: without it, the prompt is as it was before journeys
+    const shown = journeysShown(context.journeys);
+    const journeys = shown?.current === undefined ? undefined : shown;
     const answered = input.answer === undefined ? undefined : previousNumber.get(input.answer.answerTo);
     const picked = input.pick === undefined ? undefined : previousNumber.get(input.pick.pickOf);
     const data = {
@@ -375,6 +430,7 @@ export function buildPrompt(
         ...(input.candidates && { chosenCandidates: chosenCandidatesOf(input.candidates) }),
         ...(context.changedSinceYourLastRun && { changedSinceYourLastRun: changedList(context.changedSinceYourLastRun) }),
         ...(context.sessionSoFar !== undefined && { sessionSoFar: context.sessionSoFar }),
+        ...(journeys && { journeys }),
     };
     const languages = languagesOf(input);
     const { dt, dtes } = languages;
@@ -445,12 +501,11 @@ Rules:
    it on a business event of the Big Picture. An event you add for a request sent at Design Level (\`viewedAt.level:
    "design"\`) that is a detail of the mechanism gets \`level design\`; for a request sent at Big Picture, add no such
    event unless the request asks for it.
-16. \`confirmedBrief\`, when present: the person who ran an interview (\`/es\` or \`/model\`) confirmed this brief; it,
-   not the request, is what to do. Write its \`lines\` as they are, one \`///\` line each, as the description directly
-   above \`storming <name>\` (\`for: "storming"\`, a \`.dtes\` file) or \`context <name>\` (\`for: "context"\`, a \`.dt\`
-   file). When \`create\` is true it does not exist yet: create it with the brief and its \`label\` and nothing else (a
-   new file named after it, beside the other stormings or contexts). Replace an existing description only when
-   \`replaceExistingDescription\` is true; else keep it and add the brief's lines below it. Change nothing else.
+16. \`confirmedBrief\`, when present: the person who ran \`/es:start\` confirmed the brief of a new storming; it, not
+   the request, is what to do. dt has already written the brief into \`domaintrail.journey.json\` (never edit that
+   file). Create the storming only: \`storming <name> "<label>" { }\` in a new \`.dtes\` file named after it, beside
+   the other stormings, with its \`description\` (when given) as its one \`///\` line directly above it — a short
+   description of what it is, never the brief. Change nothing else.
 17. A \`.dtes\` storming that goes through several phases is organised in \`stage\`s, in time order, each \`after\`
    the one before it (\`stage Issuance "発行" after Preparation { … }\`). In a stage (or a storming without stages),
    the normal flow is a \`timeline\`, written first; each exception is an \`exception\` that starts with the event of
@@ -474,7 +529,7 @@ Rules:
    design\` as the last clause of its body, or remove it, exactly as \`how\` says, and change nothing else of it. For
    \`/es:names\`, each renames one element (its target): change only its label (the quoted string), to the new label
    \`label\` gives (\`how\` shows old → new), never its identifier (references use it); keep its \`///\`, and when
-   \`how\` gives a detail the old label carried, add that detail to its \`///\` as a line of its own.
+   \`how\` gives a detail the old label carried, add that detail to its \`///\` as a line of its own.${journeys ? JOURNEY_RULES : ''}
 
 ${practiceSection(practice)}${replyDescription()}
 
@@ -493,15 +548,12 @@ function chosenCandidatesOf(c: Json<Collaboration.CandidatesInstruction>): Recor
     };
 }
 
-/** A confirmed brief as the run's data shows it (rule 16). */
+/** A confirmed brief as the run's data shows it (rule 16): the new storming to create, its label and short description. */
 function confirmedBriefOf(b: Json<Collaboration.BriefInstruction>): Record<string, unknown> {
     return {
-        for: b.command === 'Es' ? 'storming' : 'context',
-        name: b.brief.name,
+        storming: b.brief.name,
         ...(b.brief.label !== undefined && { label: b.brief.label }),
-        create: b.brief.isNew,
-        replaceExistingDescription: b.brief.replaces,
-        lines: b.brief.text.split('\n').filter((l) => l.trim() !== ''),
+        ...(b.brief.description !== undefined && { description: b.brief.description }),
     };
 }
 

@@ -1,0 +1,38 @@
+{
+  "$schema": "../../schema/journey.schema.json",
+  "version": 1,
+  "stormings": {
+    "OrderToCash": {
+      "purpose": "注文から入金までの流れを、いまのモデルと突き合わせる",
+      "scope": "注文の受付から入金の確認まで",
+      "participants": ["販売担当", "経理担当", "開発者"],
+      "use": "modeling",
+      "level": "DesignLevel",
+      "state": "active",
+      "marks": []
+    },
+    "Returns": {
+      "purpose": "返品の流れをつかむ",
+      "scope": "返品の申し出から返金まで",
+      "participants": ["窓口担当", "倉庫担当"],
+      "use": "modeling",
+      "level": "BigPicture",
+      "state": "active",
+      "marks": []
+    }
+  },
+  "modeling": [
+    {
+      "id": "order-to-cash",
+      "name": "注文から入金まで",
+      "purpose": "注文と請求のモデルから型を生成する",
+      "constraints": "決済代行の API はそのまま",
+      "participants": ["販売担当", "経理担当", "開発者"],
+      "pattern": "FromStorming",
+      "from": { "stormings": ["OrderToCash"] },
+      "goal": "invariants",
+      "state": "active",
+      "marks": { "steps": ["review"], "contexts": {} }
+    }
+  ]
+}

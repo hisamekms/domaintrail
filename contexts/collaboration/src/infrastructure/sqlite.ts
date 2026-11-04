@@ -19,6 +19,7 @@ import type {
     RevisionStore,
     OperationLog,
     InterviewRepository,
+    RecordRepository,
     SlashCommandRepository,
     ProposalRepository,
     RestoreOperation,
@@ -304,6 +305,18 @@ export const MIGRATIONS: readonly string[] = [
         data TEXT NOT NULL
     ) STRICT;
     CREATE INDEX slash_commands_by_session ON slash_commands(session_id, seq);
+    `,
+    // ---------- the session's records ----------
+    // the chat's small rows of what people did (a goal changed, marks, a request…) and of the journey file changed
+    // outside dt; a record may be written again (marks merged, a request's outcome). Sessions written before have none
+    `
+    CREATE TABLE session_records (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        seq INTEGER NOT NULL,
+        data TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX session_records_by_session ON session_records(session_id, seq);
     `,
 ];
 
@@ -819,7 +832,7 @@ function interviews(db: DatabaseSync): InterviewRepository {
                     id: interview.id,
                     session: interview.session,
                     opening: interview.opening,
-                    run: interview.state === 'Confirmed' ? interview.run : null,
+                    run: interview.state === 'Confirmed' ? (interview.run ?? null) : null,
                     state: interview.state,
                     data: encodeJson(interview),
                 }),
@@ -827,6 +840,28 @@ function interviews(db: DatabaseSync): InterviewRepository {
         },
         listBySession(session) {
             return list.all(params({ session })).map((r) => decoded<Collaboration.Interview>(text(r, 'data')));
+        },
+    };
+}
+
+function records(db: DatabaseSync): RecordRepository {
+    const load = db.prepare('SELECT data FROM session_records WHERE id = :id');
+    const save = db.prepare(
+        `INSERT INTO session_records (id, session_id, seq, data)
+         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM session_records), :data)
+         ON CONFLICT (id) DO UPDATE SET data = excluded.data`,
+    );
+    const list = db.prepare('SELECT data FROM session_records WHERE session_id = :session ORDER BY seq');
+    return {
+        load(id) {
+            const r = load.get(params({ id }));
+            return r ? decoded<Collaboration.SessionRecord>(text(r, 'data')) : undefined;
+        },
+        save(record) {
+            save.run(params({ id: record.id, session: record.session, data: encodeJson(record) }));
+        },
+        listBySession(session) {
+            return list.all(params({ session })).map((r) => decoded<Collaboration.SessionRecord>(text(r, 'data')));
         },
     };
 }
@@ -1052,6 +1087,7 @@ export function createStores(db: DatabaseSync): Stores {
         proposals: proposals(db),
         interviews: interviews(db),
         slashCommands: slashCommands(db),
+        records: records(db),
         outbox: outbox(db),
         access: access(db),
         operations: operations(db),

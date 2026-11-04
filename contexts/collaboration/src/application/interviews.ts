@@ -1,18 +1,27 @@
 // The use cases of the `/` commands' interviews (the plan's "`/` commands: ways of working with the AI", round 5): start
 // one (anyone), the interviewer's question or brief (the answerer role, through the agent API), confirm the brief (the
-// facilitator, as is or edited: a run is queued that writes it; the approval of a participant's brief) or reject it,
-// stop one (its starter or the facilitator), and the interview jobs that wait for the interviewer. The starter's messages are heard by the interview in `sendMessage` (`hearIn`), without triage.
+// facilitator, as is or with its why edited; the approval of a participant's brief: dt writes the journey file, and a
+// run is queued only to create a new storming's block) or reject it,
+// stop one (its starter or the facilitator), and the interview jobs that wait for the interviewer. Once confirmed, dt
+// posts its note under the AI's name as the last reply in the interview's thread (`journey-note.ts`: what was decided,
+// where the journey is, the next step): at once, or for a new storming when the run that creates it ends. The starter's messages are heard by the interview in `sendMessage` (`hearIn`), without triage.
 // As the other use cases: the aggregates loaded and saved in one transaction with their events, the commands deciding.
 import { Collaboration, err, ok, type Result } from '../generated/index.js';
 import { requestCommands } from '../domain/commands.js';
 import { knownInterviewId, knownRequestId } from '../domain/ids.js';
-import { awaitedMessage, interviewCommands, interviewMessages, isRunning, runningInterview } from '../domain/interviews.js';
+import { awaitedMessage, interviewCommands, interviewMessages, isRunning, runningInterview, withEditedText } from '../domain/interviews.js';
+import { applyBrief, type JourneyActError, type JourneyFile } from '../domain/journey.js';
+import { decidedOf, journeyNote, type JourneyNoteText } from '../domain/journey-note.js';
+import type { GuideWorkspace } from '../domain/guide.js';
+import { sessionCommands } from '../domain/commands.js';
+import { journeyKeyOf, updateJourneys, type JourneyWriteError } from './journeys.js';
 import type { Actor } from './actor.js';
 import { notAllowed, notFound, type NotAllowed, type NotFound } from './errors.js';
 import type { CollaborationDeps, Stores } from './ports.js';
 import { publish, queueRequests, type FreezeError } from './queueing.js';
 import { sendIn, type SendMessageError } from './conversation.js';
 import { storeVerifications } from './verifications.js';
+import { writeRecord } from './records.js';
 
 type SessionId = Collaboration.SessionId;
 type InterviewId = Collaboration.InterviewId;
@@ -31,6 +40,13 @@ export interface InterviewJob {
 export interface InterviewStarted {
     readonly interview: Collaboration.AskingInterview;
     readonly request: Collaboration.SentRequest;
+}
+
+/** A brief's text edited so that its why cannot be read back (a line without a known head, no purpose). */
+export interface InvalidBriefText {
+    readonly type: 'InvalidBriefText';
+    readonly path: string;
+    readonly message: string;
 }
 
 type QueueError = FreezeError | Collaboration.FacilitatorOnly | Collaboration.DuplicateRequest | Collaboration.InputMismatch;
@@ -81,18 +97,36 @@ export interface InterviewUseCases {
         >
     >;
     /**
-     * The facilitator confirms the brief, as is or with its text edited — for an interview a participant started, that is
-     * the approval: a run is queued (on the message the brief answered) whose input carries the brief, to write it as the
-     * description of its storming or context.
+     * The facilitator confirms the brief, as is or with its why edited (its text, read back by its heads) — for an
+     * interview a participant started, that is the approval: dt writes the journey into the journey file (a storming's
+     * ES journey, created or revised; a modeling journey, continued or new) and makes it the session's current journey.
+     * Only a new storming queues a run (on the message the brief answered), to create its `storming` block with its
+     * short description. dt then posts its note (`journey-note.ts`) as the AI's reply to that message; a new storming's
+     * waits for its run (`noteStormingRun`).
      */
     confirmInterview(input: {
         readonly interview: InterviewId;
         readonly actor: Actor;
         readonly text?: Collaboration.BriefText;
+        /** The workspace as the guide reads it (the note's next step); absent: the note says only what was decided. */
+        readonly workspace?: () => GuideWorkspace;
     }): Promise<
         Result<
-            { readonly interview: Collaboration.ConfirmedInterview; readonly run: Collaboration.QueuedAgentRun },
-            NotFound | NotAllowed | Collaboration.SessionNotFound | Collaboration.SessionAlreadyClosed | QueueError
+            {
+                readonly interview: Collaboration.ConfirmedInterview;
+                readonly run?: Collaboration.QueuedAgentRun;
+                readonly journey: string;
+                /** dt's note in the interview's thread (none for a new storming: posted when its run ends). */
+                readonly note?: Collaboration.SentRequest;
+            },
+            | NotFound
+            | NotAllowed
+            | Collaboration.SessionNotFound
+            | Collaboration.SessionAlreadyClosed
+            | QueueError
+            | InvalidBriefText
+            | JourneyActError
+            | JourneyWriteError
         >
     >;
     /** The facilitator rejects the brief (却下), with an optional note to its starter: the interview ends. */
@@ -211,40 +245,112 @@ export function createInterviews(deps: CollaborationDeps): InterviewUseCases {
             });
         },
 
-        async confirmInterview({ interview, actor, text }) {
+        async confirmInterview({ interview, actor, text, workspace }) {
+            // the brief as confirmed, checked first (nothing written while the interview could not be confirmed)
+            type Checked = { readonly i: Collaboration.BriefedInterview; readonly brief: Collaboration.InterviewBrief; readonly edited: boolean };
+            const checked = await uow.transaction(
+                async (
+                    stores,
+                ): Promise<
+                    Result<
+                        Checked,
+                        | NotFound
+                        | NotAllowed
+                        | Collaboration.FacilitatorOnly
+                        | Collaboration.SessionNotFound
+                        | Collaboration.SessionAlreadyClosed
+                        | InvalidBriefText
+                    >
+                > => {
+                    const found = load(stores, interview);
+                    if (!found.ok) return found;
+                    const i = found.value;
+                    if (i.state !== 'Briefed') return err(notAllowed('confirm', i.state));
+                    if (actor.role !== 'Facilitator') return err({ type: 'FacilitatorOnly' as const });
+                    const active = await storeVerifications(stores).makeActiveSession(i.session);
+                    if (!active.ok) return active;
+                    const edited = text !== undefined && text !== i.brief.text;
+                    if (!edited) return ok({ i, brief: i.brief, edited });
+                    const read = withEditedText(i.brief, text);
+                    if (!read.ok) return err({ type: 'InvalidBriefText' as const, ...read.error });
+                    return ok({ i, brief: read.value, edited });
+                },
+            );
+            if (!checked.ok) return checked;
+            const { i, brief, edited } = checked.value;
+            // dt writes the journey itself: no AI run for the brief
+            let before: JourneyFile | undefined;
+            const written = await updateJourneys<string, JourneyActError>(deps.journeys, (file) => {
+                before = file;
+                const applied = applyBrief(file, i.command, brief);
+                return applied.ok ? ok({ file: applied.value.file, value: applied.value.key }) : applied;
+            });
+            if (!written.ok) return written;
+            const journey = written.value.value;
             return uow.transaction(async (stores) => {
                 const found = load(stores, interview);
                 if (!found.ok) return found;
-                const i = found.value;
-                if (i.state !== 'Briefed') return err(notAllowed('confirm', i.state));
-                // asked before the run is queued (which asks it too), so that the refusal is the interview's
-                if (actor.role !== 'Facilitator') return err({ type: 'FacilitatorOnly' });
-                const active = await storeVerifications(stores).makeActiveSession(i.session);
+                const now = found.value;
+                if (now.state !== 'Briefed') return err(notAllowed('confirm', now.state));
+                const active = await storeVerifications(stores).makeActiveSession(now.session);
                 if (!active.ok) return active;
                 const at = clock.now();
-                const edited = text !== undefined && text !== i.brief.text;
-                const brief: Collaboration.InterviewBrief = edited ? { ...i.brief, text } : i.brief;
-                const run = await queueRequests(stores, ids, {
-                    session: active.value,
-                    requests: [i.answered],
-                    extra: { brief: { interview: i.id, command: i.command, brief } },
-                    queuedBy: actor.participant,
-                    queuedByRole: actor.role,
-                    at,
-                });
-                if (!run.ok) return run;
-                const confirmed = interviewCommands.confirm(i, {
+                // a new storming still needs a run to create its block (its `///`: the short description only)
+                let run: Collaboration.QueuedAgentRun | undefined;
+                if (now.command === 'Es' && brief.isNew) {
+                    const queued = await queueRequests(stores, ids, {
+                        session: active.value,
+                        requests: [now.answered],
+                        extra: { brief: { interview: now.id, command: now.command, brief } },
+                        queuedBy: actor.participant,
+                        queuedByRole: actor.role,
+                        at,
+                    });
+                    if (!queued.ok) return queued;
+                    run = queued.value;
+                }
+                const confirmed = interviewCommands.confirm(now, {
                     confirmedBy: actor.participant,
                     confirmedByRole: actor.role,
                     confirmedBrief: brief,
                     edited,
-                    run: run.value.id,
+                    run: run?.id,
                     confirmedAt: at,
                 });
                 if (!confirmed.ok) return confirmed;
                 stores.interviews.save(confirmed.value.Confirmed.aggregate);
-                publish(stores, i.session, confirmed.value.Confirmed.events, at);
-                return ok({ interview: confirmed.value.Confirmed.aggregate, run: run.value });
+                publish(stores, now.session, confirmed.value.Confirmed.events, at);
+                // the journey just written is the one the session works on now
+                const session = stores.sessions.load(now.session);
+                // dt's note, as the AI's reply to the message the brief answered (a new storming's: once its run ends)
+                let note: Collaboration.SentRequest | undefined;
+                if (!run) {
+                    const seen = workspace?.();
+                    const after = written.value.file;
+                    const label = seen?.stormings.find((s) => s.id === brief.name)?.label;
+                    const decided = decidedOf({ brief, key: journey, before, after, ...(label !== undefined && { label }) });
+                    if (decided) {
+                        const approvedBy =
+                            now.startedBy === actor.participant ? undefined : session?.participants.find((p) => p.id === actor.participant)?.name;
+                        const text = journeyNote({
+                            journey,
+                            decided,
+                            language: now.language,
+                            ...(approvedBy !== undefined && { approvedBy }),
+                            ...(seen && { workspace: { ...seen, journey: after } }),
+                        });
+                        note = postNote(stores, ids.newId(), active.value, now.answered, text, at);
+                    }
+                }
+                const key = journeyKeyOf(journey);
+                if (session?.state === 'Open' && key && session.currentJourney !== key) {
+                    const chosen = sessionCommands.chooseJourney(session, { journey: key, chosenByRole: actor.role, chosenAt: at });
+                    if (chosen.ok) {
+                        stores.sessions.save(chosen.value.Open.aggregate);
+                        publish(stores, now.session, chosen.value.Open.events, at);
+                    }
+                }
+                return ok({ interview: confirmed.value.Confirmed.aggregate, ...(run && { run }), journey, ...(note && { note }) });
             });
         },
 
@@ -261,6 +367,8 @@ export function createInterviews(deps: CollaborationDeps): InterviewUseCases {
                 if (!rejected.ok) return rejected;
                 stores.interviews.save(rejected.value.Rejected.aggregate);
                 publish(stores, i.session, rejected.value.Rejected.events, at);
+                // a row for everyone at the end of the interview's thread (its starter's notice stays as well)
+                recordInThread(stores, ids.newId(), active.value, i, actor.participant, { kind: 'BriefRejected', interview: i.id, ...(note && { note }) }, at);
                 return ok(rejected.value.Rejected.aggregate);
             });
         },
@@ -278,6 +386,7 @@ export function createInterviews(deps: CollaborationDeps): InterviewUseCases {
                 if (!stopped.ok) return stopped;
                 stores.interviews.save(stopped.value.Stopped.aggregate);
                 publish(stores, i.session, stopped.value.Stopped.events, at);
+                recordInThread(stores, ids.newId(), active.value, i, actor.participant, { kind: 'InterviewStopped', interview: i.id }, at);
                 return ok(stopped.value.Stopped.aggregate);
             });
         },
@@ -301,6 +410,72 @@ export function createInterviews(deps: CollaborationDeps): InterviewUseCases {
             });
         },
     };
+}
+
+/** dt's note as the AI's reply to a message of the interview, inside the caller's transaction. */
+function postNote(
+    stores: Stores,
+    id: string,
+    session: Collaboration.ActiveSession,
+    answers: Collaboration.RequestId,
+    text: JourneyNoteText,
+    at: Date,
+): Collaboration.SentRequest | undefined {
+    const body = Collaboration.makeText(text.body);
+    if (!body.ok) return undefined;
+    const { Sent } = decided(requestCommands.answer({ id: knownRequestId(id), session, answers, body: body.value, sentAt: at, journeyNote: text.note }));
+    stores.requests.save(Sent.aggregate);
+    publish(stores, Sent.aggregate.session, Sent.events, at);
+    return Sent.aggregate;
+}
+
+/**
+ * dt's note once the run that was to create a new storming has ended: the storming created and its journey added, or
+ * — when the run did not complete — that it was not created (its journey stays as written). The AI's reply to the
+ * message the brief answered (the run's), posted once. Nothing for any other run.
+ */
+export async function noteStormingRun(deps: CollaborationDeps, run: Collaboration.AgentRun): Promise<Collaboration.SentRequest | undefined> {
+    const instruction = run.input.brief;
+    if (!instruction || instruction.command !== 'Es' || !instruction.brief.isNew) return undefined;
+    if (run.state === 'Queued' || run.state === 'Running') return undefined;
+    return deps.uow.transaction(async (stores) => {
+        const interview = stores.interviews.load(instruction.interview);
+        const answered = run.input.requests[0]?.request;
+        if (interview?.state !== 'Confirmed' || interview.run !== run.id || !answered) return undefined;
+        const requests = stores.requests.listBySession(run.session);
+        // once: a note already replying to that message
+        if (requests.some((r) => r.journeyNote && r.replyTo?.kind === 'Message' && r.replyTo.request === answered)) return undefined;
+        const active = await storeVerifications(stores).makeActiveSession(run.session);
+        if (!active.ok) return undefined;
+        const brief = interview.brief;
+        const label = brief.label ?? brief.name;
+        const session = stores.sessions.load(run.session);
+        const approvedBy =
+            interview.confirmedBy === undefined || interview.confirmedBy === interview.startedBy
+                ? undefined
+                : session?.participants.find((p) => p.id === interview.confirmedBy)?.name;
+        const text = journeyNote({
+            journey: `es:${brief.name}`,
+            decided: run.state === 'Completed' ? { kind: 'esCreated', label, level: brief.journey?.level ?? 'BigPicture' } : { kind: 'esNotCreated', label },
+            language: interview.language,
+            ...(approvedBy !== undefined && { approvedBy }),
+        });
+        return postNote(stores, deps.ids.newId(), active.value, answered, text, deps.clock.now());
+    });
+}
+
+/** A record at the end of an interview's thread (replying to its last message), inside the caller's transaction. */
+function recordInThread(
+    stores: Stores,
+    id: string,
+    session: Collaboration.ActiveSession,
+    interview: Collaboration.Interview,
+    by: Collaboration.ParticipantId,
+    fact: Collaboration.RecordFact,
+    at: Date,
+): void {
+    const last = interviewMessages(interview, stores.requests.listBySession(interview.session)).at(-1);
+    writeRecord(stores, id, { session, by, fact, ...(last && { replyTo: last.id }), at });
 }
 
 /** The success value of a command that cannot fail. */
