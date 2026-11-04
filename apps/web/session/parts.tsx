@@ -1,6 +1,5 @@
 // Pieces the session's chat and the facilitator's panel share: avatars, errors, and a request's targets and body
 // (a row of its targets as chips with each one's status, mentions of elements and people as links).
-import { Fragment } from 'react';
 import { CircleAlert, Unlink2 } from 'lucide-react';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import type { TargetStatus } from '@domaintrail/collaboration';
@@ -8,6 +7,7 @@ import type { Messages } from '../i18n';
 import { SessionApiError } from './api';
 import { isAiAuthor } from './ai';
 import { parseBody } from './mentions';
+import { ReplyText } from './reply';
 import { useTargetNaming } from './naming';
 import { initials, participantColor } from './presence';
 import { targetShortText, targetText } from './stream';
@@ -124,7 +124,8 @@ export function MentionedText(props: {
     return (
         <>
             {parseBody(props.body, { targets: targets.length, people: mentions.length }).map((seg, i) => {
-                if (seg.kind === 'text') return <Fragment key={i}>{seg.text}</Fragment>;
+                // its element references (an interview's choice picked: `@{es:Returns}`) by name, as the AI's are
+                if (seg.kind === 'text') return <ReplyText key={i} text={seg.text} onNavigate={props.onNavigate} />;
                 if (seg.kind === 'person') {
                     const id = mentions[seg.index];
                     const name = `@${props.nameOf?.(id) ?? seg.name}`;

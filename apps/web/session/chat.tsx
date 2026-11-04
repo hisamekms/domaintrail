@@ -1388,8 +1388,8 @@ function MessageReferenceLine({ request }: { request: string }) {
     const ref = replies.messageReferenceOf(request);
     if (!ref) return null;
     const who = speakerName(ref.author, session.me.participant.id, nameOf, tx.chat.you);
-    // the AI's answer names elements as references: by their names here, as its bubble shows them
-    const head = isAiAuthor(ref.author) ? referencesAsText(ref.head, naming) : ref.head;
+    // the AI's answer names elements as references, and so does a choice picked: by their names here, as the bubble shows them
+    const head = referencesAsText(ref.head, naming);
     return (
         <button className="chat-reply-ref" onClick={() => jump(`message:${ref.request}`)} data-tooltip={tx.chat.replies.messageReferenceHint(who)}>
             <span className="chat-reply-ref-run">↩ {who}:</span> <span className="chat-reply-ref-head">{head}</span>

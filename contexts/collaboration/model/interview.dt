@@ -81,7 +81,9 @@ context Collaboration {
   }
 
   /// AI の問いの選択肢（短い1行）。始めた人が押すと、それが答えとして送られる。AI の出力で、文字として出すだけ。
-  primitive AnswerChoice "答えの選択肢": String { length(value) >= 1 and length(value) <= 40 }
+  /// 要素の参照（`@{es:Returns}`）を含むことがあり、画面はそれをラベルで出す。見える長さは 40 字までで、
+  /// 参照を書いたままの長さは 200 字まで。
+  primitive AnswerChoice "答えの選択肢": String { length(value) >= 1 and length(value) <= 200 }
 
   /// 答えを待っている AI の問いと、その選択肢（ないこともある）。画面は、始めた人にだけ選択肢のボタンを出す。
   value AskedQuestion "答えを待つ問い" {

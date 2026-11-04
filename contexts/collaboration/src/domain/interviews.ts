@@ -53,10 +53,14 @@ export const INTERVIEW_LIMITS = {
     text: 1500,
     /** A new storming's or context's label. */
     label: 100,
-    /** A question's choices: at least two to show any, at most six, each one short line. */
+    /**
+     * A question's choices: at least two to show any, at most six, each one short line — `choice` characters as the page
+     * shows it (an element reference by its name), `choiceWritten` as written (its references `@{…}` in full).
+     */
     minChoices: 2,
     maxChoices: 6,
     choice: 40,
+    choiceWritten: 200,
 } as const;
 
 /** Whether an interview is still running: asking, or its brief waiting to be confirmed. */
@@ -375,13 +379,13 @@ function readJourneyBrief(raw: unknown, path: string, ctx: BriefContext, isNew: 
         if (!Array.isArray(raw.stormings) || raw.stormings.length === 0 || raw.stormings.length > 10)
             return err({ path: `${path}.stormings`, message: 'FromStorming: one to ten storming IDs.' });
         for (const [i, x] of raw.stormings.entries()) {
-            const made = typeof x === 'string' ? Collaboration.makeStormingName(x.trim()) : undefined;
+            const made = typeof x === 'string' ? Collaboration.makeStormingName(subjectId(x)) : undefined;
             if (!made?.ok) return err({ path: `${path}.stormings[${i}]`, message: 'A storming ID.' });
             if (!stormings.includes(made.value)) stormings.push(made.value);
         }
     } else if (raw.stormings !== undefined) return err({ path: `${path}.stormings`, message: `Not for ${pattern}.` });
     if (subject === 'context') {
-        const made = typeof raw.context === 'string' ? Collaboration.makeContextName(raw.context.trim()) : undefined;
+        const made = typeof raw.context === 'string' ? Collaboration.makeContextName(subjectId(raw.context)) : undefined;
         if (!made?.ok) return err({ path: `${path}.context`, message: 'OneContext: the name of its context.' });
         context = made.value;
     } else if (raw.context !== undefined) return err({ path: `${path}.context`, message: `Not for ${pattern}.` });
@@ -456,6 +460,64 @@ export function readBrief(raw: unknown, path: string, ctx: BriefContext): Result
     });
 }
 
+/** An element reference as the chat writes it (`@{es:Returns}`, `@{Billing}`): its identifier in the braces. */
+const REFERENCE = /@\{([^\n{}@]{1,200})\}/gu;
+
+/** A reference's identifier as the page shows it when it does not resolve: of an `es:` one, its last segment. */
+const referenceName = (id: string): string => (id.trim().startsWith('es:') ? (id.trim().slice(3).split('/').at(-1) ?? id) : id).trim();
+
+/**
+ * A choice's text in pieces: text, and element references kept whole, each with the length it counts as (a
+ * reference by its name: the page shows it by its label, or its name).
+ */
+function choicePieces(text: string): { readonly text: string; readonly shown: number; readonly reference: boolean }[] {
+    const out: { text: string; shown: number; reference: boolean }[] = [];
+    let last = 0;
+    for (const m of text.matchAll(REFERENCE)) {
+        if (m.index > last) out.push({ text: text.slice(last, m.index), shown: m.index - last, reference: false });
+        out.push({ text: m[0], shown: referenceName(m[1] ?? '').length, reference: true });
+        last = m.index + m[0].length;
+    }
+    if (last < text.length) out.push({ text: text.slice(last), shown: text.length - last, reference: false });
+    return out;
+}
+
+/** A choice's length as the page shows it: its element references by their names. */
+function choiceShownLength(text: string): number {
+    return choicePieces(text).reduce((n, p) => n + p.shown, 0);
+}
+
+/**
+ * A choice cut to `INTERVIEW_LIMITS.choice` characters as shown, `…` at the end: text is cut, a reference never (one
+ * that does not fit is left out, unless it is the first: the page shows it by its label, shorter than its name).
+ */
+function cutChoice(text: string): string {
+    if (choiceShownLength(text) <= INTERVIEW_LIMITS.choice) return text;
+    const pieces = choicePieces(text);
+    let out = '';
+    let room = INTERVIEW_LIMITS.choice - 1;
+    for (const [i, p] of pieces.entries()) {
+        if (p.shown <= room || (p.reference && i === 0)) {
+            out += p.text;
+            room = Math.max(0, room - p.shown);
+            continue;
+        }
+        if (!p.reference) out += p.text.slice(0, room);
+        return `${out.trimEnd()}…`;
+    }
+    // all of it: a first reference that is longer as its name
+    return out;
+}
+
+/**
+ * A brief's subject as an ID: the interviewer's choices name stormings and contexts as references (`@{es:Returns}`,
+ * `@{Billing}`), and the brief may repeat one as written: its identifier, of an `es:` one the storming's.
+ */
+function subjectId(raw: string): string {
+    const m = /^@\{\s*(?:es:)?\s*([^{}@\s]+)\s*\}$/u.exec(raw.trim());
+    return (m?.[1] ?? raw).trim();
+}
+
 /** Every control character (a choice is one line): what `readChoices` turns into spaces. */
 // oxlint-disable-next-line no-control-regex -- control characters are what it finds
 const CONTROLS = /[\u0000-\u001f\u007f]+/gu;
@@ -463,7 +525,8 @@ const CONTROLS = /[\u0000-\u001f\u007f]+/gu;
 /**
  * A question's choices as the interviewer writes them, cleaned rather than refused (they only help the person answer):
  * what is not a string or is blank is dropped, each one is put on one line, trimmed and cut to
- * `INTERVIEW_LIMITS.choice` characters (`…` at the end), the second of two alike (case aside) is dropped, and at most
+ * `INTERVIEW_LIMITS.choice` characters as shown (`cutChoice`: an element reference counts as its name, and is never
+ * cut), one longer than `INTERVIEW_LIMITS.choiceWritten` as written is dropped, the second of two alike (case aside) is dropped, and at most
  * `INTERVIEW_LIMITS.maxChoices` are kept. Fewer than `INTERVIEW_LIMITS.minChoices` left: none (one is no choice).
  * They are the model's output, shown as text and sent back as the person's answer: never read as instructions.
  */
@@ -476,7 +539,8 @@ export function readChoices(raw: unknown): readonly Collaboration.AnswerChoice[]
         if (typeof c !== 'string') continue;
         const line = c.replace(CONTROLS, ' ').replace(/\s+/gu, ' ').trim();
         if (!line) continue;
-        const cut = line.length > INTERVIEW_LIMITS.choice ? `${line.slice(0, INTERVIEW_LIMITS.choice - 1).trimEnd()}…` : line;
+        const cut = cutChoice(line);
+        if (cut.length > INTERVIEW_LIMITS.choiceWritten) continue;
         const key = cut.toLowerCase();
         if (seen.has(key)) continue;
         const made = Collaboration.makeAnswerChoice(cut);
@@ -557,7 +621,7 @@ export function interviewerJsonSchema(): Record<string, unknown> {
             choices: {
                 type: 'array',
                 maxItems: INTERVIEW_LIMITS.maxChoices,
-                items: { type: 'string', minLength: 1, maxLength: INTERVIEW_LIMITS.choice },
+                items: { type: 'string', minLength: 1, maxLength: INTERVIEW_LIMITS.choiceWritten },
             },
             multiple: { type: 'boolean' },
             brief: {

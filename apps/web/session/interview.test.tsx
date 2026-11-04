@@ -7,7 +7,11 @@ import { describe, expect, test } from 'bun:test';
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MESSAGES } from '../i18n';
+import { check } from '../test-helpers';
 import { ChatProvider, type ChatContextValue } from './chat-context';
+import { TargetNamingProvider } from './naming';
+import { MentionedText } from './parts';
+import type { NamingContext } from './targets';
 import {
     awaitedChoices,
     briefRole,
@@ -66,11 +70,12 @@ function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
     return [node, ...elements(node.props.children as ReactNode)];
 }
 
-/** The text of an element's children. */
+/** The text of an element's children (a choice's as written: `ChoiceText`'s `text`). */
 function textOf(node: ReactNode): string {
     if (typeof node === 'string' || typeof node === 'number') return String(node);
     if (Array.isArray(node)) return node.map(textOf).join('');
-    return isValidElement<{ children?: ReactNode }>(node) ? textOf(node.props.children) : '';
+    if (!isValidElement<{ children?: ReactNode; text?: unknown }>(node)) return '';
+    return typeof node.props.text === 'string' ? node.props.text : textOf(node.props.children);
 }
 
 function list(more: Partial<ChoiceListProps> = {}) {
@@ -142,6 +147,60 @@ describe('the choices', () => {
 
     test('an answer is a message replying to the question', () => {
         expect(choiceAnswerBody('q1', '返品')).toEqual({ targets: [], body: '返品', replyTo: { kind: 'Message', request: 'q1' } });
+    });
+});
+
+describe('a choice that names an element by reference', () => {
+    // a storming with a label, one without, and a context with a label
+    const naming = async (mode: NamingContext['mode'] = 'label'): Promise<NamingContext> => {
+        const a = await check({
+            'konbini.dtes': 'storming ConvenienceStoreIssuance "住民票などのコンビニ交付（ビッグピクチャ）" {\n  event Issued "交付した"\n}\n',
+            'bare.dtes': 'storming Bare {\n  event Done\n}\n',
+            'billing.dt': 'context Billing "請求" {\n}\n',
+        });
+        return { mode, model: a.model ?? null, stormings: a.stormings.stormings.map((s) => ({ id: s.id, storming: s })) };
+    };
+    const choices = ['@{es:ConvenienceStoreIssuance}', '@{es:Bare}', '@{Billing}', '@{es:Gone}', '@{es:ConvenienceStoreIssuance/Issued} から'];
+    const html = (ctx: NamingContext, more: Partial<ChoiceListProps> = {}): string =>
+        renderToStaticMarkup(<TargetNamingProvider value={ctx}>{list({ choices, ...more }).tree[0]}</TargetNamingProvider>);
+    /** The buttons' (or the checkboxes' labels') texts, as shown. */
+    const shown = (markup: string): string[] =>
+        [...markup.matchAll(/<(?:button|label)[^>]*class="interview-choice(?:| checked)"[^>]*>(.*?)<\/(?:button|label)>/gu)].map((m) =>
+            (m[1] ?? '').replace(/<[^>]+>/gu, ''),
+        );
+
+    test('shows the label, else the name; a missing one as written, as messages do; never a link', async () => {
+        const ctx = await naming();
+        const single = html(ctx);
+        expect(shown(single)).toEqual(['住民票などのコンビニ交付（ビッグピクチャ）', 'Bare', '請求', 'Gone', '交付した から']);
+        expect(single).toContain('<span class="choice-text"><span class="reply-element">住民票などのコンビニ交付（ビッグピクチャ）</span></span>');
+        expect(single).toContain('<span class="reply-element unresolved">Gone</span>');
+        expect(single).not.toContain('<a');
+        expect(single).not.toContain('@{');
+        // the display setting, as for messages
+        expect(shown(html(await naming('name')))[0]).toBe('ConvenienceStoreIssuance');
+        // checkboxes: the same
+        expect(shown(html(ctx, { multiple: true }))).toEqual(['住民票などのコンビニ交付（ビッグピクチャ）', 'Bare', '請求', 'Gone', '交付した から']);
+    });
+
+    test('sends the reference as written, so the AI gets the ID; several joined keep theirs', () => {
+        const single = list({ choices });
+        click(single.buttons[0]);
+        expect(single.sent).toEqual(['@{es:ConvenienceStoreIssuance}']);
+        expect(choiceAnswerBody('q1', single.sent[0] ?? '').body).toBe('@{es:ConvenienceStoreIssuance}');
+        const several = list({ choices, multiple: true, checked: new Set([0, 2]) });
+        click(several.buttons[0]);
+        expect(several.sent).toEqual(['@{es:ConvenienceStoreIssuance}、@{Billing}']);
+    });
+
+    test("the person's message with the choice shows the label, as a link like any reference", async () => {
+        const ctx = await naming();
+        const markup = renderToStaticMarkup(
+            <TargetNamingProvider value={ctx}>
+                <MentionedText body="@{es:ConvenienceStoreIssuance}" targets={[]} statuses={[]} onNavigate={() => {}} tx={t.session} />
+            </TargetNamingProvider>,
+        );
+        expect(markup).toBe('<a class="reply-element">住民票などのコンビニ交付（ビッグピクチャ）</a>');
     });
 });
 

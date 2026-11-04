@@ -18,6 +18,7 @@ import { isAiAuthor, type AiSlot } from './ai';
 import { sessionApi } from './api';
 import { useChat } from './chat-context';
 import { failure } from './parts';
+import { ChoiceText } from './reply';
 import { runningInterview, type InterviewJson } from './slash';
 import type { SessionData } from './useSession';
 
@@ -323,7 +324,8 @@ export interface ChoiceListProps {
 
 /**
  * The choices under the question: buttons in the action colour that send one at once, or (multiple) checkboxes and
- * 送る; always その他 last. Each choice is the AI's text shown as text.
+ * 送る; always その他 last. Each choice is the AI's text shown as text, an element it names by its label as a message
+ * names it (`ChoiceText`, no link); what is sent is the choice as written, its references whole.
  */
 export function ChoiceList(props: ChoiceListProps): ReactElement {
     const { choices, multiple, checked, busy, tx } = props;
@@ -334,12 +336,12 @@ export function ChoiceList(props: ChoiceListProps): ReactElement {
                 ? choices.map((c, i) => (
                       <label key={i} className={checked.has(i) ? 'interview-choice checked' : 'interview-choice'}>
                           <input type="checkbox" checked={checked.has(i)} disabled={busy} onChange={() => props.onToggle(i)} />
-                          {c}
+                          <ChoiceText text={c} />
                       </label>
                   ))
                 : choices.map((c, i) => (
                       <button key={i} type="button" className="interview-choice" disabled={busy} onClick={() => props.onSend(c)}>
-                          {c}
+                          <ChoiceText text={c} />
                       </button>
                   ))}
             {multiple && (

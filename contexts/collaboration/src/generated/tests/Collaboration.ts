@@ -405,7 +405,7 @@ export function arbitraries(options: Options = {}): Arbitraries {
         JourneyUse: () => given.JourneyUse ?? fc.constantFrom<Collaboration.JourneyUse>('Align', 'Modeling'),
         JourneyBrief: () => given.JourneyBrief ?? testing.cast<Collaboration.JourneyBrief>(fc.record({ purpose: a.BriefField, scope: a.BriefField, constraints: a.BriefField, participants: testing.many(a.RoleName, 0, 12), use: a.JourneyUse, level: a.StormingLevel, pattern: a.GuidePattern, goal: a.GuideStepKey, stormings: testing.many(a.StormingName, 0, 10), context: a.ContextName, journeyName: a.JourneyName, continues: testing.cast<boolean>(scalar.Bool) }, { requiredKeys: ['purpose', 'participants', 'stormings', 'continues'] })),
         InterviewBrief: () => given.InterviewBrief ?? testing.cast<Collaboration.InterviewBrief>(fc.record({ name: a.BriefName, label: a.BriefLabel, isNew: testing.cast<boolean>(scalar.Bool), replaces: testing.cast<boolean>(scalar.Bool), text: a.BriefText, journey: a.JourneyBrief, description: a.ShortDescription }, { requiredKeys: ['name', 'isNew', 'replaces', 'text'] })),
-        AnswerChoice: () => testing.valid(given.AnswerChoice ?? testing.collide(testing.cast<Collaboration.AnswerChoice>(testing.base('String', { minLength: 1, maxLength: 40 })), seed), (v) => Collaboration.checkAnswerChoice(v).length === 0, 'Collaboration.AnswerChoice'),
+        AnswerChoice: () => testing.valid(given.AnswerChoice ?? testing.collide(testing.cast<Collaboration.AnswerChoice>(testing.base('String', { minLength: 1, maxLength: 200 })), seed), (v) => Collaboration.checkAnswerChoice(v).length === 0, 'Collaboration.AnswerChoice'),
         AskedQuestion: () => testing.valid(given.AskedQuestion ?? testing.cast<Collaboration.AskedQuestion>(fc.record({ question: a.RequestId, choices: testing.many(a.AnswerChoice, 0, 6), multiple: testing.cast<boolean>(scalar.Bool) })), (v) => Collaboration.checkAskedQuestion(v).length === 0, 'Collaboration.AskedQuestion'),
         BriefInstruction: () => given.BriefInstruction ?? testing.cast<Collaboration.BriefInstruction>(fc.record({ interview: a.InterviewId, command: a.InterviewCommand, brief: a.InterviewBrief })),
         AskingInterview: () => testing.withExamples(given.AskingInterview ?? testing.cast<Collaboration.AskingInterview>(fc.record({ state: fc.constant('Asking' as const), id: a.InterviewId, session: a.SessionId, command: a.InterviewCommand, startedBy: a.ParticipantId, opening: a.RequestId, focus: a.ModelTarget, language: a.UiLanguage, startedAt: testing.cast<Date>(scalar.Timestamp), awaiting: a.RequestId, asked: a.AskedQuestion }, { requiredKeys: ['state', 'id', 'session', 'command', 'startedBy', 'opening', 'language', 'startedAt'] })), options.examples?.Interview?.states?.Asking, () => [], 'Collaboration.AskingInterview'),
@@ -739,7 +739,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...(impl.make.AnswerChoice ? testing.primitiveCases({
                 type: 'Collaboration.AnswerChoice',
                 base: 'String',
-                hints: { minLength: 1, maxLength: 40 },
+                hints: { minLength: 1, maxLength: 200 },
                 invariants: ['valid'],
                 declared: [],
                 check: () => Collaboration.checkAnswerChoice,
