@@ -412,6 +412,11 @@
     --space-3: 12px;
     --space-4: 16px;
     --space-5: 24px;
+    /* the spacing rhythm (docs/ui-rules.md): inside a group at most --gap-inside, between groups at least --gap-between
+       (twice it), a change of turn --gap-turn */
+    --gap-inside: var(--space-2);
+    --gap-between: var(--space-4);
+    --gap-turn: var(--space-5);
 }
 
 /* Dark theme: set by the app on <html data-theme="dark"> (the OS setting, or the user's choice in the header). It
@@ -8996,4 +9001,141 @@ label.proposal-option {
         overflow: visible;
         padding: 0;
     }
+}
+
+/* ---------- actions: the text buttons by what pressing them does (shared/act.tsx, docs/ui-rules.md) ---------- */
+
+/* one shape for all; the kind gives the look: filled decides, the wash sends, ↵ and the code font fill the composer,
+   brand text moves, a grey outline opens or decides on the side, muted stops, red refuses */
+button.act {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    max-width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 2px var(--space-2);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+    text-align: left;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+button.act svg {
+    flex: none;
+}
+.act.act-decide {
+    border-color: var(--brand);
+    background: var(--brand);
+    color: var(--on-brand);
+    font-weight: var(--fw-strong);
+}
+.act.act-decide-sub,
+.act.act-open {
+    border-color: var(--border-strong);
+    color: var(--text);
+}
+.act.act-send {
+    border-color: var(--brand-wash-border);
+    background: var(--brand-wash);
+    color: var(--brand);
+    font-weight: var(--fw-strong);
+}
+.act.act-insert {
+    border-color: var(--brand-wash-border);
+    color: var(--brand);
+    font-family: var(--mono);
+}
+.act.act-see {
+    padding-inline: 0;
+    color: var(--brand);
+}
+.act.act-stop {
+    border-color: var(--border-strong);
+    color: var(--muted);
+}
+.act.act-danger {
+    border-color: color-mix(in srgb, var(--status-danger-ink) 50%, transparent);
+    color: var(--status-danger-ink);
+}
+.act.act-decide-sub:hover:not(:disabled),
+.act.act-open:hover:not(:disabled),
+.act.act-stop:hover:not(:disabled) {
+    background: var(--hover);
+}
+.act.act-send:hover:not(:disabled),
+.act.act-insert:hover:not(:disabled) {
+    border-color: var(--brand);
+}
+.act.act-insert:hover:not(:disabled) {
+    background: var(--brand-wash);
+}
+.act.act-see:hover:not(:disabled) {
+    text-decoration: underline;
+}
+.act.act-danger:hover:not(:disabled) {
+    background: var(--status-danger-bg);
+}
+button.act:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+/* the ✓ of the journey's map: a checkbox and 済み / 済みにする, small under the step */
+.act-mark {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    max-width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+button.act-mark {
+    cursor: pointer;
+}
+button.act-mark:disabled {
+    cursor: default;
+}
+.act-mark-box {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 14px;
+    height: 14px;
+    border: 1.5px solid var(--border-strong);
+    border-radius: 3px;
+    color: var(--on-brand);
+}
+.act-mark.on {
+    color: var(--text);
+}
+.act-mark.on .act-mark-box {
+    border-color: var(--brand);
+    background: var(--brand);
+}
+button.act-mark:hover:not(:disabled) .act-mark-box {
+    border-color: var(--brand);
+}
+/* under a step of the map: the box over its word, kept whole in the step's narrow column, as small as the label */
+.guide-step .act-mark {
+    flex-direction: column;
+    gap: 1px;
+    font-size: 0.625rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+.guide-step .act-mark-box {
+    width: 12px;
+    height: 12px;
 }
