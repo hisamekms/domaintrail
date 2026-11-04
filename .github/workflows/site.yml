@@ -42,7 +42,7 @@ jobs:
         env:
           DT: node ../dist/dt.js
 
-      # `dt export svg` draws each figure of figures.json; a dt without it leaves marked placeholders.
+      # `dt export svg` draws each figure of figures.json; a figure it cannot draw fails the build.
       # The captures of the Live View (public/shots) are committed: `bun run site:shots` takes them again.
       - name: Build the site
         run: bun run build
