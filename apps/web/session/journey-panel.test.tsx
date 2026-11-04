@@ -10,7 +10,7 @@ import { analyze } from '@domaintrail/analysis';
 import type { GuideWorkspace, JourneyFile } from '@domaintrail/collaboration';
 import type { JourneyRequestBody } from '@domaintrail/collaboration/protocol';
 import { MESSAGES } from '../i18n';
-import { exampleSources } from '../test-helpers';
+import { actKinds, decides, exampleSources } from '../test-helpers';
 import { ChatProvider, type ChatContextValue } from './chat-context';
 import { JourneyDetail } from './journey-detail';
 import { GoalMenu, JourneyChipButton, JourneysPanel } from './journey-panel';
@@ -240,6 +240,33 @@ describe('the journeys panel', () => {
         ]);
         expect(goalChoices({ kind: 'es' })).toEqual(['BigPicture', 'DesignLevel']);
         expect(goalChoices({ kind: 'model', pattern: 'OneContext' })).toEqual(['commands', 'invariants']);
+    });
+
+    test('the buttons by what they do (docs/ui-rules.md): one decide per place, the commands inserted, the guide seen', () => {
+        const html = render(<JourneysPanel onClose={() => {}} />, chat('f', FILE, 'billing'));
+        const current = html.slice(html.indexOf('journeys-current'), html.indexOf('journeys-others'));
+        // 完了にする decides; ゴールを変える opens; ブリーフを見直す puts its command in the composer; しまう on the side
+        expect(actKinds(current)).toEqual(['decide', 'open', 'insert', 'decide-sub', 'see']);
+        expect(decides(current)).toBe(1);
+        const others = html.slice(html.indexOf('journeys-others'), html.indexOf('journeys-new'));
+        expect(new Set(actKinds(others))).toEqual(new Set(['decide-sub']));
+        const fresh = html.slice(html.indexOf('journeys-new'));
+        expect(actKinds(fresh)).toEqual(['insert', 'insert', 'open']);
+        // the goal menu: the current goal filled, the others on the side
+        const goals = render(<GoalMenu item={overviewOf(FILE, 'shop').current!} onDone={() => {}} />, chat('f', FILE, 'shop'));
+        expect(actKinds(goals)).toEqual(['decide-sub', 'decide-sub', 'decide']);
+    });
+
+    test('a request: the facilitator approves (decide) or denies (danger), one decide each; its requester withdraws (stop)', () => {
+        const request: JourneyRequestBody = { id: 'r1', by: 'bob', byName: 'Bob', act: { kind: 'choose', journey: 'es:Returns' }, at: '2026-11-03T10:00:00Z' };
+        const requests = (html: string): string[] => html.match(/<li class="journeys-request">.*?<\/li>/g) ?? [];
+        const facilitator = requests(render(<JourneysPanel onClose={() => {}} />, chat('f', FILE, 'shop', [request, { ...request, id: 'r2' }])));
+        expect(facilitator).toHaveLength(2);
+        for (const r of facilitator) {
+            expect(actKinds(r)).toEqual(['decide', 'danger']);
+            expect(decides(r)).toBe(1);
+        }
+        expect(requests(render(<JourneysPanel onClose={() => {}} />, chat('bob', FILE, 'shop', [request]))).map(actKinds)).toEqual([['stop']]);
     });
 });
 

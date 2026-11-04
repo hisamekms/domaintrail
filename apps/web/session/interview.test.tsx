@@ -7,7 +7,7 @@ import { describe, expect, test } from 'bun:test';
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MESSAGES } from '../i18n';
-import { check } from '../test-helpers';
+import { actKinds, check, decides } from '../test-helpers';
 import { ChatProvider, type ChatContextValue } from './chat-context';
 import { TargetNamingProvider } from './naming';
 import { MentionedText } from './parts';
@@ -309,6 +309,13 @@ describe("the brief's card, by who looks", () => {
     test("the facilitator's own brief: 確定 / 編集して確定 / 中止, as before; participants wait for it", () => {
         expect(buttons(panel('f', briefed('f')))).toEqual(['確定', '編集して確定', '中止']);
         expect(buttons(panel('bob', briefed('f')))).toEqual([]);
+    });
+
+    test('the buttons by what they do (docs/ui-rules.md): one decide, editing opens, 却下 is danger, 中止 stops', () => {
+        expect(actKinds(panel('f', briefed('bob')))).toEqual(['decide', 'open', 'danger']);
+        expect(actKinds(panel('f', briefed('f')))).toEqual(['decide', 'open', 'stop']);
+        expect(actKinds(panel('bob', briefed('bob')))).toEqual(['stop']);
+        expect(decides(panel('f', briefed('bob')))).toBe(1);
     });
 
     test('while it asks, its starter and the facilitator may stop it', () => {

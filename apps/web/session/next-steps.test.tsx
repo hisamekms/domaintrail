@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { analyze } from '@domaintrail/analysis';
 import { MESSAGES } from '../i18n';
-import { exampleSources } from '../test-helpers';
+import { actKinds, decides, exampleSources } from '../test-helpers';
 import { CandidatesCard } from './candidates';
 import { ChatProvider, type ChatContextValue } from './chat-context';
 import { TargetNamingProvider } from './naming';
@@ -107,6 +107,9 @@ describe("a candidate command's card, by who looks", () => {
         const html = render(<CandidatesCard command={listed('bob')} continues={false} />, chat('f', [listed('bob')]));
         expect(html).toContain('type="checkbox"');
         expect(buttons(html)).toEqual(['採用したものを反映', '中止']);
+        // 反映 changes the files: the one decide; 中止 stops (docs/ui-rules.md)
+        expect(actKinds(html)).toEqual(['decide', 'stop']);
+        expect(decides(html)).toBe(1);
         expect(html).not.toContain('ファシリテーターが選んで反映します');
     });
 

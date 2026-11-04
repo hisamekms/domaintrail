@@ -9,7 +9,7 @@ import { analyze } from '@domaintrail/analysis';
 import { goalOf, guideMarks, guideSnapshot, journeyMarks, NO_MARKS, type GuideGoal, type GuideWorkspace, type JourneyFile } from '@domaintrail/collaboration';
 import { journeyOverview } from './journey-view';
 import { MESSAGES } from '../i18n';
-import { exampleSources } from '../test-helpers';
+import { actKinds, decides, exampleSources } from '../test-helpers';
 import { ChatProvider, type ChatContextValue } from './chat-context';
 import { GuideCard } from './guide-card';
 import { askBody, guideAnswers, latestGuide, viewTargetOfShown, withMarks, type GuideMapJson, type GuideSnapshotJson } from './guide-view';
@@ -199,6 +199,26 @@ describe("the guide's card", () => {
         expect(html).toContain('これより新しいガイドがあります');
         // stopped
         expect(render(guide({ state: 'Stopped' }), chat('bob', []))).toContain('中止しました');
+        // the buttons by what they do (docs/ui-rules.md): the command inserted, the places seen, the question sent
+        const advice = html.slice(html.indexOf('guide-advice'));
+        expect(actKinds(advice)).toEqual(['insert', 'see', 'see', 'send']);
+        expect(decides(html)).toBe(0);
+    });
+
+    test('the buttons as it starts: /es:start inserted, what is known seen, 中止 stops; the ✓ a checkbox with 済み / 済みにする', () => {
+        const command = guide({ guide: snapshot({}, STORMING_VIEW) });
+        const html = render(command, chat('bob', [command]));
+        expect(actKinds(html)).toEqual(['insert', 'see', 'see', 'see', 'stop']);
+        expect(decides(html)).toBeLessThanOrEqual(1);
+        const file = FILE(['review'], 'model');
+        const model = guide({ guide: snapshot(goalOf(file), MODEL_VIEW, guideMarks(journeyMarks(file)), file) });
+        const marks = render(model, chat('f', [model], file, 'shop'));
+        expect(marks).toMatch(
+            /<button type="button" class="act-mark on" aria-pressed="true" aria-label="ES を見直す: 済みを外す"[^>]*>.*?済み<\/span><\/button>/,
+        );
+        expect(marks).toMatch(
+            /<button type="button" class="act-mark" aria-pressed="false" aria-label="Billing: 済みにする"[^>]*>.*?済みにする<\/span><\/button>/,
+        );
     });
 });
 
