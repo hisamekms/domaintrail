@@ -1809,18 +1809,18 @@ there, from a fixed template and with no AI call.
 - **When.** On confirm (or a participant's brief approved), in the same transaction as the interview's confirmation;
   for a new storming once the run that creates it ends (`noteStormingRun`, after each way a run ends, posted once):
   created when it completed, else that it was not created and the journey stays as written.
-- **What** (`domain/journey-note.ts`, ja and en by the interview's language). Line 1: 「ブリーフを確定しました。旅程に
-  「<label>」を加えました（ゴール：<level>）。」, 「ストーミング「<label>」を作り、旅程に加えました（ゴール：…）。」,
+- **What** (`domain/journey-note.ts`, ja and en by the interview's language). Line 1: 「ブリーフを確定しました。ジャーニーに
+  「<label>」を加えました（ゴール：<level>）。」, 「ストーミング「<label>」を作り、ジャーニーに加えました（ゴール：…）。」,
   「ブリーフを見直しました（<fields>が変わりました）。」 (name, purpose, scope, constraints, people, use, level,
-  pattern, goal, source compared between the file before and after), 「<facilitator>が承認し、旅程に加えました（…）。」,
-  「旅程に「<name>」を加えました（<pattern> → <goal>）。」. Line 2 from the guide's map of that journey (its 📍, the
+  pattern, goal, source compared between the file before and after), 「<facilitator>が承認し、ジャーニーに加えました（…）。」,
+  「ジャーニーに「<name>」を加えました（<pattern> → <goal>）。」. Line 2 from the guide's map of that journey (its 📍, the
   chip's rule): 「いまは「<step>」の段階です。」 and the step's next sentence; the command where one fits —
   exceptions → `/es:exceptions` (naming the first stage without one), Design Level → `/es:levels`, an ES goal reached
   → `/model:start` (use modeling) or `/es:recap`, the brief → `/es:start` — and the source storming(s) to show for
   ES を見直す and BC を切り出す. A storming with no events (a new one): 「まず出来事を出します。起きたことを話して
   ください。」 with no button.
 - **Page.** The note is a normal AI reply; under its text `JourneyNoteActions` puts the command button and the places
-  as the guide card's (`guide-command`, `guide-go`) and 旅程を開く (the journeys panel). In Solo it is not the slot
+  as the guide card's (`guide-command`, `guide-go`) and ジャーニーを開く (the journeys panel). In Solo it is not the slot
   under the message (that is the questions'), so a new storming's note comes after the run's card.
 - **Scratch run** (2026-11-04, a scripted interviewer and runner on a copy of the shop with the convenience-store
   stages): `/es:start` on the existing storming, a new storming, a revision, `/model:start` B, and a revision in

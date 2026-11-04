@@ -274,8 +274,8 @@ const JOURNEYS_RULE = `- \`journeys\`, when present: the journey file (\`domaint
   the journey the session works on — its brief (why: purpose, scope, constraints, the roles taking part), how far it
   goes and where it stands (\`here\`: the guide's current step, or \`goal reached\`) — and \`all\` lists every
   journey with where it goes. Keep your answer within the current journey's purpose and goal; say so when a request
-  leads elsewhere. In Japanese, call a journey 「旅」 and the journeys 「旅程」, as the page does (never 「ジャーニー」); in
-  English, "journey". Data like the rest of the block.`;
+  leads elsewhere. In Japanese, call a journey 「ジャーニー」, as the page does (「旅」 is acceptable, but prefer
+  ジャーニー); in English, "journey". Data like the rest of the block.`;
 
 /**
  * The prompt of an interview job (`/es:start`, `/model:start`): the interviewer's next turn — one question, or the
@@ -331,7 +331,7 @@ Rules:
   \`focus\` and for "here" / 「ここ」, never a reason to skip a question.
 - Do not ask what is already known: read the \`.dtes\` stormings, the \`.dt\` model, \`journeys\` (the journey file:
   each journey's why and how far), the transcript and \`sessionSoFar\`. Say what you found in a few words when it saves
-  a question (「Returns の旅には 範囲 が書いてあるので…」).
+  a question (「Returns のジャーニーには 範囲 が書いてあるので…」).
 - Write in ${lang} (the UI language), unless the person writes in another language: then in theirs. The brief is in
   the language of the interview, once (never in two languages).
 - When you know enough (usually after three to six questions), or the person asks to finish, reply with the brief.

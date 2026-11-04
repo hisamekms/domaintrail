@@ -122,7 +122,7 @@ describe('the chip', () => {
         const shop = render(<JourneyChipButton />, chat('f', FILE, 'shop'));
         // 📍 after the last step done (BC を切り出す, 集約 are): ES を見直す, not marked, is unconfirmed, not here
         expect(text(shop)).toBe('ショップ·コマンド→不変条件');
-        expect(shop).toContain('aria-label="いまの旅: ショップ、いま コマンド、ゴール 不変条件（旅程を開く）"');
+        expect(shop).toContain('aria-label="いまのジャーニー: ショップ、いま コマンド、ゴール 不変条件（ジャーニーを開く）"');
         expect(shop).toContain('lucide-compass');
         expect(shop).toContain('lucide-map-pin');
         expect(shop).toContain('lucide-flag');
@@ -162,7 +162,7 @@ describe('the chip', () => {
 describe('the journeys panel', () => {
     test("the facilitator: the current journey's brief, its map and actions; the others to choose; the new ones; the archived counted", () => {
         const html = render(<JourneysPanel onClose={() => {}} />, chat('f', FILE, 'billing'));
-        expect(html).toContain('role="dialog" aria-label="旅程"');
+        expect(html).toContain('role="dialog" aria-label="ジャーニー"');
         const current = html.slice(html.indexOf('journeys-current'), html.indexOf('journeys-others'));
         expect(text(current)).toContain('Billing の深掘り');
         expect(text(current)).toContain('目的請求を正す');
@@ -175,10 +175,10 @@ describe('the journeys panel', () => {
         for (const action of ['ガイドを見る', 'ゴールを変える', 'ブリーフを見直す', '完了にする', 'しまう']) expect(text(current)).toContain(action);
         const others = html.slice(html.indexOf('journeys-others'), html.indexOf('journeys-new'));
         expect([...others.matchAll(/<span class="journeys-row-name">([^<]*)<\/span>/g)].map((m) => m[1])).toEqual(['返品', 'ショップ']);
-        expect(others.match(/>この旅にする<\/button>/g)).toHaveLength(2);
+        expect(others.match(/>このジャーニーにする<\/button>/g)).toHaveLength(2);
         expect(text(html)).toContain('/es:start');
         expect(text(html)).toContain('/model:start');
-        expect(text(html)).toContain('しまった旅 1 件');
+        expect(text(html)).toContain('しまったジャーニー 1 件');
         expect(html).not.toContain('ファシリテーターが決めます');
     });
 
@@ -207,13 +207,13 @@ describe('the journeys panel', () => {
         expect(text(bob)).toContain('ゴールを変える');
         const ada = render(<JourneysPanel onClose={() => {}} />, chat('f', FILE, 'shop', [mine, theirs]));
         expect(text(ada)).toContain('Bob が「ショップ」のゴールを コマンド に');
-        expect(text(ada)).toContain('Carol が「返品」をいまの旅に');
+        expect(text(ada)).toContain('Carol が「返品」をいまのジャーニーに');
         expect(ada.match(/>承認<\/button>/g)).toHaveLength(2);
         expect(ada.match(/>却下<\/button>/g)).toHaveLength(2);
     });
 
     test('no journey: said so, with the new ones; an ES journey that reached its goal with use modeling: /model:start', () => {
-        expect(text(render(<JourneysPanel onClose={() => {}} />, chat('f', null)))).toContain('まだ旅がありません');
+        expect(text(render(<JourneysPanel onClose={() => {}} />, chat('f', null)))).toContain('まだジャーニーがありません');
         const reached: JourneyFile = { ...FILE, stormings: { Returns: { ...FILE.stormings.Returns!, marks: ['exceptions', 'questions'] } } };
         const html = render(<JourneysPanel onClose={() => {}} />, chat('f', reached, 'es:Returns'));
         expect(text(html)).toContain('ゴールに着きました。ここからモデリングへ/model:start');
@@ -281,7 +281,7 @@ describe('the journeys in the detail', () => {
         expect(text(html)).toContain('返品を速く');
         expect(text(html)).toContain('例外');
         expect(text(html)).toContain('ビッグピクチャー');
-        expect(renderToStaticMarkup(<JourneyDetail items={[]} onOpen={() => {}} empty />)).toContain('まだ旅がありません');
+        expect(renderToStaticMarkup(<JourneyDetail items={[]} onOpen={() => {}} empty />)).toContain('まだジャーニーがありません');
         expect(renderToStaticMarkup(<JourneyDetail items={[]} onOpen={() => {}} />)).toBe('');
         const billing = renderToStaticMarkup(<JourneyDetail items={[overview.current!]} current="billing" onOpen={() => {}} />);
         expect(billing).toContain('class="journey-detail-row current"');

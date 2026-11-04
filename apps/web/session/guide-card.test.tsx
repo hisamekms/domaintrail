@@ -135,7 +135,7 @@ describe("the guide's card", () => {
         expect(html).toContain('aria-current="step"');
         // the heading: the 🏁 changes the goal, the journey's name opens the journeys panel
         expect(html).toContain('class="guide-goal-button" aria-expanded="false" data-tooltip="ゴールを変える"');
-        expect(html).toMatch(/class="guide-journey-button" data-tooltip="旅程を開く">.*?返品<\/button>/);
+        expect(html).toMatch(/class="guide-journey-button" data-tooltip="ジャーニーを開く">.*?返品<\/button>/);
         // the exceptions and the questions: marked by a person when the files cannot tell
         expect(html).toContain('aria-label="例外: 済みにする"');
     });

@@ -3,7 +3,7 @@
 // added, the storming created, the brief revised, a participant's brief approved); line 2 says where the journey is
 // (its map's 📍 step, by the same rule as the chip) and the next step. The next step's command (into the composer) or
 // the place it shows (the source storming) is kept on the message (`JourneyNote`) for the page's buttons, beside
-// 「🧭 旅程を開く」. The brief itself is not repeated: the journeys panel shows it.
+// 「🧭 ジャーニーを開く」. The brief itself is not repeated: the journeys panel shows it.
 //
 // One place for the template and the next-step table, in Japanese and English (the interview's language). Pure.
 import { Collaboration } from '../generated/index.js';
@@ -144,14 +144,14 @@ const JA: Words = {
     list: '・',
     goal: (goal) => `ゴール：${goal}`,
     how: (pattern, goal) => `${pattern} → ${goal}`,
-    esAdded: (label, how) => `ブリーフを確定しました。旅程に「${label}」を加えました（${how}）。`,
-    esCreated: (label, how) => `ストーミング「${label}」を作り、旅程に加えました（${how}）。`,
-    esNotCreated: (label) => `ストーミング「${label}」を作れませんでした。旅程はそのまま残しています。`,
-    modelAdded: (name, how) => `旅程に「${name}」を加えました（${how}）。`,
+    esAdded: (label, how) => `ブリーフを確定しました。ジャーニーに「${label}」を加えました（${how}）。`,
+    esCreated: (label, how) => `ストーミング「${label}」を作り、ジャーニーに加えました（${how}）。`,
+    esNotCreated: (label) => `ストーミング「${label}」を作れませんでした。ジャーニーはそのまま残しています。`,
+    modelAdded: (name, how) => `ジャーニーに「${name}」を加えました（${how}）。`,
     revised: (changed) =>
         changed === undefined ? 'ブリーフを見直しました（変わったところはありません）。' : `ブリーフを見直しました（${changed}が変わりました）。`,
-    approvedAdded: (by, how) => `${by}が承認し、旅程に加えました（${how}）。`,
-    approvedCreated: (by, label, how) => `${by}が承認し、ストーミング「${label}」を作って旅程に加えました（${how}）。`,
+    approvedAdded: (by, how) => `${by}が承認し、ジャーニーに加えました（${how}）。`,
+    approvedCreated: (by, label, how) => `${by}が承認し、ストーミング「${label}」を作ってジャーニーに加えました（${how}）。`,
     approvedRevised: (by, changed) =>
         changed === undefined
             ? `${by}が承認し、ブリーフを見直しました（変わったところはありません）。`

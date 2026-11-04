@@ -323,7 +323,7 @@ describe('interviews', () => {
         const facts = { exitCode: 0, formatted: 'Skipped', checked: 'Skipped' } as const;
         value(await use.finishRun({ run: claimed.run.id, token: claimed.lease.token, facts }));
         expect(await notes()).toEqual([
-            'ストーミング「返品」を作り、旅程に加えました（ゴール：ビッグピクチャー）。\nまず出来事を出します。起きたことを話してください。',
+            'ストーミング「返品」を作り、ジャーニーに加えました（ゴール：ビッグピクチャー）。\nまず出来事を出します。起きたことを話してください。',
         ]);
         // the same finish again (a replay): no second note
         value(await use.finishRun({ run: claimed.run.id, token: claimed.lease.token, facts }));
@@ -341,7 +341,7 @@ describe('interviews', () => {
         const run = value(await use.confirmInterview({ interview: other.interview.id, actor: facilitator })).run;
         if (!run) throw new Error('a new storming takes a run');
         value(await use.cancelRun({ run: run.id, actor: facilitator }));
-        expect((await notes()).at(-1)).toBe('ストーミング「交換」を作れませんでした。旅程はそのまま残しています。');
+        expect((await notes()).at(-1)).toBe('ストーミング「交換」を作れませんでした。ジャーニーはそのまま残しています。');
     });
 
     test('a journey file that does not read: nothing is written over it, the brief waits', async () => {
@@ -400,7 +400,7 @@ describe('an interview a participant started', () => {
         const note = value(await use.sessionState({ session })).requests.find((r) => r.journeyNote);
         expect(note).toMatchObject({
             replyTo: { kind: 'Message', request: answer.request.id },
-            body: 'ストーミング「返品」を作れませんでした。旅程はそのまま残しています。',
+            body: 'ストーミング「返品」を作れませんでした。ジャーニーはそのまま残しています。',
         });
         expect(value(await use.sessionSoFar({ session })).text).toContain("Ada approved Bob's brief of the interview /es:start after editing it");
     });

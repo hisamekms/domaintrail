@@ -34,7 +34,7 @@ facilitator's chip counts the participants' requests waiting. Pressing it opens 
 it): the requests waiting (承認 / 却下 for the facilitator; the requester's own, 承認待ち and 取り下げ); the current
 journey — its brief (目的, 範囲, 制約, 参加者, 使い道, もと), its map as the guide draws it, and ガイドを見る, ゴールを変える
 (the ES levels, or the goals of its pattern), ブリーフを見直す (`/es:start` or `/model:start` into the composer),
-完了にする, しまう; the other journeys with where each stands (この旅にする makes one current); 新しい旅 (`/es:start`,
+完了にする, しまう; the other journeys with where each stands (このジャーニーにする makes one current); 新しいジャーニー (`/es:start`,
 `/model:start`); and the archived ones, counted, opened on demand (戻す). A participant's choice, goal, done, archive
 or mark becomes a request the facilitator approves in the panel. Everything comes from `domaintrail.journey.json`
 (see [`dt guide`](guide.md#the-journey-file)): a change to it from git or another tool shows at once.
@@ -407,11 +407,11 @@ The chat has two views:
   facilitator: they see 承認 / 編集して承認 / 却下 (with an optional note, which its starter then reads), everyone else
   承認待ち. A message instead of confirming takes it back to the questions. Confirmed, dt writes the journey into
   `domaintrail.journey.json` (a run only creates a new storming's block) and posts a **note** under the AI's name as
-  the last reply in the interview's thread, with no AI call: what was decided (「旅程に「…」を加えました（ゴール：…）」,
+  the last reply in the interview's thread, with no AI call: what was decided (「ジャーニーに「…」を加えました（ゴール：…）」,
   the revised fields, who approved a participant's brief; for a new storming once its run ended, or that it could not
   be created), then where the journey is and the next step (「いまは「例外」の段階です。次は「依頼・準備」の例外を
   出しましょう。」), with the next command's button (into the composer), the source storming to show when that is the
-  step, and 旅程を開く. A question with natural candidates shows them as buttons under it for its starter
+  step, and ジャーニーを開く. A question with natural candidates shows them as buttons under it for its starter
   (one sends it at once; several are checked and sent with 送る; その他 goes to the composer). The interview survives a reload. `/es:exceptions` (例外を洗い出す) has
   the AI list, for the storming in view (its stage or timeline when one is shown), the exceptions its main flow does
   not model yet: a card in the chat with each candidate (its label, the events as chips, how in a line, why), none
