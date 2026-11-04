@@ -1,6 +1,8 @@
 ---
 // A figure generated from an example workspace: a sticky-note diagram (public/figures/<guide>/<name>.svg, scripts/figures.ts) or
 // a capture of the Live View (public/shots/<guide>/<name>.png, scripts/shots.ts), both of the page's guide. Never drawn by hand.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import Icon from './Icon.astro';
 import { guideOf, withBase } from '../journey';
 
@@ -16,12 +18,23 @@ interface Props {
 
 const { name, kind = 'figure', alt, caption, label } = Astro.props;
 const guide = guideOf(Astro.locals.starlightRoute.id);
-const src = withBase(kind === 'figure' ? `figures/${guide}/${name}.svg` : `shots/${guide}/${name}.png`);
+const file = kind === 'figure' ? `figures/${guide}/${name}.svg` : `shots/${guide}/${name}.png`;
+const src = withBase(file);
+// a capture is taken at twice the screen's pixels (scripts/shots.ts): never drawn larger than the screen showed it, so a
+// narrow card stays the size of the page's text (the width from the PNG's header)
+const shotWidth = (): number | undefined => {
+    try {
+        return readFileSync(join(process.cwd(), 'public', file)).readUInt32BE(16) / 2;
+    } catch {
+        return undefined;
+    }
+};
+const maxWidth = kind === 'shot' ? shotWidth() : undefined;
 ---
 
 <figure class="gen not-content">
     {label && <span class="lbl">{label}</span>}
-    <a href={src} class="frame"><img src={src} alt={alt} loading="lazy" /></a>
+    <a href={src} class="frame"><img src={src} alt={alt} loading="lazy" style={maxWidth ? `max-width: min(100%, ${maxWidth}px)` : undefined} /></a>
     <figcaption>
         <span class="auto"><Icon name="sparkles" size={12} /> {kind === 'figure' ? '例から自動で描画' : '例から自動で撮影'}</span>
         {caption && <span>{caption}</span>}
