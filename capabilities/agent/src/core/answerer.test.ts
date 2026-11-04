@@ -398,6 +398,31 @@ describe('the answerer role', () => {
         expect([model.includes('STORMING'), model.includes('MODELING')]).toEqual([false, true]);
         expect(buildInterviewPrompt(j('es:start'), 'n')).not.toContain('How the people work');
     });
+
+    test("the interviewer's choices name stormings and contexts as references, bare; the brief's subject by its ID", () => {
+        const model = buildInterviewPrompt(
+            {
+                job: 'j',
+                kind: 'interview',
+                interview: { id: 'i' },
+                request: { id: REQUEST },
+                author: 'Ada',
+                timeoutMs: 1,
+                command: 'model:start',
+                language: 'ja',
+                transcript: [],
+            } as unknown as AgentInterviewJobBody,
+            'n',
+        );
+        expect(model).not.toContain("stormings' IDs as choices");
+        expect(model).toContain('(the stormings as choices, each as its reference: @{es:Returns})');
+        expect(model).toContain('(the contexts as\n  choices, each as its reference: @{Billing})');
+        expect(model).toContain('a storming @{es:Returns}');
+        expect(model).toContain('a context @{Billing}');
+        expect(model).toContain('never inside backticks; the page shows them by their labels');
+        expect(model).toContain('never a reference (@{…}) nor a label');
+        expect(model).not.toContain('`@{es:Returns}`');
+    });
 });
 
 describe('the candidate and answer commands of the `/` list', () => {

@@ -256,12 +256,13 @@ const INTERVIEWS = {
   「1 つの BC を深掘り」. The four: 全体から (Whole), ES から (FromStorming), 1 つの BC を深掘り (OneContext), 既存モデルの
   見直し (Review);
 - then the pattern's goal (a choice of its goals, the last the default) and its subject: the storming(s) for ES から
-  (list the stormings' IDs as choices), the context for 1 つの BC を深掘り (the contexts' names);
+  (the stormings as choices, each as its reference: @{es:Returns}), the context for 1 つの BC を深掘り (the contexts as
+  choices, each as its reference: @{Billing});
 - then the purpose (what the generated code is for), the scope, the constraints (existing systems, terms that are
   fixed) and who takes part, as roles (names become roles; never write people's names).`,
         target: `the journey: \`isNew: false\` and \`name\` its ID (from \`journeys\`) to continue one; \`isNew: true\` for a new
   one (its ID is derived from its name)`,
-        journey: `{ purpose, scope?, constraints?, participants: [roles], name (a new journey's), pattern: "Whole" | "FromStorming" | "OneContext" | "Review", goal, stormings? (FromStorming: IDs), context? (OneContext) } — goals: Whole contextMap | contexts | invariants; FromStorming aggregates | commands | invariants; OneContext commands | invariants; Review invariants`,
+        journey: `{ purpose, scope?, constraints?, participants: [roles], name (a new journey's), pattern: "Whole" | "FromStorming" | "OneContext" | "Review", goal, stormings? (FromStorming: their IDs, e.g. ["Returns"]), context? (OneContext: its ID, e.g. "Billing") } — the subject by its ID as written in the files, never a reference (@{…}) nor a label, even when the answer picked it as a reference — goals: Whole contextMap | contexts | invariants; FromStorming aggregates | commands | invariants; OneContext commands | invariants; Review invariants`,
     },
 } as const;
 
@@ -330,8 +331,12 @@ Rules:
 - One question per turn, short (one to three lines). Never two questions at once.
 - Choices: when the question has natural candidates, give them in \`choices\` (${INTERVIEW_LIMITS.minChoices} to
   ${INTERVIEW_LIMITS.maxChoices}, each a few words, at most ${INTERVIEW_LIMITS.choice} characters, in the interview's language). Take them from
-  what you read in this workspace and from the answers so far (the stormings' and contexts' names, their events,
-  the business the person described), not generic ones. The page shows them as buttons under the question, and the
+  what you read in this workspace and from the answers so far (the stormings, the contexts, their events, the
+  business the person described), not generic ones. A choice that is a storming, a context or an element is its
+  reference, never its ID or label as text: a storming @{es:Returns}, one of its elements
+  @{es:Returns/ReturnRequested}, a context @{Billing}, a \`.dt\` element @{Sales.Order}. Write them bare,
+  never inside backticks; the page shows them by their labels, and a reference counts as its name in the length.
+  An answer picked from such choices names them the same way. The page shows them as buttons under the question, and the
   person can always write their own answer instead, so no "other" choice. Once given as \`choices\`, keep the question's
   text free of that list (no 「例: A、B、C」). Set \`multiple: true\` only when several answers together make sense
   (who takes part, what the result is for); else leave it out. Open questions ("why", an example) have no choices.
