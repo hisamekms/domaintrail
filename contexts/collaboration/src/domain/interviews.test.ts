@@ -102,6 +102,16 @@ describe("the interviewer's reply", () => {
             expect(readInterviewerReply({ kind: 'brief', brief: briefData(fresh.value.brief) }, MODEL)).toEqual(fresh);
     });
 
+    test("the brief's subject is the ID, also when it repeats the reference the person picked as a choice", () => {
+        const subject = (j: object) =>
+            readInterviewerReply({ kind: 'brief', brief: { isNew: true, journey: { purpose: 'x', participants: [], name: 'n', ...j } } }, MODEL);
+        expect(subject({ pattern: 'FromStorming', stormings: ['@{es:ConvenienceStoreIssuance}', ' @{ ConvenienceStoreIssuance } '] })).toMatchObject({
+            ok: true,
+            value: { brief: { journey: { stormings: ['ConvenienceStoreIssuance'] } } },
+        });
+        expect(subject({ pattern: 'OneContext', context: '@{Billing}' })).toMatchObject({ ok: true, value: { brief: { journey: { context: 'Billing' } } } });
+    });
+
     test('refused: an unknown kind or field, a name that is no identifier, a journey that does not fit its command', () => {
         const brief = (b: object, j: object = {}, ctx: typeof ES | typeof MODEL = ES) =>
             readInterviewerReply({ kind: 'brief', brief: { name: 'Returns', isNew: false, ...b, journey: { ...esJourney, ...j } } }, ctx);
@@ -157,8 +167,26 @@ describe("the interviewer's reply", () => {
             error: { path: 'reply.multiple' },
         });
         expect(interviewerJsonSchema()).toMatchObject({
-            properties: { choices: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 40 } }, multiple: { type: 'boolean' } },
+            properties: { choices: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 200 } }, multiple: { type: 'boolean' } },
         });
+    });
+
+    test('a choice that names elements by reference: kept whole, its length counted as the page shows it (by name)', () => {
+        const id = 'AVeryLongStormingIdentifierForTheIssuance';
+        // a reference longer than 40 as written, shorter as shown; one alone is kept whole, even when its name is long
+        expect(readChoices([`@{es:${id.slice(0, 30)}}`, '@{Billing}', `@{es:${id}}`]) as readonly string[]).toEqual([
+            `@{es:${id.slice(0, 30)}}`,
+            '@{Billing}',
+            `@{es:${id}}`,
+        ]);
+        expect(readChoices([`@{es:Returns/${id.slice(0, 30)}} から`, 'b']) as readonly string[]).toEqual([`@{es:Returns/${id.slice(0, 30)}} から`, 'b']);
+        // cut in its text, never inside a reference: one that does not fit is left out
+        const [cut] = readChoices([`${'あ'.repeat(30)}@{es:${id}}`, 'b']) as readonly string[];
+        expect(cut).toBe(`${'あ'.repeat(30)}…`);
+        const [tail] = readChoices([`@{es:Returns} ${'い'.repeat(50)}`, 'b']) as readonly string[];
+        expect(tail).toBe(`@{es:Returns} ${'い'.repeat(31)}…`);
+        // too long as written: dropped
+        expect(readChoices([`@{es:${'x'.repeat(196)}}`, 'a', 'b']) as readonly string[]).toEqual(['a', 'b']);
     });
 
     test('choices are cleaned, not refused: blanks and non-strings dropped, one line, cut to 40, duplicates dropped, six at most', () => {
