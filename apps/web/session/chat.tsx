@@ -65,6 +65,7 @@ import { messageMarks, updatedCards } from './cards';
 import { ChatProvider, useChat, type ChatContextValue, type Tx } from './chat-context';
 import { ChatHead, type ChatView } from './chat-head';
 import { ComposerResizer, useComposerSize } from './composer-resizer';
+import { EditUnit } from './edit-unit';
 import { changeUnits, requestersOf, shownUnits, statusUnit, unfinishedCount, unitName, workGroups, type ChangeUnit, type UnitOutcome } from './history';
 import {
     addChips,
@@ -1589,9 +1590,14 @@ function History({ units: all, reveal }: { units: readonly ChangeUnit[]; reveal:
     };
     const rows = (units: readonly ChangeUnit[], mark?: (i: number) => ReactNode): ReactNode => (
         <ol className="chat-units">
-            {units.map((unit, i) => (
-                <HistoryUnit key={unit.key} unit={unit} mark={mark?.(i)} open={open.has(unit.key)} onToggle={() => toggle(unit.key)} />
-            ))}
+            {units.map((unit, i) =>
+                // a person's edit of a sticky (ADR 0033): its own row, with what changed and its revert
+                unit.outcome === 'edited' ? (
+                    <EditUnit key={unit.key} unit={unit} />
+                ) : (
+                    <HistoryUnit key={unit.key} unit={unit} mark={mark?.(i)} open={open.has(unit.key)} onToggle={() => toggle(unit.key)} />
+                ),
+            )}
         </ol>
     );
     return (

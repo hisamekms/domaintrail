@@ -240,9 +240,11 @@ export function streamItems(
         items.push({ kind: 'record', key: `record:${record.id}`, at: record.at, updatedAt: record.revisedAt ?? record.at, record });
     // a guide's answer is its card's: not a message of its own
     const answers = guideAnswers(state);
+    // a person's edit of a sticky (ADR 0033) is in AI の作業, not in the chat: neither its message nor its unit
     for (const request of state.requests)
-        if (!answers.has(request.id)) items.push({ kind: 'message', key: `message:${request.id}`, at: request.sentAt, request });
-    for (const unit of changeUnits(state)) items.push({ kind: 'card', key: `card:${unit.key}`, at: unit.start, updatedAt: unit.at, unit });
+        if (!answers.has(request.id) && request.edit === undefined) items.push({ kind: 'message', key: `message:${request.id}`, at: request.sentAt, request });
+    for (const unit of changeUnits(state))
+        if (unit.outcome !== 'edited') items.push({ kind: 'card', key: `card:${unit.key}`, at: unit.start, updatedAt: unit.at, unit });
     for (const proposal of state.proposals ?? []) items.push({ kind: 'proposal', key: `proposal:${proposal.id}`, at: proposal.proposedAt, proposal });
     // an answer command's answer is the AI's message: its card says only that the AI works on it (in Solo, its slot
     // does), or that it had nothing to work on (a guide stored from when it was `/es:next` and had no storming in view:
