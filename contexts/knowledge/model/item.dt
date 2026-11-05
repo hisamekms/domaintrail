@@ -1,0 +1,223 @@
+context Knowledge {
+  /// 1つの発見を持つナレッジ。抽出が足し、出典を足し、詳しくし、食い違いをつなぐ。人は直し、消す。どれを残すかを1件ずつ
+  /// 決めることはせず、確かめた印も持たない: 言われたこと・分かったことを、その時点のものとして残す。どこまで信じるかは
+  /// `origin` が言う。
+  aggregate KnowledgeItem "ナレッジ" {
+    id: KnowledgeItemId
+    owns content: ItemContent "中身"
+    owns sources: Source[0..*] "出典"
+    /// 前の版はストアが残す（新しい版を作った操作の前のナレッジ）。
+    version: ItemVersion "版"
+    /// 食い違うナレッジ。両方を残し、互いにつなぐ。
+    conflictsWith: KnowledgeItemId[0..*] "食い違うナレッジ"
+    /// 抽出が作ったセッション。人が手で書いたナレッジにはない。
+    createdIn: SessionRef? "作ったセッション"
+    createdAt: Timestamp "作った日時"
+    updatedAt: Timestamp "変えた日時"
+
+    invariant distinctSources "出典のメッセージは1回" { unique(sources, s => s.session, s.message) }
+    invariant distinctConflicts "食い違うナレッジは1回" { unique(conflictsWith) }
+    invariant notConflictingItself "自分とは食い違わない" { not contains(conflictsWith, id) }
+    /// 食い違いは、両方がそれぞれの出典をもって言われたときだけ。
+    invariant conflictsSourced "食い違いには出典がある" { count(conflictsWith) == 0 or count(sources) >= 1 }
+
+    state Live "見える"
+    /// 消したナレッジは、すぐにだれからも見えなくなる。ストアの掃除が、元に戻せる間を過ぎてから、版と画像をすべて消す。
+    state Deleted "消した" {
+      deletedBy: UserName "消した人"
+      deletedAt: Timestamp "消した日時"
+    }
+
+    /// 抽出が新しい発見を足す。
+    create command add(id: KnowledgeItemId, content: ItemContent, sources: Source[1..*], by: ExtractionRef, reason: Reason?, at: Timestamp) "足す"
+      -> Live
+      requires distinctSources "出典のメッセージは1回" {
+        unique(sources, s => s.session, s.message)
+      } else DuplicateSource
+      emits KnowledgeItemAdded
+
+    /// 抽出が、前のナレッジと食い違う発見を足す（前のナレッジには `linkConflict` でつなぐ）。
+    create command addConflicting(id: KnowledgeItemId, content: ItemContent, sources: Source[1..*], other: KnowledgeItemId "食い違うナレッジ", by: ExtractionRef, reason: Reason?, at: Timestamp) "食い違いとして足す"
+      -> Live
+      requires distinctSources "出典のメッセージは1回" {
+        unique(sources, s => s.session, s.message)
+      } else DuplicateSource
+      requires notItself "自分とは食い違わない" { other != id } else ConflictWithItself
+      emits KnowledgeItemAdded
+
+    /// 同じ発見がまた言われた: 出典を1つ足す。合意（話がそのまま進んだ）なら、発言を合意に上げる（ほかの出どころは変えない）。
+    command addSource(source: Source, agreed: Bool, base: ItemVersion, by: ExtractionRef, reason: Reason?, at: Timestamp) "出典を足す"
+      Live -> Live
+      requires current "抽出が見た版のまま" { base == version } else StaleOperation
+      requires newSource "まだない出典" {
+        all(sources, s => s.session != source.session or s.message != source.message)
+      } else DuplicateSource
+      changes content, sources, updatedAt
+      emits KnowledgeSourceAdded
+
+    /// 抽出が詳しくする。拠りどころのメッセージを出典に足す（すでにあるものは1回）。新しい出典を足す更新は、いつも新しい版に
+    /// する（直しをメッセージまでたどれるように）。出典を足さない言い換えだけが、このセッションで作ったナレッジ（まだだれも
+    /// 新しい版を作っていない、版 1 のもの）を版を作らずに書き換える。
+    command update(revised: ItemContent, newSources: Source[1..*] "出典", base: ItemVersion, by: ExtractionRef, reason: Reason?, at: Timestamp) "詳しくする"
+      Live -> Live
+      requires current "抽出が見た版のまま" { base == version } else StaleOperation
+      changes content, sources, version, updatedAt
+      emits KnowledgeItemRewritten?,
+            KnowledgeItemRevised?
+
+    /// 抽出が、このナレッジと食い違う新しいナレッジをつなぐ。
+    command linkConflict(other: KnowledgeItemId "食い違うナレッジ", base: ItemVersion, by: ExtractionRef, reason: Reason?, at: Timestamp) "食い違いをつなぐ"
+      Live -> Live
+      requires current "抽出が見た版のまま" { base == version } else StaleOperation
+      requires notItself "自分とは食い違わない" { other != id } else ConflictWithItself
+      requires sourced "出典がある" { count(sources) >= 1 } else ConflictWithoutSource
+      changes conflictsWith, updatedAt
+      emits KnowledgeConflictLinked
+
+    /// 人が、食い違いとしてつながれた2つを、食い違いではないと決める（「食い違いではない」）。つなぎを外すだけで、中身も版も
+    /// 変えない（ストアは相手のナレッジからも外す）。
+    command unlinkConflict(other: KnowledgeItemId "食い違うナレッジ", by: UserName, at: Timestamp) "食い違いを外す"
+      Live -> Live
+      requires notItself "自分とは食い違わない" { other != id } else ConflictWithItself
+      changes conflictsWith, updatedAt
+      emits KnowledgeConflictUnlinked
+
+    /// 人が「ホットスポットにする」と決めた食い違いを、AI が足したホットスポットに引き継ぐ（ADR 0031 の 4）: ホットスポットを
+    /// 付箋に足し、食い違いのつなぎを外す。ひとつの決定で、中身の本文・ラベルも版も変えない（ストアは相手のナレッジも同じく
+    /// 引き継ぐ）。監査のログには、ホットスポットを理由として残す。
+    command handOverToHotspot(hotspot: StickyRef "ホットスポット", other: KnowledgeItemId "食い違うナレッジ", by: UserName, at: Timestamp) "ホットスポットに引き継ぐ"
+      Live -> Live
+      requires notItself "自分とは食い違わない" { other != id } else ConflictWithItself
+      changes content, conflictsWith, updatedAt
+      emits KnowledgeHandedOverToHotspot
+
+    /// 人が本文・ラベル・付箋を直す。いつも新しい版になる。
+    command correct(corrected: ItemContent, by: UserName, at: Timestamp) "直す"
+      Live -> Live
+      changes content, version, updatedAt
+      emits KnowledgeItemCorrected
+
+    /// 人が消す。
+    command delete(by: UserName, at: Timestamp) "消す"
+      Live -> Deleted
+      emits KnowledgeItemDeleted
+
+    /// 人が、掃除の前に消したのを取り消す（元に戻す）。
+    command restore(by: UserName, at: Timestamp) "元に戻す"
+      Deleted -> Live
+      emits KnowledgeItemRestored
+  }
+
+  // The events are the audit log: who (by), what (the event and the item's version) and why (reason). They hold no text
+  // nor quote, so that deleting an item leaves nothing personal in them but the reason, which the sweep drops.
+
+  persistent event KnowledgeItemAdded "ナレッジを足した" {
+    itemId: KnowledgeItemId
+    version: ItemVersion
+    conflictsWith: KnowledgeItemId[0..*] "食い違うナレッジ"
+    by: ExtractionRef
+    reason: Reason?
+    at: Timestamp
+  }
+
+  persistent event KnowledgeSourceAdded "出典を足した" {
+    itemId: KnowledgeItemId
+    version: ItemVersion
+    agreed: Bool "合意に上げた"
+    by: ExtractionRef
+    reason: Reason?
+    at: Timestamp
+  }
+
+  /// このセッションで作ったナレッジを、版を作らずに書き換えた。
+  persistent event KnowledgeItemRewritten "書き換えた" {
+    itemId: KnowledgeItemId
+    version: ItemVersion
+    by: ExtractionRef
+    reason: Reason?
+    at: Timestamp
+  }
+
+  /// 新しい版を作った。
+  persistent event KnowledgeItemRevised "新しい版にした" {
+    itemId: KnowledgeItemId
+    version: ItemVersion
+    by: ExtractionRef
+    reason: Reason?
+    at: Timestamp
+  }
+
+  persistent event KnowledgeConflictLinked "食い違いをつないだ" {
+    itemId: KnowledgeItemId
+    version: ItemVersion
+    other: KnowledgeItemId "食い違うナレッジ"
+    by: ExtractionRef
+    reason: Reason?
+    at: Timestamp
+  }
+
+  persistent event KnowledgeConflictUnlinked "食い違いを外した" {
+    itemId: KnowledgeItemId
+    version: ItemVersion
+    other: KnowledgeItemId "食い違うナレッジ"
+    by: UserName
+    at: Timestamp
+  }
+
+  persistent event KnowledgeHandedOverToHotspot "ホットスポットに引き継いだ" {
+    itemId: KnowledgeItemId
+    version: ItemVersion
+    hotspot: StickyRef "ホットスポット"
+    other: KnowledgeItemId "食い違うナレッジ"
+    by: UserName
+    at: Timestamp
+  }
+
+  persistent event KnowledgeItemCorrected "直した" {
+    itemId: KnowledgeItemId
+    version: ItemVersion
+    by: UserName
+    at: Timestamp
+  }
+
+  persistent event KnowledgeItemDeleted "消した" {
+    itemId: KnowledgeItemId
+    version: ItemVersion
+    by: UserName
+    at: Timestamp
+  }
+
+  persistent event KnowledgeItemRestored "元に戻した" {
+    itemId: KnowledgeItemId
+    version: ItemVersion
+    by: UserName
+    at: Timestamp
+  }
+
+  /// 抽出が見たあとに、ナレッジが変わった（人が直した、ほかの抽出が新しい版にした）。人の変更を残し、操作は捨てる。
+  error StaleOperation "古い版への操作"
+
+  /// 同じメッセージを2回出典にした。
+  error DuplicateSource "同じ出典"
+
+  /// 食い違いの片方に出典がない。
+  error ConflictWithoutSource "出典のない食い違い"
+
+  /// 自分と食い違うとした。
+  error ConflictWithItself "自分との食い違い"
+
+  /// ナレッジがない（ID が違う、掃除が消した）。
+  error KnowledgeItemNotFound "ないナレッジ" {
+    itemId: KnowledgeItemId
+  }
+
+  /// 抽出が足そうとした ID のナレッジがもうある。
+  error KnowledgeItemExists "あるナレッジ" {
+    itemId: KnowledgeItemId
+  }
+
+  /// ナレッジは消してある。
+  error KnowledgeItemGone "消したナレッジ" {
+    itemId: KnowledgeItemId
+  }
+}

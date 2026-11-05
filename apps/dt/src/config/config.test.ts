@@ -1,10 +1,12 @@
 // domaintrail.jsonc composed from its sections' owners: the file's keys and the schema, the order of the checks (the
 // first error wins), the resolved configuration and its errors. Each section's own cases are its owner's: the
 // analysis (capabilities/analysis/src/core/sources.test.ts), the generation (capabilities/generation/src/core/
-// config.test.ts), Collaboration (contexts/collaboration/src/application/config.test.ts), the agent
+// config.test.ts), Collaboration (contexts/collaboration/src/application/config.test.ts), Knowledge
+// (contexts/knowledge/src/application/config.test.ts), the agent
 // (capabilities/agent/src/adapters/config.test.ts, adapters/dt-shim.test.ts). Finding the file:
 // platform/workspace/src/infrastructure/config.test.ts; through the CLI: test/config-cli.test.ts.
 import { describe, expect, test } from 'bun:test';
+import { Knowledge } from '@domaintrail/knowledge';
 import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import {
@@ -21,6 +23,7 @@ import {
     type ResolvedAgentSection,
     type ResolvedCollabConfig,
     type ResolvedConfig,
+    type ResolvedKnowledgeConfig,
 } from './config.js';
 
 const ROOT = path.resolve('/work/project');
@@ -59,10 +62,26 @@ const AGENT_DEFAULTS: ResolvedAgentSection = {
     },
     answer: { warm: true, restartAfter: 50, idleTimeout: 30, timeout: 120 },
     triage: { model: 'haiku', warm: false },
+    extract: { timeout: 180, gateModel: 'haiku' },
     read: { answer: [], run: [] },
 };
 
 const CLASSIFIER_DEFAULTS = { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.9 } as const;
+
+/** A project name known to be one. */
+const projectName = (v: string): Knowledge.ProjectName => {
+    const made = Knowledge.makeProjectName(v);
+    if (!made.ok) throw new Error(`not a project name: ${v}`);
+    return made.value;
+};
+const EXTRACTION_DEFAULTS = { enabled: false, quietSeconds: 30, minIntervalSeconds: 60, contextMinutes: 10, gateContextMinutes: 3, settleSeconds: 120 };
+/** The `files` store, its project named after the root's directory (`/work/project`). */
+const KNOWLEDGE_DEFAULTS: ResolvedKnowledgeConfig = {
+    store: 'files',
+    project: projectName('project'),
+    projectFrom: 'workspace',
+    extraction: EXTRACTION_DEFAULTS,
+};
 
 describe('config file', () => {
     test('JSONC: comments and trailing commas', () => {
@@ -84,6 +103,7 @@ describe('config file', () => {
             agent: AGENT_DEFAULTS,
             classifier: CLASSIFIER_DEFAULTS,
             templates: [],
+            knowledge: KNOWLEDGE_DEFAULTS,
         };
         expect(defaultConfig(ROOT)).toEqual(defaults);
         expect(Object.keys(defaultConfig(ROOT))).toEqual(Object.keys(defaults));
@@ -111,6 +131,7 @@ describe('config file', () => {
                 triage: { model: 'sonnet', warm: true },
             },
             classifier: { enabled: true, accountId: '0123456789abcdef0123456789abcdef' },
+            knowledge: { store: 'cloudflare', project: 'shop', url: 'https://knowledge.example.com/', extraction: { quietSeconds: 10 } },
         });
         const c = resolveConfig(text, FILE);
         expect(c).toEqual({
@@ -153,13 +174,21 @@ describe('config file', () => {
                 },
                 answer: { warm: true, restartAfter: 50, idleTimeout: 30, timeout: 60, model: 'haiku' },
                 triage: { model: 'sonnet', warm: true },
+                extract: { timeout: 180, model: 'haiku', gateModel: 'sonnet' },
                 read: { answer: [], run: [] },
             },
             classifier: { ...CLASSIFIER_DEFAULTS, enabled: true, accountId: '0123456789abcdef0123456789abcdef' },
             templates: [],
+            knowledge: {
+                store: 'cloudflare',
+                project: projectName('shop'),
+                projectFrom: 'config',
+                url: 'https://knowledge.example.com',
+                extraction: { ...EXTRACTION_DEFAULTS, quietSeconds: 10 },
+            },
         });
         expect(Object.keys(c.collab)).toEqual(['port', 'host', 'identity', 'access', 'maxParticipants', 'quickReactions']);
-        expect(Object.keys(c.agent)).toEqual(['port', 'run', 'answer', 'triage', 'read']);
+        expect(Object.keys(c.agent)).toEqual(['port', 'run', 'answer', 'triage', 'extract', 'read']);
     });
 
     test.each([
@@ -240,6 +269,10 @@ describe('config file', () => {
         ['{ "templates": {} }', "'templates' must be an array"],
         ['{ "templates": [{ "id": "a", "name": "A" }] }', "'templates[0].text' must be a string, or an object with 'ja' and/or 'en'"],
         ['{ "templates": [{ "id": "a", "name": "A", "text": "T", "when": ["board"] }] }', "'templates[0].when' must hold"],
+        // knowledge (ADR 0031)
+        ['{ "knowledge": [] }', "'knowledge' must be an object"],
+        ['{ "knowledge": { "token": "x" } }', "unknown key 'knowledge.token'"],
+        ['{ "knowledge": { "store": "cloudflare", "project": "shop" } }', "'knowledge.store' \"cloudflare\" needs 'knowledge.url'"],
     ])('%s is refused with the file name', (text, expected) => {
         const msg = message(text);
         expect(msg.startsWith(`${FILE}: `)).toBe(true);
@@ -289,6 +322,16 @@ describe('config file', () => {
         const templates = [{ id: 'glossary', name: { ja: '用語', en: 'Terms' }, text: '用語集と食い違うところを挙げて', when: ['model'] }];
         expect(resolveConfig(JSON.stringify({ templates }), FILE).templates as unknown).toEqual(templates);
         expect(message('{ "templates": 1, "classifier": [] }')).toContain("'classifier' must be an object");
+    });
+
+    test('knowledge: checked last; the project of files named after the root unless named', () => {
+        expect(message('{ "knowledge": { "store": "x" }, "templates": 1 }')).toContain("'templates' must be an array");
+        expect(resolveConfig('{}', path.join(path.resolve('/work/My Shop'), 'domaintrail.json')).knowledge.project).toBe(projectName('my-shop'));
+        expect(resolveConfig('{ "knowledge": { "project": "shop" } }', FILE).knowledge).toEqual({
+            ...KNOWLEDGE_DEFAULTS,
+            project: projectName('shop'),
+            projectFrom: 'config',
+        });
     });
 
     test("an agent's dt inside the workspace is refused after the pure checks", () => {
@@ -346,6 +389,14 @@ describe('the local override (domaintrail.local.jsonc)', () => {
         expect(c.agent.run.allowedTools).toEqual(['Read']);
         expect(c.agent.run.model).toBe('sonnet');
         expect(c.agent.answer).toEqual({ ...AGENT_DEFAULTS.answer, timeout: 60, model: 'opus' });
+    });
+
+    test("the knowledge store switched to files for oneself: the project's Worker URL is left unused", () => {
+        const c = withLocal(
+            '{ "knowledge": { "store": "cloudflare", "project": "shop", "url": "https://k.example.com" } }',
+            '{ "knowledge": { "store": "files" } }',
+        );
+        expect(c.knowledge).toEqual({ ...KNOWLEDGE_DEFAULTS, project: projectName('shop'), projectFrom: 'config' });
     });
 
     test('a key named __proto__ is a key, never a prototype', () => {

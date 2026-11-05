@@ -7223,11 +7223,13 @@ export interface RequestCommon {
     readonly journeyNote?: JourneyNote;
     /** 付箋の手直し — 人が付箋を直した記録なら、何をどう直したか（ADR 0033）。チャットには出さず、AI の作業に出す。ほかのメッセージにはない。 */
     readonly edit?: StickyEdit;
+    /** 墨消し日時 — 墨消ししたなら、その日時。本文は決まった文（`REDACTED_BODY`）に置き換わり、行（だれが・いつ・何についての メッセージか）は残る。ナレッジを消すと、その出典のメッセージが墨消しになる（ADR 0031 の 7）。 */
+    readonly redactedAt?: Timestamp;
 }
 
 /**
  * 送信済み
- * @see contexts/collaboration/model/request.dt:103
+ * @see contexts/collaboration/model/request.dt:106
  */
 export interface SentRequest extends RequestCommon {
     readonly state: 'Sent';
@@ -7237,7 +7239,7 @@ export interface SentRequest extends RequestCommon {
  * 見送り
  * 見送りは印で、依頼そのものは残る。見送る操作はもうない（#23 で画面と経路から外し、ADR 0027 の T12 でコマンドも
  * 外した）。以前のセッションに残る見送り済みの依頼を読み、実行に束ねないために、状態は残す。
- * @see contexts/collaboration/model/request.dt:106
+ * @see contexts/collaboration/model/request.dt:109
  */
 export interface DismissedRequest extends RequestCommon {
     readonly state: 'Dismissed';
@@ -7262,7 +7264,7 @@ export type Request = SentRequest | DismissedRequest;
  * @see contexts/collaboration/model/request.dt:73
  */
 export const RequestShape: Shape = {
-    fields: ['id', 'session', 'author', 'targets', 'body', 'sentAt', 'replyTo', 'mentions', 'reverts', 'viewedAt', 'journeyNote', 'edit'],
+    fields: ['id', 'session', 'author', 'targets', 'body', 'sentAt', 'replyTo', 'mentions', 'reverts', 'viewedAt', 'journeyNote', 'edit', 'redactedAt'],
     states: { Sent: [], Dismissed: ['dismissedBy', 'dismissedAt'] },
 };
 
@@ -7282,7 +7284,7 @@ export function checkRequestCommon(request: RequestCommon): readonly ('atMostTwe
 
 /**
  * The invariants of Request in state Sent (the aggregate's, by `checkRequestCommon`, and the state's) that an aggregate violates, in declaration order.
- * @see contexts/collaboration/model/request.dt:103
+ * @see contexts/collaboration/model/request.dt:106
  */
 export function checkSentRequest(request: SentRequest): readonly ('atMostTwentyTargets' | 'distinctTargets' | 'atMostTwentyMentions' | 'distinctMentions' | 'noWorkspaceTarget')[] {
     return checkRequestCommon(request);
@@ -7290,7 +7292,7 @@ export function checkSentRequest(request: SentRequest): readonly ('atMostTwentyT
 
 /**
  * The invariants of Request in state Dismissed (the aggregate's, by `checkRequestCommon`, and the state's) that an aggregate violates, in declaration order.
- * @see contexts/collaboration/model/request.dt:106
+ * @see contexts/collaboration/model/request.dt:109
  */
 export function checkDismissedRequest(request: DismissedRequest): readonly ('atMostTwentyTargets' | 'distinctTargets' | 'atMostTwentyMentions' | 'distinctMentions' | 'noWorkspaceTarget')[] {
     return checkRequestCommon(request);
@@ -7309,7 +7311,7 @@ export function checkRequest(request: Request): readonly ('atMostTwentyTargets' 
 
 /**
  * The parameters of Request.send, by name.
- * @see contexts/collaboration/model/request.dt:111
+ * @see contexts/collaboration/model/request.dt:114
  */
 export interface SendRequestParams {
     /** 依頼ID */
@@ -7340,7 +7342,7 @@ export interface SendRequestParams {
  * @requires atMostTwentyMentions (言及する人は20人まで) else TooManyMentions: count(mentions) <= 20
  * @requires distinctMentions (同じ人の言及は1回) else DuplicateMention: unique(mentions)
  * @emits RequestSent — exactly once when the command succeeds
- * @see contexts/collaboration/model/request.dt:111
+ * @see contexts/collaboration/model/request.dt:114
  */
 export type SendRequest = (
     params: SendRequestParams,
@@ -7361,20 +7363,20 @@ export type SendRequest = (
  * @requires distinctMentions (同じ人の言及は1回) else DuplicateMention: unique(mentions)
  * new -> Sent — set: every field
  * @emits RequestSent — exactly once when the command succeeds
- * @see contexts/collaboration/model/request.dt:111
+ * @see contexts/collaboration/model/request.dt:114
  */
 export type SendRequestDecision = (
     params: SendRequestParams,
 ) => Result<{
     readonly Sent: {
-        readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: ReplyTarget | undefined; readonly mentions: readonly ParticipantId[]; readonly reverts: AgentRunId | undefined; readonly viewedAt: ViewedAt | undefined; readonly journeyNote: JourneyNote | undefined; readonly edit: StickyEdit | undefined };
+        readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: ReplyTarget | undefined; readonly mentions: readonly ParticipantId[]; readonly reverts: AgentRunId | undefined; readonly viewedAt: ViewedAt | undefined; readonly journeyNote: JourneyNote | undefined; readonly edit: StickyEdit | undefined; readonly redactedAt: Timestamp | undefined };
         readonly events: { readonly RequestSent: RequestSent };
     };
 }, TooManyTargets | DuplicateTarget | WorkspaceTarget | TooManyMentions | DuplicateMention>;
 
 /**
  * The first requirement of Request.send that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/request.dt:111
+ * @see contexts/collaboration/model/request.dt:114
  */
 export function checkSendRequestRequires(params: SendRequestParams): 'atMostTwentyTargets' | 'distinctTargets' | 'noWorkspaceTarget' | 'atMostTwentyMentions' | 'distinctMentions' | undefined {
     if (!(params.targets.length <= 20)) return 'atMostTwentyTargets';
@@ -7387,7 +7389,7 @@ export function checkSendRequestRequires(params: SendRequestParams): 'atMostTwen
 
 /**
  * The parameters of Request.requestRevert, by name.
- * @see contexts/collaboration/model/request.dt:123
+ * @see contexts/collaboration/model/request.dt:126
  */
 export interface RequestRevertRequestParams {
     /** 依頼ID */
@@ -7411,7 +7413,7 @@ export interface RequestRevertRequestParams {
  * ファシリテーターが、ある作業（実行）の変更の打ち消しを頼む。対象も言及もない、ワークスペース全体についての依頼。
  * @requires facilitatorReverts (ファシリテーターが打ち消す) else FacilitatorOnly: authorRole == ParticipantRole.Facilitator
  * @emits RequestSent — exactly once when the command succeeds
- * @see contexts/collaboration/model/request.dt:123
+ * @see contexts/collaboration/model/request.dt:126
  */
 export type RequestRevertRequest = (
     params: RequestRevertRequestParams,
@@ -7428,20 +7430,20 @@ export type RequestRevertRequest = (
  * @requires facilitatorReverts (ファシリテーターが打ち消す) else FacilitatorOnly: authorRole == ParticipantRole.Facilitator
  * new -> Sent — set: every field
  * @emits RequestSent — exactly once when the command succeeds
- * @see contexts/collaboration/model/request.dt:123
+ * @see contexts/collaboration/model/request.dt:126
  */
 export type RequestRevertRequestDecision = (
     params: RequestRevertRequestParams,
 ) => Result<{
     readonly Sent: {
-        readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: ReplyTarget | undefined; readonly mentions: readonly ParticipantId[]; readonly reverts: AgentRunId | undefined; readonly viewedAt: ViewedAt | undefined; readonly journeyNote: JourneyNote | undefined; readonly edit: StickyEdit | undefined };
+        readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: ReplyTarget | undefined; readonly mentions: readonly ParticipantId[]; readonly reverts: AgentRunId | undefined; readonly viewedAt: ViewedAt | undefined; readonly journeyNote: JourneyNote | undefined; readonly edit: StickyEdit | undefined; readonly redactedAt: Timestamp | undefined };
         readonly events: { readonly RequestSent: RequestSent };
     };
 }, FacilitatorOnly>;
 
 /**
  * The first requirement of Request.requestRevert that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/request.dt:123
+ * @see contexts/collaboration/model/request.dt:126
  */
 export function checkRequestRevertRequestRequires(params: RequestRevertRequestParams): 'facilitatorReverts' | undefined {
     if (!(params.authorRole === 'Facilitator')) return 'facilitatorReverts';
@@ -7450,7 +7452,7 @@ export function checkRequestRevertRequestRequires(params: RequestRevertRequestPa
 
 /**
  * The parameters of Request.recordEdit, by name.
- * @see contexts/collaboration/model/request.dt:131
+ * @see contexts/collaboration/model/request.dt:134
  */
 export interface RecordEditRequestParams {
     /** 依頼ID */
@@ -7471,7 +7473,7 @@ export interface RecordEditRequestParams {
  * 付箋の手直しを記録する
  * 参加者が付箋を直した（ADR 0033）。誰でも直せる。対象も言及もなく、本文は何を直したかの一文。
  * @emits RequestSent — exactly once when the command succeeds
- * @see contexts/collaboration/model/request.dt:131
+ * @see contexts/collaboration/model/request.dt:134
  */
 export type RecordEditRequest = (
     params: RecordEditRequestParams,
@@ -7487,20 +7489,20 @@ export type RecordEditRequest = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
  * new -> Sent — set: every field
  * @emits RequestSent — exactly once when the command succeeds
- * @see contexts/collaboration/model/request.dt:131
+ * @see contexts/collaboration/model/request.dt:134
  */
 export type RecordEditRequestDecision = (
     params: RecordEditRequestParams,
 ) => Result<{
     readonly Sent: {
-        readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: ReplyTarget | undefined; readonly mentions: readonly ParticipantId[]; readonly reverts: AgentRunId | undefined; readonly viewedAt: ViewedAt | undefined; readonly journeyNote: JourneyNote | undefined; readonly edit: StickyEdit | undefined };
+        readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: ReplyTarget | undefined; readonly mentions: readonly ParticipantId[]; readonly reverts: AgentRunId | undefined; readonly viewedAt: ViewedAt | undefined; readonly journeyNote: JourneyNote | undefined; readonly edit: StickyEdit | undefined; readonly redactedAt: Timestamp | undefined };
         readonly events: { readonly RequestSent: RequestSent };
     };
 }, never>;
 
 /**
  * The parameters of Request.answer, by name.
- * @see contexts/collaboration/model/request.dt:138
+ * @see contexts/collaboration/model/request.dt:141
  */
 export interface AnswerRequestParams {
     /** 依頼ID */
@@ -7523,7 +7525,7 @@ export interface AnswerRequestParams {
  * 聞き取りを確定したあとの dt のお知らせも、これで AI の名で書く（`journeyNote` を添える）。道のりを完了にしたあとのお知らせは
  * 答えるメッセージがなく、返信にならない。
  * @emits RequestSent — exactly once when the command succeeds
- * @see contexts/collaboration/model/request.dt:138
+ * @see contexts/collaboration/model/request.dt:141
  */
 export type AnswerRequest = (
     params: AnswerRequestParams,
@@ -7539,16 +7541,80 @@ export type AnswerRequest = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
  * new -> Sent — set: every field
  * @emits RequestSent — exactly once when the command succeeds
- * @see contexts/collaboration/model/request.dt:138
+ * @see contexts/collaboration/model/request.dt:141
  */
 export type AnswerRequestDecision = (
     params: AnswerRequestParams,
 ) => Result<{
     readonly Sent: {
-        readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: ReplyTarget | undefined; readonly mentions: readonly ParticipantId[]; readonly reverts: AgentRunId | undefined; readonly viewedAt: ViewedAt | undefined; readonly journeyNote: JourneyNote | undefined; readonly edit: StickyEdit | undefined };
+        readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: ReplyTarget | undefined; readonly mentions: readonly ParticipantId[]; readonly reverts: AgentRunId | undefined; readonly viewedAt: ViewedAt | undefined; readonly journeyNote: JourneyNote | undefined; readonly edit: StickyEdit | undefined; readonly redactedAt: Timestamp | undefined };
         readonly events: { readonly RequestSent: RequestSent };
     };
 }, never>;
+
+/**
+ * The parameters of Request.redact, by name.
+ * @see contexts/collaboration/model/request.dt:147
+ */
+export interface RedactRequestParams {
+    /** 置き換える本文 */
+    readonly body: Text;
+    readonly at: Timestamp;
+}
+
+/**
+ * Request.redact (Sent -> Sent; Dismissed -> Dismissed)
+ * 墨消しする
+ * 本文を墨消しする: 個人のデータを消すため（消したナレッジの出典だったメッセージ、ADR 0031 の 7）。本文を決まった文に
+ * 置き換え、ほかは残す。もう墨消ししたメッセージは変えない（日時もそのまま）。
+ * @changes body, redactedAt
+ * @emits RequestRedacted — exactly once when the command succeeds
+ * @see contexts/collaboration/model/request.dt:147
+ */
+export type RedactRequest = <S extends SentRequest | DismissedRequest>(
+    request: S,
+    params: RedactRequestParams,
+) => {
+    /** @emits RequestRedacted — exactly once when the command succeeds */
+    readonly Sent: Result<{
+        readonly Sent: {
+            readonly aggregate: SentRequest;
+            readonly events: { readonly RequestRedacted: RequestRedacted };
+        };
+    }, never>;
+    /** @emits RequestRedacted — exactly once when the command succeeds */
+    readonly Dismissed: Result<{
+        readonly Dismissed: {
+            readonly aggregate: DismissedRequest;
+            readonly events: { readonly RequestRedacted: RequestRedacted };
+        };
+    }, never>;
+}[S['state']];
+
+/**
+ * Request.redact, decided per source state; implement it with `decide(RequestShape, …)` from the runtime.
+ * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
+ * @changes body, redactedAt
+ * Sent -> Sent — set: body, redactedAt; carried over: id, session, author, targets, sentAt, replyTo, mentions, reverts, viewedAt, journeyNote, edit
+ * Dismissed -> Dismissed — set: body, redactedAt; carried over: id, session, author, targets, sentAt, replyTo, mentions, reverts, viewedAt, journeyNote, edit, dismissedBy, dismissedAt
+ * @see contexts/collaboration/model/request.dt:147
+ */
+export type RedactRequestDecision = {
+    /** @emits RequestRedacted — exactly once when the command succeeds */
+    readonly Sent: (request: SentRequest, params: RedactRequestParams) => Result<{
+        readonly Sent: {
+            readonly set: { readonly body: Text; readonly redactedAt: Timestamp | undefined };
+            readonly events: { readonly RequestRedacted: RequestRedacted };
+        };
+    }, never>;
+    /** @emits RequestRedacted — exactly once when the command succeeds */
+    readonly Dismissed: (request: DismissedRequest, params: RedactRequestParams) => Result<{
+        readonly Dismissed: {
+            readonly set: { readonly body: Text; readonly redactedAt: Timestamp | undefined };
+            readonly events: { readonly RequestRedacted: RequestRedacted };
+        };
+    }, never>;
+};
 
 /**
  * Command contracts of Request. Implement this interface by hand.
@@ -7564,18 +7630,20 @@ export interface RequestCommands {
     readonly recordEdit: RecordEditRequest;
     /** AI が答える */
     readonly answer: AnswerRequest;
+    /** 墨消しする */
+    readonly redact: RedactRequest;
 }
 
 /**
  * Events that the commands of Request may emit.
  * @see contexts/collaboration/model/request.dt:73
  */
-export type RequestEvent = RequestSent;
+export type RequestEvent = RequestSent | RequestRedacted;
 
 /**
  * 依頼送信
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/request.dt:143
+ * @see contexts/collaboration/model/request.dt:154
  */
 export interface RequestSent {
     readonly type: 'RequestSent';
@@ -7605,10 +7673,23 @@ export interface RequestSent {
 }
 
 /**
+ * 墨消し
+ * 本文を墨消しした。ページには状態を送り直して伝える（アウトボックスには残さない: 残せば本文の代わりに墨消しの記録が
+ * 増えるだけで、送ったときの `RequestSent` はアウトボックスの中で墨消しする）。
+ * @see contexts/collaboration/model/request.dt:174
+ */
+export interface RequestRedacted {
+    readonly type: 'RequestRedacted';
+    /** 依頼ID */
+    readonly requestId: RequestId;
+    readonly redactedAt: Timestamp;
+}
+
+/**
  * 依頼見送り
  * 以前のセッションのアウトボックスに残る見送り。いまは発行しないが、読み直し（再生）のために残す。
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/request.dt:162
+ * @see contexts/collaboration/model/request.dt:180
  */
 export interface RequestDismissed {
     readonly type: 'RequestDismissed';
@@ -7622,7 +7703,7 @@ export interface RequestDismissed {
 /**
  * 依頼なし
  * 指定した依頼がない。
- * @see contexts/collaboration/model/request.dt:169
+ * @see contexts/collaboration/model/request.dt:187
  */
 export interface RequestNotFound {
     readonly type: 'RequestNotFound';
@@ -7633,7 +7714,7 @@ export interface RequestNotFound {
 /**
  * 別のセッションの依頼
  * 依頼は別のセッションのもの。
- * @see contexts/collaboration/model/request.dt:174
+ * @see contexts/collaboration/model/request.dt:192
  */
 export interface RequestOfAnotherSession {
     readonly type: 'RequestOfAnotherSession';
@@ -7644,7 +7725,7 @@ export interface RequestOfAnotherSession {
 /**
  * 見送り済みの依頼
  * 依頼はすでに見送られている。
- * @see contexts/collaboration/model/request.dt:179
+ * @see contexts/collaboration/model/request.dt:197
  */
 export interface RequestAlreadyDismissed {
     readonly type: 'RequestAlreadyDismissed';
@@ -7655,7 +7736,7 @@ export interface RequestAlreadyDismissed {
 /**
  * 参加者でない人の言及
  * 言及した人は、そのセッションの参加者ではない。
- * @see contexts/collaboration/model/request.dt:184
+ * @see contexts/collaboration/model/request.dt:202
  */
 export interface MentionedNotAParticipant {
     readonly type: 'MentionedNotAParticipant';
@@ -7666,7 +7747,7 @@ export interface MentionedNotAParticipant {
 /**
  * 実行なし
  * 返信先の実行がない。
- * @see contexts/collaboration/model/request.dt:189
+ * @see contexts/collaboration/model/request.dt:207
  */
 export interface RunNotFound {
     readonly type: 'RunNotFound';
@@ -7677,7 +7758,7 @@ export interface RunNotFound {
 /**
  * 別のセッションの実行
  * 返信先の実行は別のセッションのもの。
- * @see contexts/collaboration/model/request.dt:194
+ * @see contexts/collaboration/model/request.dt:212
  */
 export interface RunOfAnotherSession {
     readonly type: 'RunOfAnotherSession';
@@ -7688,7 +7769,7 @@ export interface RunOfAnotherSession {
 /**
  * 返信できない実行
  * 返信先の実行は、まだ終わっていないか確認待ち（返信できるのは完了・失敗・辞退・中止・打ち消しの実行）。
- * @see contexts/collaboration/model/request.dt:199
+ * @see contexts/collaboration/model/request.dt:217
  */
 export interface RunNotReplyable {
     readonly type: 'RunNotReplyable';
@@ -7699,7 +7780,7 @@ export interface RunNotReplyable {
 /**
  * 打ち消せない実行
  * 打ち消す実行は、ファイルの変更を記録していない（変更のない実行、結果のない実行）か、もう打ち消された・打ち消しの待ちや最中。
- * @see contexts/collaboration/model/request.dt:204
+ * @see contexts/collaboration/model/request.dt:222
  */
 export interface RunNotRevertable {
     readonly type: 'RunNotRevertable';
@@ -7710,7 +7791,7 @@ export interface RunNotRevertable {
 /**
  * 言及する人が多すぎる
  * 本文で言及する人が20人を超える。
- * @see contexts/collaboration/model/request.dt:209
+ * @see contexts/collaboration/model/request.dt:227
  */
 export interface TooManyMentions {
     readonly type: 'TooManyMentions';
@@ -7719,7 +7800,7 @@ export interface TooManyMentions {
 /**
  * 言及する人の重複
  * 本文で同じ人を2回言及している。
- * @see contexts/collaboration/model/request.dt:212
+ * @see contexts/collaboration/model/request.dt:230
  */
 export interface DuplicateMention {
     readonly type: 'DuplicateMention';
@@ -7728,7 +7809,7 @@ export interface DuplicateMention {
 /**
  * 対象が多すぎる
  * 依頼の対象が20件を超える。
- * @see contexts/collaboration/model/request.dt:215
+ * @see contexts/collaboration/model/request.dt:233
  */
 export interface TooManyTargets {
     readonly type: 'TooManyTargets';
@@ -7737,7 +7818,7 @@ export interface TooManyTargets {
 /**
  * 対象の重複
  * 依頼の対象に同じものが2回ある。
- * @see contexts/collaboration/model/request.dt:218
+ * @see contexts/collaboration/model/request.dt:236
  */
 export interface DuplicateTarget {
     readonly type: 'DuplicateTarget';
@@ -7746,7 +7827,7 @@ export interface DuplicateTarget {
 /**
  * 対象にワークスペース全体
  * 依頼の対象にワークスペース全体がある（ワークスペース全体は、対象を挙げないことで表す）。
- * @see contexts/collaboration/model/request.dt:221
+ * @see contexts/collaboration/model/request.dt:239
  */
 export interface WorkspaceTarget {
     readonly type: 'WorkspaceTarget';
@@ -10788,7 +10869,7 @@ export function equalViewedAt(a: ViewedAt, b: ViewedAt): boolean {
 export type PersistentEvent = RunQueued | RunReverted | RunEdited | RunEditConflicted | RevertLeftToAgent | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | SlashCommandStarted | CandidatesListed | SlashCommandAnswered | CandidatesApplied | SlashCommandStopped | InterviewStarted | InterviewAnswered | InterviewQuestionAsked | InterviewBriefed | InterviewConfirmed | InterviewStopped | InterviewRejected | MarkPlaced | MarkRemoved | ChangeProposed | ProposalApproved | ProposalRejected | ProposalWithdrawn | RecordWritten | RecordRevised | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | SessionStarted | SessionCollaborated | ParticipantJoined | JourneyChosen | SessionClosed | TriageOpened | TriageStepRecorded | TriageDecided | TriageOverridden | TriageReaddressed | TriageConcluded;
 
 /** Events of Collaboration. */
-export type DomainEvent = RunQueued | RunReverted | RunEdited | RunEditConflicted | RevertLeftToAgent | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | SlashCommandStarted | CandidatesListed | SlashCommandAnswered | CandidatesApplied | SlashCommandStopped | InterviewStarted | InterviewAnswered | InterviewQuestionAsked | InterviewBriefed | InterviewConfirmed | InterviewStopped | InterviewRejected | MarkPlaced | MarkRemoved | ChangeProposed | ProposalApproved | ProposalRejected | ProposalWithdrawn | RecordWritten | RecordRevised | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | SessionStarted | SessionCollaborated | ParticipantJoined | JourneyChosen | SessionClosed | TriageOpened | TriageStepRecorded | TriageDecided | TriageOverridden | TriageReaddressed | TriageConcluded;
+export type DomainEvent = RunQueued | RunReverted | RunEdited | RunEditConflicted | RevertLeftToAgent | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | SlashCommandStarted | CandidatesListed | SlashCommandAnswered | CandidatesApplied | SlashCommandStopped | InterviewStarted | InterviewAnswered | InterviewQuestionAsked | InterviewBriefed | InterviewConfirmed | InterviewStopped | InterviewRejected | MarkPlaced | MarkRemoved | ChangeProposed | ProposalApproved | ProposalRejected | ProposalWithdrawn | RecordWritten | RecordRevised | RequestSent | RequestRedacted | RequestDismissed | RevisionRecorded | RevisionRestored | SessionStarted | SessionCollaborated | ParticipantJoined | JourneyChosen | SessionClosed | TriageOpened | TriageStepRecorded | TriageDecided | TriageOverridden | TriageReaddressed | TriageConcluded;
 
 /** Aggregates of Collaboration. */
 export type Aggregate = AgentRun | AssumptionApproval | SlashCommand | Interview | Mark | ChangeProposal | SessionRecord | Request | Revision | Session | Triage;

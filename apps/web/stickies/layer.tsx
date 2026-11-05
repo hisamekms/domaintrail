@@ -69,6 +69,8 @@ export interface StickyActionsInput {
     readonly onSeeTimeline: (storming: string, timeline: string, then: string) => void;
     /** Shows a sticky: its storming's view that draws it, selected. */
     readonly onOpenSticky: (id: string) => void;
+    /** The session's knowledge (ADR 0031): which stickies have some, and showing a sticky's in the detail; absent without a store. */
+    readonly knowledge?: { readonly has: (id: string) => boolean; readonly open: (id: string) => void };
 }
 
 export interface StickyActions {
@@ -135,8 +137,9 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
             live: session?.live === true,
             ...(input.timelineShown !== undefined && { timelineShown: input.timelineShown }),
             hasModelElement: (sticky) => sticky.ref !== undefined && dtTarget(model, sticky.kind, sticky.ref) !== undefined,
+            ...(input.knowledge && { hasKnowledge: (sticky: Sticky) => input.knowledge?.has(sticky.id) === true }),
         }),
-        [session?.live, input.timelineShown, model],
+        [session?.live, input.timelineShown, model, input.knowledge],
     );
     const available = useMemo(() => actionsFor(selected, context), [selected, context]);
     const stormingOf = useCallback((sticky: Sticky) => stormings.find((v) => v.id === sticky.storming)?.storming, [stormings]);
@@ -188,6 +191,9 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
                     return session?.chat.add();
                 case 'edit':
                     return open('edit', first);
+                case 'knowledge':
+                    if (first) input.knowledge?.open(first.id);
+                    return;
                 case 'seeModel': {
                     const dt = first?.ref !== undefined ? dtTarget(model, first.kind, first.ref) : undefined;
                     if (dt) input.onSeeModel(dt);

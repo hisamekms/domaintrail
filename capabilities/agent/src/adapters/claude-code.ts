@@ -45,6 +45,32 @@ export interface ClaudeRunOptions {
      * name refuses the run.
      */
     readonly configFiles?: readonly string[];
+    /** The knowledge tools of `dt mcp` (none: no MCP server at all). */
+    readonly knowledge?: KnowledgeMcp;
+}
+
+/**
+ * How Claude Code starts `dt mcp` on the workspace (ADR 0031, Consequences: the answerer and the runner read knowledge
+ * through the same read-only tools as `dt mcp`): a launcher outside the workspace that runs the agent's pinned `dt`
+ * there (`writeKnowledgeMcpLauncher`). It is the process's only MCP server (`--strict-mcp-config`), and its three tools
+ * are allowed by name, nothing else of it. `dt mcp` checks the approval of the workspace's settings itself.
+ */
+export interface KnowledgeMcp {
+    readonly command: string;
+    readonly args: readonly string[];
+}
+
+/** The name Claude Code knows `dt mcp` by: its tools are `mcp__domaintrail__<tool>`. */
+export const KNOWLEDGE_MCP_SERVER = 'domaintrail';
+/** The read-only tools of `dt mcp` (apps/dt's `knowledgeTools`). */
+export const KNOWLEDGE_TOOLS: readonly string[] = ['knowledge_for_element', 'knowledge_search', 'knowledge_get'];
+/** The permission rules that allow them, and nothing else of the server. */
+export const KNOWLEDGE_TOOL_RULES: readonly string[] = KNOWLEDGE_TOOLS.map((t) => `mcp__${KNOWLEDGE_MCP_SERVER}__${t}`);
+
+/** The value of `--mcp-config`: `dt mcp` over stdio as the one server. */
+export function knowledgeMcpConfig(mcp: KnowledgeMcp): string {
+    for (const word of [mcp.command, ...mcp.args]) if (!word || /[\0\r\n]/.test(word)) throw new Error(`Not a command word: ${JSON.stringify(word)}`);
+    return JSON.stringify({ mcpServers: { [KNOWLEDGE_MCP_SERVER]: { type: 'stdio', command: mcp.command, args: [...mcp.args] } } });
 }
 
 /**
@@ -235,7 +261,7 @@ export function claudeArguments(allowedTools: readonly string[], requests?: numb
     for (const rule of allowedTools) checkValue('a tool rule', rule);
     const tools = toolNames(allowedTools);
     const extra = options.extraRead && extraReadRules(options.extraRead);
-    const allowed = [...scopedRules(allowedTools), ...(extra?.allowed ?? [])];
+    const allowed = [...new Set([...scopedRules(allowedTools), ...(extra?.allowed ?? []), ...(options.knowledge ? KNOWLEDGE_TOOL_RULES : [])])];
     // checked by `extraReadRules`: absolute, nameable
     const addDirs = options.extraRead?.dirs ?? [];
     return [
@@ -246,6 +272,8 @@ export function claudeArguments(allowedTools: readonly string[], requests?: numb
         '--verbose',
         '--no-session-persistence',
         '--strict-mcp-config',
+        // the knowledge tools: `dt mcp` as the only server (its tools allowed by name below)
+        ...(options.knowledge ? ['--mcp-config', knowledgeMcpConfig(options.knowledge)] : []),
         // no settings file: the workspace's (`.claude/`) are files the agent can write, the user's may allow reading anywhere
         '--setting-sources',
         '',
@@ -296,6 +324,8 @@ export interface ClaudeCodeOptions {
     readonly effort?: string;
     /** Configuration files the agent never edits (a `-c` file and its local override; see `ClaudeRunOptions`). */
     readonly configFiles?: readonly string[];
+    /** The knowledge tools of `dt mcp`, when the workspace has a usable store (see `KnowledgeMcp`). */
+    readonly knowledge?: KnowledgeMcp;
 }
 
 /** The real path of the workspace (the agent may name files by it), or the path as given when it cannot be resolved. */
@@ -365,6 +395,7 @@ export async function createClaudeCodeRunner(options: ClaudeCodeOptions): Promis
                         deniedPaths,
                         ...(extra && { extraRead: extra }),
                         ...(options.configFiles && { configFiles: options.configFiles }),
+                        ...(options.knowledge && { knowledge: options.knowledge }),
                     }),
                 ];
                 return shimFor().then((shim) => spawnWithShim(shim, args));

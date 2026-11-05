@@ -13,6 +13,7 @@ import { Bot, Check, Circle, CircleDot, Reply, CircleX, Ellipsis, FileDiff, Hour
 import { revertableChanges, revertStatus } from '@domaintrail/collaboration';
 import type { ElementChange } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
+import { MarkdownText } from '../shared/markdown-text';
 import { useClipped } from '../view/toolbar';
 import { answerBody, type QuestionChoice } from './actions';
 import { Clamped } from './bubble';
@@ -24,7 +25,6 @@ import { useChat, type Tx } from './chat-context';
 import { assumptionDecision, questionsState, type QuestionsState } from './decisions';
 import { changedPaths, cutList, requestersOf, unitName, type ChangeUnit } from './history';
 import { isReplyable } from './replies';
-import { MarkdownText } from './markdown-text';
 import { AddReaction, ReactionRow, VoteMark } from './mark-controls';
 import { bodyText } from './mentions';
 import { useTargetNaming } from './naming';
@@ -392,8 +392,8 @@ function AnswerLine({ run }: { run: CardRun }) {
 function AiText({ text, className, label }: { text: string; className?: string; label?: string }) {
     const { onNavigate } = useChat();
     return (
-        <div className={`chat-text chat-markdown${className ? ` ${className}` : ''}`} {...(label && { 'aria-label': label })}>
-            <MarkdownText text={text} onNavigate={onNavigate} />
+        <div className={`chat-text markdown${className ? ` ${className}` : ''}`} {...(label && { 'aria-label': label })}>
+            <MarkdownText text={text} renderText={(t) => <ReplyText text={t} onNavigate={onNavigate} />} />
         </div>
     );
 }
@@ -428,7 +428,7 @@ export function AgentBody({ run, message: m }: { run: string; message: AgentMess
                     <>
                         {changed && <AiText text={m.reply.summary} className="reply-summary" />}
                         <Clamped tx={tx} revealKey={`run:${run}`} className="reply-answer" blocks>
-                            <MarkdownText text={m.reply.answer} onNavigate={onNavigate} />
+                            <MarkdownText text={m.reply.answer} renderText={(t) => <ReplyText text={t} onNavigate={onNavigate} />} />
                         </Clamped>
                         {changed && <p className="chat-text reply-answered-changed">{tx.chat.ai.answeredChanged}</p>}
                     </>

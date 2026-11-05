@@ -133,7 +133,7 @@ export function stormingLocation(stormings: readonly StormingView[], id: string)
     return range && { file: range.file, line: range.start.line, endLine: range.end.line };
 }
 
-/** The name of a selection in the inspector's back button. */
+/** A storming selection's local ID (its name when it is not found). */
 export const stormingSelectionName = (id: string): string => id.slice(id.lastIndexOf('/') + 1);
 
 /** The `.dt` item a `ref` names, when the model has it (an event or an aggregate `Ctx.Name`, a command `Ctx.Agg.cmd`). */
@@ -305,6 +305,7 @@ export function StormingDetails({
     onSelect,
     onShowScope,
     onLevel,
+    knowledge,
 }: {
     stormings: readonly StormingView[];
     selected: string;
@@ -325,6 +326,8 @@ export function StormingDetails({
     onShowScope?: (stormingId: string, scope: string, then?: string) => void;
     /** Shows the storming at another level (the selection kept). */
     onLevel?: (level: ViewLevel) => void;
+    /** The knowledge about a sticky (`<Storming>.<Local>`), in a session with a knowledge store. */
+    knowledge?: ((sticky: string) => ReactNode) | undefined;
 }): ReactNode {
     const t = useT();
     const d = t.esDetail;
@@ -423,6 +426,7 @@ export function StormingDetails({
                         ))}
                     </div>
                 )}
+                {isNote && knowledge?.(`${storming.id}.${declaration.id}`)}
             </div>
         </>
     );

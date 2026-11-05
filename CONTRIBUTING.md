@@ -55,14 +55,16 @@ CI (`.github/workflows/ci.yml`) runs the build, the type check, the lint, the fo
 | `contexts/modeling` | `@domaintrail/modeling`, the `.dt` language (a context of ADR 0027): `model/` (`.dt`: what it publishes — the Typed Model, the diff, the dependency types, its rule IDs; its locations are the kernel's `Location`) and the TypeScript generated from it, committed in `src/generated` (imported by `domain` with `import type` only; see [Bootstrap](#bootstrap)); `domain` (the helpers over the Typed Model, its dependencies between contexts and between aggregates, the diff of two models, the stable IDs, Modeling's rule IDs; the model as written that the checkers read — sites, expression trees, resolved references — with its static types and the rule sink; the checkers in `rules/`), `application` (Modeling's analysis of the `.dt` sources: the models and the rules, on what the syntax parses), `infrastructure/syntax` (the grammar and its Langium project, `langium-config.json`; the generated parser and AST, scoping, parsing and the diagnostics of the syntax and the links, the AST index, labels, the sites, the AST → model mappings, the printer of `dt fmt`) |
 | `contexts/storming` | `@domaintrail/storming`, the Event Storming DSL `.dtes` (ADR 0024), upstream Modeling: `domain` (the IR, the validator, the link to the Typed Model, the semantic graph and timeline occurrences, its rule IDs, `isStormingFile`), `application` (its analysis against the Typed Model), `infrastructure/syntax` (its own grammar and Langium project, the parser into the IR, the printer) |
 | `contexts/collaboration` | `@domaintrail/collaboration`, collaboration sessions (ADR 0026): `model/` (`.dt`) and the TypeScript generated from it, committed in `src/generated` (see [Bootstrap](#bootstrap); `src/contracts.test.ts` runs its contract tests); `domain` (the commands and pure decisions, the emoji of a reaction), `application` (use cases, ports — the model validator among them —, its settings in the config's `collab` and `classifier` sections and `agent.run.maxPreviousRunDiff`), `infrastructure` (`node:sqlite` store, blobs, identity) |
+| `contexts/knowledge` | `@domaintrail/knowledge`, the knowledge taken from sessions (ADR 0031): `model/` (`.dt`: the item, its labels, sources and versions, the operations of an extraction, the audit and redaction records) and the TypeScript generated from it, committed in `src/generated` (see [Bootstrap](#bootstrap); `src/contracts.test.ts` runs its contract tests); `domain` (the item's commands as pure decisions, an extraction's operations applied to the items, the audit, redaction and past-version records, the format of an item's file `knowledge/<id>.md`, `dt check`'s rules K001–K002 on those files; the extractor's input, reply and its reading, the stages before it (the mechanical one, the light model's question and reply), the guards of held operations, the timing of the extractions), `application` (the `KnowledgeStore` port its adapters implement, `authorize`, its settings in the config's `knowledge` section and the store's credentials from the environment; a session's extractions, their scheduler and the facilitator's switch over ports), `infrastructure` (the extraction's checkpoint, cost records and switch in the session database; the `files` store: the items as `knowledge/*.md` in the workspace, its images and logs, the deleted items and the extractions applied in the state directory; the `cloudflare` adapter: the HTTP client of the Worker), `protocol.ts` (the Worker's HTTP API: paths, headers, the decoders of its bodies) |
 | `capabilities/analysis` | `@domaintrail/analysis`, the project analysis behind `dt check` (ADR 0027's capability `analysis`): `application` (Modeling's and Storming's analyses and the generation's checks combined into one `Analysis`), `core` (the config's `sources` section) |
 | `capabilities/generation` | `@domaintrail/generation`: `core` (the TypeScript generator, generated checks and contract tests, naming, its name check M011 run by the project analysis; the config's `generate` and `lintHint` sections) |
 | `capabilities/visualization` | `@domaintrail/visualization`, the Live View's model: `core` (graph IR and the rows marked against the baseline, the storming views: the prefix trie, the render graph), `application` (the view service and its ports), `adapters` (the ELK layout, the layout file, git), `protocol.ts` |
-| `capabilities/agent` | `@domaintrail/agent`, `dt agent` and the agent in process (ADR 0026, ADR 0030): `core` (the subscriber and the run pipeline over its ports, the prompt), `adapters` (the agent API client and its SSE parser, the Claude Code adapter, `dt fmt`/`dt check`, the workspace scan; their settings in the config's `agent` section: `agent.run`, `agent.answer`, `agent.triage`) |
+| `capabilities/agent` | `@domaintrail/agent`, `dt agent` and the agent in process (ADR 0026, ADR 0030): `core` (the subscriber and the run pipeline over its ports, the answerer, the extractor of knowledge, their prompts), `adapters` (the agent API client and its SSE parser, the Claude Code adapters, `dt fmt`/`dt check`, the workspace scan; their settings in the config's `agent` section: `agent.run`, `agent.answer`, `agent.triage`, `agent.extract`) |
 | `platform/workspace` | `@domaintrail/workspace`, the workspace on disk: sources and `.gitignore` (which files are sources is given by the app), finding and reading the config file (its format given by the app), the output of `dt generate ts`, the file and git ref watchers |
 | `shared/kernel` | `@domaintrail/kernel`, ADR 0027's shared kernel: `Diagnostic` (its code a plain string; each context owns its rule IDs), the suggestions, `SourceFile`, `Location`, `camel`; it imports nothing. Its types are the shared context Kernel in `model/` (`.dt`), generated into `src/generated` (committed) and exported whole by its index.ts, through which the generated code of other packages imports the context (`@domaintrail/kernel`; see [Bootstrap](#bootstrap)) |
-| `apps/dt` | `@domaintrail/dt`, the one binary: `main.ts` (`runDt`, called by `bin/dt.ts`, and `cliDeps`), `wiring` (the Live View server, the session server, the subscriber, the model validator, with every adapter wired), `cli` (the commands, `dt guide`, `dt show`), `lsp` (`dt lsp`), `server` (`http` and `websocket`: the Live View server and its access check; `session`: the session's routes, identities, presence, the agent API), `config` (`domaintrail.jsonc` composed from its sections' owners; the ports, hosts and allowed hosts and origins are the app's own) |
-| `apps/web` | `@domaintrail/web`, the Live View page (React; the diagrams through the canvas port `view/diagram.ts`, drawn with React Flow by `view/flow-canvas.tsx` only, see [ADR 0029](docs/adr/0029-react-flow-canvas.md) and [the plan](docs/plans/react-flow.md)): `app` (shell, top bar, socket), `view` (the view's hooks and workspace), `session`, `shared`; `render.ts` builds the scene (`scene.ts`) the canvas draws, `diagram-items.tsx` draws its items |
+| `apps/dt` | `@domaintrail/dt`, the one binary: `main.ts` (`runDt`, called by `bin/dt.ts`, and `cliDeps`), `wiring` (the Live View server, the session server, the subscriber, the model validator, the knowledge store of the config's `knowledge` (`openKnowledgeStore`, the one place it is opened), with every adapter wired), `cli` (the commands, `dt guide`, `dt show`), `lsp` (`dt lsp`), `mcp` (`dt mcp`: a minimal MCP server over stdio, no SDK, and the knowledge tools), `server` (`http` and `websocket`: the Live View server and its access check; `session`: the session's routes, identities, presence, the agent API), `config` (`domaintrail.jsonc` composed from its sections' owners; the ports, hosts and allowed hosts and origins are the app's own) |
+| `apps/web` | `@domaintrail/web`, the Live View page (React; the diagrams through the canvas port `view/diagram.ts`, drawn with React Flow by `view/flow-canvas.tsx` only, see [ADR 0029](docs/adr/0029-react-flow-canvas.md) and [the plan](docs/plans/react-flow.md)): `app` (shell, top bar, socket), `view` (the view's hooks and workspace), `session`, `shared`, `knowledge`; `published` (a second entry: the knowledge store Worker's read-only page, the same canvas and knowledge panels, built into `dist/knowledge-worker/page`); `render.ts` builds the scene (`scene.ts`) the canvas draws, `diagram-items.tsx` draws its items |
+| `apps/knowledge-worker` | `@domaintrail/knowledge-worker`, the knowledge store's Worker (ADR 0031) that users deploy: `src` (the HTTP API over D1 and R2, the Access check, the sweep), `template/` (`wrangler.jsonc`, the D1 migrations, the README of its deploy), shipped as `dist/knowledge-worker/` with the Worker bundled into `worker.js` and its read-only page (`apps/web/published`) into `page/` by `bun run build`; its tests run it in workerd with Miniflare |
 | `testing` | `domaintrail/testing`, the support of the generated contract tests (ADR 0028, decision 5): a subpath of the published package, built into `dist/testing.js` (see [The testing support](#the-testing-support)) |
 | `docs` | the guide (`dt guide`), Getting started, the Live View, the ADRs, releasing |
 | `examples/shop` | the complete example, also run by the tests |
@@ -99,14 +101,16 @@ table matches the map):
 | `modeling` | `contexts/modeling` | context | kernel |
 | `storming` | `contexts/storming` | context | kernel, modeling |
 | `collaboration` | `contexts/collaboration` | context | kernel, modeling, storming |
+| `knowledge` | `contexts/knowledge` | context | kernel |
 | `analysis` | `capabilities/analysis` | capability | generation, kernel, modeling, storming |
 | `generation` | `capabilities/generation` | capability | kernel, modeling |
 | `visualization` | `capabilities/visualization` | capability | analysis, kernel, modeling, storming |
-| `agent` | `capabilities/agent` | capability | collaboration |
+| `agent` | `capabilities/agent` | capability | collaboration, knowledge |
 | `workspace` | `platform/workspace` | platform | kernel |
 | `kernel` | `shared/kernel` | kernel | — |
-| `dt` | `apps/dt` | app | agent, analysis, collaboration, generation, kernel, modeling, storming, visualization, workspace |
-| `web` | `apps/web` | app | analysis (its unit tests only, a devDependency), collaboration, kernel, modeling, storming, visualization |
+| `dt` | `apps/dt` | app | agent, analysis, collaboration, generation, kernel, knowledge, modeling, storming, visualization, workspace |
+| `knowledge-worker` | `apps/knowledge-worker` | app | knowledge |
+| `web` | `apps/web` | app | analysis (its unit tests only, a devDependency), collaboration, kernel, knowledge, modeling, storming, visualization |
 
 | Kind | Inside `src/` | May depend on | Takes from another package |
 |---|---|---|---|
@@ -147,7 +151,8 @@ The rules, with the name a failure gives (a failure also names the section of AD
 - **The kernel** (`kernel`). `shared/kernel` imports only its own files and the pure builtins, and its index.ts exports
   every module. Keep it small: what needs Langium or the model stays in the module that uses it.
 - **Runtimes.** Collaboration and the agent run on Node (`node:*` only in their `infrastructure/` / `adapters/`, no
-  `bun`); the page imports no `infrastructure/`.
+  `bun`); the page imports no `infrastructure/`; the knowledge store's Worker runs on Cloudflare Workers (no `node:*`, no
+  `bun`, but in its tests).
 - **Exceptions.** The map can list a rule's known violations per package (`exceptions`); it lists none. A listed
   violation that no longer occurs fails the test, so the list only shrinks: new code adds none.
 
@@ -212,16 +217,16 @@ bun run test:it        # the integration tests: test/
 ## Bootstrap
 
 DomainTrail describes itself in `.dt`, with one configuration at the root (`domaintrail.jsonc`, ADR 0028): the kernel
-(`shared/kernel/model`, a shared context), Modeling (`contexts/modeling/model`: what it publishes) and Collaboration
-(`contexts/collaboration/model`). Each is generated into its package's `src/generated` (committed, with its contract
+(`shared/kernel/model`, a shared context), Modeling (`contexts/modeling/model`: what it publishes), Collaboration
+(`contexts/collaboration/model`) and Knowledge (`contexts/knowledge/model`). Each is generated into its package's `src/generated` (committed, with its contract
 tests in `src/generated/tests`), and imported from the other packages by the package's module (`generate.ts.contexts.
 <Ctx>.module`): Modeling's Typed Model takes the kernel's `Location` from `@domaintrail/kernel`. `bun run dt check` and
-`bun run dt open` at the root show all three. The tool is built on the generated code: Modeling imports it with `import
+`bun run dt open` at the root show all four. The tool is built on the generated code: Modeling imports it with `import
 type` only (the architecture test's rule `generated`), so the tool runs from the committed output even when the
 generator is broken. `test/self-contracts.test.ts` fails when the model does not check clean, is not formatted, or
 generating it again differs from the committed files.
 
-- **Changing the model** (any of the three): edit the `.dt`, run `bun run dt fmt` and `bun run dt generate ts` at the
+- **Changing the model** (any of the four): edit the `.dt`, run `bun run dt fmt` and `bun run dt generate ts` at the
   root, then `bun run typecheck` and fix what uses the changed types (a type the kernel's generated code adds is also
   exported from `shared/kernel/src/index.ts`). A change of the Typed Model's shape changes the Live View payload (a T0
   baseline): make it in one commit with every consumer and the updated snapshots (`bun test -u` on those tests), and
@@ -229,7 +234,8 @@ generating it again differs from the committed files.
 - **Changing the generator:** regenerate (`bun run dt generate ts` at the root) and commit the generated files with
   the change.
 - **A broken generator** (its output does not type-check, or the tool no longer runs): `git restore
-  shared/kernel/src/generated contexts/modeling/src/generated contexts/collaboration/src/generated` to get the committed
+  shared/kernel/src/generated contexts/modeling/src/generated contexts/collaboration/src/generated
+  contexts/knowledge/src/generated` to get the committed
   output back, fix the generator with it in place, then regenerate.
 
 ## The tree-sitter grammar

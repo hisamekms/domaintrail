@@ -387,7 +387,17 @@ export interface PromptContext {
      * `changedSinceYourLastRun` for an agent that continues its conversation, else as `editedByPeople` (rule 3).
      */
     readonly peopleEdits?: readonly AgentPeopleEdit[];
+    /** The agent has the knowledge tools of `dt mcp` (ADR 0031): the prompt says when to use them; none: it never names them. */
+    readonly knowledge?: boolean;
 }
+
+/** What the runner is told of the knowledge tools, when it has them: check before changing, cite what the change rests on. */
+const KNOWLEDGE_SECTION = `Knowledge: the tools knowledge_for_element, knowledge_search and knowledge_get read what the project learned in its
+sessions about stickies and model elements (why, rules, examples, decisions). Before changing an element, call
+knowledge_for_element with it (\`Storming.LocalId\` or \`dt:Context.Aggregate.command\`). Where your change rests on an
+item or departs from one, cite its ID (\`kn_…\`) in the summary or the request's note.
+
+`;
 
 /** A person's edit as the prompt shows it: who, the storming, and what changed, old → new. */
 function peopleEditOf(e: AgentPeopleEdit, names: ReadonlyMap<string, string>): Record<string, unknown> {
@@ -585,7 +595,7 @@ Rules:
    \`label\` gives (\`how\` shows old → new), never its identifier (references use it); keep its \`///\`, and when
    \`how\` gives a detail the old label carried, add that detail to its \`///\` as a line of its own.${journeys ? JOURNEY_RULES : ''}
 
-${practiceSection(practice)}${replyDescription()}
+${context.knowledge ? KNOWLEDGE_SECTION : ''}${practiceSection(practice)}${replyDescription()}
 
 <requests-${nonce}>
 ${blockJson(data)}

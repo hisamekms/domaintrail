@@ -3928,7 +3928,12 @@ svg.chat-launcher-mark {
     .conversation-inner,
     .legend-slot,
     .tree-children,
-    .tree-twisty svg {
+    .tree-twisty svg,
+    .knowledge-item,
+    .knowledge-item::before,
+    .knowledge-fold,
+    .knowledge-unfold,
+    .knowledge-side {
         transition: none;
     }
     .spin {
@@ -5135,12 +5140,12 @@ del.was.block {
     padding: 0 var(--space-2);
     color: var(--muted);
 }
-.pane a.chat-target {
+a.chat-chip.chat-target {
     color: var(--accent);
     text-decoration: none;
     cursor: pointer;
 }
-.pane a.chat-target:hover {
+a.chat-chip.chat-target:hover {
     background: var(--hover);
 }
 .chat-target.stale .chat-chip-name {
@@ -5168,42 +5173,50 @@ del.was.block {
     line-clamp: 4;
     overflow: hidden;
 }
-/* an answer of the AI as Markdown (`markdown.ts`): blocks --space-2 apart; clamped by its height (four lines), since
-   line clamping does not reach into its lists and tables, its last line fading out only when it is cut (`cut`: taller
-   than the clamp); one that fits is shown whole, unfaded */
-.chat-text.chat-markdown.clamped {
+/* a Markdown text (`shared/markdown.ts`; the chat's answers, the knowledge's opened items): blocks --space-2 apart. An
+   answer of the AI is clamped by its height (four lines), since line clamping does not reach into its lists and
+   tables, its last line fading out only when it is cut (`cut`: taller than the clamp); one that fits is shown whole,
+   unfaded */
+.chat-text.markdown.clamped {
     display: block;
     max-height: calc(4em * var(--lh-body));
 }
-.chat-text.chat-markdown.clamped.cut {
+.chat-text.markdown.clamped.cut {
     mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5em), transparent);
 }
-.chat-markdown > * {
+.markdown > * {
     margin: 0;
 }
-.chat-markdown > * + * {
+.markdown > * + * {
     margin-top: var(--space-2);
 }
-.chat-markdown :is(ul, ol) {
+.markdown :is(ul, ol) {
     margin: 0;
     padding-left: 1.5em;
 }
+/* its own bullets, wherever the text is (an item of the knowledge is in a list itself) */
+.markdown ul {
+    list-style-type: disc;
+}
+.markdown :is(ul, ol) ul {
+    list-style-type: circle;
+}
 /* every heading level alike: a bold line, a little larger than the body */
-.chat-markdown .chat-md-heading {
+.markdown .md-heading {
     font-size: 1.0625em;
     font-weight: var(--fw-strong);
 }
-.chat-markdown strong {
+.markdown strong {
     font-weight: var(--fw-strong);
 }
-.chat-markdown code {
+.markdown code {
     font-size: 0.9em;
     padding: 0 3px;
     border-radius: 4px;
     background: var(--surface-muted);
 }
 /* a code block and a table: wider than the column, they scroll inside it, never widen the chat */
-.chat-markdown .chat-md-code {
+.markdown .md-code {
     max-width: 100%;
     padding: var(--space-2);
     overflow-x: auto;
@@ -5213,30 +5226,40 @@ del.was.block {
     line-height: var(--lh-small);
     white-space: pre;
 }
-.chat-md-code code {
+.md-code code {
     padding: 0;
     background: none;
     font-size: inherit;
 }
-.chat-markdown .chat-md-table {
+.markdown .md-table {
     max-width: 100%;
     overflow-x: auto;
 }
-.chat-md-table table {
+.md-table table {
     border-collapse: collapse;
     font-size: var(--fs-small);
     line-height: var(--lh-small);
 }
-.chat-md-table :is(th, td) {
+.md-table :is(th, td) {
     padding: 2px var(--space-2);
     border: 1px solid var(--border);
     text-align: left;
     vertical-align: top;
     white-space: nowrap;
 }
-.chat-md-table th {
+.md-table th {
     font-weight: var(--fw-strong);
     background: var(--surface-muted);
+}
+/* an attached image (`![…](image:<id>)`): the column's width at most, and not taller than a screenful's part, its
+   proportions kept */
+.markdown .md-image {
+    display: block;
+    max-width: 100%;
+    max-height: 20em;
+    height: auto;
+    border: 1px solid var(--border);
+    border-radius: 4px;
 }
 .chat-more {
     margin-top: calc(-1 * var(--space-1));
@@ -5325,9 +5348,11 @@ del.was.block {
     padding: var(--space-1) var(--space-2);
     font-size: var(--fs-small);
 }
-/* a mention in a sent body, and an element the AI's reply names: a link to it (violet, a thin underline), never bold */
+/* a mention in a sent body, and an element the AI's reply or an item of the knowledge names (on the Worker's page too,
+   which has no panes): a link to it (violet, a thin underline), never bold */
 .pane a.chat-mention,
-.pane a.reply-element {
+.pane a.reply-element,
+.knowledge-body a.reply-element {
     color: var(--accent);
     text-decoration: underline;
     text-decoration-thickness: 1px;
@@ -5336,7 +5361,8 @@ del.was.block {
     cursor: pointer;
 }
 .pane a.chat-mention:hover,
-.pane a.reply-element:hover {
+.pane a.reply-element:hover,
+.knowledge-body a.reply-element:hover {
     text-decoration-color: currentColor;
 }
 .chat-mention.stale {
@@ -7650,8 +7676,10 @@ button.add-to-request.added:hover {
     white-space: nowrap;
     text-overflow: ellipsis;
 }
-/* a posted reply: the run it replies to, one muted line at the top of the message (a quote's look) */
-.session-chat button.chat-reply-ref {
+/* a posted reply: the run it replies to, one muted line at the top of the message (a quote's look); a knowledge
+   item's source the same (a span: a message of another session, not on this page) */
+.chat-reply-ref,
+button.chat-reply-ref {
     display: flex;
     align-items: baseline;
     gap: var(--space-1);
@@ -7661,12 +7689,16 @@ button.add-to-request.added:hover {
     border: none;
     background: none;
     color: var(--muted);
+    font-family: inherit;
     font-size: var(--fs-small);
     line-height: var(--lh-small);
     text-align: left;
+    cursor: default;
+}
+button.chat-reply-ref {
     cursor: pointer;
 }
-.session-chat button.chat-reply-ref:hover .chat-reply-ref-head {
+button.chat-reply-ref:hover .chat-reply-ref-head {
     text-decoration: underline;
 }
 .chat-reply-ref-run {
@@ -8999,6 +9031,465 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
 .guide-step .act-mark-box {
     width: 12px;
     height: 12px;
+}
+
+/* ---------- the knowledge (ADR 0031, section 10) ---------- */
+/* a sticky's items in its detail, the ナレッジ list of the left column, the conflicts side by side, the notice of a
+   deletion with its undo, and on the canvas the dot, the conflict mark and the ring of an opened item's stickies. The
+   differences are told by weight and colour, in two sizes only (the body's and --fs-small). */
+.knowledge-sticky {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-inside);
+    margin-top: var(--gap-between);
+    padding-top: var(--gap-inside);
+    border-top: 1px solid var(--border);
+}
+.knowledge-head {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-inside);
+}
+.knowledge-title {
+    font-size: var(--fs-small);
+    font-weight: 700;
+    color: var(--muted);
+}
+.knowledge-head > .knowledge-order {
+    margin-left: auto;
+}
+.knowledge-order {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+.knowledge-order button {
+    padding: 0 var(--space-2);
+    border: none;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: var(--fs-small);
+    cursor: pointer;
+}
+.knowledge-order button.on {
+    background: var(--selected-bg);
+    color: var(--selected-text);
+    font-weight: 700;
+}
+.knowledge-items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+/* an item: its kind in the left column, the rest from the title's left edge (its labels' line, and opened, its detail) */
+.knowledge-item {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr) auto;
+    column-gap: var(--gap-inside);
+    transition: border-color var(--motion-medium) var(--motion-ease-standard);
+}
+.knowledge-item + .knowledge-item {
+    border-top: 1px solid var(--border);
+}
+/* opened: one card, outlined, on a light wash; the rows around it stay flat. The card is painted outside the row's
+   box (--space-2 to each side; the head's padding is its room above), so opening moves nothing of the item: the
+   card fades in, the head (its title) stays, the labels' line folds away (.knowledge-fold) as the detail unfolds
+   (.knowledge-unfold) with the card's room below it. The lists' padding holds the card (.knowledge-list-body, the
+   detail's) */
+.knowledge-item::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 0 calc(-1 * var(--space-2));
+    border-radius: 8px;
+    pointer-events: none;
+    box-shadow: inset 0 0 0 1px transparent;
+    transition:
+        background-color var(--motion-medium) var(--motion-ease-standard),
+        box-shadow var(--motion-medium) var(--motion-ease-standard);
+}
+.knowledge-item.open {
+    border-top-color: transparent;
+}
+.knowledge-item.open::before {
+    background-color: var(--surface-muted);
+    box-shadow: inset 0 0 0 1px var(--action);
+}
+.knowledge-item:not(.open):hover::before {
+    background-color: var(--row-hover);
+}
+.knowledge-item.open + .knowledge-item {
+    border-top-color: transparent;
+}
+.knowledge-item-head {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: subgrid;
+    align-items: baseline;
+    width: 100%;
+    padding: var(--space-2) 0 var(--space-1);
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.knowledge-kind {
+    flex: none;
+    min-width: 4em;
+    font-size: var(--fs-small);
+    font-weight: 700;
+    color: var(--action);
+}
+/* an item's title: one short line of plain text (wrapped when the column is narrow), open or closed alike */
+.knowledge-item-title {
+    min-width: 0;
+    font-weight: var(--fw-strong);
+    overflow-wrap: anywhere;
+}
+/* an opened item's text */
+.knowledge-body {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+/* the labels' line under a closed item (and the stickies' names in the ナレッジ list) fold away as it opens; a click
+   on it opens the item, as one on the head does */
+.knowledge-item > .knowledge-fold {
+    grid-column: 2 / -1;
+    cursor: pointer;
+}
+.knowledge-item.open > .knowledge-fold {
+    cursor: auto;
+}
+.knowledge-item-labels {
+    display: flex;
+    flex-direction: column;
+    padding-bottom: var(--space-2);
+}
+.knowledge-fold {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition:
+        grid-template-rows var(--motion-medium) var(--motion-ease-standard),
+        opacity var(--motion-medium) var(--motion-ease-standard);
+}
+.knowledge-fold.shut {
+    grid-template-rows: 0fr;
+    opacity: 0;
+}
+.knowledge-fold > * {
+    min-height: 0;
+    overflow: hidden;
+}
+.knowledge-meta,
+.knowledge-about {
+    font-size: var(--fs-small);
+    color: var(--muted);
+}
+.knowledge-to-be {
+    color: var(--action);
+    font-weight: 700;
+}
+.knowledge-ai {
+    font-style: italic;
+}
+.knowledge-conflict-icon {
+    flex: none;
+    align-self: center;
+    color: var(--status-danger-ink);
+}
+.knowledge-item > .knowledge-unfold {
+    grid-column: 2 / -1;
+}
+/* the card's room below the detail, unfolding with it */
+.knowledge-item > .knowledge-unfold > .knowledge-unfold-inner > * {
+    margin-bottom: var(--space-2);
+}
+/* an opened detail unfolds: its height from nothing (a grid row from 0fr, which height cannot do from auto) as it
+   fades in, and back as it closes (it stays mounted meanwhile: useStaying) */
+.knowledge-unfold {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition:
+        grid-template-rows var(--motion-medium) var(--motion-ease-standard),
+        opacity var(--motion-medium) var(--motion-ease-standard);
+}
+.knowledge-unfold.open {
+    grid-template-rows: 1fr;
+    opacity: 1;
+}
+@starting-style {
+    .knowledge-unfold.open {
+        grid-template-rows: 0fr;
+        opacity: 0;
+    }
+}
+.knowledge-unfold-inner {
+    min-height: 0;
+    overflow: hidden;
+}
+.knowledge-detail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-inside);
+}
+.knowledge-sources {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.knowledge-actions,
+.knowledge-form-labels {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--gap-inside);
+}
+.knowledge-versions summary {
+    font-size: var(--fs-small);
+    color: var(--muted);
+    cursor: pointer;
+}
+.knowledge-version {
+    display: flex;
+    flex-direction: column;
+    margin: var(--space-1) 0 0;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+}
+.knowledge-version-title {
+    font-weight: var(--fw-strong);
+}
+/* an opened item's labels as the list's chips, its date after them */
+.knowledge-labels {
+    align-items: center;
+}
+.knowledge-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-inside);
+    padding-bottom: var(--space-3);
+}
+.knowledge-form :is(textarea, input[type='text']) {
+    width: 100%;
+    box-sizing: border-box;
+    padding: var(--space-2);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    resize: vertical;
+}
+.knowledge-form select {
+    font: inherit;
+    font-size: var(--fs-small);
+}
+/* a conflict: the two items side by side on the danger's wash */
+.knowledge-conflict,
+.knowledge-hotspot {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-inside);
+    padding: var(--space-2);
+    border-radius: 6px;
+    background: var(--status-danger-bg);
+}
+/* the items handed over to a hotspot: side by side on a calm tint, the hotspot linked */
+.knowledge-hotspot {
+    background: var(--neutral-tint);
+}
+.knowledge-hotspot .knowledge-pair {
+    grid-template-columns: repeat(auto-fit, minmax(40%, 1fr));
+}
+/* why the buttons came back, a line above them */
+.knowledge-cleared {
+    flex-basis: 100%;
+    color: var(--muted);
+    font-size: var(--fs-small);
+}
+.knowledge-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--gap-inside);
+}
+/* a side opens to its detail under the pair: the whole card is the target, outlined while open */
+.knowledge-side {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: var(--space-2);
+    border: none;
+    border-radius: 4px;
+    background: var(--surface);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: inset 0 0 0 1px transparent;
+    transition: box-shadow var(--motion-medium) var(--motion-ease-standard);
+}
+.knowledge-side:hover {
+    background: var(--hover);
+}
+.knowledge-side[aria-expanded='true'] {
+    box-shadow: inset 0 0 0 1px var(--action);
+}
+/* a side's detail in the box: the box's gap comes with it as it unfolds, not before */
+.knowledge-conflict > .knowledge-unfold,
+.knowledge-hotspot > .knowledge-unfold {
+    margin-top: calc(-1 * var(--gap-inside));
+}
+.knowledge-conflict > .knowledge-unfold > .knowledge-unfold-inner > *,
+.knowledge-hotspot > .knowledge-unfold > .knowledge-unfold-inner > * {
+    margin-top: var(--gap-inside);
+}
+.knowledge-conflict .knowledge-side .knowledge-kind {
+    color: var(--status-danger-ink);
+}
+/* the ナレッジ list */
+.knowledge-list-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-inside);
+    padding: var(--space-2) var(--space-3);
+}
+.knowledge-search {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    color: var(--muted);
+}
+.knowledge-search input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: none;
+    color: var(--text);
+    font: inherit;
+}
+.knowledge-filters {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+.knowledge-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+}
+.knowledge-chip {
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: var(--fs-small);
+    cursor: pointer;
+}
+.knowledge-chip[aria-pressed='true'] {
+    border-color: var(--action);
+    background: var(--action);
+    color: var(--on-action);
+}
+/* whether the session's talk is turned into knowledge, in the app bar: 💡 in the action's colour while on (the
+   facilitator's switch pressed, the others' mark), the struck-through 💡 muted while off (the facilitator's only) */
+.knowledge-extraction {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: var(--action);
+}
+button.knowledge-extraction {
+    cursor: pointer;
+    color: var(--muted);
+}
+button.knowledge-extraction[aria-pressed='true'] {
+    background: var(--selected-bg);
+    color: var(--action);
+}
+button.knowledge-extraction[aria-pressed='false']:hover:not(:disabled) {
+    background: var(--hover);
+}
+button.knowledge-extraction:disabled {
+    cursor: default;
+}
+/* 消しました / 元に戻す */
+.knowledge-notice {
+    position: fixed;
+    left: 50%;
+    bottom: var(--space-5);
+    z-index: 900;
+    display: flex;
+    align-items: center;
+    gap: var(--gap-between);
+    padding: var(--space-2) var(--space-4);
+    transform: translateX(-50%);
+    border-radius: 6px;
+    background: var(--surface-raised);
+    box-shadow: 0 2px 12px var(--shadow);
+}
+.knowledge-notice-error {
+    color: var(--status-danger-ink);
+}
+/* on the canvas: following the camera, above the notes, never in the pointer's way */
+.knowledge-marks {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 305;
+}
+.knowledge-dot,
+.knowledge-mark-conflict,
+.knowledge-ring {
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+.knowledge-dot {
+    width: 10px;
+    height: 10px;
+    border: 2px solid var(--surface);
+    border-radius: 50%;
+    background: var(--action);
+    box-sizing: border-box;
+}
+.knowledge-mark-conflict {
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    box-sizing: border-box;
+    border: 2px solid var(--surface);
+    border-radius: 50%;
+    background: var(--status-danger-ink);
+    color: var(--surface);
+    font-size: var(--fs-small);
+    font-weight: 700;
+}
+.knowledge-ring {
+    box-sizing: border-box;
+    border: 3px solid var(--action);
+    border-radius: 6px;
 }
 
 /* ---- the stickies' actions (ADR 0033): the toolbar above the selection, its menu, the edit windows, the palette ---- */

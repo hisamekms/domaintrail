@@ -26,7 +26,8 @@ const OUTSIDE_PACKAGE: Record<string, string[]> = {
     'apps/dt/src/cli/main.ts': ['docs/guide.md'],
     'apps/dt/src/cli/export-svg.ts': ['apps/web/styles.css'],
     'capabilities/generation/src/core/tests.ts': ['package.json'],
-    'apps/web/app/shell.tsx': ['assets/brand/logo-dark.svg', 'assets/brand/logo-light.svg'],
+    'apps/dt/src/mcp/start.ts': ['package.json'],
+    'apps/web/app/brand.tsx': ['assets/brand/logo-dark.svg', 'assets/brand/logo-light.svg'],
 };
 
 /**
@@ -363,7 +364,7 @@ describe('the boundary map', () => {
 
     test("CONTRIBUTING.md's package table gives each package's path, kind and upstream as the map does", async () => {
         const contributing = await readFile(path.join(ROOT, 'CONTRIBUTING.md'), 'utf8');
-        const rows = [...contributing.matchAll(/^\| `([a-z]+)` \| `([^`]+)` \| ([a-z]+) \| ([^|]+) \|$/gm)].map(([, name, dir, kind, upstream]) => ({
+        const rows = [...contributing.matchAll(/^\| `([a-z-]+)` \| `([^`]+)` \| ([a-z]+) \| ([^|]+) \|$/gm)].map(([, name, dir, kind, upstream]) => ({
             name,
             dir,
             kind,
@@ -702,6 +703,10 @@ describe('runtimes', () => {
     test('agent runs on Node: only its adapters import node:*, and nothing imports bun', () => {
         expect(show(IMPORTS.agent.filter((i) => i.specifier.startsWith('node:') && !segments(i.file).includes('adapters')))).toEqual([]);
         expect(show(IMPORTS.agent.filter((i) => i.specifier === 'bun' || i.specifier.startsWith('bun:')))).toEqual([]);
+    });
+
+    test('knowledge-worker runs on Cloudflare Workers: it imports neither node:* nor bun', () => {
+        expect(show(IMPORTS['knowledge-worker'].filter((i) => isBuiltin(i.specifier)))).toEqual([]);
     });
 
     test('web runs in the browser: it imports no infrastructure/', () => {

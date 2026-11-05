@@ -62,6 +62,8 @@ export interface SubscriberOptions {
     readonly reconnect?: { readonly minMs: number; readonly maxMs: number; readonly giveUpMs: number };
     /** The ways of working the prompts give for the DSLs a run is about (the guide's); none without it. */
     readonly practice?: Practice;
+    /** The runner has the knowledge tools of `dt mcp` (ADR 0031): its prompt says when to use them. */
+    readonly knowledge?: boolean;
 }
 
 /** Why a subscriber ended. */
@@ -136,7 +138,8 @@ export function showPaths(paths: readonly string[]): string {
 export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions): Subscriber {
     const { api, clock, log } = deps;
     const reconnect = options.reconnect ?? DEFAULT_RECONNECT;
-    const practice = options.practice && { practice: options.practice };
+    // what every prompt of a run says alike: the ways of working, and the knowledge tools when the runner has them
+    const fixed = { ...(options.practice && { practice: options.practice }), ...(options.knowledge && { knowledge: true }) };
     const heartbeatMs = options.heartbeatMs ?? Math.max(50, Math.floor(options.leaseMs / 4));
     const stopping = new AbortController();
     let end: SubscriberEnd | undefined;
@@ -310,13 +313,13 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                 outcome = await deps.runner.run({
                     prompt: buildPrompt(input, names, nonce, previousRuns, revert, {
                         ...(soFar && { sessionSoFar: soFar.text }),
-                        ...practice,
+                        ...fixed,
                         ...journeys,
                         ...peopleEdits,
                     }),
                     ...(sinceLast && {
                         continuedPrompt: buildPrompt(input, names, nonce, previousRuns, revert, {
-                            ...practice,
+                            ...fixed,
                             ...journeys,
                             ...peopleEdits,
                             changedSinceYourLastRun: sinceLast,

@@ -113,6 +113,22 @@ const RAW_BUTTONS: Readonly<Record<string, { readonly count: number; readonly re
         reason: "the inspector's back to the previous element (↶ and its name): a reference in running text (a quote, a time, a chip of an element) that jumps to its source: its look is the text it stands for",
     },
     'inspector.tsx role=tab': { count: 1, reason: 'a tab of a tablist (role=tab): it switches what the pane shows, a widget of its own' },
+    'knowledge/panel.tsx role=radio': {
+        count: 1,
+        reason: '新しい順 / 種類の順 of a knowledge list: segmented view settings (a radio group), not session actions',
+    },
+    'knowledge/panel.tsx knowledge-item-head': {
+        count: 1,
+        reason: "a knowledge item's head (kind, title) that opens it: a row or card whose whole box is the target (a list's row, a disclosure head): its layout is the row's, not a button's",
+    },
+    'knowledge/panel.tsx knowledge-side': {
+        count: 1,
+        reason: "a side of a knowledge conflict (kind, title, labels) that opens it under the pair: a row or card whose whole box is the target (a list's row, a disclosure head): its layout is the card's, not a button's",
+    },
+    'knowledge/panel.tsx knowledge-chip': {
+        count: 2,
+        reason: "a filter of the ナレッジ list (AS-IS, ルール, 発言…), on or off, and an opened item's label as the same chip, which filters the list by it: a chip or badge of its own (a count, a reaction, a status pill): a view setting",
+    },
     'lists.tsx problem': {
         count: 1,
         reason: "a problem of the problems list: a row or card whose whole box is the target (a list's row, a disclosure head): its layout is the row's, not a button's",
@@ -154,9 +170,9 @@ const RAW_BUTTONS: Readonly<Record<string, { readonly count: number; readonly re
         count: 1,
         reason: 'the AI avatar and ↓ that jump to a turn: icon-only, on a shape of its own (round, bordered or sized to its place): not a text button',
     },
-    'session/chat.tsx chat-reply-ref': {
-        count: 2,
-        reason: 'the quote of what a reply answers: a reference in running text (a quote, a time, a chip of an element) that jumps to its source: its look is the text it stands for',
+    'shared/reference.tsx chat-reply-ref': {
+        count: 1,
+        reason: "the quote of what a reply answers, and a knowledge item's source: a reference in running text (a quote, a time, a chip of an element) that jumps to its source: its look is the text it stands for",
     },
     'session/chat.tsx role=menuitem': {
         count: 2,

@@ -178,6 +178,7 @@ export interface Arbitraries {
     readonly DismissedRequest: fc.Arbitrary<Collaboration.DismissedRequest>;
     readonly Request: fc.Arbitrary<Collaboration.Request>;
     readonly RequestSent: fc.Arbitrary<Collaboration.RequestSent>;
+    readonly RequestRedacted: fc.Arbitrary<Collaboration.RequestRedacted>;
     readonly RequestDismissed: fc.Arbitrary<Collaboration.RequestDismissed>;
     readonly RevisionId: fc.Arbitrary<Collaboration.RevisionId>;
     readonly RestorableRevision: fc.Arbitrary<Collaboration.RestorableRevision>;
@@ -285,7 +286,7 @@ export interface Examples {
     };
     readonly Request?: {
         readonly states?: { readonly Sent?: readonly Collaboration.SentRequest[]; readonly Dismissed?: readonly Collaboration.DismissedRequest[] };
-        readonly commands?: { readonly send?: readonly Parameters<Collaboration.RequestCommands['send']>[]; readonly requestRevert?: readonly Parameters<Collaboration.RequestCommands['requestRevert']>[]; readonly recordEdit?: readonly Parameters<Collaboration.RequestCommands['recordEdit']>[]; readonly answer?: readonly Parameters<Collaboration.RequestCommands['answer']>[] };
+        readonly commands?: { readonly send?: readonly Parameters<Collaboration.RequestCommands['send']>[]; readonly requestRevert?: readonly Parameters<Collaboration.RequestCommands['requestRevert']>[]; readonly recordEdit?: readonly Parameters<Collaboration.RequestCommands['recordEdit']>[]; readonly answer?: readonly Parameters<Collaboration.RequestCommands['answer']>[]; readonly redact?: readonly Parameters<Collaboration.RequestCommands['redact']>[] };
     };
     readonly Revision?: {
         readonly states?: { readonly Recorded?: readonly Collaboration.RecordedRevision[] };
@@ -501,10 +502,11 @@ export function arbitraries(options: Options = {}): Arbitraries {
         JourneyNote: () => given.JourneyNote ?? testing.cast<Collaboration.JourneyNote>(fc.record({ journey: a.GuideJourneyKey, command: a.SuggestedCommand, targets: testing.many(a.ModelTarget, 0, 3) }, { requiredKeys: ['journey', 'targets'] })),
         StickyEdit: () => given.StickyEdit ?? testing.cast<Collaboration.StickyEdit>(fc.oneof(fc.record({ kind: fc.constant('Wording' as const), storming: a.StormingName, path: a.WorkspacePath, nameBefore: a.StormingLocalName, nameAfter: a.StormingLocalName, labelBefore: a.Text, labelAfter: a.Text, references: a.Tally }, { requiredKeys: ['kind', 'storming', 'path', 'nameBefore', 'nameAfter', 'references'] }), fc.record({ kind: fc.constant('HotspotAdded' as const), storming: a.StormingName, path: a.WorkspacePath, hotspot: a.StormingLocalName, label: a.Text, on: a.StormingLocalName }), fc.record({ kind: fc.constant('HotspotResolved' as const), storming: a.StormingName, path: a.WorkspacePath, hotspot: a.StormingLocalName, resolution: a.Text }))),
         MentionableParticipant: () => given.MentionableParticipant ?? testing.cast<Collaboration.MentionableParticipant>(a.ParticipantId),
-        SentRequest: () => testing.withExamples(testing.valid(given.SentRequest ?? testing.cast<Collaboration.SentRequest>(fc.record({ state: fc.constant('Sent' as const), id: a.RequestId, session: a.SessionId, author: a.ParticipantId, targets: testing.many(a.TargetSnapshot, 0, 20), body: a.Text, sentAt: testing.cast<Date>(scalar.Timestamp), replyTo: a.ReplyTarget, mentions: testing.many(a.ParticipantId, 0, 20), reverts: a.AgentRunId, viewedAt: a.ViewedAt, journeyNote: a.JourneyNote, edit: a.StickyEdit }, { requiredKeys: ['state', 'id', 'session', 'author', 'targets', 'body', 'sentAt', 'mentions'] })), (v) => Collaboration.checkSentRequest(v).length === 0, 'Collaboration.SentRequest'), options.examples?.Request?.states?.Sent, Collaboration.checkSentRequest, 'Collaboration.SentRequest'),
-        DismissedRequest: () => testing.withExamples(testing.valid(given.DismissedRequest ?? testing.cast<Collaboration.DismissedRequest>(fc.record({ state: fc.constant('Dismissed' as const), id: a.RequestId, session: a.SessionId, author: a.ParticipantId, targets: testing.many(a.TargetSnapshot, 0, 20), body: a.Text, sentAt: testing.cast<Date>(scalar.Timestamp), replyTo: a.ReplyTarget, mentions: testing.many(a.ParticipantId, 0, 20), reverts: a.AgentRunId, viewedAt: a.ViewedAt, journeyNote: a.JourneyNote, edit: a.StickyEdit, dismissedBy: a.ParticipantId, dismissedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'author', 'targets', 'body', 'sentAt', 'mentions', 'dismissedBy', 'dismissedAt'] })), (v) => Collaboration.checkDismissedRequest(v).length === 0, 'Collaboration.DismissedRequest'), options.examples?.Request?.states?.Dismissed, Collaboration.checkDismissedRequest, 'Collaboration.DismissedRequest'),
+        SentRequest: () => testing.withExamples(testing.valid(given.SentRequest ?? testing.cast<Collaboration.SentRequest>(fc.record({ state: fc.constant('Sent' as const), id: a.RequestId, session: a.SessionId, author: a.ParticipantId, targets: testing.many(a.TargetSnapshot, 0, 20), body: a.Text, sentAt: testing.cast<Date>(scalar.Timestamp), replyTo: a.ReplyTarget, mentions: testing.many(a.ParticipantId, 0, 20), reverts: a.AgentRunId, viewedAt: a.ViewedAt, journeyNote: a.JourneyNote, edit: a.StickyEdit, redactedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'author', 'targets', 'body', 'sentAt', 'mentions'] })), (v) => Collaboration.checkSentRequest(v).length === 0, 'Collaboration.SentRequest'), options.examples?.Request?.states?.Sent, Collaboration.checkSentRequest, 'Collaboration.SentRequest'),
+        DismissedRequest: () => testing.withExamples(testing.valid(given.DismissedRequest ?? testing.cast<Collaboration.DismissedRequest>(fc.record({ state: fc.constant('Dismissed' as const), id: a.RequestId, session: a.SessionId, author: a.ParticipantId, targets: testing.many(a.TargetSnapshot, 0, 20), body: a.Text, sentAt: testing.cast<Date>(scalar.Timestamp), replyTo: a.ReplyTarget, mentions: testing.many(a.ParticipantId, 0, 20), reverts: a.AgentRunId, viewedAt: a.ViewedAt, journeyNote: a.JourneyNote, edit: a.StickyEdit, redactedAt: testing.cast<Date>(scalar.Timestamp), dismissedBy: a.ParticipantId, dismissedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'author', 'targets', 'body', 'sentAt', 'mentions', 'dismissedBy', 'dismissedAt'] })), (v) => Collaboration.checkDismissedRequest(v).length === 0, 'Collaboration.DismissedRequest'), options.examples?.Request?.states?.Dismissed, Collaboration.checkDismissedRequest, 'Collaboration.DismissedRequest'),
         Request: () => given.Request ?? fc.oneof(a.SentRequest, a.DismissedRequest),
         RequestSent: () => given.RequestSent ?? testing.cast<Collaboration.RequestSent>(fc.record({ type: fc.constant('RequestSent' as const), requestId: a.RequestId, session: a.SessionId, author: a.ParticipantId, targets: testing.many(a.TargetSnapshot, 0, 20), body: a.Text, sentAt: testing.cast<Date>(scalar.Timestamp), replyTo: a.ReplyTarget, mentions: testing.many(a.ParticipantId, 0, 20), reverts: a.AgentRunId, viewedAt: a.ViewedAt, journeyNote: a.JourneyNote, edit: a.StickyEdit }, { requiredKeys: ['type', 'requestId', 'session', 'author', 'targets', 'body', 'sentAt', 'mentions'] })),
+        RequestRedacted: () => given.RequestRedacted ?? testing.cast<Collaboration.RequestRedacted>(fc.record({ type: fc.constant('RequestRedacted' as const), requestId: a.RequestId, redactedAt: testing.cast<Date>(scalar.Timestamp) })),
         RequestDismissed: () => given.RequestDismissed ?? testing.cast<Collaboration.RequestDismissed>(fc.record({ type: fc.constant('RequestDismissed' as const), requestId: a.RequestId, dismissedBy: a.ParticipantId, dismissedAt: testing.cast<Date>(scalar.Timestamp) })),
         RevisionId: () => testing.valid(given.RevisionId ?? testing.collide(testing.cast<Collaboration.RevisionId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkRevisionId(v).length === 0, 'Collaboration.RevisionId'),
         RestorableRevision: () => given.RestorableRevision ?? testing.cast<Collaboration.RestorableRevision>(a.RevisionId),
@@ -1526,6 +1528,19 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 input: () => fc.tuple(fc.record({ id: a.RequestId, session: a.ActiveSession, answers: a.RequestId, body: a.Text, sentAt: testing.cast<Date>(scalar.Timestamp), journeyNote: a.JourneyNote }, { requiredKeys: ['id', 'session', 'body', 'sentAt'] })),
                 examples: options.examples?.Request?.commands?.answer ?? [],
                 factory: true,
+                requires: [],
+                declaredRequires: [],
+                invariants: () => Collaboration.checkRequest,
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'Request.redact',
+                run: impl.Request.redact,
+                input: () => fc.tuple(fc.oneof(a.SentRequest, a.DismissedRequest), fc.record({ body: a.Text, at: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.Request?.commands?.redact ?? [],
+                factory: false,
                 requires: [],
                 declaredRequires: [],
                 invariants: () => Collaboration.checkRequest,

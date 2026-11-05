@@ -37,6 +37,7 @@ import type { ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
 import { motionMs, useGrow, useSwap } from '../shared/motion';
 import { useLang, useT } from '../i18n';
+import { ExtractionSwitch } from '../knowledge/panel';
 import { useChatActions, type QuestionChoice } from './actions';
 import { ActivityLine } from './activity';
 import {
@@ -58,7 +59,7 @@ import {
 import { sessionApi } from './api';
 import { Bubble, Clamped, time } from './bubble';
 import { arrival, clamps, followTop, HEAD_MARGIN, PAGE_REVEAL, revealKeys } from './reveal';
-import { MarkdownText } from './markdown-text';
+import { MarkdownText } from '../shared/markdown-text';
 import { ChangedElements, ReplyButton, RunCard, useUnitAbout } from './card';
 import { AddReaction, ReactionRow, useMarking } from './mark-controls';
 import { messageMarks, updatedCards } from './cards';
@@ -83,6 +84,7 @@ import { useTargetNaming } from './naming';
 import { CollabMenu, CollabSummaryDialog, openPeople, useCollabSummary } from './collab-menu';
 import { JoinRequests } from './join-requests';
 import { Avatar, failure, MentionedText, TargetChips } from './parts';
+import { ReferenceLine } from '../shared/reference';
 import { AiAvatar, ProposalCard } from './proposal';
 import { chosenIndex } from './proposal-view';
 import { referencesAsText } from './references';
@@ -109,6 +111,7 @@ import {
     type SlashItem,
     type SlashScope,
 } from './slash';
+import { ReplyText } from './reply';
 import { isReplyable, messageReference, messageReplyTargets, repliesToMe, replyReference, replyTargets, type ReplyDraft } from './replies';
 import { useRevisionTools } from './revisions';
 import { CancelButton, CancelDialog, RowActions, StatusSizer, StatusSlot, TurnLink } from './status-slot';
@@ -666,7 +669,8 @@ export function SessionChat(props: {
 
 /**
  * The session's controls of the whole page, put in the app bar (rendered here, inside the chat's context): the collab
- * menu (the avatars ▾; in Solo a plain ⋯, after the AI's state) and the AI's state at a glance.
+ * menu (the avatars ▾; in Solo a plain ⋯, after the AI's state), whether the talk is turned into knowledge (with a
+ * knowledge store) and the AI's state at a glance.
  */
 function SessionBar(props: {
     slot: HTMLElement | null;
@@ -705,6 +709,7 @@ function SessionBar(props: {
     return createPortal(
         <div className="session-chat session-bar">
             {!solo && menu}
+            <ExtractionSwitch facilitator={session.me.participant.role === 'facilitator'} live={props.live} />
             {/* idle says nothing: only running, a question or a queued run shows; a click opens it in AI の作業 */}
             <span className="chat-status-slot" aria-live="polite">
                 {presence.kind === 'missing' && (
@@ -1357,7 +1362,7 @@ function AiMessageRow({ request: r, continues, hangs }: { request: RequestJson; 
             <Bubble avatar={<AiAvatar />} who={tx.chat.agent} at={r.sentAt} continues={continues} className="chat-bubble-ai">
                 {r.replyTo?.kind === 'Message' && !hangs && <MessageReferenceLine request={r.replyTo.request} />}
                 <Clamped tx={tx} revealKey={`message:${r.id}`} blocks>
-                    <MarkdownText text={r.body} onNavigate={onNavigate} />
+                    <MarkdownText text={r.body} renderText={(text) => <ReplyText text={text} onNavigate={onNavigate} />} />
                 </Clamped>
                 <InterviewChoices request={r.id} />
                 <JourneyNoteActions request={r} />
@@ -1400,11 +1405,7 @@ function ReplyReferenceLine({ run }: { run: string }) {
     const r = tx.chat.replies;
     // plain text in a button: an element the AI named reads as its name, not a link
     const head = ref.summary === undefined ? r.states[ref.state] : referencesAsText(ref.summary, naming);
-    return (
-        <button className="chat-reply-ref" onClick={() => jump(`card:${ref.card}`)} data-tooltip={r.referenceHint(ref.name)}>
-            <span className="chat-reply-ref-run">↩ {r.reference(ref.name)}:</span> <span className="chat-reply-ref-head">{head}</span>
-        </button>
-    );
+    return <ReferenceLine who={r.reference(ref.name)} head={head} tooltip={r.referenceHint(ref.name)} onClick={() => jump(`card:${ref.card}`)} />;
 }
 
 /**
@@ -1419,11 +1420,7 @@ function MessageReferenceLine({ request }: { request: string }) {
     const who = speakerName(ref.author, session.me.participant.id, nameOf, tx.chat.you);
     // the AI's answer names elements as references, and so does a choice picked: by their names here, as the bubble shows them
     const head = referencesAsText(ref.head, naming);
-    return (
-        <button className="chat-reply-ref" onClick={() => jump(`message:${ref.request}`)} data-tooltip={tx.chat.replies.messageReferenceHint(who)}>
-            <span className="chat-reply-ref-run">↩ {who}:</span> <span className="chat-reply-ref-head">{head}</span>
-        </button>
-    );
+    return <ReferenceLine who={who} head={head} tooltip={tx.chat.replies.messageReferenceHint(who)} onClick={() => jump(`message:${ref.request}`)} />;
 }
 
 /** A message's menu (the facilitator's, …): choose it among several to send to the AI together; the triage's record. */

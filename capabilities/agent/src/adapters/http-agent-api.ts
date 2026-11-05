@@ -11,7 +11,17 @@ import {
     type AgentSessionBody,
     type EventMessage,
 } from '@domaintrail/collaboration/protocol';
-import { AgentApiError, type AgentApi, type AnswerStreamItem, type ApiResult, type Started, type StreamItem } from '../core/ports.js';
+import { EXTRACTION_EVENT_TYPES, type ExtractionJobBody } from '@domaintrail/knowledge';
+import {
+    AgentApiError,
+    type AgentApi,
+    type AnswerStreamItem,
+    type ApiResult,
+    type ExtractionApi,
+    type ExtractionStreamItem,
+    type Started,
+    type StreamItem,
+} from '../core/ports.js';
 
 /** How long a call may take (a start or a finish takes a snapshot of the workspace on the server). */
 const CALL_TIMEOUT_MS = 120_000;
@@ -81,7 +91,7 @@ export async function* parseSse(body: ReadableStream<Uint8Array>): AsyncGenerato
     }
 }
 
-export function createHttpAgentApi(options: HttpAgentApiOptions): AgentApi {
+export function createHttpAgentApi(options: HttpAgentApiOptions): AgentApi & ExtractionApi {
     const base = options.url.endsWith('/') ? options.url : `${options.url}/`;
     const authorization = `Bearer ${options.token}`;
 
@@ -164,5 +174,36 @@ export function createHttpAgentApi(options: HttpAgentApiOptions): AgentApi {
             }
         },
         answerResult: (job, result) => call('POST', `answers/${encodeURIComponent(job)}`, result),
+        async *extractionEvents(signal): AsyncGenerator<ExtractionStreamItem> {
+            const res = await fetch(`${base}agent/extractions/events`, { headers: { authorization, accept: 'text/event-stream' }, signal });
+            if (!res.ok) throw new AgentApiError(res.status, await errorType(res));
+            if (!res.body) throw new Error('The extraction stream has no body');
+            yield { kind: 'open' };
+            for await (const e of parseSse(res.body)) {
+                let data: unknown;
+                try {
+                    data = e.data ? JSON.parse(e.data) : {};
+                } catch (error) {
+                    throw new Error(`An extraction event is not JSON: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+                }
+                switch (e.event) {
+                    case EXTRACTION_EVENT_TYPES.job:
+                        if (!isObject(data) || typeof data.job !== 'string' || !Array.isArray(data.messages))
+                            throw new Error('An extraction job without its ID');
+                        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- a job as the server encodes it (ExtractionJobBody), checked for its ID above
+                        yield { kind: 'job', job: data as unknown as ExtractionJobBody };
+                        break;
+                    case EXTRACTION_EVENT_TYPES.withdrawn:
+                        if (isObject(data) && typeof data.job === 'string') yield { kind: 'withdrawn', job: data.job };
+                        break;
+                    case EXTRACTION_EVENT_TYPES.closed:
+                        yield { kind: 'closed' };
+                        break;
+                    default:
+                    // an event of a later server: not this extractor's
+                }
+            }
+        },
+        extractionResult: (job, result) => call('POST', `extractions/${encodeURIComponent(job)}`, result),
     };
 }

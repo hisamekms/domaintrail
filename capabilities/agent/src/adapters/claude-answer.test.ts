@@ -133,4 +133,33 @@ describe("the answerer role's Claude Code", () => {
         expect(valueOf(turns[0].args, '--model')).toBe('claude-haiku-4-5');
         expect(valueOf(turns[0].args, '--tools')).toBe('');
     });
+
+    test("the knowledge tools: dt mcp for answers and proposals only, its three tools allowed; never the triage's, an interview's or a command's", async () => {
+        const answer = { kind: 'answer', answer: 'ok' };
+        const verdict = { kind: 'consultation', confidence: 0.9, reason: 'a question' };
+        const knowledge = { command: '/tmp/domaintrail-dt-mcp-x/dt-mcp', args: [] };
+        const { agent, logged } = await setup([{ reply: verdict }, { reply: answer }, { reply: { kind: 'question', question: 'q' } }, { reply: {} }], {
+            knowledge,
+        });
+        await agent.triage(turn('t'));
+        await agent.answer(turn('a'));
+        await agent.interview(turn('i'));
+        await agent.command({ ...turn('c'), type: 'answer' });
+        const [t, a, i, c] = logged();
+        expect(JSON.parse(valueOf(a.args, '--mcp-config') ?? '{}')).toEqual({
+            mcpServers: { domaintrail: { type: 'stdio', command: knowledge.command, args: [] } },
+        });
+        expect(a.args).toContain('--strict-mcp-config');
+        expect(a.args.slice(a.args.indexOf('--allowedTools') + 1)).toEqual([
+            'mcp__domaintrail__knowledge_for_element',
+            'mcp__domaintrail__knowledge_search',
+            'mcp__domaintrail__knowledge_get',
+        ]);
+        // still the reading tools only among the built-in ones
+        expect(valueOf(a.args, '--tools')).toBe('Read,Grep,Glob');
+        for (const other of [t, i, c]) {
+            expect(other.args).not.toContain('--mcp-config');
+            expect(other.args).not.toContain('--allowedTools');
+        }
+    });
 });

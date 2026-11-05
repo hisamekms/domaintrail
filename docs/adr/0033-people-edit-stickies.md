@@ -42,6 +42,7 @@ it, so an action added there shows everywhere at once:
 |---|---|---|---|---|---|
 | チャットに追加 | all | yes | yes | Enter | a live session |
 | 直す（ラベル・名前） | all | no | yes | F2 | a live session |
+| 知見を見る | a sticky with knowledge (ADR 0031), in a session with a knowledge store | no | no | | a store |
 | ドメインモデルで見る | event, command, aggregate with a `ref` the model has | no | no | | |
 | このタイムラインで見る | an event in a timeline the view does not show | no | no | | |
 | ホットスポットを付ける | event (`HOTSPOT_TARGETS`, the grammar's rule; widened there) | no | no | | a live session |
@@ -49,8 +50,8 @@ it, so an action added there shows everywhere at once:
 | リンクをコピー | all | no | no | ⌘⇧C | |
 
 The `see` actions have the `see` look (the eye) and name their place in the tooltip (「ドメインモデルの 注文 › 確定する
-を見る」, in the display mode). 知見を見る (the knowledge feature, on another branch) is one more entry of the `see` group
-when it lands; nothing of it is drawn before.
+を見る」, in the display mode). 知見を見る opens the sticky's knowledge in the detail, under the tree; it is offered only
+where the session keeps knowledge and the sticky has some (its dot on the canvas).
 
 **Links.** A link names an element in the page's fragment, `#select=es/<Storming>/<Local>`: the view state stays the
 page's (per browser, not in the URL), and the page opens the world and the storming's view that draws the element
@@ -129,4 +130,4 @@ the prompt shows them in `changedSinceYourLastRun.editedByPeople` for an agent t
 - The canvas is no longer read-only for its words: a typo costs an edit, not a run. The AI keeps the tidying.
 - `Edited` is a state every consumer of runs knows (the chat's stream leaves it out; AI の作業 draws it; the prompt
   calls it "edited by a person").
-- The menu and the palette are shared components for the next features (知見を見る, other worlds' actions).
+- The menu and the palette are shared components for the next features (other worlds' actions).

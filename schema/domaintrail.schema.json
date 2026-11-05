@@ -410,6 +410,34 @@
             }
           }
         },
+        "extract": {
+          "description": "The extractor: takes knowledge from the session's talk (ADR 0031), with no tools at all, a fresh Claude Code process per extraction.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "description": "The model of the extractions (claude --model). Default: agent.answer.model, else the model of your Claude Code settings.",
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][\\w.:@\\[\\]/-]*$"
+            },
+            "effort": {
+              "description": "The effort of the extractions (claude --effort). Default: agent.answer.effort, else the effort of your Claude Code settings.",
+              "enum": ["low", "medium", "high", "xhigh", "max"]
+            },
+            "timeout": {
+              "description": "The most seconds an extraction may take.",
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "default": 180
+            },
+            "gateModel": {
+              "description": "The light model that decides first whether there is anything to extract, so that the extractor runs only then (claude --model, no tools). Default: agent.triage.model, else haiku.",
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][\\w.:@\\[\\]/-]*$",
+              "default": "haiku"
+            }
+          }
+        },
         "read": {
           "description": "What both roles of the AI may read outside the workspace, read-only (agent.answer.read and agent.run.read add to it). dt open, dt collab and dt agent print it at startup; in a collab session, any participant can make the AI quote these files.",
           "type": "object",
@@ -534,6 +562,79 @@
             }
           }
         }
+      }
+    },
+    "knowledge": {
+      "description": "The knowledge taken from the sessions (ADR 0031): where it is kept, the project this workspace reads and writes, and when it is extracted from the talk. The Access service token of the cloudflare store is never here: it is read from the environment variables DOMAINTRAIL_KNOWLEDGE_CLIENT_ID and DOMAINTRAIL_KNOWLEDGE_CLIENT_SECRET.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "store": {
+          "description": "files: one Markdown file per item in the workspace's knowledge/ directory, versions left to git. cloudflare: the Worker you deploy from DomainTrail's template (D1 and R2, behind Cloudflare Access), needed when personal data must be deletable.",
+          "enum": ["files", "cloudflare"],
+          "default": "files"
+        },
+        "project": {
+          "description": "The project whose knowledge this workspace reads and writes, the same in every clone and worktree. Required with cloudflare; with files, by default the workspace's directory name made into a project name (lowercased, other characters than letters and digits made '-').",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+        },
+        "url": {
+          "description": "The Worker's base URL (https; http only on localhost), required with cloudflare, unused with files.",
+          "type": "string",
+          "format": "uri",
+          "pattern": "^(https://[^/?#@]+|http://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?)(/[^?#]*)?$",
+          "examples": ["https://knowledge.example.com"]
+        },
+        "extraction": {
+          "description": "When the knowledge is extracted from the talk of a session.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "description": "Whether a session extracts knowledge from its talk unless its facilitator switches it in the Live View (the facilitator's choice is kept for the session).",
+              "type": "boolean",
+              "default": false
+            },
+            "quietSeconds": {
+              "description": "Seconds without a message after a person's message before an extraction (one also follows each answer of the AI, and the end of the session).",
+              "type": "number",
+              "minimum": 0,
+              "default": 30
+            },
+            "minIntervalSeconds": {
+              "description": "The fewest seconds between two extractions of a session.",
+              "type": "number",
+              "minimum": 0,
+              "default": 60
+            },
+            "contextMinutes": {
+              "description": "Minutes of the talk before the new messages that the extraction is given as context.",
+              "type": "number",
+              "minimum": 0,
+              "default": 10
+            },
+            "gateContextMinutes": {
+              "description": "Minutes of the talk before the new messages that the light model deciding whether to extract is given as context.",
+              "type": "number",
+              "minimum": 0,
+              "default": 3
+            },
+            "settleSeconds": {
+              "description": "Seconds of quiet on a topic after which a held update or conflict applies (else it applies when the next extraction makes the same call).",
+              "type": "number",
+              "minimum": 0,
+              "default": 120
+            }
+          }
+        }
+      },
+      "if": {
+        "properties": { "store": { "const": "cloudflare" } },
+        "required": ["store"]
+      },
+      "then": {
+        "required": ["project", "url"]
       }
     }
   }

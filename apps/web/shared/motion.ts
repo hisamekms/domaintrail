@@ -230,3 +230,51 @@ export function useHeld<T>(value: T | undefined, holdMs: number, same?: (a: T, b
     useEffect(() => () => hold.cancel(), [hold]);
     return shown;
 }
+
+/** A part that stays on the page while it closes (see `createStay`): `set` whether it is open, `cancel` drops the wait. */
+export interface Stay {
+    set(open: boolean): void;
+    cancel(): void;
+}
+
+/**
+ * The timing of `useStaying`, without React: `show` is called with whether the part is on the page. Opened, it is at
+ * once; closed, it stays `ms` more (its close plays meanwhile), unless it opens again before then. With no motion
+ * (`ms` 0) it goes at once.
+ */
+export function createStay(initial: boolean, ms: number, show: (shown: boolean) => void, clock: HoldClock = PAGE_CLOCK): Stay {
+    let shown = initial;
+    let timer: (() => void) | undefined;
+    const cancel = (): void => {
+        timer?.();
+        timer = undefined;
+    };
+    const apply = (value: boolean): void => {
+        timer = undefined;
+        if (shown === value) return;
+        shown = value;
+        show(value);
+    };
+    return {
+        set(open) {
+            cancel();
+            if (open || ms <= 0) apply(open);
+            else if (shown) timer = clock.after(ms, () => apply(false));
+        },
+        cancel,
+    };
+}
+
+/**
+ * Whether a part that opens and closes (`open`) is on the page: while open, and for `token` (a motion token) after it
+ * closed, so that its close can play before it goes; at once with "reduce motion" (the token is 0ms).
+ */
+export function useStaying(open: boolean, token = '--motion-medium'): boolean {
+    const [shown, setShown] = useState(open);
+    const [stay] = useState(() => createStay(open, motionMs(token), setShown));
+    useEffect(() => stay.set(open), [stay, open]);
+    useEffect(() => () => stay.cancel(), [stay]);
+    if (open) return true;
+    // with no motion, it goes in the same render as it closes (no frame of it closed but still there)
+    return shown && motionMs(token) > 0;
+}

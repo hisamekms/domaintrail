@@ -67,6 +67,8 @@ export interface AnswererOptions {
     readonly reconnect?: { readonly minMs: number; readonly maxMs: number; readonly giveUpMs: number };
     /** The ways of working the answer and propose prompts give for the DSLs a message is about (the guide's); none without it. */
     readonly practice?: Practice;
+    /** The agent's answers and proposals have the knowledge tools of `dt mcp` (ADR 0031): their prompts say when to use them. */
+    readonly knowledge?: boolean;
 }
 
 /** Why an answerer ended. */
@@ -99,6 +101,7 @@ export function startAnswerer(deps: AnswererDeps, options: AnswererOptions = {})
     const now = deps.now ?? Date.now;
     const reconnect = options.reconnect ?? DEFAULT_RECONNECT;
     const practice = options.practice && { practice: options.practice };
+    const knowledge = options.knowledge && { knowledge: true };
     const stopping = new AbortController();
     let end: AnswererEnd | undefined;
     let resolveDone: (end: AnswererEnd) => void = () => {};
@@ -180,9 +183,14 @@ export function startAnswerer(deps: AnswererDeps, options: AnswererOptions = {})
         const build = job.kind === 'answer' ? buildAnswerPrompt : buildProposePrompt;
         const since = job.sessionSoFarSince ?? job.sessionSoFar;
         const result = await deps.agent.answer({
-            prompt: build(job, nonce, { ...(job.sessionSoFar && { sessionSoFar: job.sessionSoFar.text }), ...practice }),
+            prompt: build(job, nonce, { ...(job.sessionSoFar && { sessionSoFar: job.sessionSoFar.text }), ...practice, ...knowledge }),
             ...(changed && {
-                continuedPrompt: build(job, nonce, { ...practice, changedSinceYourLastAnswer: changed, ...(since && { sessionSoFar: since.text }) }),
+                continuedPrompt: build(job, nonce, {
+                    ...practice,
+                    ...knowledge,
+                    changedSinceYourLastAnswer: changed,
+                    ...(since && { sessionSoFar: since.text }),
+                }),
             }),
             signal,
         });

@@ -1,0 +1,11 @@
+{
+  "name": "@domaintrail/knowledge-worker",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@domaintrail/knowledge": "workspace:*"
+  },
+  "devDependencies": {
+    "miniflare": "4.20260730.0"
+  }
+}

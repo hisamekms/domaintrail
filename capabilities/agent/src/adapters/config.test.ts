@@ -29,10 +29,36 @@ describe("the agent's settings", () => {
             run: RUN_DEFAULTS,
             answer: { warm: true, restartAfter: 50, idleTimeout: 30, timeout: 120 },
             triage: { model: 'haiku', warm: false },
+            extract: { timeout: 180, gateModel: 'haiku' },
             read: { answer: [], run: [] },
         });
         expect(resolveAgentConfig().run.allowedTools).not.toBe(DEFAULT_AGENT_TOOLS);
         expect(resolveAgentConfig({ run: { allowedTools: ['Read'] } }).run.allowedTools).toEqual(['Read']);
+    });
+
+    test("the extractor's light model: the triage's unless its own is given, else haiku", () => {
+        expect(resolveAgentConfig({ triage: { model: 'claude-haiku-4-5' } }).extract.gateModel).toBe('claude-haiku-4-5');
+        expect(resolveAgentConfig({ triage: { model: 'claude-haiku-4-5' }, extract: { gateModel: 'sonnet' } }).extract.gateModel).toBe('sonnet');
+    });
+
+    test("the extractor: 180 s, the answerer's model and effort unless its own are given", () => {
+        expect(resolveAgentConfig({ answer: { model: 'opus', effort: 'high' } }).extract).toEqual({
+            timeout: 180,
+            model: 'opus',
+            effort: 'high',
+            gateModel: 'haiku',
+        });
+        expect(resolveAgentConfig({ answer: { model: 'opus' }, extract: { model: 'sonnet', timeout: 60 } }).extract).toEqual({
+            timeout: 60,
+            model: 'sonnet',
+            gateModel: 'haiku',
+        });
+        expect(refusal({ extract: { model: 'sonnet', effort: 'low', timeout: 30 } })).toBeUndefined();
+        expect(refusal({ extract: { timeout: 0 } })).toContain("'agent.extract.timeout'");
+        expect(refusal({ extract: { effort: 'huge' } })).toContain("'agent.extract.effort'");
+        expect(refusal({ extract: { gateModel: '-x' } })).toContain("'agent.extract.gateModel'");
+        expect(refusal({ extract: { gateModel: 'claude-haiku-4-5' } })).toBeUndefined();
+        expect(refusal({ extract: 'sonnet' })).toContain("'agent.extract' must be an object");
     });
 
     test('the runs: a warm Claude Code by default, replaced after 20 runs, ended after 30 idle minutes; the model and effort only when given', () => {

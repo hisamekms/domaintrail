@@ -184,7 +184,7 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   never on hover, hidden while the canvas moves): the frequent actions as icons — チャットに追加 (💬, a muted ✓ once
   added) and 直す ✎ — then 「…」; with several selected, how many and the actions for several only. 「…」 and a
   right-click on a sticky open the menu of every action that applies to it, by group with their keys: よく使う
-  (チャットに追加 `Enter`, 直す（ラベル・名前） `F2`), 見る (ドメインモデルで見る for an event, a command or an aggregate whose
+  (チャットに追加 `Enter`, 直す（ラベル・名前） `F2`), 見る (知見を見る for a sticky with knowledge, opening it in the detail; ドメインモデルで見る for an event, a command or an aggregate whose
   `ref` the model has, its tooltip naming the element 「ドメインモデルの 注文 › 確定する を見る」; このタイムラインで見る for an
   event, opening a timeline it is in), 書く (ホットスポットを付ける on an event; 解決を書く on a hotspot) and そのほか (リンクをコピー
   `⌘⇧C`, a link that opens the Live View with that sticky selected). The arrow keys move in the menu, Escape closes
@@ -500,3 +500,39 @@ the journeys panel; the latest card follows the journey file as it is now. A few
   other groups always show.
 
 The others' cursors are drawn on the same view. `dt open --host <non-loopback>` serves the same page read-only, without any of it. See [`dt guide session`](guide.md#collaboration-sessions).
+
+### Knowledge
+
+When the session's workspace has a knowledge store ([ADR 0031](adr/0031-knowledge.md), the `knowledge` section; what
+it is: [`dt guide knowledge`](guide.md#knowledge-from-the-sessions)), the page shows what the sessions found, through
+dt only (`/api/session/knowledge`):
+
+- On the canvas, a sticky with knowledge has a dot at its top right corner, and a red `!` when one of its items is in a
+  conflict; no count.
+- Selecting a sticky shows ナレッジ in its detail: its conflicts first, the two items side by side (each opens to its detail
+  there, and is not listed again below) with
+  ホットスポットにする (a message to the AI, as 聞くことをメモ sends: the facilitator's goes to the runner, a
+  participant's becomes a proposal) and 食い違いではない (the link removed from both); a conflict whose other side was
+  deleted no longer shows. Then its other items, 新しい順 or 種類の順.
+  A closed item shows its kind, its title (one line of plain text) and its labels' line (`AS-IS · 発言 · 営業 · 11/5`),
+  no text; the cards of a conflict and of a hotspot's box show their titles too. An item opens, as one outlined card:
+  its title stays where it was, the labels' line folds away as the rest unfolds (their heights move together, so
+  nothing jumps): its whole text as Markdown with the chat's rules (but its headings drawn as ordinary paragraphs,
+  the title being its heading; its `@{es:…}` references linking the stickies, each selects it; its images drawn, as
+  wide as the column at most), its labels as the ナレッジ tab's filter
+  chips (when, kind, origin, and the perspective it has; pressing one opens the tab filtered by that label alone, the
+  search and the other filters cleared), its sources as the chat's reference lines (`↩ who: quote`: a
+  message of this session by who said it, a click moves to it in the chat; another session's by its date; the whole
+  quote and its time in the tooltip), the other stickies it concerns as the chat's `#name` chips (each selects it), its
+  versions, and 直す (its title, text and labels, a new version), 画像を付ける (PNG, JPEG, GIF or WebP, at the end of its text)
+  and 消す. Deleting hides it from everyone at once; 元に戻す shows for 10 seconds. Once the store's undo window has
+  passed, its sweep removes the item for good and puts its source messages on the redaction log, which every dt of the
+  project reads (when it starts and every few minutes) to redact them in its own session database.
+- ナレッジ in the activity bar lists every item, with a search over the titles, the text and the quotes and filters by
+  AS-IS / TO-BE, kind and origin (and by a perspective, chosen from an item's chip, shown as one more chip while it
+  filters). The filters stay while the tab is closed. Opening an item rings its stickies on the canvas.
+- Whether the talk is turned into knowledge shows in the app bar, with the session's other controls: the facilitator
+  has a 💡 switch (pressed while the extraction is on, struck through while off; `POST /api/session/extraction`), the
+  others a 💡 while it is on and nothing while it is off. Every page follows a change at once (`knowledge.extraction`
+  over the WebSocket). None of it without a knowledge store.
+- The page reads the knowledge again whenever it changes: after an extraction, or anyone's change.

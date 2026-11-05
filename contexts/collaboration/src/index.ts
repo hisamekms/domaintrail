@@ -413,6 +413,9 @@ export {
 // stage 2 of the triage (ADR 0030): Clef's step for a message addressed to the AI
 export { CLEF_NOT_CONFIGURED, clefStep, type MessageClassifier } from './application/classifier.js';
 export { createRunActivities, RUN_ENDING_EVENTS, type RunActivities } from './application/activities.js';
+// redacting the messages a deleted knowledge item came from (ADR 0031, section 7)
+export { createRedaction, type MessageToRedact, type Redacted, type Redaction } from './application/redaction.js';
+export { isRedacted, REDACTED_BODY } from './domain/redaction.js';
 // its settings in domaintrail.jsonc (`collab`, `classifier`, `agent.run.maxPreviousRunDiff`), composed by the app
 export {
     ACCESS_CHECKS,

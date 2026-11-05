@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createHold, growMotion, paneMotion, parseDuration, shownPaneMotion, type HoldClock } from './motion';
+import { createHold, createStay, growMotion, paneMotion, parseDuration, shownPaneMotion, type HoldClock } from './motion';
 import { centeredCamera, isLaidOut } from '../view/center';
 
 const styles = readFileSync(join(import.meta.dir, '..', 'styles.css'), 'utf8');
@@ -208,5 +208,46 @@ describe('the panes on the first display', () => {
         // the tree folding over the detail moves at --motion-medium, instant on the first display too
         expect(styles).toMatch(/\.navigator\.with-detail \{[^}]*transition: height var\(--motion-medium\)/);
         expect(styles).toMatch(/\.app\.motion-none \.navigator \{\s*transition: none;/);
+    });
+});
+
+describe('a part kept on the page while it closes', () => {
+    const setup = (initial: boolean, ms = 180) => {
+        const clock = fakeClock();
+        const shown: boolean[] = [];
+        const stay = createStay(initial, ms, (v) => shown.push(v), clock);
+        return { clock, shown, stay };
+    };
+
+    test('opened, it is there at once; closed, it stays for the close and then goes', () => {
+        const { clock, shown, stay } = setup(false);
+        stay.set(true);
+        expect(shown).toEqual([true]);
+        stay.set(false);
+        clock.advance(179);
+        expect(shown).toEqual([true]);
+        clock.advance(1);
+        expect(shown).toEqual([true, false]);
+    });
+
+    test('opened again while it closes, it stays (and does not go and come back)', () => {
+        const { clock, shown, stay } = setup(true);
+        stay.set(false);
+        clock.advance(100);
+        stay.set(true);
+        clock.advance(500);
+        expect(shown).toEqual([]);
+        expect(clock.pending()).toBe(0);
+    });
+
+    test('with "reduce motion" (0ms) it goes at once; cancelled (unmounted), nothing waits', () => {
+        const instant = setup(true, 0);
+        instant.stay.set(false);
+        expect(instant.shown).toEqual([false]);
+        const { clock, shown, stay } = setup(true);
+        stay.set(false);
+        stay.cancel();
+        clock.advance(500);
+        expect(shown).toEqual([]);
     });
 });

@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { gitExposedEntries, gitIgnoredEntries, gitReadableFiles } from './git-files.js';
+import { gitExposedEntries, gitIgnoredEntries, gitLastCommit, gitReadableFiles } from './git-files.js';
 import { GitIgnore } from './gitignore.js';
 
 const dirs: string[] = [];
@@ -142,5 +142,29 @@ describe('what a commit may hold of a directory (an older .domaintrail/)', () =>
         await put(root, { '.DomainTrail/y': 'y' });
         execFileSync('git', ['add', '-f', '.DomainTrail/y'], { cwd: root, env });
         expect(await gitExposedEntries(root, '.domaintrail', { env })).toEqual(['.DomainTrail/y']);
+    });
+});
+
+describe('the last commit of a file (`dt publish` dates a drawing)', () => {
+    test('none outside a repository or before a commit; then the commit that changed it, and whether it differs now', async () => {
+        const root = await scratch();
+        const home = await scratch();
+        await writeFile(path.join(home, 'gitconfig'), '[user]\n\tname = t\n\temail = t@example.com\n');
+        const env = await gitEnv(path.join(home, 'gitconfig'));
+        await put(root, { 's/a.dtes': 'storming A {}\n', 'b.txt': 'b' });
+        expect(await gitLastCommit(root, 's/a.dtes', { env })).toBeUndefined();
+        gitInit(root, env);
+        expect(await gitLastCommit(root, 's/a.dtes', { env })).toBeUndefined();
+        const commit = (message: string, date: string): string => {
+            execFileSync('git', ['add', '-A'], { cwd: root, env });
+            execFileSync('git', ['commit', '-q', '-m', message], { cwd: root, env: { ...env, GIT_COMMITTER_DATE: date, GIT_AUTHOR_DATE: date } });
+            return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, env }).toString().trim();
+        };
+        const first = commit('a', '2026-11-01T10:00:00Z');
+        await put(root, { 'b.txt': 'b2' });
+        commit('b', '2026-11-02T10:00:00Z');
+        expect(await gitLastCommit(root, 's/a.dtes', { env })).toEqual({ commit: first, at: new Date('2026-11-01T10:00:00Z'), changed: false });
+        await put(root, { 's/a.dtes': 'storming A { }\n' });
+        expect(await gitLastCommit(root, 's/a.dtes', { env })).toMatchObject({ commit: first, changed: true });
     });
 });

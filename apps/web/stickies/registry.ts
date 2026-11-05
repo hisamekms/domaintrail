@@ -4,9 +4,9 @@
 // what they have, e.g. a `ref` to `.dt`), whether it works on several selected at once, and whether it is frequent (a
 // button of the toolbar; the others are in 「…」). What an action does is the layer's (`layer.tsx`), by its ID.
 //
-// 知見を見る (the knowledge feature, on another branch) is added here as one more entry of the `see` group when it lands:
-// `{ id: 'knowledge', icon: Lightbulb, group: 'see', … }`, with its handler in the layer.
-import { CircleCheck, Eye, Link, MessageCircleQuestionMark, MessageSquarePlus, PencilLine, type LucideIcon } from 'lucide-react';
+// 知見を見る opens the sticky's knowledge (ADR 0031) in the detail: offered only where the session keeps knowledge and
+// the sticky has some.
+import { CircleCheck, Eye, Lightbulb, Link, MessageCircleQuestionMark, MessageSquarePlus, PencilLine, type LucideIcon } from 'lucide-react';
 import {
     firstDeclarations,
     type NodeElementKind,
@@ -40,9 +40,11 @@ export interface ActionContext {
     readonly timelineShown?: string;
     /** Whether the `.dt` element a sticky's `ref` names is in the model now. */
     readonly hasModelElement: (sticky: Sticky) => boolean;
+    /** Whether a sticky has knowledge; absent where the session keeps none (no store): 知見を見る is never offered. */
+    readonly hasKnowledge?: (sticky: Sticky) => boolean;
 }
 
-export type StickyActionId = 'chat' | 'edit' | 'seeModel' | 'seeTimeline' | 'addHotspot' | 'resolve' | 'copyLink';
+export type StickyActionId = 'chat' | 'edit' | 'knowledge' | 'seeModel' | 'seeTimeline' | 'addHotspot' | 'resolve' | 'copyLink';
 
 /** A key that runs an action while stickies are selected (and nothing that takes text has the focus). */
 export interface Shortcut {
@@ -81,6 +83,7 @@ const REF_KINDS: readonly NodeElementKind[] = ['event', 'command', 'aggregate'];
 export const STICKY_ACTIONS: readonly StickyAction[] = [
     { id: 'chat', icon: MessageSquarePlus, group: 'frequent', frequent: true, multi: true, shortcut: { key: 'Enter' }, applies: (_, c) => c.live },
     { id: 'edit', icon: PencilLine, group: 'frequent', frequent: true, multi: false, shortcut: { key: 'F2' }, applies: (_, c) => c.live },
+    { id: 'knowledge', icon: Lightbulb, group: 'see', frequent: false, multi: false, applies: (s, c) => c.hasKnowledge?.(s) === true },
     {
         id: 'seeModel',
         icon: Eye,

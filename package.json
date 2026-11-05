@@ -65,7 +65,7 @@
     "site:build": "bun run --cwd site build",
     "site:shots": "bun run --cwd site shots",
     "site:examples": "bun run --cwd site examples:check",
-    "version": "bun ./scripts/zed-version.ts && git add editors/zed && bun run langium:generate && bun ./bin/dt.ts generate ts && git add shared/kernel/src/generated contexts/modeling/src/generated contexts/collaboration/src/generated",
+    "version": "bun ./scripts/zed-version.ts && git add editors/zed && bun run langium:generate && bun ./bin/dt.ts generate ts && git add shared/kernel/src/generated contexts/modeling/src/generated contexts/collaboration/src/generated contexts/knowledge/src/generated",
     "prepack": "bun run build"
   },
   "dependencies": {
@@ -93,6 +93,7 @@
     "@domaintrail/dt": "workspace:*",
     "@domaintrail/generation": "workspace:*",
     "@domaintrail/kernel": "workspace:*",
+    "@domaintrail/knowledge": "workspace:*",
     "@domaintrail/modeling": "workspace:*",
     "@domaintrail/storming": "workspace:*",
     "@domaintrail/visualization": "workspace:*",

@@ -114,7 +114,19 @@ export interface AnswerContext {
     readonly changedSinceYourLastAnswer?: readonly string[];
     /** The ways of working, of which the prompt takes those of the DSLs the message is about. */
     readonly practice?: Practice;
+    /** The answerer has the knowledge tools of `dt mcp` (ADR 0031): the rules say when to use them; none: never named. */
+    readonly knowledge?: boolean;
 }
+
+/** The knowledge tools, when the answerer has them: what they hold, and for an answer, to cite what it rests on. */
+const KNOWLEDGE_TOOLS_RULE = `- Besides them, the knowledge tools (knowledge_for_element, knowledge_search, knowledge_get) read what the project learned in its
+  sessions about stickies and model elements: why, rules, examples, decisions. An item is what was said or found at a
+  time (its origin and date tell how far to trust it); the files are the model.`;
+const KNOWLEDGE_ANSWER_RULE = `${KNOWLEDGE_TOOLS_RULE} When the message asks why something is so or how it
+  is done, look it up first (knowledge_for_element with \`Storming.LocalId\` or \`dt:Context.Aggregate.command\`), and cite
+  the IDs (\`kn_…\`) of the items your answer rests on.`;
+const KNOWLEDGE_PROPOSE_RULE = `${KNOWLEDGE_TOOLS_RULE} Check them for the elements the change touches
+  (knowledge_for_element), and propose in line with them.`;
 
 /**
  * The ways of working of the DSLs the message is about (by its targets; none: both), the guide's text as it is, under
@@ -190,7 +202,7 @@ in the block below was addressed to the AI and sorted as a question (相談): an
 
 Rules:
 ${READ_ONLY_RULES}
-${JOURNEYS_RULE}
+${JOURNEYS_RULE}${context.knowledge ? `\n${KNOWLEDGE_ANSWER_RULE}` : ''}
 
 ${practiceSection(job, context)}Reply with one JSON object (structured output), its "kind" one of:
 - "answer": { kind, answer } — your answer about the model as it is in the files (at most ${REPLY_LIMITS.answer}
@@ -219,7 +231,7 @@ first. Write it up as a change proposal the facilitator can approve, edit or rej
 grounded in the files you read. Do not carry it out.
 
 Rules:
-${READ_ONLY_RULES}
+${READ_ONLY_RULES}${context.knowledge ? `\n${KNOWLEDGE_PROPOSE_RULE}` : ''}
 
 ${practiceSection(job, context)}Reply with the JSON object (structured output) { kind: "proposal", ${PROPOSAL_FIELDS} }.
 

@@ -40,9 +40,16 @@ describe("the stickies' actions (ADR 0033): one list, by kind", () => {
         expect(ids('OrderPlaced', { live: true, hasModelElement: () => false })).not.toContain('seeModel');
     });
 
+    test('知見を見る: only for a sticky with knowledge, and never without a store', () => {
+        const withStore: ActionContext = { ...live, hasKnowledge: (s) => s.local === 'OrderPlaced' };
+        expect(ids('OrderPlaced', withStore)).toEqual(['chat', 'edit', 'knowledge', 'seeModel', 'seeTimeline', 'addHotspot', 'copyLink']);
+        expect(ids('PlaceOrder', withStore)).not.toContain('knowledge');
+        expect(ids('OrderPlaced')).not.toContain('knowledge');
+    });
+
     test("a hotspot goes on an event only: the grammar's rule, kept in one place", () => {
         expect(HOTSPOT_TARGETS).toEqual(['event']);
-        expect(STICKY_ACTIONS.map((a) => a.id)).toEqual(['chat', 'edit', 'seeModel', 'seeTimeline', 'addHotspot', 'resolve', 'copyLink']);
+        expect(STICKY_ACTIONS.map((a) => a.id)).toEqual(['chat', 'edit', 'knowledge', 'seeModel', 'seeTimeline', 'addHotspot', 'resolve', 'copyLink']);
         expect(STICKY_ACTIONS.filter((a) => a.frequent).map((a) => a.id)).toEqual(['chat', 'edit']);
     });
 

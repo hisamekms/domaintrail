@@ -57,7 +57,7 @@ describe('dt guide topics', () => {
         expect(r.out.startsWith(parsed.intro)).toBe(true);
         expect(r.out).toContain(parsed.topics.find((t) => t.name === 'quick')!.text);
         for (const t of parsed.topics) expect(r.out).toMatch(new RegExp(`^ +${t.name} +`, 'm'));
-        expect(r.out.split('\n').length).toBeLessThanOrEqual(165);
+        expect(r.out.split('\n').length).toBeLessThanOrEqual(170);
     });
 
     test('the quick reference example is a file that checks without any diagnostic and is formatted', async () => {

@@ -9,8 +9,10 @@
 // the reply is validated and kept, never a fact. While a run runs, its holder also reports what it is doing (an
 // activity, ADR 0026, amendment): held in memory and sent to the pages, never stored. Since ADR 0030 (decision 6) these
 // are the runner role's; the answerer role has an entry point of its own beside them, behind the same token
-// (`/agent/answers/events`, `POST /agent/answers/:job`: `answers.ts`). Each stream open is an agent of its role
-// connected (the page's AI status).
+// (`/agent/answers/events`, `POST /agent/answers/:job`: `answers.ts`), and the extractor role of ADR 0031 one more
+// (`/agent/extractions/events`, `POST /agent/extractions/:job`: `extractions.ts`), answered 404 when the session keeps
+// no knowledge. Each stream open is an agent of its role connected (the page's AI status counts the runs' and the
+// answers').
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import {
@@ -34,6 +36,7 @@ import {
 import { isLoopbackHost } from '../http/access.js';
 import { BodyError, readJson, sendError, sendJson } from '../http/json.js';
 import { type AnswerDispatcher, createAnswerDispatcher } from './answers.js';
+import type { ExtractionDispatcher } from './extractions.js';
 import { agentReply, body, text, uuid, MAX_NOTE } from './input.js';
 import { eventMessage } from './relay.js';
 import { statusOf } from './routes.js';
@@ -77,6 +80,8 @@ export interface AgentApiDeps {
      * watcher's hold, before the agent is answered (so that it claims the next run after them). Absent: none.
      */
     readonly afterRun?: (run: Collaboration.AgentRunId) => Promise<void>;
+    /** The extractor role's entry point (absent: the session keeps no knowledge, and the entry point answers 404). */
+    readonly extractions?: ExtractionDispatcher;
 }
 
 export interface AgentApi {
@@ -439,6 +444,25 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         }
         if (path === '/agent/events' && req.method === 'GET') return events(req, url, res);
         if (path === '/agent/answers/events' && req.method === 'GET') return answers.events(req, res);
+        if (path === '/agent/extractions/events' && req.method === 'GET') {
+            if (!deps.extractions) return sendError(res, 404, 'KnowledgeOff', 'The session keeps no knowledge.');
+            return deps.extractions.events(req, res);
+        }
+        const extraction = /^\/agent\/extractions\/([^/]+)$/.exec(path);
+        if (extraction && extraction[1] !== 'events') {
+            if (!deps.extractions) return sendError(res, 404, 'KnowledgeOff', 'The session keeps no knowledge.');
+            if (req.method !== 'POST') return sendError(res, 405, 'MethodNotAllowed', 'Use POST.');
+            const id = uuid(extraction[1], 'job');
+            if (!id.ok) return sendError(res, 400, 'InvalidInput', id.error.message, { field: 'job' });
+            let raw: unknown;
+            try {
+                raw = await readJson(req, MAX_AGENT_BODY);
+            } catch (e) {
+                if (!(e instanceof BodyError)) throw e;
+                return sendError(res, e.status, e.type, e.message);
+            }
+            return deps.extractions.result(res, id.value, raw);
+        }
         const job = /^\/agent\/answers\/([^/]+)$/.exec(path);
         if (job && job[1] !== 'events') {
             if (req.method !== 'POST') return sendError(res, 405, 'MethodNotAllowed', 'Use POST.');

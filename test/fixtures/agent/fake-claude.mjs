@@ -3,7 +3,11 @@
 //
 //   { "runs": [ { "edits": [{ "path": "a.dtes", "replace": ["from", "to"] } | { "path", "append" } | { "path", "write" }],
 //                 "waitForFile": "/abs/flag", "delayMs": 0, "hang": false, "exitCode": 0, "outcome": { "outcome": "done", "summary": "…" },
-//                 "reply": { "outcome": "done", "summary": "…", "requests": [{ "request": 1, "status": "done" }] } }, … ] }
+//                 "reply": { "outcome": "done", "summary": "…", "requests": [{ "request": 1, "status": "done" }] },
+//                 "mcp": { "tool": "knowledge_for_element", "arguments": { … } } }, … ] }
+//
+// With `mcp` (a cold run), it starts the MCP server `domaintrail` of its `--mcp-config` as Claude Code does (the
+// command in its own working directory), calls the tool after `initialize`, and logs the call's result as `mcp`.
 //
 // `waitForFile` holds the step's edits until that file exists (a test does something while the agent runs, then
 // creates it). Step n is used by the n-th invocation (counted in `<plan>.log`, one JSON line per invocation: pid, the pid of a
@@ -19,6 +23,26 @@ import { spawn } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { createInterface } from 'node:readline';
+
+/** Calls `call.tool` of the `domaintrail` server of `--mcp-config`: the call's result, or why there is none. */
+async function callMcp(args, call) {
+    const at = args.indexOf('--mcp-config');
+    if (at < 0) return { error: 'no --mcp-config' };
+    const server = JSON.parse(args[at + 1]).mcpServers?.domaintrail;
+    if (!server) return { error: 'no domaintrail server' };
+    const child = spawn(server.command, server.args ?? [], { stdio: ['pipe', 'pipe', 'ignore'], env: { ...process.env, ...server.env } });
+    const lines = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
+    const ask = async (id, method, params) => {
+        child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
+        return JSON.parse((await lines.next()).value);
+    };
+    await ask(1, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'fake-claude', version: '1' } });
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
+    const answer = await ask(2, 'tools/call', { name: call.tool, arguments: call.arguments ?? {} });
+    child.stdin.end();
+    await new Promise((resolve) => child.on('exit', resolve));
+    return answer.result ?? answer;
+}
 
 const [planFile, ...args] = process.argv.slice(2);
 const plan = JSON.parse(readFileSync(planFile, 'utf8'));
@@ -95,8 +119,9 @@ if (args.includes('--input-format')) {
     process.stdin.setEncoding('utf8');
     for await (const chunk of process.stdin) prompt += chunk;
 
+    const mcp = step.mcp ? await callMcp(args, step.mcp) : undefined;
     const child = step.hang ? spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }) : undefined;
-    appendFileSync(logFile, `${JSON.stringify({ pid: process.pid, childPid: child?.pid, args, cwd: process.cwd(), prompt })}\n`);
+    appendFileSync(logFile, `${JSON.stringify({ pid: process.pid, childPid: child?.pid, args, cwd: process.cwd(), prompt, ...(mcp && { mcp }) })}\n`);
     await ready(step);
     edit(step);
     if (step.delayMs) await new Promise((resolve) => setTimeout(resolve, step.delayMs));

@@ -30,8 +30,9 @@ export interface StartFlags {
  * The security-relevant settings of `cfg`, effective (merged), with their keys: what each role reads outside the
  * workspace, the runner's tools and its `dt`; who may reach the session (`collab.identity`, `collab.host`,
  * `collab.access`, `collab.link`, `open.host`, and `--tunnel`: the session on the internet); and where the addressed
- * messages are sent (`classifier`, but its threshold). `collab.link` and the tunnel are there only when set, so that
- * the settings approved before them keep their hash.
+ * messages are sent (`classifier`, but its threshold), and where the knowledge goes with the store's service token
+ * (`knowledge`'s Worker and project, with the `cloudflare` store). `collab.link`, the tunnel and the `cloudflare` store
+ * are there only when set, so that the settings approved before them keep their hash.
  */
 export function securitySettings(cfg: ResolvedConfig, flags: StartFlags = {}): Record<string, unknown> {
     const { threshold: _threshold, ...classifier } = cfg.classifier;
@@ -47,6 +48,7 @@ export function securitySettings(cfg: ResolvedConfig, flags: StartFlags = {}): R
         ...(flags.tunnel && { 'collab --tunnel': 'a public cloudflared quick tunnel (trycloudflare.com), identity link' }),
         'open.host': cfg.open.host,
         classifier,
+        ...(cfg.knowledge.store === 'cloudflare' && { 'knowledge (cloudflare)': { url: cfg.knowledge.url, project: cfg.knowledge.project } }),
     };
 }
 
@@ -116,6 +118,55 @@ export function fileTrustStore(file: string = trustFile()): TrustStore {
     };
 }
 
+/**
+ * Proof that the security-relevant settings of a workspace were approved (or are all defaults) when the command started:
+ * what a caller hands to whatever sends a credential where those settings say (the `cloudflare` knowledge store sends
+ * the service token of the environment to `knowledge.url`, `openKnowledgeStore`). Only `approveSettings` and
+ * `checkApproved` make one (`approvals` remembers them; an object of the same shape is no proof), and it holds the
+ * settings approved, so that it proves nothing for a config changed since (`approvedFor`).
+ */
+export interface SettingsApproval {
+    /** The workspace's root, as the config resolved it. */
+    readonly root: string;
+    /** The approved settings' `knowledge (cloudflare)` (the Worker's URL and the project), when the store is `cloudflare`. */
+    readonly knowledge?: unknown;
+}
+
+const approvals = new WeakSet<SettingsApproval>();
+
+function approval(cfg: ResolvedConfig): SettingsApproval {
+    const knowledge = securitySettings(cfg)['knowledge (cloudflare)'];
+    const made: SettingsApproval = Object.freeze({ root: cfg.root, ...(knowledge !== undefined && { knowledge: structuredClone(knowledge) }) });
+    approvals.add(made);
+    return made;
+}
+
+/** Whether `proof` is an approval made by this module for `cfg`'s workspace and its knowledge settings as they are now. */
+export function approvedFor(proof: SettingsApproval | undefined, cfg: ResolvedConfig): boolean {
+    if (proof === undefined || !approvals.has(proof) || proof.root !== cfg.root) return false;
+    return canonical(proof.knowledge ?? null) === canonical(securitySettings(cfg)['knowledge (cloudflare)'] ?? null);
+}
+
+/**
+ * The approval of `cfg`'s settings without asking anyone (`dt mcp`, whose stdin is the protocol's): when they are all
+ * defaults or approved before for this workspace (by `dt open`, `dt collab` or `dt agent`); else undefined. Without a
+ * store (a test's dependencies), approved.
+ */
+export async function checkApproved(cfg: ResolvedConfig, trust: TrustStore | undefined, flags: StartFlags = {}): Promise<SettingsApproval | undefined> {
+    if (!trust) return approval(cfg);
+    const hash = settingsHash(securitySettings(cfg, flags));
+    if (hash === settingsHash(securitySettings(defaultConfig(cfg.root)))) return approval(cfg);
+    return (await trust.approved(realWorkspace(cfg.root))) === hash ? approval(cfg) : undefined;
+}
+
+function realWorkspace(root: string): string {
+    try {
+        return realpathSync.native(root);
+    } catch {
+        return path.resolve(root);
+    }
+}
+
 /** What `approveSettings` asks of the CLI. */
 export interface ApprovalDeps {
     readonly trust?: TrustStore;
@@ -130,20 +181,15 @@ export class NotApproved extends Error {}
 /**
  * Starts only with approved settings: all defaults, or the hash approved for this workspace; else prints them and
  * asks (`confirm`), or records them with `yes` (`--yes`). Refused (`NotApproved`) when declined, or with no one to ask
- * and no `--yes`. Without a store (a test's dependencies), nothing is asked.
+ * and no `--yes`. Without a store (a test's dependencies), nothing is asked. Returns the proof of the approval.
  */
-export async function approveSettings(cfg: ResolvedConfig, deps: ApprovalDeps, yes: boolean, flags: StartFlags = {}): Promise<void> {
-    if (!deps.trust) return;
+export async function approveSettings(cfg: ResolvedConfig, deps: ApprovalDeps, yes: boolean, flags: StartFlags = {}): Promise<SettingsApproval> {
+    if (!deps.trust) return approval(cfg);
     const settings = securitySettings(cfg, flags);
     const hash = settingsHash(settings);
-    if (hash === settingsHash(securitySettings(defaultConfig(cfg.root)))) return;
-    let workspace: string;
-    try {
-        workspace = realpathSync.native(cfg.root);
-    } catch {
-        workspace = path.resolve(cfg.root);
-    }
-    if ((await deps.trust.approved(workspace)) === hash) return;
+    if (hash === settingsHash(securitySettings(defaultConfig(cfg.root)))) return approval(cfg);
+    const workspace = realWorkspace(cfg.root);
+    if ((await deps.trust.approved(workspace)) === hash) return approval(cfg);
     deps.out(`Security-relevant settings not yet approved for this workspace (${workspace}):`);
     for (const line of settingsLines(settings)) deps.out(line);
     if (!yes) {
@@ -152,4 +198,34 @@ export async function approveSettings(cfg: ResolvedConfig, deps: ApprovalDeps, y
     }
     await deps.trust.approve(workspace, hash);
     deps.out('Approved for this workspace.');
+    return approval(cfg);
+}
+
+/** The Worker's URL that a non-interactive `dt publish` may send the service token to (CI: a repository variable). */
+export const PUBLISH_URL_ENV = 'DOMAINTRAIL_PUBLISH_URL';
+/** The project that a non-interactive `dt publish` may publish to, with `PUBLISH_URL_ENV`. */
+export const PUBLISH_PROJECT_ENV = 'DOMAINTRAIL_PUBLISH_PROJECT';
+
+const withoutSlash = (url: string): string => url.trim().replace(/\/+$/, '');
+
+/**
+ * The approval of `cfg`'s knowledge settings without asking anyone, for `dt publish` in CI, where no one can be asked
+ * and the trust store does not last: given only when the environment pins the destination — `PUBLISH_URL_ENV` and
+ * `PUBLISH_PROJECT_ENV` — and the config names exactly that Worker and project. The pin comes from outside the
+ * repository (CI's settings, beside the service token's secrets), so a commit that changes `knowledge.url` in the
+ * config cannot send the token anywhere else: the publish is refused. `undefined` when nothing is pinned; refused
+ * (`NotApproved`) when the pin and the config differ, or the store is not `cloudflare`.
+ */
+export function pinnedApproval(cfg: ResolvedConfig, env: Readonly<Record<string, string | undefined>>): SettingsApproval | undefined {
+    const url = env[PUBLISH_URL_ENV]?.trim();
+    const project = env[PUBLISH_PROJECT_ENV]?.trim();
+    if (!url && !project) return undefined;
+    if (!url || !project) throw new NotApproved(`Not published: set both ${PUBLISH_URL_ENV} and ${PUBLISH_PROJECT_ENV}, or neither.`);
+    const { knowledge } = cfg;
+    if (knowledge.store !== 'cloudflare') throw new NotApproved(`Not published: ${PUBLISH_URL_ENV} is set, but knowledge.store is not "cloudflare".`);
+    if (withoutSlash(knowledge.url) !== withoutSlash(url) || knowledge.project !== project)
+        throw new NotApproved(
+            `Not published: the config's knowledge (url ${JSON.stringify(knowledge.url)}, project ${JSON.stringify(knowledge.project)}) is not the one ${PUBLISH_URL_ENV} and ${PUBLISH_PROJECT_ENV} pin (${JSON.stringify(url)}, ${JSON.stringify(project)}).`,
+        );
+    return approval(cfg);
 }
