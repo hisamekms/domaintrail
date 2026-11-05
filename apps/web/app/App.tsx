@@ -5,12 +5,12 @@ import type { DomainModel } from '@domaintrail/modeling';
 import { BaselineButton, BaselineMenu, baselineName } from '../baseline-picker';
 import { Explorer } from '../explorer';
 import { I18nProvider, MESSAGES } from '../i18n';
-import { Inspector } from '../inspector';
+import { Inspector, selectionName } from '../inspector';
 import { changeCount, ChangesList, problemCounts, ProblemsList } from '../lists';
 import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from '../model-utils';
 import { StatesCanvas } from '../states-canvas';
 import { useSessionPage } from '../session/page';
-import { chooseScope, StormingDetails, stormingExists } from '../storming';
+import { chooseScope, isStormingSelection, StormingDetails, stormingExists, stormingSelectionTitle } from '../storming';
 import { StormingNavigator } from '../storming-navigator';
 import { NameSwitch } from '../view/toolbar';
 import { ViewWorkspace, useViewWorkspace } from '../view/workspace';
@@ -20,6 +20,7 @@ import { usePanes } from './panes';
 import { SettingsDialog } from '../settings-dialog';
 import { usePreferences } from './preferences';
 import { AppShell, type Conversation } from './shell';
+import type { TreeFold } from '../tree-fold';
 import { workspaceName } from './health';
 import { HealthButton } from './status';
 import { useViewSocket } from './useViewSocket';
@@ -49,7 +50,7 @@ export function App() {
     const t = MESSAGES[lang];
     // a session's page opens on its chat (useSessionPage): from the first frame when the server said there is one
     const panes = usePanes(preferences.uiScale, boot?.session !== undefined);
-    const { setExplorerOpen, setInspectorOpen, showLeft, legends } = panes;
+    const { setExplorerOpen, showInspector, showLeft, legends } = panes;
     const { inspectorTab, setInspectorTab, openInspector } = panes;
     /** The button the baseline menu was opened from (it opens next to it), or null while closed. */
     const [baselineAnchor, setBaselineAnchor] = useState<HTMLElement | null>(null);
@@ -85,7 +86,17 @@ export function App() {
         // e.g. syntax errors belong to no element: only their file can show them
         select(d.elementId ?? fileSelection(d.file));
         setSourceFocus({ file: d.file, line: d.start.line, endLine: d.end.line });
-        if (!d.elementId) setInspectorOpen(true);
+        if (!d.elementId) showInspector();
+    };
+
+    /** The tree's fold over the detail; folded, its head line names the world and what is selected. */
+    const fold: TreeFold = {
+        folded: panes.treeFolded,
+        label: [
+            t.worlds[worlds.world],
+            ...(selected ? [isStormingSelection(selected) ? stormingSelectionTitle(stormings, selected, mode) : selectionName(selected, mode, model)] : []),
+        ].join(' › '),
+        onToggle: () => panes.setTreeFolded(!panes.treeFolded),
     };
 
     const empty = { added: [], changed: [], removed: [] };
@@ -153,6 +164,7 @@ export function App() {
                                         if (stormingExists(stormings, id)) select(id, { highlight: false });
                                     }}
                                     onClose={() => setExplorerOpen(false)}
+                                    fold={fold}
                                 />
                             ) : (
                                 <Explorer
@@ -164,10 +176,11 @@ export function App() {
                                     selected={selected}
                                     onSelect={(id) => {
                                         select(id);
-                                        if (selectedFile(id)) setInspectorOpen(true);
+                                        if (selectedFile(id)) showInspector();
                                     }}
                                     onOpen={openBest}
                                     onClose={() => setExplorerOpen(false)}
+                                    fold={fold}
                                 />
                             ),
                     },
@@ -285,7 +298,6 @@ export function App() {
                         }}
                         backTo={backTo}
                         onBack={goBack}
-                        onClose={() => setInspectorOpen(false)}
                     />
                 }
                 overlays={

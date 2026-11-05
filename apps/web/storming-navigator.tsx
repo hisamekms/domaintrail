@@ -7,6 +7,7 @@ import { useT } from './i18n';
 import { nameIn } from './model-utils';
 import { usePersistentState } from './shared/layout';
 import { chooseScope, shownScope, stageChoice, type StormingChoice } from './storming';
+import { FoldButton, FoldedLabel, type TreeFold } from './tree-fold';
 
 /**
  * A row of the storming navigator: a storming, one of its stages or one of its timelines. `scope` is the view it
@@ -111,6 +112,8 @@ export function StormingNavigator(props: {
     /** Selects the row's declaration (`es/<storming>` or `es/<storming>/<ID>`) for the detail. */
     onSelect: (id: string) => void;
     onClose: () => void;
+    /** The tree's fold over the detail: its button in the head line, which names the selection while folded. */
+    fold?: TreeFold;
 }) {
     const t = useT();
     // what is collapsed is remembered; everything is open by default. The filter is not, as in the model tree.
@@ -168,28 +171,32 @@ export function StormingNavigator(props: {
     return (
         <div className="explorer storming-navigator">
             <div className="explorer-head">
-                <div className="explorer-filter">
-                    <Search size={14} aria-hidden />
-                    <input
-                        value={query}
-                        placeholder={t.filter}
-                        aria-label={t.filter}
-                        onChange={(e) => setQuery(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Escape') setQuery('');
-                        }}
-                    />
-                    {query && (
-                        <button className="icon-button" onClick={() => setQuery('')} data-tooltip={t.clearFilter} aria-label={t.clearFilter}>
-                            <X size={14} aria-hidden />
-                        </button>
-                    )}
-                </div>
+                <FoldedLabel fold={props.fold} />
+                {!props.fold?.folded && (
+                    <div className="explorer-filter">
+                        <Search size={14} aria-hidden />
+                        <input
+                            value={query}
+                            placeholder={t.filter}
+                            aria-label={t.filter}
+                            onChange={(e) => setQuery(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Escape') setQuery('');
+                            }}
+                        />
+                        {query && (
+                            <button className="icon-button" onClick={() => setQuery('')} data-tooltip={t.clearFilter} aria-label={t.clearFilter}>
+                                <X size={14} aria-hidden />
+                            </button>
+                        )}
+                    </div>
+                )}
+                <FoldButton fold={props.fold} />
                 <button className="icon-button" onClick={props.onClose} data-tooltip={t.closeExplorer} aria-label={t.closeExplorer}>
                     <PanelLeftClose size={16} aria-hidden />
                 </button>
             </div>
-            <div className="explorer-body">
+            <div className="explorer-body" inert={props.fold?.folded}>
                 <Section
                     title={t.stormingsTitle}
                     hits={filtering ? navigatorRows(tree) : undefined}
