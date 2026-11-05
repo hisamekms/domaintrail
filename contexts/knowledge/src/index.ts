@@ -33,3 +33,6 @@ export type {
     StickyCount,
 } from './application/ports.js';
 export { authorize, type KnowledgeAction } from './application/authorize.js';
+
+// ---- the adapters an app wires (ADR 0031, section 5) ---------------------------------------------------------------
+export { cloudflareKnowledgeStore, KnowledgeStoreError, type AccessServiceToken, type CloudflareKnowledgeStoreSettings } from './infrastructure/cloudflare.js';
