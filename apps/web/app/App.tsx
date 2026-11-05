@@ -1,7 +1,9 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Blocks, StickyNote, type LucideIcon } from 'lucide-react';
 import type { Diagnostic } from '@domaintrail/kernel';
 import type { DomainModel } from '@domaintrail/modeling';
+import { firstDeclarations } from '@domaintrail/storming';
+import { LEVEL_KINDS } from '@domaintrail/visualization';
 import { BaselineButton, BaselineMenu, baselineName } from '../baseline-picker';
 import { Explorer } from '../explorer';
 import { I18nProvider, MESSAGES } from '../i18n';
@@ -24,6 +26,11 @@ import type { TreeFold } from '../tree-fold';
 import { workspaceName } from './health';
 import { HealthButton } from './status';
 import { useViewSocket } from './useViewSocket';
+import { CommandPalette, usePaletteKey } from '../shared/palette';
+import { useStickyActions } from '../stickies/layer';
+import { linkedElement } from '../stickies/link';
+import { isMac } from '../stickies/registry';
+import { highlightElement } from '../view/canvas';
 
 const WORLD_ICONS: Record<World, LucideIcon> = { model: Blocks, storming: StickyNote };
 
@@ -81,6 +88,69 @@ export function App() {
 
     // in a session (dt session start) only: the session's chat, the facilitator's session pane and the others' cursors
     const session = useSessionPage({ socket, current, workspace, panes, mode, openBest, barSlot: sessionSlot, journeySlot });
+
+    /**
+     * Shows a sticky: its storming's integrated canvas (the view shown kept when it draws it), at a level that draws
+     * it, and selects it there (the palette, a link, a sticky renamed).
+     */
+    const { stormingChoice, setStormingChoice } = settings;
+    const { canvas } = workspace;
+    const openSticky = useCallback(
+        (id: string): void => {
+            const [, stormingId, local] = id.split('/');
+            const storming = stormings.find((x) => x.id === stormingId);
+            if (!storming || local === undefined) return;
+            const kind = firstDeclarations(storming.storming).get(local)?.kind;
+            const drawn = LEVEL_KINDS[stormingChoice.level].some((k) => k === kind);
+            const inView = view.kind === 'storming' && shown?.storming.id === stormingId && drawn && canvas?.findElement(id) !== undefined;
+            if (!inView) {
+                const { [stormingId]: _, ...others } = stormingChoice.timelines;
+                setStormingChoice({ ...stormingChoice, stormingId, level: drawn ? stormingChoice.level : 'design-level', timelines: others });
+                setView({ kind: 'storming' });
+            }
+            select(id, { highlight: false });
+            requestAnimationFrame(() => requestAnimationFrame(() => canvas && highlightElement(canvas, id)));
+        },
+        [stormings, stormingChoice, setStormingChoice, view.kind, shown?.storming.id, canvas, select, setView],
+    );
+
+    // the stickies' actions (ADR 0033): the toolbar, the menu, the keys and the windows over a storming, the palette's items
+    const stickyActions = useStickyActions({
+        canvas,
+        stormings,
+        model,
+        mode,
+        active: view.kind === 'storming',
+        ...(shown?.options.timelineId !== undefined && { timelineShown: shown.options.timelineId }),
+        session: session.stickies,
+        onSeeModel: openBest,
+        onSeeTimeline: (stormingId, timeline, then) => {
+            setStormingChoice(chooseScope(stormingChoice, stormingId, timeline));
+            setView({ kind: 'storming' });
+            requestAnimationFrame(() => requestAnimationFrame(() => select(then)));
+        },
+        onOpenSticky: openSticky,
+    });
+    // the command palette (⌘K / Ctrl+K), shared by the features that give it items
+    const mac = useMemo(isMac, []);
+    const [paletteOpen, setPaletteOpen] = useState(false);
+    const openPalette = useCallback(() => setPaletteOpen(true), []);
+    usePaletteKey(mac, openPalette);
+
+    // a link to an element (`#select=…`): opened once its storming is there, then the fragment is dropped
+    const [linked, setLinked] = useState(() => linkedElement(window.location.hash));
+    useEffect(() => {
+        // a link opened in a page already showing the Live View only changes the fragment
+        const onHash = (): void => setLinked(linkedElement(window.location.hash));
+        window.addEventListener('hashchange', onHash);
+        return () => window.removeEventListener('hashchange', onHash);
+    }, []);
+    useEffect(() => {
+        if (linked === undefined || !stormingExists(stormings, linked)) return;
+        setLinked(undefined);
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        openSticky(linked);
+    }, [linked, stormings, openSticky]);
 
     const locate = (d: Diagnostic) => {
         // e.g. syntax errors belong to no element: only their file can show them
@@ -225,7 +295,12 @@ export function App() {
                         current={current}
                         mode={mode}
                         legends={legends}
-                        overlay={session.canvasOverlay}
+                        overlay={
+                            <>
+                                {session.canvasOverlay}
+                                {stickyActions.overlay}
+                            </>
+                        }
                         aiReady={session.aiReady}
                     />
                 }
@@ -301,9 +376,20 @@ export function App() {
                     />
                 }
                 overlays={
-                    current &&
-                    baselineAnchor &&
-                    !session.baselineLocked && <BaselineMenu baseline={current.baseline} anchor={baselineAnchor} onClose={closeBaselineMenu} />
+                    <>
+                        {current && baselineAnchor && !session.baselineLocked && (
+                            <BaselineMenu baseline={current.baseline} anchor={baselineAnchor} onClose={closeBaselineMenu} />
+                        )}
+                        {paletteOpen && (
+                            <CommandPalette
+                                label={t.stickies.palette.title}
+                                placeholder={t.stickies.palette.placeholder}
+                                empty={t.stickies.palette.empty}
+                                items={stickyActions.palette}
+                                onClose={() => setPaletteOpen(false)}
+                            />
+                        )}
+                    </>
                 }
             />
         </I18nProvider>

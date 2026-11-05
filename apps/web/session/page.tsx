@@ -25,6 +25,8 @@ import { PeerCursors } from './cursors';
 import { TargetNamingProvider } from './naming';
 import { viewLocation } from './location';
 import { AddButton, SelectionAction, type AddAction } from './selection-action';
+import { SessionApiError, sessionApi } from './api';
+import type { StickySession } from '../stickies/layer';
 import { confirmSelection, isAdded, isConfirmKey, isTyping } from './selection';
 import type { ComposerValue } from './mentions';
 import { cursorsOn } from './presence';
@@ -62,6 +64,18 @@ export interface SessionPage {
     readonly aiReady: boolean;
     /** A selected context's modeling journeys, in brief (the detail). */
     readonly contextJourneys?: (context: string) => ReactNode;
+    /** What the stickies' actions get of the session (ADR 0033): adding to the chat, and editing; undefined outside a session. */
+    readonly stickies: StickySession | undefined;
+}
+
+/** A person's edit of a sticky, written by the server; a refusal is thrown as its error body (`type`, `current`, …). */
+async function editSticky(edit: object, body: string): Promise<void> {
+    try {
+        await sessionApi.editSticky(edit, body);
+    } catch (e) {
+        if (e instanceof SessionApiError) throw { ...e.detail, type: e.type };
+        throw e;
+    }
 }
 
 export function useSessionPage(input: {
@@ -407,6 +421,7 @@ export function useSessionPage(input: {
             baselineLocked: false,
             ended: false,
             aiReady: false,
+            stickies: undefined,
         };
     const facilitator = session.me.participant.role === 'facilitator';
     return {
@@ -417,10 +432,16 @@ export function useSessionPage(input: {
         canvasOverlay: (
             <>
                 <PeerCursors canvas={canvas} cursors={cursorsOn(session.peers, location)} />
-                <SelectionAction canvas={canvas} action={addAction(selectionTargets)} />
+                {/* on a storming, the stickies' toolbar has the 💬 among its actions (ADR 0033) */}
+                {view.kind !== 'storming' && <SelectionAction canvas={canvas} action={addAction(selectionTargets)} />}
             </>
         ),
         inspectorAction: inspectorAdd && <AddButton action={inspectorAdd} />,
+        stickies: {
+            live,
+            chat: { added: isAdded(composerValue, selectionTargets), add: () => confirm(selectionTargets) },
+            edit: editSticky,
+        },
         stormingDetail: {
             activity: (el) => elementActivity(session.state, runChanges, el),
             ...(live && { begin }),
