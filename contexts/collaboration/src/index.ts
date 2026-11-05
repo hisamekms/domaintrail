@@ -371,6 +371,14 @@ export {
 } from './application/conversation.js';
 export { journeyFileMarks, journeyKeyOf, readJourneys, updateJourneys, type JourneyUseCases, type JourneyWriteError } from './application/journeys.js';
 export { type OpenJourneyRequest, type RecordUseCases, type RequestedAct } from './application/records.js';
+export {
+    type EditStickyError,
+    type EditsReapplied,
+    type PeopleEdit,
+    type StickyEdited,
+    type StickyEditsUnavailable,
+    type StickyUseCases,
+} from './application/stickies.js';
 export { type SlashCommandJob, type SlashCommandStartedResult, type SlashCommandUseCases, type WrongCommandType } from './application/slash-commands.js';
 export { type InterviewJob, type InterviewStarted as InterviewStartedResult, type InterviewUseCases } from './application/interviews.js';
 export { actorOf, type Actor } from './application/actor.js';
@@ -432,6 +440,11 @@ export {
     type OutboxEntry,
     type SignIn,
     type SourceFormatter,
+    type StickyEditInput,
+    type StickyEditor,
+    type StickyEditPlan,
+    type StickyEditProblem,
+    type StickyWording,
     type Stores,
 } from './application/ports.js';
 

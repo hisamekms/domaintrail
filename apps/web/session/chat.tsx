@@ -26,6 +26,7 @@ import {
     Info,
     LoaderCircle,
     MessagesSquare,
+    PencilLine,
     SendHorizontal,
     Ban,
     X,
@@ -1540,6 +1541,7 @@ function UndoBar() {
 }
 
 const OUTCOME_ICONS: Record<UnitOutcome, LucideIcon> = {
+    edited: PencilLine,
     changed: CircleCheck,
     unchanged: CircleMinus,
     clarification: CircleHelp,

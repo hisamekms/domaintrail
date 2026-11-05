@@ -73,6 +73,7 @@ export {
     MAX_STICKY_LABEL,
     planStickyEdit,
     quoteLabel,
+    stickyWording,
     type StickyEditInput,
     type StickyEditPlan,
     type StickyEditProblem,

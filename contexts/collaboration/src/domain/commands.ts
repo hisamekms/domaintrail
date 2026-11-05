@@ -98,7 +98,7 @@ export const requestCommands: Collaboration.RequestCommands = {
         return ok({
             Sent: {
                 // a reply names the run it answers; whether it runs is the facilitator's to decide, as for any message
-                set: { id, session, author, targets, body, sentAt, replyTo, mentions, reverts: undefined, viewedAt, journeyNote: undefined },
+                set: { id, session, author, targets, body, sentAt, replyTo, mentions, reverts: undefined, viewedAt, journeyNote: undefined, edit: undefined },
                 events: {
                     RequestSent: {
                         type: 'RequestSent',
@@ -125,11 +125,47 @@ export const requestCommands: Collaboration.RequestCommands = {
         const reverts: Collaboration.AgentRunId = params.reverts;
         return ok({
             Sent: {
-                set: { id, session, author, targets: [], body, sentAt, replyTo: undefined, mentions: [], reverts, viewedAt: undefined, journeyNote: undefined },
+                set: {
+                    id,
+                    session,
+                    author,
+                    targets: [],
+                    body,
+                    sentAt,
+                    replyTo: undefined,
+                    mentions: [],
+                    reverts,
+                    viewedAt: undefined,
+                    journeyNote: undefined,
+                    edit: undefined,
+                },
                 events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, mentions: [], reverts } },
             },
         });
     }),
+
+    // a person's edit of a sticky (ADR 0033): anyone's, about the workspace as a whole, kept out of the chat
+    recordEdit: decide<Collaboration.RecordEditRequestDecision>(Collaboration.RequestShape, ({ id, session, author, body, sentAt, edit }) =>
+        ok({
+            Sent: {
+                set: {
+                    id,
+                    session,
+                    author,
+                    targets: [],
+                    body,
+                    sentAt,
+                    replyTo: undefined,
+                    mentions: [],
+                    reverts: undefined,
+                    viewedAt: undefined,
+                    journeyNote: undefined,
+                    edit,
+                },
+                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, mentions: [], edit } },
+            },
+        }),
+    ),
 
     // the read-only answerer's answer: written as the AI, a reply to the message it answers, with no target or mention;
     // also dt's note after an interview's brief is confirmed (its journey and next step's buttons on `journeyNote`)
@@ -139,7 +175,20 @@ export const requestCommands: Collaboration.RequestCommands = {
         const author = AI_PARTICIPANT_ID;
         return ok({
             Sent: {
-                set: { id, session, author, targets: [], body, sentAt, replyTo, mentions: [], reverts: undefined, viewedAt: undefined, journeyNote },
+                set: {
+                    id,
+                    session,
+                    author,
+                    targets: [],
+                    body,
+                    sentAt,
+                    replyTo,
+                    mentions: [],
+                    reverts: undefined,
+                    viewedAt: undefined,
+                    journeyNote,
+                    edit: undefined,
+                },
                 events: {
                     RequestSent: {
                         type: 'RequestSent',
@@ -176,6 +225,42 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
                 events: { RunQueued: { type: 'RunQueued', runId: id, session, requests, queuedBy, queuedAt } },
             },
         });
+    }),
+
+    // a person's edit of a sticky, written by dt: recorded at once, never queued (ADR 0033)
+    recordEdit: decide<Collaboration.RecordEditAgentRunDecision>(Collaboration.AgentRunShape, (params) => {
+        switch (Collaboration.checkRecordEditAgentRunRequires(params)) {
+            case 'inputEdits':
+            case 'editInputCoversRequests':
+                return err({ type: 'InputMismatch' });
+            case 'editChanges':
+                return err({ type: 'ChangedMismatch' });
+        }
+        const { id, session, requests, input, queuedBy, queuedAt, baseRevision, resultRevision, reapplies, finishedAt } = params;
+        return ok({
+            Edited: {
+                set: { id, session, input, queuedBy, queuedAt, baseRevision, resultRevision, reapplies, finishedAt, conflict: undefined },
+                events: {
+                    RunEdited: {
+                        type: 'RunEdited',
+                        runId: id,
+                        session,
+                        requests,
+                        queuedBy,
+                        baseRevision,
+                        resultRevision,
+                        ...(reapplies && { reapplies }),
+                        finishedAt,
+                    },
+                },
+            },
+        });
+    }),
+
+    // what a later run did to the same sticky, or the person's choice made (ADR 0033)
+    noteConflict: decide<Collaboration.NoteConflictAgentRunDecision>(Collaboration.AgentRunShape, {
+        Edited: (run, { conflict }) =>
+            ok({ Edited: { set: { conflict }, events: { RunEditConflicted: { type: 'RunEditConflicted', runId: run.id, conflict } } } }),
     }),
 
     // a queued revert whose turn came, reverted mechanically by the server (no agent); unchanged when nothing was left

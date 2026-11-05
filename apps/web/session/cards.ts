@@ -101,6 +101,7 @@ function markState(run: RunJson, request: string): MarkState {
         case 'Completed':
             return line ? PROGRESS[line.status] : 'done';
         case 'Reverted':
+        case 'Edited':
             return 'done';
         case 'Declined':
             return 'declined';

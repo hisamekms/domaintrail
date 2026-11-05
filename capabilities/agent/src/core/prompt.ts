@@ -163,6 +163,7 @@ const OUTCOMES: Record<RunJson['state'], string> = {
     Failed: 'failed',
     Cancelled: 'cancelled',
     Reverted: 'reverted mechanically',
+    Edited: 'edited by a person',
 };
 
 /** A request as the prompt shows it, numbered `number`, with the message it replies to quoted. */

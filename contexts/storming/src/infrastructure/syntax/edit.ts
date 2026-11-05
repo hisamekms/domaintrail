@@ -63,7 +63,9 @@ export interface StickyEditPlan {
 export type StickyEditProblem =
     /** The file does not parse now: nothing is located in it. */
     | { readonly type: 'SyntaxError' }
-    /** No such storming in the file, or no such element in it (or the event a hotspot is to be on). */
+    /** The file has no storming of that ID. */
+    | { readonly type: 'StormingNotFound' }
+    /** No such element in the storming (or no event a hotspot is to be on). */
     | { readonly type: 'NotFound' }
     /** The sticky is no longer as the person saw it: what it is now. */
     | { readonly type: 'Stale'; readonly current: StickyWording }
@@ -132,11 +134,22 @@ function located(text: string, stormingId: string): { storming: EsStorming; decl
     const file = parse(text);
     if (!file) return { type: 'SyntaxError' };
     const storming = file.stormings.find((s) => s.name === stormingId);
-    if (!storming) return { type: 'NotFound' };
+    if (!storming) return { type: 'StormingNotFound' };
     return { storming, declarations: stormingDeclarations(storming) };
 }
 
 const wordingOf = (d: EsDeclaration): StickyWording => ({ name: d.name, ...(d.label !== undefined && { label: d.label }) });
+
+/**
+ * What a declaration of a storming is called in a file's text now; undefined when the file does not parse or has no
+ * such storming or declaration.
+ */
+export function stickyWording(text: string, stormingId: string, element: string): StickyWording | undefined {
+    const found = located(text, stormingId);
+    if ('type' in found) return undefined;
+    const decl = found.declarations.find((d) => d.name === element);
+    return decl && wordingOf(decl);
+}
 
 /** Plans a person's edit of a sticky in the text of the `.dtes` file holding its storming. */
 export function planStickyEdit(text: string, input: StickyEditInput): StickyEditResult {

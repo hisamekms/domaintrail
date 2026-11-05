@@ -1,9 +1,9 @@
 // Snapshots of the workspace, between transactions: read the sources, keep their bytes as blobs, validate them; and
 // read a revision's sources back from the blobs.
 import { Collaboration, err, ok, type Result } from '../generated/index.js';
-import { comparePaths, snapshotFile, snapshotHash, workspacePath } from '../domain/snapshot.js';
+import { comparePaths, nonEmpty, snapshotFile, snapshotHash, workspacePath } from '../domain/snapshot.js';
 import { summarize } from '../domain/validation.js';
-import type { CollaborationDeps, ValidationResult, WorkspaceScan } from './ports.js';
+import type { CollaborationDeps, ValidationResult, WorkspaceScan, WriteRefusal } from './ports.js';
 
 /** The blobs of a revision's files are gone (or no longer hold their content): it cannot be read back. */
 export interface BlobMissing {
@@ -72,4 +72,24 @@ export async function analysisOf(
     const sources = await sourcesOf(deps, revision);
     if (!sources.ok) return sources;
     return ok(await validate(deps, sources.value));
+}
+
+/** A refusal of the workspace's writer as the model's error. */
+export function writeRefusal(e: WriteRefusal): Collaboration.ExternalChangesSinceSnapshot | Collaboration.SymlinkInWorkspace | Collaboration.PathOutsideRoot {
+    if (e.type === 'ExternalChangesSinceSnapshot') {
+        const paths: Collaboration.WorkspacePath[] = [];
+        for (const raw of e.paths) {
+            const p = workspacePath(raw);
+            if (!p.ok) return p.error;
+            paths.push(p.value);
+        }
+        const changed = nonEmpty(paths);
+        if (!changed) throw new Error('The workspace adapter refused a write for external changes without naming a path');
+        return { type: 'ExternalChangesSinceSnapshot', paths: changed };
+    }
+    if (e.type === 'SymlinkInWorkspace') {
+        const p = workspacePath(e.path);
+        return p.ok ? { type: 'SymlinkInWorkspace', path: p.value } : p.error;
+    }
+    return { type: 'PathOutsideRoot', path: e.path };
 }
