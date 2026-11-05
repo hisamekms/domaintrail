@@ -3091,9 +3091,15 @@ stronger model runs only when there is something to extract:
    `gateContextMinutes` and the stickies' names, says whether they hold a finding; it stops the extraction only when
    sure;
 3. the extractor (`agent.extract.model`; no tools, a fresh Claude Code process each time) reads the new messages, the
-   talk of the last `contextMinutes`, the items made in this session and those about the stickies the talk points at,
-   and replies with operations: **add** an item, **addSource** (the same finding again; `said` may become `agreed`),
-   **update** (more precise) or **conflict** (both kept, linked).
+   talk of the last `contextMinutes`, the workspace's stickies (below), the items made in this session, those about the
+   stickies the talk points at and those about the stickies the new messages name by their label, and replies with
+   operations: **add** an item, **addSource** (the same finding again; `said` may become `agreed`), **update** (more
+   precise; with the messages it rests on as new sources) or **conflict** (both kept, linked).
+
+Both models see the same stickies: those of the storming the facilitator's page has open (else one any page has open)
+and of the session's current journey; when neither is known, every storming's; at most 300. The extractor links each
+finding to the stickies it is about by meaning, preferring those pointed at with `#`, so that items get their sticky
+even when nobody points at one.
 
 Each extraction's stages and what each model cost are recorded in the session database. Switched on again after being
 off, the extraction picks up the last `contextMinutes` of talk, not everything said while it was off. So that a remark
@@ -3102,8 +3108,9 @@ in mid-talk does not become a conclusion:
 - add and addSource apply at once (a wrong item costs a deletion); update and conflict are **held**, unseen, and apply
   only when the next extraction makes the same call or the topic stays quiet for `settleSeconds`; those still held when
   the session ends are dropped;
-- an item made in this session is rewritten in place until the session ends; versions are kept for items of earlier
-  sessions (and for a person's correction);
+- an update carries the messages it rests on as new sources (one without is dropped) and then makes a new version,
+  so that a correction can be followed to its message; only a rewording that adds no source rewrites an item made in
+  this session in place; versions are kept for items of earlier sessions (and for a person's correction);
 - a correction within the same stretch of talk is an update, not a conflict; questions and "maybe" are not extracted,
   or get `inferred`; `agreed` only when the talk moved on without objection;
 - an extraction is sent as operations: one on an item a person corrected or deleted meanwhile is dropped, and the
