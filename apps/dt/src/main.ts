@@ -123,6 +123,7 @@ export function cliDeps(): CliDeps {
         pruneState: (options) => pruneStateDirs(options),
         // loads the language server only when `dt lsp` starts it
         startLanguageServer: (options) => startLanguageServer(options, languageServerFiles),
+        startMcpServer: async (options) => (await import('./mcp/start.js')).startMcpServer(options, { loadWorkspace }),
     };
 }
 

@@ -1,6 +1,6 @@
 import type { SourceFile } from '@domaintrail/kernel';
 import type { AnswerConfig, Practice, RunConfig, TriageConfig } from '@domaintrail/agent';
-import type { ResolvedClassifierConfig, ResolvedCollabConfig, ResolvedConfig } from '../config/config.js';
+import type { ResolvedClassifierConfig, ResolvedCollabConfig, ResolvedConfig, ResolvedKnowledgeConfig } from '../config/config.js';
 import type { MessageTemplateConfig } from '@domaintrail/collaboration';
 import type { LanguageServerOptions } from '../lsp/server.js';
 import type { TrustStore } from './trust.js';
@@ -71,6 +71,11 @@ export interface CliDeps {
     /** Starts the language server over stdio; resolves once it listens. */
     startLanguageServer(options: LanguageServerOptions): Promise<void>;
     /**
+     * Serves `dt mcp` over stdio: the read-only knowledge tools on the workspace's store and stormings (ADR 0031,
+     * section 9). Resolves when the client closes stdin.
+     */
+    startMcpServer(options: McpServerStartOptions): Promise<void>;
+    /**
      * `dt session prune`: the state and cache directories of workspaces that are gone (or, with `olderThanDays`, not
      * used for that long), removed when `remove`. Absent: the command says it cannot here.
      */
@@ -114,6 +119,16 @@ export interface DiagramViews {
     focusGraph(contexts: readonly string[], level: StructureLevel): Promise<LaidOutGraph | null>;
     /** Stops the layout engine. */
     dispose(): void;
+}
+
+/** What `dt mcp` reads of the configuration. */
+export interface McpServerStartOptions {
+    root: string;
+    sources: readonly string[];
+    respectGitignore: boolean;
+    knowledge: ResolvedKnowledgeConfig;
+    /** Where it says what goes wrong (stderr: stdout is the protocol's). */
+    log: (line: string) => void;
 }
 
 /** What `dt open --host <non-loopback>` asks of the Live View. */
