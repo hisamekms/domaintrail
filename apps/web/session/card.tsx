@@ -24,6 +24,7 @@ import { useChat, type Tx } from './chat-context';
 import { assumptionDecision, questionsState, type QuestionsState } from './decisions';
 import { changedPaths, cutList, requestersOf, unitName, type ChangeUnit } from './history';
 import { isReplyable } from './replies';
+import { MarkdownText } from './markdown-text';
 import { AddReaction, ReactionRow, VoteMark } from './mark-controls';
 import { bodyText } from './mentions';
 import { useTargetNaming } from './naming';
@@ -384,11 +385,26 @@ function AnswerLine({ run }: { run: CardRun }) {
 }
 
 /**
- * What the agent says of a run, as the chat said it; the files it changed are a line of their own below
- * (`RunFiles`). A question asked without the structured form is shown on the question's surface. An answer instead
- * of an edit is clamped as the AI's answers are (`Clamped`: when it was there at the page's load).
+ * What the AI wrote of a run (its summary, its answer, a question asked without the structured form) as the chat shows
+ * an answer of the AI (ADR 0030): Markdown with element links, its blocks in a `<div>` (never a `<p>`: a list or a
+ * table cannot sit in one).
  */
-function AgentBody({ run, message: m }: { run: string; message: AgentMessage }) {
+function AiText({ text, className, label }: { text: string; className?: string; label?: string }) {
+    const { onNavigate } = useChat();
+    return (
+        <div className={`chat-text chat-markdown${className ? ` ${className}` : ''}`} {...(label && { 'aria-label': label })}>
+            <MarkdownText text={text} onNavigate={onNavigate} />
+        </div>
+    );
+}
+
+/**
+ * What the agent says of a run, as the chat said it; the files it changed are a line of their own below
+ * (`RunFiles`). A question asked without the structured form is shown on the question's surface. What the AI wrote is
+ * Markdown (`AiText`); an answer instead of an edit is clamped as the AI's answers are (`Clamped`: when it was there at
+ * the page's load).
+ */
+export function AgentBody({ run, message: m }: { run: string; message: AgentMessage }) {
     const { tx, nameOf, onNavigate } = useChat();
     const says = tx.chat.agentSays;
     switch (m.kind) {
@@ -397,14 +413,10 @@ function AgentBody({ run, message: m }: { run: string; message: AgentMessage }) 
             return null;
         case 'clarification':
             return m.reply ? (
-                <p className="chat-text reply-summary">
-                    <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
-                </p>
+                <AiText text={m.reply.summary} className="reply-summary" />
             ) : (
                 <ReplySection kind="ask">
-                    <p className="reply-question-text">
-                        <ReplyText text={m.question} onNavigate={onNavigate} />
-                    </p>
+                    <AiText text={m.question} className="reply-question-text" />
                 </ReplySection>
             );
         case 'completed':
@@ -414,31 +426,21 @@ function AgentBody({ run, message: m }: { run: string; message: AgentMessage }) 
                 const changed = (m.files ?? (m.changed ? 1 : 0)) > 0;
                 return (
                     <>
-                        {changed && (
-                            <p className="chat-text reply-summary">
-                                <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
-                            </p>
-                        )}
-                        <Clamped tx={tx} revealKey={`run:${run}`} className="reply-answer">
-                            <ReplyText text={m.reply.answer} onNavigate={onNavigate} />
+                        {changed && <AiText text={m.reply.summary} className="reply-summary" />}
+                        <Clamped tx={tx} revealKey={`run:${run}`} className="reply-answer" blocks>
+                            <MarkdownText text={m.reply.answer} onNavigate={onNavigate} />
                         </Clamped>
                         {changed && <p className="chat-text reply-answered-changed">{tx.chat.ai.answeredChanged}</p>}
                     </>
                 );
             }
             return m.reply ? (
-                <p className="chat-text reply-summary">
-                    <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
-                </p>
+                <AiText text={m.reply.summary} className="reply-summary" />
             ) : (
                 <p className="chat-text">{m.changed ? says.completedChanged : says.completedUnchanged}</p>
             );
         case 'declined':
-            return (
-                <p className="chat-text" aria-label={tx.chat.reply.declined}>
-                    <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
-                </p>
-            );
+            return <AiText text={m.reply.summary} label={tx.chat.reply.declined} />;
         case 'failed':
             return (
                 <div className="chat-with-icon session-error">
