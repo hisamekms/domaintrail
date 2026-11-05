@@ -1,5 +1,7 @@
 // Values of Knowledge for the unit tests: made through the generated constructors, so that a typo fails loudly.
 import { Knowledge } from './generated/index.js';
+import type { AppliedExtraction, KnowledgeQuery, KnowledgeStore } from './application/ports.js';
+import { applyExtraction, idempotencyKey } from './domain/extraction.js';
 
 function known<T>(made: { ok: true; value: T } | { ok: false; error: unknown }): T {
     if (!made.ok) throw new Error(`invalid test value: ${JSON.stringify(made.error)}`);
@@ -50,3 +52,61 @@ export const liveItem = (
     createdAt: at,
     updatedAt: at,
 });
+
+/**
+ * A store in memory with the semantics every store gives an extraction (`applyExtraction`, idempotent by its key), the
+ * reads the extraction makes (`about`, `search` by session), and a switch that makes it fail (unreachable).
+ */
+export function memoryStore(items: readonly Knowledge.LiveKnowledgeItem[] = []): KnowledgeStore & {
+    readonly items: Map<string, Knowledge.KnowledgeItem>;
+    readonly applied: Knowledge.Extraction[];
+    failing: boolean;
+} {
+    const byId = new Map<string, Knowledge.KnowledgeItem>(items.map((i) => [i.id, i]));
+    const results = new Map<string, AppliedExtraction>();
+    const applied: Knowledge.Extraction[] = [];
+    const live = (): Knowledge.LiveKnowledgeItem[] => [...byId.values()].filter((i): i is Knowledge.LiveKnowledgeItem => i.state === 'Live').reverse();
+    const unused = (): never => {
+        throw new Error('not used by the extraction');
+    };
+    const store = {
+        items: byId,
+        applied,
+        failing: false,
+        async about(_project: Knowledge.ProjectName, stickies: readonly Knowledge.StickyRef[]) {
+            if (store.failing) throw new Error('the store is unreachable');
+            return live().filter((i) => i.content.about.some((a) => stickies.includes(a)));
+        },
+        async search(_project: Knowledge.ProjectName, query: KnowledgeQuery) {
+            if (store.failing) throw new Error('the store is unreachable');
+            return { items: live().filter((i) => query.session === undefined || i.createdIn === query.session) };
+        },
+        async applyExtraction(_project: Knowledge.ProjectName, extraction: Knowledge.Extraction): Promise<AppliedExtraction> {
+            if (store.failing) throw new Error('the store is unreachable');
+            const key = idempotencyKey(extraction.by);
+            const before = results.get(key);
+            if (before) return { ...before, replayed: true };
+            const outcome = applyExtraction(extraction, (id) => byId.get(id), at);
+            for (const item of outcome.items) byId.set(item.id, item);
+            applied.push(extraction);
+            const result: AppliedExtraction = {
+                items: outcome.items.filter((i): i is Knowledge.LiveKnowledgeItem => i.state === 'Live'),
+                dropped: outcome.dropped,
+                replayed: false,
+            };
+            results.set(key, result);
+            return result;
+        },
+        counts: unused,
+        get: unused,
+        correct: unused,
+        delete: unused,
+        deleteSession: unused,
+        restore: unused,
+        redactions: unused,
+        audit: unused,
+        putImage: unused,
+        getImage: unused,
+    };
+    return store;
+}

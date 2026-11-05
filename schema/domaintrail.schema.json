@@ -410,6 +410,28 @@
             }
           }
         },
+        "extract": {
+          "description": "The extractor: takes knowledge from the session's talk (ADR 0031), with no tools at all, a fresh Claude Code process per extraction.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "description": "The model of the extractions (claude --model). Default: agent.answer.model, else the model of your Claude Code settings.",
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][\\w.:@\\[\\]/-]*$"
+            },
+            "effort": {
+              "description": "The effort of the extractions (claude --effort). Default: agent.answer.effort, else the effort of your Claude Code settings.",
+              "enum": ["low", "medium", "high", "xhigh", "max"]
+            },
+            "timeout": {
+              "description": "The most seconds an extraction may take.",
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "default": 180
+            }
+          }
+        },
         "read": {
           "description": "What both roles of the AI may read outside the workspace, read-only (agent.answer.read and agent.run.read add to it). dt open, dt collab and dt agent print it at startup; in a collab session, any participant can make the AI quote these files.",
           "type": "object",

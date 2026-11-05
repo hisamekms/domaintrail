@@ -29,10 +29,20 @@ describe("the agent's settings", () => {
             run: RUN_DEFAULTS,
             answer: { warm: true, restartAfter: 50, idleTimeout: 30, timeout: 120 },
             triage: { model: 'haiku', warm: false },
+            extract: { timeout: 180 },
             read: { answer: [], run: [] },
         });
         expect(resolveAgentConfig().run.allowedTools).not.toBe(DEFAULT_AGENT_TOOLS);
         expect(resolveAgentConfig({ run: { allowedTools: ['Read'] } }).run.allowedTools).toEqual(['Read']);
+    });
+
+    test("the extractor: 180 s, the answerer's model and effort unless its own are given", () => {
+        expect(resolveAgentConfig({ answer: { model: 'opus', effort: 'high' } }).extract).toEqual({ timeout: 180, model: 'opus', effort: 'high' });
+        expect(resolveAgentConfig({ answer: { model: 'opus' }, extract: { model: 'sonnet', timeout: 60 } }).extract).toEqual({ timeout: 60, model: 'sonnet' });
+        expect(refusal({ extract: { model: 'sonnet', effort: 'low', timeout: 30 } })).toBeUndefined();
+        expect(refusal({ extract: { timeout: 0 } })).toContain("'agent.extract.timeout'");
+        expect(refusal({ extract: { effort: 'huge' } })).toContain("'agent.extract.effort'");
+        expect(refusal({ extract: 'sonnet' })).toContain("'agent.extract' must be an object");
     });
 
     test('the runs: a warm Claude Code by default, replaced after 20 runs, ended after 30 idle minutes; the model and effort only when given', () => {

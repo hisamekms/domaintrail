@@ -537,7 +537,7 @@ Examples:
         'host to bind (default: open.host, else 127.0.0.1; a non-loopback address serves the Live View read-only)',
     ).action(async (opts: ServeOptions) => {
         const cfg = await config();
-        await approve(cfg, opts.yes);
+        const approval = await approve(cfg, opts.yes);
         const { UnknownRevisionError } = await import('@domaintrail/visualization');
         const port = opts.port ?? cfg.open.port;
         const host = opts.host ?? cfg.open.host;
@@ -561,6 +561,7 @@ Examples:
                 base: opts.base,
                 mode: 'Solo',
                 session: openSettings(cfg, port, host),
+                knowledge: { config: cfg, approval },
                 log: io.out,
             })
             .catch((e: unknown) => {
@@ -611,7 +612,7 @@ Examples:
             throw new CliError(
                 '--tunnel starts a quick tunnel for the link identity mode; with identity "access", run your own named tunnel (docs/session-access.md).',
             );
-        await approve(cfg, opts.yes, { tunnel: opts.tunnel ?? false });
+        const approval = await approve(cfg, opts.yes, { tunnel: opts.tunnel ?? false });
         const { UnknownRevisionError } = await import('@domaintrail/visualization');
         let settings = sessionSettings(cfg, cfg.collab, opts);
         let tunnel: StartedTunnel | undefined;
@@ -632,6 +633,7 @@ Examples:
                 base: opts.base,
                 mode: 'Collab',
                 session: settings,
+                knowledge: { config: cfg, approval },
                 ...(opts.tunnel && { quickTunnel: true, publicUrlAfterListen: startTunnel }),
                 log: io.out,
             })
@@ -1012,6 +1014,7 @@ Examples:
             run: cfg.agent.run,
             answer: cfg.agent.answer,
             triage: cfg.agent.triage,
+            extract: cfg.agent.extract,
             read: cfg.agent.read,
             practice: practiceOf(parseGuide(guide)),
         };
@@ -1153,9 +1156,10 @@ function openSettings(cfg: ResolvedConfig, port: number, host: string): SessionS
         identity: 'dev',
         maxParticipants: 1,
         quickReactions: cfg.collab.quickReactions,
-        agent: { port: cfg.agent.port, allowedTools: run.allowedTools, maxPreviousRunDiff: run.maxPreviousRunDiff },
+        agent: { port: cfg.agent.port, allowedTools: run.allowedTools, maxPreviousRunDiff: run.maxPreviousRunDiff, extractTimeout: cfg.agent.extract.timeout },
         classifier: cfg.classifier,
         templates: cfg.templates,
+        knowledge: cfg.knowledge,
     };
 }
 
@@ -1166,9 +1170,10 @@ function sessionSettings(cfg: ResolvedConfig, server: { port: number; host: stri
         ...cfg.collab,
         port: opts.port ?? server.port,
         host: opts.host ?? server.host,
-        agent: { port: cfg.agent.port, allowedTools: run.allowedTools, maxPreviousRunDiff: run.maxPreviousRunDiff },
+        agent: { port: cfg.agent.port, allowedTools: run.allowedTools, maxPreviousRunDiff: run.maxPreviousRunDiff, extractTimeout: cfg.agent.extract.timeout },
         classifier: cfg.classifier,
         templates: cfg.templates,
+        knowledge: cfg.knowledge,
     };
 }
 

@@ -62,6 +62,7 @@ const AGENT_DEFAULTS: ResolvedAgentSection = {
     },
     answer: { warm: true, restartAfter: 50, idleTimeout: 30, timeout: 120 },
     triage: { model: 'haiku', warm: false },
+    extract: { timeout: 180 },
     read: { answer: [], run: [] },
 };
 
@@ -173,6 +174,7 @@ describe('config file', () => {
                 },
                 answer: { warm: true, restartAfter: 50, idleTimeout: 30, timeout: 60, model: 'haiku' },
                 triage: { model: 'sonnet', warm: true },
+                extract: { timeout: 180, model: 'haiku' },
                 read: { answer: [], run: [] },
             },
             classifier: { ...CLASSIFIER_DEFAULTS, enabled: true, accountId: '0123456789abcdef0123456789abcdef' },
@@ -186,7 +188,7 @@ describe('config file', () => {
             },
         });
         expect(Object.keys(c.collab)).toEqual(['port', 'host', 'identity', 'access', 'maxParticipants', 'quickReactions']);
-        expect(Object.keys(c.agent)).toEqual(['port', 'run', 'answer', 'triage', 'read']);
+        expect(Object.keys(c.agent)).toEqual(['port', 'run', 'answer', 'triage', 'extract', 'read']);
     });
 
     test.each([

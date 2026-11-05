@@ -6,6 +6,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@domaintrail/collaboration": "workspace:*"
+    "@domaintrail/collaboration": "workspace:*",
+    "@domaintrail/knowledge": "workspace:*"
   }
 }

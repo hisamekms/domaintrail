@@ -1,6 +1,6 @@
 import type { SourceFile } from '@domaintrail/kernel';
-import type { AnswerConfig, Practice, RunConfig, TriageConfig } from '@domaintrail/agent';
-import type { ResolvedClassifierConfig, ResolvedCollabConfig, ResolvedConfig } from '../config/config.js';
+import type { AnswerConfig, ExtractConfig, Practice, RunConfig, TriageConfig } from '@domaintrail/agent';
+import type { ResolvedClassifierConfig, ResolvedCollabConfig, ResolvedConfig, ResolvedKnowledgeConfig } from '../config/config.js';
 import type { MessageTemplateConfig } from '@domaintrail/collaboration';
 import type { LanguageServerOptions } from '../lsp/server.js';
 import type { SettingsApproval, TrustStore } from './trust.js';
@@ -162,6 +162,8 @@ export interface SessionServerOptions {
     quickTunnel?: boolean;
     /** `link`: the public URL, asked once the server listens, with the port bound (`--tunnel` starts its tunnel then). */
     publicUrlAfterListen?: (port: number) => Promise<string>;
+    /** The config and the proof its settings were approved: the knowledge store is opened from them (ADR 0031). */
+    knowledge?: { readonly config: ResolvedConfig; readonly approval: SettingsApproval | undefined };
     log: (line: string) => void;
 }
 
@@ -171,7 +173,10 @@ export interface SessionServerOptions {
  * and the `classifier`.
  */
 export interface SessionSettings extends ResolvedCollabConfig {
-    agent: { port: number; allowedTools: string[]; maxPreviousRunDiff: number };
+    /** `extractTimeout`: the most seconds an extraction of knowledge may take (`agent.extract.timeout`; default 180). */
+    agent: { port: number; allowedTools: string[]; maxPreviousRunDiff: number; extractTimeout?: number };
+    /** Where the session's knowledge goes, and when it is extracted (the `knowledge` section; absent: none is kept). */
+    knowledge?: ResolvedKnowledgeConfig;
     classifier: ResolvedClassifierConfig;
     /** The team's message templates (the top-level `templates`), sent to the pages with the state. Default: none. */
     templates?: readonly MessageTemplateConfig[];
@@ -241,6 +246,8 @@ export interface AgentOptions {
     answer?: AnswerConfig;
     /** `agent.triage`: the light model of the triage's stage 3. */
     triage?: TriageConfig;
+    /** `agent.extract`: the extractor of knowledge (model, effort, timeout), which goes with the answer role. */
+    extract?: ExtractConfig;
     /** The ways of working the agent's prompts give: the guide's `storming-practice` and `modeling-practice`. */
     practice?: Practice;
     /** What each role may read outside the workspace, read-only (`agent.read.paths` and its own; absolute paths). */

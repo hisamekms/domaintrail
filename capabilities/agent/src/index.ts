@@ -1,12 +1,15 @@
-// The public surface of @domaintrail/agent (the `.` export; ADR 0027, Dependency rules): the agent's two roles (ADR
-// 0030, decision 6) — the runner (`startSubscriber`: the session's runs) and the answerer (`startAnswerer`: stage 3 of
-// the triage, answers, proposals) — their ports, and the adapters an app wires. `dt agent --role answer|run` and the
-// in-process agent start one or both.
+// The public surface of @domaintrail/agent (the `.` export; ADR 0027, Dependency rules): the agent's roles (ADR 0030,
+// decision 6; ADR 0031, section 3) — the runner (`startSubscriber`: the session's runs), the answerer (`startAnswerer`:
+// stage 3 of the triage, answers, proposals) and the extractor (`startExtractor`: knowledge from the talk) — their
+// ports, and the adapters an app wires. `dt agent --role answer|run` and the in-process agent start one or both; the
+// extractor goes with the answerer (read-only, both).
 
 // ---- core: the roles and their ports ---------------------------------------------------------------------------
 export { startSubscriber, type Subscriber, type SubscriberEnd, type SubscriberOptions } from './core/subscriber.js';
 export { startAnswerer, type Answerer, type AnswererDeps, type AnswererEnd, type AnswererOptions } from './core/answerer.js';
 export { buildAnswerPrompt, buildProposePrompt, buildTriagePrompt, type DiagnosticsScope } from './core/answer-prompt.js';
+export { startExtractor, type Extractor, type ExtractorDeps, type ExtractorEnd, type ExtractorOptions } from './core/extractor.js';
+export { buildExtractionPrompt, extractorInstructions } from './core/extract-prompt.js';
 // the ways of working the prompts give, which the app takes from the guide it embeds
 export type { Practice } from './core/prompt.js';
 export {
@@ -18,6 +21,9 @@ export {
     type AnswerStreamItem,
     type AnswerTurn,
     type AnswerTurnResult,
+    type ExtractAgent,
+    type ExtractionApi,
+    type ExtractionStreamItem,
     ReadScopeTooLarge,
     type StreamItem,
     type WorkspaceFiles,
@@ -57,6 +63,8 @@ export { checkReadPaths, checkTarget, readPathError, readTargets, type ReadTarge
 // the answerer role's Claude Code: stage 3 with no tools, answers and proposals with the reading tools only
 export { ANSWERER_TOOLS, answererArguments, createClaudeAnswerer, triageArguments, type ClaudeAnswererOptions } from './adapters/claude-answer.js';
 // the warm process itself, for a role other than the runs (its own tools, prompt and schema)
+// the extractor's Claude Code: no tools at all, the extractor's schema and instructions, a fresh process each
+export { createClaudeExtractor, extractorArguments, type ClaudeExtractorOptions } from './adapters/claude-extract.js';
 export { createWarmClaude, type WarmClaude, type WarmClaudeOptions, type WarmProfile, type WarmTurn, type WarmTurnEnd } from './adapters/warm-claude.js';
 export { checkDtOutsideWorkspace, dtCommandOf, pinDt, type PinnedDt } from './adapters/dt-shim.js';
 // the adapters' settings in domaintrail.jsonc, `agent.run` (the runner: tools, `dt`, the warm agent), `agent.answer`
@@ -74,6 +82,12 @@ export {
     DEFAULT_IDLE_TIMEOUT,
     DEFAULT_RESTART_AFTER,
     DEFAULT_TRIAGE_MODEL,
+    DEFAULT_EXTRACT_TIMEOUT,
+    EXTRACT_CONFIG_KEYS,
+    type ExtractConfig,
+    type ExtractConfigFile,
+    resolveExtractConfig,
+    validateExtractConfig,
     type ReadConfigFile,
     type ReadPaths,
     READ_CONFIG_KEYS,
