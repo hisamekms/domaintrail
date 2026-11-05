@@ -50,7 +50,13 @@ describe('redactMessages', () => {
         const { use, session, uow, redaction } = await open();
         const said = value(await use.sendMessage({ session, actor: facilitator, targets: [], body: text('山田さんの携帯は 090-0000-0000') })).request;
         const reply = value(
-            await use.sendMessage({ session, actor: facilitator, targets: [], body: text('それは控えておきます'), replyTo: { kind: 'Message', request: said.id } }),
+            await use.sendMessage({
+                session,
+                actor: facilitator,
+                targets: [],
+                body: text('それは控えておきます'),
+                replyTo: { kind: 'Message', request: said.id },
+            }),
         ).request;
         value(await use.queueRun({ session, requests: [said.id, reply.id], actor: facilitator }));
 
@@ -100,7 +106,8 @@ describe('redactMessages', () => {
             const said = value(await use.sendMessage({ session, actor: facilitator, targets: [], body: text(secret) })).request;
             value(await use.queueRun({ session, requests: [said.id], actor: facilitator }));
             // many more messages, so that pages are rewritten and freed
-            for (let i = 0; i < 50; i++) value(await use.sendMessage({ session, actor: facilitator, targets: [], body: text(`メッセージ ${i} ${'あ'.repeat(200)}`) }));
+            for (let i = 0; i < 50; i++)
+                value(await use.sendMessage({ session, actor: facilitator, targets: [], body: text(`メッセージ ${i} ${'あ'.repeat(200)}`) }));
             const bytes = async (): Promise<Buffer> =>
                 Buffer.concat(await Promise.all([file, `${file}-wal`].map((f) => readFile(f).catch(() => Buffer.alloc(0)))));
             expect((await bytes()).includes(Buffer.from('090-1234-5678'))).toBe(true);

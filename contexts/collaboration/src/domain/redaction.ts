@@ -26,7 +26,9 @@ export function redactedRun(run: Collaboration.AgentRun, request: Collaboration.
     const requests = run.input.requests.map((r): Collaboration.FrozenRequest => {
         const body = r.request === request && r.body !== REDACTED_BODY ? REDACTED_BODY : r.body;
         const replyTo =
-            r.replyTo?.kind === 'Message' && r.replyTo.request === request && r.replyTo.body !== REDACTED_BODY ? { ...r.replyTo, body: REDACTED_BODY } : r.replyTo;
+            r.replyTo?.kind === 'Message' && r.replyTo.request === request && r.replyTo.body !== REDACTED_BODY
+                ? { ...r.replyTo, body: REDACTED_BODY }
+                : r.replyTo;
         if (body === r.body && replyTo === r.replyTo) return r;
         changed = true;
         return { ...r, body, ...(replyTo && { replyTo }) };

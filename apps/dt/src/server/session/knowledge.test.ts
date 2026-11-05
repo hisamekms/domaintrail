@@ -17,11 +17,11 @@ describe('the knowledge routes', () => {
     });
 
     test('its paths, and the line of an attached image', () => {
-        expect([isKnowledgePath('/api/session/knowledge'), isKnowledgePath('/api/session/knowledge/counts'), isKnowledgePath('/api/session/knowledgex')]).toEqual([
-            true,
-            true,
-            false,
-        ]);
+        expect([
+            isKnowledgePath('/api/session/knowledge'),
+            isKnowledgePath('/api/session/knowledge/counts'),
+            isKnowledgePath('/api/session/knowledgex'),
+        ]).toEqual([true, true, false]);
         expect(imageLine('img_abcdefgh' as never)).toBe('![](image:img_abcdefgh)');
     });
 });

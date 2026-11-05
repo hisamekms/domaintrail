@@ -110,7 +110,7 @@ table matches the map):
 | `kernel` | `shared/kernel` | kernel | — |
 | `dt` | `apps/dt` | app | agent, analysis, collaboration, generation, kernel, knowledge, modeling, storming, visualization, workspace |
 | `knowledge-worker` | `apps/knowledge-worker` | app | knowledge |
-| `web` | `apps/web` | app | analysis (its unit tests only, a devDependency), collaboration, kernel, modeling, storming, visualization |
+| `web` | `apps/web` | app | analysis (its unit tests only, a devDependency), collaboration, kernel, knowledge, modeling, storming, visualization |
 
 | Kind | Inside `src/` | May depend on | Takes from another package |
 |---|---|---|---|

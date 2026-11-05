@@ -163,7 +163,17 @@ function auditJson(entry: Knowledge.AuditEntry): string {
     });
 }
 
-const AUDIT_OPERATIONS: readonly Knowledge.AuditOperation[] = ['add', 'addSource', 'rewrite', 'revise', 'linkConflict', 'correct', 'delete', 'restore', 'unlinkConflict'];
+const AUDIT_OPERATIONS: readonly Knowledge.AuditOperation[] = [
+    'add',
+    'addSource',
+    'rewrite',
+    'revise',
+    'linkConflict',
+    'correct',
+    'delete',
+    'restore',
+    'unlinkConflict',
+];
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const text = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -546,25 +556,27 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
 
         async unlinkConflict(project, id, other, by) {
             checkProject(project);
-            return exclusive(async (): Promise<Result<readonly Knowledge.LiveKnowledgeItem[], Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>> => {
-                const item = await liveOne(id);
-                if (item === undefined)
-                    return (await deletedOne(id)) ? err({ type: 'KnowledgeItemGone', itemId: id }) : err({ type: 'KnowledgeItemNotFound', itemId: id });
-                if (other === id) return ok([item]);
-                const at = now();
-                const sides = [item, await liveOne(other)].filter((i): i is Knowledge.LiveKnowledgeItem => i !== undefined);
-                const unlinked = sides.map((side) => {
-                    const r = knowledgeItemCommands.unlinkConflict(side, { other: side.id === id ? other : id, by, at });
-                    if (!r.ok) throw new Error('unlinkConflict refused two distinct items');
-                    return r.value.Live;
-                });
-                await writeItems(
-                    unlinked.map((u) => u.aggregate),
-                    dir,
-                );
-                await appendAudit(unlinked.map((u) => auditOf(u.events.KnowledgeConflictUnlinked)));
-                return ok(unlinked.map((u) => u.aggregate));
-            });
+            return exclusive(
+                async (): Promise<Result<readonly Knowledge.LiveKnowledgeItem[], Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>> => {
+                    const item = await liveOne(id);
+                    if (item === undefined)
+                        return (await deletedOne(id)) ? err({ type: 'KnowledgeItemGone', itemId: id }) : err({ type: 'KnowledgeItemNotFound', itemId: id });
+                    if (other === id) return ok([item]);
+                    const at = now();
+                    const sides = [item, await liveOne(other)].filter((i): i is Knowledge.LiveKnowledgeItem => i !== undefined);
+                    const unlinked = sides.map((side) => {
+                        const r = knowledgeItemCommands.unlinkConflict(side, { other: side.id === id ? other : id, by, at });
+                        if (!r.ok) throw new Error('unlinkConflict refused two distinct items');
+                        return r.value.Live;
+                    });
+                    await writeItems(
+                        unlinked.map((u) => u.aggregate),
+                        dir,
+                    );
+                    await appendAudit(unlinked.map((u) => auditOf(u.events.KnowledgeConflictUnlinked)));
+                    return ok(unlinked.map((u) => u.aggregate));
+                },
+            );
         },
 
         async delete(project, id, by) {

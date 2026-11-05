@@ -20,7 +20,13 @@ let cursors: RedactionCursors;
 beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'domaintrail-redaction-'));
     clock = new Date('2026-11-05T09:00:00Z');
-    store = createFilesKnowledgeStore({ dir: path.join(root, 'knowledge'), project, stateDir: path.join(root, 'state'), undoWindowMs: 60_000, now: () => clock });
+    store = createFilesKnowledgeStore({
+        dir: path.join(root, 'knowledge'),
+        project,
+        stateDir: path.join(root, 'state'),
+        undoWindowMs: 60_000,
+        now: () => clock,
+    });
     cursors = createSqliteRedactionCursors(new DatabaseSync(':memory:'));
 });
 afterEach(async () => {
@@ -59,7 +65,10 @@ describe('the redaction sync', () => {
         await addAndDelete(2);
         clock = new Date(clock.getTime() + 61_000);
         expect(await sync.run()).toBe(1);
-        expect(redacted).toEqual([['s1/m1', 's1/m1b'], ['s1/m2', 's1/m2b']]);
+        expect(redacted).toEqual([
+            ['s1/m1', 's1/m1b'],
+            ['s1/m2', 's1/m2b'],
+        ]);
     });
 
     test('a failed redaction leaves the cursor, and the next run reads the same entries again', async () => {

@@ -113,6 +113,18 @@ const RAW_BUTTONS: Readonly<Record<string, { readonly count: number; readonly re
         reason: "the inspector's back to the previous element (↶ and its name): a reference in running text (a quote, a time, a chip of an element) that jumps to its source: its look is the text it stands for",
     },
     'inspector.tsx role=tab': { count: 1, reason: 'a tab of a tablist (role=tab): it switches what the pane shows, a widget of its own' },
+    'knowledge/panel.tsx role=radio': {
+        count: 1,
+        reason: '新しい順 / 種類の順 of a knowledge list: segmented view settings (a radio group), not session actions',
+    },
+    'knowledge/panel.tsx knowledge-item-head': {
+        count: 1,
+        reason: "a knowledge item's row (kind, text, labels) that opens it: a row or card whose whole box is the target (a list's row, a disclosure head): its layout is the row's, not a button's",
+    },
+    'knowledge/panel.tsx knowledge-chip': {
+        count: 1,
+        reason: 'a filter of the ナレッジ list (AS-IS, ルール, 発言…), on or off: a chip or badge of its own (a count, a reaction, a status pill): a view setting',
+    },
     'lists.tsx problem': {
         count: 1,
         reason: "a problem of the problems list: a row or card whose whole box is the target (a list's row, a disclosure head): its layout is the row's, not a button's",

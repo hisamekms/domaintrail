@@ -222,7 +222,17 @@ const time: Decoder<Date> = (v, at) => {
 const WHEN: readonly Knowledge.When[] = ['as_is', 'to_be', 'none'];
 const KINDS: readonly Knowledge.KnowledgeKind[] = ['rule', 'flow', 'example', 'term', 'pain', 'want', 'decision'];
 const ORIGINS: readonly Knowledge.Origin[] = ['said', 'agreed', 'investigated', 'inferred'];
-const AUDIT_OPERATIONS: readonly Knowledge.AuditOperation[] = ['add', 'addSource', 'rewrite', 'revise', 'linkConflict', 'correct', 'delete', 'restore', 'unlinkConflict'];
+const AUDIT_OPERATIONS: readonly Knowledge.AuditOperation[] = [
+    'add',
+    'addSource',
+    'rewrite',
+    'revise',
+    'linkConflict',
+    'correct',
+    'delete',
+    'restore',
+    'unlinkConflict',
+];
 
 export const itemId: Decoder<Knowledge.KnowledgeItemId> = branded(Knowledge.makeKnowledgeItemId, str);
 export const imageId: Decoder<Knowledge.ImageId> = branded(Knowledge.makeImageId, str);

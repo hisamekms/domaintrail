@@ -61,6 +61,11 @@ const LATIN_IN_JA = new Set([
     'ES',
     // the `/model:start` command (an empty view of the domain model points to it)
     'model',
+    // the knowledge's labels AS-IS and TO-BE (ADR 0031: written so in Japanese too)
+    'AS',
+    'IS',
+    'TO',
+    'BE',
     // the formats of 書き出し
     'PNG',
     'SVG',

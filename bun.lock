@@ -84,6 +84,7 @@
       "dependencies": {
         "@domaintrail/collaboration": "workspace:*",
         "@domaintrail/kernel": "workspace:*",
+        "@domaintrail/knowledge": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "@domaintrail/storming": "workspace:*",
         "@domaintrail/visualization": "workspace:*",

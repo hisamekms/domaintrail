@@ -16,7 +16,14 @@ describe('forgetHeldQuotes', () => {
             number: 2,
             held: [
                 {
-                    operation: { kind: 'Conflict', id: itemId('kn_00000002'), content: content('x'), sources: [source('s1', 'm1', '携帯は090')], item: itemId('kn_00000001'), base: version(1) },
+                    operation: {
+                        kind: 'Conflict',
+                        id: itemId('kn_00000002'),
+                        content: content('x'),
+                        sources: [source('s1', 'm1', '携帯は090')],
+                        item: itemId('kn_00000001'),
+                        base: version(1),
+                    },
                     heldIn: 1,
                     heldAt,
                 },

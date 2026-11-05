@@ -55,10 +55,7 @@ async function until<T>(what: string, probe: () => T | undefined | Promise<T | u
 const json = { 'content-type': 'application/json' };
 const content = (text: string, about: string[]): unknown => ({ text, labels: { when: 'as_is', kind: 'rule', origin: 'said' }, about });
 /** A 1×1 PNG. */
-const PNG = Uint8Array.from(
-    atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='),
-    (c) => c.charCodeAt(0),
-);
+const PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0));
 
 describe('the Live View’s knowledge', () => {
     test('reads, corrects, attaches an image, unlinks a conflict, deletes with undo, and redacts after the sweep', async () => {
@@ -77,7 +74,7 @@ describe('the Live View’s knowledge', () => {
         await server.ready;
         const joined = await fetch(`${server.url}api/session/join`, { method: 'POST', headers: json, body: JSON.stringify({ name: 'Ada' }) });
         const cookie = (joined.headers.get('set-cookie') ?? '').split(';')[0];
-        const api = (p: string, init: RequestInit = {}): Promise<Response> =>
+        const api = (p: string, init: { method?: string; body?: BodyInit; headers?: Record<string, string> } = {}): Promise<Response> =>
             fetch(`${server.url}api/session/knowledge${p}`, { ...init, headers: { cookie, ...(init.body !== undefined && json), ...init.headers } });
         const post = (p: string, body: unknown = {}): Promise<Response> => api(p, { method: 'POST', body: JSON.stringify(body) });
 
@@ -125,7 +122,9 @@ describe('the Live View’s knowledge', () => {
 
         // the pages are told of each change
         const told: string[] = [];
-        const ws = new WebSocket(`${server.url.replace('http', 'ws')}ws`, { headers: { cookie, origin: server.url.replace(/\/$/, '') } } as unknown as string[]);
+        const ws = new WebSocket(`${server.url.replace('http', 'ws')}ws`, {
+            headers: { cookie, origin: server.url.replace(/\/$/, '') },
+        } as unknown as string[]);
         ws.onmessage = (e) => {
             const m = JSON.parse(String(e.data)) as { type: string };
             if (m.type === 'knowledge.changed' || m.type === 'session.state') told.push(m.type);
@@ -140,9 +139,11 @@ describe('the Live View’s knowledge', () => {
         ] as unknown as [Knowledge.StickyRef, boolean, boolean][]);
         const found = wire.page(wire.liveItem)(await (await api('/?about=Shop.Paid')).json(), 'page');
         expect(found.items.map((i) => i.id as string)).toEqual(['kn_00000002']);
-        expect(wire.page(wire.liveItem)(await (await api('?q=%E5%BD%93%E6%97%A5')).json(), 'page').items.map((i) => i.id as string)).toEqual([
-            'kn_00000002',
-        ]);
+        expect(
+            wire
+                .page(wire.liveItem)(await (await api('?q=%E5%BD%93%E6%97%A5')).json(), 'page')
+                .items.map((i) => i.id as string),
+        ).toEqual(['kn_00000002']);
         expect((await api('?kind=nonsense')).status).toBe(400);
 
         // 直す: a new version, the person who did it from the identity; every page told
@@ -181,7 +182,9 @@ describe('the Live View’s knowledge', () => {
         expect((await api('/items/kn_00000001')).status).toBe(200);
         expect((await post('/items/kn_00000001/delete')).status).toBe(200);
         const body = async (): Promise<string | undefined> => {
-            const state = (await (await fetch(`${server.url}api/session/state`, { headers: { cookie } })).json()) as { requests: { id: string; body: string }[] };
+            const state = (await (await fetch(`${server.url}api/session/state`, { headers: { cookie } })).json()) as {
+                requests: { id: string; body: string }[];
+            };
             return state.requests.find((r) => r.id === message)?.body;
         };
         expect(await body()).toBe('締めは前日17時、担当は山田さん');

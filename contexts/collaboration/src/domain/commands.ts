@@ -98,7 +98,20 @@ export const requestCommands: Collaboration.RequestCommands = {
         return ok({
             Sent: {
                 // a reply names the run it answers; whether it runs is the facilitator's to decide, as for any message
-                set: { id, session, author, targets, body, sentAt, replyTo, mentions, reverts: undefined, viewedAt, journeyNote: undefined, redactedAt: undefined },
+                set: {
+                    id,
+                    session,
+                    author,
+                    targets,
+                    body,
+                    sentAt,
+                    replyTo,
+                    mentions,
+                    reverts: undefined,
+                    viewedAt,
+                    journeyNote: undefined,
+                    redactedAt: undefined,
+                },
                 events: {
                     RequestSent: {
                         type: 'RequestSent',
@@ -125,7 +138,20 @@ export const requestCommands: Collaboration.RequestCommands = {
         const reverts: Collaboration.AgentRunId = params.reverts;
         return ok({
             Sent: {
-                set: { id, session, author, targets: [], body, sentAt, replyTo: undefined, mentions: [], reverts, viewedAt: undefined, journeyNote: undefined, redactedAt: undefined },
+                set: {
+                    id,
+                    session,
+                    author,
+                    targets: [],
+                    body,
+                    sentAt,
+                    replyTo: undefined,
+                    mentions: [],
+                    reverts,
+                    viewedAt: undefined,
+                    journeyNote: undefined,
+                    redactedAt: undefined,
+                },
                 events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, mentions: [], reverts } },
             },
         });
@@ -139,7 +165,20 @@ export const requestCommands: Collaboration.RequestCommands = {
         const author = AI_PARTICIPANT_ID;
         return ok({
             Sent: {
-                set: { id, session, author, targets: [], body, sentAt, replyTo, mentions: [], reverts: undefined, viewedAt: undefined, journeyNote, redactedAt: undefined },
+                set: {
+                    id,
+                    session,
+                    author,
+                    targets: [],
+                    body,
+                    sentAt,
+                    replyTo,
+                    mentions: [],
+                    reverts: undefined,
+                    viewedAt: undefined,
+                    journeyNote,
+                    redactedAt: undefined,
+                },
                 events: {
                     RequestSent: {
                         type: 'RequestSent',
