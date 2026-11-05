@@ -417,6 +417,8 @@ export function openDatabase(file: string): DatabaseSync {
     try {
         db.exec('PRAGMA foreign_keys = ON');
         db.exec('PRAGMA busy_timeout = 5000');
+        // what a redaction overwrites or a deletion frees is zeroed on disk, not left in free pages (ADR 0031, section 7)
+        db.exec('PRAGMA secure_delete = ON');
         if (file !== ':memory:') {
             db.exec('PRAGMA journal_mode = WAL');
             db.exec('PRAGMA synchronous = NORMAL');
@@ -899,6 +901,10 @@ function slashCommands(db: DatabaseSync): SlashCommandRepository {
 
 function outbox(db: DatabaseSync): EventOutbox {
     const append = db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (:session, :type, :payload, :at)');
+    const requestSent = db.prepare(
+        "SELECT seq, session_id, payload, recorded_at FROM outbox WHERE type = 'RequestSent' AND json_extract(payload, '$.requestId') = :request ORDER BY seq",
+    );
+    const replace = db.prepare('UPDATE outbox SET type = :type, payload = :payload WHERE seq = :seq');
     const all = db.prepare('SELECT seq, session_id, payload, recorded_at FROM outbox WHERE seq > :cursor ORDER BY seq LIMIT :limit');
     const ofSession = db.prepare(
         'SELECT seq, session_id, payload, recorded_at FROM outbox WHERE seq > :cursor AND session_id = :session ORDER BY seq LIMIT :limit',
@@ -917,6 +923,12 @@ function outbox(db: DatabaseSync): EventOutbox {
         readAfter(cursor, limit, session) {
             const rows = session === undefined ? all.all(params({ cursor, limit })) : ofSession.all(params({ cursor, limit, session }));
             return rows.map(entry);
+        },
+        requestSent(request) {
+            return requestSent.all(params({ request })).map(entry);
+        },
+        replace(seq, event) {
+            replace.run(params({ seq, type: event.type, payload: encodeJson(event) }));
         },
     };
 }
@@ -1117,6 +1129,17 @@ export function createUnitOfWork(db: DatabaseSync): UnitOfWork {
             };
             const next = tail.then(run);
             // the next transaction waits for this one whatever its outcome; the outcome itself goes to the caller
+            tail = next.then(
+                () => undefined,
+                () => undefined,
+            );
+            return next;
+        },
+        checkpoint() {
+            // after the transactions queued before it: the WAL's pages copied into the database, then the WAL emptied
+            const next = tail.then(() => {
+                db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+            });
             tail = next.then(
                 () => undefined,
                 () => undefined,

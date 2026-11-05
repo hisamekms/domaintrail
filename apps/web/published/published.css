@@ -1,0 +1,73 @@
+/* The read-only page of the knowledge store's Worker: the Live View's bar, canvas and knowledge panels (styles.css),
+   laid out as the ナレッジ list, the canvas and a sticky's detail side by side. */
+.published-subject {
+    flex: 0 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--gap-between);
+}
+.published-drawn {
+    color: var(--muted);
+    font-size: 0.8125rem;
+    white-space: nowrap;
+}
+.published-body {
+    position: relative;
+}
+.published-list {
+    flex: none;
+    width: 320px;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    overflow: auto;
+}
+.published-list > .list {
+    flex: none;
+}
+.published-list-open {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    z-index: 320;
+}
+.published-missing {
+    border-top: 1px solid var(--border);
+}
+.published-missing > .knowledge-items {
+    padding: var(--space-2) var(--space-3);
+}
+.published-missing-refs {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--muted);
+    font-size: 0.75rem;
+}
+.published-detail {
+    flex: none;
+    width: 340px;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+}
+.published-detail-head {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--gap-between);
+}
+.published-detail-head h2 {
+    flex: 1;
+    margin: 0;
+}
+@media (max-width: 900px) {
+    .published-list,
+    .published-detail {
+        width: 260px;
+    }
+}

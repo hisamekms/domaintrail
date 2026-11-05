@@ -6,8 +6,18 @@
 // - the runner: Claude Code (a warm process across runs, or one per run: `agent.run`), `dt fmt`/`dt check` (this CLI,
 //   or `agent.run.dt`, for the agent too) and the workspace's files;
 // - the answerer: stage 3 of the triage (a light model with no tools: `agent.triage`), answers and proposals (Claude
-//   Code with the reading tools only: `agent.answer`), from the answers entry point.
-import { homedir, hostname } from 'node:os';
+//   Code with the reading tools only: `agent.answer`), from the answers entry point; and with it the extractor of
+//   knowledge (ADR 0031: Claude Code with no tools at all, `agent.extract`), from the extraction entry point — a role of
+//   its own on the agent API, read-only like the answerer, so it is taken with it. A session that keeps no knowledge
+//   answers its stream 404, and it ends then without a word more.
+//
+// With a usable knowledge store (`knowledgeForAgents`), the answerer's answers and proposals and the runner's runs read
+// knowledge through the same read-only tools as `dt mcp` (ADR 0031, Consequences): Claude Code starts `dt mcp` of the
+// agent's pinned `dt` on the workspace as its one MCP server, through a launcher outside the workspace, and is allowed
+// its three tools by name. `dt mcp` checks the approval of the workspace's settings by itself. The triage, the
+// interviews, the commands and the extractor never get them.
+import { mkdtemp, rm } from 'node:fs/promises';
+import { homedir, hostname, tmpdir } from 'node:os';
 import * as path from 'node:path';
 import {
     AGENT_ROLES,
@@ -16,11 +26,16 @@ import {
     type AgentRunner,
     type AnswerConfig,
     createClaudeAnswerer,
+    createClaudeExtractor,
     createClaudeCodeRunner,
     createDtTools,
     createWarmClaudeRunner,
     createHttpAgentApi,
+    type KnowledgeMcp,
+    writeKnowledgeMcpLauncher,
     type DtCommand,
+    type ExtractConfig,
+    type Extractor,
     dtCommandOf,
     pinDt,
     type PinnedDt,
@@ -32,6 +47,7 @@ import {
     type RunConfig,
     scanWorkspace,
     startAnswerer,
+    startExtractor,
     startSubscriber as subscribe,
     type Subscriber,
     type SubscriberEnd,
@@ -60,6 +76,9 @@ import { workspaceState } from './state.js';
 import { configFileRules, configGuardScan } from './config-guard.js';
 import { processAlive } from './process.js';
 import { answererExtraViews, runnerReadScope } from './read-scope.js';
+import type { ResolvedConfig } from '../config/config.js';
+import type { SettingsApproval } from '../cli/trust.js';
+import { knowledgeForAgents } from './knowledge.js';
 
 export type { SubscriberEnd };
 
@@ -94,10 +113,17 @@ export interface SubscriberOptions {
     answer?: AnswerConfig;
     /** Stage 3 of the triage (`agent.triage`); default: `haiku`, a fresh process per triage. */
     triage?: TriageConfig;
+    /** The extractor of knowledge (`agent.extract`); default: the answerer's model and effort, 180 s, the triage's light model first. */
+    extract?: ExtractConfig;
     /** The ways of working the prompts give (the guide's); none without it. */
     practice?: Practice;
     /** What each role may read outside the workspace, read-only (`agent.read.paths` and its own; absolute paths). */
     read?: { readonly answer: readonly string[]; readonly run: readonly string[] };
+    /**
+     * The workspace's config and the proof that its settings were approved: with a usable knowledge store, the
+     * answerer and the runner get the knowledge tools of `dt mcp` (`knowledgeForAgents`). None: no knowledge tools.
+     */
+    knowledge?: { readonly config: ResolvedConfig; readonly approval: SettingsApproval | undefined };
     /** The answerer's program instead of `agentCommand`: for the tests only. */
     answerCommand?: AgentCommand;
     log?: (line: string) => void;
@@ -188,6 +214,10 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
         for (const s of skipped) log(`${role === 'answer' ? 'answerer' : 'runner'}: not reading ${s}`);
         return targets;
     };
+    // the knowledge tools of `dt mcp`, for the answers and the runs alike; its launcher goes when the subscriber ends
+    const launcher = await knowledgeLauncher(options, root, log);
+    const knowledgeMcp: KnowledgeMcp | undefined = launcher && { command: launcher.command, args: launcher.args };
+    const knowledgeGone = <T>(done: Promise<T>): Promise<T> => (launcher ? done.finally(() => launcher.dispose()) : done);
     // the answerer reads a view of the workspace: the files git does not ignore, without .domaintrail/ and .git/; and
     // views of what it reads outside it
     const view = roles.has('answer') ? answererView(root) : undefined;
@@ -207,6 +237,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
                           root: viewDir,
                           prepare,
                           ...(extraViews && { extraRead: extraViews.extra }),
+                          ...(knowledgeMcp && { knowledge: knowledgeMcp }),
                           ...((options.answerCommand ?? options.agentCommand) && { command: options.answerCommand ?? options.agentCommand }),
                           answer: {
                               warm: answerConfig.warm,
@@ -228,14 +259,53 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
                       timeoutMs: answerConfig.timeout * 1000,
                       ...(options.reconnect && { reconnect: options.reconnect }),
                       ...(options.practice && { practice: options.practice }),
+                      ...(knowledgeMcp && { knowledge: true }),
                   },
               )
             : undefined;
     // the views go with the answerer
     void answerer?.done.then(() => Promise.all([view?.dispose(), extraViews?.dispose()]));
+    const extractor = roles.has('answer')
+        ? await startKnowledgeExtractor({
+              api,
+              ...((options.extract?.model ?? answerConfig.model ?? user.model) !== undefined && {
+                  model: options.extract?.model ?? answerConfig.model ?? user.model,
+              }),
+              ...((options.extract?.effort ?? answerConfig.effort ?? user.effort) !== undefined && {
+                  effort: options.extract?.effort ?? answerConfig.effort ?? user.effort,
+              }),
+              timeoutMs: (options.extract?.timeout ?? 180) * 1000,
+              gateModel: options.extract?.gateModel ?? triageConfig.model,
+              ...((options.answerCommand ?? options.agentCommand) && { command: options.answerCommand ?? options.agentCommand }),
+              ...(options.reconnect && { reconnect: options.reconnect }),
+              log,
+          })
+        : undefined;
+    /**
+     * The read-only roles' end: the answerer stops; the extractor, when the session closed, is let finish the last
+     * extraction (the server tells it when it is done), at most its timeout and a little more.
+     */
+    const readOnlyEnd = async (why: SubscriberEnd | 'closed'): Promise<void> => {
+        const last = why === 'closed' && extractor ? withTimeout(extractor.done, (options.extract?.timeout ?? 180) * 1000 + 10_000) : undefined;
+        await Promise.all([answerer?.stop(), last?.then(() => extractor?.stop())]);
+        await extractor?.stop();
+    };
     if (!roles.has('run')) {
-        const done = answerer?.done ?? Promise.resolve<SubscriberEnd>('stopped');
-        return { session: session.value.session, roles: taken, done, stop: async () => (await answerer?.stop()) ?? 'stopped' };
+        const done = knowledgeGone(
+            (answerer?.done ?? Promise.resolve<SubscriberEnd>('stopped')).then(async (why) => {
+                await readOnlyEnd(why);
+                return why;
+            }),
+        );
+        return {
+            session: session.value.session,
+            roles: taken,
+            done,
+            stop: async () => {
+                const [why] = await Promise.all([answerer?.stop() ?? Promise.resolve<SubscriberEnd>('stopped'), extractor?.stop()]);
+                return why;
+            },
+        };
     }
 
     const runTargets = readOf('run');
@@ -254,6 +324,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             readScope: () => runnerReadScope(() => runnerDeniedPaths(root), runTargets),
             // a -c file and its local override, never edited (the default names are denied at any depth already)
             ...(options.configPath && { configFiles: configFileRules(options.configPath, root) }),
+            ...(knowledgeMcp && { knowledge: knowledgeMcp }),
             ...((run?.model ?? user.model) !== undefined && { model: run?.model ?? user.model }),
             ...((run?.effort ?? user.effort) !== undefined && { effort: run?.effort ?? user.effort }),
         };
@@ -267,7 +338,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
                   })
                 : await createClaudeCodeRunner(claude);
     } catch (e) {
-        await answerer?.stop();
+        await Promise.all([answerer?.stop(), extractor?.stop(), launcher?.dispose()]);
         throw new SessionError(e instanceof Error ? e.message : String(e));
     }
     const subscriber: Subscriber = subscribe(
@@ -292,22 +363,52 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             heartbeatMs: options.heartbeatMs,
             reconnect: options.reconnect,
             ...(options.practice && { practice: options.practice }),
+            ...(knowledgeMcp && { knowledge: true }),
         },
     );
-    // the runner's end ends the answerer too (the session closed, the server is gone, Ctrl+C, `--once`)
-    const done = subscriber.done.then(async (why) => {
-        await answerer?.stop();
-        return why;
-    });
+    // the runner's end ends the answerer and the extractor too (the session closed — after the last extraction —, the
+    // server is gone, Ctrl+C, `--once`)
+    const done = knowledgeGone(
+        subscriber.done.then(async (why) => {
+            await readOnlyEnd(why);
+            return why;
+        }),
+    );
     return {
         session: session.value.session,
         roles: taken,
         done,
         stop: async () => {
-            const [why] = await Promise.all([subscriber.stop(), answerer?.stop()]);
+            const [why] = await Promise.all([subscriber.stop(), answerer?.stop(), extractor?.stop()]);
             return why;
         },
     };
+}
+
+/**
+ * The launcher of `dt mcp` for the agent's Claude Code when the workspace's knowledge store is usable
+ * (`knowledgeForAgents`), with the agent's `dt` pinned (outside the workspace); else none, said in the log unless there
+ * is simply nothing to read yet (a `files` store without `knowledge/`).
+ */
+async function knowledgeLauncher(
+    options: SubscriberOptions,
+    root: string,
+    log: (line: string) => void,
+): Promise<(KnowledgeMcp & { dispose(): Promise<void> }) | undefined> {
+    if (!options.knowledge) return undefined;
+    const usable = knowledgeForAgents(options.knowledge.config, options.knowledge.approval);
+    if (!usable.usable) {
+        if (!usable.quiet) log(`knowledge: the AI reads none (${usable.reason})`);
+        return undefined;
+    }
+    try {
+        const launcher = await writeKnowledgeMcpLauncher(pinDt(options.dt, root), root, options.configPath);
+        log('knowledge: the answers and the runs read it through dt mcp');
+        return launcher;
+    } catch (e) {
+        log(`knowledge: the AI reads none (dt mcp cannot be started: ${e instanceof Error ? e.message : String(e)})`);
+        return undefined;
+    }
 }
 
 /**
@@ -358,4 +459,52 @@ export function runnerDeniedPaths(root: string, env?: NodeJS.ProcessEnv): Promis
         },
         ignores: (p, d) => (gitignore ??= new GitIgnore(root, { userExcludes: true, env })).ignores(p, d),
     });
+}
+
+/** Resolves with `promise`, or after `ms` (undefined). */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
+    return new Promise((resolve) => {
+        const timer = setTimeout(() => resolve(undefined), ms);
+        timer.unref();
+        void promise.then((v) => {
+            clearTimeout(timer);
+            resolve(v);
+        });
+    });
+}
+
+/**
+ * The extractor of knowledge (ADR 0031): Claude Code with no tools at all, a fresh process per extraction, in an empty
+ * directory of its own (removed when it ends), so that no file of the workspace — nor its `CLAUDE.md` — is read.
+ */
+async function startKnowledgeExtractor(options: {
+    api: Parameters<typeof startExtractor>[0]['api'];
+    model?: string;
+    effort?: string;
+    /** The light model that decides first whether to extract (`agent.extract.gateModel`). */
+    gateModel: string;
+    timeoutMs: number;
+    command?: AgentCommand;
+    reconnect?: { minMs: number; maxMs: number; giveUpMs: number };
+    log: (line: string) => void;
+}): Promise<Extractor> {
+    const dir = await mkdtemp(path.join(tmpdir(), 'dt-extractor-'));
+    const extractor = startExtractor(
+        {
+            api: options.api,
+            agent: createClaudeExtractor({
+                root: dir,
+                ...(options.model !== undefined && { model: options.model }),
+                ...(options.effort !== undefined && { effort: options.effort }),
+                gateModel: options.gateModel,
+                ...(options.command && { command: options.command }),
+            }),
+            clock: systemClock,
+            nonce: randomNonce,
+            log: options.log,
+        },
+        { timeoutMs: options.timeoutMs, ...(options.reconnect && { reconnect: options.reconnect }) },
+    );
+    void extractor.done.then(() => rm(dir, { recursive: true, force: true })).catch(() => undefined);
+    return extractor;
 }

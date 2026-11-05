@@ -1,7 +1,7 @@
 // domaintrail.jsonc as the app composes it (ADR 0027, Project analysis and configuration; ADR 0030, the sections): each
 // owner defines the type, defaults and validation of its section — the analysis `sources`, the generation `generate`
 // and `lintHint`, the app the ports and hosts (./server.ts: `open`), the owners of `collab` and `agent` (./collab.ts),
-// Collaboration the `classifier` and `templates` — and this module puts them together: the file's keys, its validation in a fixed
+// Collaboration the `classifier` and `templates`, Knowledge the `knowledge` (its store, project and extraction) — and this module puts them together: the file's keys, its validation in a fixed
 // order (the first error wins), the old sections `session` and `view` refused with where their keys went, and the
 // resolved configuration. The workspace reads the file (`loadConfig`, given `CONFIG_FILE_FORMAT` by the composition)
 // and knows none of the sections. The CLI and the language server read the resolved configuration and its errors.
@@ -31,6 +31,13 @@ import {
     validateClassifierConfig,
     validateTemplatesConfig,
 } from '@domaintrail/collaboration';
+import {
+    type KnowledgeConfigFile,
+    KNOWLEDGE_CONFIG_KEYS,
+    resolveKnowledgeConfig,
+    type ResolvedKnowledgeConfig,
+    validateKnowledgeConfig,
+} from '@domaintrail/knowledge';
 import { type OpenConfigFile, resolveOpenConfig, SERVER_CONFIG_KEYS, validateOpenConfig } from './server.js';
 import {
     type AgentSectionFile,
@@ -70,6 +77,7 @@ export const CONFIG_KEYS: Readonly<Record<string, readonly string[]>> = mergeKey
     GENERATION_CONFIG_KEYS,
     SERVER_CONFIG_KEYS,
     ...COLLAB_AGENT_CONFIG_KEYS,
+    KNOWLEDGE_CONFIG_KEYS,
 ]);
 
 function mergeKeys(parts: readonly Readonly<Record<string, readonly string[]>>[]): Record<string, readonly string[]> {
@@ -89,9 +97,11 @@ export interface DomainTrailConfigFile extends SourcesConfigFile, GenerationConf
     classifier?: ClassifierConfigFile;
     /** The team's message templates of the chat (after `/`), in both modes. */
     templates?: MessageTemplateConfig[];
+    /** Knowledge taken from the sessions (ADR 0031): its store, its project and when it is extracted. */
+    knowledge?: KnowledgeConfigFile;
 }
 
-export type { ResolvedAgentSection, ResolvedCollabConfig };
+export type { ResolvedAgentSection, ResolvedCollabConfig, ResolvedKnowledgeConfig };
 export type ResolvedClassifierConfig = ResolvedCollaborationConfig['classifier'];
 
 export interface ResolvedConfig extends ResolvedSourcesConfig, ResolvedGenerationConfig {
@@ -106,13 +116,14 @@ export interface ResolvedConfig extends ResolvedSourcesConfig, ResolvedGeneratio
     agent: ResolvedAgentSection;
     classifier: ResolvedClassifierConfig;
     templates: readonly MessageTemplateConfig[];
+    knowledge: ResolvedKnowledgeConfig;
 }
 
 export class ConfigError extends Error {}
 
 /** The configuration without a config file: the defaults, rooted at `root`. */
 export function defaultConfig(root: string): ResolvedConfig {
-    return { root: path.resolve(root), ...resolved({}) };
+    return { root: path.resolve(root), ...resolved({}, undefined, path.resolve(root)) };
 }
 
 /**
@@ -205,8 +216,11 @@ export function mergeConfig(base: unknown, override: unknown): unknown {
     return out;
 }
 
-/** Every section with its defaults, in the order the resolved configuration always had. */
-function resolved(config: DomainTrailConfigFile, dir?: string): Omit<ResolvedConfig, 'root' | 'file'> {
+/**
+ * Every section with its defaults, in the order the resolved configuration always had. `dir` resolves the runner's
+ * `dt`; `root` (by default `dir`) names the `files` store's project when the file names none.
+ */
+function resolved(config: DomainTrailConfigFile, dir?: string, root: string | undefined = dir): Omit<ResolvedConfig, 'root' | 'file'> {
     return {
         ...resolveSourcesConfig(config),
         ...resolveGenerationConfig(config),
@@ -215,6 +229,7 @@ function resolved(config: DomainTrailConfigFile, dir?: string): Omit<ResolvedCon
         agent: resolveAgent(config.agent, dir),
         classifier: resolveCollaborationConfig({ classifier: config.classifier }).classifier,
         templates: config.templates ?? [],
+        knowledge: resolveKnowledgeConfig(config.knowledge, path.basename(root ?? '')),
     };
 }
 
@@ -287,6 +302,7 @@ function validate(raw: unknown, fail: (msg: string) => never): DomainTrailConfig
     if (raw.agent !== undefined) validateAgent(raw.agent, CONFIG_KEYS, fail);
     validateClassifierConfig(raw.classifier, fail);
     validateTemplatesConfig(raw.templates, fail);
+    validateKnowledgeConfig(raw.knowledge, fail);
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- every key was checked above
     return raw as DomainTrailConfigFile;
 }

@@ -10,9 +10,10 @@ import { check } from '../test-helpers';
 import type { TriageRecord } from './ai';
 import { AgentBody } from './card';
 import { ChatProvider, type ChatContextValue } from './chat-context';
-import { MarkdownText } from './markdown-text';
+import { MarkdownText } from '../shared/markdown-text';
 import { TargetNamingProvider } from './naming';
 import { targetLabel } from './proposal-view';
+import { ReplyText } from './reply';
 import { parseReplyText, referencesAsText, referenceText } from './references';
 import { resolveTarget, viewOfDeclaration, type ModelTarget, type NamingContext } from './targets';
 import type { AgentMessage, ReplyView } from './stream';
@@ -175,7 +176,7 @@ describe('parsing next to punctuation and line breaks', () => {
 const html = (text: string): string =>
     renderToStaticMarkup(
         <TargetNamingProvider value={naming}>
-            <MarkdownText text={text} onNavigate={() => {}} />
+            <MarkdownText text={text} renderText={(t) => <ReplyText text={t} onNavigate={() => {}} />} />
         </TargetNamingProvider>,
     );
 const link = (label: string): string => `<a class="reply-element" data-tooltip="給食当番 / ${label}">${label}</a>`;
@@ -215,7 +216,7 @@ describe('references inside the Markdown of an answer', () => {
         expect(html('` @{es:Kyushoku/Normal} `')).toContain(link('いつもの流れ'));
         const out = html('`x = @{es:Kyushoku/Normal}` と\n\n```\n@{es:Kyushoku/Normal}\n```');
         expect(out).toContain('<code>x = @{es:Kyushoku/Normal}</code>');
-        expect(out).toContain('<pre class="chat-md-code"><code>@{es:Kyushoku/Normal}</code></pre>');
+        expect(out).toContain('<pre class="md-code"><code>@{es:Kyushoku/Normal}</code></pre>');
         expect(out).not.toContain('reply-element');
     });
 
@@ -322,7 +323,7 @@ describe('the same resolution elsewhere', () => {
         const markdown = ['## @{es:Kyushoku/Normal} の流れ', '', '- **@{es:Kyushoku/Served}** のあと', '- @{es:Kyushoku/Cleaned}'].join('\n');
         const shown = (out: string): void => {
             // every heading level one heading; the list, bold and the element links; no Markdown left as written
-            expect(out).toContain(`<p class="chat-md-heading" role="heading" aria-level="4">${link('いつもの流れ')} の流れ</p>`);
+            expect(out).toContain(`<p class="md-heading" role="heading" aria-level="4">${link('いつもの流れ')} の流れ</p>`);
             expect(out).toContain(`<ul><li><strong>${link('配った')}</strong> のあと</li><li>${link('掃除した')}</li></ul>`);
             expect(out).not.toMatch(/##|\*\*|@\{/);
             // blocks in a <div>, never in a <p>
@@ -331,7 +332,7 @@ describe('the same resolution elsewhere', () => {
 
         test('an answer instead of an edit: clamped as blocks', () => {
             const out = card({ kind: 'completed', changed: false, result: 1, files: 0, reply: reply('質問に答えました', markdown) });
-            expect(out).toContain('<div class="chat-text chat-markdown reply-answer">');
+            expect(out).toContain('<div class="chat-text markdown reply-answer">');
             shown(out);
         });
 
@@ -342,17 +343,17 @@ describe('the same resolution elsewhere', () => {
                 { kind: 'declined', result: 1, files: 0, reply: reply(markdown) },
             ] as const) {
                 const out = card(message);
-                expect(out).toMatch(/<div class="chat-text chat-markdown( reply-summary)?"/);
+                expect(out).toMatch(/<div class="chat-text markdown( reply-summary)?"/);
                 shown(out);
             }
             const changed = card({ kind: 'completed', changed: true, result: 1, files: 2, reply: reply(markdown, '答え') });
-            expect(changed).toContain('<div class="chat-text chat-markdown reply-summary">');
+            expect(changed).toContain('<div class="chat-text markdown reply-summary">');
             shown(changed);
         });
 
         test("a question asked without the structured form, on the question's surface", () => {
             const out = card({ kind: 'clarification', question: markdown, result: 1, files: 0 });
-            expect(out).toContain('<div class="chat-text chat-markdown reply-question-text">');
+            expect(out).toContain('<div class="chat-text markdown reply-question-text">');
             shown(out);
         });
     });

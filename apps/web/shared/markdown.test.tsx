@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { parseInline, parseMarkdown, splitRow } from './markdown';
-import { MarkdownText } from './markdown-text';
+import { ReplyText } from '../session/reply';
+import { markdownPlain, parseInline, parseMarkdown, splitRow } from './markdown';
+import { MarkdownImages, MarkdownText } from './markdown-text';
 
 const t = (text: string): { kind: 'text'; text: string } => ({ kind: 'text', text });
-const html = (text: string): string => renderToStaticMarkup(<MarkdownText text={text} onNavigate={() => {}} />);
+const html = (text: string): string => renderToStaticMarkup(<MarkdownText text={text} renderText={(t) => <ReplyText text={t} onNavigate={() => {}} />} />);
 
 describe('inline Markdown', () => {
     test('code, bold and italic, nested', () => {
@@ -35,6 +36,16 @@ describe('inline Markdown', () => {
         expect(parseInline('![図](img.png)')).toEqual([t('図 (img.png)')]);
         expect(parseInline('<https://example.com>')).toEqual([t('https://example.com')]);
         expect(parseInline('[**b**](u)')).toEqual([{ kind: 'strong', children: [t('b')] }, t(' (u)')]);
+    });
+
+    test("an image of the page's own (`image:<id>`) is an image; a link to one is text", () => {
+        expect(parseInline('前 ![伝票 **1**](image:img_0000abcd) 後')).toEqual([
+            t('前 '),
+            { kind: 'image', id: 'img_0000abcd', alt: '伝票 1', url: 'image:img_0000abcd' },
+            t(' 後'),
+        ]);
+        expect(parseInline('[伝票](image:img_0000abcd)')).toEqual([t('伝票 (image:img_0000abcd)')]);
+        expect(parseInline('![x](image:a b)')).toEqual([t('![x](image:a b)')]);
     });
 });
 
@@ -134,15 +145,48 @@ describe('rendering an answer', () => {
 
     test('blocks as elements: one heading style, lists, code, a scrolling table', () => {
         const out = html('# 見出し\n### 小見出し\n\n- a\n  - b\n\n1. c\n\n`c`\n\n| h |\n|---|\n| v |');
-        expect(out.match(/class="chat-md-heading"/g)).toHaveLength(2);
+        expect(out.match(/class="md-heading"/g)).toHaveLength(2);
         expect(out).not.toMatch(/<h\d/);
         expect(out).toContain('<ul><li>a<ul><li>b</li></ul></li></ul><ol><li>c</li></ol>');
         expect(out).toContain('<code>c</code>');
-        expect(out).toContain('<div class="chat-md-table"><table><thead><tr><th>h</th></tr></thead><tbody><tr><td>v</td></tr></tbody></table></div>');
+        expect(out).toContain('<div class="md-table"><table><thead><tr><th>h</th></tr></thead><tbody><tr><td>v</td></tr></tbody></table></div>');
+    });
+
+    test('headings as paragraphs (a knowledge item): every level an ordinary paragraph, its marks dropped; the chat keeps its heading', () => {
+        const src = '# x\n## y\n\ntext';
+        const para = renderToStaticMarkup(<MarkdownText text={src} headings="paragraph" renderText={(t) => t} />);
+        expect(para).toBe('<p>x</p><p>y</p><p>text</p>');
+        expect(renderToStaticMarkup(<MarkdownText text={src} renderText={(t) => t} />)).toBe(
+            '<p class="md-heading" role="heading" aria-level="4">x</p><p class="md-heading" role="heading" aria-level="4">y</p><p>text</p>',
+        );
+    });
+
+    test('an attached image is drawn where the page resolves it, bounded and lazy; text where it does not (the chat today)', () => {
+        const src = '![伝票](image:img_0000abcd) ![](image:img_0000ef01) ![外](https://e.com/i.png)';
+        expect(html(src)).toBe('<p>伝票 (image:img_0000abcd) image:img_0000ef01 外 (https://e.com/i.png)</p>');
+        const drawn = renderToStaticMarkup(
+            <MarkdownImages.Provider value={(id) => `/img/${id}`}>
+                <MarkdownText text={src} renderText={(t) => t} />
+            </MarkdownImages.Provider>,
+        );
+        expect(drawn).toBe(
+            '<p><img class="md-image" src="/img/img_0000abcd" alt="伝票" loading="lazy"/> <img class="md-image" src="/img/img_0000ef01" alt="" loading="lazy"/> 外 (https://e.com/i.png)</p>',
+        );
     });
 
     test('element references in the text stay references (unresolved outside a page: their identifier)', () => {
         const out = html('**@{Sales.Order}** を見て');
         expect(out).toContain('<strong><span class="reply-element unresolved">Sales.Order</span></strong>');
+    });
+});
+
+describe('the text plain', () => {
+    test('a line per block, item and row; marks dropped, images left out, references as written', () => {
+        expect(
+            markdownPlain(
+                '# 見出し\n\n**太字**と `x` の @{es:O/P}\n\n- a\n  - b\n1. c\n\n| h | i |\n|---|---|\n| v | |\n\n![図](image:img_0000abcd)\n\n```\ncode\n```',
+            ),
+        ).toBe('見出し\n太字と x の @{es:O/P}\na\nb\nc\nh i\nv\ncode');
+        expect(markdownPlain('前 ![図](image:img_0000abcd) 後')).toBe('前 後');
     });
 });

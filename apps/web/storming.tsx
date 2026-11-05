@@ -305,6 +305,7 @@ export function StormingDetails({
     onSelect,
     onShowScope,
     onLevel,
+    knowledge,
 }: {
     stormings: readonly StormingView[];
     selected: string;
@@ -325,6 +326,8 @@ export function StormingDetails({
     onShowScope?: (stormingId: string, scope: string, then?: string) => void;
     /** Shows the storming at another level (the selection kept). */
     onLevel?: (level: ViewLevel) => void;
+    /** The knowledge about a sticky (`<Storming>.<Local>`), in a session with a knowledge store. */
+    knowledge?: ((sticky: string) => ReactNode) | undefined;
 }): ReactNode {
     const t = useT();
     const d = t.esDetail;
@@ -423,6 +426,7 @@ export function StormingDetails({
                         ))}
                     </div>
                 )}
+                {isNote && knowledge?.(`${storming.id}.${declaration.id}`)}
             </div>
         </>
     );

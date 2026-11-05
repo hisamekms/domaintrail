@@ -1,16 +1,21 @@
-// The Markdown of the AI's answers (ADR 0030), the part the chat shows: paragraphs (their line breaks kept), bullet and
-// numbered lists (one level of nesting; deeper items are flattened to that level), headings (any number of `#`, all one
-// level: the chat column is too narrow to tell several apart), fenced code blocks, GFM tables, inline code, **bold** and
-// *italic*. Links and images are text (`label (url)`), never followed; HTML is text, never markup. Whatever is not
-// understood stays as written. The answer is short and the column narrow, so a small parser here rather than a
-// library. Pure: no React (`markdown.tsx` renders it).
+// The Markdown the page shows: the AI's answers in the chat (ADR 0030) and the knowledge's items (ADR 0031, section 2),
+// in the Live View and on the Worker's page. Paragraphs (their line breaks kept), bullet and numbered lists (one level
+// of nesting; deeper items are flattened to that level), headings (any number of `#`, all one level: the columns are
+// too narrow to tell several apart; a knowledge item's are drawn as paragraphs, its title being its heading), fenced
+// code blocks, GFM tables, inline code, **bold** and *italic*. An image of
+// the page's own (`![label](image:<id>)`, an attached image) is an image, drawn where the page can resolve its id
+// (`markdown-text.tsx`); other links and images are text (`label (url)`), never followed nor loaded; HTML is text, never
+// markup. Whatever is not understood stays as written. The texts are short and the columns narrow, so a small parser
+// here rather than a library. Pure: no React (`markdown-text.tsx` renders it).
 
 /** A run of inline content. */
 export type Inline =
     | { readonly kind: 'text'; readonly text: string }
     | { readonly kind: 'code'; readonly text: string }
     | { readonly kind: 'strong'; readonly children: readonly Inline[] }
-    | { readonly kind: 'em'; readonly children: readonly Inline[] };
+    | { readonly kind: 'em'; readonly children: readonly Inline[] }
+    /** An attached image (`![alt](image:<id>)`); `url` as written, for the text it shows where it cannot be drawn. */
+    | { readonly kind: 'image'; readonly id: string; readonly alt: string; readonly url: string };
 
 /** An item of a list: its text and, at the top level only, the list nested in it. */
 export interface ListItem {
@@ -122,6 +127,9 @@ function startsBlock(lines: readonly string[], i: number): boolean {
     return HEADING.test(line) || FENCE.test(line) || ITEM.test(line) || tableAt(lines, i) !== undefined;
 }
 
+/** The URL of an attached image: `image:` and its id. */
+const IMAGE_URL = /^image:([A-Za-z0-9_-]+)$/;
+
 const PUNCTUATION = /[!"#$%&'()*+,\-./:;<=>?[\\\]^_`{|}~]/;
 
 /**
@@ -171,6 +179,13 @@ export function parseInline(src: string): Inline[] {
             const link = /^!?\[([^\]\n]*)\]\(\s*<?([^)\s>]*)>?(?:\s+"[^"\n]*")?\s*\)/.exec(rest);
             if (link) {
                 const [whole, label = '', url = ''] = link;
+                const image = c === '!' ? IMAGE_URL.exec(url) : null;
+                if (image) {
+                    flush();
+                    out.push({ kind: 'image', id: image[1] ?? '', alt: inlineText(parseInline(label)), url });
+                    i += whole.length;
+                    continue;
+                }
                 for (const n of parseInline(label)) {
                     if (n.kind === 'text') text += n.text;
                     else {
@@ -219,6 +234,11 @@ export function parseInline(src: string): Inline[] {
     }
     flush();
     return out;
+}
+
+/** Inline content as text: its marks dropped, its images left out. */
+function inlineText(content: readonly Inline[]): string {
+    return content.map((n) => (n.kind === 'text' || n.kind === 'code' ? n.text : n.kind === 'image' ? '' : inlineText(n.children))).join('');
 }
 
 /** The `*` closing an italic opened before `from`: a single one (not `**`), after a character that is not a space. */
@@ -364,4 +384,35 @@ export function parseMarkdown(src: string): Block[] {
         blocks.push({ kind: 'paragraph', content: parseInline(para.join('\n')) });
     }
     return blocks;
+}
+
+/**
+ * The text without its Markdown marks, for a line that shows it plain (a closed item of the knowledge, clamped): a line
+ * per paragraph, heading, list item and table row (its cells a space apart), a code block as written, images left out.
+ * Element references (`@{…}`) stay as written, for the page to name them.
+ */
+export function markdownPlain(src: string): string {
+    const items = (list: MdList): string[] => list.items.flatMap((it) => [inlineText(it.content), ...(it.children ? items(it.children) : [])]);
+    const lines = parseMarkdown(src).flatMap((b): string[] => {
+        switch (b.kind) {
+            case 'heading':
+            case 'paragraph':
+                return [inlineText(b.content)];
+            case 'code':
+                return [b.text];
+            case 'list':
+                return items(b);
+            case 'table':
+                return [b.head, ...b.rows].map((row) =>
+                    row
+                        .map(inlineText)
+                        .filter((c) => c !== '')
+                        .join(' '),
+                );
+        }
+    });
+    return lines
+        .map((l) => l.replace(/[ \t]{2,}/g, ' ').trim())
+        .filter((l) => l !== '')
+        .join('\n');
 }

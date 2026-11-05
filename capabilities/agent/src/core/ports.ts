@@ -1,7 +1,8 @@
-// The ports of the agent's two roles (ADR 0026, S6; ADR 0030, decision 6), defined here on their side: the session
-// server's agent API (the runner's entry point and the answerer's), the agent that edits the workspace (the runner),
-// the read-only agent that triages and answers (the answerer), the DSL tools run after a run, the workspace's files, and
-// time. The adapters are in `../adapters`, wired by the app (`startSubscriber`, `startAnswerer`).
+// The ports of the agent's roles (ADR 0026, S6; ADR 0030, decision 6; ADR 0031, section 3), defined here on their side:
+// the session server's agent API (the runner's entry point, the answerer's and the extractor's), the agent that edits
+// the workspace (the runner), the read-only agent that triages and answers (the answerer), the agent with no tools that
+// extracts knowledge (the extractor), the DSL tools run after a run, the workspace's files, and time. The adapters are in
+// `../adapters`, wired by the app (`startSubscriber`, `startAnswerer`, `startExtractor`).
 import type {
     AgentAnswerStreamJob,
     AgentClaimed,
@@ -20,6 +21,7 @@ import type {
     RunActivity,
 } from '@domaintrail/collaboration/protocol';
 import type { Collaboration, CommandReplyShape, ReplyData, ReplyOutcome } from '@domaintrail/collaboration';
+import type { ExtractionJobBody, ExtractionResultBody } from '@domaintrail/knowledge';
 
 /** An answer of the agent API other than 2xx: its HTTP status and the error's `type` (`LeaseLost`, `NothingQueued`, …). */
 export interface ApiFailure {
@@ -106,6 +108,24 @@ export interface AgentApi {
     answerResult(job: string, result: Readonly<Record<string, unknown>>): Promise<ApiResult<unknown>>;
 }
 
+/**
+ * The extractor role's entry point on the agent API (ADR 0031, section 3): `GET /agent/extractions/events` and
+ * `POST /agent/extractions/:job`. A server with no knowledge store answers the stream 404.
+ */
+export interface ExtractionApi {
+    /** The extractor's SSE stream: `open` first, then its jobs, their withdrawals and the session's end. Rejects as `events` does. */
+    extractionEvents(signal: AbortSignal): AsyncIterable<ExtractionStreamItem>;
+    /** A job's result (or why it failed). */
+    extractionResult(job: string, result: ExtractionResultBody): Promise<ApiResult<unknown>>;
+}
+
+/** What the extractor role's stream carries. */
+export type ExtractionStreamItem =
+    | { readonly kind: 'open' }
+    | { readonly kind: 'job'; readonly job: ExtractionJobBody }
+    | { readonly kind: 'withdrawn'; readonly job: string }
+    | { readonly kind: 'closed' };
+
 /** What the answerer role's stream carries. */
 export type AnswerStreamItem =
     | { readonly kind: 'open' }
@@ -138,6 +158,35 @@ export interface AnswerTurnResult {
     readonly model?: string;
     /** Why there is no output: the process failed, exited, or the turn was stopped. */
     readonly error?: string;
+    /** What the turn cost, when the agent said. */
+    readonly usage?: TurnUsage;
+}
+
+/** What a turn cost: the tokens in (those read from and written to the prompt cache apart) and out, and dollars. */
+export interface TurnUsage {
+    readonly inputTokens?: number;
+    readonly outputTokens?: number;
+    readonly cacheReadTokens?: number;
+    readonly cacheCreationTokens?: number;
+    readonly costUsd?: number;
+}
+
+/** An extractor's turn: the message, and what goes in the system prompt after the instructions (the workspace's stickies). */
+export interface ExtractTurn extends AnswerTurn {
+    /** The stable part of the job, appended to the system prompt after the role's instructions: the prompt cache keeps it. */
+    readonly context?: string;
+}
+
+/**
+ * The extractor (ADR 0031, section 3): a read-only agent with **no tools at all** (no file is read: its prompt holds
+ * the talk and the items), replying with the extractor's schema; and the light model before it (`gate`), with no tools
+ * either, replying whether to extract. One turn at a time.
+ */
+export interface ExtractAgent {
+    extract(turn: ExtractTurn): Promise<AnswerTurnResult>;
+    gate(turn: ExtractTurn): Promise<AnswerTurnResult>;
+    /** Ends what it keeps; resolves once it is gone. */
+    close?(): Promise<void>;
 }
 
 /**

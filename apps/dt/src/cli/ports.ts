@@ -1,9 +1,9 @@
 import type { SourceFile } from '@domaintrail/kernel';
-import type { AnswerConfig, Practice, RunConfig, TriageConfig } from '@domaintrail/agent';
-import type { ResolvedClassifierConfig, ResolvedCollabConfig, ResolvedConfig } from '../config/config.js';
+import type { AnswerConfig, ExtractConfig, Practice, RunConfig, TriageConfig } from '@domaintrail/agent';
+import type { ResolvedClassifierConfig, ResolvedCollabConfig, ResolvedConfig, ResolvedKnowledgeConfig } from '../config/config.js';
 import type { MessageTemplateConfig } from '@domaintrail/collaboration';
 import type { LanguageServerOptions } from '../lsp/server.js';
-import type { TrustStore } from './trust.js';
+import type { SettingsApproval, TrustStore } from './trust.js';
 import type { LaidOutGraph, StructureLevel } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 
@@ -71,6 +71,17 @@ export interface CliDeps {
     /** Starts the language server over stdio; resolves once it listens. */
     startLanguageServer(options: LanguageServerOptions): Promise<void>;
     /**
+     * Serves `dt mcp` over stdio: the read-only knowledge tools on the workspace's store and stormings (ADR 0031,
+     * section 9). Resolves when the client closes stdin.
+     */
+    startMcpServer(options: McpServerStartOptions): Promise<void>;
+    /**
+     * `dt publish`: the workspace's stormings laid out and dated by their last commit, sent to the knowledge store's
+     * Worker for its read-only page (ADR 0031, section 11), or written as JSON files (`out`). Rejects with
+     * `PublishError` (cli/publish.ts) when nothing can be published.
+     */
+    publishStormings(options: PublishOptions): Promise<PublishReport>;
+    /**
      * `dt session prune`: the state and cache directories of workspaces that are gone (or, with `olderThanDays`, not
      * used for that long), removed when `remove`. Absent: the command says it cannot here.
      */
@@ -84,6 +95,8 @@ export interface CliDeps {
     trust?: TrustStore;
     /** Asks the person a yes/no question on the terminal; absent when there is none (stdin or stderr not a TTY). */
     confirm?(question: string): Promise<boolean>;
+    /** The environment the commands read (`dt publish`'s pinned destination); default `process.env`. */
+    env?: Readonly<Record<string, string | undefined>>;
 }
 
 /** What `dt export sources` (and the Live View's download) archives: the workspace's sources and its config file. */
@@ -114,6 +127,44 @@ export interface DiagramViews {
     focusGraph(contexts: readonly string[], level: StructureLevel): Promise<LaidOutGraph | null>;
     /** Stops the layout engine. */
     dispose(): void;
+}
+
+/** What `dt mcp` reads of the configuration. */
+export interface McpServerStartOptions {
+    config: ResolvedConfig;
+    /** The proof that the workspace's security-relevant settings are approved (`checkApproved`), if they are. */
+    approval: SettingsApproval | undefined;
+    /** Where it says what goes wrong (stderr: stdout is the protocol's). */
+    log: (line: string) => void;
+}
+
+/** What `dt publish` asks. */
+export interface PublishOptions {
+    config: ResolvedConfig;
+    /** The proof that the knowledge settings are approved (`approveSettings`, `checkApproved` or `pinnedApproval`); none with `out`. */
+    approval: SettingsApproval | undefined;
+    /** The stormings to publish (their IDs); all of them when absent. */
+    stormings?: readonly string[];
+    /** Write the published forms as `<storming>.json` into this directory instead of sending them. */
+    out?: string;
+    /** After publishing, remove from the Worker the published stormings the workspace no longer has (not with `out`). */
+    prune?: boolean;
+    log: (line: string) => void;
+}
+
+/** What `dt publish` did, storming by storming. */
+export interface PublishReport {
+    published: {
+        storming: string;
+        version: string;
+        commit?: string;
+        /** Sent: whether the Worker's drawing changed. */
+        changed?: boolean;
+        /** Written: the file. */
+        file?: string;
+    }[];
+    /** With `prune`: the stormings removed from the Worker, by ID. */
+    removed?: string[];
 }
 
 /** What `dt open --host <non-loopback>` asks of the Live View. */
@@ -148,6 +199,8 @@ export interface SessionServerOptions {
     quickTunnel?: boolean;
     /** `link`: the public URL, asked once the server listens, with the port bound (`--tunnel` starts its tunnel then). */
     publicUrlAfterListen?: (port: number) => Promise<string>;
+    /** The config and the proof its settings were approved: the knowledge store is opened from them (ADR 0031). */
+    knowledge?: { readonly config: ResolvedConfig; readonly approval: SettingsApproval | undefined };
     log: (line: string) => void;
 }
 
@@ -157,7 +210,10 @@ export interface SessionServerOptions {
  * and the `classifier`.
  */
 export interface SessionSettings extends ResolvedCollabConfig {
-    agent: { port: number; allowedTools: string[]; maxPreviousRunDiff: number };
+    /** `extractTimeout`: the most seconds an extraction of knowledge may take (`agent.extract.timeout`; default 180). */
+    agent: { port: number; allowedTools: string[]; maxPreviousRunDiff: number; extractTimeout?: number };
+    /** Where the session's knowledge goes, and when it is extracted (the `knowledge` section; absent: none is kept). */
+    knowledge?: ResolvedKnowledgeConfig;
     classifier: ResolvedClassifierConfig;
     /** The team's message templates (the top-level `templates`), sent to the pages with the state. Default: none. */
     templates?: readonly MessageTemplateConfig[];
@@ -227,10 +283,14 @@ export interface AgentOptions {
     answer?: AnswerConfig;
     /** `agent.triage`: the light model of the triage's stage 3. */
     triage?: TriageConfig;
+    /** `agent.extract`: the extractor of knowledge (model, effort, timeout), which goes with the answer role. */
+    extract?: ExtractConfig;
     /** The ways of working the agent's prompts give: the guide's `storming-practice` and `modeling-practice`. */
     practice?: Practice;
     /** What each role may read outside the workspace, read-only (`agent.read.paths` and its own; absolute paths). */
     read?: { readonly answer: readonly string[]; readonly run: readonly string[] };
+    /** The config and the proof of its approval: with a usable knowledge store, the AI reads it through `dt mcp`'s tools. */
+    knowledge?: { readonly config: ResolvedConfig; readonly approval: SettingsApproval | undefined };
     log: (line: string) => void;
 }
 

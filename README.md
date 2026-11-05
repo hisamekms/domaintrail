@@ -85,7 +85,7 @@ as `domaintrail`, its full name, for when `dt` clashes with another command.
 - **`dt open`**: the Live View — context map, structure, state transitions, behaviour, source and the changes since the
   last save or a git revision, in Japanese or English; and each storming at Big Picture or Design Level, as a whole or
   one timeline at a time.
-- **`dt show`**: one element resolved, for people and agents, as text or JSON.
+- **`dt show`**: one element resolved, as text or JSON; **`dt mcp`**: the project's knowledge, for Claude Code.
 - **`dt lsp`**: a language server for `.dt` and `.dtes` files — diagnostics, definitions, references, hover, rename,
   formatting; a [Zed extension](editors/zed) and a [tree-sitter grammar](tree-sitter-domaintrail) (`.dt` only).
 - **`dt guide`**: the guide in the terminal, one topic at a time.
@@ -98,7 +98,7 @@ installed). `dt collab` shares it with several people while the AI edits the mod
 Code (`dt agent` runs it alone, elsewhere), and every run leaves a revision to compare or restore. See [`dt guide session`](docs/guide.md#collaboration-sessions), [a first real run](docs/session-first-run.md)
 and, behind Cloudflare Access, [the access check](docs/session-access.md); over the internet without an account,
 [an invite link and your approval](docs/session-link.md) (`dt collab --tunnel`). Sessions are kept outside the
-repository, per user (`~/.local/state/domaintrail/`; `dt session prune` removes those of workspaces that are gone).
+repository, per user (`~/.local/state/domaintrail/`; `dt session prune` removes those of workspaces that are gone). What is said in them is kept as [knowledge](docs/guide.md#knowledge-from-the-sessions).
 
 ## Contributing
 

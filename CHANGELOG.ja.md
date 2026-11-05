@@ -10,6 +10,46 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 従ってください。このファイルはパッケージに含まれています: `node_modules/domaintrail/CHANGELOG.ja.md`（英語版は
 `CHANGELOG.md`）。
 
+## [0.8.0] - 2026-11-05
+
+### 追加
+
+- **セッションのナレッジ**（`dt guide knowledge`、ADR 0031）: セッションで話されたこと・わかったこと（なぜか、どの
+  くらいの頻度か、誰が言ったか、AI が調べてわかったこと）を、`.dtes` や `.dt` とは別に 1 件ずつ、関係する付箋に
+  結び付けて残します。1 件のナレッジは見出し（短い 1 行）、Markdown の本文（画像も）、ラベル（`when` AS-IS /
+  TO-BE、`kind`、`origin` 発言 / 合意 / 調査 / 推測、任意の `perspective`）、関係する付箋（`about`）、各メッセージの
+  短い引用を添えた出典、版、食い違うナレッジを持ちます。
+  - **セッション中の抽出**: AI の 3 つ目の役割、抽出役（`agent.extract`: `model`・`gateModel`・`timeout`・`effort`。
+    ツールなし）が、話のすぐ後にナレッジにします。人のメッセージの後 30 秒発言がないとき、AI が答えるたび、終わる
+    ときで、多くても 1 分に 1 回です。強いモデルは抽出することがあるときだけ動くよう 3 段階で進めます: 明らかに何も
+    ないメッセージだけならモデルを使わずに止め、次に軽いモデル（既定は Haiku）が発見があるかを判断します。新しい
+    ナレッジと出典の追加はすぐに反映し、更新と食い違いは次の抽出が同じ判断をするか話が落ち着くまで保留して、
+    終わるときに残っていれば捨てます。抽出ごとに各段階の結果とコストを記録します。
+    `knowledge.extraction.enabled` を有効にしない限りオフで、ファシリテーターは Live View のアプリバーの 💡 で
+    セッションごとに切り替えます。
+  - **2 つのストア**（設定のセクション `knowledge`: `store`・`project`・`url`・`extraction`）: `files`（既定）は
+    ワークスペースの `knowledge/` に 1 件 1 ファイルの Markdown で、git に残ります。`cloudflare` はパッケージに同梱の
+    テンプレート（`dist/knowledge-worker/`: D1・R2・Cloudflare Access。その README がデプロイとアップグレードの
+    手順書）からデプロイする Worker で、個人情報が話に出うるプロジェクト向けです。dt は Access のサービストークンを
+    `DOMAINTRAIL_KNOWLEDGE_CLIENT_ID` と `DOMAINTRAIL_KNOWLEDGE_CLIENT_SECRET` から送り、`knowledge.url` と
+    `knowledge.project` は承認の要るセキュリティ上の設定です。`dt check` は読めないナレッジのファイル（K001）と、
+    どのストーミングにもない付箋についてのナレッジ（K002、警告）を報告します。
+  - **Live View で**（`docs/live-view.md`）: ナレッジのある付箋に点、食い違いには印。付箋の詳細にそのナレッジを
+    新しい順か種類の順で並べ、1 件を開くと引用・ほかの付箋・版・画像が出ます。ナレッジタブで検索と絞り込み。
+    直す・画像を付ける・消す。食い違いは左右に並べ、ホットスポットにする と 食い違いではない を選べます。
+  - **消す**: 消したナレッジはすぐに全員から見えなくなり、10 秒間 元に戻す が出ます。その後ストアの掃除が版と画像を
+    すべて消し、出典のメッセージをプロジェクトの消去ログに載せます。プロジェクトの各 dt はそのログを追って、自分の
+    セッションのデータベースからそのメッセージを消します。`files` では git の履歴に残ります。
+  - **`dt mcp`**（`dt guide mcp`）: Claude Code 向けの stdio の MCP サーバーで、読み取り専用です:
+    `knowledge_for_element`（付箋か、それを `ref` する付箋を通じた `.dt` の要素）、`knowledge_search`、
+    `knowledge_get`。
+  - **`dt publish`**（`dt guide publish`）: 各ストーミングの公開用の形（付箋・つながり・配置と、図のコミットと日付）を
+    `cloudflare` の Worker に送ります。`main` が変わったときに CI で実行し、送り先は `DOMAINTRAIL_PUBLISH_URL` と
+    `DOMAINTRAIL_PUBLISH_PROJECT` で固定します。`--prune` はワークスペースにもうないストーミングを消し、`--out` は
+    ファイルに書き出します。Worker は同じ Access の後ろで **読み取り専用のページ** を配信します: 公開された
+    ストーミングのキャンバスとナレッジ、ナレッジの一覧、図にない付箋についてのナレッジ、セッションと同じ直す・消す。
+- `dt guide` のトピック `knowledge`（`mcp` と `publish` を含む）。
+
 ## [0.7.0] - 2026-11-04
 
 ### 追加
@@ -496,6 +536,7 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 - Live View（`dt view`）: コンテキストマップ、構造図（3 段階）、カタログ、状態遷移図、ソースを表示するインスペクタ、問題と
   変更の一覧。保存のたびに更新されます。日本語と英語、ライトとダーク。
 
+[0.8.0]: https://github.com/hisamekms/domaintrail/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/hisamekms/domaintrail/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/hisamekms/domaintrail/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/hisamekms/domaintrail/compare/v0.4.0...v0.5.0

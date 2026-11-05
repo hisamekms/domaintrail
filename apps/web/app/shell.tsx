@@ -1,8 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { Diff, FolderTree, TriangleAlert, type LucideIcon } from 'lucide-react';
-// the approved logo (assets/brand, never redrawn), bundled into dist/web with a hashed name: one per theme
-import logoDark from '../../../assets/brand/logo-dark.svg';
-import logoLight from '../../../assets/brand/logo-light.svg';
+import { Diff, FolderTree, Lightbulb, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { BrandLogo } from './brand';
 import { useT } from '../i18n';
 import { usePaneMotion } from '../shared/motion';
 import { Tooltips } from '../tooltip';
@@ -61,10 +59,13 @@ export interface LeftList {
     readonly count: number;
 }
 
-const LIST_ICONS: Record<LeftView, LucideIcon> = { tree: FolderTree, problems: TriangleAlert, changes: Diff };
-const LISTS: readonly LeftView[] = ['tree', 'problems', 'changes'];
-/** The lists the activity bar picks; 問題 is opened from the app bar (it concerns the whole page). */
-const RAIL_LISTS: readonly LeftView[] = ['tree', 'changes'];
+const LIST_ICONS: Record<LeftView, LucideIcon> = { tree: FolderTree, problems: TriangleAlert, changes: Diff, knowledge: Lightbulb };
+const LISTS: readonly LeftView[] = ['tree', 'problems', 'changes', 'knowledge'];
+/** The lists the activity bar picks; 問題 is opened from the app bar (it concerns the whole page); ナレッジ when there is one. */
+const RAIL_LISTS: readonly LeftView[] = ['tree', 'changes', 'knowledge'];
+
+/** The lists of the left pane: ナレッジ only in a session with a knowledge store. */
+export type LeftLists = Record<Exclude<LeftView, 'knowledge'>, LeftList> & { readonly knowledge?: LeftList | undefined };
 
 /**
  * The page's layout: the app bar across the top — the brand and the workspace's name, the world switch, a session's
@@ -85,7 +86,7 @@ export function AppShell(props: {
     journeySlot?: (slot: HTMLDivElement | null) => void;
     /** The session serving the page, known from the start (the page's boot): its controls' place is kept until they arrive. */
     session?: SessionBarState | undefined;
-    lists: Record<LeftView, LeftList>;
+    lists: LeftLists;
     /** At the foot of the left column (at the bottom of its activity bar when collapsed). */
     health: ReactNode;
     settings: ReactNode;
@@ -137,9 +138,7 @@ export function AppShell(props: {
         <div className={`app motion-${motion}`}>
             <header className="app-bar">
                 <span className="app-bar-brand">
-                    {/* the logo for the theme (the other hidden by CSS), decorative: the text beside it names it */}
-                    <img className="brand-logo brand-logo-light" src={logoLight} alt="" />
-                    <img className="brand-logo brand-logo-dark" src={logoDark} alt="" />
+                    <BrandLogo />
                     <span className="brand">DomainTrail</span>
                     {props.workspaceName && (
                         <span className="workspace-name" data-tooltip={props.workspaceName}>
@@ -164,6 +163,7 @@ export function AppShell(props: {
                                 const Icon = LIST_ICONS[k];
                                 const active = leftOpen && leftView === k;
                                 const list = props.lists[k];
+                                if (!list) return null;
                                 return (
                                     <button
                                         key={k}
@@ -189,7 +189,7 @@ export function AppShell(props: {
                                 {/* every list stays mounted, so that switching keeps the tree's filter and the lists' scroll */}
                                 {LISTS.map((k) => (
                                     <div key={k} className="left-content" hidden={leftView !== k}>
-                                        {props.lists[k].content}
+                                        {props.lists[k]?.content}
                                     </div>
                                 ))}
                             </div>

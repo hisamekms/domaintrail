@@ -6,8 +6,11 @@ import { join, relative } from 'node:path';
 
 const WEB = import.meta.dir;
 
-/** The files that may import React Flow: the adapter, and the entry (React Flow's stylesheet, before the page's). */
-const ALLOWED = ['main.tsx', 'view/flow-canvas.tsx'];
+/**
+ * The files that may import React Flow: the adapter, and the entries (React Flow's stylesheet, before the page's): the
+ * Live View's and the knowledge Worker's read-only page's.
+ */
+const ALLOWED = ['main.tsx', 'published/main.tsx', 'view/flow-canvas.tsx'];
 
 function sources(dir: string): string[] {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
