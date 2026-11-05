@@ -145,6 +145,16 @@ export function keyedSize(
     }
 }
 
+/**
+ * Whether `key` on a resizer whose pane is at its minimum (`size`) asks for less still: the arrow pointing into the pane
+ * (the one that shrinks it) or Home. A pane that folds at its minimum (`foldsAtMin`) closes on it.
+ */
+export function shrinksPastMin(key: string, size: number, o: { direction: 'x' | 'y'; invert?: boolean; min: number }): boolean {
+    if (size > o.min) return false;
+    const [back, forth] = o.direction === 'x' ? ['ArrowLeft', 'ArrowRight'] : ['ArrowUp', 'ArrowDown'];
+    return key === 'Home' || key === (o.invert ? forth : back);
+}
+
 /** The height of `ref`'s element (0 until it is laid out), followed as it changes. */
 export function useElementHeight(ref: RefObject<HTMLElement | null>): number {
     const [height, setHeight] = useState(0);
@@ -167,7 +177,8 @@ export function useElementHeight(ref: RefObject<HTMLElement | null>): number {
  * Dragging the pane smaller than half of `min` closes it, and dragging the edge of a closed pane
  * (`collapsed` is what it shows then) opens it again.
  * It is a focusable separator: the arrow keys along its axis resize the pane (a growing one opens a closed pane), Home
- * and End go to the limits, and a double click calls `onReset` (the default size).
+ * and End go to the limits, and a double click calls `onReset` (the default size). With `foldsAtMin`, a key that shrinks
+ * the pane already at its minimum closes it (the keyboard's way to what a drag past half the minimum does).
  */
 export function Resizer(props: {
     direction: 'x' | 'y';
@@ -184,6 +195,8 @@ export function Resizer(props: {
     onReset?: () => void;
     /** Draws a grip in its middle, for a handle that is always visible. */
     grip?: boolean;
+    /** A shrinking key at the minimum closes the pane. */
+    foldsAtMin?: boolean;
 }) {
     const readMax = (): number => Math.max(props.min, typeof props.max === 'function' ? props.max() : props.max);
     const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -219,6 +232,10 @@ export function Resizer(props: {
         const next = keyedSize(e.key, e.shiftKey, props.size, { direction: props.direction, invert: !!props.invert, min: props.min, max: readMax() });
         if (next === undefined) return;
         e.preventDefault();
+        if (props.open && props.foldsAtMin && shrinksPastMin(e.key, props.size, { direction: props.direction, invert: !!props.invert, min: props.min })) {
+            props.onOpenChange(false);
+            return;
+        }
         if (!props.open) {
             // a closed pane: a key that grows it opens it at its size
             if (next > props.size || e.key === 'End') props.onOpenChange(true);

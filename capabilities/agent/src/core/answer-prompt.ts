@@ -296,8 +296,8 @@ const JOURNEYS_RULE = `- \`journeys\`, when present: the journey file (\`domaint
  */
 export function buildInterviewPrompt(job: AgentInterviewJobBody, nonce: string, context: Pick<AnswerContext, 'practice'> = {}): string {
     const kind = INTERVIEWS[job.command];
-    // the guide's way of working of the command's DSL: what a good brief leads into
-    const practice = practiceFor(context.practice, job.command === 'es:start' ? { dt: false, dtes: true } : { dt: true, dtes: false });
+    // the guide's way of working of the command's DSL: what a good brief leads into (not the syntax: it writes no file)
+    const practice = practiceFor(context.practice, job.command === 'es:start' ? { dt: false, dtes: true } : { dt: true, dtes: false }, false);
     const practiceText = practice.length
         ? `How the people work (from DomainTrail's guide): ask and brief in line with it. You still change nothing and run
 nothing: what it says about editing files or running \`dt\` is for the agent that works on the files later.

@@ -63,7 +63,8 @@ Every scripted reply gives a title (the card's name), as Claude Code's does, exc
 two replies have none, like replies from before titles: it shows the fallback (its first message). A run continuing a
 card gives a title of its own that the card does not take.
 
-- `runs`: completed with changes and then applied again with a note (one card), completed without changes, failed
+- `runs`: completed with changes and then applied again with a note (one card), completed without changes, answered
+  instead of edited (its answer in Markdown: a heading, a numbered list, bold, element links), failed
   (the agent exits 1, with its report; the agent cannot run), declined with its reason, cancelled while running, and
   one run of three messages with a status line each (done, partly, skipped).
 - `questions`: a single-choice and a multiple-choice question with votes open, two questions (one without options), an

@@ -92,6 +92,9 @@ describe('the prompt', () => {
         expect(prompt).toContain(`title: a short title (about ${REPLY_LIMITS.titleAim} characters, at most ${REPLY_LIMITS.title}`);
         expect(prompt).toContain(`1 to ${REPLY_LIMITS.questions}`);
         expect(prompt).toContain('Never add an "other" or free-text option');
+        // the answer and the summary are shown as the chat's Markdown, as the answerer's: one heading level, no links
+        expect(prompt).toContain('It is shown as Markdown, as the\n  answer is.');
+        expect(prompt).toContain('use at most one heading level (`#`), and no links or images');
         expect(prompt).toContain('`@{Sales.Order}`');
         expect(prompt).toContain('`@{es:Returns/ReturnRequested}`');
         expect(prompt).not.toContain(OUTCOME_MARKER);
@@ -209,6 +212,16 @@ describe('the prompt', () => {
         expect(none.indexOf('MODELING')).toBeLessThan(none.indexOf('<requests-n>'));
         // without the guide's text, no section
         expect(buildPrompt(input([frozen({ kind: 'Workspace' }, 'x')]), names, 'n')).not.toContain('How to work');
+    });
+
+    test("the .dt syntax by example follows the modeling's way of working, for requests about the .dt model only", () => {
+        const practice = { storming: 'STORMING', modeling: 'MODELING', modelingSyntax: '### The syntax by example\n\nSYNTAX' };
+        const prompt = (...requests: Json<Collaboration.FrozenRequest>[]): string => buildPrompt(input(requests), names, 'n', [], [], { practice });
+        const dt = prompt(frozen({ kind: 'DtElement', element: 'Sales.Order' }, 'x'));
+        expect(dt).toContain(`MODELING\n\n${practice.modelingSyntax}\n\nYour final answer is the reply`);
+        expect(prompt(frozen({ kind: 'DtesStorming', storming: 'Returns' }, 'x'))).not.toContain('SYNTAX');
+        // in the stable part of the prompt, before the block of data
+        expect(prompt(frozen({ kind: 'Workspace' }, 'x')).indexOf('SYNTAX')).toBeLessThan(dt.indexOf('<requests-n>'));
     });
 });
 

@@ -1,12 +1,14 @@
 // Element references of the AI as the chat resolves and shows them (references.ts, targets.ts `resolveTarget`): every
 // kind of storming declaration — notes, timelines, exceptions, groups, stages — and the storming itself, by ID or label;
 // the forms the AI writes besides the canonical one; inside each Markdown construct of an answer (code stays code, unless a span is one reference); the
-// views a click opens; and the other places that show the AI's words (the triage record, the proposal chips).
+// views a click opens; and the other places that show the AI's words (the triage record, the proposal chips, a run's card:
+// its answer, summary and question as Markdown too).
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MESSAGES } from '../i18n';
 import { check } from '../test-helpers';
 import type { TriageRecord } from './ai';
+import { AgentBody } from './card';
 import { ChatProvider, type ChatContextValue } from './chat-context';
 import { MarkdownText } from '../shared/markdown-text';
 import { TargetNamingProvider } from './naming';
@@ -14,6 +16,7 @@ import { targetLabel } from './proposal-view';
 import { ReplyText } from './reply';
 import { parseReplyText, referencesAsText, referenceText } from './references';
 import { resolveTarget, viewOfDeclaration, type ModelTarget, type NamingContext } from './targets';
+import type { AgentMessage, ReplyView } from './stream';
 import { TriageRecordPanel } from './triage-record';
 
 // a storming with a declaration of every kind, a stage holding a timeline, an exception and a group
@@ -290,5 +293,68 @@ describe('the same resolution elsewhere', () => {
         expect(out).toContain('ストーミング（<a class="reply-element">給食当番</a>）の');
         expect(out).toContain(link('いつもの流れ'));
         expect(out).toContain('<span class="triage-reason session-error">@{es:Kyushoku} failed</span>');
+    });
+
+    describe("a run's card: what the AI wrote as Markdown, as an answer in the chat", () => {
+        const card = (message: AgentMessage): string =>
+            renderToStaticMarkup(
+                <TargetNamingProvider value={naming}>
+                    <ChatProvider
+                        value={
+                            {
+                                tx: MESSAGES.ja.session,
+                                nameOf: (id: string) => id,
+                                onNavigate: () => {},
+                                reveal: { clamps: () => false, open: () => {} },
+                            } as unknown as ChatContextValue
+                        }
+                    >
+                        <AgentBody run="r1" message={message} />
+                    </ChatProvider>
+                </TargetNamingProvider>,
+            );
+        const reply = (summary: string, answer?: string): ReplyView => ({
+            summary,
+            ...(answer !== undefined && { answer }),
+            requests: [],
+            questions: [],
+            assumptions: [],
+        });
+        const markdown = ['## @{es:Kyushoku/Normal} の流れ', '', '- **@{es:Kyushoku/Served}** のあと', '- @{es:Kyushoku/Cleaned}'].join('\n');
+        const shown = (out: string): void => {
+            // every heading level one heading; the list, bold and the element links; no Markdown left as written
+            expect(out).toContain(`<p class="md-heading" role="heading" aria-level="4">${link('いつもの流れ')} の流れ</p>`);
+            expect(out).toContain(`<ul><li><strong>${link('配った')}</strong> のあと</li><li>${link('掃除した')}</li></ul>`);
+            expect(out).not.toMatch(/##|\*\*|@\{/);
+            // blocks in a <div>, never in a <p>
+            expect(out).not.toMatch(/<p[^>]*>(?:(?!<\/p>).)*<(?:ul|ol|p|div|table|pre)[\s>]/);
+        };
+
+        test('an answer instead of an edit: clamped as blocks', () => {
+            const out = card({ kind: 'completed', changed: false, result: 1, files: 0, reply: reply('質問に答えました', markdown) });
+            expect(out).toContain('<div class="chat-text markdown reply-answer">');
+            shown(out);
+        });
+
+        test('the summary of a completed, asking (with the form) or declined run, and the summary over an answer that changed files', () => {
+            for (const message of [
+                { kind: 'completed', changed: true, result: 1, files: 1, reply: reply(markdown) },
+                { kind: 'clarification', question: '', result: 1, files: 0, reply: reply(markdown) },
+                { kind: 'declined', result: 1, files: 0, reply: reply(markdown) },
+            ] as const) {
+                const out = card(message);
+                expect(out).toMatch(/<div class="chat-text markdown( reply-summary)?"/);
+                shown(out);
+            }
+            const changed = card({ kind: 'completed', changed: true, result: 1, files: 2, reply: reply(markdown, '答え') });
+            expect(changed).toContain('<div class="chat-text markdown reply-summary">');
+            shown(changed);
+        });
+
+        test("a question asked without the structured form, on the question's surface", () => {
+            const out = card({ kind: 'clarification', question: markdown, result: 1, files: 0 });
+            expect(out).toContain('<div class="chat-text markdown reply-question-text">');
+            shown(out);
+        });
     });
 });

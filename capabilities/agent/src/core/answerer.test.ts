@@ -431,6 +431,14 @@ describe('the answerer role', () => {
         const model = buildInterviewPrompt(j('model:start'), 'n', { practice });
         expect([model.includes('STORMING'), model.includes('MODELING')]).toEqual([false, true]);
         expect(buildInterviewPrompt(j('es:start'), 'n')).not.toContain('How the people work');
+        // the .dt syntax by example is for the prompts that read or write the model, not for the interviews
+        const withSyntax = { ...practice, modelingSyntax: 'SYNTAX' };
+        expect(buildInterviewPrompt(j('model:start'), 'n', { practice: withSyntax })).not.toContain('SYNTAX');
+        for (const build of [buildAnswerPrompt, buildProposePrompt]) {
+            const p = build(job('answer', 1), 'n', { practice: withSyntax });
+            expect(p).toContain('MODELING\n\nSYNTAX');
+            expect(p.indexOf('SYNTAX')).toBeLessThan(p.indexOf('<message-n>'));
+        }
     });
 
     test("the interviewer's choices name stormings and contexts as references, bare; the brief's subject by its ID", () => {

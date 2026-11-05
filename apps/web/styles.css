@@ -2948,45 +2948,36 @@ select,
     white-space: nowrap;
 }
 
-/* the navigator over the detail, a splitter with a grip between them */
+/* the navigator: a list over the whole column, or the tree over the detail with a splitter (a grip) between them. The
+   tree has its height (TREE_MIN… in app/panes.ts); folded, it is its head line (--tree-head, the height of
+   .explorer-head), and it folds and unfolds at --motion-medium (instant while dragged, or with reduce motion) */
+.left-pane {
+    --tree-head: calc(1.5rem + 13px);
+}
 .navigator {
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: column;
 }
-/* the detail slides between its height (DETAIL_MIN… in app/panes.ts) and a 28px rail (RAIL_SIZE in app/shell.tsx)
-   with the button that opens it */
-.detail {
+.navigator.with-detail {
     flex: none;
-    position: relative;
-    /* clip: never scrolled, not even to show a focused or clicked element of a closed detail */
+    /* clip: never scrolled, not even to show a focused element of a folded tree */
     overflow: clip;
-    border-top: 1px solid var(--border);
-    transition: height var(--pane-duration) var(--pane-easing);
+    transition: height var(--motion-medium) var(--motion-ease-standard);
 }
-.detail > .rail,
-.detail > .detail-inner {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    transition: opacity var(--pane-duration) var(--pane-easing);
+.navigator.folded {
+    height: var(--tree-head);
 }
-.detail-inner {
+.detail {
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
+    border-top: 1px solid var(--border);
 }
-.detail:not(.open) > .detail-inner,
-.detail.open > .rail {
-    opacity: 0;
-}
-.detail > .rail {
-    flex-direction: row;
-    width: auto;
-    height: 28px;
-    padding: 0 6px;
-    gap: 4px;
+.detail[hidden] {
+    display: none;
 }
 
 /* the canvas column */
@@ -3010,13 +3001,6 @@ select,
     background: var(--error-wash);
     border-bottom-color: color-mix(in srgb, var(--error) 35%, transparent);
     color: var(--error);
-}
-.rail {
-    width: 28px;
-    padding-top: 6px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
 }
 /* the dock's menu (⋯ in its head) */
 .pane-menu {
@@ -3505,8 +3489,28 @@ svg.chat-launcher-mark {
     display: flex;
     align-items: center;
     gap: 2px;
+    /* the folded tree is this line (--tree-head on .left-pane) */
+    box-sizing: border-box;
+    height: var(--tree-head, auto);
     padding: 6px 6px 6px 8px;
     border-bottom: 1px solid var(--border);
+}
+/* folded, the head line names what is selected in place of the filter, and ▾ turns to point at the tree to open */
+.tree-fold-label {
+    flex: 1;
+    min-width: 0;
+    padding-left: var(--space-1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.8125rem;
+    color: var(--text-soft);
+}
+.tree-fold svg {
+    transition: transform var(--motion-medium) var(--motion-ease-standard);
+}
+.tree-fold.folded svg {
+    transform: rotate(-90deg);
 }
 .explorer-filter {
     flex: 1;
@@ -3798,10 +3802,6 @@ svg.chat-launcher-mark {
     background: var(--panel);
     cursor: pointer;
 }
-.history .close-button {
-    flex-shrink: 0;
-    margin-left: auto;
-}
 .history .back-button {
     width: auto;
     max-width: 100%;
@@ -3915,16 +3915,15 @@ svg.chat-launcher-mark {
 
 /* no animation while dragging a resizer, nor when the OS asks for less motion */
 .resizing .left,
-.resizing .detail,
+.resizing .navigator,
 .resizing .conversation {
     transition: none;
 }
 @media (prefers-reduced-motion: reduce) {
     .left,
     .left-pane,
-    .detail,
-    .detail > .rail,
-    .detail > .detail-inner,
+    .navigator,
+    .tree-fold svg,
     .conversation,
     .conversation-inner,
     .legend-slot,
@@ -3982,7 +3981,7 @@ svg.chat-launcher-mark {
     }
 }
 
-/* The panes (the left column, the detail, the chat) open and close at the pace of the change: `motion-enter` as soon
+/* The panes (the left column, the chat) open and close at the pace of the change: `motion-enter` as soon
    as one opens, `motion-exit` when they only close (usePaneMotion, on .app). The outer box's size moves, clipped; its
    content keeps the size it ends with and slides in with the box's moving edge as it fades, so that nothing is laid
    out again on the way. A drag of a pane's edge stays instant (.resizing). */
@@ -3998,6 +3997,9 @@ svg.chat-launcher-mark {
 .app.motion-none {
     --pane-duration: 0ms;
     --pane-easing: linear;
+}
+.app.motion-none .navigator {
+    transition: none;
 }
 /* the left pane's list comes out from under the activity bar */
 .left-main {
@@ -4363,8 +4365,7 @@ details.deps > .sub {
 .context-list .icon-button,
 .settings .icon-button,
 .legend .icon-button,
-.pane .icon-button,
-.rail .icon-button {
+.pane .icon-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -4379,16 +4380,14 @@ details.deps > .sub {
 .context-list .icon-button:hover:not(:disabled),
 .settings .icon-button:hover:not(:disabled),
 .legend .icon-button:hover:not(:disabled),
-.pane .icon-button:hover:not(:disabled),
-.rail .icon-button:hover:not(:disabled) {
+.pane .icon-button:hover:not(:disabled) {
     background: var(--hover);
     color: inherit;
 }
 .context-list .icon-button:disabled,
 .settings .icon-button:disabled,
 .legend .icon-button:disabled,
-.pane .icon-button:disabled,
-.rail .icon-button:disabled {
+.pane .icon-button:disabled {
     color: var(--disabled-text);
     cursor: default;
 }
@@ -6122,16 +6121,6 @@ button.add-to-request.added:hover {
 .left-content[hidden] {
     display: none;
 }
-.history-actions {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-left: auto;
-}
-.history .history-actions .close-button {
-    margin-left: 0;
-}
 
 /* ---------- the conversation: チャット | AI の作業 ---------- */
 
@@ -6740,15 +6729,41 @@ button.add-to-request.added:hover {
     left: 50%;
     bottom: 10px;
     transform: translateX(-50%);
-    padding: var(--space-1) var(--space-3);
-    border: none;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 0 var(--space-1) 0 0;
     border-radius: 12px;
     background: var(--chat-unread);
     color: var(--on-action);
     font-size: var(--fs-small);
     font-weight: var(--fw-strong);
     box-shadow: 0 2px 8px var(--shadow);
+}
+/* the pill's text: the whole of it but its ✕ goes to what it names */
+.chat-updated-pill-go {
+    min-width: 0;
+    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+    border: none;
+    border-radius: 12px;
+    background: none;
+    color: inherit;
+    font: inherit;
     cursor: pointer;
+}
+/* its ✕: puts the pill away, on the pill's colour */
+.session-chat .chat-updated-pill .icon-button.chat-updated-pill-close {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    color: inherit;
+    cursor: pointer;
+}
+.session-chat .chat-updated-pill .icon-button.chat-updated-pill-close:hover,
+.session-chat .chat-updated-pill .icon-button.chat-updated-pill-close:focus-visible {
+    background: color-mix(in srgb, var(--on-action) 20%, transparent);
+    color: inherit;
 }
 .pane-menu-list > button.menu-danger {
     color: var(--status-danger-ink);
@@ -8039,6 +8054,8 @@ button.chat-reply-ref:hover .chat-reply-ref-head {
    right offset and a gap), so that the two never overlap, at the chat's narrowest too */
 .chat-updated-pill {
     max-width: calc(100% - 2 * (var(--chat-latest-size) + var(--space-4) + var(--space-2)));
+}
+.chat-updated-pill-go {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;

@@ -132,7 +132,8 @@ Storming](#event-storming-dtes)). They are not generated: `dt generate ts` write
 
 How to work, beyond the rules of the languages: `dt guide storming-practice` for running a storming (Big Picture, then
 Design Level) and `dt guide modeling-practice` for growing the `.dt` model (terms, aggregates by their invariants,
-commands as contracts, small steps).
+the DSL's types rather than strings, commands as contracts, small steps); `dt guide dsl-quick` shows the `.dt` syntax
+in one example.
 
 `dt --help` and `dt <command> --help` list the options with examples.
 
@@ -177,6 +178,72 @@ This is a convention, not a rule: `check` neither requires nor warns about any l
 ## DSL
 
 The examples below are the files of one valid workspace (the file name is in the first comment).
+
+<!-- topic: dsl-quick -->
+### The syntax by example
+
+One file with each kind of declaration; the topics below explain each. Write in this style.
+
+```dt
+// rental/lease.dt
+context Rental "レンタル" { // a bounded context; "…" is a label (表示名)
+  id MemberId: UUID // an ID type: each aggregate and entity has its own
+  id LeaseId: UUID
+  enum Plan { Basic Premium } // a closed set of values
+  value Fee { // a value object
+    amount: Int
+  }
+  union Discount { // variants that carry different fields (none do: an enum)
+    Coupon {
+      code: String
+    }
+    Points {
+      points: Int
+    }
+  }
+
+  aggregate Member "会員" {
+    id: MemberId // its identity, of its own ID type
+    plan: Plan
+    command upgrade() // no states: no transitions
+      changes plan
+      emits MemberUpgraded
+  }
+
+  aggregate Lease "貸出" {
+    id: LeaseId
+    references member: MemberId -> Member // another aggregate, by its ID type
+    owns fee: Fee // a value or entity held by the aggregate
+    discount: Discount? // ? = optional, [0..*] = a list
+    invariant feePositive { fee.amount > 0 }
+    state Active
+    state Closed {
+      closedAt: Timestamp // only in this state
+    }
+    create command start(id: LeaseId, member: MemberId, fee: Fee) // takes the new ID
+      -> Active
+      emits LeaseStarted
+    command close(closedAt: Timestamp)
+      Active -> Closed
+      requires settled { not exists(discount) } else DiscountPending
+      emits LeaseClosed
+  }
+
+  event LeaseStarted {
+    leaseId: LeaseId
+    member: MemberId
+  }
+  event LeaseClosed {
+    leaseId: LeaseId
+    closedAt: Timestamp
+  }
+  event MemberUpgraded {
+    memberId: MemberId
+  }
+  error DiscountPending
+  policy UpgradeAfterLease when LeaseClosed -> Member.upgrade // when the event happens, the command runs
+}
+```
 
 <!-- topic: aggregates -->
 ### Contexts and aggregates
@@ -294,6 +361,8 @@ context Sales {
   [Reactions to events](#reactions-to-events-policies)).
 - Fields: `name: Type`, `owns name: Type` (entities and values held by the aggregate),
   `references name: IdType -> Aggregate` (other aggregates, by ID only). Entities are owned by exactly one aggregate.
+  An ID is held by its ID type: a `customerId: String` (or `UUID`) while `CustomerId` or `Customer` exists is a warning
+  (M027).
 - Primitive types: `String`, `Int`, `Decimal`, `Bool`, `Timestamp`, `UUID`.
 - Multiplicity after the type: `?` (also `[0..1]`, which `dt fmt` writes as `?`), `[0..*]`, `[1..*]`, `[n..m]`.
 - Aggregate members: fields, `invariant`, `state` (with its own fields and invariants), `command`.
@@ -382,6 +451,8 @@ context Sales {
 
 - A union is a value type: usable like a value object (fields, `owns`, parameters, payloads, shared contexts).
   Variants hold value fields and invariants (seeing their own fields); entities and aggregates are not allowed.
+- A union whose variants hold no fields is a closed set of values: write an `enum` (M026, a warning; with `by name:
+  Enum`, use the enum itself).
 - In invariants, `payer.kind` compares with `Payer.COMPANY` (or the bound enum's values); variant fields are not
   accessible from outside the union.
 - Value objects and unions may be recursive (a tree, an expression) when every value has a finite form: the cycle
@@ -1185,6 +1256,13 @@ description.
 - Write the invariants as expressions where the DSL can (see [Invariant expressions](#invariant-expressions)), and as
   a label or `///` where it cannot. Keep aggregates small; refer to another aggregate by its ID.
 - States (a union of states) when the allowed commands depend on where the thing is in its life.
+
+**The DSL's types, not strings.** `dt check` warns about the first two (M026, M027).
+- A closed set of values is an `enum` (`enum Plan { Basic Premium }`): not a `union` whose variants have no fields,
+  and not a `String` with the values in a comment. A `union` is for variants that carry different fields.
+- Refer to another aggregate by its ID type: `references member: MemberId -> Member`. Never copy its fields, and never
+  keep its ID as a `String` or `UUID` (`memberId: String`).
+- Each aggregate and entity has an ID type of its own (`id LeaseId: UUID`, and `id: LeaseId` in it).
 
 **Commands as contracts.**
 - A command says what it needs (`requires`), what it changes, and exactly which events it emits (`emits` is exhaustive:
@@ -2592,6 +2670,8 @@ storming](#diagnostics-of-a-storming).
 | M023 | policies: the event exists, the aggregate is one of the policy's own context, the command is one of the aggregate, the event is not of a shared context; (warning) two policies of a context state the same reaction |
 | M024 | verified types: the base and the context of `for` are value types (`for` not a verified type), no cycle; a verified type types command parameters and other verified types only, no field |
 | M025 | a context's description (`///` above `context X`) is written once across the files of the context; each later one names the first |
+| M026 | (warning) a union has a variant with fields; one whose variants have none is an `enum` |
+| M027 | (warning) a field or parameter named `<stem>Id` (`ID`; `Ids` / `IDs` for several) is not typed `String`, `UUID` or the base of the ID type when `<Stem>Id` (`<Stem>ID`) is an ID type or `<Stem>` an aggregate or entity: of its context or a shared one, else of exactly one other context (none for a field of a shared context); it takes the ID type |
 | L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
 | L002 | (warning) a term is not used by any field or parameter |
 | L003 | (warning) different things in one scope share a Japanese name |
@@ -3399,7 +3479,7 @@ of them. A
 run that answers the card's question, or that picks another alternative of one of its assumptions, is added to the same
 card under the one before (question → answer → result), under its time alone (`19:25`; the run's number is in its
 tooltip); a run of the same messages after a completed one too. The card stays where its first run was queued; when it
-changes out of sight, a pill at the bottom of the stream (「「請求書の税区分」が更新されました」) goes to it. Scrolled up, the stream stops following the newest; a round ↓ button at its bottom right (最新へ) goes back to the bottom and follows again, marked with how many messages and AI turns arrived below since (`@ n` when some mention you or reply to you, as on 💬). For the facilitator, a question's options can be chosen in the card (one, or several
+changes out of sight, a pill at the bottom of the stream (「「請求書の税区分」が更新されました」, or 「AI が回答しました」 for an answer that arrived while you were scrolled up) goes to it; its ✕ (閉じる) puts it away without moving the stream, until something else changes out of sight. Scrolled up, the stream stops following the newest; a round ↓ button at its bottom right (最新へ) goes back to the bottom and follows again, marked with how many messages and AI turns arrived below since (`@ n` when some mention you or reply to you, as on 💬). For the facilitator, a question's options can be chosen in the card (one, or several
 when it says so) and 答えて再実行 queues the run's messages again with that answer at once. その他 is the last row, a
 radio or checkbox like the options: its own words are written in a dialog — ✎ at the row's end, or choosing その他
 while it has none (Space or Enter on it too) — with the question at its top; 決定 (⌘/Ctrl+Enter) chooses その他 with the
@@ -3552,10 +3632,12 @@ base revision as its result.
 **The agent's reply** is structured (Claude Code's structured output, `--json-schema`): a short summary, a line per
 request (✓ done, ◐ partly, – not done, ? a question, with a note for the last ones), the assumptions it made where a
 request left a choice open (with the alternatives it saw), and for a question up to 3 questions, each with up to 5
-options (the page always adds "other"). The chat shows what the AI says, as plain text, then the files the run
-changed on a small line of their own (a file-diff icon, `billing.dt、tax.dt`: a link comparing the revisions before and
-after the run); nothing when no file changed. The AI names
-elements by identifier (`@{Sales.Order}`, `@{es:Returns/ReturnRequested}`); the page shows each by its own name in the
+options (the page always adds "other"). The chat shows what the AI says — its summary, an answer given instead of an
+edit, a question asked without the form — as Markdown, the way it shows the AI's answers (lists, **bold**, `code`,
+code blocks and tables; every heading level one heading; links and images as text, never HTML), its short texts (a
+request's note, an assumption, a question and its options) as plain text, then the files the run changed on a small
+line of their own (a file-diff icon, `billing.dt、tax.dt`: a link comparing the revisions before and after the run);
+nothing when no file changed. The AI names elements by identifier (`@{Sales.Order}`, `@{es:Returns/ReturnRequested}`); the page shows each by its own name in the
 name display setting (a state or a command without its aggregate, a storming element without its storming; the whole
 name in its tooltip), as a link to the element. Whether a run succeeded is
 never taken from the reply. A reply that does not fit its shape or limits is shown as far as it can be read (its
@@ -3752,7 +3834,8 @@ only (any other tool is refused without asking, and no MCP server is loaded). Th
 the `.dt` and `.dtes` sources, keep a storming exploratory, and change no `.dt` when the requests are only about
 stormings, and lets it answer instead (status `answered`) a request that turns out to be a question. It also gives the
 ways of working of the languages the requests are about, as `dt guide storming-practice` and `dt guide
-modeling-practice` print them (both for a request about the whole workspace); the answerer's prompts give them too.
+modeling-practice` print them (both for a request about the whole workspace), with the `.dt` syntax by example of `dt
+guide dsl-quick` after the modeling's; the answerer's prompts give them too (its interviews without the syntax).
 Then `dt fmt` and `dt check` run when the run changed files (else both are skipped), and the server records the
 result.
 

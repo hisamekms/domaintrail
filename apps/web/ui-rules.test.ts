@@ -158,7 +158,7 @@ const RAW_BUTTONS: Readonly<Record<string, { readonly count: number; readonly re
         count: 1,
         reason: "the chat head's AI status pill: a chip or badge of its own (a count, a reaction, a status pill): it shows a state first and opens its detail",
     },
-    'session/chat.tsx chat-updated-pill': {
+    'session/chat.tsx chat-updated-pill-go': {
         count: 1,
         reason: "the floating 'updated above' pill that jumps to what changed: a chip or badge of its own (a count, a reaction, a status pill): it shows a state first and opens its detail",
     },
@@ -417,14 +417,14 @@ const PLACED =
  * onto the tokens fails until its count is lowered here (the list only shrinks).
  */
 const OFF_RHYTHM: Readonly<Record<string, { readonly count: number; readonly reason: string }>> = {
-    '4px': { count: 81, reason: ON_SCALE },
+    '4px': { count: 79, reason: ON_SCALE },
     '8px': { count: 58, reason: ON_SCALE },
     '12px': { count: 25, reason: ON_SCALE },
     '16px': { count: 9, reason: ON_SCALE },
     '24px': { count: 2, reason: ON_SCALE },
     '3px': { count: 20, reason: OFF_SCALE },
     '5px': { count: 14, reason: OFF_SCALE },
-    '6px': { count: 93, reason: OFF_SCALE },
+    '6px': { count: 91, reason: OFF_SCALE },
     '7px': { count: 5, reason: OFF_SCALE },
     '10px': { count: 24, reason: OFF_SCALE },
     '14px': { count: 14, reason: OFF_SCALE },

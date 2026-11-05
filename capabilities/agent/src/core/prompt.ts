@@ -117,20 +117,26 @@ function languagesOf(input: Json<Collaboration.RunInput>): Languages {
 
 /**
  * The ways of working with the two DSLs, as DomainTrail's guide gives them (its `storming-practice` and
- * `modeling-practice` topics): the app reads them from the guide it embeds, so that the prompts and `dt guide` say the
- * same.
+ * `modeling-practice` topics, and the `.dt` syntax by example, `dsl-quick`): the app reads them from the guide it
+ * embeds, so that the prompts and `dt guide` say the same.
  */
 export interface Practice {
     /** How to run a storming in `.dtes` files. */
     readonly storming: string;
     /** How to grow the `.dt` model. */
     readonly modeling: string;
+    /** The `.dt` syntax by example, for a prompt that reads or writes `.dt` files; none: left out. */
+    readonly modelingSyntax?: string;
 }
 
-/** The ways of working for the DSLs a request is about, the storming's first; none without `practice`. */
-export function practiceFor(practice: Practice | undefined, languages: Languages): string[] {
+/**
+ * The ways of working for the DSLs a request is about, the storming's first, the `.dt` syntax after the modeling's
+ * (unless `syntax` is false: a prompt that writes no `.dt`); none without `practice`.
+ */
+export function practiceFor(practice: Practice | undefined, languages: Languages, syntax = true): string[] {
     if (!practice) return [];
-    return [...(languages.dtes ? [practice.storming] : []), ...(languages.dt ? [practice.modeling] : [])];
+    const modeling = [practice.modeling, ...(syntax && practice.modelingSyntax !== undefined ? [practice.modelingSyntax] : [])];
+    return [...(languages.dtes ? [practice.storming] : []), ...(languages.dt ? modeling : [])];
 }
 
 /** JSON that cannot close the block it is in: `<` and `>` are escaped (JSON reads them back unchanged). */
@@ -276,11 +282,13 @@ function replyDescription(): string {
 - outcome: "done" (you carried the requests out), "clarification" (rule 6) or "declined" (rule 7).
 - title: a short title (about ${L.titleAim} characters, at most ${L.title}, one line, in the requests' language) naming
   what these requests are about; people see it as the name of this change.
-- summary: 1-2 sentences, at most ${L.summary} characters; for "declined", why.
+- summary: 1-2 sentences, at most ${L.summary} characters; for "declined", why. It is shown as Markdown, as the
+  answer is.
 - requests: one entry per request, by its number: status "done", "partial", "skipped", "question" or "answered"
   (rule 13); a note (at most ${L.requestNote} characters) is required for "partial" and "skipped".
 - answer (only with "done", required when a request is "answered", at most ${L.answer} characters): your answer to
-  the requests that were questions (rule 13).
+  the requests that were questions (rule 13). It is shown as Markdown (paragraphs, lists, \`code\`, code blocks,
+  tables): use at most one heading level (\`#\`), and no links or images (they are shown as plain text).
 - questions (only for "clarification", 1 to ${L.questions}): id, text (at most ${L.questionText}), requests (numbers),
   options (0 to ${L.options}: id, label at most ${L.optionLabel}, detail at most ${L.optionDetail}), multiple (several
   options may be chosen). Never add an "other" or free-text option: people can always answer in their own words.

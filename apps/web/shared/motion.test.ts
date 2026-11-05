@@ -204,7 +204,10 @@ describe('the panes on the first display', () => {
     test('no motion is instant for every pane: their transitions all take the pane duration, 0ms then', () => {
         expect(styles).toMatch(/\.app\.motion-none \{\s*--pane-duration: 0ms;/);
         const panes = [...styles.matchAll(/transition: (\w+) var\(--pane-duration\)/g)].map((m) => m[1]);
-        expect(panes.length).toBeGreaterThanOrEqual(5);
+        expect(panes.length).toBeGreaterThanOrEqual(4);
+        // the tree folding over the detail moves at --motion-medium, instant on the first display too
+        expect(styles).toMatch(/\.navigator\.with-detail \{[^}]*transition: height var\(--motion-medium\)/);
+        expect(styles).toMatch(/\.app\.motion-none \.navigator \{\s*transition: none;/);
     });
 });
 

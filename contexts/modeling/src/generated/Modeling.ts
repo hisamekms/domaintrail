@@ -104,11 +104,12 @@ export function equalAggregateDependency(a: AggregateDependency, b: AggregateDep
  * carry the ID of their aggregate), M018 (invariants and requirements without an expression), M019 (parameters
  * named like fields their command's requirements see), M020 (factories take the new aggregate's ID as a parameter),
  * M021 (the fields a command `changes`), M022 (event and error fields named after their source), M023 (policies),
- * M024 (verified types), M025 (a context's description written once), L001–L003 (Japanese names). M011 (the
- * generated TypeScript names) is reported by the generator's check, which the project analysis runs.
- * @see contexts/modeling/model/analysis.dt:57
+ * M024 (verified types), M025 (a context's description written once), M026 (a union without fields is an enum),
+ * M027 (an ID kept as a primitive), L001–L003 (Japanese names). M011 (the generated TypeScript names) is reported
+ * by the generator's check, which the project analysis runs.
+ * @see contexts/modeling/model/analysis.dt:58
  */
-export type ModelingRuleId = 'SYNTAX' | 'M001' | 'M002' | 'M003' | 'M004' | 'M005' | 'M006' | 'M007' | 'M008' | 'M009' | 'M010' | 'M011' | 'M012' | 'M013' | 'M014' | 'M015' | 'M016' | 'M017' | 'M018' | 'M019' | 'M020' | 'M021' | 'M022' | 'M023' | 'M024' | 'M025' | 'L001' | 'L002' | 'L003';
+export type ModelingRuleId = 'SYNTAX' | 'M001' | 'M002' | 'M003' | 'M004' | 'M005' | 'M006' | 'M007' | 'M008' | 'M009' | 'M010' | 'M011' | 'M012' | 'M013' | 'M014' | 'M015' | 'M016' | 'M017' | 'M018' | 'M019' | 'M020' | 'M021' | 'M022' | 'M023' | 'M024' | 'M025' | 'M026' | 'M027' | 'L001' | 'L002' | 'L003';
 
 /**
  * The stable ID of an element, a state or a command, derived from qualified names so that it survives re-parsing:

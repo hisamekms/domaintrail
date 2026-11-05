@@ -128,7 +128,7 @@ export function useSessionPage(input: {
     // aggregate whose state diagram the inspector shows
     const resolvedSelection = model && nav.selected ? resolve(model, nav.selected) : undefined;
     const statesOf =
-        panes.explorerOpen && panes.inspectorOpen && panes.inspectorTab === 'states' && resolvedSelection
+        panes.explorerOpen && panes.leftView === 'tree' && panes.inspectorTab === 'states' && resolvedSelection
             ? resolvedSelection.kind === 'element'
                 ? resolvedSelection.el.kind === 'aggregate'
                     ? resolvedSelection.el.id

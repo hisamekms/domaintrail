@@ -5,16 +5,16 @@ serves the page at <http://127.0.0.1:4321> (`--port`, `--host`, or `open.port` /
 and runs until Ctrl+C. [Getting started](getting-started.md#watch-it-in-the-live-view) shows what to look at first;
 this page describes every pane. How its buttons and spacing are built is in [UI rules](ui-rules.md).
 
-The app bar runs across the top; under it the screen has three columns: the left column — the navigator (the lists)
-on top and the detail of the selected item (the inspector) under it — the canvas, and, in a session, the chat at the
-right end. Panes are closed and opened with the icon buttons at their top (a closed detail leaves a narrow rail at the
-bottom of the left column, with the button that opens it). The left column's width, the chat's width and the split
-between the navigator and the detail are dragged; each edge is also a separator the keyboard moves (focused, the arrow
-keys along it step it, Shift in larger steps, Home / End go to its limits) and a double click gives its default size
-back. The split has a grip, so that it is seen at rest; the navigator and the detail each keep a little room. All of it
-is remembered per browser. A pane slides in and out as it opens and closes (its content does not reflow on the way),
-and the canvas keeps what is at its center in place whenever its size changes (a pane, the window). With the OS's
-"reduce motion" setting everything is instant.
+The app bar runs across the top; under it the screen has three columns: the left column — the navigator (the lists;
+the tree with the detail of the selected item, the inspector, under it) — the canvas, and, in a session, the chat at
+the right end. Panes are closed and opened with the icon buttons at their top. The left column's width (up to half
+the window, always leaving the canvas some room), the chat's width and the split between the tree and the detail are
+dragged; each edge is also a separator the keyboard moves (focused, the arrow keys along it step it, Shift in larger
+steps, Home / End go to its limits) and a double click gives its default size back. The split has a grip, so that it is seen at rest; the tree and the detail each keep a little
+room, and the tree folds to its head line when the split is dragged to the top (see [木](#木-tree)). All of it is
+remembered per browser. A pane slides in and out as it opens and closes (its content does not reflow on the way), and
+the canvas keeps what is at its center in place whenever its size changes (a pane, the window). With the OS's "reduce
+motion" setting everything is instant.
 
 ## App bar
 
@@ -44,9 +44,9 @@ or mark becomes a request the facilitator approves in the panel. Everything come
 
 A column of icons at its left edge, the activity bar, picks the list the navigator shows — 木 and 差分, with the
 number of changes as a badge (問題 is opened from the app bar) — and clicking the list shown collapses the column to the
-activity bar (it never disappears); the detail goes with it (it is not shown alone: to give the detail the whole
-column, drag the split up). Opening something in the detail from elsewhere (a link in the chat, a double click in the
-tree, a problem) opens the column again. At its foot:
+activity bar (it never disappears). The detail is under the tree only: 問題 and 差分 take the whole column. Opening
+something in the detail from elsewhere (a link in the chat, a double click in the tree, a problem in a file) opens the
+column again on the tree. At its foot:
 
 - **The health**: a dot, green when all is well, larger and amber or red with a word when it is not (警告: connecting,
   no sources, an older diagram shown, warnings; エラー: the model does not validate, or the server is gone). A click
@@ -67,6 +67,13 @@ them, for a storming without stages); a collapsed stage counts its timelines aft
 model tree's groups do. A click shows that view — the storming's integrated canvas, the stage or the timeline — as the
 view bar's pickers do (the two always show the same choice) and selects it for the detail. The filter at the top keeps the rows whose name or ID holds the text, with their rows above
 (a matching storming or stage keeps all its rows); what is folded is remembered per browser.
+
+The detail is under the tree, past the split. To give the detail more room, fold the tree: drag the split to the top,
+press ▾ in the tree's head line (it turns while folded), or, with the split focused, press ↑ (or Home) at the tree's
+smallest; the tree never folds by itself. Folded, the head line stays and names the world and what is selected
+(「イベントストーミング › 配達を完了した」) in place of the filter. ▾ again, ↓ on the split, or a drag down opens it at
+the height it had. It folds and unfolds in a short slide (none while dragged, or with "reduce motion"); the split's
+place and the fold are remembered per browser.
 
 ### 問題 (problems)
 
@@ -237,11 +244,11 @@ an attachment (`Content-Disposition` with the UTF-8 `filename*`), never cached; 
 sources, told in the menu. The read-only Live View (`dt open --host <address>`) serves the same path to whoever it
 serves the view, but has no menu.
 
-## Detail (the inspector, under the navigator)
+## Detail (the inspector, under the tree)
 
 The selected item — name, description, diagnostics, a back button naming the item it returns to (「〇〇 に戻る」), and
-buttons to show it in a view; with nothing selected, a line says to pick one. Its close button folds it to the rail at
-the bottom of the left column. Sub-tabs (on a second row when the column is narrow): 構造 / 状態遷移 / 振る舞い / 参照 / ソース. An event shows 永続化 / 非永続 next
+buttons to show it in a view; with nothing selected, a line says to pick one. It has no close button: fold the tree
+to give it the column. Sub-tabs (on a second row when the column is narrow): 構造 / 状態遷移 / 振る舞い / 参照 / ソース. An event shows 永続化 / 非永続 next
 to its kind, as it does in an aggregate's 発生させる Event list; persistent events have a database icon in the
 explorer.
 

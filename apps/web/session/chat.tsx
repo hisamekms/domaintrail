@@ -915,17 +915,31 @@ function Stream({ shown }: { shown: Shown }) {
                     ))}
                 </ol>
             </div>
+            {/* the pill goes to what it names; its ✕ only puts it away (until something else moves on out of sight) */}
             {pill && (
-                <button
-                    className="chat-updated-pill"
-                    onClick={() => {
-                        if (pill.head) toHead(pill.key);
-                        else jump(pill.key);
-                        setPill(undefined);
-                    }}
-                >
-                    <span className="chat-updated-pill-text">{pill.text}</span>
-                </button>
+                <div className="chat-updated-pill">
+                    <button
+                        className="chat-updated-pill-go"
+                        onClick={() => {
+                            if (pill.head) toHead(pill.key);
+                            else jump(pill.key);
+                            setPill(undefined);
+                        }}
+                    >
+                        <span className="chat-updated-pill-text">{pill.text}</span>
+                    </button>
+                    <button
+                        className="icon-button chat-updated-pill-close"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setPill(undefined);
+                        }}
+                        aria-label={tx.chat.dismissPill}
+                        data-tooltip={tx.chat.dismissPill}
+                    >
+                        <X size={12} aria-hidden />
+                    </button>
+                </div>
             )}
             {/* away from the bottom: back to the newest, with how many arrived below (`@ n` when some are for me, as 💬) */}
             {arrived && (
