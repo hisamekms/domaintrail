@@ -643,16 +643,15 @@ storming RoomBooking "会議室予約" {
 
   command Request "申し込む" {
     ref Booking.Reservation.request
-    actor Member
-    target Reservation
+    by Member
+    handledBy Reservation
     emits ReservationRequested
   }
   command Confirm "確定する" {
     ref Booking.Reservation.confirm
     reads RoomCapacity
-    target Reservation
-    emits ReservationConfirmed
-    emits ReservationDeclined
+    handledBy Reservation
+    emits ReservationConfirmed, ReservationDeclined
   }
 
   timeline Confirmed "確定" {
@@ -665,13 +664,13 @@ storming RoomBooking "会議室予約" {
   }
 
   hotspot WhoConfirms "誰が確定する？ 申込みのときに自動で？" {
-    on ReservationConfirmed
+    on Confirm
   }
 }
 ```
 
-この storming は、確定のときに予約が断られることがある（モデルにはまだない）と言い、誰が確定するのかをホットスポットで
-問うています。`dt fmt` と `dt check` は `.dt` ファイルと一緒に `.dtes` ファイルも扱い、Live View は storming を
+この storming は、確定のときに予約が断られることがある（モデルにはまだない）と言い、誰が確定するのかをコマンドに付けた
+ホットスポットで問うています。分からない関係を推測で埋めず、ホットスポットで問いとして残します（`dt guide dtes-quick`）。`dt fmt` と `dt check` は `.dt` ファイルと一緒に `.dtes` ファイルも扱い、Live View は storming を
 Big Picture（イベント）か Design Level で、全体または timeline ごとに表示します。
 
 ### 全体像

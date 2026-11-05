@@ -3,7 +3,10 @@
 - Status: accepted. Three choices the spec leaves open were decided by the maintainer: storming IDs unique in the
   workspace, the hotspots of a timeline filter, and the default `sources` (marked *Decided by the maintainer*).
   Amended 2026-11-03: events at Design Level only (`level design`, below); stages and exceptions; actors, read models
-  and aggregates drawn once per use; the cause of an event in a timeline's or a stage's view.
+  and aggregates drawn once per use; the cause of an event in a timeline's or a stage's view. Amended 2026-11-05:
+  Event Storming's grammar at Design Level (the drawing). Amended 2026-11-06 by [ADR 0032](0032-dtes-design-level-grammar.md):
+  the relations themselves are the grammar (`by`, `reads`, `handledBy`, `emits`, `on`, `issues`, `from`), `actor` and
+  `target` are errors (S023), incomplete designs are errors unless an open hotspot asks about them (S024–S028).
 - Date: 2026-10-31
 - Spec: [docs/dtes-v0.1.md](../dtes-v0.1.md). Its semantics, the sections marked 確定 in particular, are the reference.
   This ADR fixes only how they are implemented, plus the details the spec leaves to "実装調査" (§13, §14).
@@ -447,7 +450,10 @@ the drawing changes: the `.dtes`, its relations and the semantic graph do not (�
   (with their actors and read models); a selected command brings the events its aggregate emits.
 - **Still needing a DSL change** (separate decision): the aggregate emitting events itself (today `emits` belongs to the
   command), an external system receiving a command or producing events, event → read model → actor (a read model fed
-  by events), and hotspots on any sticky (today `on` an event only).
+  by events), and hotspots on any sticky (today `on` an event only). Decided by [ADR 0032](0032-dtes-design-level-grammar.md)
+  (2026-11-06): `handledBy` (an aggregate or external system, from which the drawing starts `emits`), an event `from` an
+  external system, a read model `from` events drawn to the issuer that `reads` it, and a hotspot `on` any sticky; this
+  amendment's `actor` and `target` read `by` and `handledBy` there.
 
 ## Task interfaces
 
