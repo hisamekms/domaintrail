@@ -1,8 +1,9 @@
 // What became of the message ホットスポットにする sent (ADR 0031, section 4), read from the session's state: its latest
-// run decides; without one, its triage and proposal say whether a run may still come.
+// run decides (the hotspots it added and changed, those its reply names); without one, its triage and proposal say
+// whether a run may still come.
 import { describe, expect, test } from 'bun:test';
 import type { CollaborationUseCases } from '@domaintrail/collaboration';
-import { ownRequest, requestOutcomes } from './knowledge-hotspots';
+import { namedInReply, ownRequest, requestOutcomes } from './knowledge-hotspots';
 
 interface Fake {
     requests?: unknown[];
@@ -11,6 +12,8 @@ interface Fake {
     proposals?: unknown[];
     changes?: unknown[];
     complete?: boolean;
+    /** The `.dtes` elements of the run's result revision. */
+    elements?: unknown[];
 }
 
 const collaboration = (f: Fake): CollaborationUseCases =>
@@ -25,6 +28,7 @@ const collaboration = (f: Fake): CollaborationUseCases =>
             },
         }),
         modelChanges: async () => ({ ok: true, value: { changes: f.changes ?? [], complete: f.complete ?? true } }),
+        stormingElements: async () => ({ ok: true, value: { elements: f.elements ?? [], complete: true } }),
     }) as unknown as CollaborationUseCases;
 
 const outcome = (f: Fake): Promise<unknown> => requestOutcomes(collaboration(f), 's1' as never)('r1');
@@ -36,22 +40,55 @@ describe('requestOutcomes', () => {
         for (const s of ['Queued', 'Running', 'NeedsClarification']) expect(await outcome({ runs: [run(s)] })).toEqual({ kind: 'waiting' });
     });
 
-    test('a completed run: the hotspots it added, from the storming’s diff (not those changed or removed, nor other elements)', async () => {
+    test('a completed run: the hotspots it added and changed, from the storming’s diff (not those removed, nor other elements)', async () => {
         const changes = [
             hotspot('CutOff'),
             hotspot('Deadline', 'changed'),
             hotspot('Old', 'removed'),
             { language: 'Dtes', kind: 'event', storming: 'Returns', local: 'X', change: 'added' },
         ];
-        expect(await outcome({ runs: [run('Completed', { changed: true })], changes })).toEqual({ kind: 'ran', hotspots: ['Returns.CutOff'] });
-        expect(await outcome({ runs: [run('Completed', { changed: false })] })).toEqual({ kind: 'ran', hotspots: [] });
+        expect(await outcome({ runs: [run('Completed', { changed: true })], changes })).toEqual({
+            kind: 'ran',
+            added: ['Returns.CutOff'],
+            changed: ['Returns.Deadline'],
+            named: [],
+        });
+        expect(await outcome({ runs: [run('Completed', { changed: false })] })).toEqual({ kind: 'ran', added: [], changed: [], named: [] });
         expect(await outcome({ runs: [run('Completed', { changed: true })], complete: false })).toMatchObject({ kind: 'ended' });
+    });
+
+    test('a completed run that added or changed none: the hotspots its reply names, in its result revision', async () => {
+        const reply = {
+            summary: '既存の @{es:Returns/Deadline} を使いました（@{es:Returns/ReturnRequested} について）。',
+            requests: [{ request: 'r1', status: 'done', note: '@{es:Returns/Gone} と @{Sales.Order}' }],
+            questions: [],
+            assumptions: [],
+        };
+        const elements = [
+            { storming: 'Returns', local: 'Deadline', kind: 'hotspot' },
+            { storming: 'Returns', local: 'ReturnRequested', kind: 'event' },
+        ];
+        expect(await outcome({ runs: [run('Completed', { changed: false, reply })], elements })).toEqual({
+            kind: 'ran',
+            added: [],
+            changed: [],
+            named: ['Returns.Deadline'],
+        });
+        // added first: what the reply names is not read
+        expect(await outcome({ runs: [run('Completed', { changed: true, reply })], changes: [hotspot('CutOff')], elements })).toEqual({
+            kind: 'ran',
+            added: ['Returns.CutOff'],
+            changed: [],
+            named: [],
+        });
     });
 
     test('the latest run decides: a question answered by a run that completed', async () => {
         expect(await outcome({ runs: [run('NeedsClarification'), run('Completed', { changed: true })], changes: [hotspot('CutOff')] })).toEqual({
             kind: 'ran',
-            hotspots: ['Returns.CutOff'],
+            added: ['Returns.CutOff'],
+            changed: [],
+            named: [],
         });
     });
 
@@ -84,6 +121,18 @@ describe('requestOutcomes', () => {
         expect(await outcome({ requests: [{ id: 'r1', state: 'Dismissed' }] })).toMatchObject({ kind: 'ended' });
         expect(await outcome({ requests: [] })).toMatchObject({ kind: 'ended' });
     });
+});
+
+test('namedInReply: the storming elements its text names, each once', () => {
+    expect(namedInReply(undefined)).toEqual([]);
+    expect(
+        namedInReply({
+            summary: '@{es:A/H} と @{es:A}',
+            answer: '@{es:A/H}',
+            requests: [{ note: '@{es:B/H2}' }],
+            assumptions: [{ text: '`@{es:C/H3}` @{X.Y}' }],
+        } as never),
+    ).toEqual(['A.H', 'B.H2', 'C.H3']);
 });
 
 test('ownRequest: only the author of a message of the session', async () => {

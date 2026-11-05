@@ -225,7 +225,10 @@ const ja = {
         makeHotspot: 'ホットスポットにする',
         notConflict: '食い違いではない',
         makingHotspot: 'ホットスポットを作っています',
-        hotspotText: (targets: string, a: string, b = '') => `${targets} について、次の2つが食い違っています。ホットスポットにしてください。「${a}」「${b}」`,
+        hotspotText: (targets: string, a: string, b = '') =>
+            `${targets} について、次の2つが食い違っています。ホットスポットにしてください。同じ問いのホットスポットがすでにあれば、新しく作らずにそれを使ってください。作った、または使ったホットスポットを返答で名指ししてください。「${a}」「${b}」`,
+        hotspotCleared: { none: 'ホットスポットが見つかりませんでした', several: '候補が複数ありました', ended: 'ホットスポットにできませんでした' },
+        hotspot: 'ホットスポット',
         correct: '直す',
         attachImage: '画像を付ける',
         delete: '消す',
@@ -1332,7 +1335,10 @@ const en: Messages = {
         makeHotspot: 'Make it a hotspot',
         notConflict: 'Not a conflict',
         makingHotspot: 'Making it a hotspot',
-        hotspotText: (targets, a, b) => `About ${targets}, these two conflict. Make it a hotspot: "${a}" "${b}"`,
+        hotspotText: (targets, a, b) =>
+            `About ${targets}, these two conflict. Make it a hotspot. If a hotspot already asks the same question, use it instead of adding another. Name the hotspot you made or used in your reply: "${a}" "${b}"`,
+        hotspotCleared: { none: 'No hotspot was found', several: 'There were several candidates', ended: 'It was not made a hotspot' },
+        hotspot: 'Hotspot',
         correct: 'Correct',
         attachImage: 'Attach an image',
         delete: 'Delete',

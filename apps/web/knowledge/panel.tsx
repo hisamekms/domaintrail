@@ -1,5 +1,6 @@
 // The knowledge on the page (ADR 0031, section 10; the maintainer's approved preview): a sticky's items in its detail
-// (its conflicts side by side first, each side opening to its detail, then the other items newest first or by kind), the ナレッジ list of the left column
+// (its conflicts side by side first, each side opening to its detail, then the items kept with the hotspot they were
+// handed over to, then the other items newest first or by kind), the ナレッジ list of the left column
 // with its search and filters, an item opened to its quotes, the other stickies it concerns, its versions and images,
 // with 直す / 画像を付ける / 消す; the deletion's 元に戻す; the dot and the conflict mark on the canvas, the stickies
 // an opened item lights up, and the session's extraction switch in the app bar (section 3).
@@ -18,6 +19,7 @@ import {
     conflictPairs,
     extractionControl,
     hotspotBody,
+    hotspotGroups,
     imagesOf,
     KINDS,
     missingConflicts,
@@ -33,6 +35,7 @@ import {
     selectionOfSticky,
     type ConflictPair,
     type Filters,
+    type HotspotGroup,
     type KnowledgeItem,
     type Order,
 } from './model';
@@ -369,7 +372,8 @@ export function ItemRow({
  * A conflict: the two items side by side, ホットスポットにする (a message to the AI) and 食い違いではない. Each side
  * opens to its detail under the pair (the sticky's list does not repeat them). Once ホットスポットにする is pressed (here
  * or on another page), the box shows that the hotspot is being made, without its buttons, until the run ends: handed
- * over, the conflict goes; otherwise its buttons come back (ADR 0031, section 4).
+ * over, the conflict goes; otherwise its buttons come back, with why (no hotspot found, several candidates, the
+ * message ended) until it is pressed again (ADR 0031, section 4).
  */
 export function ConflictBox({
     pair,
@@ -389,6 +393,7 @@ export function ConflictBox({
     // pressed here, until dt's list of the conflicts being made hotspots has it (or the press failed)
     const [pressed, setPressed] = useState(false);
     const making = pressed || (view?.makingHotspots?.has(pairKey(pair.a.id, pair.b.id)) ?? false);
+    const cleared = view?.clearedHotspots?.get(pairKey(pair.a.id, pair.b.id));
     useEffect(() => {
         if (pressed && view?.makingHotspots?.has(pairKey(pair.a.id, pair.b.id))) setPressed(false);
     }, [pressed, view?.makingHotspots, pair.a.id, pair.b.id]);
@@ -417,18 +422,7 @@ export function ConflictBox({
     };
     return (
         <div className="knowledge-conflict" role="group" aria-label={t.conflict}>
-            <div className="knowledge-pair">
-                {[pair.a, pair.b].map((i) => (
-                    <button key={i.id} type="button" className="knowledge-side" aria-expanded={isOpen(i.id)} onClick={() => onToggle(i)}>
-                        <span className="knowledge-kind">{t.kinds[i.content.labels.kind]}</span>
-                        <span className="knowledge-text">{plainText(i.content.text)}</span>
-                        <Meta item={i} />
-                    </button>
-                ))}
-            </div>
-            {[pair.a, pair.b].map((i) => (
-                <SideDetail key={i.id} item={i} from={from} open={isOpen(i.id)} />
-            ))}
+            <SideBySide items={[pair.a, pair.b]} from={from} isOpen={isOpen} onToggle={onToggle} />
             {making ? (
                 <span className="knowledge-actions knowledge-making" role="status">
                     <Act kind="send" icon={<Bot size={12} aria-hidden />} disabled>
@@ -437,6 +431,11 @@ export function ConflictBox({
                 </span>
             ) : (
                 <span className="knowledge-actions">
+                    {cleared && (
+                        <span className="knowledge-cleared" role="status">
+                            {t.hotspotCleared[cleared]}
+                        </span>
+                    )}
                     {api.hotspots && (
                         <Act kind="send" icon={<Bot size={12} aria-hidden />} onClick={() => void hotspot()}>
                             {t.makeHotspot}
@@ -451,7 +450,66 @@ export function ConflictBox({
     );
 }
 
-/** A side of a conflict opened: its detail in the box, unfolding as it opens and closes. */
+/** Items side by side in a box (a conflict's two, a hotspot's), each card opening to its detail under them. */
+function SideBySide({
+    items,
+    from,
+    isOpen,
+    onToggle,
+}: {
+    items: readonly KnowledgeItem[];
+    from: string | undefined;
+    isOpen: (id: string) => boolean;
+    onToggle: (item: KnowledgeItem) => void;
+}): ReactElement {
+    const t = useT().knowledge;
+    return (
+        <>
+            <div className="knowledge-pair">
+                {items.map((i) => (
+                    <button key={i.id} type="button" className="knowledge-side" aria-expanded={isOpen(i.id)} onClick={() => onToggle(i)}>
+                        <span className="knowledge-kind">{t.kinds[i.content.labels.kind]}</span>
+                        <span className="knowledge-text">{plainText(i.content.text)}</span>
+                        <Meta item={i} />
+                    </button>
+                ))}
+            </div>
+            {items.map((i) => (
+                <SideDetail key={i.id} item={i} from={from} open={isOpen(i.id)} />
+            ))}
+        </>
+    );
+}
+
+/**
+ * Items about the sticky and about one hotspot too (a conflict handed over to it, and items about it since): side by
+ * side in a calm box, and the hotspot linked instead of buttons (ADR 0031, section 4). Derived from the items' `about`.
+ */
+export function HotspotBox({
+    group,
+    from,
+    isOpen,
+    onToggle,
+}: {
+    group: HotspotGroup;
+    from: string | undefined;
+    isOpen: (id: string) => boolean;
+    onToggle: (item: KnowledgeItem) => void;
+}): ReactElement {
+    const t = useT().knowledge;
+    const view = useKnowledgeView();
+    const name = view?.label(group.hotspot) ?? group.hotspot;
+    return (
+        <div className="knowledge-hotspot" role="group" aria-label={t.hotspot}>
+            <SideBySide items={group.items} from={from} isOpen={isOpen} onToggle={onToggle} />
+            <div className="chat-targets">
+                <TargetLink name={name} tooltip={name} kind="DtesElement" onClick={() => view?.select(group.hotspot)} />
+            </div>
+        </div>
+    );
+}
+
+/** A side of a box opened: its detail in the box, unfolding as it opens and closes. */
 function SideDetail({ item, from, open }: { item: KnowledgeItem; from: string | undefined; open: boolean }): ReactElement | null {
     const shown = useStaying(open);
     if (!shown) return null;
@@ -478,7 +536,10 @@ function useOpened(
     return { isOpen: (id) => id === opened, toggle: (i) => setOpened((o) => (o === i.id ? undefined : i.id)) };
 }
 
-/** The items about a sticky (its detail): its conflicts side by side, then the other items, newest first or by kind. */
+/**
+ * The items about a sticky (its detail): its conflicts side by side, then the items kept with a hotspot, then the other
+ * items, newest first or by kind.
+ */
 export function StickyKnowledge({ sticky }: { sticky: string }): ReactElement | null {
     const t = useT().knowledge;
     const view = useKnowledgeView();
@@ -506,8 +567,8 @@ export function StickyKnowledge({ sticky }: { sticky: string }): ReactElement | 
     if (!view?.available || items === undefined) return null;
     const all = new Map(shown.map((i) => [i.id as string, i]));
     const pairs = conflictPairs(items, (id) => all.get(id));
-    // an item in a conflict box is shown there only
-    const rest = outsideConflicts(items, pairs);
+    // an item in a conflict box is shown there only; the items handed over to a hotspot stay together with its link
+    const { groups, rest } = hotspotGroups(outsideConflicts(items, pairs), sticky, view.isHotspot ?? (() => false));
     return (
         <section className="knowledge-sticky" aria-label={t.title}>
             <div className="knowledge-head">
@@ -516,6 +577,9 @@ export function StickyKnowledge({ sticky }: { sticky: string }): ReactElement | 
             </div>
             {pairs.map((p) => (
                 <ConflictBox key={`${p.a.id}|${p.b.id}`} pair={p} from={sticky} isOpen={opened.isOpen} onToggle={opened.toggle} />
+            ))}
+            {groups.map((g) => (
+                <HotspotBox key={g.hotspot} group={g} from={sticky} isOpen={opened.isOpen} onToggle={opened.toggle} />
             ))}
             {items.length === 0 ? (
                 <p className="muted">{t.none}</p>

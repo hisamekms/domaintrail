@@ -1,10 +1,12 @@
 // A conflict made a hotspot is handed over to it (ADR 0031, section 4). Pressing ホットスポットにする sends a message
 // to the AI and records the press here, kept in the session database with the message's ID, so that every page shows
-// the conflict as being made into a hotspot (and a reload keeps it). When the message's run ends, the hotspots the run
-// added are read from the storming's diff before and after it: exactly one, and both items are handed over to it
+// the conflict as being made into a hotspot (and a reload keeps it). When the message's run ends, its hotspot is found,
+// in this order: the hotspots the run added (the storming's diff before and after it), else the existing ones it
+// changed, else the ones its reply names. Exactly one, and both items are handed over to it
 // (`KnowledgeStore.handOverToHotspot`, by the person who pressed the button); none or more than one, or a run that
 // declined or failed, or a message that never ran (answered as a question, a participant's proposal rejected or
-// withdrawn), and the press is forgotten: the conflict gets its two buttons back.
+// withdrawn), and the press is forgotten: the conflict gets its two buttons back, with why (`cleared`, kept a while in
+// memory, until the conflict is pressed again).
 //
 // What became of a message is the collaboration's (`outcomeOf`, wired by dt); this only keeps the presses and settles
 // them, one settling at a time, whenever the session moved (`settle`).
@@ -32,19 +34,38 @@ export interface PendingHandOvers {
 
 /**
  * What became of a message sent to the AI: still on its way (being triaged, a proposal waiting for the facilitator, a
- * run queued, running or asking a question); ran to completion, with the hotspots it added (`complete: false` when the
- * storming's diff could not be read); or ended without a change to hand over to (declined, failed, cancelled, answered
- * as a question, its proposal rejected or withdrawn, gone).
+ * run queued, running or asking a question); ran to completion, with the hotspots (`<Storming>.<Local>`) it added, the
+ * existing ones it changed, and those its reply names; or ended without a change to hand over to (declined, failed,
+ * cancelled, answered as a question, its proposal rejected or withdrawn, the storming unreadable, gone).
  */
 export type RequestOutcome =
     | { readonly kind: 'waiting' }
-    | { readonly kind: 'ran'; readonly hotspots: readonly string[] }
+    | { readonly kind: 'ran'; readonly added: readonly string[]; readonly changed: readonly string[]; readonly named: readonly string[] }
     | { readonly kind: 'ended'; readonly why: string };
+
+/** Why a press got its buttons back: no hotspot found, several candidates, or the message ended without a run's change. */
+export type ClearedReason = 'none' | 'several' | 'ended';
 
 /** What a settled press came to. */
 export type Settled =
     | { readonly kind: 'handedOver'; readonly request: string; readonly hotspot: Knowledge.StickyRef; readonly items: readonly Knowledge.KnowledgeItemId[] }
-    | { readonly kind: 'cleared'; readonly request: string; readonly why: string };
+    | {
+          readonly kind: 'cleared';
+          readonly request: string;
+          readonly items: readonly [Knowledge.KnowledgeItemId, Knowledge.KnowledgeItemId];
+          readonly reason: ClearedReason;
+          readonly why: string;
+      };
+
+/** A conflict whose press was cleared lately: the box shows why its buttons came back. */
+export interface ClearedHandOver {
+    readonly items: readonly [Knowledge.KnowledgeItemId, Knowledge.KnowledgeItemId];
+    readonly reason: ClearedReason;
+    readonly at: Date;
+}
+
+/** How long a cleared press's reason is shown (in memory: a server started again shows none). */
+export const CLEARED_KEPT_MS = 10 * 60_000;
 
 export interface HotspotHandOversDeps {
     readonly session: string;
@@ -67,29 +88,52 @@ export interface HotspotHandOvers {
     }): Promise<void>;
     /** The presses still waiting, oldest first. */
     list(): Promise<readonly PendingHandOver[]>;
+    /** The conflicts whose press was cleared lately (within `CLEARED_KEPT_MS`, not pressed again since), oldest first. */
+    cleared(): readonly ClearedHandOver[];
     /** Settles every press whose message's run ended (one settling at a time; a call meanwhile settles again after it). */
     settle(): Promise<readonly Settled[]>;
 }
 
-/** The one hotspot a run added, or why it is not handed over to. */
-export function hotspotOf(outcome: Extract<RequestOutcome, { kind: 'ran' }>): { readonly hotspot: Knowledge.StickyRef } | { readonly why: string } {
-    if (outcome.hotspots.length === 0) return { why: 'the run added no hotspot' };
-    if (outcome.hotspots.length > 1) return { why: `the run added ${outcome.hotspots.length} hotspots` };
-    const made = Knowledge.makeStickyRef(outcome.hotspots[0] ?? '');
-    return made.ok ? { hotspot: made.value } : { why: `the hotspot ${outcome.hotspots[0]} cannot be referred to` };
+/**
+ * The hotspot of a run, or why there is none: the hotspots it added; else the existing ones it changed; else those its
+ * reply names. Exactly one candidate at the first step that has any.
+ */
+export function hotspotOf(
+    outcome: Extract<RequestOutcome, { kind: 'ran' }>,
+): { readonly hotspot: Knowledge.StickyRef } | { readonly reason: Exclude<ClearedReason, 'ended'>; readonly why: string } {
+    const steps = [
+        ['added', outcome.added],
+        ['changed', outcome.changed],
+        ['named', outcome.named],
+    ] as const;
+    const step = steps.find(([, found]) => found.length > 0);
+    if (!step) return { reason: 'none', why: 'the run added, changed or named no hotspot' };
+    const [how, found] = step;
+    const candidates = [...new Set(found)];
+    if (candidates.length > 1) return { reason: 'several', why: `the run ${how} ${candidates.length} hotspots` };
+    const made = Knowledge.makeStickyRef(candidates[0] ?? '');
+    return made.ok ? { hotspot: made.value } : { reason: 'none', why: `the hotspot ${candidates[0]} cannot be referred to` };
 }
 
 export function createHotspotHandOvers(deps: HotspotHandOversDeps): HotspotHandOvers {
     const { session, project, store, pending, log } = deps;
+    // the presses cleared lately, in memory
+    let cleared: ClearedHandOver[] = [];
+    const key = (items: readonly string[]): string => [...items].sort().join('|');
+    const forget = (items: readonly string[]): void => {
+        cleared = cleared.filter((c) => key(c.items) !== key(items));
+    };
 
     const settleOne = async (p: PendingHandOver): Promise<Settled | undefined> => {
         const outcome = await deps.outcomeOf(p.request);
         if (outcome.kind === 'waiting') return undefined;
-        const found = outcome.kind === 'ran' ? hotspotOf(outcome) : { why: outcome.why };
+        const found = outcome.kind === 'ran' ? hotspotOf(outcome) : { reason: 'ended' as const, why: outcome.why };
         if ('why' in found) {
             await pending.remove(session, p.request);
+            forget(p.items);
+            cleared.push({ items: p.items, reason: found.reason, at: deps.now() });
             log(`knowledge: the conflict of ${p.items.join(' and ')} was not made a hotspot (${found.why})`);
-            return { kind: 'cleared', request: p.request, why: found.why };
+            return { kind: 'cleared', request: p.request, items: p.items, reason: found.reason, why: found.why };
         }
         const [a, b] = p.items;
         const r = await store.handOverToHotspot(project, a, b, found.hotspot, p.by);
@@ -139,10 +183,16 @@ export function createHotspotHandOvers(deps: HotspotHandOversDeps): HotspotHandO
     return {
         async press({ request, items, by }) {
             await pending.add(session, { request, items, by, at: deps.now() });
+            forget(items);
             deps.changed();
             await settle();
         },
         list: () => pending.list(session),
+        cleared() {
+            const since = deps.now().getTime() - CLEARED_KEPT_MS;
+            cleared = cleared.filter((c) => c.at.getTime() > since);
+            return cleared;
+        },
         settle,
     };
 }

@@ -1,11 +1,11 @@
 // The session's extraction in the app bar (panel.tsx, ExtractionSwitch): the facilitator's switch, pressed while on;
-// the others' mark while on and nothing while off; nothing without a store.
+// the others' mark while on and nothing while off; nothing without a store. A conflict's box and the hotspot's box.
 import { describe, expect, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { I18nProvider } from '../i18n';
-import { ConflictBox, ExtractionSwitch, ItemRow } from './panel';
-import { pairKey, type KnowledgeItem } from './model';
+import { ConflictBox, ExtractionSwitch, HotspotBox, ItemRow } from './panel';
+import { pairKey, type ClearedReason, type KnowledgeItem } from './model';
 import { KnowledgeContext, type KnowledgeView } from './useKnowledge';
 
 const view = (extraction: boolean | undefined): KnowledgeView =>
@@ -27,10 +27,15 @@ const view = (extraction: boolean | undefined): KnowledgeView =>
         setError: () => undefined,
     }) satisfies KnowledgeView;
 
-const render = (extraction: boolean | undefined, node: ReactNode, making: ReadonlySet<string> = new Set()): string =>
+const render = (
+    extraction: boolean | undefined,
+    node: ReactNode,
+    making: ReadonlySet<string> = new Set(),
+    cleared: ReadonlyMap<string, ClearedReason> = new Map(),
+): string =>
     renderToStaticMarkup(
         <I18nProvider lang="ja">
-            <KnowledgeContext.Provider value={{ ...view(extraction), makingHotspots: making }}>{node}</KnowledgeContext.Provider>
+            <KnowledgeContext.Provider value={{ ...view(extraction), makingHotspots: making, clearedHotspots: cleared }}>{node}</KnowledgeContext.Provider>
         </I18nProvider>,
     );
 
@@ -82,6 +87,43 @@ describe('a conflict made a hotspot (ADR 0031, section 4)', () => {
         expect(html).toMatch(/role="status"[^>]*>.*<button[^>]*disabled[^>]*>.*ホットスポットを作っています/s);
         expect(html).not.toContain('食い違いではない');
         expect(html).not.toContain('>ホットスポットにする<');
+    });
+
+    test('its buttons back after a run without one hotspot: with why, until pressed again', () => {
+        const key = pairKey('kn_00000001', 'kn_00000002');
+        const none = render(true, box, new Set(), new Map([[key, 'none' as const]]));
+        expect(none).toMatch(/class="knowledge-cleared" role="status">ホットスポットが見つかりませんでした</);
+        expect(none).toContain('ホットスポットにする');
+        expect(none).toContain('食い違いではない');
+        expect(render(true, box, new Set(), new Map([[key, 'several' as const]]))).toContain('候補が複数ありました');
+        // pressed again: only that it is being made
+        expect(render(true, box, new Set([key]), new Map([[key, 'none' as const]]))).not.toContain('knowledge-cleared');
+    });
+
+    test('handed over: the items side by side in a calm box, the hotspot linked as a #chip instead of buttons', () => {
+        const handed = (id: string): KnowledgeItem =>
+            ({
+                ...item(id, ''),
+                conflictsWith: [],
+                content: { ...item(id, '').content, about: ['Ordering.Placed', 'Ordering.CutOff'] },
+            }) as unknown as KnowledgeItem;
+        const html = renderToStaticMarkup(
+            <I18nProvider lang="ja">
+                <KnowledgeContext.Provider value={{ ...view(true), label: (s: string) => (s === 'Ordering.CutOff' ? '締めはいつ？' : s) }}>
+                    <HotspotBox
+                        group={{ hotspot: 'Ordering.CutOff', items: [handed('kn_00000002'), handed('kn_00000001')] }}
+                        from="Ordering.Placed"
+                        isOpen={() => false}
+                        onToggle={() => undefined}
+                    />
+                </KnowledgeContext.Provider>
+            </I18nProvider>,
+        );
+        expect(html).toMatch(/^<div class="knowledge-hotspot" role="group" aria-label="ホットスポット">/);
+        expect(html.match(/class="knowledge-side"/g)).toHaveLength(2);
+        expect(html).toMatch(/<a class="chat-chip chat-target kind-DtesElement"[^>]*><span class="chat-chip-name">#締めはいつ？<\/span><\/a>/);
+        expect(html).not.toContain('knowledge-conflict');
+        expect(html).not.toContain('class="act');
     });
 });
 

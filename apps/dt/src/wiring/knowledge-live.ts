@@ -128,6 +128,7 @@ export function startLiveKnowledge(deps: LiveKnowledgeDeps): LiveKnowledge {
                 requests && {
                     handOvers: {
                         list: () => handOvers.list(),
+                        cleared: () => handOvers.cleared(),
                         async press({ request, items, by, participant }) {
                             if (!(await requests.isOwn(request, participant))) return false;
                             await handOvers.press({ request, items, by });

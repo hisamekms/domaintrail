@@ -131,6 +131,25 @@ function stormingChanges(before: readonly Storming[], after: readonly Storming[]
     return out;
 }
 
+/** A storming's declaration in an analysis: by storming and local ID, with its kind. */
+export interface StormingElement {
+    readonly storming: string;
+    readonly local: string;
+    readonly kind: StormingElementKind;
+}
+
+/** The declarations of an analysis's stormings; `complete` is false when its `.dtes` files did not all parse. */
+export interface StormingElements {
+    readonly elements: readonly StormingElement[];
+    readonly complete: boolean;
+}
+
+/** Every declaration of the stormings of an analysis, each storming's in source order. */
+export function stormingElements(scope: TargetScope): StormingElements {
+    const elements = scope.stormings.flatMap((s) => [...firstDeclarations(s).values()].map((d) => ({ storming: s.id, local: d.id, kind: d.kind })));
+    return { elements, complete: scope.stormingsComplete };
+}
+
 /**
  * The elements two analyses differ by: added, then changed, then removed, `.dt` before `.dtes`, each in source order.
  * A side whose `.dt` sources do not parse gives no `.dt` changes, one whose `.dtes` files do not all parse no storming

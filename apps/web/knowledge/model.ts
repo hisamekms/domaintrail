@@ -1,7 +1,7 @@
 // The knowledge as the Live View shows it (ADR 0031, section 10), without React: a sticky's reference and its
 // selection, the order of a list (newest first, or by kind), the conflicts among items, the marks on the canvas, the
-// filters of the ナレッジ list, the message that asks the AI to make a conflict a hotspot, and the session's extraction
-// switch.
+// filters of the ナレッジ list, the message that asks the AI to make a conflict a hotspot, the items kept together with
+// the hotspot they were handed over to, and the session's extraction switch.
 import type { Knowledge } from '@domaintrail/knowledge';
 import type { SendRequestBody } from '@domaintrail/collaboration/protocol';
 import { mentionName } from '../session/mentions';
@@ -162,6 +162,57 @@ export interface HandOver {
 
 /** The conflicts being made hotspots, by `pairKey`. */
 export const makingHotspots = (handOvers: readonly HandOver[]): ReadonlySet<string> => new Set(handOvers.map((h) => pairKey(h.items[0], h.items[1])));
+
+/** Why a press of ホットスポットにする got its buttons back: no hotspot found, several candidates, or its message ended. */
+export type ClearedReason = 'none' | 'several' | 'ended';
+
+/** A conflict whose press was cleared lately, with why. */
+export interface ClearedHandOver {
+    readonly items: readonly [string, string];
+    readonly reason: ClearedReason;
+}
+
+/** The presses of ホットスポットにする: those waiting for their run, and those cleared lately. */
+export interface HandOvers {
+    readonly pending: readonly HandOver[];
+    readonly cleared: readonly ClearedHandOver[];
+}
+
+/** Why each conflict's press was cleared lately, by `pairKey` (the latest when several). */
+export const clearedReasons = (cleared: readonly ClearedHandOver[]): ReadonlyMap<string, ClearedReason> =>
+    new Map(cleared.map((c) => [pairKey(c.items[0], c.items[1]), c.reason] as const));
+
+/** Items about a sticky and about one hotspot too: kept together, with the hotspot linked (ADR 0031, section 4). */
+export interface HotspotGroup {
+    readonly hotspot: string;
+    /** Newest first. */
+    readonly items: readonly KnowledgeItem[];
+}
+
+/**
+ * The items of a sticky's detail that are about exactly one hotspot besides the sticky, grouped by that hotspot (the
+ * groups in the order of their newest item), and the other items. Derived from `about` only: the items handed over to
+ * a hotspot, and any item about it later. A hotspot's own detail groups nothing (its items are listed as they are).
+ */
+export function hotspotGroups(
+    items: readonly KnowledgeItem[],
+    sticky: string,
+    isHotspot: (sticky: string) => boolean,
+): { readonly groups: readonly HotspotGroup[]; readonly rest: readonly KnowledgeItem[] } {
+    if (isHotspot(sticky)) return { groups: [], rest: items };
+    const groups = new Map<string, KnowledgeItem[]>();
+    const rest: KnowledgeItem[] = [];
+    for (const item of ordered(items, 'newest')) {
+        const hotspots = [...new Set(item.content.about.filter((s) => s !== sticky && isHotspot(s)))];
+        const [hotspot] = hotspots;
+        if (hotspots.length !== 1 || hotspot === undefined) {
+            rest.push(item);
+            continue;
+        }
+        groups.set(hotspot, [...(groups.get(hotspot) ?? []), item]);
+    }
+    return { groups: [...groups].map(([hotspot, grouped]) => ({ hotspot, items: grouped })), rest: items.filter((i) => rest.includes(i)) };
+}
 
 /** Whether the session extracts its knowledge, from a message of dt's WebSocket (`knowledge.extraction`); none for another. */
 export function extractionOfMessage(message: { readonly type: string }): boolean | undefined {

@@ -1,6 +1,6 @@
 // The read-only page of the knowledge store's Worker (ADR 0031, section 11), without React: where the page is (its
 // project, storming and level, in the query, so that a link opens the same view), the drawing a published form holds
-// for a level, the stickies' names as the canvas shows them, and the date of the drawing.
+// for a level, the stickies' names as the canvas shows them, which of them are hotspots, and the date of the drawing.
 import { PUBLISHED_LEVELS, type PublishedEntry, type PublishedLevel, type PublishedStorming } from '@domaintrail/knowledge';
 import { nameIn, type DisplayMode, type LaidOutGraph, type Lang } from '@domaintrail/visualization';
 
@@ -74,6 +74,23 @@ export function stickyNames(forms: readonly PublishedStorming[], mode: DisplayMo
         if (!labels.has(sticky)) return sticky;
         return nameIn(mode, sticky.slice(sticky.indexOf('.') + 1), labels.get(sticky));
     };
+}
+
+/** The hotspots of the published stormings (`<Storming>.<Local>`), as their drawings draw them (`esHotspot`). */
+export function hotspotStickies(forms: readonly PublishedStorming[]): ReadonlySet<string> {
+    const out = new Set<string>();
+    for (const f of forms)
+        for (const level of PUBLISHED_LEVELS) {
+            const g = f.views[level];
+            const drawn: unknown = isRecord(g) ? g.nodes : undefined;
+            const nodes: readonly unknown[] = Array.isArray(drawn) ? drawn : [];
+            for (const n of nodes) {
+                if (!isRecord(n) || n.kind !== 'esHotspot' || typeof n.elementId !== 'string') continue;
+                const m = /^es\/([^/]+)\/([^/]+)$/.exec(n.elementId);
+                if (m) out.add(`${m[1]}.${m[2]}`);
+            }
+        }
+    return out;
 }
 
 /** The date of the drawing (and its commit, short), as the page's bar says it. */
