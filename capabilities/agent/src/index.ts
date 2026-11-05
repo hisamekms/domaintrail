@@ -39,6 +39,11 @@ export {
     DT_WRITTEN_FILE_NAMES,
     createClaudeCodeRunner,
     extraReadRules,
+    KNOWLEDGE_MCP_SERVER,
+    KNOWLEDGE_TOOL_RULES,
+    KNOWLEDGE_TOOLS,
+    knowledgeMcpConfig,
+    type KnowledgeMcp,
     type AgentCommand,
     type ExtraRead,
     type RunnerReadScope,
@@ -66,7 +71,7 @@ export { ANSWERER_TOOLS, answererArguments, createClaudeAnswerer, triageArgument
 // the extractor's Claude Code: no tools at all, the extractor's schema and instructions, a fresh process each
 export { createClaudeExtractor, extractorArguments, gateArguments, type ClaudeExtractorOptions } from './adapters/claude-extract.js';
 export { createWarmClaude, type WarmClaude, type WarmClaudeOptions, type WarmProfile, type WarmTurn, type WarmTurnEnd } from './adapters/warm-claude.js';
-export { checkDtOutsideWorkspace, dtCommandOf, pinDt, type PinnedDt } from './adapters/dt-shim.js';
+export { checkDtOutsideWorkspace, dtCommandOf, knowledgeMcpLauncher, pinDt, type PinnedDt, writeKnowledgeMcpLauncher } from './adapters/dt-shim.js';
 // the adapters' settings in domaintrail.jsonc, `agent.run` (the runner: tools, `dt`, the warm agent), `agent.answer`
 // (the answerer) and `agent.triage` (stage 3), composed by the app
 export {

@@ -269,3 +269,49 @@ export async function writeDtShim(dt: PinnedDt, root: string, runtime: string = 
     }
     return shimDir;
 }
+
+/**
+ * The launcher of `dt mcp` for the agent's Claude Code (ADR 0031: the answerer and the runner read knowledge through
+ * the same tools as `dt mcp`): a `sh` script (a `.cmd` file on Windows) that changes to `cwd`, a private directory
+ * outside the workspace, then runs the pinned `dt` with `-r <root>` (and `-c <config>`) and `mcp`. Claude Code starts
+ * it in its own working directory, the workspace or the answerer's view of it: run there, a runtime would pick up a
+ * config file of it (a `bunfig.toml`) that an agent could have written. Nothing of it comes from the agent.
+ */
+export function knowledgeMcpLauncher(
+    dt: PinnedDt,
+    root: string,
+    cwd: string,
+    configPath?: string,
+    platform: NodeJS.Platform = process.platform,
+): { readonly file: string; readonly text: string } {
+    const command = dtCommandOf(dt);
+    const words = [command.command, ...command.args, '-r', root, ...(configPath ? ['-c', configPath] : []), 'mcp'];
+    [...words, cwd].forEach(checkWord);
+    if (platform === 'win32') {
+        for (const w of [...words, cwd]) if (CMD_SPECIAL.test(w)) throw new Error(`A path the dt mcp launcher cannot hold on Windows: ${JSON.stringify(w)}`);
+        return { file: 'dt-mcp.cmd', text: `@echo off\r\ncd /d "${cwd}" || exit /b 1\r\n${words.map((w) => `"${w}"`).join(' ')}\r\n` };
+    }
+    return { file: 'dt-mcp', text: `#!/bin/sh\ncd ${shQuote(cwd)} || exit 1\nexec ${words.map(shQuote).join(' ')}\n` };
+}
+
+/**
+ * Writes the launcher of `dt mcp` (`knowledgeMcpLauncher`) in a new private directory outside `root`, also `dt`'s
+ * working directory; `dispose` removes it. `command` is what Claude Code starts.
+ */
+export async function writeKnowledgeMcpLauncher(
+    dt: PinnedDt,
+    root: string,
+    configPath?: string,
+): Promise<{ readonly command: string; readonly args: readonly string[]; dispose(): Promise<void> }> {
+    const dir = await privateDir(root, 'domaintrail-dt-mcp-');
+    try {
+        const launcher = knowledgeMcpLauncher(dt, root, dir.dir, configPath);
+        const file = path.join(dir.dir, launcher.file);
+        await writeFile(file, launcher.text, { mode: 0o700 });
+        await chmod(file, 0o700);
+        return { command: file, args: [], dispose: () => dir.dispose() };
+    } catch (e) {
+        await dir.dispose();
+        throw e;
+    }
+}

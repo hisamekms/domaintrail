@@ -15,6 +15,7 @@
 // and `knowledge.project` among them — were approved as they are now (`SettingsApproval`, made only by
 // `approveSettings` and `checkApproved` of cli/trust.ts, checked by `approvedFor`): no caller can skip the check, and a
 // proof made before the URL changed proves nothing.
+import { statSync } from 'node:fs';
 import * as path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { type Collaboration, type CollaborationUseCases, isAi, mechanicalVerdict, plainBody } from '@domaintrail/collaboration';
@@ -107,11 +108,9 @@ export async function openKnowledgeStore(
             return ok({ kind: 'files', store, project: knowledge.project, sweep: () => store.sweep() });
         }
         case 'cloudflare': {
-            if (!approvedFor(approval, cfg)) return err({ type: 'KnowledgeStoreUnavailable', store: 'cloudflare', message: NOT_APPROVED });
+            const refused = cloudflareRefusal(cfg, approval, options.env ?? process.env);
+            if (refused !== undefined) return err({ type: 'KnowledgeStoreUnavailable', store: 'cloudflare', message: refused });
             const credentials = knowledgeCredentials(options.env ?? process.env);
-            const loopback = LOOPBACK.includes(new URL(knowledge.url).hostname);
-            if (!credentials.ok && !loopback)
-                return err({ type: 'KnowledgeStoreUnavailable', store: 'cloudflare', message: missingCredentialsMessage(credentials.error) });
             const store = cloudflareKnowledgeStore({
                 url: knowledge.url,
                 ...(credentials.ok && { serviceToken: credentials.value }),
@@ -121,6 +120,47 @@ export async function openKnowledgeStore(
         }
     }
 }
+
+/**
+ * Why the `cloudflare` store of `cfg` cannot be used now: its settings not approved as they are (`approvedFor`), or
+ * no service token in `env` for a Worker that is not on a loopback host. Undefined when it can.
+ */
+function cloudflareRefusal(cfg: ResolvedConfig, approval: SettingsApproval | undefined, env: Readonly<Record<string, string | undefined>>): string | undefined {
+    const { knowledge } = cfg;
+    if (knowledge.store !== 'cloudflare') return undefined;
+    if (!approvedFor(approval, cfg)) return NOT_APPROVED;
+    const credentials = knowledgeCredentials(env);
+    if (!credentials.ok && !LOOPBACK.includes(new URL(knowledge.url).hostname)) return missingCredentialsMessage(credentials.error);
+    return undefined;
+}
+
+/**
+ * Whether the AI's answerer and runner get the knowledge tools of `dt mcp` (ADR 0031, Consequences), decided when the
+ * agent starts: `{ usable: true }` for a `files` store whose `knowledge/` directory exists in the workspace, or a
+ * `cloudflare` store that `openKnowledgeStore` would open (its settings approved as they are now, a service token in
+ * the environment); else why not. A `files` store without `knowledge/` has nothing to read yet, and is no reason to
+ * say so (`quiet`). `dt mcp` checks the approval again by itself, as Claude Code starts it.
+ */
+export function knowledgeForAgents(
+    cfg: ResolvedConfig,
+    approval: SettingsApproval | undefined,
+    env: Readonly<Record<string, string | undefined>> = process.env,
+): { readonly usable: true } | { readonly usable: false; readonly reason: string; readonly quiet?: boolean } {
+    if (cfg.knowledge.store === 'files') {
+        const dir = path.join(cfg.root, KNOWLEDGE_DIR);
+        return isDirectory(dir) ? { usable: true } : { usable: false, reason: `no ${KNOWLEDGE_DIR}/ in the workspace`, quiet: true };
+    }
+    const refused = cloudflareRefusal(cfg, approval, env);
+    return refused === undefined ? { usable: true } : { usable: false, reason: refused };
+}
+
+const isDirectory = (p: string): boolean => {
+    try {
+        return statSync(p).isDirectory();
+    } catch {
+        return false;
+    }
+};
 
 /** Longest delay `setTimeout` keeps (about 24.8 days). */
 const MAX_TIMER_MS = 2 ** 31 - 1;

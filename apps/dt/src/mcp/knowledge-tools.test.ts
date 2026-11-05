@@ -5,6 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { createFilesKnowledgeStore, Knowledge, type KnowledgeStore } from '@domaintrail/knowledge';
+import { KNOWLEDGE_TOOLS } from '@domaintrail/agent';
 import { analyzeStormings } from '@domaintrail/storming';
 import { knowledgeTools, LIST_TEXT_CHARS, stickyIndex, type StickyIndex } from './knowledge-tools.js';
 import type { McpTool } from './protocol.js';
@@ -110,6 +111,13 @@ beforeAll(async () => {
 });
 afterAll(async () => {
     await rm(root, { recursive: true, force: true });
+});
+
+describe('the tools the agent is allowed', () => {
+    test("are these, by name: the answerer's and the runner's Claude Code allows them as mcp__domaintrail__<name>", () => {
+        const tools = knowledgeTools({ access: { unavailable: 'none' }, stickies: async () => new Map() });
+        expect(tools.map((t) => t.name)).toEqual([...KNOWLEDGE_TOOLS]);
+    });
 });
 
 describe('stickyIndex', () => {

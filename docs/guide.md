@@ -3137,7 +3137,9 @@ writes the same knowledge. Deploying and upgrading the Worker, its Access applic
 `node_modules/domaintrail/dist/knowledge-worker/README.md`.
 
 **Reading it.** In a session, the Live View marks the stickies that have knowledge, lists a sticky's items and every
-item in the ナレッジ tab ([the Live View](live-view.md#knowledge)). Outside one, Claude Code reads it through `dt mcp`
+item in the ナレッジ tab ([the Live View](live-view.md#knowledge)). The session's AI reads it too: its answers and
+runs get `dt mcp`'s tools when the store is usable when `dt agent` starts (`files`: `knowledge/` exists; `cloudflare`:
+approved, with the token), and cite the items they rest on. Outside one, Claude Code reads it through `dt mcp`
 (below), and with `cloudflare` the business reads it on the Worker's page (`dt publish`, below).
 
 **Conflicts.** Two items that contradict each other are linked and shown side by side, with ホットスポットにする (a
