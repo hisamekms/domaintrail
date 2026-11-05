@@ -27,7 +27,7 @@ import {
 } from './ports.js';
 import { checkSvgOptions, exportSvg, SvgExportError, type SvgExportOptions } from './export-svg.js';
 import { lookup, showJson, showText } from './show.js';
-import { approveSettings, NotApproved, type StartFlags } from './trust.js';
+import { approveSettings, checkApproved, NotApproved, type SettingsApproval, type StartFlags } from './trust.js';
 import guide from '../../../../docs/guide.md' with { type: 'text' };
 
 export interface CliIO {
@@ -127,7 +127,9 @@ async function knowledgeCheck(root: string, analysis: Analysis): Promise<Analysi
 async function runCheck(config: ResolvedConfig, io: CliIO, deps: CliDeps, report?: JsonReport): Promise<Analysis> {
     const root = config.root;
     const sources = await deps.loadWorkspace(root, config.sources, config.respectGitignore);
-    const analysis = await knowledgeCheck(root, await journeyCheck(root, await analyze(sources)));
+    const checked = await journeyCheck(root, await analyze(sources));
+    // the items' files are the `files` store's: with `cloudflare` the workspace has none to check
+    const analysis = config.knowledge.store === 'files' ? await knowledgeCheck(root, checked) : checked;
     const errors = analysis.diagnostics.filter((d) => d.severity === 'error').length;
     const warnings = analysis.diagnostics.length - errors;
     const noFiles = noSourcesMessage(config);
@@ -175,6 +177,7 @@ Examples:
   dt fmt                        rewrite every .dt and .dtes file in the canonical layout (run it after editing)
   dt open                       the Live View with the chat and the AI at http://127.0.0.1:4321 (runs until Ctrl+C)
   dt lsp                        language server over stdio, started by editors and AI agents
+  dt mcp                        MCP server over stdio: the project's knowledge for Claude Code (read-only)
   dt show Sales.Order           one element resolved (field sets, labels, commands, used by), instead of reading files
   dt export sources             the .dt and .dtes files and the config as <workspace>-sources.zip, to share without git
   dt export svg --storming S -o s.svg   a diagram as the Live View's 書き出し → SVG saves it, without a browser
@@ -193,7 +196,8 @@ Prints \`file:line:col - error CODE: message\` per problem (errors on stderr, wa
 indented \`hint:\` line when there is a suggested fix, then a summary line. With --format json, prints one JSON document
 on stdout instead: {"diagnostics": [...], "summary": {...}}, or {"error": "..."} when the check could not run.
 Checks the Event Storming files (.dtes) too, their \`ref\`s against the .dt model; their rules start with S.
-Checks the knowledge items' files (knowledge/kn_*.md) when there are any; their rules start with K.
+Checks the knowledge items' files (knowledge/kn_*.md) when there are any and the knowledge store is \`files\`; their
+rules start with K.
 Exits 0 when there are no errors, 1 on errors or when no .dt or .dtes file is found, 2 on an invalid config.
 
 Examples:
@@ -888,6 +892,30 @@ Examples:
         });
 
     program
+        .command('mcp')
+        .description("Start the MCP server over stdio: the project's knowledge, read-only, for Claude Code (runs until the client exits).")
+        .addHelpText(
+            'after',
+            `
+Speaks the Model Context Protocol on stdin/stdout, with three read-only tools over the knowledge store of the
+workspace (\`knowledge\` in the config; ADR 0031): knowledge_for_element (a sticky 'Storming.LocalId', or a .dt element
+'dt:Context.Aggregate.command' through the stickies that \`ref\` it), knowledge_search and knowledge_get. Started by an
+MCP client, not by hand; nothing but the protocol is written to stdout. With the \`cloudflare\` store, the
+workspace's security-relevant settings must have been approved (by \`dt open\`, \`dt collab\` or \`dt agent\` in a
+terminal): until then the tools answer that they are not. See \`dt guide mcp\`.
+
+Examples:
+  claude mcp add domaintrail -- dt mcp
+  dt -r domain mcp`,
+        )
+        .action(async () => {
+            const cfg = await config();
+            // no one to ask (stdin is the protocol's): the settings approved before, by `dt open`, `dt collab` or `dt agent`
+            const approval = await checkApproved(cfg, deps.trust);
+            await deps.startMcpServer({ config: cfg, approval, log: io.err });
+        });
+
+    program
         .command('show')
         .description('Print the resolved model of one element, state, command or context (all contexts without a name).')
         .argument('[name]', 'Sales.Order, Order, Sales, Sales.Order.confirm (a command), Sales.Order.Confirmed (a state)')
@@ -1058,9 +1086,12 @@ Examples:
         for (const line of readScopeLines(cfg, roles)) io.out(line);
     };
 
-    /** Starts only with approved security-relevant settings (`approveSettings`); refused: a one-line error. */
-    const approve = async (cfg: ResolvedConfig, yes: boolean | undefined, flags: StartFlags = {}): Promise<void> => {
-        await approveSettings(
+    /**
+     * Starts only with approved security-relevant settings (`approveSettings`); refused: a one-line error. Returns the
+     * proof of the approval, which opening the `cloudflare` knowledge store needs (`openKnowledgeStore`).
+     */
+    const approve = async (cfg: ResolvedConfig, yes: boolean | undefined, flags: StartFlags = {}): Promise<SettingsApproval> =>
+        approveSettings(
             cfg,
             { ...(deps.trust && { trust: deps.trust }), ...(deps.confirm && { confirm: (q: string) => deps.confirm!(q) }), out: io.out },
             yes ?? false,
@@ -1069,7 +1100,6 @@ Examples:
             if (e instanceof NotApproved) throw new CliError(e.message);
             throw e;
         });
-    };
 
     const config = async () => {
         const start = path.resolve(program.opts().root);

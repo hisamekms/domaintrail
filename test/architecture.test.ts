@@ -26,6 +26,7 @@ const OUTSIDE_PACKAGE: Record<string, string[]> = {
     'apps/dt/src/cli/main.ts': ['docs/guide.md'],
     'apps/dt/src/cli/export-svg.ts': ['apps/web/styles.css'],
     'capabilities/generation/src/core/tests.ts': ['package.json'],
+    'apps/dt/src/mcp/start.ts': ['package.json'],
     'apps/web/app/shell.tsx': ['assets/brand/logo-dark.svg', 'assets/brand/logo-light.svg'],
 };
 

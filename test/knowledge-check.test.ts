@@ -1,5 +1,6 @@
 // `dt check` on the knowledge items' files (ADR 0031; the plan's K2): an item about a sticky the workspace's `.dtes` lack
-// is a warning (K002: exit 0), a file that does not read an error (K001: exit 1); without `knowledge/` nothing changes.
+// is a warning (K002: exit 0), a file that does not read an error (K001: exit 1); without `knowledge/` nothing changes,
+// nor with the `cloudflare` store (its items are not files of the workspace).
 import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -68,5 +69,12 @@ describe('dt check on knowledge/', () => {
         expect(r.err).toContainEqual(
             'knowledge/kn_00000001.md:1:1 - error K001: The knowledge item does not read: An item file starts with a front matter: a line "---", the fields, and a line "---".',
         );
+    });
+
+    test("with the 'cloudflare' store, the workspace's knowledge/ is not checked", async () => {
+        const config = JSON.stringify({ knowledge: { store: 'cloudflare', project: 'shop', url: 'https://knowledge.example.com' } });
+        const r = await check(await workspace({ 'domaintrail.jsonc': config, 'b.dt': DT, 'i.dtes': DTES, 'knowledge/kn_00000001.md': 'just text\n' }));
+        expect(r.code).toBe(0);
+        expect([...r.out, ...r.err].join('\n')).not.toContain('K00');
     });
 });
