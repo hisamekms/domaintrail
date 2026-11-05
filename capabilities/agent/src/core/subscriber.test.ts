@@ -83,6 +83,9 @@ describe('the prompt', () => {
         expect(prompt).toContain(`title: a short title (about ${REPLY_LIMITS.titleAim} characters, at most ${REPLY_LIMITS.title}`);
         expect(prompt).toContain(`1 to ${REPLY_LIMITS.questions}`);
         expect(prompt).toContain('Never add an "other" or free-text option');
+        // the answer and the summary are shown as the chat's Markdown, as the answerer's: one heading level, no links
+        expect(prompt).toContain('It is shown as Markdown, as the\n  answer is.');
+        expect(prompt).toContain('use at most one heading level (`#`), and no links or images');
         expect(prompt).toContain('`@{Sales.Order}`');
         expect(prompt).toContain('`@{es:Returns/ReturnRequested}`');
         expect(prompt).not.toContain(OUTCOME_MARKER);
