@@ -6,6 +6,12 @@
 // - `cloudflare`: the Worker at `knowledge.url`, reached with the Access service token of the environment
 //   (`knowledgeCredentials`). Without one, the result says which variables to set (a Worker on a loopback host —
 //   `wrangler dev` — is reached without one).
+//
+// The token goes where `knowledge.url` says, and that comes from the workspace's config, which a commit can change. So
+// the `cloudflare` store is built only with the proof that the workspace's security-relevant settings — `knowledge.url`
+// and `knowledge.project` among them — were approved as they are now (`SettingsApproval`, made only by
+// `approveSettings` and `checkApproved` of cli/trust.ts, checked by `approvedFor`): no caller can skip the check, and a
+// proof made before the URL changed proves nothing.
 import * as path from 'node:path';
 import {
     cloudflareKnowledgeStore,
@@ -20,6 +26,8 @@ import {
     type ResolvedKnowledgeConfig,
     type Result,
 } from '@domaintrail/knowledge';
+import { approvedFor, type SettingsApproval } from '../cli/trust.js';
+import type { ResolvedConfig } from '../config/config.js';
 import { workspaceState } from './state.js';
 
 /** The store of a workspace, opened, and the project every call names. */
@@ -54,16 +62,22 @@ export interface KnowledgeStoreOptions {
 
 const LOOPBACK = ['localhost', '127.0.0.1', '[::1]'];
 
+/** Why the `cloudflare` store is not opened without the approval of the settings. */
+export const NOT_APPROVED =
+    "the knowledge store 'cloudflare' sends its service token to knowledge.url, and this workspace's settings (knowledge.url and knowledge.project among them) are not approved as they are now: run `dt open` (or `dt collab`, `dt agent`) in a terminal once to approve them";
+
 /**
- * Opens the knowledge store the workspace at `root` names in `knowledge` (the resolved config's section). Rejects with
- * `StateError` when the state directory cannot be used; the store itself is opened lazily (nothing is read or written
- * until a call).
+ * Opens the knowledge store `cfg` names in its `knowledge` section, for the workspace at `cfg.root`. The `cloudflare`
+ * store needs `approval`, the proof that `cfg`'s security-relevant settings were approved as they are now (see the
+ * module's comment); the `files` store sends nothing anywhere and needs none. Rejects with `StateError` when the state
+ * directory cannot be used; the store itself is opened lazily (nothing is read or written until a call).
  */
 export async function openKnowledgeStore(
-    knowledge: ResolvedKnowledgeConfig,
-    root: string,
+    cfg: ResolvedConfig,
+    approval: SettingsApproval | undefined,
     options: KnowledgeStoreOptions = {},
 ): Promise<Result<OpenedKnowledgeStore, KnowledgeStoreUnavailable>> {
+    const { knowledge, root } = cfg;
     switch (knowledge.store) {
         case 'files': {
             const state = options.stateDir ? await options.stateDir(root) : (await workspaceState(root, (line) => console.error(line))).state;
@@ -76,6 +90,7 @@ export async function openKnowledgeStore(
             return ok({ kind: 'files', store, project: knowledge.project, sweep: () => store.sweep() });
         }
         case 'cloudflare': {
+            if (!approvedFor(approval, cfg)) return err({ type: 'KnowledgeStoreUnavailable', store: 'cloudflare', message: NOT_APPROVED });
             const credentials = knowledgeCredentials(options.env ?? process.env);
             const loopback = LOOPBACK.includes(new URL(knowledge.url).hostname);
             if (!credentials.ok && !loopback)

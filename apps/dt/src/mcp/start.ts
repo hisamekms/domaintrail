@@ -24,11 +24,12 @@ export interface McpServerIO {
 
 /** Serves `dt mcp` on stdin and stdout (or `io`'s streams) until the client closes stdin. */
 export async function startMcpServer(options: McpServerStartOptions, io: McpServerIO): Promise<void> {
-    const opened = await openKnowledgeStore(options.knowledge, options.root, io.store);
+    const { config } = options;
+    const opened = await openKnowledgeStore(config, options.approval, io.store);
     const access: KnowledgeAccess = opened.ok ? { store: opened.value.store, project: opened.value.project } : { unavailable: opened.error.message };
     if (!opened.ok) options.log(`dt mcp: ${opened.error.message}; the tools answer with this error`);
     const stickies = async (): Promise<StickyIndex> => {
-        const sources = (await io.loadWorkspace(options.root, options.sources, options.respectGitignore)).filter((s) => isStormingFile(s.path));
+        const sources = (await io.loadWorkspace(config.root, config.sources, config.respectGitignore)).filter((s) => isStormingFile(s.path));
         return stickyIndex((await analyzeStormings(sources, undefined)).stormings);
     };
     await serveMcp({

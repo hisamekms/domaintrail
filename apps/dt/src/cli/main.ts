@@ -27,7 +27,7 @@ import {
 } from './ports.js';
 import { checkSvgOptions, exportSvg, SvgExportError, type SvgExportOptions } from './export-svg.js';
 import { lookup, showJson, showText } from './show.js';
-import { approveSettings, NotApproved, type StartFlags } from './trust.js';
+import { approveSettings, checkApproved, NotApproved, type SettingsApproval, type StartFlags } from './trust.js';
 import guide from '../../../../docs/guide.md' with { type: 'text' };
 
 export interface CliIO {
@@ -900,7 +900,9 @@ Examples:
 Speaks the Model Context Protocol on stdin/stdout, with three read-only tools over the knowledge store of the
 workspace (\`knowledge\` in the config; ADR 0031): knowledge_for_element (a sticky 'Storming.LocalId', or a .dt element
 'dt:Context.Aggregate.command' through the stickies that \`ref\` it), knowledge_search and knowledge_get. Started by an
-MCP client, not by hand; nothing but the protocol is written to stdout. See \`dt guide mcp\`.
+MCP client, not by hand; nothing but the protocol is written to stdout. With the \`cloudflare\` store, the
+workspace's security-relevant settings must have been approved (by \`dt open\`, \`dt collab\` or \`dt agent\` in a
+terminal): until then the tools answer that they are not. See \`dt guide mcp\`.
 
 Examples:
   claude mcp add domaintrail -- dt mcp
@@ -908,13 +910,9 @@ Examples:
         )
         .action(async () => {
             const cfg = await config();
-            await deps.startMcpServer({
-                root: cfg.root,
-                sources: cfg.sources,
-                respectGitignore: cfg.respectGitignore,
-                knowledge: cfg.knowledge,
-                log: io.err,
-            });
+            // no one to ask (stdin is the protocol's): the settings approved before, by `dt open`, `dt collab` or `dt agent`
+            const approval = await checkApproved(cfg, deps.trust);
+            await deps.startMcpServer({ config: cfg, approval, log: io.err });
         });
 
     program
@@ -1088,9 +1086,12 @@ Examples:
         for (const line of readScopeLines(cfg, roles)) io.out(line);
     };
 
-    /** Starts only with approved security-relevant settings (`approveSettings`); refused: a one-line error. */
-    const approve = async (cfg: ResolvedConfig, yes: boolean | undefined, flags: StartFlags = {}): Promise<void> => {
-        await approveSettings(
+    /**
+     * Starts only with approved security-relevant settings (`approveSettings`); refused: a one-line error. Returns the
+     * proof of the approval, which opening the `cloudflare` knowledge store needs (`openKnowledgeStore`).
+     */
+    const approve = async (cfg: ResolvedConfig, yes: boolean | undefined, flags: StartFlags = {}): Promise<SettingsApproval> =>
+        approveSettings(
             cfg,
             { ...(deps.trust && { trust: deps.trust }), ...(deps.confirm && { confirm: (q: string) => deps.confirm!(q) }), out: io.out },
             yes ?? false,
@@ -1099,7 +1100,6 @@ Examples:
             if (e instanceof NotApproved) throw new CliError(e.message);
             throw e;
         });
-    };
 
     const config = async () => {
         const start = path.resolve(program.opts().root);

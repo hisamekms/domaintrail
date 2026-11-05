@@ -79,4 +79,33 @@ describe('dt mcp', () => {
         expect(await exited).toBe(0);
         expect((await lines.next()).done).toBe(true);
     });
+
+    test('with the cloudflare store and settings not approved: the tools refuse, and nothing is asked on stdin', async () => {
+        const root = await mkdtemp(path.join(tmpdir(), 'domaintrail-mcp-'));
+        const home = await mkdtemp(path.join(tmpdir(), 'domaintrail-mcp-home-'));
+        dirs.push(root, home);
+        await writeFile(
+            path.join(root, 'domaintrail.jsonc'),
+            JSON.stringify({ knowledge: { store: 'cloudflare', project: 'shop', url: 'https://knowledge.example.com' } }),
+        );
+        await writeFile(path.join(root, 'sales.dt'), DT);
+        const child = spawn(process.execPath, [BIN, '-r', root, 'mcp'], {
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: {
+                ...process.env,
+                XDG_CONFIG_HOME: home,
+                DOMAINTRAIL_STATE_DIR: home,
+                DOMAINTRAIL_KNOWLEDGE_CLIENT_ID: 'id',
+                DOMAINTRAIL_KNOWLEDGE_CLIENT_SECRET: 'secret',
+            },
+        });
+        const exited = new Promise<number | null>((resolve) => child.on('exit', resolve));
+        const lines = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
+        child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'knowledge_search', arguments: {} } })}\n`);
+        const answer = JSON.parse(String((await lines.next()).value)) as { result: { content: { text: string }[]; isError?: boolean } };
+        expect(answer.result.isError).toBe(true);
+        expect(answer.result.content[0].text).toContain('are not approved as they are now: run `dt open`');
+        child.stdin.end();
+        expect(await exited).toBe(0);
+    });
 });

@@ -3062,7 +3062,10 @@ names (`files`: the workspace's `knowledge/`; `cloudflare`: the Worker, with the
   quotes; with `history`, its earlier versions (the `files` store keeps none: `git log -p knowledge/<id>.md`).
 
 The stormings are read again on every call. A wrong input, an unknown item or a store that cannot be reached is an
-error of the tool, with its reason. Register it in Claude Code from the workspace (with `dt` on the `PATH`, or
+error of the tool, with its reason. With `cloudflare`, the service token goes to `knowledge.url`, so `dt mcp` opens the
+store only when the workspace's security-relevant settings are approved as they are now (it cannot ask: its stdin is
+the protocol's); approve them by starting `dt open`, `dt collab` or `dt agent` in a terminal once, and again after a
+change of `knowledge.url` or `knowledge.project`. Register it in Claude Code from the workspace (with `dt` on the `PATH`, or
 `npx dt mcp`):
 
 ```sh

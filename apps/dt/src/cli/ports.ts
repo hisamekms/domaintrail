@@ -1,9 +1,9 @@
 import type { SourceFile } from '@domaintrail/kernel';
 import type { AnswerConfig, Practice, RunConfig, TriageConfig } from '@domaintrail/agent';
-import type { ResolvedClassifierConfig, ResolvedCollabConfig, ResolvedConfig, ResolvedKnowledgeConfig } from '../config/config.js';
+import type { ResolvedClassifierConfig, ResolvedCollabConfig, ResolvedConfig } from '../config/config.js';
 import type { MessageTemplateConfig } from '@domaintrail/collaboration';
 import type { LanguageServerOptions } from '../lsp/server.js';
-import type { TrustStore } from './trust.js';
+import type { SettingsApproval, TrustStore } from './trust.js';
 import type { LaidOutGraph, StructureLevel } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 
@@ -123,10 +123,9 @@ export interface DiagramViews {
 
 /** What `dt mcp` reads of the configuration. */
 export interface McpServerStartOptions {
-    root: string;
-    sources: readonly string[];
-    respectGitignore: boolean;
-    knowledge: ResolvedKnowledgeConfig;
+    config: ResolvedConfig;
+    /** The proof that the workspace's security-relevant settings are approved (`checkApproved`), if they are. */
+    approval: SettingsApproval | undefined;
     /** Where it says what goes wrong (stderr: stdout is the protocol's). */
     log: (line: string) => void;
 }
