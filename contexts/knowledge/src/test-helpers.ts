@@ -13,6 +13,7 @@ export const version = (v: number): Knowledge.ItemVersion => known(Knowledge.mak
 export const sessionRef = (v: string): Knowledge.SessionRef => known(Knowledge.makeSessionRef(v));
 export const userName = (v: string): Knowledge.UserName => known(Knowledge.makeUserName(v));
 export const reason = (v: string): Knowledge.Reason => known(Knowledge.makeReason(v));
+export const stickyRef = (v: string): Knowledge.StickyRef => known(Knowledge.makeStickyRef(v));
 
 export const at = new Date('2026-11-05T09:00:00Z');
 export const later = new Date('2026-11-05T09:05:00Z');
@@ -101,6 +102,7 @@ export function memoryStore(items: readonly Knowledge.LiveKnowledgeItem[] = []):
         get: unused,
         correct: unused,
         unlinkConflict: unused,
+        handOverToHotspot: unused,
         delete: unused,
         deleteSession: unused,
         restore: unused,

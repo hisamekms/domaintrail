@@ -149,6 +149,36 @@ describe('extractions', () => {
         expect(plain((await store.get(project, id(1)))?.item.conflictsWith)).toEqual([id(2)]);
     });
 
+    test('hands a conflict over to a hotspot (ホットスポットにする): both sides about it, unlinked, versions kept, audited with the hotspot', async () => {
+        const project = newProject();
+        await store.applyExtraction(project, extraction('s1', 1, [add(1, '締めは前日17時')]));
+        await store.applyExtraction(
+            project,
+            extraction('s2', 1, [{ kind: 'Conflict', id: id(2), content: content('締めは当日9時'), sources: [source('s2', 'm1')], item: id(1), base: 1 }]),
+        );
+        const hotspot = wire.stickyRef('Ordering.CutOffUnclear', 'test');
+        const r = await store.handOverToHotspot(project, id(2), id(1), hotspot, user);
+        expect(r.ok && plain(r.value.map((i) => [i.id, i.content.about, i.conflictsWith, i.version]))).toEqual([
+            [id(2), ['Ordering.CreateSpecification', 'Ordering.CutOffUnclear'], [], 1],
+            [id(1), ['Ordering.CreateSpecification', 'Ordering.CutOffUnclear'], [], 1],
+        ]);
+        expect(plain(await store.counts(project, 'Ordering'))).toEqual([
+            { sticky: 'Ordering.CreateSpecification', hasItems: true, hasConflict: false },
+            { sticky: 'Ordering.CutOffUnclear', hasItems: true, hasConflict: false },
+        ]);
+        expect(texts(await store.about(project, [hotspot]))).toEqual(['締めは当日9時', '締めは前日17時']);
+        const audit = (await store.audit(project, { item: id(1) })).items[0];
+        expect(plain([audit?.operation, audit?.actor, audit?.reason])).toEqual([
+            'handOverToHotspot',
+            { kind: 'Person', user },
+            'hotspot Ordering.CutOffUnclear',
+        ]);
+        expect(await store.handOverToHotspot(project, id(9), id(1), hotspot, user)).toEqual({
+            ok: false,
+            error: { type: 'KnowledgeItemNotFound', itemId: id(9) },
+        });
+    });
+
     test('drops the operations on an item a person corrected or deleted meanwhile, and keeps the person’s change', async () => {
         const project = newProject();
         await store.applyExtraction(project, extraction('s1', 1, [add(1, '締めは月末'), add(2, '請求は翌月')]));

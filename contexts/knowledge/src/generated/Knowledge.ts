@@ -907,12 +907,13 @@ export type AuditOperation =
     | 'correct' // 直した
     | 'delete' // 消した
     | 'restore' // 元に戻した
-    | 'unlinkConflict'; // 食い違いを外した
+    | 'unlinkConflict' // 食い違いを外した
+    | 'handOverToHotspot'; // ホットスポットに引き継いだ
 
 /**
  * 監査の記録
  * 監査のログの1行: だれが・どのナレッジに・何を・なぜ。消したナレッジの理由は掃除が消す（発言を引くことがあるため）。
- * @see contexts/knowledge/model/extraction.dt:59
+ * @see contexts/knowledge/model/extraction.dt:60
  */
 export interface AuditEntry {
     /** ナレッジ */
@@ -931,7 +932,7 @@ export interface AuditEntry {
 
 /**
  * Whether two AuditEntry values are equal: by all their fields (ADR 0016).
- * @see contexts/knowledge/model/extraction.dt:59
+ * @see contexts/knowledge/model/extraction.dt:60
  */
 export function equalAuditEntry(a: AuditEntry, b: AuditEntry): boolean {
     return a.item === b.item && a.version === b.version && a.operation === b.operation && equalActor(a.actor, b.actor) && sameOptional(a.reason, b.reason, ($14: Reason, $15: Reason) => $14 === $15) && a.at.getTime() === b.at.getTime();
@@ -940,7 +941,7 @@ export function equalAuditEntry(a: AuditEntry, b: AuditEntry): boolean {
 /**
  * メッセージの ID
  * 出典のメッセージ1つの ID。
- * @see contexts/knowledge/model/extraction.dt:69
+ * @see contexts/knowledge/model/extraction.dt:70
  */
 export interface MessageKey {
     /** セッション */
@@ -951,7 +952,7 @@ export interface MessageKey {
 
 /**
  * Whether two MessageKey values are equal: by all their fields (ADR 0016).
- * @see contexts/knowledge/model/extraction.dt:69
+ * @see contexts/knowledge/model/extraction.dt:70
  */
 export function equalMessageKey(a: MessageKey, b: MessageKey): boolean {
     return a.session === b.session && a.message === b.message;
@@ -961,7 +962,7 @@ export function equalMessageKey(a: MessageKey, b: MessageKey): boolean {
  * 墨消し
  * 墨消しのログの1行: 掃除が消したナレッジと、その出典のメッセージ。ID だけなので、ずっと残す。プロジェクトのどの dt も
  * 読んだところから先を読み、自分のセッションのデータベースにあるメッセージを墨消しする。
- * @see contexts/knowledge/model/extraction.dt:76
+ * @see contexts/knowledge/model/extraction.dt:77
  */
 export interface Redaction {
     /** ナレッジ */
@@ -972,7 +973,7 @@ export interface Redaction {
 
 /**
  * Whether two Redaction values are equal: by all their fields (ADR 0016).
- * @see contexts/knowledge/model/extraction.dt:76
+ * @see contexts/knowledge/model/extraction.dt:77
  */
 export function equalRedaction(a: Redaction, b: Redaction): boolean {
     return a.item === b.item && sameList(a.messages, b.messages, equalMessageKey);
@@ -1472,8 +1473,70 @@ export function checkUnlinkConflictKnowledgeItemRequires(knowledgeItem: LiveKnow
 }
 
 /**
+ * The parameters of KnowledgeItem.handOverToHotspot, by name.
+ * @see contexts/knowledge/model/item.dt:87
+ */
+export interface HandOverToHotspotKnowledgeItemParams {
+    /** ホットスポット */
+    readonly hotspot: StickyRef;
+    /** 食い違うナレッジ */
+    readonly other: KnowledgeItemId;
+    /** ユーザー */
+    readonly by: UserName;
+    readonly at: Timestamp;
+}
+
+/**
+ * KnowledgeItem.handOverToHotspot (Live -> Live)
+ * ホットスポットに引き継ぐ
+ * 人が「ホットスポットにする」と決めた食い違いを、AI が足したホットスポットに引き継ぐ（ADR 0031 の 4）: ホットスポットを
+ * 付箋に足し、食い違いのつなぎを外す。ひとつの決定で、中身の本文・ラベルも版も変えない（ストアは相手のナレッジも同じく
+ * 引き継ぐ）。監査のログには、ホットスポットを理由として残す。
+ * @requires notItself (自分とは食い違わない) else ConflictWithItself: other != id
+ * @changes content, conflictsWith, updatedAt
+ * @emits KnowledgeHandedOverToHotspot — exactly once when the command succeeds
+ * @see contexts/knowledge/model/item.dt:87
+ */
+export type HandOverToHotspotKnowledgeItem = (
+    knowledgeItem: LiveKnowledgeItem,
+    params: HandOverToHotspotKnowledgeItemParams,
+) => Result<{
+    readonly Live: {
+        readonly aggregate: LiveKnowledgeItem;
+        readonly events: { readonly KnowledgeHandedOverToHotspot: KnowledgeHandedOverToHotspot };
+    };
+}, ConflictWithItself>;
+
+/**
+ * KnowledgeItem.handOverToHotspot, decided per source state; implement it with `decide(KnowledgeItemShape, …)` from the runtime.
+ * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
+ * @requires notItself (自分とは食い違わない) else ConflictWithItself: other != id
+ * @changes content, conflictsWith, updatedAt
+ * Live -> Live — set: content, conflictsWith, updatedAt; carried over: id, sources, version, createdIn, createdAt
+ * @see contexts/knowledge/model/item.dt:87
+ */
+export type HandOverToHotspotKnowledgeItemDecision = {
+    /** @emits KnowledgeHandedOverToHotspot — exactly once when the command succeeds */
+    readonly Live: (knowledgeItem: LiveKnowledgeItem, params: HandOverToHotspotKnowledgeItemParams) => Result<{
+        readonly Live: {
+            readonly set: { readonly content: ItemContent; readonly conflictsWith: readonly KnowledgeItemId[]; readonly updatedAt: Timestamp };
+            readonly events: { readonly KnowledgeHandedOverToHotspot: KnowledgeHandedOverToHotspot };
+        };
+    }, ConflictWithItself>;
+};
+
+/**
+ * The first requirement of KnowledgeItem.handOverToHotspot that does not hold, in declaration order; `undefined` when all hold.
+ * @see contexts/knowledge/model/item.dt:87
+ */
+export function checkHandOverToHotspotKnowledgeItemRequires(knowledgeItem: LiveKnowledgeItem, params: HandOverToHotspotKnowledgeItemParams): 'notItself' | undefined {
+    if (!(!(params.other === knowledgeItem.id))) return 'notItself';
+    return undefined;
+}
+
+/**
  * The parameters of KnowledgeItem.correct, by name.
- * @see contexts/knowledge/model/item.dt:85
+ * @see contexts/knowledge/model/item.dt:94
  */
 export interface CorrectKnowledgeItemParams {
     /** 中身 */
@@ -1489,7 +1552,7 @@ export interface CorrectKnowledgeItemParams {
  * 人が本文・ラベル・付箋を直す。いつも新しい版になる。
  * @changes content, version, updatedAt
  * @emits KnowledgeItemCorrected — exactly once when the command succeeds
- * @see contexts/knowledge/model/item.dt:85
+ * @see contexts/knowledge/model/item.dt:94
  */
 export type CorrectKnowledgeItem = (
     knowledgeItem: LiveKnowledgeItem,
@@ -1506,7 +1569,7 @@ export type CorrectKnowledgeItem = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @changes content, version, updatedAt
  * Live -> Live — set: content, version, updatedAt; carried over: id, sources, conflictsWith, createdIn, createdAt
- * @see contexts/knowledge/model/item.dt:85
+ * @see contexts/knowledge/model/item.dt:94
  */
 export type CorrectKnowledgeItemDecision = {
     /** @emits KnowledgeItemCorrected — exactly once when the command succeeds */
@@ -1520,7 +1583,7 @@ export type CorrectKnowledgeItemDecision = {
 
 /**
  * The parameters of KnowledgeItem.delete, by name.
- * @see contexts/knowledge/model/item.dt:91
+ * @see contexts/knowledge/model/item.dt:100
  */
 export interface DeleteKnowledgeItemParams {
     /** ユーザー */
@@ -1534,7 +1597,7 @@ export interface DeleteKnowledgeItemParams {
  * 人が消す。
  * @changes none — the command changes no common field
  * @emits KnowledgeItemDeleted — exactly once when the command succeeds
- * @see contexts/knowledge/model/item.dt:91
+ * @see contexts/knowledge/model/item.dt:100
  */
 export type DeleteKnowledgeItem = (
     knowledgeItem: LiveKnowledgeItem,
@@ -1551,7 +1614,7 @@ export type DeleteKnowledgeItem = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @changes none — the command changes no common field
  * Live -> Deleted — set: deletedBy (new in Deleted), deletedAt (new in Deleted); carried over: id, content, sources, version, conflictsWith, createdIn, createdAt, updatedAt
- * @see contexts/knowledge/model/item.dt:91
+ * @see contexts/knowledge/model/item.dt:100
  */
 export type DeleteKnowledgeItemDecision = {
     /** @emits KnowledgeItemDeleted — exactly once when the command succeeds */
@@ -1565,7 +1628,7 @@ export type DeleteKnowledgeItemDecision = {
 
 /**
  * The parameters of KnowledgeItem.restore, by name.
- * @see contexts/knowledge/model/item.dt:96
+ * @see contexts/knowledge/model/item.dt:105
  */
 export interface RestoreKnowledgeItemParams {
     /** ユーザー */
@@ -1579,7 +1642,7 @@ export interface RestoreKnowledgeItemParams {
  * 人が、掃除の前に消したのを取り消す（元に戻す）。
  * @changes none — the command changes no common field
  * @emits KnowledgeItemRestored — exactly once when the command succeeds
- * @see contexts/knowledge/model/item.dt:96
+ * @see contexts/knowledge/model/item.dt:105
  */
 export type RestoreKnowledgeItem = (
     knowledgeItem: DeletedKnowledgeItem,
@@ -1596,7 +1659,7 @@ export type RestoreKnowledgeItem = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @changes none — the command changes no common field
  * Deleted -> Live — set: nothing; carried over: id, content, sources, version, conflictsWith, createdIn, createdAt, updatedAt; dropped: deletedBy, deletedAt
- * @see contexts/knowledge/model/item.dt:96
+ * @see contexts/knowledge/model/item.dt:105
  */
 export type RestoreKnowledgeItemDecision = {
     /** @emits KnowledgeItemRestored — exactly once when the command succeeds */
@@ -1626,6 +1689,8 @@ export interface KnowledgeItemCommands {
     readonly linkConflict: LinkConflictKnowledgeItem;
     /** 食い違いを外す */
     readonly unlinkConflict: UnlinkConflictKnowledgeItem;
+    /** ホットスポットに引き継ぐ */
+    readonly handOverToHotspot: HandOverToHotspotKnowledgeItem;
     /** 直す */
     readonly correct: CorrectKnowledgeItem;
     /** 消す */
@@ -1638,12 +1703,12 @@ export interface KnowledgeItemCommands {
  * Events that the commands of KnowledgeItem may emit.
  * @see contexts/knowledge/model/item.dt:5
  */
-export type KnowledgeItemEvent = KnowledgeItemAdded | KnowledgeSourceAdded | KnowledgeItemRewritten | KnowledgeItemRevised | KnowledgeConflictLinked | KnowledgeConflictUnlinked | KnowledgeItemCorrected | KnowledgeItemDeleted | KnowledgeItemRestored;
+export type KnowledgeItemEvent = KnowledgeItemAdded | KnowledgeSourceAdded | KnowledgeItemRewritten | KnowledgeItemRevised | KnowledgeConflictLinked | KnowledgeConflictUnlinked | KnowledgeHandedOverToHotspot | KnowledgeItemCorrected | KnowledgeItemDeleted | KnowledgeItemRestored;
 
 /**
  * ナレッジを足した
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/knowledge/model/item.dt:104
+ * @see contexts/knowledge/model/item.dt:113
  */
 export interface KnowledgeItemAdded {
     readonly type: 'KnowledgeItemAdded';
@@ -1663,7 +1728,7 @@ export interface KnowledgeItemAdded {
 /**
  * 出典を足した
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/knowledge/model/item.dt:113
+ * @see contexts/knowledge/model/item.dt:122
  */
 export interface KnowledgeSourceAdded {
     readonly type: 'KnowledgeSourceAdded';
@@ -1684,7 +1749,7 @@ export interface KnowledgeSourceAdded {
  * 書き換えた
  * このセッションで作ったナレッジを、版を作らずに書き換えた。
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/knowledge/model/item.dt:123
+ * @see contexts/knowledge/model/item.dt:132
  */
 export interface KnowledgeItemRewritten {
     readonly type: 'KnowledgeItemRewritten';
@@ -1703,7 +1768,7 @@ export interface KnowledgeItemRewritten {
  * 新しい版にした
  * 新しい版を作った。
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/knowledge/model/item.dt:132
+ * @see contexts/knowledge/model/item.dt:141
  */
 export interface KnowledgeItemRevised {
     readonly type: 'KnowledgeItemRevised';
@@ -1721,7 +1786,7 @@ export interface KnowledgeItemRevised {
 /**
  * 食い違いをつないだ
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/knowledge/model/item.dt:140
+ * @see contexts/knowledge/model/item.dt:149
  */
 export interface KnowledgeConflictLinked {
     readonly type: 'KnowledgeConflictLinked';
@@ -1741,7 +1806,7 @@ export interface KnowledgeConflictLinked {
 /**
  * 食い違いを外した
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/knowledge/model/item.dt:149
+ * @see contexts/knowledge/model/item.dt:158
  */
 export interface KnowledgeConflictUnlinked {
     readonly type: 'KnowledgeConflictUnlinked';
@@ -1757,9 +1822,29 @@ export interface KnowledgeConflictUnlinked {
 }
 
 /**
+ * ホットスポットに引き継いだ
+ * @persistent Persisted: storing this event is part of its contract.
+ * @see contexts/knowledge/model/item.dt:166
+ */
+export interface KnowledgeHandedOverToHotspot {
+    readonly type: 'KnowledgeHandedOverToHotspot';
+    /** ナレッジID */
+    readonly itemId: KnowledgeItemId;
+    /** 版 */
+    readonly version: ItemVersion;
+    /** ホットスポット */
+    readonly hotspot: StickyRef;
+    /** 食い違うナレッジ */
+    readonly other: KnowledgeItemId;
+    /** ユーザー */
+    readonly by: UserName;
+    readonly at: Timestamp;
+}
+
+/**
  * 直した
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/knowledge/model/item.dt:157
+ * @see contexts/knowledge/model/item.dt:175
  */
 export interface KnowledgeItemCorrected {
     readonly type: 'KnowledgeItemCorrected';
@@ -1775,7 +1860,7 @@ export interface KnowledgeItemCorrected {
 /**
  * 消した
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/knowledge/model/item.dt:164
+ * @see contexts/knowledge/model/item.dt:182
  */
 export interface KnowledgeItemDeleted {
     readonly type: 'KnowledgeItemDeleted';
@@ -1791,7 +1876,7 @@ export interface KnowledgeItemDeleted {
 /**
  * 元に戻した
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/knowledge/model/item.dt:171
+ * @see contexts/knowledge/model/item.dt:189
  */
 export interface KnowledgeItemRestored {
     readonly type: 'KnowledgeItemRestored';
@@ -1807,7 +1892,7 @@ export interface KnowledgeItemRestored {
 /**
  * 古い版への操作
  * 抽出が見たあとに、ナレッジが変わった（人が直した、ほかの抽出が新しい版にした）。人の変更を残し、操作は捨てる。
- * @see contexts/knowledge/model/item.dt:179
+ * @see contexts/knowledge/model/item.dt:197
  */
 export interface StaleOperation {
     readonly type: 'StaleOperation';
@@ -1816,7 +1901,7 @@ export interface StaleOperation {
 /**
  * 同じ出典
  * 同じメッセージを2回出典にした。
- * @see contexts/knowledge/model/item.dt:182
+ * @see contexts/knowledge/model/item.dt:200
  */
 export interface DuplicateSource {
     readonly type: 'DuplicateSource';
@@ -1825,7 +1910,7 @@ export interface DuplicateSource {
 /**
  * 出典のない食い違い
  * 食い違いの片方に出典がない。
- * @see contexts/knowledge/model/item.dt:185
+ * @see contexts/knowledge/model/item.dt:203
  */
 export interface ConflictWithoutSource {
     readonly type: 'ConflictWithoutSource';
@@ -1834,7 +1919,7 @@ export interface ConflictWithoutSource {
 /**
  * 自分との食い違い
  * 自分と食い違うとした。
- * @see contexts/knowledge/model/item.dt:188
+ * @see contexts/knowledge/model/item.dt:206
  */
 export interface ConflictWithItself {
     readonly type: 'ConflictWithItself';
@@ -1843,7 +1928,7 @@ export interface ConflictWithItself {
 /**
  * ないナレッジ
  * ナレッジがない（ID が違う、掃除が消した）。
- * @see contexts/knowledge/model/item.dt:191
+ * @see contexts/knowledge/model/item.dt:209
  */
 export interface KnowledgeItemNotFound {
     readonly type: 'KnowledgeItemNotFound';
@@ -1854,7 +1939,7 @@ export interface KnowledgeItemNotFound {
 /**
  * あるナレッジ
  * 抽出が足そうとした ID のナレッジがもうある。
- * @see contexts/knowledge/model/item.dt:196
+ * @see contexts/knowledge/model/item.dt:214
  */
 export interface KnowledgeItemExists {
     readonly type: 'KnowledgeItemExists';
@@ -1865,7 +1950,7 @@ export interface KnowledgeItemExists {
 /**
  * 消したナレッジ
  * ナレッジは消してある。
- * @see contexts/knowledge/model/item.dt:201
+ * @see contexts/knowledge/model/item.dt:219
  */
 export interface KnowledgeItemGone {
     readonly type: 'KnowledgeItemGone';
@@ -1874,10 +1959,10 @@ export interface KnowledgeItemGone {
 }
 
 /** Events of Knowledge that are persisted (declared `persistent`). */
-export type PersistentEvent = KnowledgeItemAdded | KnowledgeSourceAdded | KnowledgeItemRewritten | KnowledgeItemRevised | KnowledgeConflictLinked | KnowledgeConflictUnlinked | KnowledgeItemCorrected | KnowledgeItemDeleted | KnowledgeItemRestored;
+export type PersistentEvent = KnowledgeItemAdded | KnowledgeSourceAdded | KnowledgeItemRewritten | KnowledgeItemRevised | KnowledgeConflictLinked | KnowledgeConflictUnlinked | KnowledgeHandedOverToHotspot | KnowledgeItemCorrected | KnowledgeItemDeleted | KnowledgeItemRestored;
 
 /** Events of Knowledge. */
-export type DomainEvent = KnowledgeItemAdded | KnowledgeSourceAdded | KnowledgeItemRewritten | KnowledgeItemRevised | KnowledgeConflictLinked | KnowledgeConflictUnlinked | KnowledgeItemCorrected | KnowledgeItemDeleted | KnowledgeItemRestored;
+export type DomainEvent = KnowledgeItemAdded | KnowledgeSourceAdded | KnowledgeItemRewritten | KnowledgeItemRevised | KnowledgeConflictLinked | KnowledgeConflictUnlinked | KnowledgeHandedOverToHotspot | KnowledgeItemCorrected | KnowledgeItemDeleted | KnowledgeItemRestored;
 
 /** Aggregates of Knowledge. */
 export type Aggregate = KnowledgeItem;

@@ -252,6 +252,7 @@ const AUDIT_OPERATIONS: readonly Knowledge.AuditOperation[] = [
     'delete',
     'restore',
     'unlinkConflict',
+    'handOverToHotspot',
 ];
 
 export const itemId: Decoder<Knowledge.KnowledgeItemId> = branded(Knowledge.makeKnowledgeItemId, str);
@@ -416,6 +417,12 @@ export const liveItems: Decoder<Knowledge.LiveKnowledgeItem[]> = (v, at) => list
 
 /** The body of `POST /knowledge/:id/unlink`: `{ other }`, the item it is said not to conflict with. */
 export const unlinkBody: Decoder<Knowledge.KnowledgeItemId> = (v, at) => itemId(obj(v, at).other, `${at}.other`);
+
+/** The body of `POST /knowledge/:id/hand-over`: `{ other, hotspot }`, the other side of the conflict and the hotspot it goes to. */
+export const handOverBody: Decoder<{ readonly other: Knowledge.KnowledgeItemId; readonly hotspot: Knowledge.StickyRef }> = (v, at) => {
+    const o = obj(v, at);
+    return { other: itemId(o.other, `${at}.other`), hotspot: stickyRef(o.hotspot, `${at}.hotspot`) };
+};
 
 /** The body of `GET /counts`: `{ counts }`. */
 export const stickyCounts: Decoder<StickyCount[]> = (v, at) => list(stickyCount)(obj(v, at).counts, `${at}.counts`);

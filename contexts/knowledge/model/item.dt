@@ -81,6 +81,15 @@ context Knowledge {
       changes conflictsWith, updatedAt
       emits KnowledgeConflictUnlinked
 
+    /// 人が「ホットスポットにする」と決めた食い違いを、AI が足したホットスポットに引き継ぐ（ADR 0031 の 4）: ホットスポットを
+    /// 付箋に足し、食い違いのつなぎを外す。ひとつの決定で、中身の本文・ラベルも版も変えない（ストアは相手のナレッジも同じく
+    /// 引き継ぐ）。監査のログには、ホットスポットを理由として残す。
+    command handOverToHotspot(hotspot: StickyRef "ホットスポット", other: KnowledgeItemId "食い違うナレッジ", by: UserName, at: Timestamp) "ホットスポットに引き継ぐ"
+      Live -> Live
+      requires notItself "自分とは食い違わない" { other != id } else ConflictWithItself
+      changes content, conflictsWith, updatedAt
+      emits KnowledgeHandedOverToHotspot
+
     /// 人が本文・ラベル・付箋を直す。いつも新しい版になる。
     command correct(corrected: ItemContent, by: UserName, at: Timestamp) "直す"
       Live -> Live
@@ -149,6 +158,15 @@ context Knowledge {
   persistent event KnowledgeConflictUnlinked "食い違いを外した" {
     itemId: KnowledgeItemId
     version: ItemVersion
+    other: KnowledgeItemId "食い違うナレッジ"
+    by: UserName
+    at: Timestamp
+  }
+
+  persistent event KnowledgeHandedOverToHotspot "ホットスポットに引き継いだ" {
+    itemId: KnowledgeItemId
+    version: ItemVersion
+    hotspot: StickyRef "ホットスポット"
     other: KnowledgeItemId "食い違うナレッジ"
     by: UserName
     at: Timestamp

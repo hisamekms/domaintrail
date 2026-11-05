@@ -45,6 +45,7 @@ export interface Arbitraries {
     readonly KnowledgeItemRevised: fc.Arbitrary<Knowledge.KnowledgeItemRevised>;
     readonly KnowledgeConflictLinked: fc.Arbitrary<Knowledge.KnowledgeConflictLinked>;
     readonly KnowledgeConflictUnlinked: fc.Arbitrary<Knowledge.KnowledgeConflictUnlinked>;
+    readonly KnowledgeHandedOverToHotspot: fc.Arbitrary<Knowledge.KnowledgeHandedOverToHotspot>;
     readonly KnowledgeItemCorrected: fc.Arbitrary<Knowledge.KnowledgeItemCorrected>;
     readonly KnowledgeItemDeleted: fc.Arbitrary<Knowledge.KnowledgeItemDeleted>;
     readonly KnowledgeItemRestored: fc.Arbitrary<Knowledge.KnowledgeItemRestored>;
@@ -57,7 +58,7 @@ export interface DeclaredChecks {}
 export interface Examples {
     readonly KnowledgeItem?: {
         readonly states?: { readonly Live?: readonly Knowledge.LiveKnowledgeItem[]; readonly Deleted?: readonly Knowledge.DeletedKnowledgeItem[] };
-        readonly commands?: { readonly add?: readonly Parameters<Knowledge.KnowledgeItemCommands['add']>[]; readonly addConflicting?: readonly Parameters<Knowledge.KnowledgeItemCommands['addConflicting']>[]; readonly addSource?: readonly Parameters<Knowledge.KnowledgeItemCommands['addSource']>[]; readonly update?: readonly Parameters<Knowledge.KnowledgeItemCommands['update']>[]; readonly linkConflict?: readonly Parameters<Knowledge.KnowledgeItemCommands['linkConflict']>[]; readonly unlinkConflict?: readonly Parameters<Knowledge.KnowledgeItemCommands['unlinkConflict']>[]; readonly correct?: readonly Parameters<Knowledge.KnowledgeItemCommands['correct']>[]; readonly delete?: readonly Parameters<Knowledge.KnowledgeItemCommands['delete']>[]; readonly restore?: readonly Parameters<Knowledge.KnowledgeItemCommands['restore']>[] };
+        readonly commands?: { readonly add?: readonly Parameters<Knowledge.KnowledgeItemCommands['add']>[]; readonly addConflicting?: readonly Parameters<Knowledge.KnowledgeItemCommands['addConflicting']>[]; readonly addSource?: readonly Parameters<Knowledge.KnowledgeItemCommands['addSource']>[]; readonly update?: readonly Parameters<Knowledge.KnowledgeItemCommands['update']>[]; readonly linkConflict?: readonly Parameters<Knowledge.KnowledgeItemCommands['linkConflict']>[]; readonly unlinkConflict?: readonly Parameters<Knowledge.KnowledgeItemCommands['unlinkConflict']>[]; readonly handOverToHotspot?: readonly Parameters<Knowledge.KnowledgeItemCommands['handOverToHotspot']>[]; readonly correct?: readonly Parameters<Knowledge.KnowledgeItemCommands['correct']>[]; readonly delete?: readonly Parameters<Knowledge.KnowledgeItemCommands['delete']>[]; readonly restore?: readonly Parameters<Knowledge.KnowledgeItemCommands['restore']>[] };
     };
 }
 
@@ -108,7 +109,7 @@ export function arbitraries(options: Options = {}): Arbitraries {
         Actor: () => given.Actor ?? testing.cast<Knowledge.Actor>(fc.oneof(fc.record({ kind: fc.constant('Extractor' as const), extraction: a.ExtractionRef }), fc.record({ kind: fc.constant('Person' as const), user: a.UserName }))),
         Operation: () => given.Operation ?? testing.cast<Knowledge.Operation>(fc.oneof(fc.record({ kind: fc.constant('Add' as const), id: a.KnowledgeItemId, content: a.ItemContent, sources: testing.many(a.Source, 1), reason: a.Reason }, { requiredKeys: ['kind', 'id', 'content', 'sources'] }), fc.record({ kind: fc.constant('AddSource' as const), item: a.KnowledgeItemId, base: a.ItemVersion, source: a.Source, agreed: testing.cast<boolean>(scalar.Bool), reason: a.Reason }, { requiredKeys: ['kind', 'item', 'base', 'source', 'agreed'] }), fc.record({ kind: fc.constant('Update' as const), item: a.KnowledgeItemId, base: a.ItemVersion, revised: a.ItemContent, reason: a.Reason }, { requiredKeys: ['kind', 'item', 'base', 'revised'] }), fc.record({ kind: fc.constant('Conflict' as const), id: a.KnowledgeItemId, content: a.ItemContent, sources: testing.many(a.Source, 1), item: a.KnowledgeItemId, base: a.ItemVersion, reason: a.Reason }, { requiredKeys: ['kind', 'id', 'content', 'sources', 'item', 'base'] }))),
         Extraction: () => given.Extraction ?? testing.cast<Knowledge.Extraction>(fc.record({ by: a.ExtractionRef, operations: testing.many(a.Operation, 0) })),
-        AuditOperation: () => given.AuditOperation ?? fc.constantFrom<Knowledge.AuditOperation>('add', 'addSource', 'rewrite', 'revise', 'linkConflict', 'correct', 'delete', 'restore', 'unlinkConflict'),
+        AuditOperation: () => given.AuditOperation ?? fc.constantFrom<Knowledge.AuditOperation>('add', 'addSource', 'rewrite', 'revise', 'linkConflict', 'correct', 'delete', 'restore', 'unlinkConflict', 'handOverToHotspot'),
         AuditEntry: () => given.AuditEntry ?? testing.cast<Knowledge.AuditEntry>(fc.record({ item: a.KnowledgeItemId, version: a.ItemVersion, operation: a.AuditOperation, actor: a.Actor, reason: a.Reason, at: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['item', 'version', 'operation', 'actor', 'at'] })),
         MessageKey: () => given.MessageKey ?? testing.cast<Knowledge.MessageKey>(fc.record({ session: a.SessionRef, message: a.MessageRef })),
         Redaction: () => given.Redaction ?? testing.cast<Knowledge.Redaction>(fc.record({ item: a.KnowledgeItemId, messages: testing.many(a.MessageKey, 0) })),
@@ -121,6 +122,7 @@ export function arbitraries(options: Options = {}): Arbitraries {
         KnowledgeItemRevised: () => given.KnowledgeItemRevised ?? testing.cast<Knowledge.KnowledgeItemRevised>(fc.record({ type: fc.constant('KnowledgeItemRevised' as const), itemId: a.KnowledgeItemId, version: a.ItemVersion, by: a.ExtractionRef, reason: a.Reason, at: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'itemId', 'version', 'by', 'at'] })),
         KnowledgeConflictLinked: () => given.KnowledgeConflictLinked ?? testing.cast<Knowledge.KnowledgeConflictLinked>(fc.record({ type: fc.constant('KnowledgeConflictLinked' as const), itemId: a.KnowledgeItemId, version: a.ItemVersion, other: a.KnowledgeItemId, by: a.ExtractionRef, reason: a.Reason, at: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'itemId', 'version', 'other', 'by', 'at'] })),
         KnowledgeConflictUnlinked: () => given.KnowledgeConflictUnlinked ?? testing.cast<Knowledge.KnowledgeConflictUnlinked>(fc.record({ type: fc.constant('KnowledgeConflictUnlinked' as const), itemId: a.KnowledgeItemId, version: a.ItemVersion, other: a.KnowledgeItemId, by: a.UserName, at: testing.cast<Date>(scalar.Timestamp) })),
+        KnowledgeHandedOverToHotspot: () => given.KnowledgeHandedOverToHotspot ?? testing.cast<Knowledge.KnowledgeHandedOverToHotspot>(fc.record({ type: fc.constant('KnowledgeHandedOverToHotspot' as const), itemId: a.KnowledgeItemId, version: a.ItemVersion, hotspot: a.StickyRef, other: a.KnowledgeItemId, by: a.UserName, at: testing.cast<Date>(scalar.Timestamp) })),
         KnowledgeItemCorrected: () => given.KnowledgeItemCorrected ?? testing.cast<Knowledge.KnowledgeItemCorrected>(fc.record({ type: fc.constant('KnowledgeItemCorrected' as const), itemId: a.KnowledgeItemId, version: a.ItemVersion, by: a.UserName, at: testing.cast<Date>(scalar.Timestamp) })),
         KnowledgeItemDeleted: () => given.KnowledgeItemDeleted ?? testing.cast<Knowledge.KnowledgeItemDeleted>(fc.record({ type: fc.constant('KnowledgeItemDeleted' as const), itemId: a.KnowledgeItemId, version: a.ItemVersion, by: a.UserName, at: testing.cast<Date>(scalar.Timestamp) })),
         KnowledgeItemRestored: () => given.KnowledgeItemRestored ?? testing.cast<Knowledge.KnowledgeItemRestored>(fc.record({ type: fc.constant('KnowledgeItemRestored' as const), itemId: a.KnowledgeItemId, version: a.ItemVersion, by: a.UserName, at: testing.cast<Date>(scalar.Timestamp) })),
@@ -338,6 +340,20 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 requires: [{ name: 'notItself', error: 'ConflictWithItself' }],
                 declaredRequires: [],
                 firstFailing: () => Knowledge.checkUnlinkConflictKnowledgeItemRequires,
+                invariants: () => Knowledge.checkKnowledgeItem,
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'KnowledgeItem.handOverToHotspot',
+                run: impl.KnowledgeItem.handOverToHotspot,
+                input: () => fc.tuple(fc.oneof(a.LiveKnowledgeItem), fc.record({ hotspot: a.StickyRef, other: a.KnowledgeItemId, by: a.UserName, at: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.KnowledgeItem?.commands?.handOverToHotspot ?? [],
+                factory: false,
+                requires: [{ name: 'notItself', error: 'ConflictWithItself' }],
+                declaredRequires: [],
+                firstFailing: () => Knowledge.checkHandOverToHotspotKnowledgeItemRequires,
                 invariants: () => Knowledge.checkKnowledgeItem,
                 declaredInvariants: [],
                 stateful: true,

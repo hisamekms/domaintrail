@@ -118,10 +118,21 @@ export {
 export { createRedactionSync, type RedactionCursors, type RedactionSync, type RedactionSyncDeps } from './application/redaction-sync.js';
 export { createExtractionScheduler, type ExtractionScheduler, type ExtractionSchedulerDeps, type Timers } from './application/extraction-scheduler.js';
 export { loadExtractionSwitch, type ExtractionSwitch, type ExtractionSwitches } from './application/extraction-switch.js';
-// the checkpoint, the switch and the redaction cursors in the session database (adapters, wired by the app)
+export {
+    createHotspotHandOvers,
+    hotspotOf,
+    type HotspotHandOvers,
+    type HotspotHandOversDeps,
+    type PendingHandOver,
+    type PendingHandOvers,
+    type RequestOutcome,
+    type Settled,
+} from './application/hotspot-handovers.js';
+// the checkpoint, the switch, the redaction cursors and the waiting hotspot presses in the session database (adapters, wired by the app)
 export { CHECKPOINT_SCHEMA, createSqliteCheckpoints, extractionCosts, forgetHeldQuotes } from './infrastructure/sqlite-checkpoints.js';
 export { createSqliteExtractionSwitches, EXTRACTION_SWITCH_SCHEMA } from './infrastructure/sqlite-extraction-switch.js';
 export { createSqliteRedactionCursors, REDACTION_CURSOR_SCHEMA } from './infrastructure/sqlite-redaction-cursors.js';
+export { createSqliteHotspotHandOvers, HOTSPOT_HANDOVERS_SCHEMA } from './infrastructure/sqlite-hotspot-handovers.js';
 
 // ---- its settings in domaintrail.jsonc (the `knowledge` section), and the store's credentials from the environment --
 export {

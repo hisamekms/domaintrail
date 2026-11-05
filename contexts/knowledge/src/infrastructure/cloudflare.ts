@@ -240,6 +240,13 @@ export function cloudflareKnowledgeStore(settings: CloudflareKnowledgeStoreSetti
             return gone ? err({ type: gone, itemId: id }) : ok(await read(res, liveItems, what));
         },
 
+        async handOverToHotspot(project, id, other, hotspot, by) {
+            const res = await request(project, `${itemPath(id)}/hand-over`, { method: 'POST', json: { other, hotspot }, headers: actor(by) });
+            const what = `handing ${id} and ${other} over to ${hotspot}`;
+            const gone = await missing(res, what);
+            return gone ? err({ type: gone, itemId: id }) : ok(await read(res, liveItems, what));
+        },
+
         async delete(project, id, by) {
             const res = await request(project, itemPath(id), { method: 'DELETE', headers: actor(by) });
             return notFoundOr(res, deletion, id, `deleting ${id}`);

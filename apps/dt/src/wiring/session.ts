@@ -53,6 +53,7 @@ import { createAgentApi } from '../server/session/agent.js';
 import { createExtractionDispatcher } from '../server/session/extractions.js';
 import { openKnowledgeStore, type SessionKnowledge, startSessionKnowledge } from './knowledge.js';
 import { type LiveKnowledge, startLiveKnowledge } from './knowledge-live.js';
+import { ownRequest, requestOutcomes } from './knowledge-hotspots.js';
 import type { SettingsApproval } from '../cli/trust.js';
 import type { ResolvedConfig } from '../config/config.js';
 import { createApiRoutes } from '../server/http/routes.js';
@@ -571,6 +572,11 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                       sessionRedacted: facilitatorChanged,
                       ...(options.redactionEveryMs !== undefined && { everyMs: options.redactionEveryMs }),
                       log,
+                      // a conflict made a hotspot follows its message (ADR 0031, section 4)
+                      requests: {
+                          outcomeOf: requestOutcomes(collaboration, session),
+                          isOwn: (request, participant) => ownRequest(collaboration, session, request, participant),
+                      },
                   })
                 : undefined;
         if (liveKnowledge) store = liveKnowledge.store;
@@ -606,6 +612,8 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 for (const e of entries) if (ending.has(e.event.type) && 'runId' in e.event) activities.end(e.event.runId);
                 // a message, or the AI's answer: the extraction of knowledge decides when to run
                 knowledge?.observe(entries);
+                // a run ended, a proposal decided, a message triaged: the conflicts being made hotspots may be settled
+                void liveKnowledge?.handOvers?.settle();
                 presenceChanged();
                 if (entries.some((e) => e.event.type === 'SessionClosed')) {
                     agent.answers.close(true);

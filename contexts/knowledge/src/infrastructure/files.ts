@@ -173,6 +173,7 @@ const AUDIT_OPERATIONS: readonly Knowledge.AuditOperation[] = [
     'delete',
     'restore',
     'unlinkConflict',
+    'handOverToHotspot',
 ];
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -584,6 +585,32 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                     );
                     await appendAudit(unlinked.map((u) => auditOf(u.events.KnowledgeConflictUnlinked)));
                     return ok(unlinked.map((u) => u.aggregate));
+                },
+            );
+        },
+
+        async handOverToHotspot(project, id, other, hotspot, by) {
+            checkProject(project);
+            return exclusive(
+                async (): Promise<Result<readonly Knowledge.LiveKnowledgeItem[], Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>> => {
+                    const item = await liveOne(id);
+                    if (item === undefined)
+                        return (await deletedOne(id)) ? err({ type: 'KnowledgeItemGone', itemId: id }) : err({ type: 'KnowledgeItemNotFound', itemId: id });
+                    if (other === id) return ok([item]);
+                    const at = now();
+                    // the other side too, while it is live (a deleted one's links go with it)
+                    const sides = [item, await liveOne(other)].filter((i): i is Knowledge.LiveKnowledgeItem => i !== undefined);
+                    const handed = sides.map((side) => {
+                        const r = knowledgeItemCommands.handOverToHotspot(side, { hotspot, other: side.id === id ? other : id, by, at });
+                        if (!r.ok) throw new Error('handOverToHotspot refused two distinct items');
+                        return r.value.Live;
+                    });
+                    await writeItems(
+                        handed.map((h) => h.aggregate),
+                        dir,
+                    );
+                    await appendAudit(handed.map((h) => auditOf(h.events.KnowledgeHandedOverToHotspot)));
+                    return ok(handed.map((h) => h.aggregate));
                 },
             );
         },

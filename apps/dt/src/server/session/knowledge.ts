@@ -14,10 +14,12 @@
 // | POST /api/session/knowledge/items/:id/unlink | unlinkConflict `{ other }` (食い違いではない) |
 // | POST /api/session/knowledge/items/:id/images | putImage, then correct: the image at the end of the text (画像を付ける) |
 // | GET  /api/session/knowledge/images/:id       | getImage                       |
+// | GET  /api/session/knowledge/hand-overs       | the presses of ホットスポットにする still waiting for their run |
+// | POST /api/session/knowledge/hand-overs       | a press `{ request, items }`, after its message was sent (ADR 0031, section 4) |
 //
 // A change made here is told to every page (`changed`); a store that fails or cannot be reached is answered 502.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { Knowledge, type KnowledgeStore } from '@domaintrail/knowledge';
+import { Knowledge, type KnowledgeStore, type PendingHandOver } from '@domaintrail/knowledge';
 import { IMAGE_MEDIA_TYPES, MAX_IMAGE_BYTES, WireError, itemContent, itemId, imageId, knowledgeQueryOf, unlinkBody } from '@domaintrail/knowledge/protocol';
 import type { Identified } from '../http/access.js';
 import { BodyError, mediaType, readJson, sendError, sendJson } from '../http/json.js';
@@ -34,6 +36,33 @@ export interface KnowledgeRoutesDeps {
     /** The knowledge changed (a person's change made here): every page reads it again. */
     readonly changed: () => void;
     readonly log: (line: string) => void;
+    /** The presses of ホットスポットにする (absent: none, the routes answer 404). */
+    readonly handOvers?: HandOverRoutes;
+}
+
+/** What the routes ask of the session's hand-overs to hotspots (ADR 0031, section 4). */
+export interface HandOverRoutes {
+    list(): Promise<readonly PendingHandOver[]>;
+    /** Keeps the press of `participant`, whose message `request` is: false when the message is not theirs in the session. */
+    press(input: {
+        readonly request: string;
+        readonly items: readonly [Knowledge.KnowledgeItemId, Knowledge.KnowledgeItemId];
+        readonly by: Knowledge.UserName;
+        readonly participant: string;
+    }): Promise<boolean>;
+}
+
+/** The body of a press: the message sent, and the two items of the conflict. */
+function pressBody(v: unknown): { readonly request: string; readonly items: readonly [Knowledge.KnowledgeItemId, Knowledge.KnowledgeItemId] } {
+    if (typeof v !== 'object' || v === null) throw new WireError('body: expected an object');
+    const request: unknown = Reflect.get(v, 'request');
+    const items: unknown = Reflect.get(v, 'items');
+    if (typeof request !== 'string' || request.length === 0 || request.length > 100) throw new WireError('body.request: expected the ID of a message');
+    if (!Array.isArray(items) || items.length !== 2) throw new WireError('body.items: expected the two items of a conflict');
+    const a = itemId(items[0], 'body.items[0]');
+    const b = itemId(items[1], 'body.items[1]');
+    if (a === b) throw new WireError('body.items: expected two different items');
+    return { request, items: [a, b] };
 }
 
 /** Answers a request below `KNOWLEDGE_API` of a participant (the session's access check passed already). */
@@ -121,6 +150,15 @@ export function createKnowledgeRoutes(deps: KnowledgeRoutesDeps): KnowledgeRoute
             });
             res.end(Buffer.from(image.bytes));
             return;
+        }
+        if (resource === 'hand-overs' && rest.length === 1) {
+            const handOvers = deps.handOvers;
+            if (!handOvers) return sendError(res, 404, 'NotFound', 'No such knowledge API.');
+            if (method === 'GET') return sendJson(res, 200, { handOvers: (await handOvers.list()).map(({ request, items }) => ({ request, items })) });
+            if (method !== 'POST') return sendError(res, 405, 'MethodNotAllowed', 'Use GET or POST.');
+            const { request, items } = pressBody(await json(req));
+            const kept = await handOvers.press({ request, items, by: actorOf(who), participant: who.participant.id });
+            return kept ? sendJson(res, 201, { request, items }) : sendError(res, 404, 'NoSuchMessage', 'No such message of yours in the session.');
         }
         if (resource !== 'items' || raw === undefined || rest.length > 3) return sendError(res, 404, 'NotFound', 'No such knowledge API.');
         const id = itemId(raw, 'id');

@@ -1,7 +1,8 @@
 // The page's knowledge (ADR 0031, section 10): whether the session has a store, the marks of the storming shown, the
 // stickies an opened item lights up, deleting with 10 seconds to undo, and whether the session extracts (section 3).
 // What is shown is read again whenever dt says the knowledge changed (`knowledge.changed`, after an extraction or
-// anyone's change) and after this page's own; the extraction's state follows dt's `knowledge.extraction`.
+// anyone's change) and after this page's own; the extraction's state follows dt's `knowledge.extraction`. The conflicts
+// being made hotspots (ホットスポットにする pressed, its run not ended) are read with it.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { firstDeclarations } from '@domaintrail/storming';
 import type { DisplayMode } from '@domaintrail/visualization';
@@ -10,7 +11,7 @@ import type { ViewSocket } from '../app/useViewSocket';
 import { nameIn } from '../model-utils';
 import { SessionApiError } from '../session/api';
 import { knowledgeApi, type KnowledgeApi } from './api';
-import { extractionOfMessage, marksOf, type StickyMark } from './model';
+import { extractionOfMessage, makingHotspots, marksOf, type StickyMark } from './model';
 
 /** How long a deletion can be undone on the page (ADR 0031, section 7; the store keeps it longer). */
 export const UNDO_MS = 10_000;
@@ -39,6 +40,8 @@ export interface KnowledgeView {
     readonly extraction: boolean | undefined;
     /** The facilitator switches the extraction on or off. */
     setExtraction(enabled: boolean): Promise<void>;
+    /** The conflicts being made hotspots, by `pairKey` (ADR 0031, section 4); none where there is no session. */
+    readonly makingHotspots?: ReadonlySet<string>;
     /** The last failure, said once. */
     readonly error: string | undefined;
     readonly setError: (error: string | undefined) => void;
@@ -101,6 +104,7 @@ export function useKnowledge(input: {
     const [lit, setLitState] = useState<readonly string[]>([]);
     const [error, setError] = useState<string | undefined>();
     const [extraction, setExtractionState] = useState<boolean | undefined>();
+    const [making, setMaking] = useState<ReadonlySet<string>>(new Set());
     const changed = useCallback(() => setVersion((v) => v + 1), []);
 
     // dt says the knowledge changed: read it again
@@ -148,6 +152,18 @@ export function useKnowledge(input: {
             stale = true;
         };
     }, [session, storming, version]);
+    // the conflicts being made hotspots: read again with the knowledge (dt tells a press and its end as a change)
+    useEffect(() => {
+        if (!session) return;
+        let stale = false;
+        knowledgeApi.handOvers().then(
+            (h) => !stale && setMaking(makingHotspots(h)),
+            () => !stale && setMaking(new Set()),
+        );
+        return () => {
+            stale = true;
+        };
+    }, [session, version]);
     // a session's page without a storming shown still learns whether there is a store
     useEffect(() => {
         if (!session || storming) return;
@@ -195,6 +211,7 @@ export function useKnowledge(input: {
         select: (sticky) => select(`es/${sticky.replace('.', '/')}`),
         extraction,
         setExtraction,
+        makingHotspots: making,
         error,
         setError,
     };

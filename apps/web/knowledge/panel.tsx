@@ -22,6 +22,7 @@ import {
     NO_FILTERS,
     ordered,
     ORIGINS,
+    pairKey,
     outsideConflicts,
     plainText,
     queryOf,
@@ -281,7 +282,9 @@ export function ItemRow({
 
 /**
  * A conflict: the two items side by side, ホットスポットにする (a message to the AI) and 食い違いではない. Each side
- * opens to its detail under the pair (the sticky's list does not repeat them).
+ * opens to its detail under the pair (the sticky's list does not repeat them). Once ホットスポットにする is pressed (here
+ * or on another page), the box shows that the hotspot is being made, without its buttons, until the run ends: handed
+ * over, the conflict goes; otherwise its buttons come back (ADR 0031, section 4).
  */
 export function ConflictBox({
     pair,
@@ -298,14 +301,24 @@ export function ConflictBox({
     const t = useT().knowledge;
     const view = useKnowledgeView();
     const api = useKnowledgeApi();
-    const [asked, setAsked] = useState(false);
+    // pressed here, until dt's list of the conflicts being made hotspots has it (or the press failed)
+    const [pressed, setPressed] = useState(false);
+    const making = pressed || (view?.makingHotspots?.has(pairKey(pair.a.id, pair.b.id)) ?? false);
+    useEffect(() => {
+        if (pressed && view?.makingHotspots?.has(pairKey(pair.a.id, pair.b.id))) setPressed(false);
+    }, [pressed, view?.makingHotspots, pair.a.id, pair.b.id]);
     const hotspot = async (): Promise<void> => {
+        setPressed(true);
         try {
             const revision = latestRevision(await sessionApi.state());
-            if (!revision) return;
-            await sessionApi.sendRequest(hotspotBody({ pair, label: (s) => view?.label(s) ?? s, revision: revision.id, aiName: AI_NAME, text: t.hotspotText }));
-            setAsked(true);
+            if (!revision) return setPressed(false);
+            const sent = await sessionApi.sendRequest(
+                hotspotBody({ pair, label: (s) => view?.label(s) ?? s, revision: revision.id, aiName: AI_NAME, text: t.hotspotText }),
+            );
+            await api.pressHotspot?.(sent.request.id, [pair.a.id, pair.b.id]);
+            view?.changed();
         } catch (e) {
+            setPressed(false);
             view?.setError(failure(e));
         }
     };
@@ -329,18 +342,24 @@ export function ConflictBox({
                 ))}
             </div>
             {[pair.a, pair.b].map((i) => isOpen(i.id) && <ItemDetail key={i.id} item={i} from={from} />)}
-            <span className="knowledge-actions">
-                {!api.hotspots ? null : asked ? (
-                    <span className="knowledge-meta">{t.hotspotAsked}</span>
-                ) : (
-                    <Act kind="send" onClick={() => void hotspot()}>
-                        {t.makeHotspot}
+            {making ? (
+                <span className="knowledge-actions knowledge-making" role="status">
+                    <Act kind="send" disabled>
+                        {t.makingHotspot}
                     </Act>
-                )}
-                <Act kind="decide-sub" onClick={() => void unlink()}>
-                    {t.notConflict}
-                </Act>
-            </span>
+                </span>
+            ) : (
+                <span className="knowledge-actions">
+                    {api.hotspots && (
+                        <Act kind="send" onClick={() => void hotspot()}>
+                            {t.makeHotspot}
+                        </Act>
+                    )}
+                    <Act kind="decide-sub" onClick={() => void unlink()}>
+                        {t.notConflict}
+                    </Act>
+                </span>
+            )}
         </div>
     );
 }

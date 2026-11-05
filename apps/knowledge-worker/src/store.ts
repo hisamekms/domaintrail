@@ -608,6 +608,39 @@ export class D1KnowledgeStore implements KnowledgeStore {
         });
     }
 
+    async handOverToHotspot(
+        project: Knowledge.ProjectName,
+        id: Knowledge.KnowledgeItemId,
+        other: Knowledge.KnowledgeItemId,
+        hotspot: Knowledge.StickyRef,
+        by: Knowledge.UserName,
+    ): Promise<Result<readonly Knowledge.LiveKnowledgeItem[], Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>> {
+        type Answer = Result<readonly Knowledge.LiveKnowledgeItem[], Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>;
+        return this.decideAndWrite<Answer>(project, other === id ? [id] : [id, other], async (rows) => {
+            const row = rows.get(id);
+            if (!row) return { statements: [], value: err({ type: 'KnowledgeItemNotFound' as const, itemId: id }) };
+            const item = itemOf(row);
+            if (item.state !== 'Live') return { statements: [], value: err({ type: 'KnowledgeItemGone' as const, itemId: id }) };
+            if (other === id) return { statements: [], value: ok([item]) };
+            const otherRow = rows.get(other);
+            const otherItem = otherRow ? itemOf(otherRow) : undefined;
+            const at = this.now();
+            // the other side too, while it is live (a deleted one's links go with it)
+            const sides = [item, ...(otherItem?.state === 'Live' ? [otherItem] : [])].map((side) => {
+                const r = knowledgeItemCommands.handOverToHotspot(side, { hotspot, other: side.id === id ? other : id, by, at });
+                if (!r.ok) throw new Error('handOverToHotspot refused two distinct items');
+                return r.value.Live;
+            });
+            const statements = this.writes(
+                project,
+                sides.map((s) => s.aggregate),
+                [],
+                sides.map((s) => auditOf(s.events.KnowledgeHandedOverToHotspot)),
+            );
+            return { statements, value: ok(sides.map((s) => s.aggregate)) };
+        });
+    }
+
     async delete(
         project: Knowledge.ProjectName,
         id: Knowledge.KnowledgeItemId,

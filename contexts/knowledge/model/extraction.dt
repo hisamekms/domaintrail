@@ -53,6 +53,7 @@ context Knowledge {
     delete "消した"
     restore "元に戻した"
     unlinkConflict "食い違いを外した"
+    handOverToHotspot "ホットスポットに引き継いだ"
   }
 
   /// 監査のログの1行: だれが・どのナレッジに・何を・なぜ。消したナレッジの理由は掃除が消す（発言を引くことがあるため）。

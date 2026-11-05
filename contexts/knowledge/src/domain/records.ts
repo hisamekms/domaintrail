@@ -29,6 +29,8 @@ export function auditOf(event: Knowledge.KnowledgeItemEvent): Knowledge.AuditEnt
             return record('linkConflict', extractor(event.by), event.reason);
         case 'KnowledgeConflictUnlinked':
             return record('unlinkConflict', person(event.by));
+        case 'KnowledgeHandedOverToHotspot':
+            return record('handOverToHotspot', person(event.by), hotspotReason(event.hotspot));
         case 'KnowledgeItemCorrected':
             return record('correct', person(event.by));
         case 'KnowledgeItemDeleted':
@@ -36,6 +38,13 @@ export function auditOf(event: Knowledge.KnowledgeItemEvent): Knowledge.AuditEnt
         case 'KnowledgeItemRestored':
             return record('restore', person(event.by));
     }
+}
+
+/** The reason a hand-over is recorded with: the hotspot the conflict went to. */
+export function hotspotReason(hotspot: Knowledge.StickyRef): Knowledge.Reason {
+    const made = Knowledge.makeReason(`hotspot ${hotspot}`);
+    if (!made.ok) throw new Error(`No reason for ${hotspot}`);
+    return made.value;
 }
 
 /** The audit record without its reason: what the sweep keeps of a deleted item's records (a reason may quote someone). */
