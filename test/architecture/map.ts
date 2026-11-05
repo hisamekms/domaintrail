@@ -219,6 +219,14 @@ export const MAP: Record<string, Module> = {
         // `wiring/`; presentation and composition before T8)
         upstream: ['agent', 'analysis', 'collaboration', 'generation', 'kernel', 'knowledge', 'modeling', 'storming', 'visualization', 'workspace'],
     },
+    'knowledge-worker': {
+        kind: 'app',
+        dir: 'apps/knowledge-worker',
+        sources: 'apps/knowledge-worker/src',
+        // the knowledge store's Worker that users deploy from the template (ADR 0031, section 5): it applies the
+        // knowledge context's decisions on D1 and R2 and serves the protocol of its `cloudflare` adapter
+        upstream: ['knowledge'],
+    },
     web: {
         kind: 'app',
         dir: 'apps/web',
