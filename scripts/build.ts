@@ -1,7 +1,7 @@
 // Builds the npm package into dist/: the Live View page (dist/web), the CLI bundled for Node (dist/dt.js),
 // `domaintrail/testing`, the support of the generated contract tests (dist/testing.js, with dist/testing.d.ts), and the
 // knowledge store's Worker template that users deploy (dist/knowledge-worker: worker.js, wrangler.jsonc, migrations/,
-// README.md; ADR 0031).
+// README.md, and page/, the Worker's read-only page built from apps/web/published; ADR 0031).
 // The CLI's dependencies (the root package.json's `dependencies`) stay external and are installed with the package;
 // the workspace packages (@domaintrail/*, private) and the page's own dependencies are bundled. fast-check, which
 // `domaintrail/testing` imports, is the user's project's (an optional peer dependency).
@@ -98,3 +98,12 @@ await build({
     banner: `// The knowledge store's Worker of DomainTrail ${pkg.version} (ADR 0031), built from apps/knowledge-worker. Do not edit.`,
 });
 await cp(path.join(WORKER, 'template'), path.join(DIST, 'knowledge-worker'), { recursive: true });
+
+// the Worker's read-only page (ADR 0031, section 11): a second entry of the Live View's code (its canvas and knowledge
+// panels, read-only), served by the Worker as static assets, so that worker.js stays the API alone
+await build({
+    entrypoints: [path.join(ROOT, 'apps', 'web', 'published', 'index.html')],
+    outdir: path.join(DIST, 'knowledge-worker', 'page'),
+    minify: true,
+    define: { 'process.env.NODE_ENV': '"production"' },
+});

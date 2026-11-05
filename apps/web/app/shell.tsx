@@ -1,8 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Diff, FolderTree, Lightbulb, PanelBottomOpen, TriangleAlert, type LucideIcon } from 'lucide-react';
-// the approved logo (assets/brand, never redrawn), bundled into dist/web with a hashed name: one per theme
-import logoDark from '../../../assets/brand/logo-dark.svg';
-import logoLight from '../../../assets/brand/logo-light.svg';
+import { BrandLogo } from './brand';
 import { useT } from '../i18n';
 import { readStored, Resizer, useElementHeight, writeStored } from '../shared/layout';
 import { usePaneMotion } from '../shared/motion';
@@ -137,9 +135,7 @@ export function AppShell(props: {
         <div className={`app motion-${motion}`}>
             <header className="app-bar">
                 <span className="app-bar-brand">
-                    {/* the logo for the theme (the other hidden by CSS), decorative: the text beside it names it */}
-                    <img className="brand-logo brand-logo-light" src={logoLight} alt="" />
-                    <img className="brand-logo brand-logo-dark" src={logoDark} alt="" />
+                    <BrandLogo />
                     <span className="brand">DomainTrail</span>
                     {props.workspaceName && (
                         <span className="workspace-name" data-tooltip={props.workspaceName}>

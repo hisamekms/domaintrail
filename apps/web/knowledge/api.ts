@@ -1,6 +1,8 @@
-// dt's knowledge API as the page calls it (`/api/session/knowledge`, apps/dt/src/server/session/knowledge.ts): the
-// answers are the store's values as JSON, decoded with the store's own protocol (`@domaintrail/knowledge/protocol`).
-// A session without a store answers 404: the page then shows no knowledge at all.
+// The knowledge as the panels read and change it (`KnowledgeApi`), and dt's API that a session's page calls for it
+// (`/api/session/knowledge`, apps/dt/src/server/session/knowledge.ts): the answers are the store's values as JSON,
+// decoded with the store's own protocol (`@domaintrail/knowledge/protocol`). A session without a store answers 404: the
+// page then shows no knowledge at all. The Worker's read-only page gives the panels its own (apps/web/published).
+import { createContext, useContext } from 'react';
 import type { Knowledge, ItemWithHistory, Page, StickyCount, Deletion } from '@domaintrail/knowledge';
 import { deletion, extractionSwitch, itemWithHistory, liveItem, liveItems, page, stickyCounts, type Decoder } from '@domaintrail/knowledge/protocol';
 import { isSignInRedirect, reloadForSignIn, SAME_ORIGIN } from '../app/sign-in';
@@ -45,23 +47,46 @@ async function call<T>(path: string, decode: Decoder<T>, init?: Post, base: stri
 
 const enc = encodeURIComponent;
 
+/** What the knowledge's panels ask of the store, through dt (a session's page) or the Worker (its read-only page). */
+export interface KnowledgeApi {
+    /** Per sticky of a storming that has items: whether one is in a conflict. */
+    counts(storming: string): Promise<StickyCount[]>;
+    /** A page of the items that match. */
+    search(query: URLSearchParams): Promise<Page<Knowledge.LiveKnowledgeItem>>;
+    /** The items about one sticky (newest first; every page). */
+    about(sticky: string): Promise<Knowledge.LiveKnowledgeItem[]>;
+    /** An item with its earlier versions; undefined when it is gone. */
+    get(id: string): Promise<ItemWithHistory | undefined>;
+    correct(id: string, content: unknown): Promise<Knowledge.LiveKnowledgeItem>;
+    delete(id: string): Promise<Deletion>;
+    restore(id: string): Promise<Knowledge.LiveKnowledgeItem>;
+    unlink(id: string, other: string): Promise<Knowledge.LiveKnowledgeItem[]>;
+    attachImage(id: string, file: Blob): Promise<Knowledge.LiveKnowledgeItem>;
+    /** Where the page shows an image of the knowledge from. */
+    imageUrl(id: string): string;
+    /** A conflict can be made a hotspot (a message to the session's AI): only where there is a session. */
+    readonly hotspots: boolean;
+}
+
+/** The items about one sticky, every page of `search`'s, newest first. */
+export async function allAbout(search: KnowledgeApi['search'], sticky: string): Promise<Knowledge.LiveKnowledgeItem[]> {
+    const items: Knowledge.LiveKnowledgeItem[] = [];
+    let cursor: string | undefined;
+    do {
+        const p = await search(new URLSearchParams({ about: sticky, limit: '200', ...(cursor !== undefined && { cursor }) }));
+        items.push(...p.items);
+        cursor = p.next;
+    } while (cursor !== undefined);
+    return items;
+}
+
 export const knowledgeApi = {
     /** Per sticky of a storming that has items: whether one is in a conflict. */
     counts: (storming: string): Promise<StickyCount[]> => call(`/counts?storming=${enc(storming)}`, stickyCounts),
     /** A page of the items that match. */
     search: (query: URLSearchParams): Promise<Page<Knowledge.LiveKnowledgeItem>> => call(`?${query.toString()}`, page(liveItem)),
     /** The items about one sticky (newest first; every page). */
-    about: async (sticky: string): Promise<Knowledge.LiveKnowledgeItem[]> => {
-        const items: Knowledge.LiveKnowledgeItem[] = [];
-        let cursor: string | undefined;
-        do {
-            const q = new URLSearchParams({ about: sticky, limit: '200', ...(cursor !== undefined && { cursor }) });
-            const p = await call(`?${q.toString()}`, page(liveItem));
-            items.push(...p.items);
-            cursor = p.next;
-        } while (cursor !== undefined);
-        return items;
-    },
+    about: (sticky: string): Promise<Knowledge.LiveKnowledgeItem[]> => allAbout((q) => call(`?${q.toString()}`, page(liveItem)), sticky),
     /** An item with its earlier versions; undefined when it is gone. */
     get: (id: string): Promise<ItemWithHistory | undefined> =>
         call(`/items/${enc(id)}?history=1`, itemWithHistory).catch((e: unknown) => {
@@ -81,3 +106,10 @@ export const knowledgeApi = {
 
 /** Where the page shows an image of the knowledge from. */
 export const imageUrl = (id: string): string => `${BASE}/images/${enc(id)}`;
+
+/** The knowledge of a session's page, through dt. */
+export const sessionKnowledgeApi: KnowledgeApi = { ...knowledgeApi, imageUrl, hotspots: true };
+
+/** The API the panels below use: the session's, unless a page provides its own. */
+export const KnowledgeApiContext = createContext<KnowledgeApi>(sessionKnowledgeApi);
+export const useKnowledgeApi = (): KnowledgeApi => useContext(KnowledgeApiContext);
