@@ -3159,7 +3159,7 @@ of them. A
 run that answers the card's question, or that picks another alternative of one of its assumptions, is added to the same
 card under the one before (question → answer → result), under its time alone (`19:25`; the run's number is in its
 tooltip); a run of the same messages after a completed one too. The card stays where its first run was queued; when it
-changes out of sight, a pill at the bottom of the stream (「「請求書の税区分」が更新されました」) goes to it. Scrolled up, the stream stops following the newest; a round ↓ button at its bottom right (最新へ) goes back to the bottom and follows again, marked with how many messages and AI turns arrived below since (`@ n` when some mention you or reply to you, as on 💬). For the facilitator, a question's options can be chosen in the card (one, or several
+changes out of sight, a pill at the bottom of the stream (「「請求書の税区分」が更新されました」, or 「AI が回答しました」 for an answer that arrived while you were scrolled up) goes to it; its ✕ (閉じる) puts it away without moving the stream, until something else changes out of sight. Scrolled up, the stream stops following the newest; a round ↓ button at its bottom right (最新へ) goes back to the bottom and follows again, marked with how many messages and AI turns arrived below since (`@ n` when some mention you or reply to you, as on 💬). For the facilitator, a question's options can be chosen in the card (one, or several
 when it says so) and 答えて再実行 queues the run's messages again with that answer at once. その他 is the last row, a
 radio or checkbox like the options: its own words are written in a dialog — ✎ at the row's end, or choosing その他
 while it has none (Space or Enter on it too) — with the question at its top; 決定 (⌘/Ctrl+Enter) chooses その他 with the

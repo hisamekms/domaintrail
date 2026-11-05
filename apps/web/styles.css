@@ -6714,15 +6714,41 @@ button.add-to-request.added:hover {
     left: 50%;
     bottom: 10px;
     transform: translateX(-50%);
-    padding: var(--space-1) var(--space-3);
-    border: none;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 0 var(--space-1) 0 0;
     border-radius: 12px;
     background: var(--chat-unread);
     color: var(--on-action);
     font-size: var(--fs-small);
     font-weight: var(--fw-strong);
     box-shadow: 0 2px 8px var(--shadow);
+}
+/* the pill's text: the whole of it but its ✕ goes to what it names */
+.chat-updated-pill-go {
+    min-width: 0;
+    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+    border: none;
+    border-radius: 12px;
+    background: none;
+    color: inherit;
+    font: inherit;
     cursor: pointer;
+}
+/* its ✕: puts the pill away, on the pill's colour */
+.session-chat .chat-updated-pill .icon-button.chat-updated-pill-close {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    color: inherit;
+    cursor: pointer;
+}
+.session-chat .chat-updated-pill .icon-button.chat-updated-pill-close:hover,
+.session-chat .chat-updated-pill .icon-button.chat-updated-pill-close:focus-visible {
+    background: color-mix(in srgb, var(--on-action) 20%, transparent);
+    color: inherit;
 }
 .pane-menu-list > button.menu-danger {
     color: var(--status-danger-ink);
@@ -8007,6 +8033,8 @@ button.add-to-request.added:hover {
    right offset and a gap), so that the two never overlap, at the chat's narrowest too */
 .chat-updated-pill {
     max-width: calc(100% - 2 * (var(--chat-latest-size) + var(--space-4) + var(--space-2)));
+}
+.chat-updated-pill-go {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;

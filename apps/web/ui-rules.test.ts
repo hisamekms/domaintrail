@@ -142,7 +142,7 @@ const RAW_BUTTONS: Readonly<Record<string, { readonly count: number; readonly re
         count: 1,
         reason: "the chat head's AI status pill: a chip or badge of its own (a count, a reaction, a status pill): it shows a state first and opens its detail",
     },
-    'session/chat.tsx chat-updated-pill': {
+    'session/chat.tsx chat-updated-pill-go': {
         count: 1,
         reason: "the floating 'updated above' pill that jumps to what changed: a chip or badge of its own (a count, a reaction, a status pill): it shows a state first and opens its detail",
     },
