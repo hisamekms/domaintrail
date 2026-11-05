@@ -464,6 +464,57 @@ describe('actors, external systems, read models and aggregates drawn once per us
         expect(elementIds(projectView(s, { level: 'big-picture', timelineId: 'T' }))).toEqual([]);
     });
 
+    test('a handler shared by the commands converging on one event note is drawn once before it', () => {
+        const s = storming(
+            ...events('E1', 'E2', 'E3'),
+            el('actor', 'Clerk'),
+            el('actor', 'Boss'),
+            el('aggregate', 'Order'),
+            el('aggregate', 'Stock'),
+            el('external', 'Bank'),
+            // A and B converge on E1 through Order; A also emits E2 alone; C emits E1 through Stock, D E3 through Bank
+            el('command', 'A', ['by', 'Clerk'], ['handledBy', 'Order'], ['emits', 'E1'], ['emits', 'E2']),
+            el('command', 'B', ['by', 'Boss'], ['handledBy', 'Order'], ['emits', 'E1']),
+            el('command', 'C', ['by', 'Clerk'], ['handledBy', 'Stock'], ['emits', 'E1']),
+            el('command', 'D', ['by', 'Clerk'], ['handledBy', 'Bank'], ['emits', 'E3']),
+            tl('T', 'E1', 'E2', 'E3'),
+        );
+        const g = projectView(s, { level: 'design-level', timelineId: 'T' });
+        const merged = g.nodes.filter((n) => n.type === 'element' && n.commands);
+        expect(merged).toEqual([{ type: 'element', id: 'n:Order@*t:e:E1', elementId: 'Order', kind: 'aggregate', commands: ['A#1', 'B'] }]);
+        const edges = semanticEdges(g);
+        // each command → the one handler, and one `emits` from it standing for both
+        expect(edges).toEqual(expect.arrayContaining(['handledBy:n:A#1->n:Order@*t:e:E1', 'handledBy:n:B->n:Order@*t:e:E1', 'emits:n:Order@*t:e:E1->t:e:E1']));
+        expect(g.edges.find((e) => e.type === 'semantic' && e.source === 'n:Order@*t:e:E1')).toMatchObject({ merged: ['emits:A->E1', 'emits:B->E1'] });
+        expect(edges.filter((e) => e.endsWith('->t:e:E1'))).toEqual(['emits:n:Order@*t:e:E1->t:e:E1', 'emits:n:Stock@C->t:e:E1']);
+        // A's note at E2, which only it emits, has its own handler; neither B's nor A's at E1 has; issuers stay per command
+        expect(edges).toEqual(
+            expect.arrayContaining(['emits:n:Order@A#2->t:e:E1>e:E2', 'handledBy:n:A#2->n:Order@A#2', 'by:n:Clerk@A#1->n:A#1', 'by:n:Boss@B->n:B']),
+        );
+        expect(nodeIds(g)).not.toContain('n:Order@B');
+        expect(nodeIds(g)).not.toContain('n:Order@A#1');
+        // another handler (Stock) or an external system alone is never merged
+        expect(nodeIds(g)).toEqual(expect.arrayContaining(['n:Stock@C', 'n:Bank@D']));
+    });
+
+    test('a handler is never merged across event notes: an event drawn at two steps gets one before each', () => {
+        const s = storming(
+            ...events('E1', 'X'),
+            el('aggregate', 'Order'),
+            el('command', 'A', ['handledBy', 'Order'], ['emits', 'E1']),
+            el('command', 'B', ['handledBy', 'Order'], ['emits', 'E1']),
+            tl('T', 'E1', 'X', 'E1'),
+        );
+        const g = projectView(s, { level: 'design-level', timelineId: 'T' });
+        expect(g.nodes.filter((n) => n.type === 'element' && n.commands).map((n) => n.id)).toEqual(['n:Order@*t:e:E1', 'n:Order@*t:e:E1>e:X>e:E1']);
+        // the integrated canvas draws E1 once: one handler before it
+        expect(
+            projectView(s, DL)
+                .nodes.filter((n) => n.type === 'element' && n.commands)
+                .map((n) => n.id),
+        ).toEqual(['n:Order@*e:E1']);
+    });
+
     test('copy IDs are stable: the declaration order changes nothing, another use adds a copy and keeps the others', () => {
         const g = projectView(uses(), DL);
         const reversed = uses();
@@ -677,8 +728,20 @@ describe('§12.3 properties', () => {
                     };
                     for (const e of g.edges) {
                         if (e.type !== 'semantic') continue;
+                        const merged = byId.get(e.source);
+                        if (merged?.type === 'element' && merged.commands) {
+                            // a handler shared by commands converging on one event note: each `emits` and `handledBy` is one of theirs
+                            const commands = merged.commands.map((c) => elementOf(`n:${c}`));
+                            for (const key of e.merged ?? [e.semantic]) {
+                                const edge = keys.get(key);
+                                expect(edge).toBeDefined();
+                                expect([edge!.kind, commands.includes(edge!.sourceId), edge!.targetId === elementOf(e.target)]).toEqual(['emits', true, true]);
+                            }
+                            continue;
+                        }
                         const edge = keys.get(e.semantic);
                         expect(edge).toBeDefined();
+                        expect(e.merged).toBeUndefined();
                         const source = e.kind === 'emits' ? commandOf(e.source) : elementOf(e.source);
                         expect([e.kind, source, elementOf(e.target)]).toEqual([edge!.kind, edge!.sourceId, edge!.targetId]);
                     }
@@ -751,8 +814,8 @@ describe('§12.3 properties', () => {
                     const before = projectView(storming(...elements), { level });
                     const after = projectView(storming(...longer), { level });
                     const ids = new Set(nodeIds(after));
-                    // an event of no timeline may join one; every other node stays
-                    for (const id of nodeIds(before)) if (!id.startsWith('e:')) expect(ids.has(id)).toBe(true);
+                    // an event of no timeline may join one, and so may a handler merged before it; every other node stays
+                    for (const id of nodeIds(before)) if (!id.startsWith('e:') && !id.includes('@*e:')) expect(ids.has(id)).toBe(true);
                     const pairs = matchRenderNodes(before, after);
                     for (const id of nodeIds(before)) if (ids.has(id)) expect(pairs.get(id)).toBe(id);
                 }

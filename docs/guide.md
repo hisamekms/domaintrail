@@ -2338,7 +2338,8 @@ event that arrives `from` an external system has that system before it. A hotspo
 A hotspot with `status resolved` is drawn paler, with a green check in its corner and a fainter `on` (hovering it shows
 its `resolution`), so the open ones stand out; to settle one, ask the AI in the chat.
 At Design Level an issuer, a read model and a handler are drawn next to each command that uses them, one note per
-command, and an external system an event comes from next to each note of that event, so their lines stay short (one
+command — except that commands converging on the same event note through the same handler share one handler note
+before it (its arrow to the event stands for all their `emits`; hovering it names them), and an external system an event comes from next to each note of that event, so their lines stay short (one
 that nothing uses is drawn once). Where one view draws an event at several steps (a timeline's view, a stage, a
 storming with stages), a command is drawn before each step of its events, with its own issuer, read model and handler,
 a policy after each step of the events it is `on`, and a hotspot on each note of its sticky, so every chain reads left to right into its own event. Selecting any of these notes

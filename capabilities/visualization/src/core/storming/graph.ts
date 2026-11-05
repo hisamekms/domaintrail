@@ -72,6 +72,7 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
             };
         }
         const [elementId, kind] = n.type === 'event' ? [n.eventId, 'event' as const] : [n.elementId, n.kind];
+        const commands = n.type === 'element' && n.commands ? [...new Set(n.commands.map((c) => esElementId(storming.id, c.split('#')[0]!)))] : undefined;
         const parent = parentOf.get(n.id);
         const settled = kind === 'hotspot' ? resolution(declared.get(elementId)) : undefined;
         // every note is the same square, whatever its label: the canvas shrinks the label to fit it (`STICKY_NOTE`)
@@ -83,9 +84,18 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
             lines: [],
             elementId: esElementId(storming.id, elementId),
             ...(parent !== undefined ? { parent } : {}),
+            ...(commands && { commands }),
             ...(settled !== undefined && { status: 'resolved' as const, resolution: settled }),
             width: STICKY_NOTE.side,
             height: STICKY_NOTE.side,
+        };
+    };
+    /** The commands an `emits` from a merged handler stands for, on hover. */
+    const tooltip = (e: RenderEdge): { tooltip?: Texts } => {
+        if (e.type !== 'semantic' || !e.merged) return {};
+        const texts = e.merged.map((key) => label(key.slice(key.indexOf(':') + 1, key.indexOf('->'))));
+        return {
+            tooltip: mapTexts(texts[0]!, (_, lang, mode) => `${lang === 'ja' ? 'コマンド: ' : 'Commands: '}${texts.map((t) => t[lang][mode]).join(' / ')}`),
         };
     };
     const timelinesOf = (ids: readonly string[]): Texts => {
@@ -101,6 +111,7 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
             source: e.source,
             target: e.target,
             ...(captions[e.id] && { label: timelinesOf(captions[e.id]) }),
+            ...tooltip(e),
         });
         return {
             id: stormingGraphId(storming.id, render.options),
@@ -110,7 +121,7 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
         };
     }
     if (render.options.timelineId !== undefined) {
-        const edge = (e: RenderEdge): GraphEdge => ({ id: e.id, kind: edgeKind(e), source: e.source, target: e.target });
+        const edge = (e: RenderEdge): GraphEdge => ({ id: e.id, kind: edgeKind(e), source: e.source, target: e.target, ...tooltip(e) });
         return attach({ id: stormingGraphId(storming.id, render.options), nodes: render.nodes.map(node), edges: render.edges.map(edge) });
     }
 
@@ -141,7 +152,7 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
                     sequences.set(id, s);
                 } else if (e.type === 'semantic') {
                     const id = `${e.semantic}@${source}->${target}`;
-                    edges.set(id, { id, kind: edgeKind(e), source, target });
+                    edges.set(id, { id, kind: edgeKind(e), source, target, ...tooltip(e) });
                 }
             }
         }

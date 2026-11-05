@@ -278,6 +278,37 @@ describe('layout of an Event Storming view', () => {
         }
     });
 
+    test('a handler shared by converging commands: one note naming its commands, one emits whose tooltip names them', async () => {
+        const storming = await parse(`storming S {
+  event Requested "受け付けた"
+  actor Clerk
+  aggregate Request "依頼"
+  command Receive "受注する" { by Clerk handledBy Request emits Requested }
+  command Create "登録する" { by Clerk handledBy Request emits Requested }
+  timeline T { Requested }
+}`);
+        for (const options of [{ level: 'design-level' }, { level: 'design-level', timelineId: 'T' }] satisfies ViewOptions[]) {
+            const graph = graphOf(storming, options);
+            const handlers = graph.nodes.filter((n) => n.kind === 'esAggregate');
+            expect(handlers).toHaveLength(1);
+            expect(handlers[0]!.commands).toEqual(['es/S/Create', 'es/S/Receive']);
+            const emits = graph.edges.filter(
+                (e) => e.source === handlers[0]!.id && e.kind === 'esCausal' && !graph.nodes.some((n) => n.id === e.target && n.kind !== 'esEvent'),
+            );
+            expect(emits).toHaveLength(1);
+            expect(emits[0]!.tooltip?.ja.label).toBe('コマンド: 登録する / 受注する');
+            expect(emits[0]!.tooltip?.en.name).toBe('Commands: Create / Receive');
+            expect(
+                graph.edges
+                    .filter((e) => e.target === handlers[0]!.id)
+                    .map((e) => e.source)
+                    .sort(),
+            ).toEqual(['n:Create', 'n:Receive']);
+            const laid = await engine.layout(graph);
+            expectReadable(laid);
+        }
+    });
+
     test('sticks a hotspot on its event: above it, not a step of the flow', async () => {
         const storming = await parse(`storming S {
   event A event B

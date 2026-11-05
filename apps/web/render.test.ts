@@ -345,3 +345,30 @@ describe('the focus of a selected note in a view of stages (the grid) and a time
         expect(focusElements(grouped, [noteOf(grouped, 'D')])).toEqual(es('D', 'G1', 'G2'));
     });
 });
+
+describe('a handler shared by the commands converging on one event (ADR 0032)', () => {
+    test('selecting it keeps all its commands; selecting one command keeps only its path through it; its emits has a tooltip', async () => {
+        const [payload] = await viewPayloads([
+            {
+                path: 'es.dtes',
+                text: `storming S {
+  event Requested
+  actor Clerk
+  actor Shop
+  aggregate Request
+  command Receive { by Shop handledBy Request emits Requested }
+  command Create { by Clerk handledBy Request emits Requested }
+  timeline T { Requested }
+}
+`,
+            },
+        ]);
+        const scene = buildScene(payload!.stormings[0]!.views['design-level|']!.graph, optionsOf(payload!));
+        const items = sceneItems(scene);
+        const handler = items.find((i) => i.type === 'node' && i.elementId === 'es/S/Request')!;
+        expect(focusElements(items, [handler.id])).toEqual(['Clerk', 'Create', 'Receive', 'Request', 'Requested', 'Shop'].map((id) => `es/S/${id}`));
+        expect(focusElements(items, ['n:n:Create'])).toEqual(['Clerk', 'Create', 'Request', 'Requested'].map((id) => `es/S/${id}`));
+        const emits = scene.edges.find((e) => e.source === handler.id)!;
+        expect(emits.props.tooltip).toBe('Commands: Create / Receive');
+    });
+});

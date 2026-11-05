@@ -310,6 +310,11 @@ interface Chain {
     hotspots: { id: string; sub: SubColumn }[];
 }
 /** The rows of a chain's hotspots: as many as the most hotspots of one of its sub-columns. */
+/** A handler drawn once for the chains converging on one event note, and the command notes of those chains. */
+interface Merged {
+    id: string;
+    commands: string[];
+}
 const hotspotRows = (c: Chain): number => Math.max(0, ...SUB_COLUMNS.map((sub) => c.hotspots.filter((h) => h.sub === sub).length));
 const chainHeight = (c: Chain): number => hotspotRows(c) + Math.max(c.issuers.length + 1, c.readmodels.length);
 
@@ -339,12 +344,14 @@ function placeChains(chains: Chains, cells: Record<string, GridCell>, frames: St
         else if (e.kind === 'hotspot-on') subjectOf.set(e.source, e.target);
     }
     /** What stands at each step. */
-    const at = new Map<string, { chains: Chain[]; hotspots: string[]; policies: string[]; policyHotspots: string[] }>();
+    const at = new Map<string, { chains: Chain[]; hotspots: string[]; policies: string[]; policyHotspots: string[]; merged: Merged[] }>();
     const stepOf = (slot: string) => {
         let s = at.get(slot);
-        if (!s) at.set(slot, (s = { chains: [], hotspots: [], policies: [], policyHotspots: [] }));
+        if (!s) at.set(slot, (s = { chains: [], hotspots: [], policies: [], policyHotspots: [], merged: [] }));
         return s;
     };
+    /** The merged handler each command note's chain converges on (the first, by ID). */
+    const mergedOf = new Map<string, string>();
     const sorted = [...chains.nodes].sort((a, b) => compare(a.id, b.id));
     /** The chain each note is in, and its sub-column there. */
     const chainOf = new Map<string, { chain: Chain; sub: SubColumn }>();
@@ -352,7 +359,12 @@ function placeChains(chains: Chains, cells: Record<string, GridCell>, frames: St
     for (const n of sorted) {
         const slot = slotOf(n.id);
         if (slot === undefined) continue;
-        if (n.kind === 'command') {
+        if (n.commands) {
+            // a handler shared by chains converging on one event note: placed once their rows are known
+            stepOf(slot).merged.push({ id: n.id, commands: n.commands.map((c) => `n:${c}`) });
+            for (const c of n.commands) if (!mergedOf.has(`n:${c}`)) mergedOf.set(`n:${c}`, n.id);
+            placed.add(n.id);
+        } else if (n.kind === 'command') {
             const chain: Chain = { command: n.id, issuers: [], readmodels: [], hotspots: [] };
             chainOf.set(n.id, { chain, sub: 'command' });
             stepOf(slot).chains.push(chain);
@@ -384,13 +396,30 @@ function placeChains(chains: Chains, cells: Record<string, GridCell>, frames: St
         const slot = slotOf(n.id);
         const subject = subjectOf.get(n.id);
         const inChain = subject !== undefined ? chainOf.get(subject) : undefined;
+        const mergedChain =
+            subject !== undefined && byId.get(subject)?.commands
+                ? chainOf.get(
+                      byId
+                          .get(subject)!
+                          .commands!.map((c) => `n:${c}`)
+                          .sort(compare)[0]!,
+                  )
+                : undefined;
         if (inChain && placed.has(subject!)) inChain.chain.hotspots.push({ id: n.id, sub: inChain.sub });
+        // on a merged handler: above the first chain converging on it, in the handlers' column
+        else if (mergedChain) mergedChain.chain.hotspots.push({ id: n.id, sub: 'handler' });
         else if (subject !== undefined && byId.get(subject)?.kind === 'policy' && placed.has(subject)) stepOf(slotOf(subject)!).policyHotspots.push(n.id);
         else if (slot !== undefined && (subject === undefined || !byId.has(subject))) stepOf(slot).hotspots.push(n.id);
         else continue;
         placed.add(n.id);
     }
     for (const n of sorted) if (!placed.has(n.id)) loose.push(n.id);
+    // the chains converging on one merged handler next to each other, so that it stands beside all of them
+    const chainKey = (c: Chain): string => (c.command !== undefined ? (mergedOf.get(c.command) ?? c.command) : c.handler!);
+    for (const s of at.values()) {
+        const order = new Map(s.chains.map((c, i) => [c, i]));
+        s.chains.sort((a, b) => compare(chainKey(a), chainKey(b)) || order.get(a)! - order.get(b)!);
+    }
 
     // the sub-columns of each step's column, and the band above each lane's row
     const used = new Map<number, Set<SubColumn>>();
@@ -404,6 +433,7 @@ function placeChains(chains: Chains, cells: Record<string, GridCell>, frames: St
             if (c.readmodels.length) subs.add('readmodel');
             if (c.handler !== undefined) subs.add('handler');
         }
+        if (s.merged.length) subs.add('handler');
         if (s.policies.length) subs.add('policy');
         const height = Math.max(
             s.chains.reduce((h, c) => h + chainHeight(c), 0),
@@ -444,6 +474,8 @@ function placeChains(chains: Chains, cells: Record<string, GridCell>, frames: St
             cells[id] = { col: colOf(step.col, sub), row: r };
         };
         let top = bottom + 1 - s.chains.reduce((h, c) => h + chainHeight(c), 0);
+        const commandRows = new Map<string, number>();
+        const handlerRows = new Set<number>();
         for (const c of s.chains) {
             const above = hotspotRows(c);
             for (const sub of SUB_COLUMNS) c.hotspots.filter((h) => h.sub === sub).forEach((h, i) => place(h.id, sub, top + above - 1 - i));
@@ -451,9 +483,25 @@ function placeChains(chains: Chains, cells: Record<string, GridCell>, frames: St
             c.issuers.forEach((id, i) => place(id, 'command', first + i));
             const commandRow = first + c.issuers.length;
             if (c.command !== undefined) place(c.command, 'command', commandRow);
+            if (c.command !== undefined) commandRows.set(c.command, commandRow);
             if (c.handler !== undefined) place(c.handler, 'handler', commandRow);
+            if (c.handler !== undefined) handlerRows.add(commandRow);
             c.readmodels.forEach((id, i) => place(id, 'readmodel', first + i));
             top += chainHeight(c);
+        }
+        // a merged handler at the middle of the rows of the commands converging on it (a free row of its column near it)
+        for (const m of s.merged) {
+            const rows = m.commands.flatMap((c) => commandRows.get(c) ?? []).sort((a, b) => a - b);
+            if (!rows.length) continue;
+            const [low, high] = [rows[0]!, rows.at(-1)!];
+            const middle = Math.round((low + high) / 2);
+            const free = [...Array(high - low + 1).keys()]
+                .map((i) => low + i)
+                .filter((r) => !handlerRows.has(r))
+                .sort((a, b) => Math.abs(a - middle) - Math.abs(b - middle) || a - b);
+            const r = free[0] ?? middle;
+            handlerRows.add(r);
+            place(m.id, 'handler', r);
         }
         s.hotspots.forEach((id, i) => place(id, 'event', bottom - i));
         s.policies.forEach((id, i) => place(id, 'policy', bottom - i));

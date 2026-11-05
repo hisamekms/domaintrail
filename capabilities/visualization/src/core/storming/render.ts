@@ -47,7 +47,14 @@ export function projectView(storming: Storming, options: ViewOptions): RenderGra
     const addEvent = (node: RenderEventNode, slot: string = '', position: number = 0): void => {
         nodes.set(node.id, node);
         eventNodes.set(node.eventId, [...(eventNodes.get(node.eventId) ?? []), node.id]);
-        places.push({ id: node.id, eventId: node.eventId, slot: timelineId === undefined ? '' : slot, position });
+        // the integrated canvas draws each event as one note (`graph.ts`): a handler merged before it is merged once
+        places.push({
+            id: node.id,
+            eventId: node.eventId,
+            slot: timelineId === undefined ? '' : slot,
+            position,
+            ...(timelineId === undefined && { drawnAs: `e:${node.eventId}` }),
+        });
     };
     const addStep = (node: TrieNode, position: number = 0): void => {
         const occurrencesOf = (eventId: string) => (node.occurrences.get(eventId) ?? []).filter((o) => timelineId === undefined || o.timelineId === timelineId);

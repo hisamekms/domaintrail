@@ -78,6 +78,8 @@ export interface EdgeProps {
     tone: EdgeTone;
     /** A resolved hotspot's `on`: drawn quieter, as its note is. */
     resolved?: true;
+    /** Shown on hover (an `emits` from a handler shared by several commands: their names). */
+    tooltip?: string;
 }
 
 /** What every item has: a stable ID (unchanged items keep their identity and selection), its origin and its element. */

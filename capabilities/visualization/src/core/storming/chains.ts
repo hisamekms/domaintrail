@@ -34,6 +34,8 @@ export interface EventPlace {
     eventId: string;
     slot: string;
     position: number;
+    /** The note the graph draws it as, when the graph draws several event nodes as one (the integrated canvas: `e:<event>`). */
+    drawnAs?: string;
 }
 
 /** The elements of a view (not events) drawn along the grammar, their semantic edges, and the slot of each anchored note. */
@@ -109,9 +111,9 @@ export function drawChains(elements: readonly ElementOfView[], drawn: readonly S
     const notes = new Map<string, Note[]>();
     const nodes = new Map<string, RenderElementNode>();
     const slots = new Map<string, string>();
-    const addNote = (n: ElementOfView, note: Note, use?: string): void => {
+    const addNote = (n: ElementOfView, note: Note, use?: string, commands?: string[]): void => {
         const id = `n:${note.key}`;
-        nodes.set(id, { type: 'element', id, elementId: n.id, kind: n.kind, ...(use !== undefined && { use }) });
+        nodes.set(id, { type: 'element', id, elementId: n.id, kind: n.kind, ...(use !== undefined && { use }), ...(commands && { commands }) });
         if (note.slot !== undefined) slots.set(id, note.slot);
         notes.set(n.id, [...(notes.get(n.id) ?? []), note]);
     };
@@ -119,12 +121,53 @@ export function drawChains(elements: readonly ElementOfView[], drawn: readonly S
         if (n.kind === 'command') for (const note of notesAt(n.id, placesOf('emits', 'targetId', n.id))) addNote(n, note);
         if (n.kind === 'policy') for (const note of notesAt(n.id, placesOf('on', 'sourceId', n.id))) addNote(n, note);
     }
-    // an issuer, read model or handler beside each note of each command that uses it
-    const copies = new Map<string, Note[]>();
-    for (const [element, commands] of usersOf(edgesOf('by').concat(edgesOf('reads'), edgesOf('handledBy')))) {
-        const list = commands.flatMap((c) => notes.get(c) ?? []);
-        copies.set(element, [...new Map(list.map((note) => [note.key, note])).values()]);
+    /** The event notes of `eventId` at a note's slot (every one when the note has none). */
+    const eventsAt = (eventId: string, note: Note): EventPlace[] =>
+        (eventsOf.get(eventId) ?? []).filter((p) => note.slot === undefined || p.slot === note.slot);
+    // one handler for the chains that converge on one event note: the command notes handled by the same element that
+    // emit it, at its slot (`n:<handler>@*<event note>`); a command note keeps a copy of its own for the rest
+    const handlerOfCommand = new Map<string, string>();
+    for (const e of edgesOf('handledBy')) if (!handlerOfCommand.has(e.sourceId)) handlerOfCommand.set(e.sourceId, e.targetId);
+    const converging = new Map<string, { handler: string; places: EventPlace[]; notes: string[] }>();
+    for (const e of edgesOf('emits')) {
+        const handler = handlerOfCommand.get(e.sourceId);
+        if (handler === undefined) continue;
+        for (const note of notes.get(e.sourceId) ?? []) {
+            for (const place of eventsAt(e.targetId, note)) {
+                const key = `${handler}@*${place.drawnAs ?? place.id}`;
+                const c = converging.get(key) ?? { handler, places: [], notes: [] };
+                if (!c.notes.includes(note.key)) c.notes.push(note.key);
+                if (!c.places.includes(place)) c.places.push(place);
+                converging.set(key, c);
+            }
+        }
     }
+    const merged = new Map([...converging].filter(([, c]) => c.notes.length > 1));
+    /** The merged handler a command note's chain into an event note goes through (`<note>|<event note>`). */
+    const mergedAt = new Map<string, string>();
+    for (const [key, c] of merged) for (const note of c.notes) for (const p of c.places) mergedAt.set(`${note}|${p.id}`, `n:${key}`);
+    const ownHandler = (note: Note, command: string): boolean => {
+        const places = edgesOf('emits')
+            .filter((e) => e.sourceId === command)
+            .flatMap((e) => eventsAt(e.targetId, note));
+        return !places.length || places.some((p) => !mergedAt.has(`${note.key}|${p.id}`));
+    };
+    // an issuer, read model or handler beside each note of each command that uses it (a handler: unless merged)
+    const copies = new Map<string, Note[]>();
+    const addCopies = (element: string, list: Note[]): void => {
+        const all = [...(copies.get(element) ?? []), ...list];
+        copies.set(element, [...new Map(all.map((note) => [note.key, note])).values()]);
+    };
+    for (const [element, commands] of usersOf(edgesOf('by').concat(edgesOf('reads'))))
+        addCopies(
+            element,
+            commands.flatMap((c) => notes.get(c) ?? []),
+        );
+    for (const [command, handler] of handlerOfCommand)
+        addCopies(
+            handler,
+            (notes.get(command) ?? []).filter((note) => ownHandler(note, command)),
+        );
     // an external system beside each note of an event that comes from it
     const sources = new Map<string, EventPlace[]>();
     for (const e of edgesOf('event-from')) sources.set(e.sourceId, [...(sources.get(e.sourceId) ?? []), ...(eventsOf.get(e.targetId) ?? [])]);
@@ -132,9 +175,11 @@ export function drawChains(elements: readonly ElementOfView[], drawn: readonly S
         if (n.kind === 'command' || n.kind === 'policy' || n.kind === 'hotspot') continue;
         const uses = copies.get(n.id) ?? [];
         const places = sources.get(n.id) ?? [];
-        if (!uses.length && !places.length) addNote(n, { key: n.id });
+        const shared = [...merged].filter(([, c]) => c.handler === n.id);
+        if (!uses.length && !places.length && !shared.length) addNote(n, { key: n.id });
         for (const use of uses) addNote(n, { key: `${n.id}@${use.key}`, ...at(use) }, use.key);
         for (const p of places) addNote(n, { key: `${n.id}@${p.id}`, slot: p.slot, position: p.position }, p.id);
+        for (const [key, c] of shared) addNote(n, { key, slot: c.places[0]!.slot, position: c.places[0]!.position }, undefined, [...c.notes].sort(compare));
     }
     // a hotspot on each note of its sticky
     const subjectOf = new Map(edgesOf('hotspot-on').map((e) => [e.sourceId, e.targetId]));
@@ -160,9 +205,8 @@ export function drawChains(elements: readonly ElementOfView[], drawn: readonly S
         edges.set(id, { type: 'semantic', id, kind: e.kind, source, target, semantic: key });
     };
     const notesOf = (id: string): Note[] => notes.get(id) ?? [];
-    /** The event notes of `eventId` at a note's slot (every one when the note has none). */
-    const eventsAt = (eventId: string, note: Note): EventPlace[] =>
-        (eventsOf.get(eventId) ?? []).filter((p) => note.slot === undefined || p.slot === note.slot);
+    /** The `emits` drawn from a merged handler to an event note: one edge for the commands' `emits` it stands for. */
+    const fromMerged = new Map<string, { source: string; target: string; keys: string[] }>();
     /** The copy of an element beside a command's note, when it is drawn. */
     const copyAt = (elementId: string, note: Note): string | undefined => {
         const id = useNodeId(elementId, note.key);
@@ -178,7 +222,17 @@ export function drawChains(elements: readonly ElementOfView[], drawn: readonly S
                 for (const note of notesOf(e.sourceId)) {
                     const handler = handlerOf.get(note.key);
                     const source = (handler !== undefined && copyAt(handler, note)) || `n:${note.key}`;
-                    for (const p of eventsAt(e.targetId, note)) add(e, source, p.id);
+                    for (const p of eventsAt(e.targetId, note)) {
+                        const m = mergedAt.get(`${note.key}|${p.id}`);
+                        if (m === undefined) {
+                            add(e, source, p.id);
+                            continue;
+                        }
+                        const id = `${m}->${p.id}`;
+                        const f = fromMerged.get(id) ?? { source: m, target: p.id, keys: [] };
+                        f.keys.push(semanticEdgeKey(e));
+                        fromMerged.set(id, f);
+                    }
                 }
                 break;
             case 'by':
@@ -191,6 +245,7 @@ export function drawChains(elements: readonly ElementOfView[], drawn: readonly S
                 for (const note of notesOf(e.sourceId)) {
                     const copy = copyAt(e.targetId, note);
                     if (copy) add(e, `n:${note.key}`, copy);
+                    for (const [key, c] of merged) if (c.handler === e.targetId && c.notes.includes(note.key)) add(e, `n:${note.key}`, `n:${key}`);
                 }
                 break;
             case 'reads':
@@ -229,6 +284,19 @@ export function drawChains(elements: readonly ElementOfView[], drawn: readonly S
                 for (const note of notesOf(e.sourceId)) for (const c of issued(note, notesOf(e.targetId))) add(e, `n:${note.key}`, `n:${c.key}`);
                 break;
         }
+    }
+    for (const f of fromMerged.values()) {
+        const keys = [...new Set(f.keys)].sort(compare);
+        const id = `${keys[0]}@${f.source}->${f.target}`;
+        edges.set(id, {
+            type: 'semantic',
+            id,
+            kind: 'emits',
+            source: f.source,
+            target: f.target,
+            semantic: keys[0]!,
+            ...(keys.length > 1 && { merged: keys }),
+        });
     }
     return { nodes: [...nodes.values()], edges: [...edges.values()], slots };
 }

@@ -233,6 +233,7 @@ function edgeItem(graph: LaidOutGraph, e: GraphEdge, v: Variant, owner: string, 
             lw: l?.width ?? 0,
             lh: l?.height ?? 0,
             tone,
+            ...(e.tooltip && { tooltip: textOf(e.tooltip, v) }),
         },
     };
 }

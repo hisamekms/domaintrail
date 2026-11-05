@@ -154,7 +154,9 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   causes and time only. Design Level follows Event Storming's grammar, left to right (ADR 0032): read model → issuer
   (`by`: an actor or external system, stuck on top of its command when no read model leads to it) → command → handler
   (`handledBy`: an aggregate or external system, from which the command's events come) → event → policy → the command it
-  issues; a command a policy issues has no issuer, and its read model goes to the command; an event that arrives `from`
+  issues; commands converging on one event note through the same handler share one handler note before it (hovering
+  its arrow names them; selecting it keeps them all, selecting one command only its own path); a command a policy
+  issues has no issuer, and its read model goes to the command; an event that arrives `from`
   an external system has that system before it; a hotspot is stuck on top of the sticky it is `on` (an event, a
   command, a policy, …), never a step of the flow, and at Big Picture only one on an event is drawn. Where an event is
   drawn at several steps, the command before it, its copies and the policy after it are drawn at each step (ADR 0024,

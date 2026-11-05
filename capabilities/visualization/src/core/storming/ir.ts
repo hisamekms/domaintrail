@@ -104,6 +104,12 @@ export interface RenderElementNode {
     kind: Exclude<NodeElementKind, 'event'>;
     /** The note a copy stands beside: a command note's ID without `n:` (`C` or `C#2`), or an event note's ID. */
     use?: string;
+    /**
+     * A handler drawn once for the chains that converge on one event note (`n:<handler>@*<event note>`, `chains.ts`):
+     * the command notes it stands for, their IDs without `n:`, sorted. A change to the `handledBy` of any of them is
+     * a change of this note.
+     */
+    commands?: string[];
 }
 
 /** A stage, drawn as a frame around its main flow and its exceptions (views of a storming with stages, spec §3.7). */
@@ -118,7 +124,17 @@ export type RenderNode = RenderEventNode | RenderGroupNode | RenderElementNode |
 
 export type RenderEdge =
     /** The drawing of a semantic edge; one semantic edge may be drawn several times when its event is. */
-    | { type: 'semantic'; id: string; kind: SemanticEdgeKind; source: string; target: string; semantic: string }
+    | {
+          type: 'semantic';
+          id: string;
+          kind: SemanticEdgeKind;
+          source: string;
+          target: string;
+          /** The semantic edge it draws (the first of `merged`). */
+          semantic: string;
+          /** An `emits` from a merged handler: the semantic edges of every command's `emits` it stands for, sorted. */
+          merged?: string[];
+      }
     /**
      * Time order between consecutive steps of timelines (from or to a group node, never inside it); `exception` when
      * every one of them is an exception (a view of sections only).

@@ -554,6 +554,76 @@ describe('the grammar of ADR 0032 in a view of stages', () => {
     });
 });
 
+describe('a handler shared by the chains converging on one event note, in a view of stages', () => {
+    const text = `storming M {
+  event Requested
+  event Rejected
+  event Next
+  actor Clerk
+  external Orders
+  aggregate Request
+  aggregate Inbox
+  command Receive {
+    by Orders
+    handledBy Request
+    emits Requested, Rejected
+  }
+  command Upload {
+    by Clerk
+    handledBy Request
+    emits Requested, Rejected
+  }
+  command Create {
+    by Clerk
+    handledBy Request
+    emits Requested
+  }
+  command Note {
+    by Clerk
+    handledBy Inbox
+    emits Requested
+  }
+  stage S {
+    timeline Main {
+      group Got {
+        Requested
+        Rejected
+      }
+      Next
+    }
+  }
+}
+`;
+    test('one handler per event note, at the middle of the rows of its commands, next to each other; no crossings', async () => {
+        const s = await parse(text);
+        const render = projectView(s, DL);
+        const cells = render.grid!.cells;
+        const merged = render.nodes.filter((n) => n.type === 'element' && n.commands);
+        // before Requested: Receive, Upload and Create through Request; before Rejected: Receive and Upload
+        expect(merged.map((n) => [n.id.replace(/@\*.*\//, '@*…/'), n.type === 'element' && n.commands])).toEqual([
+            ['n:Request@*…/Rejected', ['Receive', 'Upload']],
+            ['n:Request@*…/Requested', ['Create', 'Receive', 'Upload']],
+        ]);
+        // Note goes through its own handler, Inbox: never merged with another one
+        expect(cells['n:Inbox@Note']).toBeDefined();
+        for (const m of merged) {
+            const rows = m.type === 'element' ? m.commands!.map((c) => cells[`n:${c}`]!.row) : [];
+            const [low, high] = [Math.min(...rows), Math.max(...rows)];
+            expect(cells[m.id]!.row).toBeGreaterThanOrEqual(low);
+            expect(cells[m.id]!.row).toBeLessThanOrEqual(high);
+            // its commands next to each other: no other command between them
+            const between = render.nodes.filter((n) => n.type === 'element' && n.kind === 'command' && cells[n.id]!.row >= low && cells[n.id]!.row <= high);
+            expect(between.map((n) => n.id.slice(2)).sort()).toEqual(m.type === 'element' ? [...m.commands!].sort() : []);
+            expect(cells[m.id]!.col).toBe(cells['n:Inbox@Note']!.col);
+        }
+        expect(new Set(merged.map((m) => `${cells[m.id]!.col}:${cells[m.id]!.row}`)).size).toBe(merged.length);
+        expect(crossings(laidOut(render, s))).toEqual([]);
+        // selecting one command keeps its path through the merged handler, not the other commands
+        const edges = render.edges.filter((e) => e.type === 'semantic' && e.kind === 'handledBy' && e.target === merged[1]!.id);
+        expect(edges.map((e) => e.source).sort()).toEqual(['n:Create', 'n:Receive', 'n:Upload']);
+    });
+});
+
 describe('without the exceptions (「例外を表示」 off)', () => {
     const text = `storming T {
   event A

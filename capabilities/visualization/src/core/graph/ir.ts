@@ -108,6 +108,11 @@ export interface GraphNode {
      * that node.
      */
     attachTo?: string;
+    /**
+     * An Event Storming handler drawn once for several commands converging on one event (ADR 0032): their element IDs,
+     * so that a change to any of them marks this note.
+     */
+    commands?: string[];
     /** Commands that leave a state as it is, listed in a compartment at the bottom of its box (UML internal transitions). */
     internal?: InternalTransition[];
     /** Model element shown in the Detail Panel when the node is selected. */
@@ -140,6 +145,8 @@ export interface GraphEdge {
     label?: Texts;
     /** Events a transition raises, shown with or instead of its command (see `TransitionLabels`). */
     events?: Texts;
+    /** Shown on hover: an Event Storming `emits` from a handler shared by several commands names them. */
+    tooltip?: Texts;
 }
 
 /** A command that leaves a state as it is, drawn as a row in the state's box instead of a loop. */

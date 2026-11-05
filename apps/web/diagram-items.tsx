@@ -201,7 +201,7 @@ export function EdgeContent({ p }: { p: EdgeProps }): ReactNode {
     const [s0, s1] = [points[0], points[1]];
     return (
         <>
-            <path d={d} className="de-hit" />
+            <path d={d} className="de-hit" {...(p.tooltip ? { [TOOLTIP_ATTR]: p.tooltip } : {})} />
             <path d={d} className="de-line" />
             {kind === 'owns' ? <path d={diamond(s0, s1)} className="de-head de-diamond" /> : null}
             {/* every edge points from the dependent to its dependency */}

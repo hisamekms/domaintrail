@@ -131,6 +131,18 @@ remain (commands without `handledBy`), and no S025, S027 or S028.
   causal); event → read model (`readmodel-from`, a new edge kind `esFeeds`: dotted *with* an arrowhead, in the legend
   「イベントがリードモデルに反映される」), from the event's note at the nearest slot at or before the copy; external →
   event (`event-from`, causal); hotspot → its sticky, one hotspot note per note of the sticky.
+- **A handler shared by converging chains** (*Decided by the maintainer*, a later commit): the commands whose chains
+  end at the same event note and that are handled by the same element (the same aggregate, or the same external
+  system) go through one handler note before it, `n:<handler>@*<event note>` (on the integrated ELK canvas, which draws
+  an event once, `@*e:<event>`): each command → that handler (`handledBy`), and one handler → event edge for all their
+  `emits` (`RenderEdge.merged` lists the semantic edges it stands for; its tooltip names the commands). Merging is per
+  event note: never across event notes (an event at two steps gets one before each), never between different
+  handlers, and the issuers stay per command; a command note keeps a handler of its own for the events it does not
+  share (A emits E1 and E2, B emits E1: one shared handler before E1, A's own before E2). The node carries the command
+  notes it stands for (`RenderElementNode.commands`; `GraphNode.commands`, their element IDs), so that a change to the
+  `handledBy` of any of them can mark it. In the grid the chains converging on one handler are next to each other and
+  the handler stands at the middle of their command rows (a free row of the handlers' column nearest it); in ELK it is
+  just the shared node. Selecting it keeps all its commands; selecting one command keeps only its own path through it.
 - **ELK**: an issuer is stuck on its command only when nothing else leads to it, so a read model reads read model →
   issuer → command → handler → event as layers; a hotspot is stuck on whatever sticky it is on.
 - **Grid** (`placeChains`): sub-columns read model, command, *handler*, event, policy. A chain is: its hotspots above
