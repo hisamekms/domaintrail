@@ -98,7 +98,10 @@ merged.
     on, makes the same call, or when the topic has been quiet for about two minutes; otherwise they are dropped.
     Those still held when the session ends are dropped (*decided by the maintainer*).
   - An item made in this session is rewritten in place, without a new version, until the session ends; versions are
-    kept only for items from earlier sessions.
+    kept only for items from earlier sessions. *Amended by the maintainer* (after trying it): an update must carry
+    the message(s) it rests on as new sources (an update without one is dropped), and an update that adds a source
+    makes a new version even in the session that made the item, so that a correction ("14 days" → "30 days") can be
+    followed from the item to the message; only a rewording that adds no source is rewritten in place.
   - A correction within the same stretch of talk is an update, not a conflict. A conflict needs both sides stated
     firmly at different times (another session, or well earlier), each with its source.
   - Questions, "maybe" and tentative ideas are not extracted, or get `origin` `inferred`. `agreed` is given only when
