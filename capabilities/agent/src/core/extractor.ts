@@ -7,9 +7,13 @@
 // A job withdrawn by the server is stopped and not answered; one past its own timeout is stopped and reported as
 // failed. The reply is AI output: its shape is checked here (`readExtractorReply`) before it is sent, and read again by
 // the server. A server with no knowledge store answers the stream 404: the extractor then ends (`off`) and nothing else
-// does. Functions over the ports only; the log has job IDs and counts, never a message's text or an item's.
+// does.
+//
+// The server also hands it the light model's question before an extraction (a `gate` job, stage 2): the same way, with
+// the light model's prompt; its reply goes back as given (the server reads it, and takes one that is not a reply as
+// unsure). Functions over the ports only; the log has job IDs and counts, never a message's text or an item's.
 import { readExtractorReply, type ExtractionJobBody, type ExtractionResultBody } from '@domaintrail/knowledge';
-import { buildExtractionPrompt } from './extract-prompt.js';
+import { buildExtractionPrompt, buildGatePrompt } from './extract-prompt.js';
 import { AgentApiError, type AnswerTurnResult, type Clock, type ExtractAgent, type ExtractionApi } from './ports.js';
 
 export interface ExtractorDeps {
@@ -74,10 +78,14 @@ export function startExtractor(deps: ExtractorDeps, options: ExtractorOptions = 
     const resultOf = async (job: ExtractionJobBody, signal: AbortSignal): Promise<ExtractionResultBody> => {
         const started = now();
         const elapsed = (): number => Math.max(0, Math.round(now() - started));
-        const result = await deps.agent.extract({ prompt: buildExtractionPrompt(job, deps.nonce()), signal });
+        const result =
+            job.stage === 'gate'
+                ? await deps.agent.gate({ prompt: buildGatePrompt(job, deps.nonce()), signal })
+                : await deps.agent.extract({ prompt: buildExtractionPrompt(job, deps.nonce()), signal });
         const meta = { ...(result.model && { model: result.model }), ...(result.usage && { usage: result.usage }), durationMs: elapsed() };
         if (result.error !== undefined) return { error: result.error, ...meta };
         const reply = outputOf(result);
+        if (job.stage === 'gate') return { reply, ...meta };
         const read = readExtractorReply(reply);
         if (!read.ok) return { error: `invalid output (${read.error.path})`, ...meta };
         return { reply, ...meta };
@@ -89,7 +97,11 @@ export function startExtractor(deps: ExtractorDeps, options: ExtractorOptions = 
         const limit = Math.max(1, Math.min(job.timeoutMs, options.timeoutMs ?? Number.POSITIVE_INFINITY));
         const timeout = AbortSignal.timeout(limit);
         const signal = AbortSignal.any([withdrawn.signal, stopping.signal, timeout]);
-        log(`extraction job ${job.job}: extraction ${job.number} (${job.messages.filter((m) => m.isNew).length} new messages, ${job.items.length} items)`);
+        log(
+            job.stage === 'gate'
+                ? `extraction job ${job.job}: the light model on extraction ${job.number} (${job.messages.filter((m) => m.isNew).length} new messages)`
+                : `extraction job ${job.job}: extraction ${job.number} (${job.messages.filter((m) => m.isNew).length} new messages, ${job.items.length} items)`,
+        );
         try {
             let result: ExtractionResultBody;
             try {

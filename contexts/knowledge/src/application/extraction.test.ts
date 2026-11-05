@@ -1,10 +1,14 @@
-// A session's extractions over fakes of their ports (ADR 0031, section 3): the input given, the guards at work across
-// extractions, the checkpoint that makes a restart neither repeat nor lose work, the cost recorded, and the timing put
-// to work by the scheduler.
+// A session's extractions over fakes of their ports (ADR 0031, section 3): the input given, the three stages (the
+// mechanical one, the light model, the extractor), the guards at work across extractions and at the session's end, the
+// checkpoint that makes a restart neither repeat nor lose work, the cost recorded per stage, the timing put to work by
+// the scheduler, and the facilitator's switch (off, on again, kept in the session database).
 import { describe, expect, test } from 'bun:test';
 import { DatabaseSync } from 'node:sqlite';
 import type { Knowledge } from '../generated/index.js';
 import type { ExtractionInput, ExtractionResultBody } from '../domain/extractor.js';
+import type { GateInput } from '../domain/stages.js';
+import { loadExtractionSwitch } from './extraction-switch.js';
+import { createSqliteExtractionSwitches } from '../infrastructure/sqlite-extraction-switch.js';
 import { extractedItemId } from '../domain/extractor.js';
 import { createExtractionScheduler } from './extraction-scheduler.js';
 import {
@@ -21,7 +25,7 @@ import { content, liveItem, memoryStore } from '../test-helpers.js';
 
 const SESSION = 'sess-1';
 const project = 'shop' as Knowledge.ProjectName;
-const config = { quietSeconds: 30, minIntervalSeconds: 60, contextMinutes: 10, settleSeconds: 120 };
+const config = { enabled: true, quietSeconds: 30, minIntervalSeconds: 60, contextMinutes: 10, gateContextMinutes: 3, settleSeconds: 120 };
 const t = (s: number): Date => new Date(Date.UTC(2026, 10, 5, 9, 0, 0) + s * 1000);
 
 const message = (id: string, at: number, over: Partial<SessionMessage> = {}): SessionMessage => ({
@@ -48,18 +52,52 @@ function memoryCheckpoints(): ExtractionCheckpoints & { costs: ExtractionCost[];
     };
 }
 
-/** An extractor that replies what the test gives it, and keeps the inputs it was given. */
-function fakeExtractor(...replies: (ExtractionResultBody | 'unavailable')[]): Extractor & { inputs: ExtractionInput[] } {
+/** The light model's default answer in these tests: yes, naming nothing. */
+const GATE_YES: ExtractionResultBody = {
+    reply: { verdict: 'yes', messages: [] },
+    model: 'claude-haiku',
+    durationMs: 800,
+    usage: { inputTokens: 900, outputTokens: 20, costUsd: 0.001 },
+};
+
+/**
+ * An extractor that replies what the test gives it, and keeps the inputs it was given; its light model answers what
+ * `gates` gives (else yes).
+ */
+function fakeExtractor(...replies: (ExtractionResultBody | 'unavailable')[]): Extractor & {
+    inputs: ExtractionInput[];
+    gateInputs: GateInput[];
+    gates: (ExtractionResultBody | 'unavailable')[];
+} {
     const inputs: ExtractionInput[] = [];
+    const gateInputs: GateInput[] = [];
+    const gates: (ExtractionResultBody | 'unavailable')[] = [];
     return {
         inputs,
+        gateInputs,
+        gates,
         async extract(input) {
             inputs.push(input);
             const reply = replies.shift() ?? { reply: { operations: [] }, durationMs: 1 };
             return reply === 'unavailable' ? { kind: 'unavailable' } : { kind: 'done', result: reply };
         },
+        async gate(input) {
+            gateInputs.push(input);
+            const reply = gates.shift() ?? GATE_YES;
+            return reply === 'unavailable' ? { kind: 'unavailable' } : { kind: 'done', result: reply };
+        },
     };
 }
+
+/** What the light model's default answer records. */
+const gateYes = (named: number, messages: number) => ({
+    verdict: 'yes',
+    named,
+    messages,
+    model: 'claude-haiku',
+    durationMs: 800,
+    usage: { inputTokens: 900, outputTokens: 20, costUsd: 0.001 },
+});
 
 const reply = (...operations: unknown[]): ExtractionResultBody => ({
     reply: { operations },
@@ -88,7 +126,11 @@ const updateFinding = (item: string, text = '急ぎの見積もりは当日17時
     reason: 'more precise',
 });
 
-function setup(messages: SessionMessage[], extractor: Extractor, over: { items?: Knowledge.LiveKnowledgeItem[]; now?: () => Date } = {}) {
+function setup(
+    messages: SessionMessage[],
+    extractor: Extractor,
+    over: { items?: Knowledge.LiveKnowledgeItem[]; now?: () => Date; config?: Partial<typeof config> } = {},
+) {
     const store = memoryStore(over.items);
     const checkpoints = memoryCheckpoints();
     const log: string[] = [];
@@ -101,7 +143,7 @@ function setup(messages: SessionMessage[], extractor: Extractor, over: { items?:
             checkpoints,
             talk: { messages: async () => messages },
             extractor,
-            config,
+            config: { ...config, ...over.config },
             now: over.now ?? (() => now),
             log: (line) => log.push(line),
         });
@@ -144,6 +186,11 @@ describe("a session's extraction", () => {
                 number: 1,
                 trigger: 'answer',
                 at: t(1000),
+                stage: 'extractor',
+                people: 1,
+                nothing: 0,
+                ai: 1,
+                gate: gateYes(0, 2),
                 model: 'claude-opus',
                 durationMs: 4200,
                 usage: { inputTokens: 9000, outputTokens: 300, cacheReadTokens: 7000, cacheCreationTokens: 0, costUsd: 0.02 },
@@ -158,7 +205,7 @@ describe("a session's extraction", () => {
             },
         ]);
         expect<unknown>(log.at(-1)).toBe(
-            'knowledge: extraction 1 (answer; 2 new of 2 messages, 0 items): 1 proposed: 1 applied, 0 held, 0 dropped, 0 rejected; tokens in 9000 (cache read 7000, written 0), out 300; $0.0200; 4.2 s (claude-opus)',
+            'knowledge: extraction 1 (answer; 2 new of 2 messages, 0 items): 1 proposed: 1 applied, 0 held, 0 dropped, 0 rejected; tokens in 9000 (cache read 7000, written 0), out 300; $0.0200; 4.2 s (claude-opus); light model: yes, 0 named; tokens in 900 (cache read 0, written 0), out 20; $0.0010; 0.8 s (claude-haiku)',
         );
         expect<unknown>(await extraction.extract('quiet')).toBe('nothing-new');
     });
@@ -201,10 +248,10 @@ describe("a session's extraction", () => {
             [3, ['kn_00000002']],
         ]);
         expect<unknown>(checkpoints.saved().held.map((h) => h.operation.item)).toEqual(['kn_00000001']);
-        // the session ends: what is held applies
+        // the session ends: what is still held is dropped, nothing more applied
         await extraction.settle(true);
         expect<unknown>(checkpoints.saved().held).toEqual([]);
-        expect<unknown>(store.applied.map((e) => e.by.number)).toEqual([3, 4]);
+        expect<unknown>(store.applied.map((e) => e.by.number)).toEqual([3]);
     });
 
     test('an extractor that fails leaves the messages to the next extraction, then skips them after two failures in a row', async () => {
@@ -244,6 +291,7 @@ describe("a session's extraction", () => {
                 store.failing = true;
                 return extractor.extract(input);
             },
+            gate: (input) => extractor.gate(input),
         });
         expect<unknown>(await extraction.extract('quiet')).toBe('store-failed');
         expect<unknown>(checkpoints.saved().pending?.by.number).toBe(1);
@@ -350,5 +398,209 @@ describe('the scheduler', () => {
             [2, ['r2']],
         ]);
         scheduler.stop();
+    });
+});
+
+describe('the three stages', () => {
+    test('stage 1: only surely-nothing messages stop without any model; the checkpoint moves past them, the minute is not used', async () => {
+        const messages = [message('r1', 900, { text: 'ありがとう', nothing: true }), message('r2', 905, { text: '👍', nothing: true })];
+        const extractor = fakeExtractor();
+        const { extraction, checkpoints, log } = setup(messages, extractor);
+        expect<unknown>(await extraction.extract('quiet')).toEqual({ stoppedAt: 'mechanical' });
+        expect<unknown>([extractor.gateInputs.length, extractor.inputs.length]).toEqual([0, 0]);
+        expect<unknown>(checkpoints.saved()).toEqual({ number: 1, lastMessage: 'r2', lastMessageAt: t(905), held: [], failures: 0 });
+        expect<unknown>(checkpoints.costs).toEqual([
+            {
+                session: SESSION,
+                number: 1,
+                trigger: 'quiet',
+                at: t(1000),
+                stage: 'mechanical',
+                people: 0,
+                nothing: 2,
+                ai: 0,
+                newMessages: 2,
+                messages: 0,
+                items: 0,
+                proposed: 0,
+                applied: 0,
+                held: 0,
+                dropped: 0,
+                rejected: 0,
+            },
+        ]);
+        expect<unknown>(log.at(-1)).toBe(
+            "knowledge: extraction 1 (quiet; 2 new messages): stopped at the mechanical stage (0 people's, 2 surely nothing, 0 the AI's)",
+        );
+        // a person's message that is not, or the AI's answer, goes on
+        messages.push(message('r3', 950, { from: 'ai', author: 'AI', answer: true }));
+        await extraction.extract('answer');
+        expect<unknown>(extractor.gateInputs.map((g) => g.messages.filter((m) => m.isNew).map((m) => m.id))).toEqual([['r3']]);
+    });
+
+    test('stage 2: the light model gets the new messages, a shorter talk before them and the names of the stickies; a sure no stops', async () => {
+        const messages = [
+            message('old', 600, { stickies: [{ ref: 'Ordering.Order' }] }),
+            message('ctx', 820),
+            message('new', 900, { stickies: [{ ref: 'Ordering.Estimate', label: '見積もり' }, { ref: 'Ordering.Invoice' }] }),
+        ];
+        const extractor = fakeExtractor();
+        extractor.gates.push({ reply: { verdict: 'no', messages: [] }, model: 'claude-haiku', durationMs: 500, usage: { inputTokens: 300, outputTokens: 5 } });
+        const { extraction, checkpoints, log } = setup(messages, extractor);
+        await checkpoints.save(SESSION, { ...EMPTY_CHECKPOINT, lastMessage: 'old', lastMessageAt: t(600) });
+        // `ctx` is new too: the talk before `ctx` within 3 minutes is none (`old` is 220 s earlier)
+        expect<unknown>(await extraction.extract('quiet')).toEqual({ stoppedAt: 'gate' });
+        const [asked] = extractor.gateInputs;
+        expect<unknown>(asked.messages.map((m) => [m.key, m.id, m.isNew])).toEqual([
+            ['m1', 'ctx', true],
+            ['m2', 'new', true],
+        ]);
+        expect<unknown>(asked.stickies).toEqual(['見積もり', 'Ordering.Invoice']);
+        expect<unknown>(extractor.inputs).toEqual([]);
+        expect<unknown>(checkpoints.saved()).toEqual({
+            number: 1,
+            lastMessage: 'new',
+            lastMessageAt: t(900),
+            lastExtractionAt: t(1000),
+            held: [],
+            failures: 0,
+        });
+        expect<unknown>(checkpoints.costs[0]).toMatchObject({
+            stage: 'gate',
+            people: 2,
+            gate: { verdict: 'no', named: 0, messages: 2, model: 'claude-haiku', durationMs: 500, usage: { inputTokens: 300, outputTokens: 5 } },
+        });
+        expect<unknown>(checkpoints.costs[0].model).toBeUndefined();
+        expect<unknown>(log.at(-1)).toBe(
+            'knowledge: extraction 1 (quiet; 2 new messages): stopped by the light model: no, 0 named; tokens in 300 (cache read 0, written 0), out 5; 0.5 s (claude-haiku)',
+        );
+    });
+
+    test('stage 2 → 3: the messages the light model named are marked for the extractor; unsure, a malformed reply or a failure go on', async () => {
+        const messages = [message('ctx', 400), message('a', 900), message('b', 905)];
+        const extractor = fakeExtractor();
+        extractor.gates.push(
+            { reply: { verdict: 'yes', messages: ['m2', 'm9'] }, durationMs: 1 },
+            { reply: { verdict: 'unsure', messages: [] }, durationMs: 1 },
+            { reply: 'maybe', durationMs: 1 },
+            { error: 'claude exited with 1', durationMs: 1 },
+        );
+        const { extraction, checkpoints } = setup(messages, extractor);
+        await checkpoints.save(SESSION, { ...EMPTY_CHECKPOINT, lastMessage: 'ctx', lastMessageAt: t(400) });
+        await extraction.extract('quiet');
+        // the light model's m2 is `b` (`ctx` is outside its three minutes, the extractor's ten hold it); m9 is no message
+        expect<unknown>(extractor.inputs[0].messages.map((m) => [m.id, m.isNew, m.likely ?? false])).toEqual([
+            ['ctx', false, false],
+            ['a', true, false],
+            ['b', true, true],
+        ]);
+        for (const id of ['c', 'd', 'e']) {
+            messages.push(message(id, 950 + messages.length));
+            await extraction.extract('quiet');
+        }
+        expect<unknown>(extractor.inputs).toHaveLength(4);
+        expect<unknown>(checkpoints.costs.map((c) => [c.stage, c.gate?.verdict, c.gate?.named, c.gate?.malformed ?? false, c.gate?.error])).toEqual([
+            ['extractor', 'yes', 1, false, undefined],
+            ['extractor', 'unsure', 0, false, undefined],
+            ['extractor', 'unsure', 0, true, undefined],
+            ['extractor', 'unsure', 0, false, 'claude exited with 1'],
+        ]);
+    });
+
+    test('no extractor connected for the light model: nothing changes', async () => {
+        const extractor = fakeExtractor();
+        extractor.gates.push('unavailable');
+        const { extraction, checkpoints } = setup([message('r1', 900)], extractor);
+        expect<unknown>(await extraction.extract('quiet')).toBe('unavailable');
+        expect<unknown>(checkpoints.saved()).toEqual(EMPTY_CHECKPOINT);
+        expect<unknown>(extractor.inputs).toEqual([]);
+    });
+});
+
+describe('the session end', () => {
+    test("the last extraction's own updates are dropped, and what is still held; its adds apply", async () => {
+        const messages = [message('r1', 900)];
+        const items = [liveItem('kn_00000002', { createdIn: SESSION }), liveItem('kn_00000001', { createdIn: SESSION })];
+        const extractor = fakeExtractor(reply(updateFinding('k1')), reply(updateFinding('k2'), addFinding('m1')));
+        const { extraction, store, checkpoints, log } = setup(messages, extractor, { items });
+        await extraction.extract('quiet');
+        expect<unknown>(checkpoints.saved().held.map((h) => h.operation.item)).toEqual(['kn_00000001']);
+        messages.push(message('r2', 950));
+        expect<unknown>(await extraction.extract('end')).toEqual({ applied: 1, held: 0, dropped: 2, rejected: 0 });
+        expect<unknown>(store.applied.map((e) => e.operations.map((o) => o.kind))).toEqual([['Add']]);
+        expect<unknown>(checkpoints.saved().held).toEqual([]);
+        expect<unknown>(log.some((l) => l.includes('its Update dropped, the session ended'))).toBe(true);
+    });
+
+    test('a last extraction stopped before the extractor still drops what is held', async () => {
+        const messages = [message('r1', 900)];
+        const extractor = fakeExtractor(reply(updateFinding('k1')));
+        const { extraction, store, checkpoints } = setup(messages, extractor, { items: [liveItem('kn_00000001', { createdIn: SESSION })] });
+        await extraction.extract('quiet');
+        messages.push(message('r2', 950, { text: 'OK', nothing: true }));
+        expect<unknown>(await extraction.extract('end')).toEqual({ stoppedAt: 'mechanical' });
+        expect<unknown>(checkpoints.saved().held).toEqual([]);
+        expect<unknown>(store.applied).toEqual([]);
+    });
+});
+
+describe('the switch', () => {
+    test('switched on again, the messages older than the usual window are skipped; those within it are extracted', async () => {
+        const messages = [message('long-ago', 100), message('recent', 700), message('now', 990)];
+        const extractor = fakeExtractor();
+        const { extraction, checkpoints, log } = setup(messages, extractor);
+        // the window is ten minutes before now (t(1000)): `long-ago` is older
+        expect<unknown>(await extraction.resume()).toBe(1);
+        expect<unknown>(checkpoints.saved()).toMatchObject({ number: 0, lastMessage: 'long-ago' });
+        expect<unknown>(log.at(-1)).toBe('knowledge: the extraction is on again; 1 messages older than 10 minutes are not extracted');
+        expect<unknown>(await extraction.resume()).toBe(0);
+        await extraction.extract('quiet');
+        expect<unknown>(extractor.inputs[0].messages.filter((m) => m.isNew).map((m) => m.id)).toEqual(['recent', 'now']);
+    });
+
+    test('the scheduler: off, nothing is extracted; switched on, it resumes and extracts', async () => {
+        const messages = [message('long-ago', 0), message('r1', 980)];
+        let now = t(1000);
+        const extractor = fakeExtractor();
+        const { extraction } = setup(messages, extractor, { now: () => now });
+        const timers = { set: () => () => {} };
+        const scheduler = createExtractionScheduler({
+            extraction,
+            timing: { quietMs: 0, minIntervalMs: 0 },
+            now: () => now,
+            timers,
+            log: () => {},
+            enabled: false,
+        });
+        scheduler.kick();
+        await scheduler.settled();
+        expect<unknown>(extractor.gateInputs).toEqual([]);
+        scheduler.setEnabled(true);
+        await scheduler.settled();
+        expect<unknown>(extractor.inputs.map((i) => i.messages.filter((m) => m.isNew).map((m) => m.id))).toEqual([['r1']]);
+        // off again: a new message waits; the end extracts nothing more
+        scheduler.setEnabled(false);
+        messages.push(message('r2', 1010));
+        now = t(1100);
+        await scheduler.end();
+        expect<unknown>(extractor.inputs).toHaveLength(1);
+        scheduler.stop();
+    });
+
+    test("the facilitator's choice is kept in the session database; never switched, the config's default", async () => {
+        const db = new DatabaseSync(':memory:');
+        const switches = createSqliteExtractionSwitches(db);
+        const load = () => loadExtractionSwitch({ session: SESSION, switches, byDefault: false, now: () => t(0) });
+        const first = await load();
+        expect<unknown>(first.enabled()).toBe(false);
+        expect<unknown>(await first.set(false)).toBe(false);
+        expect<unknown>(await switches.load(SESSION)).toBeUndefined();
+        expect<unknown>(await first.set(true)).toBe(true);
+        // a restart
+        expect<unknown>((await load()).enabled()).toBe(true);
+        expect<unknown>(
+            (await loadExtractionSwitch({ session: 'another', switches: createSqliteExtractionSwitches(db), byDefault: true, now: () => t(0) })).enabled(),
+        ).toBe(true);
+        db.close();
     });
 });

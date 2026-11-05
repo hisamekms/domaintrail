@@ -1,7 +1,11 @@
 // The timing of a session's extractions put to work (ADR 0031, section 3): told when something happened (a message, an
 // extractor connecting) through `kick`, it asks the pure decision (`domain/timing.ts`) what to do now, does it, and arms
 // a timer for the next time it should ask. One extraction at a time: a kick during one is taken once it ends. The
-// session's end runs the last extraction (or applies what is held) and resolves once it is done.
+// session's end runs the last extraction (or settles what is held, dropping the rest) and resolves once it is done.
+//
+// The extraction may be switched off for the session (`setEnabled`): nothing more is extracted, at the end neither,
+// while what is held still settles. Switched on again, the extraction skips what is older than its usual window
+// (`SessionExtraction.resume`) before it decides again — in the loop, so never while an extraction runs.
 import { decideExtraction, type ExtractionTiming } from '../domain/timing.js';
 import type { SessionExtraction } from './extraction.js';
 
@@ -16,11 +20,15 @@ export interface ExtractionSchedulerDeps {
     readonly now: () => Date;
     readonly timers: Timers;
     readonly log: (line: string) => void;
+    /** Whether the session extracts when the scheduler starts (default true). */
+    readonly enabled?: boolean;
 }
 
 export interface ExtractionScheduler {
     /** Something happened (a message, an answer, an extractor connected): decide again. */
     kick(): void;
+    /** The facilitator switched the extraction off or on for the session. */
+    setEnabled(enabled: boolean): void;
     /** The session ended: the last extraction, or what is held applied; resolves once done. */
     end(): Promise<void>;
     /** Stops deciding (the server stops); an extraction under way ends on its own. */
@@ -40,6 +48,8 @@ export function createExtractionScheduler(deps: ExtractionSchedulerDeps): Extrac
     let ended = false;
     let endDone = false;
     let stopped = false;
+    let enabled = deps.enabled ?? true;
+    let resumeDue = false;
     let cancel: (() => void) | undefined;
 
     const arm = (ms: number): void => {
@@ -51,8 +61,12 @@ export function createExtractionScheduler(deps: ExtractionSchedulerDeps): Extrac
     };
 
     const step = async (): Promise<Step> => {
+        if (resumeDue && enabled) {
+            resumeDue = false;
+            await extraction.resume();
+        }
         const talk = await extraction.talkState();
-        const decision = decideExtraction({ ...talk, running: false, ended, endDone }, deps.now(), timing);
+        const decision = decideExtraction({ ...talk, running: false, ended, endDone, off: !enabled }, deps.now(), timing);
         switch (decision.kind) {
             case 'extract': {
                 const outcome = await extraction.extract(decision.trigger);
@@ -109,6 +123,13 @@ export function createExtractionScheduler(deps: ExtractionSchedulerDeps): Extrac
                 running = undefined;
                 if (again && !stopped) scheduler.kick();
             });
+        },
+        setEnabled(on) {
+            if (on === enabled) return;
+            enabled = on;
+            if (on) resumeDue = true;
+            else cancel?.();
+            scheduler.kick();
         },
         async end() {
             ended = true;

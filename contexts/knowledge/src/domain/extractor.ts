@@ -10,6 +10,7 @@
 // from the session, the extraction's number and the operation's place, so that the same extraction sent again names the
 // same items.
 import { err, Knowledge, ok, type Result } from '../generated/index.js';
+import type { GateInput } from './stages.js';
 
 /** The most of each part of a reply, and of an input. */
 export const EXTRACTION_LIMITS = {
@@ -46,6 +47,8 @@ export interface TalkMessage {
     readonly stickies: readonly string[];
     /** Since the previous extraction (else the talk before them, context only). */
     readonly isNew: boolean;
+    /** A new message the light model named as likely holding a finding (stage 2): read first. */
+    readonly likely?: boolean;
 }
 
 /** An existing item as the extractor sees it. */
@@ -95,12 +98,15 @@ export const EXTRACTION_EVENT_TYPES = {
     closed: 'session.closed',
 } as const;
 
-/** An extraction job, as the stream hands it to the extractor. */
-export interface ExtractionJobBody extends ExtractionInput {
+/**
+ * An extraction job, as the stream hands it to the extractor: an extraction (stage 3; `stage` absent from a server
+ * before the stages), or the light model's question whether to extract (stage 2, `gate`).
+ */
+export type ExtractionJobBody = ((ExtractionInput & { readonly stage?: 'extract' }) | (GateInput & { readonly stage: 'gate' })) & {
     readonly job: string;
     /** The most milliseconds the job may take. */
     readonly timeoutMs: number;
-}
+};
 
 /** What a turn of the model cost, as Claude Code reports it. */
 export interface ExtractionUsage {

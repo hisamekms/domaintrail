@@ -57,4 +57,13 @@ describe('the timing of the extraction', () => {
         // an extraction due goes first: it settles what it can itself
         expect(decideExtraction(talk({ settleAt: t(100), answeredAt: t(100) }), t(130), timing)).toEqual({ kind: 'extract', trigger: 'answer' });
     });
+
+    test('switched off: nothing is extracted, at the end neither; what is held still settles', () => {
+        const due = talk({ off: true, personWaiting: true, answeredAt: t(5), lastMessageAt: t(5) });
+        expect(decideExtraction(due, t(100), timing)).toEqual({ kind: 'idle' });
+        expect(decideExtraction({ ...due, settleAt: t(120) }, t(100), timing)).toEqual({ kind: 'wait', at: t(120) });
+        expect(decideExtraction({ ...due, settleAt: t(120) }, t(120), timing)).toEqual({ kind: 'settle' });
+        expect(decideExtraction({ ...due, ended: true }, t(130), timing)).toEqual({ kind: 'idle' });
+        expect(decideExtraction({ ...due, ended: true, settleAt: t(500) }, t(130), timing)).toEqual({ kind: 'settle' });
+    });
 });

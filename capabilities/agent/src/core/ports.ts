@@ -173,10 +173,12 @@ export interface TurnUsage {
 
 /**
  * The extractor (ADR 0031, section 3): a read-only agent with **no tools at all** (no file is read: its prompt holds
- * the talk and the items), replying with the extractor's schema. One turn at a time.
+ * the talk and the items), replying with the extractor's schema; and the light model before it (`gate`), with no tools
+ * either, replying whether to extract. One turn at a time.
  */
 export interface ExtractAgent {
     extract(turn: AnswerTurn): Promise<AnswerTurnResult>;
+    gate(turn: AnswerTurn): Promise<AnswerTurnResult>;
     /** Ends what it keeps; resolves once it is gone. */
     close?(): Promise<void>;
 }

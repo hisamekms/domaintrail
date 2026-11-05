@@ -2912,14 +2912,23 @@ is extracted from the talk. Every key is optional; with `cloudflare`, `project` 
     // the Worker's base URL: https (http only on localhost, for wrangler dev); required with cloudflare, unused with files
     "url": "https://knowledge.example.com",
     "extraction": {
+      "enabled": false,          // off unless enabled; the facilitator switches it for the session in the Live View
       "quietSeconds": 30,        // an extraction after this many seconds without a message after a person's (and after each answer of the AI, and at the end)
       "minIntervalSeconds": 60,  // at most one extraction per this many seconds
       "contextMinutes": 10,      // the talk before the new messages given as context, in minutes
-      "settleSeconds": 120       // a held update or conflict applies after this many seconds of quiet on its topic
+      "gateContextMinutes": 3,   // the same for the light model that decides first whether to extract
+      "settleSeconds": 120       // a held update or conflict applies after this many seconds of quiet on its topic (dropped if still held at the end)
     }
   }
 }
 ```
+
+An extraction goes through three stages, so that the stronger model runs only when there is something to extract:
+messages that are surely nothing (empty, emoji only, a fixed acknowledgement) stop it without any model; then a light
+model (`agent.extract.gateModel`, Haiku unless configured) decides whether the new messages hold a finding, and stops
+it only when sure; then the extractor (`agent.extract.model`) extracts, the messages the light model named first. Each
+extraction's stages and what each model cost are recorded in the session database. Switched on again after being off,
+the extraction picks up the talk of the last `contextMinutes`, not everything said while it was off.
 
 The `cloudflare` store's Access service token is never in the file: dt reads it from the environment variables
 `DOMAINTRAIL_KNOWLEDGE_CLIENT_ID` and `DOMAINTRAIL_KNOWLEDGE_CLIENT_SECRET` (sent as `CF-Access-Client-Id` and
@@ -3509,6 +3518,13 @@ are shown. The old sections `session` and `view` are refused when the file is lo
     "triage": {
       "model": "haiku",
       "warm": false            // true: one long-lived process; false: a fresh claude -p per message
+    },
+    // the extractor of knowledge (the knowledge section, dt guide config), no tools at all, a fresh process per extraction
+    "extract": {
+      "timeout": 180,          // the most seconds an extraction may take
+      "gateModel": "haiku"     // the light model that decides first whether to extract; default: triage.model, else haiku
+      // "model": "sonnet",    // default: answer.model, else your Claude Code settings' model
+      // "effort": "low"       // default: answer.effort
     },
     // what both roles may read outside the workspace, read-only: directories or files, absolute, ~/… or relative to
     // this file (see dt guide session-agent); in domaintrail.local.jsonc only (git-ignored), never in this file

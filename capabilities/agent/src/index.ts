@@ -9,7 +9,7 @@ export { startSubscriber, type Subscriber, type SubscriberEnd, type SubscriberOp
 export { startAnswerer, type Answerer, type AnswererDeps, type AnswererEnd, type AnswererOptions } from './core/answerer.js';
 export { buildAnswerPrompt, buildProposePrompt, buildTriagePrompt, type DiagnosticsScope } from './core/answer-prompt.js';
 export { startExtractor, type Extractor, type ExtractorDeps, type ExtractorEnd, type ExtractorOptions } from './core/extractor.js';
-export { buildExtractionPrompt, extractorInstructions } from './core/extract-prompt.js';
+export { buildExtractionPrompt, buildGatePrompt, extractorInstructions, gateInstructions } from './core/extract-prompt.js';
 // the ways of working the prompts give, which the app takes from the guide it embeds
 export type { Practice } from './core/prompt.js';
 export {
@@ -64,7 +64,7 @@ export { checkReadPaths, checkTarget, readPathError, readTargets, type ReadTarge
 export { ANSWERER_TOOLS, answererArguments, createClaudeAnswerer, triageArguments, type ClaudeAnswererOptions } from './adapters/claude-answer.js';
 // the warm process itself, for a role other than the runs (its own tools, prompt and schema)
 // the extractor's Claude Code: no tools at all, the extractor's schema and instructions, a fresh process each
-export { createClaudeExtractor, extractorArguments, type ClaudeExtractorOptions } from './adapters/claude-extract.js';
+export { createClaudeExtractor, extractorArguments, gateArguments, type ClaudeExtractorOptions } from './adapters/claude-extract.js';
 export { createWarmClaude, type WarmClaude, type WarmClaudeOptions, type WarmProfile, type WarmTurn, type WarmTurnEnd } from './adapters/warm-claude.js';
 export { checkDtOutsideWorkspace, dtCommandOf, pinDt, type PinnedDt } from './adapters/dt-shim.js';
 // the adapters' settings in domaintrail.jsonc, `agent.run` (the runner: tools, `dt`, the warm agent), `agent.answer`

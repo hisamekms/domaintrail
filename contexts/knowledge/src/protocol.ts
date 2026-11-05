@@ -481,3 +481,19 @@ export const auditEntry: Decoder<Knowledge.AuditEntry> = (v, at) => {
 
 /** The body of `POST /images`' answer: `{ id }`. */
 export const imageRef: Decoder<Knowledge.ImageId> = (v, at) => imageId(obj(v, at).id, `${at}.id`);
+
+// ---- the session's extraction switch, in the Live View -----------------------------------------------------------
+
+/**
+ * Whether the session extracts its knowledge (ADR 0031, section 3), as dt sends it to every page of the session over
+ * its WebSocket: on connect, then each time the facilitator switches it (`POST /api/session/extraction`).
+ */
+export interface KnowledgeExtractionMessage {
+    readonly type: 'knowledge.extraction';
+    readonly enabled: boolean;
+}
+
+/** The body of `GET` and `POST /api/session/extraction` (the answer; the facilitator's `POST` sends `{ enabled }`). */
+export interface ExtractionSwitchBody {
+    readonly enabled: boolean;
+}

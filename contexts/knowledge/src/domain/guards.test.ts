@@ -1,8 +1,9 @@
 // The guards of an extraction (ADR 0031, section 3): add and addSource at once; update and conflict held until a later
-// extraction makes the same call, or the topic stays quiet, or the session ends; dropped when a later call differs.
+// extraction makes the same call, or the topic stays quiet; dropped when a later call differs, or when the session ends
+// with them still held.
 import { describe, expect, test } from 'bun:test';
 import type { Knowledge } from '../generated/index.js';
-import { guardExtraction, type HeldKind, type HeldOperation, nextSettleAt, sameCall, settleHeld } from './guards.js';
+import { droppedOutcome, guardExtraction, type HeldKind, type HeldOperation, nextSettleAt, sameCall, settleHeld } from './guards.js';
 import { content, itemId, source, version } from '../test-helpers.js';
 
 const SETTLE = 120_000;
@@ -95,12 +96,26 @@ describe('guarding an extraction', () => {
         expect(d.released).toEqual([{ held: settledOne, outcome: 'settled' }]);
     });
 
-    test('at the session end everything held, and what the last extraction proposes, applies', () => {
+    test('at the session end what is still held is dropped, and so are the updates and conflicts of the last extraction', () => {
         const earlier = held(update('kn_00000001'), 1, t(29));
-        const d = guard([conflict('kn_00000002')], [earlier], { ended: true });
-        expect(d.apply).toEqual([conflict('kn_00000002'), earlier.operation]);
+        const d = guard([conflict('kn_00000002'), add], [earlier], { ended: true });
+        expect(d.apply).toEqual([add]);
         expect(d.hold).toEqual([]);
         expect(d.released).toEqual([{ held: earlier, outcome: 'ended' }]);
+        expect(d.endDropped).toEqual([conflict('kn_00000002')]);
+        expect(droppedOutcome('ended')).toBe(true);
+    });
+
+    test('at the session end a held one the last extraction confirms, or one already settled, still applies', () => {
+        const confirmed = held(update('kn_00000001'), 1, t(29));
+        const quiet = held(update('kn_00000002'), 1, t(0));
+        const d = guard([update('kn_00000001')], [confirmed, quiet], { ended: true, now: new Date(t(0).getTime() + SETTLE) });
+        expect(d.apply).toEqual([update('kn_00000001'), quiet.operation]);
+        expect(d.released).toEqual([
+            { held: confirmed, outcome: 'confirmed' },
+            { held: quiet, outcome: 'settled' },
+        ]);
+        expect(d.endDropped).toEqual([]);
     });
 
     test('settling without an extraction, and when the first held settles', () => {
@@ -111,6 +126,10 @@ describe('guarding an extraction', () => {
         const d = settleHeld([a, b], new Date(t(0).getTime() + SETTLE), SETTLE);
         expect(d.apply).toEqual([a.operation]);
         expect(d.hold).toEqual([b]);
-        expect(settleHeld([a, b], t(1), SETTLE, true).apply).toEqual([a.operation, b.operation]);
+        // the session ends: nothing settled yet is dropped
+        const end = settleHeld([a, b], t(1), SETTLE, true);
+        expect(end.apply).toEqual([]);
+        expect(end.hold).toEqual([]);
+        expect(end.released.map((r) => r.outcome)).toEqual(['ended', 'ended']);
     });
 });

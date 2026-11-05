@@ -1,9 +1,11 @@
 /**
  * Knowledge taken from a session (ADR 0031, section 3; plan task K4) over a real session server (dev identity), with a
  * store in memory in place of the workspace's and the extractor role connected through the agent API with a fake agent:
- * a person's message extracted once the talk is quiet, the item applied with the session and the extraction's number,
- * its source the message; the last extraction when the session closes, after which the extractor is told the session
- * closed. Without a store — none configured, or a `cloudflare` one whose settings are not approved, which is said —
+ * nothing extracted while the extraction is off (the config's default), until the facilitator — only the facilitator —
+ * switches it on; then a person's message extracted once the talk is quiet, after the light model named it, the item
+ * applied with the session and the extraction's number, its source the message; a mere acknowledgement stopped at the
+ * mechanical stage, with no model asked; the last extraction when the session closes, after which the extractor is told
+ * the session closed. Without a store — none configured, or a `cloudflare` one whose settings are not approved, which is said —
  * the extraction entry point answers 404 and the extractor ends.
  */
 import { afterAll, afterEach, describe, expect, test } from 'bun:test';
@@ -39,7 +41,7 @@ const sessionConfig = (knowledge: boolean): SessionSettings => ({
             store: 'files',
             project: project.value,
             projectFrom: 'config',
-            extraction: { quietSeconds: 0.2, minIntervalSeconds: 0, contextMinutes: 10, settleSeconds: 120 },
+            extraction: { enabled: false, quietSeconds: 0.2, minIntervalSeconds: 0, contextMinutes: 10, gateContextMinutes: 3, settleSeconds: 120 },
         },
     }),
 });
@@ -100,7 +102,8 @@ describe('knowledge taken from a session', () => {
         dirs.push(root);
         await writeFile(path.join(root, 'shop.dt'), 'context Shop {\n  id OrderId: UUID\n}\n');
         const store = memoryStore();
-        const server = await startSessionServer({ root, debounceMs: 30, session: sessionConfig(true), knowledgeStore: store });
+        const lines: string[] = [];
+        const server = await startSessionServer({ root, debounceMs: 30, session: sessionConfig(true), knowledgeStore: store, log: (l) => lines.push(l) });
         cleanups.push(() => server.stop());
         await server.ready;
         const joined = await fetch(`${server.url}api/session/join`, { method: 'POST', headers: json, body: JSON.stringify({ name: 'Ada' }) });
@@ -116,11 +119,19 @@ describe('knowledge taken from a session', () => {
             return ((await res.json()) as { request: { id: string } }).request.id;
         };
 
-        // the extractor: a fake agent that finds one rule in the first new message of each job
+        // the extractor: a fake agent that finds one rule in the first new message of each job; its light model names them all
         const prompts: string[] = [];
+        const gates: string[] = [];
         const extractor = startExtractor({
             api: createHttpAgentApi({ url: server.agentUrl, token: server.agentToken }),
             agent: {
+                async gate(turn: AnswerTurn) {
+                    gates.push(turn.prompt);
+                    const block = turn.prompt.slice(turn.prompt.indexOf('{'), turn.prompt.lastIndexOf('}') + 1);
+                    const data = JSON.parse(block) as { messages: { key: string; isNew: boolean }[] };
+                    const verdict = { verdict: 'yes', messages: data.messages.filter((m) => m.isNew).map((m) => m.key) };
+                    return { text: JSON.stringify(verdict), structured: verdict, model: 'light' };
+                },
                 async extract(turn: AnswerTurn) {
                     prompts.push(turn.prompt);
                     const block = turn.prompt.slice(turn.prompt.indexOf('{'), turn.prompt.lastIndexOf('}') + 1);
@@ -151,8 +162,26 @@ describe('knowledge taken from a session', () => {
         });
         cleanups.push(() => extractor.stop());
 
+        // off unless enabled: nothing is extracted, and only the facilitator switches it on
         const first = await say('見積もりは営業が当日中に出す');
+        await new Promise((r) => setTimeout(r, 500));
+        expect<unknown>([store.extractions.length, gates.length]).toEqual([0, 0]);
+        const switchUrl = `${server.url}api/session/extraction`;
+        expect(await (await fetch(switchUrl, { headers: { cookie: ada } })).json()).toEqual({ enabled: false });
+        const bobJoined = await fetch(`${server.url}api/session/join`, { method: 'POST', headers: json, body: JSON.stringify({ name: 'Bob' }) });
+        const bob = (bobJoined.headers.get('set-cookie') ?? '').split(';')[0];
+        const byBob = await fetch(switchUrl, { method: 'POST', headers: { cookie: bob, ...json }, body: JSON.stringify({ enabled: true }) });
+        expect(byBob.status).toBe(403);
+        const bad = await fetch(switchUrl, { method: 'POST', headers: { cookie: ada, ...json }, body: JSON.stringify({ enabled: 'yes' }) });
+        expect(bad.status).toBe(400);
+        const on = await fetch(switchUrl, { method: 'POST', headers: { cookie: ada, ...json }, body: JSON.stringify({ enabled: true }) });
+        expect(await on.json()).toEqual({ enabled: true });
+        expect(await (await fetch(switchUrl, { headers: { cookie: bob } })).json()).toEqual({ enabled: true });
+
+        // switched on: the message said within the usual window is extracted, the light model asked first
         await until('the first extraction', () => (store.extractions.length === 1 ? true : undefined));
+        expect<unknown>(gates).toHaveLength(1);
+        expect(prompts[0]).toContain('"likely": true');
         const [extraction] = store.extractions;
         expect<unknown>([extraction.by.session, extraction.by.number]).toEqual([server.session, 1]);
         const [op] = extraction.operations;
@@ -163,13 +192,19 @@ describe('knowledge taken from a session', () => {
         ]);
         expect(prompts[0]).toContain('<talk-n0nce>');
 
+        // a mere acknowledgement: stopped at the mechanical stage, no model asked
+        await say('ありがとうございます！');
+        await until('the mechanical stop', () => (lines.some((l) => l.includes('stopped at the mechanical stage')) ? true : undefined));
+        expect<unknown>([gates.length, prompts.length]).toEqual([1, 1]);
+
         // the session closes: what was said since is extracted before the extractor is told
         const second = await say('急ぎは17時まで');
         const closed = await fetch(`${server.url}api/session/close`, { method: 'POST', headers: { cookie: ada, ...json }, body: '{}' });
         expect(closed.status).toBe(200);
         await server.closed;
         expect(await extractor.done).toBe('closed');
-        expect<unknown>(store.extractions.map((e) => e.by.number)).toEqual([1, 2]);
+        // extraction 2 was the acknowledgement's, stopped before any model
+        expect<unknown>(store.extractions.map((e) => e.by.number)).toEqual([1, 3]);
         const last = store.extractions[1].operations[0];
         expect<unknown>(last.kind === 'Add' && last.sources[0].message).toBe(second);
     });
@@ -207,7 +242,7 @@ describe('knowledge taken from a session', () => {
         await server.ready;
         const extractor = startExtractor({
             api: createHttpAgentApi({ url: server.agentUrl, token: server.agentToken }),
-            agent: { extract: () => Promise.reject(new Error('never asked')) },
+            agent: { extract: () => Promise.reject(new Error('never asked')), gate: () => Promise.reject(new Error('never asked')) },
             clock: { sleep: async () => {}, every: () => () => {} },
             nonce: () => 'n',
             log: () => {},

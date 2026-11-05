@@ -62,7 +62,7 @@ const AGENT_DEFAULTS: ResolvedAgentSection = {
     },
     answer: { warm: true, restartAfter: 50, idleTimeout: 30, timeout: 120 },
     triage: { model: 'haiku', warm: false },
-    extract: { timeout: 180 },
+    extract: { timeout: 180, gateModel: 'haiku' },
     read: { answer: [], run: [] },
 };
 
@@ -74,7 +74,7 @@ const projectName = (v: string): Knowledge.ProjectName => {
     if (!made.ok) throw new Error(`not a project name: ${v}`);
     return made.value;
 };
-const EXTRACTION_DEFAULTS = { quietSeconds: 30, minIntervalSeconds: 60, contextMinutes: 10, settleSeconds: 120 };
+const EXTRACTION_DEFAULTS = { enabled: false, quietSeconds: 30, minIntervalSeconds: 60, contextMinutes: 10, gateContextMinutes: 3, settleSeconds: 120 };
 /** The `files` store, its project named after the root's directory (`/work/project`). */
 const KNOWLEDGE_DEFAULTS: ResolvedKnowledgeConfig = {
     store: 'files',
@@ -174,7 +174,7 @@ describe('config file', () => {
                 },
                 answer: { warm: true, restartAfter: 50, idleTimeout: 30, timeout: 60, model: 'haiku' },
                 triage: { model: 'sonnet', warm: true },
-                extract: { timeout: 180, model: 'haiku' },
+                extract: { timeout: 180, model: 'haiku', gateModel: 'sonnet' },
                 read: { answer: [], run: [] },
             },
             classifier: { ...CLASSIFIER_DEFAULTS, enabled: true, accountId: '0123456789abcdef0123456789abcdef' },

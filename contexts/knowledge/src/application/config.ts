@@ -1,7 +1,8 @@
 // Knowledge's settings in domaintrail.jsonc (ADR 0031; ADR 0027, Project analysis and configuration: each section's
 // owner defines its type, defaults and validation): the top-level `knowledge` section — which store keeps the items
 // (`files`, the default, or `cloudflare`, the Worker the user deploys; section 5), the project the workspace reads and
-// writes (section 6), the Worker's URL, and the timing of the extraction (section 3, "all numbers are settings"). The
+// writes (section 6), the Worker's URL, and the extraction (section 3): whether it is on for a session unless the
+// facilitator switches it (off by default), and its timing ("all numbers are settings"). The
 // app composes it with the other sections and reports the first error (`fail` throws).
 //
 // The Access service token the `cloudflare` store is reached with (section 8) is never in the file: it is read from the
@@ -16,11 +17,13 @@ export const DEFAULT_KNOWLEDGE_STORE: KnowledgeStoreKind = 'files';
 /** The project named when the workspace's directory gives no usable name. */
 export const FALLBACK_PROJECT = 'workspace';
 
-/** The timing of the extraction (ADR 0031, section 3) by default. */
+/** The extraction (ADR 0031, section 3) by default: off unless enabled, and its timing. */
 export const DEFAULT_EXTRACTION: ResolvedExtractionConfig = {
+    enabled: false,
     quietSeconds: 30,
     minIntervalSeconds: 60,
     contextMinutes: 10,
+    gateContextMinutes: 3,
     settleSeconds: 120,
 };
 
@@ -35,7 +38,7 @@ export const ACCESS_SERVICE_TOKEN_HEADERS = { clientId: 'CF-Access-Client-Id', c
 export const KNOWLEDGE_CONFIG_KEYS: Readonly<Record<string, readonly string[]>> = {
     '': ['knowledge'],
     knowledge: ['store', 'project', 'url', 'extraction'],
-    'knowledge.extraction': ['quietSeconds', 'minIntervalSeconds', 'contextMinutes', 'settleSeconds'],
+    'knowledge.extraction': ['enabled', 'quietSeconds', 'minIntervalSeconds', 'contextMinutes', 'gateContextMinutes', 'settleSeconds'],
 };
 
 /** The `knowledge` section of the config file. */
@@ -54,23 +57,33 @@ export interface KnowledgeConfigFile {
     extraction?: ExtractionConfigFile;
 }
 
-/** `knowledge.extraction`: every number optional. */
+/** `knowledge.extraction`: every key optional. */
 export interface ExtractionConfigFile {
+    /**
+     * Whether a session extracts knowledge from its talk unless its facilitator switches it (in the Live View). Default:
+     * false (ADR 0031, section 3: off unless enabled).
+     */
+    enabled?: boolean;
     /** Seconds without a message after a person's message before an extraction. Default: 30. */
     quietSeconds?: number;
     /** The fewest seconds between two extractions of a session. Default: 60. */
     minIntervalSeconds?: number;
     /** Minutes of the talk before the new messages given to the extraction as context. Default: 10. */
     contextMinutes?: number;
+    /** Minutes of the talk before the new messages given to the light model that decides whether to extract. Default: 3. */
+    gateContextMinutes?: number;
     /** Seconds of quiet on a topic after which a held update or conflict applies. Default: 120. */
     settleSeconds?: number;
 }
 
 /** `knowledge.extraction` resolved. */
 export interface ResolvedExtractionConfig {
+    /** A session's extraction is on when it starts (its facilitator may switch it). */
+    readonly enabled: boolean;
     readonly quietSeconds: number;
     readonly minIntervalSeconds: number;
     readonly contextMinutes: number;
+    readonly gateContextMinutes: number;
     readonly settleSeconds: number;
 }
 
@@ -131,10 +144,12 @@ export function validateKnowledgeConfig(knowledge: unknown, fail: (msg: string) 
         if (!isObject(extraction)) return fail("'knowledge.extraction' must be an object");
         for (const key of Object.keys(extraction))
             if (!KNOWLEDGE_CONFIG_KEYS['knowledge.extraction'].includes(key)) fail(`unknown key 'knowledge.extraction.${key}'`);
-        const units: Record<keyof ExtractionConfigFile, string> = {
+        if (extraction.enabled !== undefined && typeof extraction.enabled !== 'boolean') fail("'knowledge.extraction.enabled' must be true or false");
+        const units: Record<Exclude<keyof ExtractionConfigFile, 'enabled'>, string> = {
             quietSeconds: 'seconds',
             minIntervalSeconds: 'seconds',
             contextMinutes: 'minutes',
+            gateContextMinutes: 'minutes',
             settleSeconds: 'seconds',
         };
         for (const [key, unit] of Object.entries(units)) {

@@ -4,7 +4,8 @@
 // `idleTimeout`, `model`, `effort`), `agent.answer` (the read-only answerer: `model`, `effort`, `warm`, `restartAfter`,
 // `idleTimeout`, `timeout`), `agent.triage` (the light model of the triage's stage 3: `model`, `warm`) and
 // `agent.extract` (the extractor of knowledge, ADR 0031: `model`, `effort`, `timeout`; its model and effort are the
-// answerer's unless given, the stronger model the ADR measures the cost of). A role's
+// answerer's unless given, the stronger model the ADR measures the cost of; and `gateModel`, the light model that
+// decides first whether an extraction is worth running, the triage's unless given, else `haiku`). A role's
 // unset model or effort falls back to the user's Claude Code settings, never to another role's. Their defaults and
 // their validation; the settings of its adapters (ADR 0027, Authorization: the agent's tools are enforced by its
 // adapter): the Claude Code runner's tools and the `dt` of the shim, whose paths are resolved against the config file's
@@ -60,7 +61,7 @@ export const ANSWER_CONFIG_KEYS = ['model', 'effort', 'warm', 'restartAfter', 'i
 export const TRIAGE_CONFIG_KEYS = ['model', 'warm'] as const;
 
 /** The keys of `agent.extract`. */
-export const EXTRACT_CONFIG_KEYS = ['model', 'effort', 'timeout'] as const;
+export const EXTRACT_CONFIG_KEYS = ['model', 'effort', 'timeout', 'gateModel'] as const;
 
 /** The keys of `agent.read`, `agent.run.read` and `agent.answer.read`. */
 export const READ_CONFIG_KEYS = ['paths'] as const;
@@ -185,14 +186,20 @@ export interface ExtractConfigFile {
     effort?: AgentEffort;
     /** The most seconds an extraction may take. Default: `DEFAULT_EXTRACT_TIMEOUT`. */
     timeout?: number;
+    /**
+     * `claude --model` of the light model that decides first whether there is anything to extract (ADR 0031, section
+     * 3). Default: the triage's (`agent.triage.model`), else `DEFAULT_TRIAGE_MODEL`.
+     */
+    gateModel?: string;
 }
 
-/** `agent.extract` resolved: the model and effort fall back to the answerer's. */
+/** `agent.extract` resolved: the model and effort fall back to the answerer's, the gate's model to the triage's. */
 export interface ExtractConfig {
     /** Seconds. */
     timeout: number;
     model?: string;
     effort?: AgentEffort;
+    gateModel: string;
 }
 
 /** The agent's part of the `agent` section of the config file (the app's: `agent.port`). */
@@ -302,6 +309,7 @@ export function validateExtractConfig(extract: unknown, at: string, fail: (msg: 
         fail(`'${at}.effort' must be one of ${AGENT_EFFORTS.map((e) => `"${e}"`).join(', ')}`);
     if (extract.timeout !== undefined && !(typeof extract.timeout === 'number' && Number.isFinite(extract.timeout) && extract.timeout > 0))
         fail(`'${at}.timeout' must be a positive number of seconds`);
+    if (extract.gateModel !== undefined && !isModel(extract.gateModel)) fail(`'${at}.gateModel' must be a Claude Code model name or alias (e.g. "haiku")`);
 }
 
 /** The agent's settings with their defaults (validated); `dt`'s paths resolved against `dir` when given. */
@@ -315,7 +323,7 @@ export function resolveAgentConfig(agent: AgentConfigFile = {}, dir?: string): R
         },
         answer: resolveAnswerConfig(agent.answer),
         triage: resolveTriageConfig(agent.triage),
-        extract: resolveExtractConfig(agent.extract, agent.answer),
+        extract: resolveExtractConfig(agent.extract, agent.answer, agent.triage),
         read: resolveReadPaths(agent, dir),
     };
 }
@@ -366,11 +374,19 @@ export function resolveAnswerConfig(answer: AnswerConfigFile = {}): AnswerConfig
     };
 }
 
-/** `agent.extract` with its defaults: `DEFAULT_EXTRACT_TIMEOUT` seconds, the answerer's model and effort (else the user's). */
-export function resolveExtractConfig(extract: ExtractConfigFile = {}, answer: AnswerConfigFile = {}): ExtractConfig {
+/**
+ * `agent.extract` with its defaults: `DEFAULT_EXTRACT_TIMEOUT` seconds, the answerer's model and effort (else the
+ * user's), the triage's model for the gate (else `DEFAULT_TRIAGE_MODEL`).
+ */
+export function resolveExtractConfig(extract: ExtractConfigFile = {}, answer: AnswerConfigFile = {}, triage: TriageConfigFile = {}): ExtractConfig {
     const model = extract.model ?? answer.model;
     const effort = extract.effort ?? answer.effort;
-    return { timeout: extract.timeout ?? DEFAULT_EXTRACT_TIMEOUT, ...(model !== undefined && { model }), ...(effort !== undefined && { effort }) };
+    return {
+        timeout: extract.timeout ?? DEFAULT_EXTRACT_TIMEOUT,
+        ...(model !== undefined && { model }),
+        ...(effort !== undefined && { effort }),
+        gateModel: extract.gateModel ?? triage.model ?? DEFAULT_TRIAGE_MODEL,
+    };
 }
 
 /** `agent.triage` with its defaults: `DEFAULT_TRIAGE_MODEL`, a fresh process per triage. */

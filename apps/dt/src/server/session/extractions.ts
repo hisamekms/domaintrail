@@ -1,17 +1,27 @@
-// The extraction entry point of the agent API (ADR 0031, section 3): the extractor role's jobs, handed out over an SSE
+// The extraction entry point of the agent API (ADR 0031, section 3): the extractor role's jobs — the light model's
+// question whether to extract (`gate`, stage 2) and the extractions (stage 3) — handed out over an SSE
 // stream of their own (`GET /agent/extractions/events`) and their results taken back (`POST /agent/extractions/:job`),
 // beside the answers' and the runs' entry points, behind the same token. No claim, no lease: an extraction changes
 // nothing in the session and never waits for a run or an answer.
 //
-// The session's extraction (Knowledge's use case, wired in `wiring/knowledge.ts`) asks for one extraction at a time
-// (`extract`): it is handed to a connected extractor that has none in hand, and the promise resolves with its result,
+// The session's extraction (Knowledge's use case, wired in `wiring/knowledge.ts`) asks for one job at a time
+// (`gate`, then `extract`): it is handed to a connected extractor that has none in hand, and the promise resolves with its result,
 // or as `unavailable` when no extractor is connected (or the one it was handed to went away: the scheduler asks again
 // when one connects). A job not answered within its timeout is withdrawn and resolves as failed. What is handed out is
 // held here in memory. The result is AI output: only its envelope is read here (`ExtractionResultBody`); the reply is
 // read by the use case.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { EXTRACTION_EVENT_TYPES, type ExtractionInput, type ExtractionResultBody, type Extractor, readUsage } from '@domaintrail/knowledge';
+import {
+    EXTRACTION_EVENT_TYPES,
+    type ExtractionInput,
+    type ExtractionJobBody,
+    type ExtractionResultBody,
+    type Extractor,
+    type ExtractorAnswer,
+    type GateInput,
+    readUsage,
+} from '@domaintrail/knowledge';
 import { sendError } from '../http/json.js';
 
 /** How long past its timeout a job's extractor has to report that it failed, before the job is withdrawn. */
@@ -52,7 +62,7 @@ interface Handed {
     readonly id: string;
     readonly stream: ExtractionStream;
     readonly timer: ReturnType<typeof setTimeout>;
-    readonly resolve: (answer: Awaited<ReturnType<Extractor['extract']>>) => void;
+    readonly resolve: (answer: ExtractorAnswer) => void;
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -86,32 +96,36 @@ export function createExtractionDispatcher(deps: ExtractionDispatcherDeps): Extr
     keepalive.unref();
 
     /** A hand-out ends with `answer`: its stream is free again. */
-    const settle = (h: Handed, answer: Awaited<ReturnType<Extractor['extract']>>): void => {
+    const settle = (h: Handed, answer: ExtractorAnswer): void => {
         if (!handed.delete(h.id)) return;
         clearTimeout(h.timer);
         if (h.stream.job === h.id) h.stream.job = undefined;
         h.resolve(answer);
     };
 
+    /** Hands a job to a connected extractor that has none in hand; `unavailable` when there is none. */
+    const handOut = (job: (id: string) => ExtractionJobBody): Promise<ExtractorAnswer> => {
+        const stream = [...streams].find((s) => !s.closed && s.job === undefined);
+        if (!stream) return Promise.resolve({ kind: 'unavailable' });
+        const id = randomUUID();
+        return new Promise((resolve) => {
+            const timer = setTimeout(() => {
+                const h = handed.get(id);
+                if (!h) return;
+                send(h.stream, EXTRACTION_EVENT_TYPES.withdrawn, { job: id });
+                log(`extraction job ${id} timed out`);
+                settle(h, { kind: 'done', result: { error: 'timed out', durationMs: deps.timeoutMs } });
+            }, deps.timeoutMs + GRACE_MS);
+            timer.unref();
+            handed.set(id, { id, stream, timer, resolve });
+            stream.job = id;
+            send(stream, EXTRACTION_EVENT_TYPES.job, job(id));
+        });
+    };
+
     return {
-        extract(input: ExtractionInput) {
-            const stream = [...streams].find((s) => !s.closed && s.job === undefined);
-            if (!stream) return Promise.resolve({ kind: 'unavailable' });
-            const id = randomUUID();
-            return new Promise((resolve) => {
-                const timer = setTimeout(() => {
-                    const h = handed.get(id);
-                    if (!h) return;
-                    send(h.stream, EXTRACTION_EVENT_TYPES.withdrawn, { job: id });
-                    log(`extraction job ${id} timed out`);
-                    settle(h, { kind: 'done', result: { error: 'timed out', durationMs: deps.timeoutMs } });
-                }, deps.timeoutMs + GRACE_MS);
-                timer.unref();
-                handed.set(id, { id, stream, timer, resolve });
-                stream.job = id;
-                send(stream, EXTRACTION_EVENT_TYPES.job, { ...input, job: id, timeoutMs: deps.timeoutMs });
-            });
-        },
+        extract: (input: ExtractionInput) => handOut((job) => ({ ...input, stage: 'extract', job, timeoutMs: deps.timeoutMs })),
+        gate: (input: GateInput) => handOut((job) => ({ ...input, stage: 'gate', job, timeoutMs: deps.timeoutMs })),
 
         events(_req, res) {
             if (streams.size >= deps.maxStreams) return sendError(res, 429, 'TooManyStreams', `At most ${deps.maxStreams} streams at once.`);

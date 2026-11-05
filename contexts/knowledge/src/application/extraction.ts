@@ -2,10 +2,15 @@
 // database), the extractor (the read-only agent role, reached through the agent API), the store, and the checkpoint
 // kept in the session database.
 //
-// An extraction takes the messages since the previous one (people's and the AI's answers alike) with the talk just
-// before them (`contextMinutes`), the items made in this session and those about the stickies the talk points at; the
-// extractor replies with operations (`domain/extractor.ts`); the guards sort them (`domain/guards.ts`); what applies is
-// sent to the store with the idempotency key of the session and the extraction's number.
+// An extraction takes the messages since the previous one (people's and the AI's answers alike) through three stages
+// (`domain/stages.ts`): the mechanical stage, which stops without any model when nothing but surely-nothing messages
+// came; the light model (through the extractor role's entry point, as a `gate` job), given the new messages with the
+// talk just before them (`gateContextMinutes`) and the stickies' names, which stops only when sure there is no finding;
+// and the extractor, given the messages with the talk just before them (`contextMinutes`), the light model's named
+// messages marked, the items made in this session and those about the stickies the talk points at. The extractor
+// replies with operations (`domain/extractor.ts`); the guards sort them (`domain/guards.ts`); what applies is sent to
+// the store with the idempotency key of the session and the extraction's number. A stop at the first two stages moves
+// the checkpoint past the messages, as an extraction that found nothing.
 //
 // The checkpoint makes a restart neither repeat nor lose work. It is written before the store is called: the extraction
 // number, the newest message extracted, the held operations, and the operations decided but not yet applied
@@ -14,8 +19,14 @@
 // twice — before anything else. An extractor that fails leaves the messages to the next extraction, `maxFailures` times
 // in a row, then they are skipped (logged), so that a reply that always fails does not cost an extraction a minute.
 //
-// What each extraction cost (tokens in and out, the cache read and written, the dollars Claude Code reports) is recorded
-// with the checkpoint (`recordCost`) and logged, one line per extraction.
+// What each extraction cost and did is recorded with the checkpoint (`recordCost`) and logged, one line per extraction:
+// the stage it reached, the messages stage 1 counted, the light model's verdict, and each model's tokens in and out,
+// cache read and written, and the dollars Claude Code reports — so that the light model's misses and savings can be
+// checked.
+//
+// The facilitator may switch the extraction off for the session and on again (the scheduler). Switched on again, the
+// messages since the checkpoint older than `contextMinutes` are skipped (`resume`): the extraction picks up the talk of
+// the usual window, not everything said while it was off.
 import { Knowledge } from '../generated/index.js';
 import type { ResolvedExtractionConfig } from './config.js';
 import type { KnowledgeStore } from './ports.js';
@@ -29,7 +40,8 @@ import {
     readExtractorReply,
     type TalkMessage,
 } from '../domain/extractor.js';
-import { guardExtraction, type HeldOperation, nextSettleAt, settleHeld } from '../domain/guards.js';
+import { droppedOutcome, guardExtraction, type HeldOperation, nextSettleAt, settleHeld } from '../domain/guards.js';
+import { type GateInput, type GateReading, type GateVerdict, mechanicalStage, readGateReply } from '../domain/stages.js';
 import type { ExtractionTrigger, TalkState } from '../domain/timing.js';
 import { idempotencyKey } from '../domain/extraction.js';
 
@@ -44,6 +56,8 @@ export interface SessionMessage {
     readonly stickies: readonly KnownSticky[];
     /** The AI's reply to a message (an answer of the answerer). */
     readonly answer: boolean;
+    /** A person's message that is surely nothing (the triage's stage 1: empty, emoji only, a fixed acknowledgement). */
+    readonly nothing?: boolean;
 }
 
 /** The session's talk: its messages in order (those the extraction reads; dt's own notices left out). */
@@ -69,16 +83,43 @@ export interface ExtractionCheckpoint {
 
 export const EMPTY_CHECKPOINT: ExtractionCheckpoint = { number: 0, held: [], failures: 0 };
 
-/** What one extraction cost and did: one record per extraction, for measuring the cost per extraction. */
+/** The stage an extraction reached: stopped at the mechanical one or the light model's, or the extractor ran. */
+export type ExtractionStage = 'mechanical' | 'gate' | 'extractor';
+
+/** What the light model (stage 2) answered and cost. */
+export interface GateCost {
+    /** Its verdict as taken: a malformed reply or a failure is `unsure`. */
+    readonly verdict: GateVerdict;
+    /** The new messages it named. */
+    readonly named: number;
+    /** The messages it was given (new ones and the talk before). */
+    readonly messages: number;
+    /** The reply was not one. */
+    readonly malformed?: boolean;
+    readonly error?: string;
+    readonly model?: string;
+    readonly durationMs: number;
+    readonly usage?: ExtractionUsage;
+}
+
+/** What one extraction cost and did: one record per extraction, for measuring the cost per extraction and per stage. */
 export interface ExtractionCost {
     readonly session: string;
     readonly number: number;
     readonly trigger: ExtractionTrigger;
     readonly at: Date;
+    readonly stage: ExtractionStage;
+    /** Stage 1's counts of the new messages: people's that are not surely nothing, people's that are, the AI's. */
+    readonly people: number;
+    readonly nothing: number;
+    readonly ai: number;
+    /** Stage 2, when it ran. */
+    readonly gate?: GateCost;
+    /** The extractor's model, duration and usage (stage 3), when it ran. */
     readonly model?: string;
-    readonly durationMs: number;
+    readonly durationMs?: number;
     readonly usage?: ExtractionUsage;
-    /** The messages given (new ones and the talk before), the items given. */
+    /** The messages given to the extractor (new ones and the talk before), the new ones, the items given. */
     readonly messages: number;
     readonly newMessages: number;
     readonly items: number;
@@ -98,9 +139,13 @@ export interface ExtractionCheckpoints {
     recordCost(cost: ExtractionCost): Promise<void>;
 }
 
-/** The extractor, reached through the agent API: its result, or `unavailable` (none is connected). */
+/** What the extractor role answered a job: its result, or `unavailable` (none is connected). */
+export type ExtractorAnswer = { readonly kind: 'unavailable' } | { readonly kind: 'done'; readonly result: ExtractionResultBody };
+
+/** The extractor role, reached through the agent API: the extractor (stage 3), and the light model (stage 2). */
 export interface Extractor {
-    extract(input: ExtractionInput): Promise<{ readonly kind: 'unavailable' } | { readonly kind: 'done'; readonly result: ExtractionResultBody }>;
+    extract(input: ExtractionInput): Promise<ExtractorAnswer>;
+    gate(input: GateInput): Promise<ExtractorAnswer>;
 }
 
 export interface SessionExtractionDeps {
@@ -125,6 +170,8 @@ export interface SessionExtractionDeps {
 /** How an extraction went. */
 export type ExtractionRunOutcome =
     | 'nothing-new'
+    /** Stopped before the extractor: nothing to extract (stage 1), or the light model was sure there is nothing (stage 2). */
+    | { readonly stoppedAt: 'mechanical' | 'gate' }
     | 'unavailable'
     | 'failed'
     | 'store-failed'
@@ -135,8 +182,13 @@ export interface SessionExtraction {
     talkState(): Promise<Omit<TalkState, 'running' | 'ended' | 'endDone'>>;
     /** Extracts the messages since the previous extraction. */
     extract(trigger: ExtractionTrigger): Promise<ExtractionRunOutcome>;
-    /** Applies the held operations that settled (all of them when the session ended), and what is pending. */
+    /** Applies the held operations that settled (the others dropped when the session ended), and what is pending. */
     settle(ended: boolean): Promise<void>;
+    /**
+     * The extraction was switched on again: the messages since the checkpoint older than `contextMinutes` are skipped
+     * (the checkpoint moved past them). How many were.
+     */
+    resume(): Promise<number>;
 }
 
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -151,15 +203,9 @@ export function messagesSince(all: readonly SessionMessage[], checkpoint: Extrac
     return since === undefined ? all : all.filter((m) => m.at.getTime() > since);
 }
 
-/** What the extractor is given: the talk keyed `m1…`, the items keyed `k1…`, the stickies of the talk. */
-export function extractionInput(
-    session: string,
-    number: number,
-    context: readonly SessionMessage[],
-    fresh: readonly SessionMessage[],
-    items: readonly Knowledge.LiveKnowledgeItem[],
-): ExtractionInput {
-    const messages: TalkMessage[] = [...context.map((m) => [m, false] as const), ...fresh.map((m) => [m, true] as const)].map(([m, isNew], i) => ({
+/** The talk keyed `m1…`: the context, then the new messages (`likely`: those the light model named). */
+function talkMessages(context: readonly SessionMessage[], fresh: readonly SessionMessage[], likely: ReadonlySet<string> = new Set()): TalkMessage[] {
+    return [...context.map((m) => [m, false] as const), ...fresh.map((m) => [m, true] as const)].map(([m, isNew], i) => ({
         key: `m${i + 1}`,
         id: m.id,
         at: m.at.toISOString(),
@@ -168,9 +214,33 @@ export function extractionInput(
         text: m.text,
         stickies: m.stickies.map((s) => s.ref),
         isNew,
+        ...(isNew && likely.has(m.id) && { likely: true }),
     }));
+}
+
+/** The stickies the messages point at, each once, with a label when one of them gave it. */
+function stickiesOf(messages: readonly SessionMessage[]): KnownSticky[] {
     const stickies = new Map<string, KnownSticky>();
-    for (const m of [...context, ...fresh]) for (const s of m.stickies) if (!stickies.get(s.ref)?.label) stickies.set(s.ref, s);
+    for (const m of messages) for (const s of m.stickies) if (!stickies.get(s.ref)?.label) stickies.set(s.ref, s);
+    return [...stickies.values()];
+}
+
+/** What the light model is given: the talk keyed `m1…`, the names of its stickies (their labels, else their refs). */
+export function gateInput(session: string, number: number, context: readonly SessionMessage[], fresh: readonly SessionMessage[]): GateInput {
+    const names = [...new Set(stickiesOf([...context, ...fresh]).map((s) => s.label ?? s.ref))];
+    return { session, number, messages: talkMessages(context, fresh), stickies: names };
+}
+
+/** What the extractor is given: the talk keyed `m1…` (`likely`: the new messages the light model named), the items keyed `k1…`, the stickies of the talk. */
+export function extractionInput(
+    session: string,
+    number: number,
+    context: readonly SessionMessage[],
+    fresh: readonly SessionMessage[],
+    items: readonly Knowledge.LiveKnowledgeItem[],
+    likely: ReadonlySet<string> = new Set(),
+): ExtractionInput {
+    const messages = talkMessages(context, fresh, likely);
     const keys = new Map(items.map((item, i) => [item.id, `k${i + 1}`]));
     const known: KnownItem[] = items.map((item) => ({
         key: keys.get(item.id) ?? '',
@@ -186,13 +256,14 @@ export function extractionInput(
         thisSession: item.createdIn === session,
         createdAt: item.createdAt.toISOString(),
     }));
-    return { session, number, messages, items: known, stickies: [...stickies.values()] };
+    return { session, number, messages, items: known, stickies: stickiesOf([...context, ...fresh]) };
 }
 
 export function createSessionExtraction(deps: SessionExtractionDeps): SessionExtraction {
     const { project, session, store, checkpoints, talk, log } = deps;
     const settleMs = deps.config.settleSeconds * 1000;
     const contextMs = deps.config.contextMinutes * 60_000;
+    const gateContextMs = deps.config.gateContextMinutes * 60_000;
     const maxFailures = deps.maxFailures ?? 2;
     const maxItems = deps.maxItems ?? 60;
     const maxNew = deps.maxNewMessages ?? 150;
@@ -268,8 +339,60 @@ export function createSessionExtraction(deps: SessionExtractionDeps): SessionExt
                 return 'nothing-new';
             }
             const first = all.indexOf(fresh[0]);
-            const from = fresh[0].at.getTime() - contextMs;
-            const context = all.slice(0, Math.max(first, 0)).filter((m) => m.at.getTime() >= from);
+            const before = all.slice(0, Math.max(first, 0));
+            const within = (ms: number): readonly SessionMessage[] => before.filter((m) => m.at.getTime() >= fresh[0].at.getTime() - ms);
+            const number = checkpoint.number + 1;
+            const last = fresh[fresh.length - 1];
+            const record = async (cost: ExtractionCost): Promise<void> => {
+                log(costLine(cost));
+                await checkpoints.recordCost(cost).catch((e: unknown) => log(`knowledge: the cost of extraction ${number} not recorded (${message(e)})`));
+            };
+            const nothingDone = { proposed: 0, applied: 0, held: checkpoint.held.length, dropped: 0, rejected: 0 };
+            /** Stopped before the extractor: the checkpoint moves past the messages, as an extraction that found nothing. */
+            const stop = async (stage: 'mechanical' | 'gate', cost: ExtractionCost): Promise<ExtractionRunOutcome> => {
+                await checkpoints.save(session, {
+                    ...checkpoint,
+                    number,
+                    lastMessage: last.id,
+                    lastMessageAt: last.at,
+                    // a model ran (the light one): the minute between extractions counts from it
+                    ...(stage === 'gate' && { lastExtractionAt: started }),
+                    failures: 0,
+                });
+                await record(cost);
+                // the end: what is held settles or is dropped all the same
+                if (trigger === 'end') await extraction.settle(true);
+                return { stoppedAt: stage };
+            };
+
+            // stage 1: mechanical
+            const mechanical = mechanicalStage(fresh);
+            const counts = { people: mechanical.people, nothing: mechanical.nothing, ai: mechanical.ai };
+            const base = { session, number, trigger, at: started, ...counts, newMessages: fresh.length };
+            if (!mechanical.go) return stop('mechanical', { ...base, stage: 'mechanical', messages: 0, items: 0, ...nothingDone });
+
+            // stage 2: the light model
+            const asked = gateInput(session, number, within(gateContextMs), fresh);
+            const gated = await deps.extractor.gate(asked);
+            if (gated.kind === 'unavailable') return 'unavailable';
+            const reading: GateReading =
+                gated.result.error === undefined ? readGateReply(gated.result.reply, asked) : { verdict: 'unsure', named: [], malformed: false };
+            const gate: GateCost = {
+                verdict: reading.verdict,
+                named: reading.named.length,
+                messages: asked.messages.length,
+                ...(reading.malformed && { malformed: true }),
+                ...(gated.result.error !== undefined && { error: gated.result.error }),
+                ...(gated.result.model && { model: gated.result.model }),
+                durationMs: gated.result.durationMs,
+                ...(gated.result.usage && { usage: gated.result.usage }),
+            };
+            if (gated.result.error !== undefined) log(`knowledge: extraction ${number}: the light model failed (${gated.result.error}); extracting anyway`);
+            else if (reading.malformed) log(`knowledge: extraction ${number}: the light model's reply is not one; extracting anyway`);
+            if (reading.verdict === 'no') return stop('gate', { ...base, stage: 'gate', gate, messages: 0, items: 0, ...nothingDone });
+
+            // stage 3: the extractor, the messages the light model named first
+            const context = within(contextMs);
             const stickies = [...new Set([...context, ...fresh].flatMap((m) => m.stickies.map((s) => s.ref)))];
             let items: readonly Knowledge.LiveKnowledgeItem[];
             try {
@@ -278,27 +401,19 @@ export function createSessionExtraction(deps: SessionExtractionDeps): SessionExt
                 log(`knowledge: the items could not be read for an extraction (${message(e)})`);
                 return 'store-failed';
             }
-            const number = checkpoint.number + 1;
-            const input = extractionInput(session, number, context, fresh, items);
-            const last = fresh[fresh.length - 1];
+            const input = extractionInput(session, number, context, fresh, items, new Set(reading.named));
             const answer = await deps.extractor.extract(input);
             if (answer.kind === 'unavailable') return 'unavailable';
             const result = answer.result;
-            const base = {
-                session,
-                number,
-                trigger,
-                at: started,
+            const extracted = {
+                ...base,
+                stage: 'extractor' as const,
+                gate,
                 ...(result.model && { model: result.model }),
                 durationMs: result.durationMs,
                 ...(result.usage && { usage: result.usage }),
                 messages: input.messages.length,
-                newMessages: fresh.length,
                 items: input.items.length,
-            };
-            const record = async (cost: ExtractionCost): Promise<void> => {
-                log(costLine(cost));
-                await checkpoints.recordCost(cost).catch((e: unknown) => log(`knowledge: the cost of extraction ${number} not recorded (${message(e)})`));
             };
 
             if (result.error !== undefined) {
@@ -311,7 +426,7 @@ export function createSessionExtraction(deps: SessionExtractionDeps): SessionExt
                     failures: skip ? 0 : failures,
                     ...(skip && { lastMessage: last.id, lastMessageAt: last.at }),
                 });
-                await record({ ...base, proposed: 0, applied: 0, held: checkpoint.held.length, dropped: 0, rejected: 0, error: result.error });
+                await record({ ...extracted, ...nothingDone, error: result.error });
                 if (skip) log(`knowledge: extraction ${number} failed ${failures} times on the same messages; ${fresh.length} messages skipped`);
                 return 'failed';
             }
@@ -331,6 +446,7 @@ export function createSessionExtraction(deps: SessionExtractionDeps): SessionExt
             });
             for (const r of decision.released)
                 log(`knowledge: extraction ${number}: a held ${r.held.operation.kind} of extraction ${r.held.heldIn} ${r.outcome}`);
+            for (const o of decision.endDropped) log(`knowledge: extraction ${number}: its ${o.kind} dropped, the session ended`);
             const pending: Knowledge.Extraction | undefined = decision.apply.length ? { by: refOf(number), operations: decision.apply } : undefined;
             const next: ExtractionCheckpoint = {
                 number,
@@ -343,22 +459,12 @@ export function createSessionExtraction(deps: SessionExtractionDeps): SessionExt
             };
             await checkpoints.save(session, next);
             const sent = await sendPending(next);
-            const superseded = decision.released.filter((r) => r.outcome === 'superseded').length;
-            await record({
-                ...base,
-                proposed: made.operations.length,
-                applied: sent.ok ? decision.apply.length - sent.dropped : 0,
-                held: decision.hold.length,
-                dropped: superseded + decision.duplicates.length + sent.dropped,
-                rejected: made.rejected.length,
-            });
+            const dropped =
+                decision.released.filter((r) => droppedOutcome(r.outcome)).length + decision.duplicates.length + decision.endDropped.length + sent.dropped;
+            const done = { proposed: made.operations.length, applied: sent.ok ? decision.apply.length - sent.dropped : 0, held: decision.hold.length, dropped };
+            await record({ ...extracted, ...done, rejected: made.rejected.length });
             if (!sent.ok) return 'store-failed';
-            return {
-                applied: decision.apply.length - sent.dropped,
-                held: decision.hold.length,
-                dropped: superseded + decision.duplicates.length + sent.dropped,
-                rejected: made.rejected.length,
-            };
+            return { applied: decision.apply.length - sent.dropped, held: decision.hold.length, dropped, rejected: made.rejected.length };
         },
 
         async settle(ended) {
@@ -369,30 +475,65 @@ export function createSessionExtraction(deps: SessionExtractionDeps): SessionExt
                 checkpoint = sent.checkpoint;
             }
             const decision = settleHeld(checkpoint.held, deps.now(), settleMs, ended);
-            if (decision.apply.length === 0) return;
-            const number = checkpoint.number + 1;
+            if (decision.released.length === 0) return;
+            const number = decision.apply.length ? checkpoint.number + 1 : checkpoint.number;
             for (const r of decision.released)
-                log(`knowledge: extraction ${number}: a held ${r.held.operation.kind} of extraction ${r.held.heldIn} ${r.outcome}`);
-            const next: ExtractionCheckpoint = { ...checkpoint, number, held: decision.hold, pending: { by: refOf(number), operations: decision.apply } };
+                log(
+                    `knowledge: a held ${r.held.operation.kind} of extraction ${r.held.heldIn} ${r.outcome === 'ended' ? 'dropped: the session ended' : r.outcome}`,
+                );
+            const next: ExtractionCheckpoint = {
+                ...checkpoint,
+                number,
+                held: decision.hold,
+                ...(decision.apply.length > 0 && { pending: { by: refOf(number), operations: decision.apply } }),
+            };
             await checkpoints.save(session, next);
             await sendPending(next);
+        },
+
+        async resume() {
+            const checkpoint = await checkpoints.load(session);
+            const cutoff = deps.now().getTime() - contextMs;
+            const skipped = messagesSince(await talk.messages(), checkpoint).filter((m) => m.at.getTime() < cutoff);
+            const newest = skipped.at(-1);
+            if (!newest) return 0;
+            await checkpoints.save(session, { ...checkpoint, lastMessage: newest.id, lastMessageAt: newest.at, failures: 0 });
+            log(`knowledge: the extraction is on again; ${skipped.length} messages older than ${deps.config.contextMinutes} minutes are not extracted`);
+            return skipped.length;
         },
     };
     return extraction;
 }
 
-/** The log line of an extraction's cost: numbers only. */
-export function costLine(cost: ExtractionCost): string {
-    const u = cost.usage;
-    const tokens = u
-        ? `; tokens in ${u.inputTokens ?? '?'} (cache read ${u.cacheReadTokens ?? 0}, written ${u.cacheCreationTokens ?? 0}), out ${u.outputTokens ?? '?'}${
-              u.costUsd !== undefined ? `; $${u.costUsd.toFixed(4)}` : ''
+/** A model's turn in a log line: its tokens, cache and dollars, its duration and model. */
+function turnText(usage: ExtractionUsage | undefined, durationMs: number | undefined, model: string | undefined): string {
+    const tokens = usage
+        ? `; tokens in ${usage.inputTokens ?? '?'} (cache read ${usage.cacheReadTokens ?? 0}, written ${usage.cacheCreationTokens ?? 0}), out ${usage.outputTokens ?? '?'}${
+              usage.costUsd !== undefined ? `; $${usage.costUsd.toFixed(4)}` : ''
           }`
         : '';
-    const what = cost.error
-        ? `failed (${cost.error})`
-        : `${cost.proposed} proposed: ${cost.applied} applied, ${cost.held} held, ${cost.dropped} dropped, ${cost.rejected} rejected`;
-    return `knowledge: extraction ${cost.number} (${cost.trigger}; ${cost.newMessages} new of ${cost.messages} messages, ${cost.items} items): ${what}${tokens}; ${(
-        cost.durationMs / 1000
-    ).toFixed(1)} s${cost.model ? ` (${cost.model})` : ''}`;
+    return `${tokens}; ${((durationMs ?? 0) / 1000).toFixed(1)} s${model ? ` (${model})` : ''}`;
+}
+
+/** The log line of an extraction's cost: numbers only. */
+export function costLine(cost: ExtractionCost): string {
+    const head = `knowledge: extraction ${cost.number} (${cost.trigger}; `;
+    const g = cost.gate;
+    const gate = g
+        ? `light model: ${g.verdict}${g.malformed ? ' (reply not one)' : ''}${g.error ? ` (failed: ${g.error})` : ''}, ${g.named} named${turnText(g.usage, g.durationMs, g.model)}`
+        : '';
+    switch (cost.stage) {
+        case 'mechanical':
+            return `${head}${cost.newMessages} new messages): stopped at the mechanical stage (${cost.people} people's, ${cost.nothing} surely nothing, ${cost.ai} the AI's)`;
+        case 'gate':
+            return `${head}${cost.newMessages} new messages): stopped by the ${gate}`;
+        case 'extractor': {
+            const what = cost.error
+                ? `failed (${cost.error})`
+                : `${cost.proposed} proposed: ${cost.applied} applied, ${cost.held} held, ${cost.dropped} dropped, ${cost.rejected} rejected`;
+            return `${head}${cost.newMessages} new of ${cost.messages} messages, ${cost.items} items): ${what}${turnText(cost.usage, cost.durationMs, cost.model)}${
+                gate ? `; ${gate}` : ''
+            }`;
+        }
+    }
 }

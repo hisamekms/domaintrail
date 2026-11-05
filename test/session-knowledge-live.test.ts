@@ -38,7 +38,7 @@ const sessionConfig: SessionSettings = {
         project,
         projectFrom: 'config',
         // no extraction while the test runs: the items are put in the store directly
-        extraction: { quietSeconds: 3600, minIntervalSeconds: 3600, contextMinutes: 10, settleSeconds: 120 },
+        extraction: { enabled: false, quietSeconds: 3600, minIntervalSeconds: 3600, contextMinutes: 10, gateContextMinutes: 3, settleSeconds: 120 },
     },
 };
 
