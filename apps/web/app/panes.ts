@@ -62,6 +62,22 @@ export function useWindowWidth(): number {
 /** The panes' default sizes at a 16px root; until the reader drags a pane, its size is this times the UI scale. */
 export const DEFAULT_PANE_SIZES = { explorerWidth: 280, conversationWidth: 380 } as const;
 
+/** The left column's width (without its activity bar) is between these; see `leftMax`. */
+export const LEFT_MIN = 220;
+/** The share of the window the left column can take at most. */
+export const LEFT_MAX_SHARE = 0.5;
+/** The canvas keeps at least this width beside the columns. */
+export const MIN_CANVAS_WIDTH = 320;
+
+/**
+ * The widest the left column (without its activity bar, `bar` px) can be in a window `window` px wide with the chat
+ * taking `conversation` px: half the window, and never leaving the canvas less than MIN_CANVAS_WIDTH (LEFT_MIN wins
+ * when there is less room than it).
+ */
+export function leftMax(window: number, bar: number, conversation: number): number {
+    return Math.max(LEFT_MIN, Math.floor(Math.min(window * LEFT_MAX_SHARE, window - bar - conversation - MIN_CANVAS_WIDTH)));
+}
+
 /** A pane's size: the reader's (once dragged), else its default at the UI scale. */
 export function paneSize(saved: number | null, base: number, scale: number): number {
     return saved ?? scaledSize(base, scale);

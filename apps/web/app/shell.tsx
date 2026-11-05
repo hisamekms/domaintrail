@@ -4,17 +4,13 @@ import { Diff, FolderTree, TriangleAlert, type LucideIcon } from 'lucide-react';
 import logoDark from '../../../assets/brand/logo-dark.svg';
 import logoLight from '../../../assets/brand/logo-light.svg';
 import { useT } from '../i18n';
-import { readStored, Resizer, useElementHeight, writeStored } from '../shared/layout';
 import { usePaneMotion } from '../shared/motion';
 import { Tooltips } from '../tooltip';
-import { drawnTreeHeight, TREE_MIN, treeMax, treeSize, type LeftView, type Panes } from './panes';
+import { clampSize, readStored, Resizer, useElementHeight, writeStored } from '../shared/layout';
+import { drawnTreeHeight, LEFT_MIN, leftMax, MIN_CANVAS_WIDTH, TREE_MIN, treeMax, treeSize, useWindowWidth, type LeftView, type Panes } from './panes';
 
 /** Width of the activity bar (the collapsed left column); see styles.css. */
 const BAR_WIDTH = 44;
-/** The left column's width, between these (and never leaving the canvas less than MIN_CANVAS_WIDTH). */
-const LEFT_MIN = 220;
-const LEFT_MAX = 560;
-const MIN_CANVAS_WIDTH = 320;
 
 /**
  * The conversation: a pillar at the right end of the page, the whole height, opened and closed by the reader (a
@@ -104,13 +100,17 @@ export function AppShell(props: {
     overlays: ReactNode;
 }) {
     const { panes, conversation } = props;
-    const { explorerOpen: leftOpen, setExplorerOpen, explorerWidth, setExplorerWidth, leftView, showLeft } = panes;
+    const { explorerOpen: leftOpen, setExplorerOpen, setExplorerWidth, leftView, showLeft } = panes;
     const { treeHeight, setTreeHeight, treeFolded, setTreeFolded } = panes;
     const { conversationOpen, setConversationOpen, conversationWidth, setConversationWidth } = panes;
     const t = useT();
     const conversationShown = conversation !== undefined && conversationOpen;
-    const leftWidth = leftOpen ? BAR_WIDTH + explorerWidth : BAR_WIDTH;
     const conversationSpace = conversationShown ? conversationWidth : 0;
+    // the saved width as drawn: within the room the window leaves now (the saved one is kept for a wider window)
+    const windowWidth = useWindowWidth();
+    const widest = (): number => leftMax(window.innerWidth, BAR_WIDTH, conversationSpace);
+    const explorerWidth = clampSize(panes.explorerWidth, LEFT_MIN, leftMax(windowWidth, BAR_WIDTH, conversationSpace));
+    const leftWidth = leftOpen ? BAR_WIDTH + explorerWidth : BAR_WIDTH;
     // the tree carries the detail under it, the other lists take the whole column
     const withDetail = leftView === 'tree';
     // the split of the left column follows its height (the window's)
@@ -227,7 +227,7 @@ export function AppShell(props: {
                     direction="x"
                     size={explorerWidth}
                     min={LEFT_MIN}
-                    max={() => Math.min(LEFT_MAX, window.innerWidth - BAR_WIDTH - conversationSpace - MIN_CANVAS_WIDTH)}
+                    max={widest}
                     open={leftOpen}
                     collapsed={0}
                     onResize={setExplorerWidth}

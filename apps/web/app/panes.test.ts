@@ -13,3 +13,17 @@ describe('the tree’s height as drawn', () => {
         expect(drawnTreeHeight(300, 720)).toBe(300);
     });
 });
+
+describe('the widest the left column can be', () => {
+    test('half the window, never leaving the canvas less than its minimum, and never under the column’s minimum', async () => {
+        const { LEFT_MIN, leftMax, MIN_CANVAS_WIDTH } = await import('./panes');
+        // no chat: half the window
+        expect(leftMax(1440, 44, 0)).toBe(720);
+        expect(leftMax(1920, 44, 0)).toBe(960);
+        // with the chat open, the canvas keeps its minimum
+        expect(leftMax(1440, 44, 380)).toBe(1440 - 44 - 380 - MIN_CANVAS_WIDTH);
+        expect(leftMax(1920, 44, 380)).toBe(960);
+        // a narrow window: the column's minimum wins
+        expect(leftMax(700, 44, 380)).toBe(LEFT_MIN);
+    });
+});

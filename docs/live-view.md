@@ -7,10 +7,10 @@ this page describes every pane. How its buttons and spacing are built is in [UI 
 
 The app bar runs across the top; under it the screen has three columns: the left column — the navigator (the lists;
 the tree with the detail of the selected item, the inspector, under it) — the canvas, and, in a session, the chat at
-the right end. Panes are closed and opened with the icon buttons at their top. The left column's width, the chat's
-width and the split between the tree and the detail are dragged; each edge is also a separator the keyboard moves
-(focused, the arrow keys along it step it, Shift in larger steps, Home / End go to its limits) and a double click gives
-its default size back. The split has a grip, so that it is seen at rest; the tree and the detail each keep a little
+the right end. Panes are closed and opened with the icon buttons at their top. The left column's width (up to half
+the window, always leaving the canvas some room), the chat's width and the split between the tree and the detail are
+dragged; each edge is also a separator the keyboard moves (focused, the arrow keys along it step it, Shift in larger
+steps, Home / End go to its limits) and a double click gives its default size back. The split has a grip, so that it is seen at rest; the tree and the detail each keep a little
 room, and the tree folds to its head line when the split is dragged to the top (see [木](#木-tree)). All of it is
 remembered per browser. A pane slides in and out as it opens and closes (its content does not reflow on the way), and
 the canvas keeps what is at its center in place whenever its size changes (a pane, the window). With the OS's "reduce
