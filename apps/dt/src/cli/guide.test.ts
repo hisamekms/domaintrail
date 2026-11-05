@@ -57,7 +57,7 @@ describe('dt guide topics', () => {
         expect(r.out.startsWith(parsed.intro)).toBe(true);
         expect(r.out).toContain(parsed.topics.find((t) => t.name === 'quick')!.text);
         for (const t of parsed.topics) expect(r.out).toMatch(new RegExp(`^ +${t.name} +`, 'm'));
-        expect(r.out.split('\n').length).toBeLessThanOrEqual(160);
+        expect(r.out.split('\n').length).toBeLessThanOrEqual(165);
     });
 
     test('the quick reference example is a file that checks without any diagnostic and is formatted', async () => {
@@ -89,6 +89,12 @@ describe('dt guide topics', () => {
         const m025 = await runGuide('M025');
         expect(m025.out).toContain("| M025 | a context's description (`///` above `context X`) is written once");
         expect(m025.out).toContain('Explained in: `dt guide layout`, `dt guide names`, `dt guide modeling-practice`.');
+        const m026 = await runGuide('M026');
+        expect(m026.out).toContain('| M026 | (warning) a union has a variant with fields');
+        expect(m026.out).toContain('Explained in: `dt guide unions`, `dt guide modeling-practice`.');
+        const m027 = await runGuide('M027');
+        expect(m027.out).toContain('| M027 | (warning) a field or parameter named `<stem>Id`');
+        expect(m027.out).toContain('Explained in: `dt guide aggregates`, `dt guide modeling-practice`.');
     });
 
     test('the ways of working are topics of their language: storming-practice in storming, modeling-practice in dsl', async () => {

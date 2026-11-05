@@ -222,7 +222,9 @@ describe('dt open and dt collab: the agent in process', () => {
         const { deps, calls } = fakeDeps(USABLE);
         expect((await run(deps, '-r', dir, 'open')).code).toBe(0);
         const guide = async (topic: string): Promise<string> => (await run(cliDeps(), 'guide', topic)).out.join('\n');
-        expect(calls.practices).toEqual([{ storming: await guide('storming-practice'), modeling: await guide('modeling-practice') }]);
+        expect(calls.practices).toEqual([
+            { storming: await guide('storming-practice'), modeling: await guide('modeling-practice'), modelingSyntax: await guide('dsl-quick') },
+        ]);
     });
 
     test('dt collab: a Collab session on collab.port with its link; continuing a dt open session says so', async () => {

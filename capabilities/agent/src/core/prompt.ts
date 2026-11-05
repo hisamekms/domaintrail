@@ -117,20 +117,26 @@ function languagesOf(input: Json<Collaboration.RunInput>): Languages {
 
 /**
  * The ways of working with the two DSLs, as DomainTrail's guide gives them (its `storming-practice` and
- * `modeling-practice` topics): the app reads them from the guide it embeds, so that the prompts and `dt guide` say the
- * same.
+ * `modeling-practice` topics, and the `.dt` syntax by example, `dsl-quick`): the app reads them from the guide it
+ * embeds, so that the prompts and `dt guide` say the same.
  */
 export interface Practice {
     /** How to run a storming in `.dtes` files. */
     readonly storming: string;
     /** How to grow the `.dt` model. */
     readonly modeling: string;
+    /** The `.dt` syntax by example, for a prompt that reads or writes `.dt` files; none: left out. */
+    readonly modelingSyntax?: string;
 }
 
-/** The ways of working for the DSLs a request is about, the storming's first; none without `practice`. */
-export function practiceFor(practice: Practice | undefined, languages: Languages): string[] {
+/**
+ * The ways of working for the DSLs a request is about, the storming's first, the `.dt` syntax after the modeling's
+ * (unless `syntax` is false: a prompt that writes no `.dt`); none without `practice`.
+ */
+export function practiceFor(practice: Practice | undefined, languages: Languages, syntax = true): string[] {
     if (!practice) return [];
-    return [...(languages.dtes ? [practice.storming] : []), ...(languages.dt ? [practice.modeling] : [])];
+    const modeling = [practice.modeling, ...(syntax && practice.modelingSyntax !== undefined ? [practice.modelingSyntax] : [])];
+    return [...(languages.dtes ? [practice.storming] : []), ...(languages.dt ? modeling : [])];
 }
 
 /** JSON that cannot close the block it is in: `<` and `>` are escaped (JSON reads them back unchanged). */
