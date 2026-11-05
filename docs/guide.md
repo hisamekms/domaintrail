@@ -3064,7 +3064,8 @@ drawing stays the same but reading or changing it correctly needs the text, it i
 | Checked | references, types, the link to the `.dt` | only that the stickies it is about exist (K002) |
 | Written by | the AI tidies, people correct | taken from what people say and the AI answers; people delete what is wrong |
 
-**An item** holds one finding: its text (Markdown; images as `![…](image:img_…)`), the stickies it is `about`
+**An item** holds one finding: its **title** (one short line of plain text, at most 40 characters, which a closed item
+shows alone), its text (Markdown; images as `![…](image:img_…)`), the stickies it is `about`
 (`<Storming>.<LocalId>`, so that a label can be renamed in place), its **sources** (the session, the message, its time
 and a short quote, which lets a reader check the wording without the session database), a version, and the items it
 **conflicts with**. Four labels, fixed for now:
@@ -3094,7 +3095,9 @@ stronger model runs only when there is something to extract:
    talk of the last `contextMinutes`, the workspace's stickies (below), the items made in this session, those about the
    stickies the talk points at and those about the stickies the new messages name by their label, and replies with
    operations: **add** an item, **addSource** (the same finding again; `said` may become `agreed`), **update** (more
-   precise; with the messages it rests on as new sources) or **conflict** (both kept, linked).
+   precise; with the messages it rests on as new sources) or **conflict** (both kept, linked). Each add, update and
+   conflict carries the title: short and concrete (「月末締めの案件は翌月の作業になる」, not 「締めについて」), in the
+   talk's language, never a person's name; an update rewrites it when the finding changed.
 
 Both models see the same stickies: those of the storming the facilitator's page has open (else one any page has open)
 and of the session's current journey; when neither is known, every storming's; at most 300. The extractor links each
@@ -3132,19 +3135,22 @@ What must be protected is **personal data, which must be deletable on request**;
 it to developers and sending it to Anthropic's API are accepted. git cannot forget what was committed, so a project
 where a name, a phone number or a customer's details may be spoken uses `cloudflare`.
 
-With `files`, each item is `knowledge/<id>.md` (`kn_…`): a YAML front matter (its labels, `about`, conflicts, session,
-times and sources with their quotes) and the text, written by dt in a fixed order so that a diff shows what changed; its
+With `files`, each item is `knowledge/<id>.md` (`kn_…`): a YAML front matter (its `title`, labels, `about`, conflicts,
+session, times and sources with their quotes) and the text, written by dt in a fixed order so that a diff shows what changed; its
 images are in `knowledge/images/`. `knowledge/audit.jsonl` (who changed what) and `knowledge/redactions.jsonl` (the
 redaction log, IDs only) are appended, and merge with `union` (`knowledge/.gitattributes`). Commit them with the
-model. A person may edit an item's file by hand; `dt check` reports one that does not read (K001), which the store
-skips and never writes over, and an `about` that names no sticky of the workspace (K002).
+model. A person may edit an item's file by hand; `dt check` reports one that does not read (K001) — among them one
+without a `title`, as written before items had one —, which the store skips and never writes over, and an `about` that
+names no sticky of the workspace (K002).
 
 With `cloudflare`, every clone and worktree that names the same `knowledge.project` and `knowledge.url` reads and
-writes the same knowledge. Deploying and upgrading the Worker, its Access application and service tokens:
+writes the same knowledge. The Worker's migration 2 adds the title and removes the items written before it (the
+feature is still in development). Deploying and upgrading the Worker, its Access application and service tokens:
 `node_modules/domaintrail/dist/knowledge-worker/README.md`.
 
 **Reading it.** In a session, the Live View marks the stickies that have knowledge, lists a sticky's items and every
-item in the ナレッジ tab ([the Live View](live-view.md#knowledge)). The session's AI reads it too: its answers and
+item in the ナレッジ tab, each closed to its title and labels; an opened item's labels are the tab's filter chips, and
+pressing one shows the tab filtered by that label ([the Live View](live-view.md#knowledge)). The session's AI reads it too: its answers and
 runs get `dt mcp`'s tools when the store is usable when `dt agent` starts (`files`: `knowledge/` exists; `cloudflare`:
 approved, with the token), and cite the items they rest on. Outside one, Claude Code reads it through `dt mcp`
 (below), and with `cloudflare` the business reads it on the Worker's page (`dt publish`, below).
@@ -3153,7 +3159,7 @@ approved, with the token), and cite the items they rest on. Outside one, Claude 
 message that asks the AI to add a hotspot) and 食い違いではない (the link removed from both). A conflict whose other side
 was deleted no longer shows.
 
-**Correcting and deleting.** Anyone who can open the project may correct (直す: text and labels, a new version) and
+**Correcting and deleting.** Anyone who can open the project may correct (直す: title, text and labels, a new version) and
 delete (消す), in the Live View and on the Worker's page. Deleting hides the item from everyone at once, with 元に戻す
 for 10 seconds; then the store's **sweep** (the `files` store's: run by dt on its next write and every few minutes;
 the Worker's: a Cron Trigger every 5 minutes) removes every version and image of it, and appends the IDs of its source
@@ -3170,14 +3176,15 @@ knowledge — what was said and found in its sessions (ADR 0031) — read-only, 
 names (`files`: the workspace's `knowledge/`; `cloudflare`: the Worker, with the service token that reads in
 `DOMAINTRAIL_KNOWLEDGE_CLIENT_ID` and `DOMAINTRAIL_KNOWLEDGE_CLIENT_SECRET`). Its tools:
 
-- `knowledge_for_element({ element })` — the items about an element, newest first, each with its labels, date and ID.
+- `knowledge_for_element({ element })` — the items about an element, newest first, each with its ID, title, labels,
+  date and text (cut when long).
   `element` is a sticky, `<Storming>.<LocalId>` (`Ordering.CreateSpecification`), or a `.dt` element prefixed with
   `dt:` (`dt:Sales.Order.confirm`, `dt:Sales.Order`, `dt:Sales.OrderPlaced`), resolved through the stickies whose `ref`
   is that element or one inside it. The tool to call before implementing an element.
 - `knowledge_search({ query, about, when, kind, origin, perspective, limit })` — every given filter holds: `query` full
-  text, `about` stickies or `dt:` elements, `when` / `kind` / `origin` one value or a list, `perspective` a role,
+  text (titles, texts and quotes), `about` stickies or `dt:` elements, `when` / `kind` / `origin` one value or a list, `perspective` a role,
   `limit` at most 50 (default 20).
-- `knowledge_get({ id, history })` — one item whole: its text, labels, stickies, conflicts and sources with their
+- `knowledge_get({ id, history })` — one item whole: its title and text, labels, stickies, conflicts and sources with their
   quotes; with `history`, its earlier versions (the `files` store keeps none: `git log -p knowledge/<id>.md`).
 
 The stormings are read again on every call. A wrong input, an unknown item or a store that cannot be reached is an
