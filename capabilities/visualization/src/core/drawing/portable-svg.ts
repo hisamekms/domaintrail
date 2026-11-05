@@ -5,7 +5,7 @@
 // text is laid out line by line in the given font stacks and wrapped, shrunk and cut short with «…» as the canvas does
 // (`note-fit.ts`), measured by the caller (a canvas's `measureText` in the page; a table of the fonts' widths in
 // `dt export svg`, `text-measure.ts`; a fixed measure in tests).
-import { TRANSITION_LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, TRANSITION_SUB_SIZE } from '../graph/ir.js';
+import { isUndirectedEdge, TRANSITION_LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, TRANSITION_SUB_SIZE } from '../graph/ir.js';
 import type { LegendContent } from './legend.js';
 import { BADGE, badgeWidth, checkPath, DIAG_RADIUS, RESOLVED_MARK } from './marks.js';
 import { fitLabel, NOTE_KINDS, type LabelFit } from './note-fit.js';
@@ -822,7 +822,7 @@ class Drawing {
                 ...paint('stroke', this.c(look.stroke)),
                 'stroke-width': look.width,
                 'stroke-dasharray': look.dash,
-                'marker-end': p.kind === 'esHotspot' ? undefined : this.markers.arrow(look.head),
+                'marker-end': isUndirectedEdge(p.kind) ? undefined : this.markers.arrow(look.head),
                 'marker-start': p.kind === 'owns' ? this.markers.diamond() : undefined,
             }),
         ];
@@ -955,7 +955,7 @@ class Drawing {
                     ...paint('fill', this.c('--model-ink')),
                 }),
             );
-        if (kind !== 'esHotspot')
+        if (!isUndirectedEdge(kind))
             out.push(
                 tag('path', {
                     d: `M${num(x + 54)},${num(y + 7)} L${num(x + 41)},${num(y + 0.5)} L${num(x + 41)},${num(y + 13.5)} Z`,

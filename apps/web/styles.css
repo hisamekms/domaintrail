@@ -1641,9 +1641,6 @@ a.field-origin {
     stroke-width: 1.1;
     stroke-dasharray: 1.5 3;
 }
-.de-esRelated .de-head {
-    fill: var(--model-edge-quiet);
-}
 .de-esHotspot.de-resolved .de-line {
     stroke: var(--es-hotspot-resolved-edge);
 }
