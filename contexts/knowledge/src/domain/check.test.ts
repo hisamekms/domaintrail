@@ -14,8 +14,8 @@ describe('dt check on the knowledge files', () => {
     test('K002: an item about a sticky the workspace lacks, at the line of the entry', () => {
         const found = knowledgeDiagnostics([fileOf('kn_00000001', ['Ordering.Placed', 'Ordering.Gone', 'Billing.Paid'])], names);
         expect(found.map((d) => [d.code, d.severity, d.start.line, d.message])).toEqual([
-            ['K002', 'warning', 9, "The knowledge item 'kn_00000001' is about 'Ordering.Gone', which storming 'Ordering' does not have."],
-            ['K002', 'warning', 10, "The knowledge item 'kn_00000001' is about 'Billing.Paid', but there is no storming 'Billing'."],
+            ['K002', 'warning', 10, "The knowledge item 'kn_00000001' is about 'Ordering.Gone', which storming 'Ordering' does not have."],
+            ['K002', 'warning', 11, "The knowledge item 'kn_00000001' is about 'Billing.Paid', but there is no storming 'Billing'."],
         ]);
         expect(found[0].file).toBe('knowledge/kn_00000001.md');
     });

@@ -17,6 +17,8 @@ import type { WorkspaceSticky } from './stickies.js';
 /** The most of each part of a reply, and of an input. */
 export const EXTRACTION_LIMITS = {
     operations: 40,
+    /** A title's most characters (`ItemTitle`). */
+    title: 40,
     text: 4000,
     reason: 500,
     quote: 300,
@@ -59,6 +61,7 @@ export interface KnownItem {
     readonly key: string;
     readonly id: string;
     readonly version: number;
+    readonly title: string;
     readonly text: string;
     readonly when: Knowledge.When;
     readonly kind: Knowledge.KnowledgeKind;
@@ -157,6 +160,8 @@ export function readUsage(raw: unknown): ExtractionUsage | undefined {
 
 /** A finding as the extractor states it. */
 export interface ReplyFinding {
+    /** One short line, plain text. */
+    readonly title: string;
     readonly text: string;
     readonly when: Knowledge.When;
     readonly kind: Knowledge.KnowledgeKind;
@@ -213,6 +218,7 @@ export function extractorJsonSchema(): Record<string, unknown> {
                     properties: {
                         op: { type: 'string', enum: [...OPS] },
                         item: { type: 'string', pattern: '^k[0-9]+$' },
+                        title: string(EXTRACTION_LIMITS.title),
                         text: string(EXTRACTION_LIMITS.text),
                         when: { type: 'string', enum: [...KNOWLEDGE_WHENS] },
                         kind: { type: 'string', enum: [...KNOWLEDGE_KINDS] },
@@ -255,7 +261,20 @@ const oneOf = <T extends string>(v: unknown, values: readonly T[], path: string)
     return found === undefined ? problem(path, `Expected one of ${values.join(', ')}.`) : ok(found);
 };
 
+/**
+ * A title as one line: its breaks and runs of spaces made one space; past the most characters, cut with "…" (the schema
+ * asks for a short one, so this is a model's slip, and a title cut short still reads).
+ */
+export function titleOf(v: unknown, path: string): Read<string> {
+    if (typeof v !== 'string' || !v.trim()) return problem(path, 'Expected a title.');
+    const line = spaced(v);
+    const max = EXTRACTION_LIMITS.title;
+    return ok(line.length <= max ? line : `${line.slice(0, max - 1).trimEnd()}…`);
+}
+
 function readFinding(raw: Record<string, unknown>, path: string): Read<ReplyFinding> {
+    const title = titleOf(raw.title, `${path}.title`);
+    if (!title.ok) return title;
     const text = textOf(raw.text, `${path}.text`, EXTRACTION_LIMITS.text);
     if (!text.ok) return text;
     const when = oneOf(raw.when, KNOWLEDGE_WHENS, `${path}.when`);
@@ -268,6 +287,7 @@ function readFinding(raw: Record<string, unknown>, path: string): Read<ReplyFind
     if (!Array.isArray(about)) return problem(`${path}.about`, 'Expected a list of stickies.');
     const perspective = typeof raw.perspective === 'string' && raw.perspective.trim() ? raw.perspective.trim().slice(0, 100) : undefined;
     return ok({
+        title: title.value,
         text: text.value,
         when: when.value,
         kind: kind.value,
@@ -426,6 +446,8 @@ export function operationsOf(reply: ExtractorReply, input: ExtractionInput): Ext
         return first ? ok([first, ...rest]) : problem(`${path}.sources`, 'No source is a message that was given.');
     };
     const contentOf = (f: ReplyFinding, path: string): Read<Knowledge.ItemContent> => {
+        const title = Knowledge.makeItemTitle(f.title);
+        if (!title.ok) return problem(`${path}.title`, 'Not an item title.');
         const text = Knowledge.makeItemText(f.text);
         if (!text.ok) return problem(`${path}.text`, 'Not an item text.');
         const perspective = f.perspective === undefined ? undefined : Knowledge.makePerspective(f.perspective);
@@ -439,6 +461,7 @@ export function operationsOf(reply: ExtractorReply, input: ExtractionInput): Ext
             if (!about.includes(ref.value)) about.push(ref.value);
         }
         return ok({
+            title: title.value,
             text: text.value,
             labels: { when: f.when, kind: f.kind, origin: f.origin, ...(perspective?.ok && { perspective: perspective.value }) },
             about,

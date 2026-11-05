@@ -1,11 +1,12 @@
 // The file of one knowledge item, as the `files` store keeps it in the workspace's `knowledge/` (ADR 0031, section 5):
-// Markdown with a front matter. The front matter holds what is not the text — the ID, the version, the labels, the
+// Markdown with a front matter. The front matter holds what is not the text — the ID, the version, the title, the labels, the
 // stickies it is about, the items it conflicts with, the session that made it, the times and the sources with their
 // quotes — and the body is the text, images referred to as `image:img_…` (the files beside it in `knowledge/images/`).
 //
 //     ---
 //     id: kn_7c0f3a9d2e
 //     version: 1
+//     title: "月末締めの案件は翌月の作業になる"
 //     when: as_is
 //     kind: rule
 //     origin: agreed
@@ -29,7 +30,8 @@
 // lists of scalars (`- x` lines, or `[a, b]`) and lists of flat maps (the sources); scalars plain, `"…"` (JSON's
 // escapes) or `'…'`; `#` comments. dt writes it that way, in a fixed key order, so that a diff in git shows what
 // changed; a person may edit it by hand, and what does not read is reported by `dt check` (K001) and skipped by the
-// store, never written over.
+// store, never written over. An item has a title (ADR 0031, section 2): a file without one does not read (K001), as
+// those written before titles were.
 //
 // Pure: reading and printing text. The store (`infrastructure/files.ts`) does the I/O; `dt check` reads the same.
 import { Knowledge, type Result } from '../generated/index.js';
@@ -246,6 +248,7 @@ function blockList(lines: Line[], i: number, indent: number): [List, number] {
 const KEYS = [
     'id',
     'version',
+    'title',
     'when',
     'kind',
     'origin',
@@ -364,6 +367,11 @@ function itemOf(front: MapNode, text: string, bodyLine: number, fileId: string |
     const versionNumber = /^\d+$/.test(versionText) ? Number(versionText) : Number.NaN;
     const version = Knowledge.makeItemVersion(versionNumber);
     if (!version.ok) throw new Unreadable(f.line('version'), `'version' is a whole number from 1: not ${versionText}.`);
+    const titleText = f.required('title');
+    const titleMade = Knowledge.makeItemTitle(titleText);
+    if (!titleMade.ok)
+        throw new Unreadable(f.line('title'), `'title' is one line of at most 40 characters, without spaces at its ends: not ${JSON.stringify(titleText)}.`);
+    const title = titleMade.value;
     const perspective = f.optional('perspective');
     const labels: Knowledge.Labels = {
         when: f.oneOf('when', WHEN),
@@ -375,7 +383,7 @@ function itemOf(front: MapNode, text: string, bodyLine: number, fileId: string |
     const about = aboutNodes.map((n) => made(Knowledge.makeStickyRef, n, 'about'));
     const itemText = Knowledge.makeItemText(text);
     if (!itemText.ok) throw new Unreadable(bodyLine, `The text (below the front matter) is ${text === '' ? 'empty' : 'too long (at most 20000 characters)'}.`);
-    const content: Knowledge.ItemContent = { text: itemText.value, labels, about };
+    const content: Knowledge.ItemContent = { title, text: itemText.value, labels, about };
     if (Knowledge.checkItemContent(content).length > 0) throw new Unreadable(f.line('about'), "'about' names a sticky twice.");
     const conflictsWith = f.list('conflictsWith').map((n) => made(Knowledge.makeKnowledgeItemId, scalarOf(n, 'conflictsWith'), 'conflictsWith'));
     const createdIn = f.optional('createdIn');
@@ -463,8 +471,15 @@ const time = (d: Date): string => d.toISOString();
 /** The file of an item: its front matter, a blank line, its text and one line break. */
 export function printItemFile(item: Knowledge.KnowledgeItem): string {
     const out = ['---'];
-    const { labels, about, text } = item.content;
-    out.push(`id: ${item.id}`, `version: ${item.version}`, `when: ${labels.when}`, `kind: ${labels.kind}`, `origin: ${labels.origin}`);
+    const { title, labels, about, text } = item.content;
+    out.push(
+        `id: ${item.id}`,
+        `version: ${item.version}`,
+        `title: ${scalar(title)}`,
+        `when: ${labels.when}`,
+        `kind: ${labels.kind}`,
+        `origin: ${labels.origin}`,
+    );
     if (labels.perspective !== undefined) out.push(`perspective: ${scalar(labels.perspective)}`);
     const list = (key: string, values: readonly string[]): void => {
         if (values.length === 0) out.push(`${key}: []`);

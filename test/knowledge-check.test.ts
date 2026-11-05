@@ -15,6 +15,7 @@ const item = (id: string, about: string[]): string =>
         '---',
         `id: ${id}`,
         'version: 1',
+        'title: A finding',
         'when: as_is',
         'kind: rule',
         'origin: said',
@@ -59,7 +60,7 @@ describe('dt check on knowledge/', () => {
         );
         expect(gone.code).toBe(0);
         expect(gone.out).toContainEqual(
-            "knowledge/kn_00000001.md:9:1 - warning K002: The knowledge item 'kn_00000001' is about 'Issue.Shipped', which storming 'Issue' does not have.",
+            "knowledge/kn_00000001.md:10:1 - warning K002: The knowledge item 'kn_00000001' is about 'Issue.Shipped', which storming 'Issue' does not have.",
         );
     });
 
@@ -69,6 +70,13 @@ describe('dt check on knowledge/', () => {
         expect(r.err).toContainEqual(
             'knowledge/kn_00000001.md:1:1 - error K001: The knowledge item does not read: An item file starts with a front matter: a line "---", the fields, and a line "---".',
         );
+    });
+
+    test('an item written before titles: K001 (exit 1)', async () => {
+        const untitled = item('kn_00000002', ['Issue.Requested']).replace('title: A finding\n', '');
+        const r = await check(await workspace({ 'b.dt': DT, 'i.dtes': DTES, 'knowledge/kn_00000002.md': untitled }));
+        expect(r.code).toBe(1);
+        expect(r.err).toContainEqual("knowledge/kn_00000002.md:2:1 - error K001: The knowledge item does not read: 'title' is missing.");
     });
 
     test("with the 'cloudflare' store, the workspace's knowledge/ is not checked", async () => {

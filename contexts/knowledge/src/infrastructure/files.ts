@@ -456,7 +456,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                     if (query.perspective !== undefined && labels.perspective !== query.perspective) return false;
                     if (query.session !== undefined && i.createdIn !== query.session) return false;
                     if (terms.length > 0) {
-                        const haystack = [i.content.text, ...i.sources.map((s) => s.quote)].join('\n').toLowerCase();
+                        const haystack = [i.content.title, i.content.text, ...i.sources.map((s) => s.quote)].join('\n').toLowerCase();
                         if (!terms.every((t) => haystack.includes(t))) return false;
                     }
                     return after === undefined || after(i);

@@ -285,6 +285,7 @@ export function extractionInput(
         key: keys.get(item.id) ?? '',
         id: item.id,
         version: item.version,
+        title: item.content.title,
         text: item.content.text,
         when: item.content.labels.when,
         kind: item.content.labels.kind,

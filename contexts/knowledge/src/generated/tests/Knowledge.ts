@@ -12,6 +12,7 @@ export interface Arbitraries {
     readonly KnowledgeItemId: fc.Arbitrary<Knowledge.KnowledgeItemId>;
     readonly ImageId: fc.Arbitrary<Knowledge.ImageId>;
     readonly ProjectName: fc.Arbitrary<Knowledge.ProjectName>;
+    readonly ItemTitle: fc.Arbitrary<Knowledge.ItemTitle>;
     readonly ItemText: fc.Arbitrary<Knowledge.ItemText>;
     readonly Quote: fc.Arbitrary<Knowledge.Quote>;
     readonly Perspective: fc.Arbitrary<Knowledge.Perspective>;
@@ -76,7 +77,7 @@ export interface Options extends Generation {
 
 /** What `contract` tests: the constructors of domain primitives and the commands of aggregates, each optional. */
 export interface Implementation {
-    readonly make?: { readonly KnowledgeItemId?: Knowledge.MakeKnowledgeItemId; readonly ImageId?: Knowledge.MakeImageId; readonly ProjectName?: Knowledge.MakeProjectName; readonly ItemText?: Knowledge.MakeItemText; readonly Quote?: Knowledge.MakeQuote; readonly Perspective?: Knowledge.MakePerspective; readonly Reason?: Knowledge.MakeReason; readonly StickyRef?: Knowledge.MakeStickyRef; readonly SessionRef?: Knowledge.MakeSessionRef; readonly MessageRef?: Knowledge.MakeMessageRef; readonly UserName?: Knowledge.MakeUserName; readonly ItemVersion?: Knowledge.MakeItemVersion; readonly ExtractionNumber?: Knowledge.MakeExtractionNumber };
+    readonly make?: { readonly KnowledgeItemId?: Knowledge.MakeKnowledgeItemId; readonly ImageId?: Knowledge.MakeImageId; readonly ProjectName?: Knowledge.MakeProjectName; readonly ItemTitle?: Knowledge.MakeItemTitle; readonly ItemText?: Knowledge.MakeItemText; readonly Quote?: Knowledge.MakeQuote; readonly Perspective?: Knowledge.MakePerspective; readonly Reason?: Knowledge.MakeReason; readonly StickyRef?: Knowledge.MakeStickyRef; readonly SessionRef?: Knowledge.MakeSessionRef; readonly MessageRef?: Knowledge.MakeMessageRef; readonly UserName?: Knowledge.MakeUserName; readonly ItemVersion?: Knowledge.MakeItemVersion; readonly ExtractionNumber?: Knowledge.MakeExtractionNumber };
     readonly KnowledgeItem?: Knowledge.KnowledgeItemCommands;
 }
 
@@ -89,6 +90,7 @@ export function arbitraries(options: Options = {}): Arbitraries {
         KnowledgeItemId: () => testing.valid(given.KnowledgeItemId ?? testing.collide(testing.cast<Knowledge.KnowledgeItemId>(testing.base('String', { pattern: '^kn_[0-9a-z]{8,32}$' })), seed), (v) => Knowledge.checkKnowledgeItemId(v).length === 0, 'Knowledge.KnowledgeItemId'),
         ImageId: () => testing.valid(given.ImageId ?? testing.collide(testing.cast<Knowledge.ImageId>(testing.base('String', { pattern: '^img_[0-9a-z]{8,32}$' })), seed), (v) => Knowledge.checkImageId(v).length === 0, 'Knowledge.ImageId'),
         ProjectName: () => testing.valid(given.ProjectName ?? testing.collide(testing.cast<Knowledge.ProjectName>(testing.base('String', { pattern: '^[a-z0-9][a-z0-9-]{0,62}$' })), seed), (v) => Knowledge.checkProjectName(v).length === 0, 'Knowledge.ProjectName'),
+        ItemTitle: () => testing.valid(given.ItemTitle ?? testing.collide(testing.cast<Knowledge.ItemTitle>(testing.base('String', { maxLength: 40, pattern: '^\\S(.*\\S)?$' })), seed), (v) => Knowledge.checkItemTitle(v).length === 0, 'Knowledge.ItemTitle'),
         ItemText: () => testing.valid(given.ItemText ?? testing.collide(testing.cast<Knowledge.ItemText>(testing.base('String', { minLength: 1, maxLength: 20000 })), seed), (v) => Knowledge.checkItemText(v).length === 0, 'Knowledge.ItemText'),
         Quote: () => testing.valid(given.Quote ?? testing.collide(testing.cast<Knowledge.Quote>(testing.base('String', { minLength: 1, maxLength: 500 })), seed), (v) => Knowledge.checkQuote(v).length === 0, 'Knowledge.Quote'),
         Perspective: () => testing.valid(given.Perspective ?? testing.collide(testing.cast<Knowledge.Perspective>(testing.base('String', { minLength: 1, maxLength: 100 })), seed), (v) => Knowledge.checkPerspective(v).length === 0, 'Knowledge.Perspective'),
@@ -103,7 +105,7 @@ export function arbitraries(options: Options = {}): Arbitraries {
         KnowledgeKind: () => given.KnowledgeKind ?? fc.constantFrom<Knowledge.KnowledgeKind>('rule', 'flow', 'example', 'term', 'pain', 'want', 'decision'),
         Origin: () => given.Origin ?? fc.constantFrom<Knowledge.Origin>('said', 'agreed', 'investigated', 'inferred'),
         Labels: () => given.Labels ?? testing.cast<Knowledge.Labels>(fc.record({ when: a.When, kind: a.KnowledgeKind, origin: a.Origin, perspective: a.Perspective }, { requiredKeys: ['when', 'kind', 'origin'] })),
-        ItemContent: () => testing.valid(given.ItemContent ?? testing.cast<Knowledge.ItemContent>(fc.record({ text: a.ItemText, labels: a.Labels, about: testing.many(a.StickyRef, 0) })), (v) => Knowledge.checkItemContent(v).length === 0, 'Knowledge.ItemContent'),
+        ItemContent: () => testing.valid(given.ItemContent ?? testing.cast<Knowledge.ItemContent>(fc.record({ title: a.ItemTitle, text: a.ItemText, labels: a.Labels, about: testing.many(a.StickyRef, 0) })), (v) => Knowledge.checkItemContent(v).length === 0, 'Knowledge.ItemContent'),
         Source: () => given.Source ?? testing.cast<Knowledge.Source>(fc.record({ session: a.SessionRef, message: a.MessageRef, at: testing.cast<Date>(scalar.Timestamp), quote: a.Quote })),
         ExtractionRef: () => given.ExtractionRef ?? testing.cast<Knowledge.ExtractionRef>(fc.record({ session: a.SessionRef, number: a.ExtractionNumber })),
         Actor: () => given.Actor ?? testing.cast<Knowledge.Actor>(fc.oneof(fc.record({ kind: fc.constant('Extractor' as const), extraction: a.ExtractionRef }), fc.record({ kind: fc.constant('Person' as const), user: a.UserName }))),
@@ -168,6 +170,15 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 declared: [],
                 check: () => Knowledge.checkProjectName,
                 make: impl.make.ProjectName,
+            }, options) : []),
+            ...(impl.make.ItemTitle ? testing.primitiveCases({
+                type: 'Knowledge.ItemTitle',
+                base: 'String',
+                hints: { maxLength: 40, pattern: '^\\S(.*\\S)?$' },
+                invariants: ['valid'],
+                declared: [],
+                check: () => Knowledge.checkItemTitle,
+                make: impl.make.ItemTitle,
             }, options) : []),
             ...(impl.make.ItemText ? testing.primitiveCases({
                 type: 'Knowledge.ItemText',

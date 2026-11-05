@@ -144,6 +144,7 @@ describe('knowledge taken from a session', () => {
                             ? [
                                   {
                                       op: 'add',
+                                      title: `決まり: ${first.text}`.slice(0, 40),
                                       text: `決まり: ${first.text}`,
                                       when: 'as_is',
                                       kind: 'rule',
@@ -262,6 +263,7 @@ describe('knowledge taken from a session', () => {
                                 ? [
                                       {
                                           op: 'add',
+                                          title: '返金は検品の翌営業日',
                                           text: '返金は検品の翌営業日に行う',
                                           when: 'as_is',
                                           kind: 'rule',

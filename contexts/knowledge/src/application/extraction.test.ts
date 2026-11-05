@@ -108,6 +108,7 @@ const reply = (...operations: unknown[]): ExtractionResultBody => ({
 });
 const addFinding = (message: string, text = '急ぎの見積もりは当日中に出す') => ({
     op: 'add',
+    title: '急ぎの見積もりは当日中',
     text,
     when: 'as_is',
     kind: 'rule',
@@ -119,6 +120,7 @@ const addFinding = (message: string, text = '急ぎの見積もりは当日中�
 const updateFinding = (item: string, text = '急ぎの見積もりは当日17時までに出す', message = 'm1') => ({
     op: 'update',
     item,
+    title: '急ぎの見積もりは当日17時まで',
     text,
     when: 'as_is',
     kind: 'rule',

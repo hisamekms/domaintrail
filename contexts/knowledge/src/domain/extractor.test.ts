@@ -1,6 +1,7 @@
 // The extractor's reply (ADR 0031, section 3): read without trusting it — a malformed reply extracts nothing, a malformed
 // operation is dropped and the others kept — and made into an extraction's operations over what the extractor was given.
 import { describe, expect, test } from 'bun:test';
+import { Knowledge } from '../generated/index.js';
 import { extractedItemId, extractorJsonSchema, type ExtractionInput, operationsOf, readExtractorReply, readUsage } from './extractor.js';
 
 const input: ExtractionInput = {
@@ -25,6 +26,7 @@ const input: ExtractionInput = {
             key: 'k1',
             id: 'kn_0000000001',
             version: 2,
+            title: '見積もりは営業が出す',
             text: '見積もりは営業が出す',
             when: 'as_is',
             kind: 'rule',
@@ -41,7 +43,14 @@ const input: ExtractionInput = {
 /** A value compared as plain data (its brands aside). */
 const plain = (v: unknown): unknown => v;
 
-const finding = { text: '急ぎの案件は当日中に見積もりを出す', when: 'as_is', kind: 'rule', origin: 'said', about: ['Ordering.Estimate'] };
+const finding = {
+    title: '急ぎの見積もりは当日中',
+    text: '急ぎの案件は当日中に見積もりを出す',
+    when: 'as_is',
+    kind: 'rule',
+    origin: 'said',
+    about: ['Ordering.Estimate'],
+};
 
 const read = (raw: unknown) => {
     const r = readExtractorReply(raw);
@@ -65,6 +74,7 @@ describe("reading the extractor's reply", () => {
                 { op: 'add', ...finding, kind: 'opinion', sources: [{ message: 'm2', quote: 'x' }], reason: 'r' },
                 { op: 'add', ...finding, sources: [], reason: 'r' },
                 { op: 'update', ...finding, reason: 'r' },
+                { op: 'add', ...finding, title: undefined, sources: [{ message: 'm2', quote: 'x' }], reason: 'r' },
                 { op: 'delete', item: 'k1', reason: 'r' },
                 { op: 'addSource', item: 'k1', sources: [{ message: 'm2', quote: 'q' }], reason: '' },
                 'not an object',
@@ -76,9 +86,10 @@ describe("reading the extractor's reply", () => {
             'reply.operations[1].kind',
             'reply.operations[2].sources',
             'reply.operations[3].item',
-            'reply.operations[4].op',
-            'reply.operations[5].reason',
-            'reply.operations[6]',
+            'reply.operations[4].title',
+            'reply.operations[5].op',
+            'reply.operations[6].reason',
+            'reply.operations[7]',
         ]);
     });
 
@@ -95,6 +106,17 @@ describe("reading the extractor's reply", () => {
         expect(reply.operations).toHaveLength(40);
         expect(reply.rejected).toHaveLength(5);
         expect(reply.operations[0].op === 'add' && reply.operations[0].finding.text.length).toBe(4000);
+    });
+
+    test('a title is made one line, and cut to 40 characters with "…" when longer', () => {
+        const titleOf = (title: string): string | false => {
+            const reply = read({ operations: [{ op: 'add', ...finding, title, sources: [{ message: 'm2', quote: 'q' }], reason: 'r' }] });
+            return reply.operations[0]?.op === 'add' && reply.operations[0].finding.title;
+        };
+        expect(titleOf('  急ぎは\n  当日中  ')).toBe('急ぎは 当日中');
+        const cut = titleOf('あ'.repeat(50));
+        expect(cut).toBe(`${'あ'.repeat(39)}…`);
+        expect(cut && Knowledge.makeItemTitle(cut).ok).toBe(true);
     });
 
     test('the schema asks for the operations, each with its op and reason, references as keys', () => {
@@ -130,7 +152,12 @@ describe('the reply made into operations', () => {
             {
                 kind: 'Add',
                 id: extractedItemId('s1', 3, 0),
-                content: { text: finding.text, labels: { when: 'as_is', kind: 'rule', origin: 'said', perspective: '営業' }, about: ['Ordering.Estimate'] },
+                content: {
+                    title: finding.title,
+                    text: finding.text,
+                    labels: { when: 'as_is', kind: 'rule', origin: 'said', perspective: '営業' },
+                    about: ['Ordering.Estimate'],
+                },
                 sources: [{ session: 's1', message: 'r-2', at: new Date('2026-11-05T09:01:00.000Z'), quote: '当日中に' }],
                 reason: '決まり',
             },

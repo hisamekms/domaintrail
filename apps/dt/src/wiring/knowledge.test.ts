@@ -74,6 +74,7 @@ describe('openKnowledgeStore', () => {
                     kind: 'Add',
                     id,
                     content: {
+                        title: made(Knowledge.makeItemTitle('A finding')),
                         text: made(Knowledge.makeItemText('A finding.')),
                         labels: { when: 'as_is', kind: 'rule', origin: 'said' },
                         about: [made(Knowledge.makeStickyRef('Ordering.Placed'))],
