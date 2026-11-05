@@ -71,3 +71,4 @@ export {
     type FilesKnowledgeStore,
     type FilesKnowledgeStoreOptions,
 } from './infrastructure/files.js';
+export { cloudflareKnowledgeStore, KnowledgeStoreError, type AccessServiceToken, type CloudflareKnowledgeStoreSettings } from './infrastructure/cloudflare.js';

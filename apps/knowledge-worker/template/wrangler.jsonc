@@ -1,0 +1,39 @@
+// The knowledge store's Worker (DomainTrail, ADR 0031). Replace every <…> before deploying; README.md says where each
+// value comes from. Wrangler 4 or later.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "knowledge",
+  "main": "worker.js",
+  "compatibility_date": "2026-08-01",
+
+  // Reached only through Cloudflare Access on your own host name: no *.workers.dev URL, no preview URLs, which Access
+  // would not cover (the Worker also verifies Access's token, and refuses a request without one).
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "<knowledge.example.com>", "custom_domain": true }],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "knowledge",
+      "database_id": "<the database_id printed by `wrangler d1 create knowledge`>",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "r2_buckets": [{ "binding": "IMAGES", "bucket_name": "<knowledge-images>" }],
+
+  // the sweep that completes deletions: every 5 minutes
+  "triggers": { "crons": ["*/5 * * * *"] },
+
+  "vars": {
+    // the Access application in front of this Worker (Zero Trust → Access → Applications → the application → Overview)
+    "ACCESS_TEAM_DOMAIN": "<your-team>.cloudflareaccess.com",
+    "ACCESS_AUD": "<the application's Application Audience (AUD) tag>",
+    // the Client IDs of the service tokens that may write (the sessions' dt), comma-separated; other tokens only read
+    "WRITER_TOKENS": "<the Client ID of the writing service token>",
+    // how long a deleted item waits for the sweep, in seconds (past the page's 10 s of 元に戻す)
+    "SWEEP_AFTER_SECONDS": "60",
+  },
+
+  "observability": { "enabled": true },
+}
