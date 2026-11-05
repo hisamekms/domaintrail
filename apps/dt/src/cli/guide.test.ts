@@ -89,6 +89,12 @@ describe('dt guide topics', () => {
         const m025 = await runGuide('M025');
         expect(m025.out).toContain("| M025 | a context's description (`///` above `context X`) is written once");
         expect(m025.out).toContain('Explained in: `dt guide layout`, `dt guide names`, `dt guide modeling-practice`.');
+        const m026 = await runGuide('M026');
+        expect(m026.out).toContain('| M026 | (warning) a union has a variant with fields');
+        expect(m026.out).toContain('Explained in: `dt guide unions`.');
+        const m027 = await runGuide('M027');
+        expect(m027.out).toContain('| M027 | (warning) a field or parameter named `<stem>Id`');
+        expect(m027.out).toContain('Explained in: `dt guide aggregates`.');
     });
 
     test('the ways of working are topics of their language: storming-practice in storming, modeling-practice in dsl', async () => {

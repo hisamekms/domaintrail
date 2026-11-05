@@ -292,6 +292,8 @@ context Sales {
   [Reactions to events](#reactions-to-events-policies)).
 - Fields: `name: Type`, `owns name: Type` (entities and values held by the aggregate),
   `references name: IdType -> Aggregate` (other aggregates, by ID only). Entities are owned by exactly one aggregate.
+  An ID is held by its ID type: a `customerId: String` (or `UUID`) while `CustomerId` or `Customer` exists is a warning
+  (M027).
 - Primitive types: `String`, `Int`, `Decimal`, `Bool`, `Timestamp`, `UUID`.
 - Multiplicity after the type: `?` (also `[0..1]`, which `dt fmt` writes as `?`), `[0..*]`, `[1..*]`, `[n..m]`.
 - Aggregate members: fields, `invariant`, `state` (with its own fields and invariants), `command`.
@@ -380,6 +382,8 @@ context Sales {
 
 - A union is a value type: usable like a value object (fields, `owns`, parameters, payloads, shared contexts).
   Variants hold value fields and invariants (seeing their own fields); entities and aggregates are not allowed.
+- A union whose variants hold no fields is a closed set of values: write an `enum` (M026, a warning; with `by name:
+  Enum`, use the enum itself).
 - In invariants, `payer.kind` compares with `Payer.COMPANY` (or the bound enum's values); variant fields are not
   accessible from outside the union.
 - Value objects and unions may be recursive (a tree, an expression) when every value has a finite form: the cycle
@@ -2590,6 +2594,8 @@ storming](#diagnostics-of-a-storming).
 | M023 | policies: the event exists, the aggregate is one of the policy's own context, the command is one of the aggregate, the event is not of a shared context; (warning) two policies of a context state the same reaction |
 | M024 | verified types: the base and the context of `for` are value types (`for` not a verified type), no cycle; a verified type types command parameters and other verified types only, no field |
 | M025 | a context's description (`///` above `context X`) is written once across the files of the context; each later one names the first |
+| M026 | (warning) a union has a variant with fields; one whose variants have none is an `enum` |
+| M027 | (warning) a field or parameter named `<stem>Id` (`ID`; `Ids` / `IDs` for several) is not typed `String`, `UUID` or the base of the ID type when `<Stem>Id` (`<Stem>ID`) is an ID type or `<Stem>` an aggregate or entity: of its context or a shared one, else of exactly one other context (none for a field of a shared context); it takes the ID type |
 | L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
 | L002 | (warning) a term is not used by any field or parameter |
 | L003 | (warning) different things in one scope share a Japanese name |
