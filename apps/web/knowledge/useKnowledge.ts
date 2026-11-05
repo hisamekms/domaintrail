@@ -9,7 +9,7 @@ import type { StormingView } from '@domaintrail/visualization/protocol';
 import type { ViewSocket } from '../app/useViewSocket';
 import { nameIn } from '../model-utils';
 import { SessionApiError } from '../session/api';
-import { knowledgeApi } from './api';
+import { knowledgeApi, type KnowledgeApi } from './api';
 import { extractionOfMessage, marksOf, type StickyMark } from './model';
 
 /** How long a deletion can be undone on the page (ADR 0031, section 7; the store keeps it longer). */
@@ -45,6 +45,43 @@ export interface KnowledgeView {
 }
 
 export const KnowledgeContext = createContext<KnowledgeView | undefined>(undefined);
+
+/**
+ * Deleting with 元に戻す for `UNDO_MS` (ADR 0031, section 7), the same on a session's page and on the Worker's: the
+ * item deleted last, while it can be undone; `deleted` after a deletion, `changed` after either, `failed` with why.
+ */
+export function useDeletion(
+    api: Pick<KnowledgeApi, 'delete' | 'restore'>,
+    events: { readonly changed: () => void; readonly deleted: () => void; readonly failed: (e: unknown) => void },
+): { readonly undoable: string | undefined; readonly remove: (id: string) => Promise<void>; readonly undo: () => Promise<void> } {
+    const [undoable, setUndoable] = useState<string | undefined>();
+    const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    useEffect(() => () => clearTimeout(timer.current), []);
+    const remove = async (id: string): Promise<void> => {
+        try {
+            await api.delete(id);
+            clearTimeout(timer.current);
+            setUndoable(id);
+            timer.current = setTimeout(() => setUndoable(undefined), UNDO_MS);
+            events.deleted();
+            events.changed();
+        } catch (e) {
+            events.failed(e);
+        }
+    };
+    const undo = async (): Promise<void> => {
+        if (!undoable) return;
+        clearTimeout(timer.current);
+        setUndoable(undefined);
+        try {
+            await api.restore(undoable);
+            events.changed();
+        } catch (e) {
+            events.failed(e);
+        }
+    };
+    return { undoable, remove, undo };
+}
 export const useKnowledgeView = (): KnowledgeView | undefined => useContext(KnowledgeContext);
 
 export function useKnowledge(input: {
@@ -62,10 +99,8 @@ export function useKnowledge(input: {
     const [version, setVersion] = useState(0);
     const [marks, setMarks] = useState<ReadonlyMap<string, StickyMark>>(new Map());
     const [lit, setLitState] = useState<readonly string[]>([]);
-    const [undoable, setUndoable] = useState<string | undefined>();
     const [error, setError] = useState<string | undefined>();
     const [extraction, setExtractionState] = useState<boolean | undefined>();
-    const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const changed = useCallback(() => setVersion((v) => v + 1), []);
 
     // dt says the knowledge changed: read it again
@@ -122,35 +157,11 @@ export function useKnowledge(input: {
         );
     }, [session, storming]);
 
-    useEffect(() => () => clearTimeout(timer.current), []);
-
     const setLit = useCallback((stickies: readonly string[]) => setLitState((old) => (old.join() === stickies.join() ? old : stickies)), []);
 
     const failed = (e: unknown): void => setError(e instanceof Error ? e.message : String(e));
 
-    const remove = async (id: string): Promise<void> => {
-        try {
-            await knowledgeApi.delete(id);
-            clearTimeout(timer.current);
-            setUndoable(id);
-            timer.current = setTimeout(() => setUndoable(undefined), UNDO_MS);
-            setLitState([]);
-            changed();
-        } catch (e) {
-            failed(e);
-        }
-    };
-    const undo = async (): Promise<void> => {
-        if (!undoable) return;
-        clearTimeout(timer.current);
-        setUndoable(undefined);
-        try {
-            await knowledgeApi.restore(undoable);
-            changed();
-        } catch (e) {
-            failed(e);
-        }
-    };
+    const { undoable, remove, undo } = useDeletion(knowledgeApi, { changed, deleted: () => setLitState([]), failed });
 
     const setExtraction = async (enabled: boolean): Promise<void> => {
         try {

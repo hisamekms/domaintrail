@@ -11,7 +11,7 @@ import { AI_NAME } from '../session/ai';
 import { useLang, useT } from '../i18n';
 import { Act } from '../shared/act';
 import { useCanvasValue, type DiagramCanvas } from '../view/diagram';
-import { imageUrl, knowledgeApi } from './api';
+import { useKnowledgeApi } from './api';
 import {
     conflictPairs,
     extractionControl,
@@ -98,6 +98,7 @@ function Meta({ item }: { item: KnowledgeItem }): ReactElement {
 function CorrectForm({ item, onDone }: { item: KnowledgeItem; onDone: () => void }): ReactElement {
     const t = useT().knowledge;
     const view = useKnowledgeView();
+    const api = useKnowledgeApi();
     // edited as plain strings: dt checks them again (the item's text and its labels)
     const [text, setText] = useState<string>(item.content.text);
     const [labels, setLabels] = useState<Readonly<Record<string, string>>>({ ...item.content.labels });
@@ -105,7 +106,7 @@ function CorrectForm({ item, onDone }: { item: KnowledgeItem; onDone: () => void
     const save = async (): Promise<void> => {
         setBusy(true);
         try {
-            await knowledgeApi.correct(item.id, { ...item.content, text, labels });
+            await api.correct(item.id, { ...item.content, text, labels });
             view?.changed();
             onDone();
         } catch (e) {
@@ -169,24 +170,25 @@ function Versions({ item, history }: { item: KnowledgeItem; history: readonly Pa
 function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefined }): ReactElement {
     const t = useT().knowledge;
     const view = useKnowledgeView();
+    const api = useKnowledgeApi();
     const date = useShortDate();
     const [editing, setEditing] = useState(false);
     const [history, setHistory] = useState<readonly PastVersion[]>([]);
     const file = useRef<HTMLInputElement>(null);
     useEffect(() => {
         let stale = false;
-        knowledgeApi.get(item.id).then(
+        api.get(item.id).then(
             (got) => !stale && setHistory(got?.history ?? []),
             () => undefined,
         );
         return () => {
             stale = true;
         };
-    }, [item.id, item.version]);
+    }, [api, item.id, item.version]);
     const attach = async (f: File | undefined): Promise<void> => {
         if (!f) return;
         try {
-            await knowledgeApi.attachImage(item.id, f);
+            await api.attachImage(item.id, f);
             view?.changed();
         } catch (e) {
             view?.setError(failure(e));
@@ -197,7 +199,7 @@ function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefi
     return (
         <div className="knowledge-detail">
             {imagesOf(item.content.text).map((id) => (
-                <img key={id} className="knowledge-image" src={imageUrl(id)} alt="" />
+                <img key={id} className="knowledge-image" src={api.imageUrl(id)} alt="" />
             ))}
             {item.sources.length > 0 && (
                 <ul className="knowledge-quotes" aria-label={t.sources}>
@@ -295,6 +297,7 @@ export function ConflictBox({
 }): ReactElement {
     const t = useT().knowledge;
     const view = useKnowledgeView();
+    const api = useKnowledgeApi();
     const [asked, setAsked] = useState(false);
     const hotspot = async (): Promise<void> => {
         try {
@@ -308,7 +311,7 @@ export function ConflictBox({
     };
     const unlink = async (): Promise<void> => {
         try {
-            await knowledgeApi.unlink(pair.a.id, pair.b.id);
+            await api.unlink(pair.a.id, pair.b.id);
             view?.changed();
         } catch (e) {
             view?.setError(failure(e));
@@ -327,7 +330,7 @@ export function ConflictBox({
             </div>
             {[pair.a, pair.b].map((i) => isOpen(i.id) && <ItemDetail key={i.id} item={i} from={from} />)}
             <span className="knowledge-actions">
-                {asked ? (
+                {!api.hotspots ? null : asked ? (
                     <span className="knowledge-meta">{t.hotspotAsked}</span>
                 ) : (
                     <Act kind="send" onClick={() => void hotspot()}>
@@ -362,6 +365,7 @@ function useOpened(
 export function StickyKnowledge({ sticky }: { sticky: string }): ReactElement | null {
     const t = useT().knowledge;
     const view = useKnowledgeView();
+    const api = useKnowledgeApi();
     const [items, setItems] = useState<readonly KnowledgeItem[] | undefined>();
     const [others, setOthers] = useState<readonly KnowledgeItem[]>([]);
     const [order, setOrder] = useState<Order>('newest');
@@ -369,9 +373,9 @@ export function StickyKnowledge({ sticky }: { sticky: string }): ReactElement | 
     useEffect(() => {
         let stale = false;
         void (async () => {
-            const about = await knowledgeApi.about(sticky);
+            const about = await api.about(sticky);
             const missing = missingConflicts(about);
-            const fetched = (await Promise.all(missing.map((id) => knowledgeApi.get(id)))).flatMap((g) => (g ? [g.item] : []));
+            const fetched = (await Promise.all(missing.map((id) => api.get(id)))).flatMap((g) => (g ? [g.item] : []));
             if (stale) return;
             setItems(about);
             setOthers(fetched);
@@ -379,7 +383,7 @@ export function StickyKnowledge({ sticky }: { sticky: string }): ReactElement | 
         return () => {
             stale = true;
         };
-    }, [sticky, version]);
+    }, [api, sticky, version]);
     const shown = useMemo(() => [...(items ?? []), ...others], [items, others]);
     const opened = useOpened(view, shown);
     if (!view?.available || items === undefined) return null;
@@ -440,6 +444,7 @@ function ChipRow<V extends string>({
 export function KnowledgeList({ onClose, closeLabel }: { onClose: () => void; closeLabel: string }): ReactElement {
     const t = useT().knowledge;
     const view = useKnowledgeView();
+    const api = useKnowledgeApi();
     const [filters, setFilters] = useState<Filters>(NO_FILTERS);
     const [order, setOrder] = useState<Order>('newest');
     const [items, setItems] = useState<readonly KnowledgeItem[]>([]);
@@ -449,7 +454,7 @@ export function KnowledgeList({ onClose, closeLabel }: { onClose: () => void; cl
     useEffect(() => {
         let stale = false;
         const timer = setTimeout(() => {
-            knowledgeApi.search(new URLSearchParams(query)).then(
+            api.search(new URLSearchParams(query)).then(
                 (p) => {
                     if (stale) return;
                     setItems(p.items);
@@ -462,10 +467,10 @@ export function KnowledgeList({ onClose, closeLabel }: { onClose: () => void; cl
             stale = true;
             clearTimeout(timer);
         };
-    }, [query, version]);
+    }, [api, query, version]);
     const more = async (): Promise<void> => {
         if (next === undefined) return;
-        const p = await knowledgeApi.search(queryOf(filters, next));
+        const p = await api.search(queryOf(filters, next));
         setItems((old) => [...old, ...p.items]);
         setNext(p.next);
     };

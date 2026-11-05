@@ -98,6 +98,7 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 - `dt show <name>` — one element, command or state resolved, with who uses it; read it instead of the `.dt` files.
 - `dt lsp` — language server over stdio: the diagnostics of `dt check`, definitions, references, hover, rename.
 - `dt mcp` — MCP server over stdio: the project's knowledge, read-only (`dt guide mcp`).
+- `dt publish` — the stormings to the knowledge store's Worker, for its read-only page; run by CI (`dt guide publish`).
 - `dt open` — the Live View in the browser, with a chat to the AI; it runs until Ctrl+C, so run it in the background.
 - `dt export sources` / `svg` — the sources as one ZIP, for someone without the repository; a diagram as an SVG file.
 
@@ -3092,6 +3093,36 @@ config is in `domain/`):
   }
 }
 ```
+
+<!-- topic: publish -->
+## Publishing the stormings (the knowledge page)
+
+With `knowledge.store: "cloudflare"`, the store's Worker also serves a read-only page behind the same Access: people
+from the business read the knowledge there at any time, on the canvas of a storming (ADR 0031, section 11). The
+Worker cannot read the repository, so `dt publish` sends it each storming's **published form**: the stickies with
+their labels, links and places, as the Live View lays out the whole storming at its Big Picture and its Design Level,
+with the commit and date of the drawing — no chat and no person. Run it in CI when `main` changes, so that readers
+see the drawing that was agreed and merged. The same drawing published again changes nothing.
+
+```sh
+dt publish                          # every storming
+dt publish --storming OrderToCash   # some of them
+dt publish --out published/         # the forms as <ID>.json files, sent nowhere (any store)
+```
+
+It sends the **writing** service token (`DOMAINTRAIL_KNOWLEDGE_CLIENT_ID` and `DOMAINTRAIL_KNOWLEDGE_CLIENT_SECRET`)
+to `knowledge.url`, so, like `dt open`, it publishes only with the workspace's settings approved: approved before, or
+asked in a terminal. In CI nobody can be asked: pin the destination outside the repository with
+`DOMAINTRAIL_PUBLISH_URL` and `DOMAINTRAIL_PUBLISH_PROJECT` (CI variables, not files of the repository), and
+`dt publish` goes ahead only when the config names exactly that Worker and project; a commit that points
+`knowledge.url` elsewhere makes it refuse instead of sending the token there. Fetch the whole history
+(`fetch-depth: 0`), so that each drawing is dated by the last commit that changed its file. The Worker's README has a
+GitHub Actions example.
+
+The page shows the storming with a dot on each sticky that has knowledge (a mark for a conflict), a sticky's items
+when it is selected, the ナレッジ list with its search and filters, the items about stickies no published storming
+has (removed or renamed) apart, and the date of the drawing. Anyone who can open it may correct and delete, with
+元に戻す for 10 seconds.
 
 <!-- topic: editors -->
 ## Editors

@@ -8,7 +8,21 @@
 import { Knowledge, type Result } from './generated/index.js';
 import type { DroppedOperation, DropReason } from './domain/extraction.js';
 import type { PastVersion } from './domain/records.js';
-import type { AppliedExtraction, Deletion, ItemWithHistory, KnowledgeQuery, Page, RedactionEntry, StickyCount } from './application/ports.js';
+import {
+    PUBLISHED_LEVELS,
+    type AppliedExtraction,
+    type Deletion,
+    type ItemWithHistory,
+    type KnowledgeQuery,
+    type MissingStickies,
+    type Page,
+    type PublishedEntry,
+    type PublishedSticky,
+    type PublishedStorming,
+    type PublishResult,
+    type RedactionEntry,
+    type StickyCount,
+} from './application/ports.js';
 
 // ---- paths and headers ------------------------------------------------------------------------------------------
 
@@ -84,8 +98,12 @@ export type ApiErrorType =
     | 'IdempotencyKeyReused'
     /** 413, 415: an image too large, or of a media type not taken. */
     | 'ImageRejected'
-    /** 501: a route reserved for a later version (`PUT /published/:storming`). */
+    /** 501: a route reserved for a later version. */
     | 'NotImplemented'
+    /** 413: a published storming larger than `MAX_PUBLISHED_BYTES`. */
+    | 'TooLarge'
+    /** 403 from a person's write whose `Origin` is not the Worker's own (the read-only page's calls only). */
+    | 'CrossOrigin'
     /** 503: the D1 database has not had the template's migrations applied. */
     | 'StoreNotMigrated'
     /** 500: anything else. */
@@ -112,6 +130,8 @@ const API_ERROR_TYPES: readonly ApiErrorType[] = [
     'IdempotencyKeyReused',
     'ImageRejected',
     'NotImplemented',
+    'TooLarge',
+    'CrossOrigin',
     'StoreNotMigrated',
     'Internal',
 ];
@@ -500,3 +520,104 @@ export interface ExtractionSwitchBody {
 
 /** The body of `GET` and `POST /api/session/extraction`'s answer: `{ enabled }`. */
 export const extractionSwitch: Decoder<ExtractionSwitchBody> = (v, at) => ({ enabled: bool(obj(v, at).enabled, `${at}.enabled`) });
+
+// ---- the published stormings (ADR 0031, section 11) -------------------------------------------------------------
+
+/** The largest published storming taken, in bytes of its JSON (a D1 row holds at most 2 MB). */
+export const MAX_PUBLISHED_BYTES = 1_500_000;
+
+const STORMING_ID = /^[_a-zA-Z][_a-zA-Z0-9]*$/;
+/** A storming's ID, as a path and the stickies' references name it. */
+export const stormingId: Decoder<string> = (v, at) => {
+    const s = str(v, at);
+    return STORMING_ID.test(s) && s.length <= 200 ? s : fail(at, "expected a storming's ID");
+};
+const shortText =
+    (max: number): Decoder<string> =>
+    (v, at) => {
+        const s = str(v, at);
+        return s.length <= max ? s : fail(at, `expected at most ${max} characters`);
+    };
+const drawingVersion: Decoder<string> = (v, at) => {
+    const s = str(v, at);
+    return /^[A-Za-z0-9._:-]{1,128}$/.test(s) ? s : fail(at, 'expected a version (letters, digits, ._:-)');
+};
+const commitId: Decoder<string> = (v, at) => {
+    const s = str(v, at);
+    return /^[0-9a-f]{7,64}$/.test(s) ? s : fail(at, "expected a commit's ID (hex)");
+};
+
+const drawing = (v: unknown, at: string): PublishedStorming['drawing'] => {
+    const o = obj(v, at);
+    const commit = opt(commitId, o.commit, `${at}.commit`);
+    return { at: time(o.at, `${at}.at`), ...(commit !== undefined && { commit }) };
+};
+
+const publishedSticky =
+    (storming: string): Decoder<PublishedSticky> =>
+    (v, at) => {
+        const o = obj(v, at);
+        const ref = stickyRef(o.ref, `${at}.ref`);
+        if (!ref.startsWith(`${storming}.`)) fail(`${at}.ref`, `expected a sticky of ${storming}`);
+        const label = opt(shortText(1000), o.label, `${at}.label`);
+        return { ref, ...(label !== undefined && { label }) };
+    };
+
+/**
+ * The body of `PUT /published/:storming`: the published form, its drawings kept as they are (objects the store does
+ * not look into; the page draws them).
+ */
+export const publishedStorming: Decoder<PublishedStorming> = (v, at) => {
+    const o = obj(v, at);
+    if (o.format !== 1) fail(`${at}.format`, 'expected 1 (a later form needs a later Worker)');
+    const storming = stormingId(o.storming, `${at}.storming`);
+    const label = opt(shortText(1000), o.label, `${at}.label`);
+    const stickies = list(publishedSticky(storming))(o.stickies, `${at}.stickies`);
+    if (new Set(stickies.map((s) => s.ref)).size !== stickies.length) fail(`${at}.stickies`, 'a sticky named twice');
+    const views = obj(o.views, `${at}.views`);
+    const unknown = Object.keys(views).filter((k) => !PUBLISHED_LEVELS.some((l) => l === k));
+    if (unknown.length) fail(`${at}.views`, `unknown level ${unknown.join(', ')}`);
+    const drawings: PublishedStorming['views'] = {
+        'big-picture': obj(views['big-picture'], `${at}.views.big-picture`),
+        'design-level': obj(views['design-level'], `${at}.views.design-level`),
+    };
+    return {
+        format: 1,
+        storming,
+        ...(label !== undefined && { label }),
+        version: drawingVersion(o.version, `${at}.version`),
+        drawing: drawing(o.drawing, `${at}.drawing`),
+        stickies,
+        views: drawings,
+    };
+};
+
+const publishedEntry: Decoder<PublishedEntry> = (v, at) => {
+    const o = obj(v, at);
+    const label = opt(str, o.label, `${at}.label`);
+    return {
+        storming: stormingId(o.storming, `${at}.storming`),
+        ...(label !== undefined && { label }),
+        version: str(o.version, `${at}.version`),
+        drawing: drawing(o.drawing, `${at}.drawing`),
+        publishedAt: time(o.publishedAt, `${at}.publishedAt`),
+    };
+};
+
+/** The body of `GET /published`: `{ stormings }`, by ID. */
+export const publishedEntries: Decoder<PublishedEntry[]> = (v, at) => list(publishedEntry)(obj(v, at).stormings, `${at}.stormings`);
+
+/** The body of `PUT /published/:storming`'s answer: `{ entry, changed }`. */
+export const publishResult: Decoder<PublishResult> = (v, at) => {
+    const o = obj(v, at);
+    return { entry: publishedEntry(o.entry, `${at}.entry`), changed: bool(o.changed, `${at}.changed`) };
+};
+
+/** The body of `GET /missing`: the stickies no published storming has, and the items about them. */
+export const missingStickies: Decoder<MissingStickies> = (v, at) => {
+    const o = obj(v, at);
+    return { stickies: list(stickyRef)(o.stickies, `${at}.stickies`), items: list(liveItem)(o.items, `${at}.items`) };
+};
+
+/** The body of `GET /v1/projects`: `{ projects }`, the projects that have knowledge or a published storming. */
+export const projectNames: Decoder<Knowledge.ProjectName[]> = (v, at) => list(projectName)(obj(v, at).projects, `${at}.projects`);

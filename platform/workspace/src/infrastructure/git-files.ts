@@ -167,3 +167,33 @@ export async function gitExposedEntries(root: string, dir: string, options: GitF
         .split('\0')
         .filter((p) => p !== '' && p.split('/')[0].normalize('NFC').toLowerCase() === folded);
 }
+
+/** The last commit that changed a file, and whether the file differs from it now. */
+export interface FileCommit {
+    /** The commit's full ID. */
+    readonly commit: string;
+    /** The commit's date (the committer's). */
+    readonly at: Date;
+    /** The file in the working tree differs from that commit (edited, staged, or not committed since). */
+    readonly changed: boolean;
+}
+
+/**
+ * The last commit that changed `file` (relative to `root`), as `dt publish` dates a storming's drawing: `undefined`
+ * when there is no repository or no commit has the file. In a shallow clone, the oldest commit fetched stands for every
+ * earlier one (CI fetches the whole history: `fetch-depth: 0`). Rejects when git fails inside a repository.
+ */
+export async function gitLastCommit(root: string, file: string, options: GitFilesOptions = {}): Promise<FileCommit | undefined> {
+    if (!repositoryTop(root)) return undefined;
+    const log = await git(root, ['log', '-1', '--format=%H%x00%cI', '--', file], options);
+    if (log.code !== 0) {
+        // a repository without a commit yet
+        if (/does not have any commits|bad default revision/i.test(log.stderr)) return undefined;
+        throw new Error(`git log failed in ${root}: ${log.stderr || `exit ${log.code}`}`);
+    }
+    const [commit, iso] = log.stdout.toString('utf8').trim().split('\0');
+    if (!commit || !iso) return undefined;
+    const diff = await git(root, ['diff', '--quiet', 'HEAD', '--', file], options);
+    if (diff.code !== 0 && diff.code !== 1) throw new Error(`git diff failed in ${root}: ${diff.stderr || `exit ${diff.code}`}`);
+    return { commit, at: new Date(iso), changed: diff.code === 1 };
+}
