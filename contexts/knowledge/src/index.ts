@@ -47,6 +47,19 @@ export {
     type TalkMessage,
 } from './domain/extractor.js';
 export {
+    gateGoesOn,
+    gateJsonSchema,
+    GATE_VERDICTS,
+    mechanicalStage,
+    readGateReply,
+    type GateInput,
+    type GateReading,
+    type GateVerdict,
+    type MechanicalOutcome,
+    type StageMessage,
+} from './domain/stages.js';
+export {
+    droppedOutcome,
     guardExtraction,
     nextSettleAt,
     sameCall,
@@ -79,20 +92,26 @@ export {
     createSessionExtraction,
     EMPTY_CHECKPOINT,
     extractionInput,
+    gateInput,
     messagesSince,
     type ExtractionCheckpoint,
     type ExtractionCheckpoints,
     type ExtractionCost,
     type ExtractionRunOutcome,
+    type ExtractionStage,
     type Extractor,
+    type ExtractorAnswer,
+    type GateCost,
     type SessionExtraction,
     type SessionExtractionDeps,
     type SessionMessage,
     type SessionTalk,
 } from './application/extraction.js';
 export { createExtractionScheduler, type ExtractionScheduler, type ExtractionSchedulerDeps, type Timers } from './application/extraction-scheduler.js';
-// the checkpoint in the session database (an adapter, wired by the app)
+export { loadExtractionSwitch, type ExtractionSwitch, type ExtractionSwitches } from './application/extraction-switch.js';
+// the checkpoint and the switch in the session database (adapters, wired by the app)
 export { CHECKPOINT_SCHEMA, createSqliteCheckpoints, extractionCosts } from './infrastructure/sqlite-checkpoints.js';
+export { createSqliteExtractionSwitches, EXTRACTION_SWITCH_SCHEMA } from './infrastructure/sqlite-extraction-switch.js';
 
 // ---- its settings in domaintrail.jsonc (the `knowledge` section), and the store's credentials from the environment --
 export {

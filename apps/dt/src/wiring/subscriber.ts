@@ -102,7 +102,7 @@ export interface SubscriberOptions {
     answer?: AnswerConfig;
     /** Stage 3 of the triage (`agent.triage`); default: `haiku`, a fresh process per triage. */
     triage?: TriageConfig;
-    /** The extractor of knowledge (`agent.extract`); default: the answerer's model and effort, 180 s. */
+    /** The extractor of knowledge (`agent.extract`); default: the answerer's model and effort, 180 s, the triage's light model first. */
     extract?: ExtractConfig;
     /** The ways of working the prompts give (the guide's); none without it. */
     practice?: Practice;
@@ -253,6 +253,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
                   effort: options.extract?.effort ?? answerConfig.effort ?? user.effort,
               }),
               timeoutMs: (options.extract?.timeout ?? 180) * 1000,
+              gateModel: options.extract?.gateModel ?? triageConfig.model,
               ...((options.answerCommand ?? options.agentCommand) && { command: options.answerCommand ?? options.agentCommand }),
               ...(options.reconnect && { reconnect: options.reconnect }),
               log,
@@ -426,6 +427,8 @@ async function startKnowledgeExtractor(options: {
     api: Parameters<typeof startExtractor>[0]['api'];
     model?: string;
     effort?: string;
+    /** The light model that decides first whether to extract (`agent.extract.gateModel`). */
+    gateModel: string;
     timeoutMs: number;
     command?: AgentCommand;
     reconnect?: { minMs: number; maxMs: number; giveUpMs: number };
@@ -439,6 +442,7 @@ async function startKnowledgeExtractor(options: {
                 root: dir,
                 ...(options.model !== undefined && { model: options.model }),
                 ...(options.effort !== undefined && { effort: options.effort }),
+                gateModel: options.gateModel,
                 ...(options.command && { command: options.command }),
             }),
             clock: systemClock,

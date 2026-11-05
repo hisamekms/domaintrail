@@ -1,6 +1,6 @@
 // The extraction entry point of the agent API (ADR 0031, section 3): an extraction handed to a connected extractor and
 // its result taken back, `unavailable` without one (or when it goes away), the credential refused in a result, the
-// session's end told.
+// session's end told; the light model's question handed out the same way, marked `gate`.
 import { describe, expect, test } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -56,7 +56,7 @@ describe('the extraction entry point', () => {
         const answer = dispatcher.extract(input);
         const [job] = events(stream);
         expect(job.event).toBe('extraction.job');
-        expect(job.data).toMatchObject({ session: 's1', number: 1, timeoutMs: 1_000 });
+        expect(job.data).toMatchObject({ session: 's1', number: 1, timeoutMs: 1_000, stage: 'extract' });
         const res = fakeResponse();
         dispatcher.result(res, String(job.data.job), { reply: { operations: [] }, model: 'opus', durationMs: 900, usage: { inputTokens: 10, junk: 'x' } });
         expect(await answer).toEqual({ kind: 'done', result: { reply: { operations: [] }, model: 'opus', durationMs: 900, usage: { inputTokens: 10 } } });
@@ -70,6 +70,21 @@ describe('the extraction entry point', () => {
         stream.emit('close');
         expect(await pending).toEqual({ kind: 'unavailable' });
         expect(await dispatcher.extract(input)).toEqual({ kind: 'unavailable' });
+        dispatcher.close(false);
+    });
+
+    test("the light model's question: a job of its own stage, its reply taken back as given; one job at a time per extractor", async () => {
+        const dispatcher = createExtractionDispatcher({ timeoutMs: 1_000, maxStreams: 2, log: () => {} });
+        const stream = fakeResponse();
+        dispatcher.events({} as IncomingMessage, stream);
+        const answer = dispatcher.gate({ session: 's1', number: 2, messages: [], stickies: ['見積もり'] });
+        // its extractor is busy: the extraction waits for none, it is unavailable now
+        expect(await dispatcher.extract(input)).toEqual({ kind: 'unavailable' });
+        const [job] = events(stream);
+        expect(job.data).toMatchObject({ stage: 'gate', number: 2, stickies: ['見積もり'] });
+        expect(job.data).not.toHaveProperty('items');
+        dispatcher.result(fakeResponse(), String(job.data.job), { reply: { verdict: 'no', messages: [] }, model: 'haiku', durationMs: 300 });
+        expect(await answer).toEqual({ kind: 'done', result: { reply: { verdict: 'no', messages: [] }, model: 'haiku', durationMs: 300 } });
         dispatcher.close(false);
     });
 

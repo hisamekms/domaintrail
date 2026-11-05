@@ -1,8 +1,8 @@
 // The one place that turns the workspace's `knowledge` section into a `KnowledgeStore` (ADR 0031, section 5): `dt mcp`,
 // the extraction of a session and the Live View all open the store here, so that they read and write the same one. Below
-// it, the session's extractions wired to the session server (ADR 0031, section 3): its talk read from the collaboration,
-// its checkpoint in the session database, its extractor reached through the agent API, its timing on the server's
-// timers.
+// it, the session's extractions wired to the session server (ADR 0031, section 3): its talk read from the collaboration
+// (each person's message judged surely nothing or not by the triage's stage 1), its checkpoint and its switch in the
+// session database, its extractor and light model reached through the agent API, its timing on the server's timers.
 //
 // - `files`: the items in `<root>/knowledge`, the deleted items and the extractions applied in the workspace's state
 //   directory (outside it, `<state>/knowledge`).
@@ -17,7 +17,7 @@
 // proof made before the URL changed proves nothing.
 import * as path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
-import { type Collaboration, type CollaborationUseCases, isAi, plainBody } from '@domaintrail/collaboration';
+import { type Collaboration, type CollaborationUseCases, isAi, mechanicalVerdict, plainBody } from '@domaintrail/collaboration';
 import {
     cloudflareKnowledgeStore,
     createFilesKnowledgeStore,
@@ -33,7 +33,9 @@ import {
     createExtractionScheduler,
     createSessionExtraction,
     createSqliteCheckpoints,
+    createSqliteExtractionSwitches,
     type ExtractionScheduler,
+    loadExtractionSwitch,
     type SessionMessage,
     type SessionTalk,
 } from '@domaintrail/knowledge';
@@ -123,7 +125,8 @@ const MAX_TIMER_MS = 2 ** 31 - 1;
 /**
  * The session's talk as the extraction reads it: every message in order but the reverts and dt's own notices, each
  * person named `P1`, `P2`, … in the order they first wrote (never by name), the AI `AI`; the stickies a message points
- * at (`<Storming>.<LocalId>`, with the label it had); an answer is the AI's reply to a message.
+ * at (`<Storming>.<LocalId>`, with the label it had); an answer is the AI's reply to a message. A person's message is
+ * surely nothing when the triage's stage 1 says so (empty, emoji only, a fixed acknowledgement: ADR 0030's list).
  */
 export function sessionTalk(collaboration: CollaborationUseCases, session: Collaboration.SessionId): SessionTalk {
     return {
@@ -152,6 +155,7 @@ export function sessionTalk(collaboration: CollaborationUseCases, session: Colla
                             t.target.kind === 'DtesElement' ? [{ ref: `${t.target.storming}.${t.target.local}`, ...(t.label && { label: t.label }) }] : [],
                         ),
                         answer: ai && r.replyTo?.kind === 'Message',
+                        ...(!ai && mechanicalVerdict(r.body).verdict === 'NotForAi' && { nothing: true }),
                     };
                 });
         },
@@ -168,9 +172,15 @@ export interface SessionKnowledgeDeps {
     readonly extractor: ExtractionDispatcher;
     readonly now: () => Date;
     readonly log: (line: string) => void;
+    /** The facilitator switched the extraction (after it was kept): tell the pages. */
+    readonly switched?: (enabled: boolean) => void;
 }
 
 export interface SessionKnowledge {
+    /** Whether the session extracts now (the config's default, else as the facilitator last switched it). */
+    enabled(): boolean;
+    /** The facilitator switches the extraction for the session: kept in the session database, the pages told. */
+    setEnabled(enabled: boolean): Promise<void>;
     /** Events of the session: a message (a person's, or the AI's answer) makes the extraction decide again. */
     observe(events: readonly { readonly event: { readonly type: string } }[]): void;
     /** An extractor connected, or the server started: decide again. */
@@ -180,8 +190,15 @@ export interface SessionKnowledge {
     stop(): void;
 }
 
-export function startSessionKnowledge(deps: SessionKnowledgeDeps): SessionKnowledge {
+export async function startSessionKnowledge(deps: SessionKnowledgeDeps): Promise<SessionKnowledge> {
     const { config, log } = deps;
+    const switched = await loadExtractionSwitch({
+        session: deps.session,
+        switches: createSqliteExtractionSwitches(deps.db),
+        byDefault: config.extraction.enabled,
+        now: deps.now,
+    });
+    log(`knowledge: extraction ${switched.enabled() ? 'on' : 'off'} (the facilitator can switch it)`);
     const extraction = createSessionExtraction({
         project: config.project,
         session: deps.session,
@@ -205,10 +222,18 @@ export function startSessionKnowledge(deps: SessionKnowledgeDeps): SessionKnowle
             },
         },
         log,
+        enabled: switched.enabled(),
     });
     // what a restart left: held operations to settle, an extraction to send again, messages not yet extracted
     scheduler.kick();
     return {
+        enabled: () => switched.enabled(),
+        async setEnabled(enabled) {
+            if (!(await switched.set(enabled))) return;
+            log(`knowledge: extraction switched ${enabled ? 'on' : 'off'} by the facilitator`);
+            scheduler.setEnabled(enabled);
+            deps.switched?.(enabled);
+        },
         observe(events) {
             if (events.some((e) => e.event.type === 'RequestSent')) scheduler.kick();
         },

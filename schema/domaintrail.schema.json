@@ -429,6 +429,12 @@
               "type": "number",
               "exclusiveMinimum": 0,
               "default": 180
+            },
+            "gateModel": {
+              "description": "The light model that decides first whether there is anything to extract, so that the extractor runs only then (claude --model, no tools). Default: agent.triage.model, else haiku.",
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][\\w.:@\\[\\]/-]*$",
+              "default": "haiku"
             }
           }
         },
@@ -585,6 +591,11 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "enabled": {
+              "description": "Whether a session extracts knowledge from its talk unless its facilitator switches it in the Live View (the facilitator's choice is kept for the session).",
+              "type": "boolean",
+              "default": false
+            },
             "quietSeconds": {
               "description": "Seconds without a message after a person's message before an extraction (one also follows each answer of the AI, and the end of the session).",
               "type": "number",
@@ -602,6 +613,12 @@
               "type": "number",
               "minimum": 0,
               "default": 10
+            },
+            "gateContextMinutes": {
+              "description": "Minutes of the talk before the new messages that the light model deciding whether to extract is given as context.",
+              "type": "number",
+              "minimum": 0,
+              "default": 3
             },
             "settleSeconds": {
               "description": "Seconds of quiet on a topic after which a held update or conflict applies (else it applies when the next extraction makes the same call).",

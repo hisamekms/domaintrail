@@ -122,6 +122,11 @@ export interface SessionHttpDeps {
     readonly guideWorkspace?: () => GuideWorkspace;
     /** The journey file and the requests about it (absent: no journey routes). */
     readonly journeys?: SessionJourneys;
+    /**
+     * Whether the session extracts its knowledge, and the facilitator's switch (ADR 0031, section 3; absent: the session
+     * keeps no knowledge, `/api/session/extraction` is 404).
+     */
+    readonly extraction?: { enabled(): boolean; setEnabled(enabled: boolean): Promise<void> };
     readonly log: (line: string) => void;
 }
 
@@ -1099,6 +1104,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             },
         },
         ...linkRoutes(deps.link),
+        ...extractionRoutes(deps.extraction, async () => (await state()).session.state === 'Open'),
         {
             method: 'POST',
             path: /^\/api\/session\/close$/,
@@ -1299,4 +1305,41 @@ function linkRoutes(link: LinkJoin | undefined): Route[] {
 function redirect(res: ServerResponse, location: string, cookie?: string | string[]): void {
     res.writeHead(303, { location, 'cache-control': 'no-store', ...(cookie && { 'set-cookie': cookie }) });
     res.end();
+}
+
+/**
+ * Whether the session extracts its knowledge (ADR 0031, section 3): any participant reads it (`GET`), the facilitator
+ * switches it (`POST { enabled }`) while the session is open; the pages learn it over their WebSocket too
+ * (`knowledge.extraction`). None without a knowledge store.
+ */
+function extractionRoutes(extraction: SessionHttpDeps['extraction'], open: () => Promise<boolean>): Route[] {
+    if (!extraction) return [];
+    const path = /^\/api\/session\/extraction$/;
+    return [
+        {
+            method: 'GET',
+            path,
+            role: 'participant',
+            handle: async ({ res }) => sendJson(res, 200, { enabled: extraction.enabled() }),
+        },
+        {
+            method: 'POST',
+            path,
+            role: 'facilitator',
+            handle: async ({ req, res }) => {
+                let raw: unknown;
+                try {
+                    raw = await readJson(req, MAX_SESSION_BODY);
+                } catch (e) {
+                    return bodyError(res, e);
+                }
+                const b = body(raw, ['enabled']);
+                if (!b.ok) return fail(res, b.error);
+                if (typeof b.value.enabled !== 'boolean') return fail(res, { type: 'InvalidInput', field: 'enabled', message: 'Expected true or false.' });
+                if (!(await open())) return sendError(res, 409, 'SessionClosed', 'The session is closed.');
+                await extraction.setEnabled(b.value.enabled);
+                sendJson(res, 200, { enabled: extraction.enabled() });
+            },
+        },
+    ];
 }

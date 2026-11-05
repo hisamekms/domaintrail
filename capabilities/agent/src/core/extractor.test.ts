@@ -1,9 +1,10 @@
 // The extractor role (ADR 0031, section 3) over fake ports: its prompt (the stable instructions apart, the talk in a
 // nonce block), each job's reply checked and sent with what it cost, a malformed reply reported as failed, a withdrawn
-// job stopped without a result, the session's end, and a session that keeps no knowledge.
+// job stopped without a result, the session's end, and a session that keeps no knowledge; the light model's question
+// (a `gate` job) asked with its own prompt and its reply sent as given.
 import { describe, expect, test } from 'bun:test';
-import type { ExtractionJobBody, ExtractionResultBody } from '@domaintrail/knowledge';
-import { buildExtractionPrompt, extractorInstructions } from './extract-prompt.js';
+import type { ExtractionInput, ExtractionJobBody, ExtractionResultBody, GateInput } from '@domaintrail/knowledge';
+import { buildExtractionPrompt, buildGatePrompt, extractorInstructions, gateInstructions } from './extract-prompt.js';
 import { startExtractor } from './extractor.js';
 import {
     AgentApiError,
@@ -15,7 +16,9 @@ import {
     type ExtractionStreamItem,
 } from './ports.js';
 
-const job = (n: number, over: Partial<ExtractionJobBody> = {}): ExtractionJobBody => ({
+type ExtractJob = ExtractionInput & { readonly job: string; readonly timeoutMs: number };
+
+const job = (n: number, over: Partial<ExtractJob> = {}): ExtractJob => ({
     job: `job-${n}`,
     timeoutMs: 5_000,
     session: 'sess-1',
@@ -51,6 +54,13 @@ const job = (n: number, over: Partial<ExtractionJobBody> = {}): ExtractionJobBod
     stickies: [{ ref: 'Ordering.Estimate', label: '見積もり' }],
     ...over,
 });
+
+/** The light model's question on the same talk. */
+const gateJob = (n: number): ExtractionJobBody => {
+    const { messages, session, number, job: id, timeoutMs } = job(n);
+    const input: GateInput = { session, number, messages, stickies: ['見積もり'] };
+    return { ...input, stage: 'gate', job: `gate-${id}`, timeoutMs };
+};
 
 const clock: Clock = { sleep: async () => {}, every: () => () => {} };
 
@@ -91,14 +101,25 @@ function fakeApi(fail?: Error): { api: ExtractionApi; push: (item: ExtractionStr
     };
 }
 
-function fakeAgent(outputs: (AnswerTurnResult | ((turn: AnswerTurn) => Promise<AnswerTurnResult>))[]): ExtractAgent & { turns: AnswerTurn[] } {
+function fakeAgent(
+    outputs: (AnswerTurnResult | ((turn: AnswerTurn) => Promise<AnswerTurnResult>))[],
+): ExtractAgent & { turns: AnswerTurn[]; gates: AnswerTurn[] } {
     const turns: AnswerTurn[] = [];
+    const gates: AnswerTurn[] = [];
+    const next = (turn: AnswerTurn): Promise<AnswerTurnResult> | AnswerTurnResult => {
+        const out = outputs.shift() ?? { text: '' };
+        return typeof out === 'function' ? out(turn) : out;
+    };
     return {
         turns,
+        gates,
         async extract(turn) {
             turns.push(turn);
-            const out = outputs.shift() ?? { text: '' };
-            return typeof out === 'function' ? out(turn) : out;
+            return next(turn);
+        },
+        async gate(turn) {
+            gates.push(turn);
+            return next(turn);
         },
     };
 }
@@ -147,7 +168,49 @@ describe('the extraction prompt', () => {
     });
 });
 
+describe("the light model's prompt", () => {
+    test('its instructions are stable and say when to answer no; its message holds the talk and the stickies, no items', () => {
+        expect<unknown>(gateInstructions()).toBe(gateInstructions());
+        for (const word of ['`yes`', '`no`', '`unsure`', 'Say `no` only when sure']) expect<unknown>(gateInstructions()).toContain(word);
+        const prompt = buildGatePrompt(gateJob(1) as GateInput, 'n0nce');
+        expect<unknown>(prompt).not.toContain('</talk-nonce>');
+        const block = prompt.slice(prompt.indexOf('<talk-n0nce>') + '<talk-n0nce>'.length, prompt.indexOf('</talk-n0nce>'));
+        const data = JSON.parse(block) as { stickies: string[]; messages: { key: string; isNew: boolean }[]; items?: unknown };
+        expect<unknown>(data.stickies).toEqual(['見積もり']);
+        expect<unknown>(data.messages.map((m) => [m.key, m.isNew])).toEqual([
+            ['m1', false],
+            ['m2', true],
+        ]);
+        expect<unknown>(data.items).toBeUndefined();
+    });
+
+    test("the extraction's message marks the messages the light model named", () => {
+        const [first, second] = job(1).messages;
+        const prompt = buildExtractionPrompt(job(1, { messages: [first, { ...second, likely: true }] }), 'n');
+        const data = JSON.parse(prompt.slice(prompt.indexOf('<talk-n>') + 8, prompt.indexOf('</talk-n>'))) as { messages: { likely?: boolean }[] };
+        expect<unknown>(data.messages.map((m) => m.likely)).toEqual([undefined, true]);
+        expect<unknown>(extractorInstructions()).toContain('`likely`');
+    });
+});
+
 describe('the extractor role', () => {
+    test('a gate job asks the light model with its prompt and sends its reply as given, even one that is not one', async () => {
+        const { api, push, results } = fakeApi();
+        const verdict = { verdict: 'yes', messages: ['m2'] };
+        const agent = fakeAgent([{ text: JSON.stringify(verdict), structured: verdict, model: 'claude-haiku', usage }, { text: 'maybe' }]);
+        const extractor = startExtractor({ api, agent, clock, nonce: () => 'n', log: () => {}, now: () => 0 });
+        push({ kind: 'job', job: gateJob(1) });
+        push({ kind: 'job', job: gateJob(2) });
+        await until(() => results.length === 2);
+        expect<unknown>(results).toEqual([
+            { job: 'gate-job-1', result: { reply: verdict, model: 'claude-haiku', usage, durationMs: 0 } },
+            { job: 'gate-job-2', result: { durationMs: 0 } },
+        ]);
+        expect<unknown>([agent.gates.length, agent.turns.length]).toEqual([2, 0]);
+        expect<unknown>(agent.gates[0].prompt).toContain('Decide whether the new messages');
+        await extractor.stop();
+    });
+
     test('takes a job, sends its reply with the model, the duration and what it cost', async () => {
         const { api, push, results } = fakeApi();
         const reply = { operations: [{ op: 'addSource', item: 'k1', sources: [{ message: 'm2', quote: '急ぎ' }], reason: 'again' }] };

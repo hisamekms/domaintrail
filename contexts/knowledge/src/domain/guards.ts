@@ -7,8 +7,10 @@
 //     operation applies, with its wording and the version it saw, and the held one is done;
 //   - or when the item's topic stayed quiet for `settleMs` since the held operation's talk: no later extraction made
 //     another call on the item meanwhile;
-//   - at the session's end: nothing can overturn them any more;
-//   otherwise they are dropped: a later extraction made another call on the same item (the newer one is held instead).
+//   otherwise they are dropped: a later extraction made another call on the same item (the newer one is held instead),
+//   or the session ended with them still held — neither confirmed nor settled by then. The last extraction's own
+//   updates and conflicts are dropped too: nothing after it can confirm them (*decided by the maintainer*, ADR 0031,
+//   section 3). A held one the last extraction confirms, or one already settled, still applies.
 //
 // "The same call" is the same kind of operation on the same item, finding the same kind of thing about the same time
 // (`labels.kind` and `labels.when`), about at least one same sticky (or about none, both). The text is not compared: the
@@ -25,18 +27,23 @@ export interface HeldOperation {
     readonly heldAt: Date;
 }
 
-/** Why a held operation was let go: applied (`confirmed`, `settled`, `ended`), or `superseded` (dropped). */
+/** Why a held operation was let go: applied (`confirmed`, `settled`), or dropped (`superseded`, `ended`: still held at the end). */
 export type HeldOutcome = 'confirmed' | 'settled' | 'ended' | 'superseded';
+
+/** Whether a held operation let go with `outcome` is dropped (else it applies). */
+export const droppedOutcome = (outcome: HeldOutcome): boolean => outcome === 'superseded' || outcome === 'ended';
 
 export interface GuardDecision {
     /** What to send to the store now, in order. */
     readonly apply: readonly Knowledge.Operation[];
     /** What stays held. */
     readonly hold: readonly HeldOperation[];
-    /** The held operations let go, and why (`superseded` ones are dropped; the others are in `apply`). */
+    /** The held operations let go, and why (`superseded` and `ended` ones are dropped; the others are in `apply`). */
     readonly released: readonly { readonly held: HeldOperation; readonly outcome: HeldOutcome }[];
     /** Proposed operations dropped: a second call on an item this extraction already made one on. */
     readonly duplicates: readonly HeldKind[];
+    /** Proposed updates and conflicts dropped because the session ended: the last extraction's, never confirmed. */
+    readonly endDropped: readonly HeldKind[];
 }
 
 export interface GuardInput {
@@ -51,7 +58,7 @@ export interface GuardInput {
     readonly now: Date;
     /** How long a topic stays quiet before a held operation on it applies (`settleSeconds`). */
     readonly settleMs: number;
-    /** The session ended: whatever is held applies. */
+    /** The session ended: what is still held, and what this extraction would hold, is dropped. */
     readonly ended: boolean;
 }
 
@@ -84,6 +91,7 @@ export function guardExtraction(input: GuardInput): GuardDecision {
     const hold: HeldOperation[] = [];
     const released: { held: HeldOperation; outcome: HeldOutcome }[] = [];
     const duplicates: HeldKind[] = [];
+    const endDropped: HeldKind[] = [];
     const earlier = new Map(input.held.map((h) => [h.operation.item, h]));
     /** The items this extraction made a held kind of call on. */
     const called = new Set<Knowledge.KnowledgeItemId>();
@@ -108,20 +116,24 @@ export function guardExtraction(input: GuardInput): GuardDecision {
             }
             released.push({ held: before, outcome: 'superseded' });
         }
-        if (input.ended) apply.push(operation);
+        if (input.ended) endDropped.push(operation);
         else hold.push({ operation, heldIn: input.number, heldAt: input.talkAt });
     }
     // the held operations this extraction made no call on: their topic is quiet
     for (const held of earlier.values()) {
-        if (input.ended || settled(held, input.now, input.settleMs)) {
-            released.push({ held, outcome: input.ended ? 'ended' : 'settled' });
+        if (settled(held, input.now, input.settleMs)) {
+            released.push({ held, outcome: 'settled' });
             apply.push(held.operation);
-        } else hold.push(held);
+        } else if (input.ended) released.push({ held, outcome: 'ended' });
+        else hold.push(held);
     }
-    return { apply, hold, released, duplicates };
+    return { apply, hold, released, duplicates, endDropped };
 }
 
-/** The held operations whose topic has settled at `now` (or all, the session ended): applied without an extraction. */
+/**
+ * The held operations whose topic has settled at `now`: applied without an extraction. When the session ended, the
+ * others are dropped (`ended`).
+ */
 export function settleHeld(held: readonly HeldOperation[], now: Date, settleMs: number, ended = false): GuardDecision {
     return guardExtraction({ proposed: [], held, number: Number.MAX_SAFE_INTEGER, talkAt: now, now, settleMs, ended });
 }

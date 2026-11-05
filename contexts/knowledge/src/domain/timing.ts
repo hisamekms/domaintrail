@@ -6,7 +6,12 @@
 // - at the session's end, at once (when anything is new or held);
 // - at most one extraction per `minIntervalMs` (but the end's), and one at a time: a later trigger waits, coalesced into
 //   the next one, which takes every message since the previous;
-// - besides, the held operations whose topic stayed quiet `settleMs` are applied without an extraction (`settle`).
+// - besides, the held operations whose topic stayed quiet `settleMs` are applied without an extraction (`settle`);
+// - while the extraction is switched off for the session (`off`), nothing is extracted, at the end neither; what is held
+//   still settles (and is dropped at the end), and what was decided before is still sent.
+//
+// What an extraction then does with the messages — stop at the mechanical stage, or at the light model's, or extract —
+// is the extraction's (`domain/stages.ts`), not the timing's.
 //
 // The answer of the AI and the person's quiet are triggers of the same extraction: whichever comes first.
 
@@ -33,6 +38,8 @@ export interface TalkState {
     readonly ended: boolean;
     /** The extraction of the end was made. */
     readonly endDone: boolean;
+    /** The extraction is switched off for the session. */
+    readonly off?: boolean;
 }
 
 export type ExtractionTrigger = 'quiet' | 'answer' | 'end';
@@ -52,15 +59,15 @@ const later = (a: Date, b: Date | undefined): Date => (b && b.getTime() > a.getT
 /** What to do now (see the head of this file). */
 export function decideExtraction(state: TalkState, now: Date, timing: ExtractionTiming): TimingDecision {
     if (state.running) return { kind: 'idle' };
-    const waiting = state.personWaiting || state.answeredAt !== undefined;
+    const waiting = !state.off && (state.personWaiting || state.answeredAt !== undefined);
     if (state.ended) {
         if (state.endDone) return { kind: 'idle' };
         if (waiting) return { kind: 'extract', trigger: 'end' };
         return state.settleAt ? { kind: 'settle' } : { kind: 'idle' };
     }
     const earliest = state.lastExtractionAt && new Date(state.lastExtractionAt.getTime() + timing.minIntervalMs);
-    const quietDue = state.personWaiting && state.lastMessageAt ? new Date(state.lastMessageAt.getTime() + timing.quietMs) : undefined;
-    const answerDue = state.answeredAt;
+    const quietDue = !state.off && state.personWaiting && state.lastMessageAt ? new Date(state.lastMessageAt.getTime() + timing.quietMs) : undefined;
+    const answerDue = state.off ? undefined : state.answeredAt;
     const due = [answerDue, quietDue].filter((d): d is Date => d !== undefined).sort((a, b) => a.getTime() - b.getTime())[0];
     const extractAt = due && later(due, earliest);
     if (extractAt && extractAt.getTime() <= now.getTime()) {

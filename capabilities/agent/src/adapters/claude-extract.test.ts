@@ -6,8 +6,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { extractorJsonSchema } from '@domaintrail/knowledge';
-import { extractorInstructions } from '../core/extract-prompt.js';
+import { extractorJsonSchema, gateJsonSchema } from '@domaintrail/knowledge';
+import { extractorInstructions, gateInstructions } from '../core/extract-prompt.js';
 import { createClaudeExtractor } from './claude-extract.js';
 
 const FAKE = path.join(import.meta.dir, '..', '..', 'test-fixtures', 'warm-claude.mjs');
@@ -53,5 +53,30 @@ describe("the extractor role's Claude Code", () => {
         expect(valueOf(a.args, '--setting-sources')).toBe('');
         expect(JSON.parse(valueOf(a.args, '--json-schema') ?? '{}')).toEqual(extractorJsonSchema());
         expect(valueOf(a.args, '--append-system-prompt')).toBe(extractorInstructions());
+    });
+
+    test('the light model: no tool at all, its own model (haiku unless given), its schema and instructions, no effort', async () => {
+        const root = await mkdtemp(path.join(tmpdir(), 'domaintrail-extractor-'));
+        const plan = path.join(root, '..', `${path.basename(root)}.plan.json`);
+        const verdict = { verdict: 'no', messages: [] };
+        await writeFile(plan, JSON.stringify({ runs: [{ reply: verdict }, { reply: verdict }] }));
+        cleanups.push(() => Promise.all([rm(root, { recursive: true, force: true }), rm(plan, { force: true }), rm(`${plan}.log`, { force: true })]));
+        const command = { command: process.execPath, args: [FAKE, plan] };
+        const signal = new AbortController().signal;
+        expect(await createClaudeExtractor({ root, model: 'opus', effort: 'high', command }).gate({ prompt: 'the talk', signal })).toMatchObject({
+            structured: verdict,
+            model: 'haiku',
+        });
+        await createClaudeExtractor({ root, gateModel: 'claude-haiku-4-5', command }).gate({ prompt: 'the talk', signal });
+        const [a, b] = readFileSync(`${plan}.log`, 'utf8')
+            .split('\n')
+            .filter(Boolean)
+            .map((l) => JSON.parse(l) as { args: string[] });
+        expect(valueOf(a.args, '--tools')).toBe('');
+        expect(valueOf(a.args, '--model')).toBe('haiku');
+        expect(a.args).not.toContain('--effort');
+        expect(JSON.parse(valueOf(a.args, '--json-schema') ?? '{}')).toEqual(gateJsonSchema());
+        expect(valueOf(a.args, '--append-system-prompt')).toBe(gateInstructions());
+        expect(valueOf(b.args, '--model')).toBe('claude-haiku-4-5');
     });
 });

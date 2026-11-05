@@ -440,6 +440,8 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 }
                 pages.set(connection.id, connection);
                 connection.send({ type: 'journey', journey: journeys.body() });
+                // whether the session extracts its knowledge (ADR 0031): the facilitator's switch shows it
+                if (knowledge) connection.send({ type: 'knowledge.extraction', enabled: knowledge.enabled() });
                 if (linkJoin && connection.data.role === 'facilitator')
                     void linkJoin.snapshot().then((snapshot) => connection.send({ type: 'join.requests', ...snapshot }), stateFailed);
                 void sendState(connection).then(() => {
@@ -630,7 +632,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             },
         });
         if (store && extractions && knowledgeConfig)
-            knowledge = startSessionKnowledge({
+            knowledge = await startSessionKnowledge({
                 store,
                 config: knowledgeConfig,
                 session,
@@ -639,6 +641,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 extractor: extractions,
                 now: () => clock.now(),
                 log,
+                switched: (enabled) => hub.publish({ type: 'knowledge.extraction', enabled }),
             });
         const stage = createTriageStage({
             session,
@@ -744,6 +747,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             knownViewNames: () => knownViewNames(view.state),
             guideWorkspace: guideWorkspaceNow,
             journeys,
+            ...(knowledge && { extraction: knowledge }),
             log,
         });
         const http = createViewHttpServer({

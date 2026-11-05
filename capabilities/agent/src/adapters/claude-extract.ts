@@ -6,17 +6,24 @@
 // context), in a working directory of its own with nothing in it (no workspace file, no `CLAUDE.md`, is read). The model
 // is the answerer's unless `agent.extract` names one. The model that answered and what the turn cost are read from the
 // process's events. Neither the prompt nor the output is logged.
-import { extractorJsonSchema } from '@domaintrail/knowledge';
-import type { AnswerTurnResult, ExtractAgent } from '../core/ports.js';
-import { extractorInstructions } from '../core/extract-prompt.js';
+//
+// The light model that decides first whether to extract (`gate`, stage 2) runs the same way — a fresh process, no tools
+// at all, the same empty directory — with its own model (`agent.extract.gateModel`, Haiku unless configured; no
+// effort: the light model is the point), its schema and its instructions in the system prompt.
+import { extractorJsonSchema, gateJsonSchema } from '@domaintrail/knowledge';
+import type { AnswerTurn, AnswerTurnResult, ExtractAgent } from '../core/ports.js';
+import { extractorInstructions, gateInstructions } from '../core/extract-prompt.js';
 import { runClaudeOnce } from './claude-answer.js';
 import { type AgentCommand, CLAUDE, claudeArguments } from './claude-code.js';
+import { DEFAULT_TRIAGE_MODEL } from './config.js';
 
 export interface ClaudeExtractorOptions {
     /** The working directory: an empty directory of the extractor's own. */
     readonly root: string;
     readonly model?: string;
     readonly effort?: string;
+    /** The light model's (`agent.extract.gateModel`); default `DEFAULT_TRIAGE_MODEL`. */
+    readonly gateModel?: string;
     /** The program (default `claude` on the PATH); the tests start a fake agent. */
     readonly command?: AgentCommand;
 }
@@ -26,24 +33,37 @@ export function extractorArguments(options: { readonly model?: string; readonly 
     return [...claudeArguments([], undefined, { ...options, schema: extractorJsonSchema() }), '--append-system-prompt', extractorInstructions()];
 }
 
+/** The arguments of the light model's question: no tool at all, its model, its schema, its instructions in the system prompt. */
+export function gateArguments(options: { readonly model?: string } = {}): string[] {
+    return [
+        ...claudeArguments([], undefined, { model: options.model ?? DEFAULT_TRIAGE_MODEL, schema: gateJsonSchema() }),
+        '--append-system-prompt',
+        gateInstructions(),
+    ];
+}
+
 export function createClaudeExtractor(options: ClaudeExtractorOptions): ExtractAgent {
     const command = options.command ?? CLAUDE;
     const args = extractorArguments({
         ...(options.model !== undefined && { model: options.model }),
         ...(options.effort !== undefined && { effort: options.effort }),
     });
+    const gateModel = options.gateModel ?? DEFAULT_TRIAGE_MODEL;
+    const gateArgs = gateArguments({ model: gateModel });
+    const turnOf = async (turn: AnswerTurn, argv: readonly string[], configured: string | undefined): Promise<AnswerTurnResult> => {
+        try {
+            const ran = await runClaudeOnce(command, argv, turn.prompt, options.root, turn.signal);
+            if (turn.signal.aborted) return { text: '', error: 'stopped' };
+            const model = ran.model ?? configured;
+            const meta = { ...(model && { model }), ...(ran.result.usage && { usage: ran.result.usage }) };
+            if (ran.exitCode !== 0) return { text: '', error: `claude exited with ${ran.exitCode}`, ...meta };
+            return { text: ran.result.text, ...(ran.result.structured !== undefined && { structured: ran.result.structured }), ...meta };
+        } catch (e) {
+            return { text: '', error: e instanceof Error ? e.message : String(e) };
+        }
+    };
     return {
-        async extract(turn): Promise<AnswerTurnResult> {
-            try {
-                const ran = await runClaudeOnce(command, args, turn.prompt, options.root, turn.signal);
-                if (turn.signal.aborted) return { text: '', error: 'stopped' };
-                const model = ran.model ?? options.model;
-                const meta = { ...(model && { model }), ...(ran.result.usage && { usage: ran.result.usage }) };
-                if (ran.exitCode !== 0) return { text: '', error: `claude exited with ${ran.exitCode}`, ...meta };
-                return { text: ran.result.text, ...(ran.result.structured !== undefined && { structured: ran.result.structured }), ...meta };
-            } catch (e) {
-                return { text: '', error: e instanceof Error ? e.message : String(e) };
-            }
-        },
+        extract: (turn) => turnOf(turn, args, options.model),
+        gate: (turn) => turnOf(turn, gateArgs, gateModel),
     };
 }
