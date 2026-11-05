@@ -80,10 +80,23 @@ merged.
   input is the messages since the last extraction (people's messages and the AI's answers alike), with the talk just
   before them (about ten minutes) and the items made in this session as context. Later, the meeting transcript of
   [the listening plan](../plans/listening.md) is one more input to the same extraction. All numbers are settings.
+- *Decided by the maintainer*: an extraction goes through **three stages**, like the triage of ADR 0030, so that the
+  stronger model runs only when there is something to extract:
+  1. **Mechanical**: at the times above, go on only if there are new people's messages or the AI finished work (an
+     answer or a run) since the last extraction; messages that are surely nothing (empty, emoji only, fixed
+     acknowledgements, the triage's list) do not count.
+  2. **A light model** (Haiku by default, through Claude Code): given the new messages, the talk just before and the
+     stickies' names (not the items), it answers whether there is a finding and in which messages. Unsure counts as
+     yes; it stops the cascade only when sure.
+  3. **The extractor** (the stronger model) extracts as described here, the messages the light model named first.
+  Every extraction records each stage's outcome and cost, so that the light model's misses can be checked.
+- *Decided by the maintainer*: extraction is **off unless enabled**: `knowledge.extraction.enabled` in the config gives
+  the default, and the facilitator can switch it for the session in the Live View.
 - Extracting this often must not jump to conclusions from a remark in mid-talk. *Decided by the maintainer*:
   - **add** and **addSource** apply at once: a wrong item costs a deletion.
   - **update** and **conflict** are held, unseen, and apply only when the next extraction, after the talk has moved
     on, makes the same call, or when the topic has been quiet for about two minutes; otherwise they are dropped.
+    Those still held when the session ends are dropped (*decided by the maintainer*).
   - An item made in this session is rewritten in place, without a new version, until the session ends; versions are
     kept only for items from earlier sessions.
   - A correction within the same stretch of talk is an update, not a conflict. A conflict needs both sides stated
@@ -244,6 +257,8 @@ merged.
 - **Extraction at pauses of minutes**: too late for the session. **Two stages** (a fast, cheap extraction that only
   adds, and a consolidation at pauses): faster and cheaper, but two jobs for the extractor and duplicates for a while.
   The maintainer chose one stage, run often, with the guards of section 3.
+- **Keywords instead of a light model** for deciding whether to extract: cheaper, but a finding phrased otherwise
+  waits or is missed. The maintainer chose a light model after the mechanical stage (section 3).
 
 ## Consequences
 
@@ -257,6 +272,6 @@ merged.
 
 ## Open questions
 
-- The extractor's prompt and its cost per extraction, run every minute or so with the stronger model: measured in the
+- The extractor's prompt and its cost per extraction, when the stronger model runs: measured in the
   plan's task K4, with the input limited to the items of the stickies in the talk and the stable part kept in the
-  prompt cache. If it is too costly, the two stages of "Alternatives considered" are the fallback.
+  prompt cache. The light model's rate of misses, from the recorded outcomes.
