@@ -130,6 +130,25 @@ describe('extractions', () => {
         expect(await store.unlinkConflict(project, id(9), id(1), user)).toEqual({ ok: false, error: { type: 'KnowledgeItemNotFound', itemId: id(9) } });
     });
 
+    test('reads an item without its conflict while the other side is deleted, and with it again once restored', async () => {
+        const project = newProject();
+        await store.applyExtraction(project, extraction('s1', 1, [add(1, '締めは前日17時')]));
+        await store.applyExtraction(
+            project,
+            extraction('s2', 1, [{ kind: 'Conflict', id: id(2), content: content('締めは当日9時'), sources: [source('s2', 'm1')], item: id(1), base: 1 }]),
+        );
+        await store.delete(project, id(2), user);
+        expect(await store.counts(project, 'Ordering')).toEqual([
+            { sticky: wire.stickyRef('Ordering.CreateSpecification', 'test'), hasItems: true, hasConflict: false },
+        ]);
+        expect(plain((await store.get(project, id(1)))?.item.conflictsWith)).toEqual([]);
+        expect(plain((await store.get(project, id(1), { history: true }))?.item.conflictsWith)).toEqual([]);
+        expect(plain((await store.search(project, {})).items.map((i) => i.conflictsWith))).toEqual([[]]);
+        expect(plain((await store.about(project, [wire.stickyRef('Ordering.CreateSpecification', 'test')])).map((i) => i.conflictsWith))).toEqual([[]]);
+        await store.restore(project, id(2), user);
+        expect(plain((await store.get(project, id(1)))?.item.conflictsWith)).toEqual([id(2)]);
+    });
+
     test('drops the operations on an item a person corrected or deleted meanwhile, and keeps the person’s change', async () => {
         const project = newProject();
         await store.applyExtraction(project, extraction('s1', 1, [add(1, '締めは月末'), add(2, '請求は翌月')]));

@@ -36,7 +36,7 @@ import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'nod
 import * as path from 'node:path';
 import { err, Knowledge, ok, type Result } from '../generated/index.js';
 import { applyExtraction as applyOperations, idempotencyKey, type DropReason } from '../domain/extraction.js';
-import { knowledgeItemCommands } from '../domain/items.js';
+import { knowledgeItemCommands, withLiveConflicts } from '../domain/items.js';
 import { auditOf, imagesIn, redactionOf, sourceMessages, withoutReason } from '../domain/records.js';
 import { IMAGES_DIR, idOfFileName, itemFileName, printItemFile, readItemFile } from '../domain/item-file.js';
 import type { KnowledgeFile } from '../domain/check.js';
@@ -322,6 +322,13 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
         return [...items.values()].filter((i): i is Knowledge.LiveKnowledgeItem => i.state === 'Live');
     }
 
+    /** The live items as they are read: each one's conflicts with live items only (`withLiveConflicts`). */
+    async function shownItems(): Promise<Knowledge.LiveKnowledgeItem[]> {
+        const live = await liveItems();
+        const ids = new Set<string>(live.map((i) => i.id));
+        return live.map((i) => withLiveConflicts(i, (id) => ids.has(id)));
+    }
+
     async function readOne(from: string, id: Knowledge.KnowledgeItemId): Promise<Knowledge.KnowledgeItem | undefined> {
         const name = itemFileName(id);
         const text = await readText(path.join(from, name));
@@ -427,7 +434,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
         async about(project, stickies) {
             checkProject(project);
             const wanted = new Set<string>(stickies);
-            return (await liveItems()).filter((i) => i.content.about.some((a) => wanted.has(a))).sort(newestFirst);
+            return (await shownItems()).filter((i) => i.content.about.some((a) => wanted.has(a))).sort(newestFirst);
         },
 
         async search(project, query: KnowledgeQuery): Promise<Page<Knowledge.LiveKnowledgeItem>> {
@@ -438,7 +445,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                 .split(/\s+/)
                 .filter((t) => t !== '');
             const after = query.cursor === undefined ? undefined : afterItemCursor(query.cursor);
-            const matching = (await liveItems())
+            const matching = (await shownItems())
                 .filter((i) => {
                     const { labels } = i.content;
                     if (about && !i.content.about.some((a) => about.has(a))) return false;
@@ -479,8 +486,10 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
         /** The live item. Its `history` is always empty: the files store keeps no past versions; git's history has them. */
         async get(project, id, opts): Promise<ItemWithHistory | undefined> {
             checkProject(project);
-            const item = await liveOne(id);
-            if (item === undefined) return undefined;
+            const found = await liveOne(id);
+            if (found === undefined) return undefined;
+            const live = new Set((await Promise.all(found.conflictsWith.map(liveOne))).flatMap((i) => (i ? [i.id] : [])));
+            const item = withLiveConflicts(found, (other) => live.has(other));
             return opts?.history ? { item, history: [] } : { item };
         },
 

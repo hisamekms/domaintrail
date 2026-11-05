@@ -41,6 +41,16 @@ export function raisedOrigin(labels: Knowledge.Labels, agreed: boolean): Knowled
     return agreed && labels.origin === 'said' ? { ...labels, origin: 'agreed' } : labels;
 }
 
+/**
+ * The item as it is read: its conflicts with live items only. A conflict whose other side was deleted — hidden at once,
+ * then removed by the sweep — has nothing left to show, so the item shows no conflict; the link itself stays in the
+ * store, so 元に戻す brings the conflict back.
+ */
+export function withLiveConflicts(item: Knowledge.LiveKnowledgeItem, isLive: (id: Knowledge.KnowledgeItemId) => boolean): Knowledge.LiveKnowledgeItem {
+    const conflictsWith = item.conflictsWith.filter(isLive);
+    return conflictsWith.length === item.conflictsWith.length ? item : { ...item, conflictsWith };
+}
+
 export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
     add: decide<Knowledge.AddKnowledgeItemDecision>(Knowledge.KnowledgeItemShape, (params) => {
         if (Knowledge.checkAddKnowledgeItemRequires(params) === 'distinctSources') return err({ type: 'DuplicateSource' });
