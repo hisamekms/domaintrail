@@ -3931,6 +3931,7 @@ svg.chat-launcher-mark {
     .tree-children,
     .tree-twisty svg,
     .knowledge-item,
+    .knowledge-item::before,
     .knowledge-fold,
     .knowledge-unfold,
     .knowledge-side {
@@ -9046,31 +9047,37 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
 }
 /* an item: its kind in the left column, the rest from the text's left edge (opened, its detail too) */
 .knowledge-item {
+    position: relative;
+    isolation: isolate;
     display: grid;
     grid-template-columns: max-content minmax(0, 1fr) auto;
     column-gap: var(--gap-inside);
-    border-radius: 8px;
-    /* the outline is a shadow and the rows' line stays 1px (its colour fades), so that opening moves nothing but by
-       the card's room; the wash stops inside the line */
-    background-clip: padding-box;
-    box-shadow: inset 0 0 0 1px transparent;
-    transition:
-        margin var(--motion-medium) var(--motion-ease-standard),
-        padding var(--motion-medium) var(--motion-ease-standard),
-        background-color var(--motion-medium) var(--motion-ease-standard),
-        box-shadow var(--motion-medium) var(--motion-ease-standard),
-        border-color var(--motion-medium) var(--motion-ease-standard);
+    transition: border-color var(--motion-medium) var(--motion-ease-standard);
 }
 .knowledge-item + .knowledge-item {
     border-top: 1px solid var(--border);
 }
-/* opened: one card, outlined, on a light wash; the rows around it stay flat. It comes and goes in --motion-medium:
-   the card fades in as it takes its room, its detail unfolds (.knowledge-unfold) and its text's clamp is released as
-   the text's height moves (panel.tsx, useClampMotion; whole while it closes: .unfolded) */
+/* opened: one card, outlined, on a light wash; the rows around it stay flat. The card is painted outside the row's
+   box (--space-2 to each side; the head's padding is its room above), so opening moves nothing of the item: the
+   card fades in, its detail unfolds (.knowledge-unfold) with the card's room below it, and its text's clamp is
+   released as the text's height moves (panel.tsx, useClampMotion; whole while it closes: .unfolded). The lists'
+   padding holds the card (.knowledge-list-body, the detail's) */
+.knowledge-item::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 0 calc(-1 * var(--space-2));
+    border-radius: 8px;
+    pointer-events: none;
+    box-shadow: inset 0 0 0 1px transparent;
+    transition:
+        background-color var(--motion-medium) var(--motion-ease-standard),
+        box-shadow var(--motion-medium) var(--motion-ease-standard);
+}
 .knowledge-item.open {
-    margin: var(--space-1) 0;
-    padding: 0 var(--space-2) var(--space-2);
     border-top-color: transparent;
+}
+.knowledge-item.open::before {
     background-color: var(--surface-muted);
     box-shadow: inset 0 0 0 1px var(--action);
 }
@@ -9155,6 +9162,10 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
 }
 .knowledge-item > .knowledge-unfold {
     grid-column: 2 / -1;
+}
+/* the card's room below the detail, unfolding with it */
+.knowledge-item > .knowledge-unfold > .knowledge-unfold-inner > * {
+    margin-bottom: var(--space-2);
 }
 /* an opened detail unfolds: its height from nothing (a grid row from 0fr, which height cannot do from auto) as it
    fades in, and back as it closes (it stays mounted meanwhile: useStaying) */
