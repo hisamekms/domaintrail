@@ -70,6 +70,11 @@ One item holds one finding. It has:
 A `term` is about the words of the business. The `.dt` `terms` keep defining the model's terms; the two are not
 merged.
 
+- *Decided by the maintainer* (after trying it): an item has a required **title**, one short line (the extractor
+  writes it; a person corrects it), versioned with the text. A closed item shows its title and its labels' line only;
+  an opened one shows the title and the text as Markdown. Items without a title (from before) are not read: the
+  feature is still in development.
+
 ### 3. Taken from the chat automatically, deleted afterwards
 
 *Decided by the maintainer.*
