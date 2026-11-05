@@ -418,8 +418,11 @@ function changedAndEdited(context: PromptContext, names: ReadonlyMap<string, str
     if (!context.changedSinceYourLastRun) return edits ? { editedByPeople: edits } : {};
     const changed = changedList(context.changedSinceYourLastRun);
     if (!edits) return { changedSinceYourLastRun: changed };
-    return { changedSinceYourLastRun: { ...(Array.isArray(changed) ? { files: changed } : changed), editedByPeople: edits } };
+    const files = isPathList(changed) ? { files: changed } : changed;
+    return { changedSinceYourLastRun: { ...files, editedByPeople: edits } };
 }
+
+const isPathList = (v: readonly string[] | { readonly files: readonly string[] }): v is readonly string[] => Array.isArray(v);
 
 /** The changed paths as the prompt shows them: at most `MAX_CHANGED_SHOWN`, then how many more (read the files then). */
 function changedList(paths: readonly string[]): readonly string[] | { readonly files: readonly string[]; readonly andMore: number } {
