@@ -27,6 +27,8 @@ export function auditOf(event: Knowledge.KnowledgeItemEvent): Knowledge.AuditEnt
             return record('revise', extractor(event.by), event.reason);
         case 'KnowledgeConflictLinked':
             return record('linkConflict', extractor(event.by), event.reason);
+        case 'KnowledgeConflictUnlinked':
+            return record('unlinkConflict', person(event.by));
         case 'KnowledgeItemCorrected':
             return record('correct', person(event.by));
         case 'KnowledgeItemDeleted':

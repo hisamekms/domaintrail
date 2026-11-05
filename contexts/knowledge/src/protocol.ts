@@ -209,7 +209,7 @@ const time: Decoder<Date> = (v, at) => {
 const WHEN: readonly Knowledge.When[] = ['as_is', 'to_be', 'none'];
 const KINDS: readonly Knowledge.KnowledgeKind[] = ['rule', 'flow', 'example', 'term', 'pain', 'want', 'decision'];
 const ORIGINS: readonly Knowledge.Origin[] = ['said', 'agreed', 'investigated', 'inferred'];
-const AUDIT_OPERATIONS: readonly Knowledge.AuditOperation[] = ['add', 'addSource', 'rewrite', 'revise', 'linkConflict', 'correct', 'delete', 'restore'];
+const AUDIT_OPERATIONS: readonly Knowledge.AuditOperation[] = ['add', 'addSource', 'rewrite', 'revise', 'linkConflict', 'correct', 'delete', 'restore', 'unlinkConflict'];
 
 export const itemId: Decoder<Knowledge.KnowledgeItemId> = branded(Knowledge.makeKnowledgeItemId, str);
 export const imageId: Decoder<Knowledge.ImageId> = branded(Knowledge.makeImageId, str);
@@ -367,6 +367,12 @@ const stickyCount: Decoder<StickyCount> = (v, at) => {
     const o = obj(v, at);
     return { sticky: stickyRef(o.sticky, `${at}.sticky`), hasItems: bool(o.hasItems, `${at}.hasItems`), hasConflict: bool(o.hasConflict, `${at}.hasConflict`) };
 };
+
+/** The body of `POST /knowledge/:id/unlink`'s answer: `{ items }`, the item first. */
+export const liveItems: Decoder<Knowledge.LiveKnowledgeItem[]> = (v, at) => list(liveItem)(obj(v, at).items, `${at}.items`);
+
+/** The body of `POST /knowledge/:id/unlink`: `{ other }`, the item it is said not to conflict with. */
+export const unlinkBody: Decoder<Knowledge.KnowledgeItemId> = (v, at) => itemId(obj(v, at).other, `${at}.other`);
 
 /** The body of `GET /counts`: `{ counts }`. */
 export const stickyCounts: Decoder<StickyCount[]> = (v, at) => list(stickyCount)(obj(v, at).counts, `${at}.counts`);

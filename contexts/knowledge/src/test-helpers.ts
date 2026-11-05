@@ -100,6 +100,7 @@ export function memoryStore(items: readonly Knowledge.LiveKnowledgeItem[] = []):
         counts: unused,
         get: unused,
         correct: unused,
+        unlinkConflict: unused,
         delete: unused,
         deleteSession: unused,
         restore: unused,

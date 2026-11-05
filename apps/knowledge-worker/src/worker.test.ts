@@ -111,6 +111,25 @@ describe('extractions', () => {
         ]);
     });
 
+    test('unlinks a conflict on both sides (食い違いではない), keeping the versions, and audits it', async () => {
+        const project = newProject();
+        await store.applyExtraction(project, extraction('s1', 1, [add(1, '締めは前日17時')]));
+        await store.applyExtraction(
+            project,
+            extraction('s2', 1, [{ kind: 'Conflict', id: id(2), content: content('締めは当日9時'), sources: [source('s2', 'm1')], item: id(1), base: 1 }]),
+        );
+        const r = await store.unlinkConflict(project, id(2), id(1), user);
+        expect(r.ok && plain(r.value.map((i) => [i.id, i.conflictsWith, i.version]))).toEqual([
+            [id(2), [], 1],
+            [id(1), [], 1],
+        ]);
+        expect(await store.counts(project, 'Ordering')).toEqual([
+            { sticky: wire.stickyRef('Ordering.CreateSpecification', 'test'), hasItems: true, hasConflict: false },
+        ]);
+        expect((await store.audit(project, { item: id(1) })).items[0]?.operation).toBe('unlinkConflict');
+        expect(await store.unlinkConflict(project, id(9), id(1), user)).toEqual({ ok: false, error: { type: 'KnowledgeItemNotFound', itemId: id(9) } });
+    });
+
     test('drops the operations on an item a person corrected or deleted meanwhile, and keeps the person’s change', async () => {
         const project = newProject();
         await store.applyExtraction(project, extraction('s1', 1, [add(1, '締めは月末'), add(2, '請求は翌月')]));

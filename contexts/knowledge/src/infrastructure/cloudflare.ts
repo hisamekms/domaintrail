@@ -24,6 +24,7 @@ import {
     itemWithHistory,
     knowledgeQueryParams,
     liveItem,
+    liveItems,
     page,
     projectPath,
     redactionEntries,
@@ -224,6 +225,13 @@ export function cloudflareKnowledgeStore(settings: CloudflareKnowledgeStoreSetti
             const what = `correcting ${id}`;
             const gone = await missing(res, what);
             return gone ? err({ type: gone, itemId: id }) : ok(await read(res, liveItem, what));
+        },
+
+        async unlinkConflict(project, id, other, by) {
+            const res = await request(project, `${itemPath(id)}/unlink`, { method: 'POST', json: { other }, headers: actor(by) });
+            const what = `unlinking ${id} from ${other}`;
+            const gone = await missing(res, what);
+            return gone ? err({ type: gone, itemId: id }) : ok(await read(res, liveItems, what));
         },
 
         async delete(project, id, by) {

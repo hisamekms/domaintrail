@@ -10,6 +10,8 @@
 //   session and still version 1: a person's correction makes version 2, which is never overwritten); otherwise a new
 //   version, the store keeping the item it replaced;
 // - linkConflict: the older side of a conflict, linked to the new one; both sides must have a source;
+// - unlinkConflict: a person decides two linked items do not conflict (食い違いではない): the link goes, the content and
+//   the version stay (the store unlinks both sides);
 // - correct: a person's edit, always a new version;
 // - delete / restore: a person hides the item at once, and may undo it until the store's sweep removes it.
 import { decide, err, Knowledge, ok } from '../generated/index.js';
@@ -165,6 +167,23 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                             ...(reason && { reason }),
                             at,
                         },
+                    },
+                },
+            });
+        },
+    }),
+
+    unlinkConflict: decide<Knowledge.UnlinkConflictKnowledgeItemDecision>(Knowledge.KnowledgeItemShape, {
+        Live: (item, params) => {
+            if (Knowledge.checkUnlinkConflictKnowledgeItemRequires(item, params) === 'notItself') return err({ type: 'ConflictWithItself' });
+            const { other, by, at } = params;
+            // unlinking what is not linked changes nothing but the time (a retry, or the other side unlinked first)
+            const conflictsWith = item.conflictsWith.filter((id) => id !== other);
+            return ok({
+                Live: {
+                    set: { conflictsWith, updatedAt: at },
+                    events: {
+                        KnowledgeConflictUnlinked: { type: 'KnowledgeConflictUnlinked', itemId: item.id, version: item.version, other, by, at },
                     },
                 },
             });
