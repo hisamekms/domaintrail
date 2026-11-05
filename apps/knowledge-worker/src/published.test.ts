@@ -104,21 +104,27 @@ describe('publishing', () => {
 
     test('a form that is not the API’s, of another storming, or too large is refused', async () => {
         const project = newProject();
-        const put = (storming: string, body: string): Promise<Response> =>
+        const put = (storming: string, body: string, init: RequestInit = {}): Promise<Response> =>
             fetch(`${worker.url}${wire.projectPath(project)}/published/${storming}`, {
                 method: 'PUT',
                 headers: { 'CF-Access-Client-Id': WRITER, 'Content-Type': 'application/json' },
                 body,
+                ...init,
             });
         expect((await put('Billing', JSON.stringify(form()))).status).toBe(400);
         const foreign = await put('Ordering', JSON.stringify(form({ stickies: [{ ref: ref('Billing.Paid') }] })));
         expect(await foreign.json()).toMatchObject({ error: { type: 'BadRequest', message: expect.stringContaining('body.stickies[0].ref') } });
         expect((await put('Ordering', JSON.stringify({ ...form(), format: 2 }))).status).toBe(400);
+        // the Worker refuses it by its Content-Length before reading the body; workerd then drops the connection with the
+        // body unread, and Bun's fetch would hand that connection to the next request (an ECONNRESET in the next test):
+        // this request takes a connection of its own
         const huge = await put(
             'Ordering',
             JSON.stringify(form({ views: { 'big-picture': { pad: 'x'.repeat(wire.MAX_PUBLISHED_BYTES) }, 'design-level': {} } })),
+            { keepalive: false },
         );
         expect(huge.status).toBe(413);
+        expect(await huge.json()).toMatchObject({ error: { type: 'TooLarge' } });
     });
 });
 
