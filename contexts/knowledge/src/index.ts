@@ -71,6 +71,16 @@ export {
     type HeldOperation,
     type HeldOutcome,
 } from './domain/guards.js';
+export {
+    chooseStickies,
+    MAX_WORKSPACE_STICKIES,
+    mentionedStickies,
+    type ChosenStickies,
+    type StickyBasis,
+    type StickyFocus,
+    type StormingStickies,
+    type WorkspaceSticky,
+} from './domain/stickies.js';
 export { decideExtraction, type ExtractionTiming, type ExtractionTrigger, type TalkState, type TimingDecision } from './domain/timing.js';
 
 // ---- the store's port, and who may use it ------------------------------------------------------------------------

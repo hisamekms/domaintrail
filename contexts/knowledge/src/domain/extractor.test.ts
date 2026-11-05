@@ -210,8 +210,35 @@ describe('the reply made into operations', () => {
         const op = made.operations[0];
         expect(plain(op.kind === 'Add' && [op.content.about, op.sources.length])).toEqual([['Ordering.Estimate'], 1]);
         expect(made.rejected.map((r) => r.message)).toEqual([
-            'Billing.Invoice is not a sticky of the talk; left out.',
-            'not a ref is not a sticky of the talk; left out.',
+            'Billing.Invoice is not a sticky that was given; left out.',
+            'not a ref is not a sticky that was given; left out.',
         ]);
+    });
+
+    test('a sticky of the workspace given, which no message points at, is kept in `about`; one not given is still left out', () => {
+        const given: ExtractionInput = {
+            ...input,
+            workspaceStickies: [
+                { ref: 'Ordering.Rush', label: '急ぎの見積もり', kind: 'event' },
+                { ref: 'Ordering.Sales', label: '営業', kind: 'actor' },
+            ],
+        };
+        const made = operationsOf(
+            read({
+                operations: [
+                    {
+                        op: 'add',
+                        ...finding,
+                        about: ['Ordering.Rush', 'Ordering.Sales', 'Ordering.Estimate', 'Billing.Invoice'],
+                        sources: [{ message: 'm2', quote: '当日中' }],
+                        reason: 'r',
+                    },
+                ],
+            }),
+            given,
+        );
+        const op = made.operations[0];
+        expect(plain(op.kind === 'Add' && op.content.about)).toEqual(['Ordering.Rush', 'Ordering.Sales', 'Ordering.Estimate']);
+        expect(made.rejected.map((r) => r.message)).toEqual(['Billing.Invoice is not a sticky that was given; left out.']);
     });
 });

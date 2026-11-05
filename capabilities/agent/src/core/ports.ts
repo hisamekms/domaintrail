@@ -171,14 +171,20 @@ export interface TurnUsage {
     readonly costUsd?: number;
 }
 
+/** An extractor's turn: the message, and what goes in the system prompt after the instructions (the workspace's stickies). */
+export interface ExtractTurn extends AnswerTurn {
+    /** The stable part of the job, appended to the system prompt after the role's instructions: the prompt cache keeps it. */
+    readonly context?: string;
+}
+
 /**
  * The extractor (ADR 0031, section 3): a read-only agent with **no tools at all** (no file is read: its prompt holds
  * the talk and the items), replying with the extractor's schema; and the light model before it (`gate`), with no tools
  * either, replying whether to extract. One turn at a time.
  */
 export interface ExtractAgent {
-    extract(turn: AnswerTurn): Promise<AnswerTurnResult>;
-    gate(turn: AnswerTurn): Promise<AnswerTurnResult>;
+    extract(turn: ExtractTurn): Promise<AnswerTurnResult>;
+    gate(turn: ExtractTurn): Promise<AnswerTurnResult>;
     /** Ends what it keeps; resolves once it is gone. */
     close?(): Promise<void>;
 }

@@ -5,14 +5,15 @@
  * switches it on; then a person's message extracted once the talk is quiet, after the light model named it, the item
  * applied with the session and the extraction's number, its source the message; a mere acknowledgement stopped at the
  * mechanical stage, with no model asked; the last extraction when the session closes, after which the extractor is told
- * the session closed. Without a store — none configured, or a `cloudflare` one whose settings are not approved, which is said —
+ * the session closed; an item about a sticky nobody pointed at, chosen among the workspace's stickies the extractor is
+ * given in its system prompt. Without a store — none configured, or a `cloudflare` one whose settings are not approved, which is said —
  * the extraction entry point answers 404 and the extractor ends.
  */
 import { afterAll, afterEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { type AnswerTurn, createHttpAgentApi, DEFAULT_AGENT_TOOLS, startExtractor } from '@domaintrail/agent';
+import { type AnswerTurn, createHttpAgentApi, DEFAULT_AGENT_TOOLS, type ExtractTurn, startExtractor } from '@domaintrail/agent';
 import { resolveConfig, type SessionSettings, startSessionServer } from '@domaintrail/dt';
 import { type AppliedExtraction, applyExtraction, idempotencyKey, Knowledge, type KnowledgeStore } from '@domaintrail/knowledge';
 
@@ -208,6 +209,91 @@ describe('knowledge taken from a session', () => {
         expect<unknown>(store.extractions.map((e) => e.by.number)).toEqual([1, 3]);
         const last = store.extractions[1].operations[0];
         expect<unknown>(last.kind === 'Add' && last.sources[0].message).toBe(second);
+    });
+
+    test("an item is about a sticky nobody pointed at: the extractor is given the workspace's stickies, its light model their names", async () => {
+        const root = await mkdtemp(path.join(tmpdir(), 'domaintrail-knowledge-'));
+        dirs.push(root);
+        await writeFile(path.join(root, 'shop.dt'), 'context Shop {\n  id OrderId: UUID\n}\n');
+        await writeFile(
+            path.join(root, 'returns.dtes'),
+            'storming Returns "返品" {\n  event ReturnRequested "返品が依頼された"\n  event RefundPaid "返金した"\n  actor Clerk "窓口担当"\n}\n',
+        );
+        const store = memoryStore();
+        const settings = sessionConfig(true);
+        const knowledge = settings.knowledge && { ...settings.knowledge, extraction: { ...settings.knowledge.extraction, enabled: true } };
+        const server = await startSessionServer({
+            root,
+            debounceMs: 30,
+            session: { ...settings, ...(knowledge && { knowledge }) },
+            knowledgeStore: store,
+            log: () => {},
+        });
+        cleanups.push(() => server.stop());
+        await server.ready;
+        const joined = await fetch(`${server.url}api/session/join`, { method: 'POST', headers: json, body: JSON.stringify({ name: 'Ada' }) });
+        const ada = (joined.headers.get('set-cookie') ?? '').split(';')[0];
+        expect((await fetch(server.facilitatorLink, { headers: { cookie: ada }, redirect: 'manual' })).status).toBe(303);
+
+        // the fake extractor puts the finding on the sticky whose label the message is about, from the system prompt's list
+        const contexts: (string | undefined)[] = [];
+        const gateContexts: (string | undefined)[] = [];
+        const extractor = startExtractor({
+            api: createHttpAgentApi({ url: server.agentUrl, token: server.agentToken }),
+            agent: {
+                async gate(turn: ExtractTurn) {
+                    gateContexts.push(turn.context);
+                    const verdict = { verdict: 'yes', messages: [] };
+                    return { text: JSON.stringify(verdict), structured: verdict };
+                },
+                async extract(turn: ExtractTurn) {
+                    contexts.push(turn.context);
+                    const listed = JSON.parse((turn.context ?? '').replace('<workspace-stickies>', '').replace('</workspace-stickies>', '')) as {
+                        ref: string;
+                        label?: string;
+                    }[];
+                    const block = turn.prompt.slice(turn.prompt.indexOf('{'), turn.prompt.lastIndexOf('}') + 1);
+                    const data = JSON.parse(block) as { messages: { key: string; isNew: boolean; text: string }[]; targeted: unknown[] };
+                    const first = data.messages.find((m) => m.isNew);
+                    const refund = listed.find((s) => s.label === '返金した');
+                    const reply = {
+                        operations:
+                            first && refund && data.targeted.length === 0
+                                ? [
+                                      {
+                                          op: 'add',
+                                          text: '返金は検品の翌営業日に行う',
+                                          when: 'as_is',
+                                          kind: 'rule',
+                                          origin: 'said',
+                                          about: [refund.ref, 'Returns.Unknown'],
+                                          sources: [{ message: first.key, quote: first.text }],
+                                          reason: '決まりが言われた',
+                                      },
+                                  ]
+                                : [],
+                    };
+                    return { text: JSON.stringify(reply), structured: reply };
+                },
+            },
+            clock: { sleep: (ms) => new Promise((r) => setTimeout(r, ms)), every: () => () => {} },
+            nonce: () => 'n0nce',
+            log: () => {},
+        });
+        cleanups.push(() => extractor.stop());
+        const sent = await fetch(`${server.url}api/session/requests`, {
+            method: 'POST',
+            headers: { cookie: ada, ...json },
+            body: JSON.stringify({ targets: [], body: '返金は検品が終わった翌営業日にしています' }),
+        });
+        expect(sent.status).toBe(201);
+        await until('the extraction', () => (store.extractions.length === 1 ? true : undefined));
+        const [op] = store.extractions[0].operations;
+        // the unknown ref is still left out
+        expect<unknown>(op.kind === 'Add' && op.content.about).toEqual(['Returns.RefundPaid']);
+        // no page has a storming open, no journey: every storming's stickies
+        expect(contexts[0]).toContain('"ref": "Returns.Clerk"');
+        expect(gateContexts[0]).toContain('"窓口担当"');
     });
 
     test('a store that cannot be opened (cloudflare, its settings not approved) is said in one line, and nothing is extracted', async () => {

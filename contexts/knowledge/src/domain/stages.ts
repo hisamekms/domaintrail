@@ -6,7 +6,8 @@
 //    triage's stage 1 (empty, emoji only, a fixed acknowledgement), judged where the message's body is read (the
 //    session's talk port) and handed here as `nothing`: the list is the triage's, not copied.
 // 2. **The light model** (Haiku by default, through Claude Code with no tools), given the new messages, the talk just
-//    before them (shorter than the extractor's) and the names of the stickies they point at (not the items): whether
+//    before them (shorter than the extractor's) and the names of the stickies — those they point at, and the
+//    workspace's the extractor is given (`stickies.ts`) — (not the items): whether
 //    there is a finding (`yes`, `no` or `unsure`) and in which of the new messages. Only a sure `no` stops; `unsure` and
 //    a reply that is not one (`readGateReply`) go on to the extractor, which reads the messages it named first.
 //
@@ -53,6 +54,11 @@ export interface GateInput {
     readonly messages: readonly TalkMessage[];
     /** The names of the stickies the messages point at (their labels, else their refs). */
     readonly stickies: readonly string[];
+    /**
+     * The names of the workspace's stickies the extractor is given too (`ExtractionInput.workspaceStickies`, the same
+     * source), so that both see the same stickies. Absent from a server before them.
+     */
+    readonly workspaceStickies?: readonly string[];
 }
 
 /** The most messages the light model may name. */

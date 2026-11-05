@@ -13,7 +13,7 @@
 // the light model's prompt; its reply goes back as given (the server reads it, and takes one that is not a reply as
 // unsure). Functions over the ports only; the log has job IDs and counts, never a message's text or an item's.
 import { readExtractorReply, type ExtractionJobBody, type ExtractionResultBody } from '@domaintrail/knowledge';
-import { buildExtractionPrompt, buildGatePrompt } from './extract-prompt.js';
+import { buildExtractionPrompt, buildGatePrompt, extractorContext, gateContext } from './extract-prompt.js';
 import { AgentApiError, type AnswerTurnResult, type Clock, type ExtractAgent, type ExtractionApi } from './ports.js';
 
 export interface ExtractorDeps {
@@ -78,10 +78,11 @@ export function startExtractor(deps: ExtractorDeps, options: ExtractorOptions = 
     const resultOf = async (job: ExtractionJobBody, signal: AbortSignal): Promise<ExtractionResultBody> => {
         const started = now();
         const elapsed = (): number => Math.max(0, Math.round(now() - started));
+        const context = job.stage === 'gate' ? gateContext(job) : extractorContext(job);
         const result =
             job.stage === 'gate'
-                ? await deps.agent.gate({ prompt: buildGatePrompt(job, deps.nonce()), signal })
-                : await deps.agent.extract({ prompt: buildExtractionPrompt(job, deps.nonce()), signal });
+                ? await deps.agent.gate({ prompt: buildGatePrompt(job, deps.nonce()), ...(context && { context }), signal })
+                : await deps.agent.extract({ prompt: buildExtractionPrompt(job, deps.nonce()), ...(context && { context }), signal });
         const meta = { ...(result.model && { model: result.model }), ...(result.usage && { usage: result.usage }), durationMs: elapsed() };
         if (result.error !== undefined) return { error: result.error, ...meta };
         const reply = outputOf(result);

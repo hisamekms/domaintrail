@@ -17,6 +17,8 @@ export interface PresenceRelay {
     received(connection: Connection<SessionConnection>, message: ClientMessage): void;
     /** A page left (closed, or sent `presence.leave`): the others are told. */
     left(connection: Connection<SessionConnection>): void;
+    /** Where each page looks now (the last update sent of each page connected): what the extraction reads of the view. */
+    presences(): readonly Presence[];
     /** Drops every pending update (the server stops). */
     dispose(): void;
 }
@@ -86,6 +88,8 @@ export function createPresenceRelay(hub: Pick<WebSocketHub<SessionConnection>, '
             forget(connection);
             if (presences.delete(connection.id)) hub.publishWhere(others(connection), { type: 'presence.leave', connection: connection.id });
         },
+
+        presences: () => [...presences.values()],
 
         dispose() {
             for (const { timer } of waiting.values()) clearTimeout(timer);

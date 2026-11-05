@@ -5,12 +5,14 @@
 // The reply is AI output. Reading it, a reply that is not an object with `operations` is refused whole (nothing is
 // extracted); within it, each operation is read on its own, and a malformed one is dropped with why, the others kept.
 // Making operations of it, a reference to a message or an item the extractor was not given drops the operation; a sticky
-// it was not given is left out of `about`; a quote that is not in its message is replaced by the message's own start
+// it was not given (neither one of the workspace's it was given, nor one the talk points at, nor one an item is about) is
+// left out of `about`; a quote that is not in its message is replaced by the message's own start
 // (the quote is what lets a reader check the AI's wording, so it must be the person's). The IDs of new items are made
 // from the session, the extraction's number and the operation's place, so that the same extraction sent again names the
 // same items.
 import { err, Knowledge, ok, type Result } from '../generated/index.js';
 import type { GateInput } from './stages.js';
+import type { WorkspaceSticky } from './stickies.js';
 
 /** The most of each part of a reply, and of an input. */
 export const EXTRACTION_LIMITS = {
@@ -71,7 +73,7 @@ export interface KnownItem {
     readonly createdAt: string;
 }
 
-/** A sticky the talk points at. */
+/** A sticky the talk points at (a message's `#` chip): a strong hint of what a finding is about. */
 export interface KnownSticky {
     readonly ref: string;
     /** Its label when the message pointed at it. */
@@ -84,9 +86,18 @@ export interface ExtractionInput {
     readonly number: number;
     /** The talk in order: the new messages, after the talk just before them (`isNew` false). */
     readonly messages: readonly TalkMessage[];
-    /** The items made in this session and those about the stickies of the talk. */
+    /** The items made in this session and those about the stickies the talk is likely about. */
     readonly items: readonly KnownItem[];
+    /** The stickies the talk points at. */
     readonly stickies: readonly KnownSticky[];
+    /**
+     * The workspace's stickies of the stormings the session looks at (`chooseStickies`), the same from one extraction to
+     * the next while the view and the stormings stay: `about` is chosen among them by meaning. Absent from a server
+     * before them.
+     */
+    readonly workspaceStickies?: readonly WorkspaceSticky[];
+    /** The workspace's stickies whose label the talk writes out without pointing at them (`mentionedStickies`). */
+    readonly mentioned?: readonly string[];
 }
 
 // ---- the agent API's extraction entry point --------------------------------------------------------------------------
@@ -372,7 +383,11 @@ export interface ExtractedOperations {
 export function operationsOf(reply: ExtractorReply, input: ExtractionInput): ExtractedOperations {
     const messages = new Map(input.messages.map((m) => [m.key, m]));
     const items = new Map(input.items.map((i) => [i.key, i]));
-    const stickies = new Set([...input.stickies.map((s) => s.ref), ...input.items.flatMap((i) => i.about)]);
+    const stickies = new Set([
+        ...input.stickies.map((s) => s.ref),
+        ...(input.workspaceStickies ?? []).map((s) => s.ref),
+        ...input.items.flatMap((i) => i.about),
+    ]);
     const operations: Knowledge.Operation[] = [];
     const rejected: ReplyProblem[] = [...reply.rejected];
     const session = Knowledge.makeSessionRef(input.session);
@@ -415,7 +430,7 @@ export function operationsOf(reply: ExtractorReply, input: ExtractionInput): Ext
         for (const a of f.about) {
             const ref = Knowledge.makeStickyRef(a);
             if (!ref.ok || !stickies.has(a)) {
-                rejected.push({ path: `${path}.about`, message: `${a} is not a sticky of the talk; left out.` });
+                rejected.push({ path: `${path}.about`, message: `${a} is not a sticky that was given; left out.` });
                 continue;
             }
             if (!about.includes(ref.value)) about.push(ref.value);

@@ -7,7 +7,7 @@
 // came; the light model (through the extractor role's entry point, as a `gate` job), given the new messages with the
 // talk just before them (`gateContextMinutes`) and the stickies' names, which stops only when sure there is no finding;
 // and the extractor, given the messages with the talk just before them (`contextMinutes`), the light model's named
-// messages marked, the items made in this session and those about the stickies the talk points at. The extractor
+// messages marked, the workspace's stickies and the items. The extractor
 // replies with operations (`domain/extractor.ts`); the guards sort them (`domain/guards.ts`); what applies is sent to
 // the store with the idempotency key of the session and the extraction's number. A stop at the first two stages moves
 // the checkpoint past the messages, as an extraction that found nothing.
@@ -23,6 +23,14 @@
 // the stage it reached, the messages stage 1 counted, the light model's verdict, and each model's tokens in and out,
 // cache read and written, and the dollars Claude Code reports — so that the light model's misses and savings can be
 // checked.
+//
+// The stickies: those the talk points at (`#`), and the workspace's of the stormings the session looks at
+// (`domain/stickies.ts`: the storming open on the facilitator's page, the current journey's, else all, capped), read
+// from the session (`workspace`) once per extraction and given to both models — the light model their names — so that
+// the extractor can say what a finding is about by meaning when nobody pointed at a sticky. The items given are bounded
+// (`maxItems`), in this order: those made in this session (an update rewrites them), those about the stickies the talk
+// points at, those about the workspace's stickies the new messages write out by label (`mentionedStickies`). A search by
+// the messages' words is not used: the stores match every word of a query, and Japanese is not written in words.
 //
 // The facilitator may switch the extraction off for the session and on again (the scheduler). Switched on again, the
 // messages since the checkpoint older than `contextMinutes` are skipped (`resume`): the extraction picks up the talk of
@@ -43,6 +51,7 @@ import {
 import { droppedOutcome, guardExtraction, type HeldOperation, nextSettleAt, settleHeld } from '../domain/guards.js';
 import { type GateInput, type GateReading, type GateVerdict, mechanicalStage, readGateReply } from '../domain/stages.js';
 import type { ExtractionTrigger, TalkState } from '../domain/timing.js';
+import { chooseStickies, mentionedStickies, type StickyBasis, type StickyFocus, type WorkspaceSticky } from '../domain/stickies.js';
 import { idempotencyKey } from '../domain/extraction.js';
 
 /** A message of the session, as the session database holds it. */
@@ -123,6 +132,11 @@ export interface ExtractionCost {
     readonly messages: number;
     readonly newMessages: number;
     readonly items: number;
+    /**
+     * The workspace's stickies given (when the session has a workspace): how many, chosen how, how many the cap left out,
+     * how many the new messages write out.
+     */
+    readonly stickies?: { readonly given: number; readonly basis: StickyBasis; readonly left: number; readonly mentioned: number };
     /** The operations the reply made, those applied now, held, dropped by the guards or the store, rejected as malformed. */
     readonly proposed: number;
     readonly applied: number;
@@ -154,6 +168,8 @@ export interface SessionExtractionDeps {
     readonly store: KnowledgeStore;
     readonly checkpoints: ExtractionCheckpoints;
     readonly talk: SessionTalk;
+    /** What the session looks at, for the workspace's stickies (`domain/stickies.ts`); absent: only those the talk points at. */
+    readonly workspace?: () => Promise<StickyFocus | undefined>;
     readonly extractor: Extractor;
     readonly config: ResolvedExtractionConfig;
     readonly now: () => Date;
@@ -165,7 +181,12 @@ export interface SessionExtractionDeps {
     readonly maxItems?: number;
     /** The most new messages one extraction takes (default 150; the rest wait for the next). */
     readonly maxNewMessages?: number;
+    /** The most of the workspace's stickies given (default `MAX_WORKSPACE_STICKIES`). */
+    readonly maxStickies?: number;
 }
+
+/** The most stickies written out by label whose items are looked up. */
+const MAX_MENTIONED = 20;
 
 /** How an extraction went. */
 export type ExtractionRunOutcome =
@@ -225,13 +246,29 @@ function stickiesOf(messages: readonly SessionMessage[]): KnownSticky[] {
     return [...stickies.values()];
 }
 
-/** What the light model is given: the talk keyed `m1…`, the names of its stickies (their labels, else their refs). */
-export function gateInput(session: string, number: number, context: readonly SessionMessage[], fresh: readonly SessionMessage[]): GateInput {
-    const names = [...new Set(stickiesOf([...context, ...fresh]).map((s) => s.label ?? s.ref))];
-    return { session, number, messages: talkMessages(context, fresh), stickies: names };
+/** A sticky's name: its label, else its ref. */
+const nameOf = (s: { readonly ref: string; readonly label?: string }): string => s.label ?? s.ref;
+
+/**
+ * What the light model is given: the talk keyed `m1…`, the names of its stickies (their labels, else their refs), and
+ * the names of the workspace's stickies the extractor is given too.
+ */
+export function gateInput(
+    session: string,
+    number: number,
+    context: readonly SessionMessage[],
+    fresh: readonly SessionMessage[],
+    workspace: readonly WorkspaceSticky[] = [],
+): GateInput {
+    const names = [...new Set(stickiesOf([...context, ...fresh]).map(nameOf))];
+    const known = [...new Set(workspace.map(nameOf))];
+    return { session, number, messages: talkMessages(context, fresh), stickies: names, ...(known.length > 0 && { workspaceStickies: known }) };
 }
 
-/** What the extractor is given: the talk keyed `m1…` (`likely`: the new messages the light model named), the items keyed `k1…`, the stickies of the talk. */
+/**
+ * What the extractor is given: the talk keyed `m1…` (`likely`: the new messages the light model named), the items keyed
+ * `k1…`, the stickies of the talk, the workspace's stickies and those of them the new messages write out.
+ */
 export function extractionInput(
     session: string,
     number: number,
@@ -239,6 +276,8 @@ export function extractionInput(
     fresh: readonly SessionMessage[],
     items: readonly Knowledge.LiveKnowledgeItem[],
     likely: ReadonlySet<string> = new Set(),
+    workspace: readonly WorkspaceSticky[] = [],
+    mentioned: readonly string[] = [],
 ): ExtractionInput {
     const messages = talkMessages(context, fresh, likely);
     const keys = new Map(items.map((item, i) => [item.id, `k${i + 1}`]));
@@ -256,7 +295,15 @@ export function extractionInput(
         thisSession: item.createdIn === session,
         createdAt: item.createdAt.toISOString(),
     }));
-    return { session, number, messages, items: known, stickies: stickiesOf([...context, ...fresh]) };
+    return {
+        session,
+        number,
+        messages,
+        items: known,
+        stickies: stickiesOf([...context, ...fresh]),
+        ...(workspace.length > 0 && { workspaceStickies: workspace }),
+        ...(mentioned.length > 0 && { mentioned }),
+    };
 }
 
 export function createSessionExtraction(deps: SessionExtractionDeps): SessionExtraction {
@@ -267,6 +314,7 @@ export function createSessionExtraction(deps: SessionExtractionDeps): SessionExt
     const maxFailures = deps.maxFailures ?? 2;
     const maxItems = deps.maxItems ?? 60;
     const maxNew = deps.maxNewMessages ?? 150;
+    const maxStickies = deps.maxStickies;
     const sessionRef = Knowledge.makeSessionRef(session);
     if (!sessionRef.ok) throw new Error(`Not a session reference: ${session}`);
 
@@ -293,19 +341,38 @@ export function createSessionExtraction(deps: SessionExtractionDeps): SessionExt
         }
     };
 
-    /** The items the extractor is given: this session's first, then those about the stickies, newest first, at most `maxItems`. */
-    const itemsFor = async (stickies: readonly string[]): Promise<readonly Knowledge.LiveKnowledgeItem[]> => {
-        const refs = stickies.flatMap((s) => {
-            const r = Knowledge.makeStickyRef(s);
-            return r.ok ? [r.value] : [];
-        });
-        const [mine, about] = await Promise.all([
+    /**
+     * The items the extractor is given, at most `maxItems`: this session's first, then those about the stickies the talk
+     * points at, then those about the stickies it writes out (each newest first).
+     */
+    const itemsFor = async (targeted: readonly string[], mentioned: readonly string[]): Promise<readonly Knowledge.LiveKnowledgeItem[]> => {
+        const refsOf = (stickies: readonly string[]): Knowledge.StickyRef[] =>
+            stickies.flatMap((s) => {
+                const r = Knowledge.makeStickyRef(s);
+                return r.ok ? [r.value] : [];
+            });
+        const aboutOf = (refs: readonly Knowledge.StickyRef[]): Promise<readonly Knowledge.LiveKnowledgeItem[]> =>
+            refs.length ? store.about(project, refs) : Promise.resolve([]);
+        const [mine, pointed, written] = await Promise.all([
             store.search(project, { session: sessionRef.value, limit: maxItems }),
-            refs.length ? store.about(project, refs) : Promise.resolve([]),
+            aboutOf(refsOf(targeted)),
+            aboutOf(refsOf(mentioned)),
         ]);
         const byId = new Map<string, Knowledge.LiveKnowledgeItem>();
-        for (const item of [...mine.items, ...about]) if (!byId.has(item.id)) byId.set(item.id, item);
+        for (const item of [...mine.items, ...pointed, ...written]) if (!byId.has(item.id)) byId.set(item.id, item);
         return [...byId.values()].slice(0, maxItems);
+    };
+
+    /** The workspace's stickies for this extraction (none when the session has no workspace or it cannot be read). */
+    const workspaceFor = async (targeted: readonly string[], number: number): Promise<ReturnType<typeof chooseStickies> | undefined> => {
+        if (!deps.workspace) return undefined;
+        try {
+            const focus = await deps.workspace();
+            return focus && chooseStickies(focus, targeted, maxStickies);
+        } catch (e) {
+            log(`knowledge: extraction ${number}: the workspace's stickies could not be read (${message(e)}); only those the talk points at`);
+            return undefined;
+        }
     };
 
     const extraction: SessionExtraction = {
@@ -371,8 +438,14 @@ export function createSessionExtraction(deps: SessionExtractionDeps): SessionExt
             const base = { session, number, trigger, at: started, ...counts, newMessages: fresh.length };
             if (!mechanical.go) return stop('mechanical', { ...base, stage: 'mechanical', messages: 0, items: 0, ...nothingDone });
 
+            // the stickies: those the talk points at, the workspace's (the same for both models)
+            const context = within(contextMs);
+            const targeted = [...new Set([...context, ...fresh].flatMap((m) => m.stickies.map((s) => s.ref)))];
+            const chosen = await workspaceFor(targeted, number);
+            const workspace = chosen?.stickies ?? [];
+
             // stage 2: the light model
-            const asked = gateInput(session, number, within(gateContextMs), fresh);
+            const asked = gateInput(session, number, within(gateContextMs), fresh, workspace);
             const gated = await deps.extractor.gate(asked);
             if (gated.kind === 'unavailable') return 'unavailable';
             const reading: GateReading =
@@ -392,16 +465,21 @@ export function createSessionExtraction(deps: SessionExtractionDeps): SessionExt
             if (reading.verdict === 'no') return stop('gate', { ...base, stage: 'gate', gate, messages: 0, items: 0, ...nothingDone });
 
             // stage 3: the extractor, the messages the light model named first
-            const context = within(contextMs);
-            const stickies = [...new Set([...context, ...fresh].flatMap((m) => m.stickies.map((s) => s.ref)))];
+            const pointedAt = new Set(targeted);
+            const mentioned = mentionedStickies(
+                workspace,
+                fresh.map((m) => m.text),
+            )
+                .filter((r) => !pointedAt.has(r))
+                .slice(0, MAX_MENTIONED);
             let items: readonly Knowledge.LiveKnowledgeItem[];
             try {
-                items = await itemsFor(stickies);
+                items = await itemsFor(targeted, mentioned);
             } catch (e) {
                 log(`knowledge: the items could not be read for an extraction (${message(e)})`);
                 return 'store-failed';
             }
-            const input = extractionInput(session, number, context, fresh, items, new Set(reading.named));
+            const input = extractionInput(session, number, context, fresh, items, new Set(reading.named), workspace, mentioned);
             const answer = await deps.extractor.extract(input);
             if (answer.kind === 'unavailable') return 'unavailable';
             const result = answer.result;
@@ -414,6 +492,7 @@ export function createSessionExtraction(deps: SessionExtractionDeps): SessionExt
                 ...(result.usage && { usage: result.usage }),
                 messages: input.messages.length,
                 items: input.items.length,
+                ...(chosen && { stickies: { given: chosen.stickies.length, basis: chosen.basis, left: chosen.left, mentioned: mentioned.length } }),
             };
 
             if (result.error !== undefined) {
@@ -531,7 +610,11 @@ export function costLine(cost: ExtractionCost): string {
             const what = cost.error
                 ? `failed (${cost.error})`
                 : `${cost.proposed} proposed: ${cost.applied} applied, ${cost.held} held, ${cost.dropped} dropped, ${cost.rejected} rejected`;
-            return `${head}${cost.newMessages} new of ${cost.messages} messages, ${cost.items} items): ${what}${turnText(cost.usage, cost.durationMs, cost.model)}${
+            const st = cost.stickies;
+            const stickies = st
+                ? `, ${st.given} stickies (${st.basis === 'focus' ? 'the stormings looked at' : 'all stormings'}${st.left ? `, ${st.left} left out` : ''}; ${st.mentioned} written out)`
+                : '';
+            return `${head}${cost.newMessages} new of ${cost.messages} messages, ${cost.items} items${stickies}): ${what}${turnText(cost.usage, cost.durationMs, cost.model)}${
                 gate ? `; ${gate}` : ''
             }`;
         }
