@@ -529,7 +529,10 @@ assumed, and to answer its questions by choosing. The reply is now structured da
 - **Principles.** Facts are never the AI's: success or failure, the files changed, `dt fmt`/`dt check` and the
   diagnostics are measured by the pipeline and the server as before. The reply is untrusted input: validated against
   its shape and limits on the subscriber and again on the server, stored only when valid, and shown as plain text (no
-  HTML, no markdown). A reply that is missing or invalid never fails a run: what can be read is kept (the outcome, a
+  HTML, no markdown). (*Amended*, decided by the maintainer (2026-11-05): the run card's AI texts — the answer, the
+  summaries and a question asked without the structured form — are shown as the chat's Markdown, like the answerer's
+  messages since a590e8c8 ("render markdown in ai answers"): as React elements, never HTML, every heading level shown
+  as one; the short texts — notes, assumptions, structured questions and their options — stay plain.) A reply that is missing or invalid never fails a run: what can be read is kept (the outcome, a
   summary within the limit, a clarification's question text), else nothing.
 - **Shape** (what the AI returns): `{ outcome: done | clarification | declined, summary, requests: [{ request,
   status: done | partial | skipped | question, note? }], questions?: [{ id, text, requests?, options: [{ id, label,
