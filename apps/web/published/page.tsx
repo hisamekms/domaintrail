@@ -3,7 +3,7 @@
 // search and filters, the items about stickies missing from the drawing apart, and the date of the drawing. It is the
 // Live View's canvas and knowledge panels in a read-only mode: nothing of the drawing changes here; the knowledge is
 // corrected and deleted as in a session (section 7), with 元に戻す. There is no session: no chat, no hotspot request.
-import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useState, type ReactElement } from 'react';
 import { Microscope, PanelLeftOpen, Telescope, X, type LucideIcon } from 'lucide-react';
 import type { MissingStickies, PublishedEntry, PublishedLevel, PublishedStorming } from '@domaintrail/knowledge';
 import { PUBLISHED_LEVELS } from '@domaintrail/knowledge';
@@ -208,29 +208,7 @@ function Page({ theme, mode }: { theme: 'light' | 'dark'; mode: ReturnType<typeo
                                     {entries?.length === 0 && <div className="empty">{t.noStormings}</div>}
                                 </div>
                             </section>
-                            <aside className="published-detail">
-                                {selectedSticky ? (
-                                    <div className="inspector">
-                                        <div className="inspector-head published-detail-head">
-                                            <h2>{knowledge.label(selectedSticky)}</h2>
-                                            <button
-                                                type="button"
-                                                className="icon-button"
-                                                aria-label={t.closeDetail}
-                                                data-tooltip={t.closeDetail}
-                                                onClick={() => canvas?.selectNone()}
-                                            >
-                                                <X size={16} aria-hidden />
-                                            </button>
-                                        </div>
-                                        <div className="inspector-body">
-                                            <StickyKnowledge key={selectedSticky} sticky={selectedSticky} />
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <p className="muted published-pick">{t.pick}</p>
-                                )}
-                            </aside>
+                            <StickyDetail sticky={selectedSticky} onClose={() => canvas?.selectNone()} />
                         </div>
                         <KnowledgeNotice />
                     </KnowledgeContext.Provider>
@@ -247,6 +225,31 @@ function Page({ theme, mode }: { theme: 'light' | 'dark'; mode: ReturnType<typeo
             )}
             <Tooltips />
         </div>
+    );
+}
+
+/**
+ * The detail at the right: the selected sticky's knowledge, closed (selecting nothing) with ✕. Nothing while no sticky
+ * is selected: the canvas takes the width, and no line says what selecting does (the dots on the stickies do).
+ */
+export function StickyDetail({ sticky, onClose }: { readonly sticky: string | undefined; readonly onClose: () => void }): ReactElement | null {
+    const t = useT().published;
+    const knowledge = useContext(KnowledgeContext);
+    if (!sticky) return null;
+    return (
+        <aside className="published-detail">
+            <div className="inspector">
+                <div className="inspector-head published-detail-head">
+                    <h2>{knowledge?.label(sticky) ?? sticky}</h2>
+                    <button type="button" className="icon-button" aria-label={t.closeDetail} data-tooltip={t.closeDetail} onClick={onClose}>
+                        <X size={16} aria-hidden />
+                    </button>
+                </div>
+                <div className="inspector-body">
+                    <StickyKnowledge key={sticky} sticky={sticky} />
+                </div>
+            </div>
+        </aside>
     );
 }
 
