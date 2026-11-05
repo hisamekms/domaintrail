@@ -62,7 +62,6 @@ function inspect(after: DomainModel, before: DomainModel | null, selected: strin
         onFocusContext: () => {},
         backTo: undefined,
         onBack: () => {},
-        onClose: () => {},
     };
     return renderToStaticMarkup(<Inspector {...props} />);
 }

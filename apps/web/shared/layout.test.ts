@@ -51,6 +51,19 @@ describe('the keyboard on a resizer', () => {
         expect(keyedSize('ArrowLeft', false, 300, detail)).toBeUndefined();
         expect(keyedSize('ArrowLeft', false, 380, { direction: 'x', invert: true, min: 300, max: 700 })).toBe(380 + KEY_STEP);
     });
+
+    test('a pane at its minimum asked for less (the shrinking arrow, or Home): the tree over the detail folds on it', async () => {
+        const { shrinksPastMin } = await import('./layout');
+        const tree = { direction: 'y' as const, min: 96 };
+        expect(shrinksPastMin('ArrowUp', 96, tree)).toBe(true);
+        expect(shrinksPastMin('Home', 96, tree)).toBe(true);
+        // above its minimum, the key only steps it; the growing arrow never folds
+        expect(shrinksPastMin('ArrowUp', 112, tree)).toBe(false);
+        expect(shrinksPastMin('ArrowDown', 96, tree)).toBe(false);
+        expect(shrinksPastMin('End', 96, tree)).toBe(false);
+        // a pane at the bottom shrinks with ↓
+        expect(shrinksPastMin('ArrowDown', 140, { direction: 'y', invert: true, min: 140 })).toBe(true);
+    });
 });
 
 describe('the sizes remembered per browser', () => {
@@ -62,11 +75,11 @@ describe('the sizes remembered per browser', () => {
     test('stored as JSON and read back; null (the default size) too', async () => {
         const { readStored, writeStored } = await import('./layout');
         const storage = memory();
-        writeStored('domaintrail.layout.detailHeight', 320, storage);
-        expect(storage.get('domaintrail.layout.detailHeight')).toBe('320');
-        expect(readStored<number | null>('domaintrail.layout.detailHeight', null, storage)).toBe(320);
-        writeStored('domaintrail.layout.detailHeight', null, storage);
-        expect(readStored<number | null>('domaintrail.layout.detailHeight', 7, storage)).toBeNull();
+        writeStored('domaintrail.layout.treeHeight', 320, storage);
+        expect(storage.get('domaintrail.layout.treeHeight')).toBe('320');
+        expect(readStored<number | null>('domaintrail.layout.treeHeight', null, storage)).toBe(320);
+        writeStored('domaintrail.layout.treeHeight', null, storage);
+        expect(readStored<number | null>('domaintrail.layout.treeHeight', 7, storage)).toBeNull();
         expect(readStored('domaintrail.layout.other', 260, storage)).toBe(260);
     });
 
@@ -90,17 +103,17 @@ describe('the sizes remembered per browser', () => {
 });
 
 describe("the left column's split", () => {
-    test('the detail takes its share of the column until dragged; each part keeps its minimum', async () => {
-        const { DETAIL_MIN, DETAIL_SHARE, NAVIGATOR_MIN, detailMax, detailSize } = await import('../app/panes');
-        expect(detailSize(null, 800)).toBe(Math.round(800 * DETAIL_SHARE));
-        expect(detailSize(300, 800)).toBe(300);
-        // dragged too low or too high: within the detail's minimum and the room the navigator leaves
-        expect(detailSize(50, 800)).toBe(DETAIL_MIN);
-        expect(detailSize(790, 800)).toBe(800 - NAVIGATOR_MIN);
-        expect(detailMax(800)).toBe(800 - NAVIGATOR_MIN);
-        // a column not laid out yet, or too short for both: the detail keeps its minimum
-        expect(detailSize(null, 0)).toBe(DETAIL_MIN);
-        expect(detailSize(400, 200)).toBe(DETAIL_MIN);
+    test('the tree takes its share of the column until dragged; each part keeps its minimum', async () => {
+        const { DETAIL_MIN, TREE_SHARE, TREE_MIN, treeMax, treeSize } = await import('../app/panes');
+        expect(treeSize(null, 800)).toBe(Math.round(800 * TREE_SHARE));
+        expect(treeSize(300, 800)).toBe(300);
+        // dragged too low or too high: within the tree's minimum and the room the detail keeps
+        expect(treeSize(50, 800)).toBe(TREE_MIN);
+        expect(treeSize(790, 800)).toBe(800 - DETAIL_MIN);
+        expect(treeMax(800)).toBe(800 - DETAIL_MIN);
+        // a column not laid out yet, or too short for both: the tree keeps its minimum
+        expect(treeSize(null, 0)).toBe(TREE_MIN);
+        expect(treeSize(400, 200)).toBe(TREE_MIN);
     });
 });
 

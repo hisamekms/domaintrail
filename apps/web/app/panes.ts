@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { InspectorTab } from '../inspector';
 import { useLegends, type Legends } from './legends';
-import { clampSize, usePersistentState } from '../shared/layout';
+import { clampSize, removeStored, usePersistentState } from '../shared/layout';
 import { effectiveLayout, keptOverrides, NO_OVERRIDES, type Overrides } from './responsive';
 import { scaledSize } from './text-size';
 
@@ -14,7 +14,7 @@ export type LeftView = 'tree' | 'problems' | 'changes';
  * (`responsive.ts`); setting it then changes what is shown only, not what is saved.
  */
 export interface Panes {
-    /** The left column shows the navigator and the detail (else its activity bar only). */
+    /** The left column shows the navigator (and, under the tree, the detail; else its activity bar only). */
     explorerOpen: boolean;
     setExplorerOpen: (open: boolean) => void;
     explorerWidth: number;
@@ -23,13 +23,17 @@ export interface Panes {
     leftView: LeftView;
     /** Opens the left column on `view`. */
     showLeft: (view: LeftView) => void;
-    /** The detail (the inspector, under the navigator) is open; the left column must be open too for it to show. */
-    inspectorOpen: boolean;
-    /** Opening the detail opens the left column too. */
-    setInspectorOpen: (open: boolean) => void;
-    /** The detail's height as the reader dragged it (px), or null for its default share of the column. */
-    detailHeight: number | null;
-    setDetailHeight: (height: number | null) => void;
+    /**
+     * Shows the detail (the inspector): it is under the tree only (the other lists take the whole column), so this opens
+     * the left column on the tree.
+     */
+    showInspector: () => void;
+    /** The tree's height over the detail as the reader dragged it (px), or null for its default share of the column. */
+    treeHeight: number | null;
+    setTreeHeight: (height: number | null) => void;
+    /** The tree is folded to its head line (by the reader only), the detail taking the rest of the column. */
+    treeFolded: boolean;
+    setTreeFolded: (folded: boolean) => void;
     /** The conversation pillar at the right end (a session's chat); never open without one. */
     conversationOpen: boolean;
     setConversationOpen: (open: boolean) => void;
@@ -40,7 +44,7 @@ export interface Panes {
     legends: Legends;
     inspectorTab: InspectorTab;
     setInspectorTab: (tab: InspectorTab) => void;
-    /** Opens the detail on `tab` (and the left column with it). */
+    /** Opens the detail on `tab` (and the left column on the tree with it). */
     openInspector: (tab: InspectorTab) => void;
 }
 
@@ -63,33 +67,38 @@ export function paneSize(saved: number | null, base: number, scale: number): num
     return saved ?? scaledSize(base, scale);
 }
 
-/** The left column's split: the detail takes this share of it by default, and each part keeps at least its minimum (px). */
-export const DETAIL_SHARE = 0.55;
+/**
+ * The tree's split over the detail: the tree takes this share of the column by default, and each part keeps at least its
+ * minimum (px); a tree dragged under half its minimum folds to its head line.
+ */
+export const TREE_SHARE = 0.45;
+export const TREE_MIN = 96;
 export const DETAIL_MIN = 140;
-export const NAVIGATOR_MIN = 96;
 
-/** The most the detail can take of a column `column` px high: all but the navigator's minimum. */
-export function detailMax(column: number): number {
-    return Math.max(DETAIL_MIN, column - NAVIGATOR_MIN);
+/** The most the tree can take of a column `column` px high: all but the detail's minimum. */
+export function treeMax(column: number): number {
+    return Math.max(TREE_MIN, column - DETAIL_MIN);
 }
 
 /**
- * The detail's height in a column `column` px high: the dragged one (`saved`), else its default share, kept within its
- * minimum and the room the navigator leaves (a dragged height is kept, and shown again once the column is tall enough).
+ * The tree's height in a column `column` px high: the dragged one (`saved`), else its default share, kept within its
+ * minimum and the room the detail leaves (a dragged height is kept, and shown again once the column is tall enough).
  */
-export function detailSize(saved: number | null, column: number): number {
-    return clampSize(saved ?? column * DETAIL_SHARE, DETAIL_MIN, detailMax(column));
+export function treeSize(saved: number | null, column: number): number {
+    return clampSize(saved ?? column * TREE_SHARE, TREE_MIN, treeMax(column));
 }
 
 /**
- * The detail's height as drawn (its outer box): the rail's (`rail`) while it is closed; open, its size in its column
- * (`detailSize`) once the column is measured, and none before (`column` 0), so that the first frame is drawn at the
- * measured split: a height that is not set is not one a transition starts from.
+ * The unfolded tree's height as drawn: its size in its column (`treeSize`) once the column is measured, and none before
+ * (`column` 0), so that the first frame is drawn at the measured split: a height that is not set is not one a transition
+ * starts from.
  */
-export function drawnDetailHeight(open: boolean, saved: number | null, column: number, rail: number): number | undefined {
-    if (!open) return rail;
-    return column > 0 ? detailSize(saved, column) : undefined;
+export function drawnTreeHeight(saved: number | null, column: number): number | undefined {
+    return column > 0 ? treeSize(saved, column) : undefined;
 }
+
+/** What the split was kept under when the detail closed to a rail under every list (no longer read). */
+const FORMER_SPLIT_KEYS = ['domaintrail.layout.inspector', 'domaintrail.layout.detailHeight'] as const;
 
 /**
  * `uiScale`: how much larger the UI is than at a 16px root (the text size), which the default sizes follow;
@@ -97,11 +106,14 @@ export function drawnDetailHeight(open: boolean, saved: number | null, column: n
  */
 export function usePanes(uiScale = 1, conversationOpenAtStart = false): Panes {
     const [leftSaved, setLeftSaved] = usePersistentState('domaintrail.layout.explorer', true);
-    const [inspectorOpen, setDetailOpen] = usePersistentState('domaintrail.layout.inspector', true);
     // the sizes are null until the reader drags the pane: then they follow the text size
     const [explorerWidthSaved, setExplorerWidth] = usePersistentState<number | null>('domaintrail.layout.explorerWidth', null);
     const [leftView, setLeftView] = usePersistentState<LeftView>('domaintrail.layout.leftView', 'tree');
-    const [detailHeight, setDetailHeight] = usePersistentState<number | null>('domaintrail.layout.detailHeight', null);
+    const [treeHeight, setTreeHeight] = usePersistentState<number | null>('domaintrail.layout.treeHeight', null);
+    const [treeFolded, setTreeFolded] = usePersistentState('domaintrail.layout.treeFolded', false);
+    useEffect(() => {
+        for (const key of FORMER_SPLIT_KEYS) removeStored(key);
+    }, []);
     const [conversationOpen, setConversationOpen] = useState(conversationOpenAtStart);
     const [conversationWidthSaved, setConversationWidth] = usePersistentState<number | null>('domaintrail.layout.conversationWidth', null);
     const legends = useLegends();
@@ -123,17 +135,14 @@ export function usePanes(uiScale = 1, conversationOpenAtStart = false): Panes {
         if (forced.left) setOverrides((o) => ({ ...o, left: open }));
         else setLeftSaved(open);
     };
-    const setInspectorOpen = (open: boolean): void => {
-        setDetailOpen(open);
-        if (open && !layout.left) setExplorerOpen(true);
-    };
-    const openInspector = (tab: InspectorTab): void => {
-        setInspectorTab(tab);
-        setInspectorOpen(true);
-    };
     const showLeft = (view: LeftView): void => {
         setLeftView(view);
         setExplorerOpen(true);
+    };
+    const showInspector = (): void => showLeft('tree');
+    const openInspector = (tab: InspectorTab): void => {
+        setInspectorTab(tab);
+        showInspector();
     };
     return {
         explorerOpen: layout.left,
@@ -142,10 +151,11 @@ export function usePanes(uiScale = 1, conversationOpenAtStart = false): Panes {
         setExplorerWidth,
         leftView,
         showLeft,
-        inspectorOpen,
-        setInspectorOpen,
-        detailHeight,
-        setDetailHeight,
+        showInspector,
+        treeHeight,
+        setTreeHeight,
+        treeFolded,
+        setTreeFolded,
         conversationOpen,
         setConversationOpen,
         conversationWidth,

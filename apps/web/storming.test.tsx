@@ -14,6 +14,7 @@ import {
     StormingDetails,
     StormingFilter,
     StormingToolbar,
+    stormingSelectionTitle,
     type StormingChoice,
     type StormingDetailSession,
 } from './storming';
@@ -283,5 +284,15 @@ describe('a storming with stages', () => {
         );
         expect(exception).toContain('aria-label="Returns to"');
         expect(exception).toContain('aria-label="Show this timeline"');
+    });
+});
+
+describe('a storming selection’s name (the folded tree’s head line)', () => {
+    test('its label or ID by the display mode, the storming’s own for the storming; its ID when it is not found', async () => {
+        const { stormings } = await viewService().refresh();
+        expect(stormingSelectionTitle(stormings, 'es/DeliveryCancellation/ShipmentCancelled', 'label')).toBe('配送がキャンセルされた');
+        expect(stormingSelectionTitle(stormings, 'es/DeliveryCancellation/ShipmentCancelled', 'name')).toBe('ShipmentCancelled');
+        expect(stormingSelectionTitle(stormings, 'es/DeliveryCancellation', 'label')).toBe('配送キャンセル');
+        expect(stormingSelectionTitle(stormings, 'es/DeliveryCancellation/Gone', 'label')).toBe('Gone');
     });
 });

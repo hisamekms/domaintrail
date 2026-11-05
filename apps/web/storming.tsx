@@ -116,6 +116,14 @@ function lookup(stormings: readonly StormingView[], id: string): { view: Stormin
     return declaration && { view, declaration };
 }
 
+/** A storming selection's name as the detail heads it (its label or ID, by the display mode); its ID when it is not found. */
+export function stormingSelectionTitle(stormings: readonly StormingView[], id: string, mode: DisplayMode): string {
+    const found = lookup(stormings, id);
+    if (!found) return stormingSelectionName(id);
+    const item = found.declaration ?? found.view.storming;
+    return nameIn(mode, item.id, item.label);
+}
+
 export const stormingExists = (stormings: readonly StormingView[], id: string): boolean => !!lookup(stormings, id);
 
 /** Where a storming element is written. */
