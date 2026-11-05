@@ -42,9 +42,20 @@ export interface KnowledgeView {
     setExtraction(enabled: boolean): Promise<void>;
     /** The conflicts being made hotspots, by `pairKey` (ADR 0031, section 4); none where there is no session. */
     readonly makingHotspots?: ReadonlySet<string>;
+    /**
+     * A source's message when this page's session holds it: who said it, named as the chat names them now (never stored
+     * in the item), and going to it in the chat; none for another session's message and on the Worker's page.
+     */
+    readonly messageOf?: (session: string, message: string) => SourceMessage | undefined;
     /** The last failure, said once. */
     readonly error: string | undefined;
     readonly setError: (error: string | undefined) => void;
+}
+
+/** A source's message in this page's session: who said it, and going to it in the chat. */
+export interface SourceMessage {
+    readonly who: string;
+    readonly open: () => void;
 }
 
 export const KnowledgeContext = createContext<KnowledgeView | undefined>(undefined);

@@ -4,12 +4,13 @@
 // with 直す / 画像を付ける / 消す; the deletion's 元に戻す; the dot and the conflict mark on the canvas, the stickies
 // an opened item lights up, and the session's extraction switch in the app bar (section 3).
 import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
-import { CircleAlert, Lightbulb, LightbulbOff, PanelLeftClose, Search } from 'lucide-react';
+import { Bot, CircleAlert, ImagePlus, Lightbulb, LightbulbOff, PanelLeftClose, Pencil, Search, Trash2 } from 'lucide-react';
 import { latestRevision } from '../session/state';
 import { sessionApi } from '../session/api';
 import { AI_NAME } from '../session/ai';
 import { useLang, useT } from '../i18n';
 import { Act } from '../shared/act';
+import { ReferenceLine, TargetLink } from '../shared/reference';
 import { useCanvasValue, type DiagramCanvas } from '../view/diagram';
 import { useKnowledgeApi } from './api';
 import {
@@ -43,6 +44,12 @@ const failure = (e: unknown): string => (e instanceof Error ? e.message : String
 function useShortDate(): (d: Date) => string {
     const lang = useLang();
     return (d) => d.toLocaleDateString(lang === 'ja' ? 'ja-JP' : 'en-US', { month: 'numeric', day: 'numeric' });
+}
+
+/** A moment, short with its time (11/5 18:02): a source's tooltip. */
+function useShortTime(): (d: Date) => string {
+    const lang = useLang();
+    return (d) => d.toLocaleString(lang === 'ja' ? 'ja-JP' : 'en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 /** 新しい順 / 種類の順: a segmented setting of the list. */
@@ -167,12 +174,20 @@ function Versions({ item, history }: { item: KnowledgeItem; history: readonly Pa
     );
 }
 
-/** An item opened: its images, quotes, the other stickies, its versions, and its actions. */
+/** A source as the chat's reference to a message: who said it (this session's) or when (another's), and its quote. */
+function SourceLine({ source }: { source: KnowledgeItem['sources'][number] }): ReactElement {
+    const view = useKnowledgeView();
+    const date = useShortDate();
+    const time = useShortTime();
+    const said = view?.messageOf?.(source.session, source.message);
+    return <ReferenceLine who={said?.who ?? date(source.at)} head={source.quote} tooltip={`${source.quote}\n${time(source.at)}`} onClick={said?.open} />;
+}
+
+/** An item opened: its images, sources, the other stickies, its versions, and its actions. */
 function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefined }): ReactElement {
     const t = useT().knowledge;
     const view = useKnowledgeView();
     const api = useKnowledgeApi();
-    const date = useShortDate();
     const [editing, setEditing] = useState(false);
     const [history, setHistory] = useState<readonly PastVersion[]>([]);
     const file = useRef<HTMLInputElement>(null);
@@ -203,33 +218,29 @@ function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefi
                 <img key={id} className="knowledge-image" src={api.imageUrl(id)} alt="" />
             ))}
             {item.sources.length > 0 && (
-                <ul className="knowledge-quotes" aria-label={t.sources}>
+                <div className="knowledge-sources" role="group" aria-label={t.sources}>
                     {item.sources.map((s) => (
-                        <li key={`${s.session}/${s.message}`}>
-                            <q>{s.quote}</q>
-                            <span className="knowledge-meta">{date(s.at)}</span>
-                        </li>
+                        <SourceLine key={`${s.session}/${s.message}`} source={s} />
                     ))}
-                </ul>
+                </div>
             )}
             {others.length > 0 && (
-                <span className="knowledge-links" aria-label={t.about}>
-                    {others.map((s) => (
-                        <Act key={s} kind="see" onClick={() => view?.select(s)}>
-                            {view?.label(s) ?? s}
-                        </Act>
-                    ))}
-                </span>
+                <div className="chat-targets" role="group" aria-label={t.about}>
+                    {others.map((s) => {
+                        const name = view?.label(s) ?? s;
+                        return <TargetLink key={s} name={name} tooltip={name} kind="DtesElement" onClick={() => view?.select(s)} />;
+                    })}
+                </div>
             )}
             <Versions item={item} history={history} />
             <span className="knowledge-actions">
-                <Act kind="open" onClick={() => setEditing(true)}>
+                <Act kind="open" icon={<Pencil size={12} aria-hidden />} onClick={() => setEditing(true)}>
                     {t.correct}
                 </Act>
-                <Act kind="open" onClick={() => file.current?.click()}>
+                <Act kind="open" icon={<ImagePlus size={12} aria-hidden />} onClick={() => file.current?.click()}>
                     {t.attachImage}
                 </Act>
-                <Act kind="decide-sub" onClick={() => void view?.remove(item.id)}>
+                <Act kind="decide-sub" icon={<Trash2 size={12} aria-hidden />} onClick={() => void view?.remove(item.id)}>
                     {t.delete}
                 </Act>
                 <input
@@ -269,7 +280,7 @@ export function ItemRow({
                 <span className="knowledge-item-main">
                     <span className="knowledge-text">{plainText(item.content.text)}</span>
                     <Meta item={item} />
-                    {!from && item.content.about.length > 0 && (
+                    {!from && !open && item.content.about.length > 0 && (
                         <span className="knowledge-about">{item.content.about.map((s) => view?.label(s) ?? s).join('、')}</span>
                     )}
                 </span>
@@ -344,14 +355,14 @@ export function ConflictBox({
             {[pair.a, pair.b].map((i) => isOpen(i.id) && <ItemDetail key={i.id} item={i} from={from} />)}
             {making ? (
                 <span className="knowledge-actions knowledge-making" role="status">
-                    <Act kind="send" disabled>
+                    <Act kind="send" icon={<Bot size={12} aria-hidden />} disabled>
                         {t.makingHotspot}
                     </Act>
                 </span>
             ) : (
                 <span className="knowledge-actions">
                     {api.hotspots && (
-                        <Act kind="send" onClick={() => void hotspot()}>
+                        <Act kind="send" icon={<Bot size={12} aria-hidden />} onClick={() => void hotspot()}>
                             {t.makeHotspot}
                         </Act>
                     )}

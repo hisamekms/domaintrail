@@ -5136,12 +5136,12 @@ del.was.block {
     padding: 0 var(--space-2);
     color: var(--muted);
 }
-.pane a.chat-target {
+a.chat-chip.chat-target {
     color: var(--accent);
     text-decoration: none;
     cursor: pointer;
 }
-.pane a.chat-target:hover {
+a.chat-chip.chat-target:hover {
     background: var(--hover);
 }
 .chat-target.stale .chat-chip-name {
@@ -7635,8 +7635,10 @@ button.add-to-request.added:hover {
     white-space: nowrap;
     text-overflow: ellipsis;
 }
-/* a posted reply: the run it replies to, one muted line at the top of the message (a quote's look) */
-.session-chat button.chat-reply-ref {
+/* a posted reply: the run it replies to, one muted line at the top of the message (a quote's look); a knowledge
+   item's source the same (a span: a message of another session, not on this page) */
+.chat-reply-ref,
+button.chat-reply-ref {
     display: flex;
     align-items: baseline;
     gap: var(--space-1);
@@ -7646,12 +7648,16 @@ button.add-to-request.added:hover {
     border: none;
     background: none;
     color: var(--muted);
+    font-family: inherit;
     font-size: var(--fs-small);
     line-height: var(--lh-small);
     text-align: left;
+    cursor: default;
+}
+button.chat-reply-ref {
     cursor: pointer;
 }
-.session-chat button.chat-reply-ref:hover .chat-reply-ref-head {
+button.chat-reply-ref:hover .chat-reply-ref-head {
     text-decoration: underline;
 }
 .chat-reply-ref-run {
@@ -9034,13 +9040,31 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
     margin: 0;
     padding: 0;
 }
+/* an item: its kind in the left column, the rest from the text's left edge (opened, its detail too) */
+.knowledge-item {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr) auto;
+    column-gap: var(--gap-inside);
+}
 .knowledge-item + .knowledge-item {
     border-top: 1px solid var(--border);
 }
+/* opened: one card, outlined, on a light wash; the rows around it stay flat */
+.knowledge-item.open {
+    margin: var(--space-1) 0;
+    padding: 0 var(--space-2) var(--space-2);
+    border: 1px solid var(--action);
+    border-radius: 8px;
+    background: var(--surface-muted);
+}
+.knowledge-item.open + .knowledge-item {
+    border-top: none;
+}
 .knowledge-item-head {
-    display: flex;
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: subgrid;
     align-items: baseline;
-    gap: var(--gap-inside);
     width: 100%;
     padding: var(--space-2) 0;
     border: none;
@@ -9055,7 +9079,7 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
 }
 .knowledge-kind {
     flex: none;
-    min-width: 3.5em;
+    min-width: 4em;
     font-size: var(--fs-small);
     font-weight: 700;
     color: var(--action);
@@ -9093,39 +9117,29 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
     align-self: center;
     color: var(--status-danger-ink);
 }
+.knowledge-item.open .knowledge-item-head:hover {
+    background: none;
+}
+.knowledge-item > .knowledge-detail,
+.knowledge-item > .knowledge-form {
+    grid-column: 2 / -1;
+    padding: 0;
+}
 .knowledge-detail {
     display: flex;
     flex-direction: column;
     gap: var(--gap-inside);
-    padding: 0 0 var(--space-3);
+}
+.knowledge-sources {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
 }
 .knowledge-image {
     max-width: 100%;
     border: 1px solid var(--border);
     border-radius: 4px;
 }
-.knowledge-quotes {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-}
-.knowledge-quotes li {
-    display: flex;
-    flex-direction: column;
-    padding-left: var(--space-2);
-    border-left: 2px solid var(--border);
-    color: var(--text-secondary);
-}
-.knowledge-quotes q::before {
-    content: '「';
-}
-.knowledge-quotes q::after {
-    content: '」';
-}
-.knowledge-links,
 .knowledge-actions,
 .knowledge-form-labels {
     display: flex;
