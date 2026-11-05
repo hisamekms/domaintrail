@@ -97,6 +97,7 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 - `dt generate ts` — check, then write the TypeScript (and the contract tests, if configured).
 - `dt show <name>` — one element, command or state resolved, with who uses it; read it instead of the `.dt` files.
 - `dt lsp` — language server over stdio: the diagnostics of `dt check`, definitions, references, hover, rename.
+- `dt mcp` — MCP server over stdio: the project's knowledge, read-only (`dt guide mcp`).
 - `dt open` — the Live View in the browser, with a chat to the AI; it runs until Ctrl+C, so run it in the background.
 - `dt export sources` / `svg` — the sources as one ZIP, for someone without the repository; a diagram as an SVG file.
 
@@ -3038,6 +3039,43 @@ extensions `.dt` and `.dtes`. For Claude Code, a plugin declares it in an `.lsp.
     "command": "dt",
     "args": ["lsp"],
     "extensionToLanguage": { ".dt": "domaintrail", ".dtes": "dtes" }
+  }
+}
+```
+
+<!-- topic: mcp -->
+## MCP server (knowledge for Claude Code)
+
+`dt mcp` is a Model Context Protocol server over stdin/stdout that gives Claude Code (or any MCP client) the project's
+knowledge — what was said and found in its sessions (ADR 0031) — read-only, from the store the config's `knowledge`
+names (`files`: the workspace's `knowledge/`; `cloudflare`: the Worker, with the service token that reads in
+`DOMAINTRAIL_KNOWLEDGE_CLIENT_ID` and `DOMAINTRAIL_KNOWLEDGE_CLIENT_SECRET`). Its tools:
+
+- `knowledge_for_element({ element })` — the items about an element, newest first, each with its labels, date and ID.
+  `element` is a sticky, `<Storming>.<LocalId>` (`Ordering.CreateSpecification`), or a `.dt` element prefixed with
+  `dt:` (`dt:Sales.Order.confirm`, `dt:Sales.Order`, `dt:Sales.OrderPlaced`), resolved through the stickies whose `ref`
+  is that element or one inside it. The tool to call before implementing an element.
+- `knowledge_search({ query, about, when, kind, origin, perspective, limit })` — every given filter holds: `query` full
+  text, `about` stickies or `dt:` elements, `when` / `kind` / `origin` one value or a list, `perspective` a role,
+  `limit` at most 50 (default 20).
+- `knowledge_get({ id, history })` — one item whole: its text, labels, stickies, conflicts and sources with their
+  quotes; with `history`, its earlier versions (the `files` store keeps none: `git log -p knowledge/<id>.md`).
+
+The stormings are read again on every call. A wrong input, an unknown item or a store that cannot be reached is an
+error of the tool, with its reason. Register it in Claude Code from the workspace (with `dt` on the `PATH`, or
+`npx dt mcp`):
+
+```sh
+claude mcp add domaintrail -- dt mcp
+```
+
+or, for everyone working in the repository, in `.mcp.json` at its root (add `"-r", "domain"` before `"mcp"` when the
+config is in `domain/`):
+
+```json
+{
+  "mcpServers": {
+    "domaintrail": { "command": "dt", "args": ["mcp"] }
   }
 }
 ```
