@@ -97,7 +97,7 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 - `dt generate ts` — check, then write the TypeScript (and the contract tests, if configured).
 - `dt show <name>` — one element, command or state resolved, with who uses it; read it instead of the `.dt` files.
 - `dt lsp` — language server over stdio: the diagnostics of `dt check`, definitions, references, hover, rename.
-- `dt mcp` — MCP server over stdio: the project's knowledge, read-only (`dt guide mcp`).
+- `dt mcp` — MCP server over stdio: the project's knowledge, read-only (`dt guide mcp`; knowledge: `dt guide knowledge`).
 - `dt publish` — the stormings to the knowledge store's Worker, for its read-only page; run by CI (`dt guide publish`).
 - `dt open` — the Live View in the browser, with a chat to the AI; it runs until Ctrl+C, so run it in the background.
 - `dt export sources` / `svg` — the sources as one ZIP, for someone without the repository; a diagram as an SVG file.
@@ -2897,7 +2897,7 @@ without your seeing it.
 ```
 
 **Knowledge: `knowledge`.** Where the knowledge taken from the sessions is kept, which project it belongs to, and when it
-is extracted from the talk. Every key is optional; with `cloudflare`, `project` and `url` are required.
+is extracted from the talk ([Knowledge from the sessions](#knowledge-from-the-sessions)). Every key is optional; with `cloudflare`, `project` and `url` are required.
 
 ```jsonc
 {
@@ -2924,13 +2924,7 @@ is extracted from the talk. Every key is optional; with `cloudflare`, `project` 
 }
 ```
 
-An extraction goes through three stages, so that the stronger model runs only when there is something to extract:
-messages that are surely nothing (empty, emoji only, a fixed acknowledgement) stop it without any model; then a light
-model (`agent.extract.gateModel`, Haiku unless configured) decides whether the new messages hold a finding, and stops
-it only when sure; then the extractor (`agent.extract.model`) extracts, the messages the light model named first. Each
-extraction's stages and what each model cost are recorded in the session database. Switched on again after being off,
-the extraction picks up the talk of the last `contextMinutes`, not everything said while it was off. The facilitator
-switches it with the 💡 in the Live View's app bar; the others see a 💡 there while it is on.
+What each store keeps, how the extraction decides and what deleting does: `dt guide knowledge`.
 
 The `cloudflare` store's Access service token is never in the file: dt reads it from the environment variables
 `DOMAINTRAIL_KNOWLEDGE_CLIENT_ID` and `DOMAINTRAIL_KNOWLEDGE_CLIENT_SECRET` (sent as `CF-Access-Client-Id` and
@@ -3054,8 +3048,113 @@ extensions `.dt` and `.dtes`. For Claude Code, a plugin declares it in an `.lsp.
 }
 ```
 
+<!-- topic: knowledge -->
+## Knowledge from the sessions
+
+A storming says what happens; the talk around it says why, how often, who said so, and what the AI found when asked.
+**Knowledge** keeps that, item by item, apart from the `.dtes` and `.dt` files and tied to their stickies (ADR 0031).
+The test for a piece of text: if it were deleted, would the drawing change? Then it belongs in the storming. If the
+drawing stays the same but reading or changing it correctly needs the text, it is knowledge.
+
+| | Storming (`.dtes`) | Knowledge |
+|---|---|---|
+| Holds | what happens, who does what, what reacts | why, how concretely, who said it, what was found |
+| Size | one short label per sticky | long, with numbers, exceptions, images |
+| Truth | the current agreement only (history in git) | dated: what was said stays said, even when later overturned |
+| Checked | references, types, the link to the `.dt` | only that the stickies it is about exist (K002) |
+| Written by | the AI tidies, people correct | taken from what people say and the AI answers; people delete what is wrong |
+
+**An item** holds one finding: its text (Markdown; images as `![…](image:img_…)`), the stickies it is `about`
+(`<Storming>.<LocalId>`, so that a label can be renamed in place), its **sources** (the session, the message, its time
+and a short quote, which lets a reader check the wording without the session database), a version, and the items it
+**conflicts with**. Four labels, fixed for now:
+
+| Label | Values |
+|---|---|
+| `when` | `as_is` AS-IS, `to_be` TO-BE, or none |
+| `kind` | `rule` ルール, `flow` 流れ, `example` 例, `term` 言葉, `pain` 困りごと, `want` 要望, `decision` 決定 |
+| `origin` | `said` 発言 (one person, not confirmed), `agreed` 合意 (several present agreed), `investigated` 調査 (the AI checked code or documents), `inferred` 推測 (the AI's hypothesis, said by nobody) |
+| `perspective` | a role (案件担当, 営業 …), never a person's name; optional |
+
+An item records what was said or found at a time; nothing marks it confirmed: `origin` tells how far to trust it. A
+`term` is about the words of the business; the `.dt` `terms` keep defining the model's.
+
+**Taken from the talk.** In a session (`dt open`, `dt collab`), the AI's **extractor** turns the talk into items: after
+30 seconds without a message following a person's message (`quietSeconds`), right after each answer of the AI, and when
+the session ends; at most once a minute (`minIntervalSeconds`). It is **off unless enabled**:
+`knowledge.extraction.enabled` gives the default, and the facilitator switches it for the session with the 💡 in the
+Live View's app bar (the others see a 💡 while it is on). Each extraction goes through three stages, so that the
+stronger model runs only when there is something to extract:
+
+1. messages that are surely nothing (empty, emoji only, a fixed acknowledgement) stop it, without any model;
+2. a light model (`agent.extract.gateModel`, Haiku unless configured), given the new messages, the talk of the last
+   `gateContextMinutes` and the stickies' names, says whether they hold a finding; it stops the extraction only when
+   sure;
+3. the extractor (`agent.extract.model`; no tools, a fresh Claude Code process each time) reads the new messages, the
+   talk of the last `contextMinutes`, the items made in this session and those about the stickies the talk points at,
+   and replies with operations: **add** an item, **addSource** (the same finding again; `said` may become `agreed`),
+   **update** (more precise) or **conflict** (both kept, linked).
+
+Each extraction's stages and what each model cost are recorded in the session database. Switched on again after being
+off, the extraction picks up the last `contextMinutes` of talk, not everything said while it was off. So that a remark
+in mid-talk does not become a conclusion:
+
+- add and addSource apply at once (a wrong item costs a deletion); update and conflict are **held**, unseen, and apply
+  only when the next extraction makes the same call or the topic stays quiet for `settleSeconds`; those still held when
+  the session ends are dropped;
+- an item made in this session is rewritten in place until the session ends; versions are kept for items of earlier
+  sessions (and for a person's correction);
+- a correction within the same stretch of talk is an update, not a conflict; questions and "maybe" are not extracted,
+  or get `inferred`; `agreed` only when the talk moved on without objection;
+- an extraction is sent as operations: one on an item a person corrected or deleted meanwhile is dropped, and the
+  person's change stands.
+
+Nobody approves item by item: everything extracted is kept, and what is wrong or unwanted is deleted afterwards.
+
+**Where it is kept: the store** (`knowledge.store`, see [Configuration](#configuration)):
+
+| | `files` (the default) | `cloudflare` |
+|---|---|---|
+| Where | the workspace's `knowledge/`, committed with the model | a Worker you deploy from DomainTrail's template: D1 and R2, behind Cloudflare Access |
+| Versions and audit | git's history; `knowledge/audit.jsonl` | the store's own (`?history=1`, `GET /audit`) |
+| Deleting | gone from the working tree, **not from git's history** | gone for good after the sweep (D1's Time Travel keeps 30 days) |
+| Read outside a session | the files, `dt mcp` | `dt mcp`, the Worker's page (`dt publish`) |
+| For | trying it out; projects where no personal data is spoken | projects where personal data may appear, and readers without the repository |
+
+What must be protected is **personal data, which must be deletable on request**; keeping knowledge on GitHub, showing
+it to developers and sending it to Anthropic's API are accepted. git cannot forget what was committed, so a project
+where a name, a phone number or a customer's details may be spoken uses `cloudflare`.
+
+With `files`, each item is `knowledge/<id>.md` (`kn_…`): a YAML front matter (its labels, `about`, conflicts, session,
+times and sources with their quotes) and the text, written by dt in a fixed order so that a diff shows what changed; its
+images are in `knowledge/images/`. `knowledge/audit.jsonl` (who changed what) and `knowledge/redactions.jsonl` (the
+redaction log, IDs only) are appended, and merge with `union` (`knowledge/.gitattributes`). Commit them with the
+model. A person may edit an item's file by hand; `dt check` reports one that does not read (K001), which the store
+skips and never writes over, and an `about` that names no sticky of the workspace (K002).
+
+With `cloudflare`, every clone and worktree that names the same `knowledge.project` and `knowledge.url` reads and
+writes the same knowledge. Deploying and upgrading the Worker, its Access application and service tokens:
+`node_modules/domaintrail/dist/knowledge-worker/README.md`.
+
+**Reading it.** In a session, the Live View marks the stickies that have knowledge, lists a sticky's items and every
+item in the ナレッジ tab ([the Live View](live-view.md#knowledge)). Outside one, Claude Code reads it through `dt mcp`
+(below), and with `cloudflare` the business reads it on the Worker's page (`dt publish`, below).
+
+**Conflicts.** Two items that contradict each other are linked and shown side by side, with ホットスポットにする (a
+message that asks the AI to add a hotspot) and 食い違いではない (the link removed from both). A conflict whose other side
+was deleted no longer shows.
+
+**Correcting and deleting.** Anyone who can open the project may correct (直す: text and labels, a new version) and
+delete (消す), in the Live View and on the Worker's page. Deleting hides the item from everyone at once, with 元に戻す
+for 10 seconds; then the store's **sweep** (the `files` store's: run by dt on its next write and every few minutes;
+the Worker's: a Cron Trigger every 5 minutes) removes every version and image of it, and appends the IDs of its source
+messages to the project's **redaction log**. Every dt of the project reads the log when it starts and every 3 minutes
+during a session, and redacts those messages (and the copies of their text) in its own session database, so that the
+sessions on other machines forget them too. With `files`, the item stays in the commits that had it: rewrite the
+history (and every clone) to forget it.
+
 <!-- topic: mcp -->
-## MCP server (knowledge for Claude Code)
+### MCP server (knowledge for Claude Code)
 
 `dt mcp` is a Model Context Protocol server over stdin/stdout that gives Claude Code (or any MCP client) the project's
 knowledge — what was said and found in its sessions (ADR 0031) — read-only, from the store the config's `knowledge`
@@ -3095,7 +3194,7 @@ config is in `domain/`):
 ```
 
 <!-- topic: publish -->
-## Publishing the stormings (the knowledge page)
+### Publishing the stormings (the knowledge page)
 
 With `knowledge.store: "cloudflare"`, the store's Worker also serves a read-only page behind the same Access: people
 from the business read the knowledge there at any time, on the canvas of a storming (ADR 0031, section 11). The
@@ -3107,8 +3206,13 @@ see the drawing that was agreed and merged. The same drawing published again cha
 ```sh
 dt publish                          # every storming
 dt publish --storming OrderToCash   # some of them
+dt publish --prune                  # then remove the stormings the workspace no longer has
 dt publish --out published/         # the forms as <ID>.json files, sent nowhere (any store)
 ```
+
+A storming removed or renamed in the workspace stays on the page until `dt publish --prune` removes it (`DELETE
+/published/<storming>`, a writing token only); the knowledge about its stickies stays, listed apart. `--prune` sends
+nothing while a `.dtes` file has an error, so that a storming that does not parse is never taken for removed.
 
 It sends the **writing** service token (`DOMAINTRAIL_KNOWLEDGE_CLIENT_ID` and `DOMAINTRAIL_KNOWLEDGE_CLIENT_SECRET`)
 to `knowledge.url`, so, like `dt open`, it publishes only with the workspace's settings approved: approved before, or

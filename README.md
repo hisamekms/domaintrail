@@ -98,7 +98,7 @@ installed). `dt collab` shares it with several people while the AI edits the mod
 Code (`dt agent` runs it alone, elsewhere), and every run leaves a revision to compare or restore. See [`dt guide session`](docs/guide.md#collaboration-sessions), [a first real run](docs/session-first-run.md)
 and, behind Cloudflare Access, [the access check](docs/session-access.md); over the internet without an account,
 [an invite link and your approval](docs/session-link.md) (`dt collab --tunnel`). Sessions are kept outside the
-repository, per user (`~/.local/state/domaintrail/`; `dt session prune` removes those of workspaces that are gone).
+repository, per user (`~/.local/state/domaintrail/`; `dt session prune` removes those of workspaces that are gone). What is said in them is kept as [knowledge](docs/guide.md#knowledge-from-the-sessions).
 
 ## Contributing
 
