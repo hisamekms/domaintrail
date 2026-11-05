@@ -9,7 +9,7 @@ import { Collaboration, err, ok, type Result } from '../generated/index.js';
 import { agentRunCommands, requestCommands, revisionCommands, sessionCommands } from '../domain/commands.js';
 import { approvalCommands, approvalOf } from '../domain/approvals.js';
 import { exclusiveGroup, markChange, markCommands, markKey, MAX_REACTION_EMOJI, reactionRoom } from '../domain/marks.js';
-import { elementChanges, type ElementChanges } from '../domain/changes.js';
+import { elementChanges, stormingElements, type ElementChanges, type StormingElements } from '../domain/changes.js';
 import { compareFiles, lineDiff, MAX_DIFF_BYTES, statusCounts, type FileComparison, type FileStatus, type LineDiff } from '../domain/compare.js';
 import { resolveAnswer, resolvePick, type AnswerData, type PickData } from '../domain/reply.js';
 import { boundChanges, previousRunIds, type ComparedChange, type PreviousRunChanges } from '../domain/previous-runs.js';
@@ -539,6 +539,11 @@ export interface CollaborationUseCases extends ConversationUseCases, InterviewUs
         readonly before: RevisionId;
         readonly after: RevisionId;
     }): Promise<Result<ElementChanges, NotFound | Collaboration.RevisionOfAnotherSession | BlobMissing>>;
+    /** The `.dtes` declarations of a revision of the session, by storming and local ID with their kind (its analysis kept as `modelChanges` keeps it). */
+    stormingElements(input: {
+        readonly session: SessionId;
+        readonly revision: RevisionId;
+    }): Promise<Result<StormingElements, NotFound | Collaboration.RevisionOfAnotherSession | BlobMissing>>;
     /**
      * The runs a run continues — those its messages reply to, then the one its answer answers, then the one it picked an
      * alternative of, as its frozen input names them — each with what it changed from its base to its result revision:
@@ -1575,6 +1580,19 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             // a blob missing now may be put back later: not kept
             if (!changes.ok) changesKept.delete(`${a.id}>${b.id}`);
             return changes;
+        },
+
+        async stormingElements({ session, revision }) {
+            const r = await uow.transaction((stores) => stores.revisions.load(revision));
+            if (!r) return err(notFound('Revision', revision));
+            if (r.session !== session) return err({ type: 'RevisionOfAnotherSession', revision });
+            const analysis = await analysisKept(r);
+            // a blob missing now may be put back later: not kept
+            if (!analysis.ok) {
+                analysesKept.delete(r.id);
+                return analysis;
+            }
+            return ok(stormingElements(analysis.value));
         },
 
         async previousRuns({ run, maxDiff }) {

@@ -4,8 +4,9 @@
  * ホットスポットにする pressed (its message sent, then the press kept, seen by every page), the facilitator queues the
  * message's run, and
  * - the run adds one hotspot: both items about it, their conflict unlinked, audited by the person who pressed, the press gone;
- * - the run adds two hotspots: nothing handed over, the press gone (the conflict gets its buttons back);
- * - the run declines: the same.
+ * - the run adds two hotspots: nothing handed over, the press gone (the conflict gets its buttons back, with why);
+ * - the run declines: the same;
+ * - the hotspot already exists and the run only names it in its reply: handed over to it.
  */
 import { afterAll, afterEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -70,7 +71,7 @@ const addHotspots = (...names: string[]): unknown[] => [
 ];
 
 describe('a conflict made a hotspot', () => {
-    test('one hotspot added: handed over; two added, or the run declined: the press cleared, the conflict kept', async () => {
+    test('one hotspot added, or an existing one only named: handed over; two added, or the run declined: the press cleared with why, the conflict kept', async () => {
         const root = await tempCopyOfExamples();
         dirs.push(root);
         const store = createFilesKnowledgeStore({ dir: path.join(root, 'knowledge'), project, stateDir: path.join(root, '.state-knowledge') });
@@ -101,12 +102,13 @@ describe('a conflict made a hotspot', () => {
                 ...(body !== undefined && { body: JSON.stringify(body) }),
             });
         const state = async (): Promise<SessionStateBody> => (await (await api(ada, 'state')).json()) as SessionStateBody;
-        const pending = async (): Promise<{ request: string; items: string[] }[]> =>
-            ((await (await api(bob, 'knowledge/hand-overs')).json()) as { handOvers: { request: string; items: string[] }[] }).handOvers;
+        type HandOversBody = { handOvers: { request: string; items: string[] }[]; cleared: { items: string[]; reason: string }[] };
+        const handOvers = async (): Promise<HandOversBody> => (await (await api(bob, 'knowledge/hand-overs')).json()) as HandOversBody;
+        const pending = async (): Promise<{ request: string; items: string[] }[]> => (await handOvers()).handOvers;
 
         // three conflicts about the same sticky, each from two sessions
         const session = server.session as unknown as string;
-        for (const n of [1, 3, 5]) {
+        for (const n of [1, 3, 5, 7]) {
             const at = new Date().toISOString();
             await store.applyExtraction(
                 project,
@@ -155,6 +157,13 @@ describe('a conflict made a hotspot', () => {
                     { edits: addHotspots('CutOff'), reply: { outcome: 'done', summary: 'Added a hotspot.', requests: [{ request: 1, status: 'done' }] } },
                     { edits: addHotspots('CutOffA', 'CutOffB'), reply: { outcome: 'done', summary: 'Added two.', requests: [{ request: 1, status: 'done' }] } },
                     { reply: { outcome: 'declined', summary: 'Not a model change.', requests: [{ request: 1, status: 'skipped', note: 'Out of scope.' }] } },
+                    {
+                        reply: {
+                            outcome: 'done',
+                            summary: '同じ問いの @{es:Returns/RefundAndOrder} がすでにあるので、それを使いました。',
+                            requests: [{ request: 1, status: 'done' }],
+                        },
+                    },
                 ],
             }),
         );
@@ -215,11 +224,26 @@ describe('a conflict made a hotspot', () => {
         await settled();
         expect((await store.get(project, wire.itemId(id(3), 'test')))?.item.conflictsWith).toEqual([wire.itemId(id(4), 'test')]);
         expect(lines.some((l) => l.includes('was not made a hotspot (the run added 2 hotspots)'))).toBe(true);
+        // every page is told why its buttons came back
+        expect((await handOvers()).cleared).toEqual([{ items: [id(4), id(3)], reason: 'several' }]);
 
         // the run declined: the same
         expect(await ended(await press(5))).toBe('Declined');
         await settled();
         expect((await store.get(project, wire.itemId(id(5), 'test')))?.item.conflictsWith).toEqual([wire.itemId(id(6), 'test')]);
         expect(lines.some((l) => l.includes('was not made a hotspot (the run declined)'))).toBe(true);
+        expect((await handOvers()).cleared.map((c) => c.reason)).toEqual(['several', 'ended']);
+
+        // the hotspot already exists, the run changes nothing and only names it: handed over to it
+        const before = await readFile(path.join(root, 'stormings', 'returns.dtes'), 'utf8');
+        expect(await ended(await press(7))).toBe('Completed');
+        await settled();
+        for (const n of [7, 8]) {
+            const item = (await store.get(project, wire.itemId(id(n), 'test')))?.item;
+            expect(item?.content.about).toEqual(['Returns.ReturnRequested', 'Returns.RefundAndOrder'] as unknown as Knowledge.StickyRef[]);
+            expect(item?.conflictsWith).toEqual([]);
+        }
+        expect(await readFile(path.join(root, 'stormings', 'returns.dtes'), 'utf8')).toBe(before);
+        expect((await handOvers()).cleared.map((c) => c.reason)).toEqual(['several', 'ended']);
     }, 60_000);
 });

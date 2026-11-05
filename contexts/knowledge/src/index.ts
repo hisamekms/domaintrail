@@ -119,8 +119,11 @@ export { createRedactionSync, type RedactionCursors, type RedactionSync, type Re
 export { createExtractionScheduler, type ExtractionScheduler, type ExtractionSchedulerDeps, type Timers } from './application/extraction-scheduler.js';
 export { loadExtractionSwitch, type ExtractionSwitch, type ExtractionSwitches } from './application/extraction-switch.js';
 export {
+    CLEARED_KEPT_MS,
     createHotspotHandOvers,
     hotspotOf,
+    type ClearedHandOver,
+    type ClearedReason,
     type HotspotHandOvers,
     type HotspotHandOversDeps,
     type PendingHandOver,

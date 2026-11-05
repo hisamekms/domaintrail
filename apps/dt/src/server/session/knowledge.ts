@@ -14,12 +14,12 @@
 // | POST /api/session/knowledge/items/:id/unlink | unlinkConflict `{ other }` (食い違いではない) |
 // | POST /api/session/knowledge/items/:id/images | putImage, then correct: the image at the end of the text (画像を付ける) |
 // | GET  /api/session/knowledge/images/:id       | getImage                       |
-// | GET  /api/session/knowledge/hand-overs       | the presses of ホットスポットにする still waiting for their run |
+// | GET  /api/session/knowledge/hand-overs       | the presses of ホットスポットにする still waiting for their run, and those cleared lately with why |
 // | POST /api/session/knowledge/hand-overs       | a press `{ request, items }`, after its message was sent (ADR 0031, section 4) |
 //
 // A change made here is told to every page (`changed`); a store that fails or cannot be reached is answered 502.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { Knowledge, type KnowledgeStore, type PendingHandOver } from '@domaintrail/knowledge';
+import { Knowledge, type ClearedHandOver, type KnowledgeStore, type PendingHandOver } from '@domaintrail/knowledge';
 import { IMAGE_MEDIA_TYPES, MAX_IMAGE_BYTES, WireError, itemContent, itemId, imageId, knowledgeQueryOf, unlinkBody } from '@domaintrail/knowledge/protocol';
 import type { Identified } from '../http/access.js';
 import { BodyError, mediaType, readJson, sendError, sendJson } from '../http/json.js';
@@ -43,6 +43,8 @@ export interface KnowledgeRoutesDeps {
 /** What the routes ask of the session's hand-overs to hotspots (ADR 0031, section 4). */
 export interface HandOverRoutes {
     list(): Promise<readonly PendingHandOver[]>;
+    /** The conflicts whose press was cleared lately: their buttons came back, with why. */
+    cleared(): readonly ClearedHandOver[];
     /** Keeps the press of `participant`, whose message `request` is: false when the message is not theirs in the session. */
     press(input: {
         readonly request: string;
@@ -154,7 +156,11 @@ export function createKnowledgeRoutes(deps: KnowledgeRoutesDeps): KnowledgeRoute
         if (resource === 'hand-overs' && rest.length === 1) {
             const handOvers = deps.handOvers;
             if (!handOvers) return sendError(res, 404, 'NotFound', 'No such knowledge API.');
-            if (method === 'GET') return sendJson(res, 200, { handOvers: (await handOvers.list()).map(({ request, items }) => ({ request, items })) });
+            if (method === 'GET')
+                return sendJson(res, 200, {
+                    handOvers: (await handOvers.list()).map(({ request, items }) => ({ request, items })),
+                    cleared: handOvers.cleared().map(({ items, reason }) => ({ items, reason })),
+                });
             if (method !== 'POST') return sendError(res, 405, 'MethodNotAllowed', 'Use GET or POST.');
             const { request, items } = pressBody(await json(req));
             const kept = await handOvers.press({ request, items, by: actorOf(who), participant: who.participant.id });

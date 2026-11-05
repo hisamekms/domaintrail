@@ -1,12 +1,55 @@
 // What became of the message ホットスポットにする sent (ADR 0031, section 4), read from the collaboration: the
 // knowledge's hand-overs (`createHotspotHandOvers`) ask it whenever the session moved. The message's latest run decides
 // (the run that answers a question carries the same messages, so a question keeps it waiting): queued, running or
-// asking, it waits; completed, the hotspots it added are the storming's diff from its base to its result revision
-// (`modelChanges`, the run card's changed elements: by storming and local ID); declined, failed, cancelled, it ended.
+// asking, it waits; completed, the hotspots it added and the existing ones it changed are the storming's diff from its
+// base to its result revision (`modelChanges`, the run card's changed elements: by storming and local ID), and those
+// its reply names are its element references (`@{es:<Storming>/<Local>}`) that are hotspots in its result revision;
+// declined, failed, cancelled, it ended.
 // Without a run yet: its triage and proposal say whether one may still come (being triaged, a proposal waiting for the
 // facilitator) or not (not for the AI, answered as a question, the proposal rejected or withdrawn).
-import { type Collaboration, type CollaborationUseCases } from '@domaintrail/collaboration';
+import { type Collaboration, type CollaborationUseCases, parseElementReference } from '@domaintrail/collaboration';
 import type { RequestOutcome } from '@domaintrail/knowledge';
+
+/** The `.dtes` elements a reply names (`@{es:<Storming>/<Local>}` in any of its text), as `<Storming>.<Local>`, each once. */
+export function namedInReply(reply: Collaboration.AgentReply | undefined): string[] {
+    if (!reply) return [];
+    const texts = [reply.summary, reply.answer ?? '', ...reply.requests.map((r) => r.note ?? ''), ...reply.assumptions.map((a) => a.text)];
+    const named = texts.flatMap((t) =>
+        [...String(t).matchAll(/@\{es:[^{}\s@\\]+\}/gu)].flatMap((m) => {
+            const target = parseElementReference(m[0]);
+            return target?.kind === 'DtesElement' ? [`${target.storming}.${target.local}`] : [];
+        }),
+    );
+    return [...new Set(named)];
+}
+
+/** The hotspots a completed run added and changed, and those its reply names; why not, when the storming cannot be read. */
+async function hotspotsOfRun(
+    collaboration: CollaborationUseCases,
+    session: Collaboration.SessionId,
+    run: Collaboration.CompletedAgentRun,
+): Promise<RequestOutcome> {
+    const unreadable: RequestOutcome = { kind: 'ended', why: 'the storming before or after the run could not be read' };
+    let added: string[] = [];
+    let changed: string[] = [];
+    if (run.changed) {
+        const changes = await collaboration.modelChanges({ session, before: run.baseRevision, after: run.resultRevision });
+        if (!changes.ok || !changes.value.complete) return unreadable;
+        const hotspots = (change: 'added' | 'changed'): string[] =>
+            changes.value.changes.flatMap((c) => (c.language === 'Dtes' && c.kind === 'hotspot' && c.change === change ? [`${c.storming}.${c.local}`] : []));
+        added = hotspots('added');
+        changed = hotspots('changed');
+    }
+    const mentioned = namedInReply(run.reply);
+    let named: string[] = [];
+    if (added.length === 0 && changed.length === 0 && mentioned.length > 0) {
+        const elements = await collaboration.stormingElements({ session, revision: run.resultRevision });
+        if (!elements.ok) return unreadable;
+        const isHotspot = new Set(elements.value.elements.filter((e) => e.kind === 'hotspot').map((e) => `${e.storming}.${e.local}`));
+        named = mentioned.filter((m) => isHotspot.has(m));
+    }
+    return { kind: 'ran', added, changed, named };
+}
 
 /** What became of a run of the message, by the run's state. */
 async function outcomeOfRun(collaboration: CollaborationUseCases, session: Collaboration.SessionId, run: Collaboration.AgentRun): Promise<RequestOutcome> {
@@ -15,15 +58,8 @@ async function outcomeOfRun(collaboration: CollaborationUseCases, session: Colla
         case 'Running':
         case 'NeedsClarification':
             return { kind: 'waiting' };
-        case 'Completed': {
-            if (!run.changed) return { kind: 'ran', hotspots: [] };
-            const changes = await collaboration.modelChanges({ session, before: run.baseRevision, after: run.resultRevision });
-            if (!changes.ok || !changes.value.complete) return { kind: 'ended', why: 'the storming before or after the run could not be read' };
-            const hotspots = changes.value.changes.flatMap((c) =>
-                c.language === 'Dtes' && c.kind === 'hotspot' && c.change === 'added' ? [`${c.storming}.${c.local}`] : [],
-            );
-            return { kind: 'ran', hotspots };
-        }
+        case 'Completed':
+            return hotspotsOfRun(collaboration, session, run);
         case 'Declined':
             return { kind: 'ended', why: 'the run declined' };
         case 'Failed':
