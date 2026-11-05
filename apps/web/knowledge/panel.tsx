@@ -3,13 +3,14 @@
 // with its search and filters, an item opened to its quotes, the other stickies it concerns, its versions and images,
 // with 直す / 画像を付ける / 消す; the deletion's 元に戻す; the dot and the conflict mark on the canvas, the stickies
 // an opened item lights up, and the session's extraction switch in the app bar (section 3).
-import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from 'react';
 import { Bot, CircleAlert, ImagePlus, Lightbulb, LightbulbOff, PanelLeftClose, Pencil, Search, Trash2 } from 'lucide-react';
 import { latestRevision } from '../session/state';
 import { sessionApi } from '../session/api';
 import { AI_NAME } from '../session/ai';
 import { useLang, useT } from '../i18n';
 import { Act } from '../shared/act';
+import { growMotion, motionEasing, motionMs, useStaying } from '../shared/motion';
 import { ReferenceLine, TargetLink } from '../shared/reference';
 import { useCanvasValue, type DiagramCanvas } from '../view/diagram';
 import { useKnowledgeApi } from './api';
@@ -258,6 +259,67 @@ function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefi
     );
 }
 
+/**
+ * An opened part's detail unfolding (`--motion-medium`, like the tree's branches): its height from nothing to its own
+ * (a grid row from 0fr to 1fr, which height cannot do to auto) as it fades in, and back as it closes; mounted while it
+ * closes (`useStaying`). Once opened, it is brought into view where it is cut off, as a list does with its selection.
+ */
+function Unfold({ open, children }: { open: boolean; children: ReactNode }): ReactElement {
+    const ref = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!open) return;
+        const ms = motionMs('--motion-medium');
+        const timer = setTimeout(() => {
+            ref.current?.scrollIntoView({ block: 'nearest', behavior: ms > 0 ? 'smooth' : 'auto' });
+        }, ms);
+        return () => clearTimeout(timer);
+    }, [open]);
+    return (
+        <div ref={ref} className={`knowledge-unfold${open ? ' open' : ''}`} inert={!open}>
+            <div className="knowledge-unfold-inner">{children}</div>
+        </div>
+    );
+}
+
+/**
+ * The text's clamp (two lines while closed) released and applied as its height moves (`--motion-medium`), not at once:
+ * the text is whole while the item is open and while it closes (`.unfolded`), and clamped once it closed. Each change
+ * measures the text whole and clamped, and moves from where it is to the other; nothing moves with "reduce motion".
+ */
+function useClampMotion(ref: RefObject<HTMLElement | null>, open: boolean, shown: boolean): void {
+    const phase = open ? 'open' : shown ? 'closing' : 'closed';
+    const first = useRef(true);
+    // the height it had when a move was cut short (opened again while it closed): the next one starts there
+    const cut = useRef<number | undefined>(undefined);
+    useLayoutEffect(() => {
+        if (first.current) {
+            first.current = false;
+            return;
+        }
+        const el = ref.current;
+        if (!el || phase === 'closed' || typeof el.animate !== 'function') return;
+        const whole = el.getBoundingClientRect().height;
+        el.style.display = '-webkit-box';
+        const clamped = el.getBoundingClientRect().height;
+        el.style.removeProperty('display');
+        const from = cut.current ?? (phase === 'open' ? clamped : whole);
+        cut.current = undefined;
+        const grow = growMotion(from, phase === 'open' ? whole : clamped, motionMs('--motion-medium'));
+        if (!grow) return;
+        // closing, it keeps the clamped height until the clamp is applied (the next phase), which ends it
+        const animation = el.animate([{ height: `${grow.from}px` }, { height: `${grow.to}px` }], {
+            duration: grow.ms,
+            easing: motionEasing('--motion-ease-standard'),
+            fill: phase === 'closing' ? 'forwards' : 'none',
+        });
+        return () => {
+            cut.current = animation.playState === 'running' ? el.getBoundingClientRect().height : undefined;
+            animation.cancel();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [phase]);
+}
+
 /** One item of a list: its kind, two lines of its text and its labels; opened, its detail. */
 export function ItemRow({
     item,
@@ -273,20 +335,32 @@ export function ItemRow({
 }): ReactElement {
     const t = useT().knowledge;
     const view = useKnowledgeView();
+    const shown = useStaying(open);
+    const text = useRef<HTMLSpanElement>(null);
+    useClampMotion(text, open, shown);
     return (
-        <li className={`knowledge-item${open ? ' open' : ''}`}>
+        <li className={`knowledge-item${open ? ' open' : ''}${shown ? ' unfolded' : ''}`}>
             <button type="button" className="knowledge-item-head" aria-expanded={open} onClick={onToggle}>
                 <span className="knowledge-kind">{t.kinds[item.content.labels.kind]}</span>
                 <span className="knowledge-item-main">
-                    <span className="knowledge-text">{plainText(item.content.text)}</span>
+                    <span ref={text} className="knowledge-text">
+                        {plainText(item.content.text)}
+                    </span>
                     <Meta item={item} />
-                    {!from && !open && item.content.about.length > 0 && (
-                        <span className="knowledge-about">{item.content.about.map((s) => view?.label(s) ?? s).join('、')}</span>
+                    {/* the stickies' names fold away as it opens (its detail links them) */}
+                    {!from && item.content.about.length > 0 && (
+                        <span className={`knowledge-fold${open ? ' shut' : ''}`} aria-hidden={open || undefined}>
+                            <span className="knowledge-about">{item.content.about.map((s) => view?.label(s) ?? s).join('、')}</span>
+                        </span>
                     )}
                 </span>
                 {item.conflictsWith.length > 0 && <CircleAlert className="knowledge-conflict-icon" size={14} aria-label={t.conflict} />}
             </button>
-            {open && <ItemDetail item={item} from={from} />}
+            {shown && (
+                <Unfold open={open}>
+                    <ItemDetail item={item} from={from} />
+                </Unfold>
+            )}
         </li>
     );
 }
@@ -352,7 +426,9 @@ export function ConflictBox({
                     </button>
                 ))}
             </div>
-            {[pair.a, pair.b].map((i) => isOpen(i.id) && <ItemDetail key={i.id} item={i} from={from} />)}
+            {[pair.a, pair.b].map((i) => (
+                <SideDetail key={i.id} item={i} from={from} open={isOpen(i.id)} />
+            ))}
             {making ? (
                 <span className="knowledge-actions knowledge-making" role="status">
                     <Act kind="send" icon={<Bot size={12} aria-hidden />} disabled>
@@ -372,6 +448,17 @@ export function ConflictBox({
                 </span>
             )}
         </div>
+    );
+}
+
+/** A side of a conflict opened: its detail in the box, unfolding as it opens and closes. */
+function SideDetail({ item, from, open }: { item: KnowledgeItem; from: string | undefined; open: boolean }): ReactElement | null {
+    const shown = useStaying(open);
+    if (!shown) return null;
+    return (
+        <Unfold open={open}>
+            <ItemDetail item={item} from={from} />
+        </Unfold>
     );
 }
 
