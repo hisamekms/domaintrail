@@ -124,6 +124,11 @@ merged.
 
 - A conflict is shown on the sticky and in the panel, both items side by side. People decide there whether it becomes
   a hotspot ("ホットスポットにする" sends a request to the runner) or is not a conflict.
+- *Decided by the maintainer*: a conflict made a hotspot is handed over to it. While the request runs, the box shows
+  that it is being made, kept in the session database. When the run ends, dt finds the hotspot the run added from the
+  storming's diff before and after it; both items then get the hotspot in `about` and their conflict is unlinked, with
+  the hotspot as the reason in the audit log. The box and the mark go; the hotspot's sticky lists the two items. If the
+  run declines or fails, or added no hotspot or more than one, the box gets its two buttons back.
 - When a hotspot is resolved, its resolution is also kept as an item of kind `decision`. Whether the resolved hotspot
   stays in the `.dtes` follows ADR 0024 (only the important ones stay).
 
