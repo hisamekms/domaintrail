@@ -1,14 +1,17 @@
 // The knowledge as the page shows it (model.ts): a sticky's selection, the orders, the conflicts, the marks, the
-// filters' query, the text without its images, and the message ホットスポットにする sends.
+// filters' query, the text without its images, the message ホットスポットにする sends, and the extraction's switch.
 import { describe, expect, test } from 'bun:test';
 import {
     conflictPairs,
+    extractionControl,
+    extractionOfMessage,
     hotspotBody,
     imagesOf,
     marksOf,
     missingConflicts,
     NO_FILTERS,
     ordered,
+    outsideConflicts,
     plainText,
     queryOf,
     selectionOfSticky,
@@ -57,6 +60,33 @@ describe('the knowledge on the page', () => {
         expect(conflictPairs([a, b], (id) => all.get(id)).map((p) => [p.a.id, p.b.id])).toEqual([['b', 'a']] as never);
         expect(missingConflicts([a])).toEqual(['b']);
         expect(conflictPairs([a], () => undefined)).toEqual([]);
+    });
+
+    test("a sticky's detail lists the items of a conflict in its box only", () => {
+        const a = item('a', { at: '2026-11-01T00:00:00Z', conflictsWith: ['b'] });
+        const b = item('b', { at: '2026-11-02T00:00:00Z', conflictsWith: ['a'] });
+        const c = item('c', { at: '2026-11-03T00:00:00Z', conflictsWith: ['x'] });
+        const d = item('d');
+        const all = new Map([a, b, c, d].map((i) => [i.id as string, i]));
+        const pairs = conflictPairs([a, b, c, d], (id) => all.get(id));
+        // c's other side is unknown: no box, so it stays in the list (with its mark)
+        expect(outsideConflicts([a, b, c, d], pairs).map((i) => i.id as string)).toEqual(['c', 'd']);
+        expect(outsideConflicts([a, b], pairs)).toEqual([]);
+    });
+
+    test("the extraction's state from dt's WebSocket", () => {
+        expect(extractionOfMessage({ type: 'knowledge.extraction', enabled: true } as never)).toBe(true);
+        expect(extractionOfMessage({ type: 'knowledge.extraction', enabled: false } as never)).toBe(false);
+        expect(extractionOfMessage({ type: 'knowledge.changed' })).toBeUndefined();
+        expect(extractionOfMessage({ type: 'knowledge.extraction' })).toBeUndefined();
+    });
+
+    test('the facilitator switches the extraction; the others see it only while it is on; nothing without a store', () => {
+        const at = (enabled: boolean | undefined, facilitator: boolean, live = true): string => extractionControl({ enabled, facilitator, live });
+        expect([at(true, true), at(false, true)]).toEqual(['switch', 'switch']);
+        expect([at(true, false), at(false, false)]).toEqual(['on', 'none']);
+        expect([at(undefined, true), at(undefined, false)]).toEqual(['none', 'none']);
+        expect([at(true, true, false), at(true, false, false)]).toEqual(['none', 'none']);
     });
 
     test('the dot and the mark by canvas element', () => {

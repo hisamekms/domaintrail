@@ -240,6 +240,10 @@ const ja = {
         perspective: '立場',
         text: '本文',
         failed: (why: string) => `うまくいきませんでした（${why}）`,
+        extraction: '会話からナレッジを抽出',
+        extracting: '会話からナレッジを抽出しています',
+        stopExtracting: '会話からナレッジを抽出しています（押すと止める）',
+        startExtracting: '会話からナレッジを抽出していません（押すと始める）',
     },
     esDetail: {
         problem: '問題',
@@ -1329,6 +1333,10 @@ const en: Messages = {
         perspective: 'Perspective',
         text: 'Text',
         failed: (why) => `It did not work (${why})`,
+        extraction: 'Extract knowledge from the talk',
+        extracting: 'Knowledge is being extracted from the talk',
+        stopExtracting: 'Knowledge is being extracted from the talk (press to stop)',
+        startExtracting: 'Knowledge is not being extracted from the talk (press to start)',
     },
     esDetail: {
         problem: 'Problem',

@@ -497,3 +497,6 @@ export interface KnowledgeExtractionMessage {
 export interface ExtractionSwitchBody {
     readonly enabled: boolean;
 }
+
+/** The body of `GET` and `POST /api/session/extraction`'s answer: `{ enabled }`. */
+export const extractionSwitch: Decoder<ExtractionSwitchBody> = (v, at) => ({ enabled: bool(obj(v, at).enabled, `${at}.enabled`) });
