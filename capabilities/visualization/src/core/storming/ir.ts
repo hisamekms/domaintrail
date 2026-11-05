@@ -9,8 +9,11 @@ import type { EventOccurrence, NodeElementKind, SemanticEdgeKind, TimelineStep }
 
 // ---- Semantic edges as drawn (spec §9.4) ----
 
-/** How a semantic edge is drawn (spec §9.4): solid causal, dotted related. */
-export const isCausal = (kind: SemanticEdgeKind): boolean => kind === 'on' || kind === 'issues' || kind === 'emits';
+/**
+ * How a semantic edge is drawn (spec §9.4): solid causal, dotted related. A command's `target` is drawn as a cause: the
+ * command goes to its aggregate, which decides and emits the events (Event Storming's grammar, `chains.ts`).
+ */
+export const isCausal = (kind: SemanticEdgeKind): boolean => kind === 'on' || kind === 'issues' || kind === 'emits' || kind === 'target';
 
 // ---- Timeline steps compared (spec §7.2, §8.3) ----
 
@@ -82,16 +85,20 @@ export interface RenderGroupNode {
 }
 
 /**
- * Any other element, drawn once per view; an actor, external system, read model or aggregate once per command of the
- * view that uses it (`uses.ts`), beside that command.
+ * Any other element, drawn along Event Storming's grammar (`chains.ts`): once per view, an actor, external system, read
+ * model or aggregate once per command note that uses it, beside it, and a command, policy or hotspot once per step of
+ * its events when those are at several steps.
  */
 export interface RenderElementNode {
     type: 'element';
-    /** `n:<local ID>`, or `n:<local ID>@<command ID>` for a copy beside a command. */
+    /**
+     * `n:<local ID>`; `n:<local ID>#<k>` for the k-th note of a command, policy or hotspot drawn per step;
+     * `n:<local ID>@<command note>` for a copy beside a command's note (`<command note>`: its ID without `n:`).
+     */
     id: string;
     elementId: string;
     kind: Exclude<NodeElementKind, 'event'>;
-    /** The command a copy stands beside. */
+    /** The command note a copy stands beside: its ID without `n:` (`C` or `C#2`). */
     use?: string;
 }
 
@@ -125,9 +132,11 @@ export interface GridCell {
 }
 
 /**
- * Where a view of stages puts its nodes (spec §3.7, §10): every column is a step later than the one on its left, the
- * main flows run along row 0 through every stage, an exception hangs below the step it branches off from, and the
- * other elements stand above the event they belong to (negative rows). The layout turns cells into coordinates.
+ * Where a view of stages puts its nodes (spec §3.7, §10): each step is a group of columns, later steps to the right; in
+ * it, left to right, the read models, commands, aggregates, the event and the policies (Event Storming's grammar). The
+ * main flows' events run along one row through every stage, an exception's on a lane below the step it branches off
+ * from; the other elements stand in a band above the events of their lane, in the columns of the step they belong to.
+ * The layout turns cells into coordinates.
  */
 export interface StageGrid {
     /** The cell of each event, group and element node (a group's members are inside it). */

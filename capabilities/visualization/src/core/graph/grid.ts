@@ -8,7 +8,7 @@
  *   stages. Rows are as tall as their tallest box; a gutter separates them, room for a lane's caption included.
  * - A frame spans its columns, from the top row to the last row of its own cells. A group's frame is its cell, its
  *   notes stacked in it.
- * - Edges: the next step on the same row, a straight line; into a lower lane, down from the step it branches off from,
+ * - Edges: the next step on the same row, a straight line (so is any edge along a row with no note between its ends); into a lower lane, down from the step it branches off from,
  *   along the gutter under its row, then into the lane from the left (the lane's caption above its first note); a
  *   `then` (`esRejoin`) down from its step, along the gutter under its lane, back to the column of its target, up to
  *   the gutter under the target's row and into the target from below; anything else from side to side through the
@@ -156,6 +156,12 @@ export function layoutGrid(graph: Graph, spacing: LayoutSpacing = 'normal'): Lai
     const middle = (b: Box): Point => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
     /** The height a lane's straight line runs at: the middle of a note of the row. */
     const lineY = (b: Box): number => top(b.row) + noteSide / 2;
+    /** Whether nothing stands on `row` strictly between the columns `a` and `b`: a straight line along it crosses no note. */
+    const taken = new Set(Object.values(grid.cells).map((c) => `${c.row}:${c.col}`));
+    const clear = (row: number, a: number, b: number): boolean => {
+        for (let c = Math.min(a, b) + 1; c < Math.max(a, b); c++) if (taken.has(`${row}:${c}`)) return false;
+        return true;
+    };
     const edgeLayout: Record<string, EdgeLayout> = {};
     for (const e of graph.edges) {
         const a = boxes.get(e.source);
@@ -198,7 +204,7 @@ export function layoutGrid(graph: Graph, spacing: LayoutSpacing = 'normal'): Lai
                 const width = Math.ceil(maxUnits(e.label) * LABEL_CHAR_WIDTH) + 8;
                 label = { x: b.x, y: b.y - TRANSITION_LINE_HEIGHT - 4, width, height: TRANSITION_LINE_HEIGHT };
             }
-        } else if (order && a.row === b.row && b.col === a.col + 1) {
+        } else if (order && a.row === b.row && b.col > a.col && clear(a.row, a.col, b.col)) {
             points = [
                 { x: a.x + a.width, y: lineY(a) },
                 { x: b.x, y: lineY(b) },
@@ -220,12 +226,16 @@ export function layoutGrid(graph: Graph, spacing: LayoutSpacing = 'normal'): Lai
                     { x: mb.x, y: down ? b.y : b.y + b.height },
                 ];
             }
-            const g = gutterAfter(a);
+            // down (or up) the gutter on the left, beside its middle, into the target's side near its near end: clear of
+            // the edges that come in at the middle of its sides (a stacked actor into its command, a hotspot into its event)
+            const g = gutterBefore(a) + COL_GAP / 4;
+            const down = b.row > a.row;
+            const into = down ? b.y + Math.min(16, b.height / 4) : b.y + b.height - Math.min(16, b.height / 4);
             return [
-                { x: a.x + a.width, y: ma.y },
+                { x: a.x, y: ma.y },
                 { x: g, y: ma.y },
-                { x: g, y: mb.y },
-                { x: b.x + b.width, y: mb.y },
+                { x: g, y: into },
+                { x: b.x, y: into },
             ];
         }
         const right = b.col > a.col;
@@ -233,7 +243,7 @@ export function layoutGrid(graph: Graph, spacing: LayoutSpacing = 'normal'): Lai
         const gb = right ? gutterBefore(b) : gutterAfter(b);
         const sa = { x: right ? a.x + a.width : a.x, y: ma.y };
         const sb = { x: right ? b.x : b.x + b.width, y: mb.y };
-        if (a.row === b.row && Math.abs(b.col - a.col) === 1) return [sa, sb];
+        if (a.row === b.row && clear(a.row, a.col, b.col)) return [sa, sb];
         if (Math.abs(ga - gb) < 1) return [sa, { x: ga, y: sa.y }, { x: ga, y: sb.y }, sb];
         const channel = b.row > a.row ? top(b.row) - ROW_GAP / 2 : b.row < a.row ? bottom(b.row) + ROW_GAP / 2 : top(b.row) - ROW_GAP / 2;
         return [sa, { x: ga, y: sa.y }, { x: ga, y: channel }, { x: gb, y: channel }, { x: gb, y: sb.y }, sb];

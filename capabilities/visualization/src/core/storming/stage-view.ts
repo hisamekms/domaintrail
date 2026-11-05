@@ -6,12 +6,13 @@
  * shared as a prefix is, spec §8); timelines that go on alike share their steps too. A `then` is an edge back to the
  * step of a main flow; an `after`, an edge from the end of the previous stage's trunk to the start of this one's.
  *
- * Every node gets a cell (`StageGrid`): a column per step, strictly later to the right through every stage, the trunks
- * on row 0, every other timeline on a lane of its own below the step it branches off from (the other main flows above
- * the exceptions; lanes that do not overlap share a row), the other elements of the level above the event they belong
- * to (a copy of an actor, external system, read model or aggregate above the command it stands beside, `uses.ts`). As
- * in the other views, sharing a node is a drawing optimization only: every edge is a semantic edge's drawing, or
- * one of the time order (`sequence`, `rejoin`, `stage`).
+ * Every node gets a cell (`StageGrid`): a group of columns per step, strictly later to the right through every stage,
+ * the trunks' events on one row, every other timeline on a lane of its own below the step it branches off from (the
+ * other main flows above the exceptions; lanes that do not overlap share a row). The Design Level reads left to right
+ * as Event Storming does (`chains.ts`, `placeChains`): in a band above each lane, in the columns of the step of the event
+ * they belong to, read model → command (its actor on top) → aggregate → event (its hotspot on top) → policy. As in the
+ * other views, sharing a node is a drawing optimization only: every edge is a semantic edge's drawing, or one of the
+ * time order (`sequence`, `rejoin`, `stage`).
  *
  * At Big Picture the events marked `level design` are left out as if their steps were not written; a timeline whose
  * branch point is hidden branches off from the nearest visible step before it (or starts the section), and a `then` to
@@ -30,7 +31,6 @@ import {
     orderStages,
     rejoinPoint,
     sections,
-    semanticEdgeKey,
     stormingTimelines,
     type EventOccurrence,
     type Section,
@@ -55,7 +55,7 @@ import {
 } from './ir.js';
 import { filterEdges } from './filter.js';
 import { compare, compareOccurrences } from './trie.js';
-import { useEnds, useNodeId, useOf, usesOf } from './uses.js';
+import { drawChains, usersOf, type Chains, type EventPlace } from './chains.js';
 
 /** A step of a section's tree. */
 interface StageNode {
@@ -122,11 +122,14 @@ export function projectStageView(storming: Storming, options: ViewOptions): Rend
     const cells: Record<string, GridCell> = {};
     const frames: StageGrid['frames'] = {};
     const captions: StageGrid['captions'] = {};
-    /** The render nodes of each event in this view, with their columns. */
-    const eventNodes = new Map<string, { id: string; col: number }[]>();
-    const addEvent = (id: string, eventId: string, occurrences: EventOccurrence[], col: number): void => {
+    /** The render nodes of each event in this view. */
+    const eventNodes = new Map<string, string[]>();
+    /** Where each event note stands: at its step (its column orders the copies, `chains.ts`). */
+    const places: EventPlace[] = [];
+    const addEvent = (id: string, eventId: string, occurrences: EventOccurrence[], slot: string, col: number): void => {
         nodes.set(id, { type: 'event', id, eventId, occurrences: [...occurrences].sort(compareOccurrences) });
-        eventNodes.set(eventId, [...(eventNodes.get(eventId) ?? []), { id, col }]);
+        eventNodes.set(eventId, [...(eventNodes.get(eventId) ?? []), id]);
+        places.push({ id, eventId, slot, position: col });
     };
     const addSequence = (type: 'sequence' | 'rejoin', source: string, target: string, timelineId: string): string => {
         const id = `${type === 'sequence' ? 's' : 'r'}:${source}->${target}`;
@@ -154,10 +157,10 @@ export function projectStageView(storming: Storming, options: ViewOptions): Rend
             cells[node.id] = cell;
             const occurrencesOf = (eventId: string): EventOccurrence[] => node.occurrences.get(eventId) ?? [];
             if (node.step.type === 'event') {
-                addEvent(node.id, node.step.eventId, occurrencesOf(node.step.eventId), cell.col);
+                addEvent(node.id, node.step.eventId, occurrencesOf(node.step.eventId), node.id, cell.col);
                 continue;
             }
-            for (const eventId of node.step.eventIds) addEvent(memberOf(node, eventId), eventId, occurrencesOf(eventId), cell.col);
+            for (const eventId of node.step.eventIds) addEvent(memberOf(node, eventId), eventId, occurrencesOf(eventId), node.id, cell.col);
             nodes.set(node.id, {
                 type: 'group',
                 id: node.id,
@@ -226,7 +229,7 @@ export function projectStageView(storming: Storming, options: ViewOptions): Rend
     if (!one) {
         for (const n of semantic.nodes) {
             if (n.kind !== 'event' || eventNodes.has(n.id) || hidden.has(n.id) || exceptionOnly.has(n.id)) continue;
-            addEvent(`e:${n.id}`, n.id, [], -1);
+            addEvent(`e:${n.id}`, n.id, [], `e:${n.id}`, Number.MAX_SAFE_INTEGER);
             loose.push(`e:${n.id}`);
         }
     }
@@ -234,76 +237,20 @@ export function projectStageView(storming: Storming, options: ViewOptions): Rend
         (n): n is NodeElement & { kind: Exclude<NodeElementKind, 'event'> } =>
             n.kind !== 'event' && shownKinds.has(n.kind) && !gone.has(n.id) && (!one || drawn.some((e) => e.sourceId === n.id || e.targetId === n.id)),
     );
-    // an actor, external system, read model or aggregate beside each command that uses it; once when none does
-    const commands = new Set(elements.filter((n) => n.kind === 'command').map((n) => n.id));
-    const uses = usesOf(drawn, (id) => commands.has(id));
-    const elementNodes: RenderElementNode[] = elements.flatMap((n): RenderElementNode[] => {
-        const users = uses.get(n.id);
-        if (!users) return [{ type: 'element', id: `n:${n.id}`, elementId: n.id, kind: n.kind }];
-        return users.map((use) => ({ type: 'element', id: useNodeId(n.id, use), elementId: n.id, kind: n.kind, use }));
-    });
-    for (const n of elementNodes) nodes.set(n.id, n);
-
-    // each element above the earliest note of the events it belongs to; a copy above its command
-    /** The column of each element's render node. */
-    const colOf = new Map<string, number>();
-    const eventCol = (id: string): number | undefined => {
-        const cols = (eventNodes.get(id) ?? []).map((n) => n.col).filter((c) => c >= 0);
-        return cols.length ? Math.min(...cols) : undefined;
-    };
-    const place = (id: string, cols: (number | undefined)[]): void => {
-        const known = cols.filter((c): c is number => c !== undefined);
-        if (!colOf.has(id) && known.length) colOf.set(id, Math.min(...known));
-    };
-    /** The other ends of the `kind` edges of `id` (`end`: which end of the edge to take). */
-    const related = (kind: SemanticEdge['kind'], end: 'sourceId' | 'targetId', id: string): string[] =>
-        drawn.filter((e) => e.kind === kind && e[end === 'sourceId' ? 'targetId' : 'sourceId'] === id).map((e) => e[end]);
-    const ofKind = (...ks: NodeElementKind[]): RenderElementNode[] => elementNodes.filter((n) => ks.includes(n.kind));
-    for (const n of ofKind('hotspot')) place(n.id, related('hotspot-on', 'targetId', n.elementId).map(eventCol));
-    for (const n of ofKind('policy')) place(n.id, related('on', 'sourceId', n.elementId).map(eventCol));
-    for (const n of ofKind('command')) place(n.id, related('emits', 'targetId', n.elementId).map(eventCol));
-    for (const n of ofKind('command'))
-        place(
-            n.id,
-            related('issues', 'sourceId', n.elementId).map((p) => colOf.get(`n:${p}`)),
-        );
-    // a copy in its command's stack (an element no command uses has no column: it goes below the sections)
-    for (const n of elementNodes) if (n.use !== undefined) place(n.id, [colOf.get(`n:${n.use}`)]);
-    const stacks = new Map<number, RenderElementNode[]>();
-    for (const n of elementNodes) {
-        const col = colOf.get(n.id);
-        if (col === undefined) {
-            loose.push(n.id);
-            continue;
-        }
-        stacks.set(col, [...(stacks.get(col) ?? []), n]);
-    }
-    const kindRank = (n: RenderElementNode): number => ELEMENT_ORDER.findIndex((k) => k === n.kind);
-    for (const [col, stack] of stacks) {
-        stack.sort((a, b) => kindRank(a) - kindRank(b) || compare(a.id, b.id));
-        stack.forEach((n, i) => (cells[n.id] = { col, row: -1 - i }));
-    }
+    // the Design Level along the grammar (`chains.ts`): copies per use and per step, the aggregate deciding
+    const chains = drawChains(elements, drawn, places);
+    for (const n of chains.nodes) nodes.set(n.id, n);
+    for (const e of chains.edges) edges.set(e.id, e);
+    maxRow = placeChains(chains, cells, frames, loose, base, maxRow);
 
     // the notes outside the sections, below them
     let looseRow: number | undefined;
     if (loose.length) {
         looseRow = maxRow + 1;
-        const perRow = Math.max(base, 5);
+        const perRow = Math.max(1 + Math.max(-1, ...Object.values(cells).map((c) => c.col)), 5);
         loose.sort(compare).forEach((id, i) => (cells[id] = { col: i % perRow, row: looseRow! + Math.floor(i / perRow) }));
     }
 
-    const renderNodesOf = (id: string): string[] =>
-        kinds.get(id) === 'event' ? (eventNodes.get(id) ?? []).map((n) => n.id) : nodes.has(`n:${id}`) ? [`n:${id}`] : [];
-    const ends = (e: SemanticEdge, end: 'sourceId' | 'targetId'): string[] => useEnds(e, end, (id) => nodes.has(id), renderNodesOf);
-    for (const e of drawn) {
-        const key = semanticEdgeKey(e);
-        for (const source of ends(e, 'sourceId')) {
-            for (const target of ends(e, 'targetId')) {
-                const id = `${key}@${source}->${target}`;
-                edges.set(id, { type: 'semantic', id, kind: e.kind, source, target, semantic: key });
-            }
-        }
-    }
     for (const edge of edges.values()) if (edge.type === 'sequence' || edge.type === 'rejoin') edge.timelineIds.sort(compare);
 
     return {
@@ -337,17 +284,150 @@ function ofExceptionsOnly(edges: readonly SemanticEdge[], events: ReadonlySet<st
         const emitted = by('emits', 'sourceId', command);
         if (emitted.length ? all(emitted, (id) => events.has(id)) : all(by('issues', 'targetId', command), (id) => out.has(id))) out.add(command);
     }
-    const users = new Map<string, string[]>();
-    for (const e of edges) {
-        const use = useOf(e);
-        if (use) users.set(use.elementId, [...(users.get(use.elementId) ?? []), use.commandId]);
-    }
-    for (const [element, list] of users) if (all(list, (id) => out.has(id))) out.add(element);
+    for (const [element, list] of usersOf(edges)) if (all(list, (id) => out.has(id))) out.add(element);
     return out;
 }
 
-/** The elements stacked above an event, nearest first. */
-const ELEMENT_ORDER = ['hotspot', 'command', 'policy', 'aggregate', 'readmodel', 'actor', 'external'] as const;
+/**
+ * The sub-columns of a step's column, left to right, as Event Storming reads (ADR 0024, amendment of 2026-11-05): the
+ * read models, the commands (their actors stuck on top of them), their aggregates, the event (its hotspots stuck on top
+ * of it) and the policies reacting to it. A column has only the sub-columns some step of it uses (the event's always).
+ */
+const SUB_COLUMNS = ['readmodel', 'command', 'aggregate', 'event', 'policy'] as const;
+type SubColumn = (typeof SUB_COLUMNS)[number];
+const SUB_COLUMN: Record<Exclude<NodeElementKind, 'event'>, SubColumn> = {
+    readmodel: 'readmodel',
+    actor: 'command',
+    external: 'command',
+    command: 'command',
+    aggregate: 'aggregate',
+    hotspot: 'event',
+    policy: 'policy',
+};
+
+/** A command's note at a step and the copies beside it: its actors above it, its read models and aggregate on its row. */
+interface Chain {
+    command: string;
+    actors: string[];
+    readmodels: string[];
+    aggregate?: string;
+}
+const chainHeight = (c: Chain): number => c.actors.length + Math.max(1, c.readmodels.length);
+
+/**
+ * Places the Design Level notes (`chains`) in the grid and spreads the steps' columns and rows to make room for them
+ * (`cells` holds the steps' cells: a column per step, a row per lane). Each step's column becomes its sub-columns
+ * (`SUB_COLUMNS`); above each lane's row, a band as tall as the tallest stack of its steps: there each step's chains
+ * (one per command note that emits its events, bottom-aligned: read model → command → aggregate on one row, the actors
+ * above the command), its hotspots above the event (nearest first) and its policies on its right. Every note sits in
+ * the lane of the event it belongs to, so a chain is read left to right into its event. A note of no step (an element no
+ * command of the view uses, a command of no event in view and its copies) is pushed to `loose`. Returns the last row.
+ */
+function placeChains(chains: Chains, cells: Record<string, GridCell>, frames: StageGrid['frames'], loose: string[], width: number, lastLane: number): number {
+    const byId = new Map(chains.nodes.map((n) => [n.id, n]));
+    const anchorOf = (n: RenderElementNode): string | undefined => {
+        if (n.use !== undefined) {
+            const command = byId.get(`n:${n.use}`);
+            return command && anchorOf(command);
+        }
+        const slot = chains.slots.get(n.id);
+        return slot !== undefined && cells[slot] ? slot : undefined;
+    };
+    /** What stands at each step. */
+    const at = new Map<string, { chains: Chain[]; hotspots: string[]; policies: string[] }>();
+    const stepOf = (slot: string) => {
+        let s = at.get(slot);
+        if (!s) at.set(slot, (s = { chains: [], hotspots: [], policies: [] }));
+        return s;
+    };
+    const sorted = [...chains.nodes].sort((a, b) => compare(a.id, b.id));
+    const chainOf = new Map<string, Chain>();
+    for (const n of sorted) {
+        const slot = anchorOf(n);
+        if (slot === undefined) {
+            loose.push(n.id);
+            continue;
+        }
+        if (n.kind === 'command') {
+            const chain: Chain = { command: n.id, actors: [], readmodels: [] };
+            chainOf.set(n.id, chain);
+            stepOf(slot).chains.push(chain);
+        } else if (n.kind === 'hotspot') stepOf(slot).hotspots.push(n.id);
+        else if (n.kind === 'policy') stepOf(slot).policies.push(n.id);
+    }
+    for (const n of sorted) {
+        const chain = n.use !== undefined ? chainOf.get(`n:${n.use}`) : undefined;
+        if (!chain) continue;
+        if (n.kind === 'aggregate') chain.aggregate ??= n.id;
+        else if (n.kind === 'readmodel') chain.readmodels.push(n.id);
+        else chain.actors.push(n.id);
+    }
+
+    // the sub-columns of each step's column, and the band above each lane's row
+    const used = new Map<number, Set<SubColumn>>();
+    const band = new Map<number, number>();
+    for (const [slot, s] of at) {
+        const { col, row } = cells[slot]!;
+        const subs = used.get(col) ?? new Set<SubColumn>();
+        used.set(col, subs);
+        for (const c of s.chains) {
+            subs.add('command');
+            if (c.readmodels.length) subs.add('readmodel');
+            if (c.aggregate !== undefined) subs.add('aggregate');
+        }
+        if (s.policies.length) subs.add('policy');
+        const height = Math.max(
+            s.chains.reduce((h, c) => h + chainHeight(c), 0),
+            s.hotspots.length,
+            s.policies.length,
+        );
+        band.set(row, Math.max(band.get(row) ?? 0, height));
+    }
+    const start: number[] = [];
+    const subsOf: SubColumn[][] = [];
+    let next = 0;
+    for (let col = 0; col < width; col++) {
+        start[col] = next;
+        subsOf[col] = SUB_COLUMNS.filter((k) => k === 'event' || used.get(col)?.has(k));
+        next += subsOf[col]!.length;
+    }
+    const colOf = (col: number, sub: SubColumn): number => start[col]! + subsOf[col]!.indexOf(sub);
+    const eventRow: number[] = [];
+    let row = 0;
+    for (let lane = 0; lane <= lastLane; lane++) {
+        row += band.get(lane) ?? 0;
+        eventRow[lane] = row;
+        row += 1;
+    }
+
+    // the steps and frames moved to their sub-columns and rows
+    const steps = new Map(Object.entries(cells));
+    for (const [id, c] of steps) cells[id] = { col: colOf(c.col, 'event'), row: eventRow[c.row]! };
+    for (const f of Object.values(frames)) {
+        f.from = start[f.from]!;
+        f.to = start[f.to]! + subsOf[f.to]!.length - 1;
+    }
+    // the notes of each step, bottom-aligned in the band above its event
+    for (const [slot, s] of at) {
+        const step = steps.get(slot)!;
+        const bottom = eventRow[step.row]! - 1;
+        const place = (id: string, r: number): void => {
+            cells[id] = { col: colOf(step.col, SUB_COLUMN[byId.get(id)!.kind]), row: r };
+        };
+        let top = bottom + 1 - s.chains.reduce((h, c) => h + chainHeight(c), 0);
+        for (const c of s.chains) {
+            c.actors.forEach((id, i) => place(id, top + i));
+            const commandRow = top + c.actors.length;
+            place(c.command, commandRow);
+            if (c.aggregate !== undefined) place(c.aggregate, commandRow);
+            c.readmodels.forEach((id, i) => place(id, commandRow + i));
+            top += chainHeight(c);
+        }
+        s.hotspots.forEach((id, i) => place(id, bottom - i));
+        s.policies.forEach((id, i) => place(id, bottom - i));
+    }
+    return eventRow[lastLane] ?? 0;
+}
 
 /** The visible part of a step (a group keeps its visible events, sorted; none when nothing is visible). */
 function visibleStep(

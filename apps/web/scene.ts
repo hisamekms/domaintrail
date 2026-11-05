@@ -62,12 +62,14 @@ const isStormingNote = (item: SceneItem): item is SceneNode => item.type === 'no
 
 /**
  * What stays in full view while storming notes are selected (docs/plans/layout.md, step 5): the notes of the selected
- * elements (every copy of an element drawn once per use), the notes joined to them by an edge (the previous and next
- * steps, the command that causes an event and the policies reacting to it, its hotspots; for a command its actor, read
- * model, aggregate and events), and those edges. A command that causes a selected event brings its actor or external
- * system, its read model and its aggregate along. A selected event in a group is joined through its group (the time
- * order runs to and from the group), and a group joined to it brings its events. Containers are never dimmed, so they
- * are not listed. `undefined` when no storming note is selected: nothing is dimmed.
+ * elements (every copy of an element drawn once per use or per step), the notes joined to them by an edge (the previous
+ * and next steps, what causes an event and the policies reacting to it, its hotspots; for a command its actor, read
+ * model and aggregate), and those edges. The drawing follows Event Storming's grammar, command → aggregate → event: an
+ * event caused through an aggregate brings the commands that go to that aggregate along, and a command brings the
+ * events its aggregate emits. A command that causes a selected event brings its actor or external system and its read
+ * model along. A selected event in a group is joined through its group (the time order runs to and from the group), and
+ * a group joined to it brings its events. Containers are never dimmed, so they are not listed. `undefined` when no
+ * storming note is selected: nothing is dimmed.
  */
 export function focusedItems(items: Iterable<SceneItem>, selected: ReadonlySet<SceneId>): Set<SceneId> | undefined {
     const all = [...items];
@@ -78,6 +80,10 @@ export function focusedItems(items: Iterable<SceneItem>, selected: ReadonlySet<S
     const edges = all.filter((s): s is SceneEdge => s.type === 'edge' && !s.ghost);
     const byId = new Map(all.map((s) => [s.id, s]));
     const members = (group: SceneId): SceneId[] => notes.filter((n) => n.parent === group).map((n) => n.id);
+    const kindOf = (id: SceneId): string | undefined => {
+        const item = byId.get(id);
+        return item?.type === 'node' ? item.props.kind : undefined;
+    };
     const kept = new Set<SceneId>();
     /** Keeps a note, or a group's events (the group itself is never dimmed). */
     const keep = (id: SceneId): void => {
@@ -89,17 +95,37 @@ export function focusedItems(items: Iterable<SceneItem>, selected: ReadonlySet<S
     const ends = new Set(own.flatMap((n) => (n.parent === undefined ? [n.id] : [n.id, n.parent])));
     for (const n of own) kept.add(n.id);
     const causes: SceneId[] = [];
+    /** The aggregates that decide a selected event (their commands are its cause). */
+    const deciding: SceneId[] = [];
+    /** The aggregates a selected command goes to (their events are its). */
+    const decided: SceneId[] = [];
     for (const e of edges) {
         const [from, to] = [ends.has(e.source), ends.has(e.target)];
         if (!from && !to) continue;
         kept.add(e.id);
         const other = from ? e.target : e.source;
         keep(other);
-        // a command whose solid edge leads into a selected note: what causes it
-        const source = byId.get(e.source);
-        if (to && e.props.kind === 'esCausal' && source?.type === 'node' && source.props.kind === 'esCommand') causes.push(source.id);
+        if (e.props.kind !== 'esCausal') continue;
+        // a command (or an aggregate) whose solid edge leads into a selected note: what causes it
+        if (to && kindOf(e.source) === 'esCommand') causes.push(e.source);
+        if (to && kindOf(e.source) === 'esAggregate' && kindOf(e.target) !== 'esAggregate') deciding.push(e.source);
+        if (from && kindOf(e.source) === 'esCommand' && kindOf(e.target) === 'esAggregate') decided.push(e.target);
     }
-    // the cause's actor or external system, read model and aggregate (the dotted relations of the command)
+    for (const e of edges) {
+        if (e.props.kind !== 'esCausal') continue;
+        // the command going to an aggregate that decides a selected event
+        if (deciding.includes(e.target) && kindOf(e.source) === 'esCommand') {
+            kept.add(e.id);
+            keep(e.source);
+            causes.push(e.source);
+        }
+        // the events emitted by the aggregate of a selected command
+        if (decided.includes(e.source)) {
+            kept.add(e.id);
+            keep(e.target);
+        }
+    }
+    // the cause's actor or external system and read model (the dotted relations of the command)
     for (const e of edges) {
         if (e.props.kind !== 'esRelated') continue;
         const at = causes.includes(e.source) ? e.target : causes.includes(e.target) ? e.source : undefined;

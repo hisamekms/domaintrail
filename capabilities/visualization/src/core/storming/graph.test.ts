@@ -39,7 +39,10 @@ describe('an Event Storming view as a graph', () => {
 
         const kinds = Object.fromEntries(graph.edges.map((e) => [e.id, e.kind]));
         expect(kinds['on:ShipmentCancelled->CleanupAfterCancel@t:e:ShipmentCancelled->n:CleanupAfterCancel']).toBe('esCausal');
-        expect(kinds[`emits:ReleaseSlot->SlotReleased@n:ReleaseSlot->${group}/SlotReleased`]).toBe('esCausal');
+        // command → aggregate → event: the aggregate decides and emits the command's events
+        expect(kinds['target:ReleaseSlot->ShipmentSlot@n:ReleaseSlot->n:ShipmentSlot@ReleaseSlot']).toBe('esCausal');
+        expect(kinds[`emits:ReleaseSlot->SlotReleased@n:ShipmentSlot@ReleaseSlot->${group}/SlotReleased`]).toBe('esCausal');
+        expect(Object.keys(kinds).filter((id) => id.startsWith('emits:ReleaseSlot->') && id.includes('@n:ReleaseSlot->'))).toEqual([]);
         expect(kinds[`s:t:e:ShipmentCancelled->${group}`]).toBe('esSequence');
         // nothing is added: one graph edge per render edge, and no sequence edge inside the group (R04)
         expect(graph.edges).toHaveLength(projectView(storming, options).edges.length);
@@ -70,7 +73,7 @@ describe('an Event Storming view as a graph', () => {
         const edge = (id: string) => graph.edges.find((e) => e.id === id);
         expect(edge('on:ShipmentCancelled->CleanupAfterCancel@e:ShipmentCancelled->n:CleanupAfterCancel')?.kind).toBe('esCausal');
         expect(edge('issues:CleanupAfterCancel->ReleaseBike@n:CleanupAfterCancel->n:ReleaseBike')?.kind).toBe('esCausal');
-        expect(edge('target:ReleaseSlot->ShipmentSlot@n:ReleaseSlot->n:ShipmentSlot@ReleaseSlot')?.kind).toBe('esRelated');
+        expect(edge('target:ReleaseSlot->ShipmentSlot@n:ReleaseSlot->n:ShipmentSlot@ReleaseSlot')?.kind).toBe('esCausal');
         expect(edge('actor:Customer->CancelShipment@n:Customer@CancelShipment->n:CancelShipment')?.kind).toBe('esRelated');
         expect(edge('hotspot-on:Compensation->ReleaseFailed@n:Compensation->e:ReleaseFailed')?.kind).toBe('esHotspot');
         // a step into a group is a time order to each of its events; each names the one timeline it is in
@@ -221,7 +224,7 @@ describe('layout of an Event Storming view', () => {
         }
     });
 
-    test('draws an element used by several commands beside each of them: the actor on the left, the aggregate on the right, short edges', async () => {
+    test('draws the grammar left to right: read model, the actor stuck on its command, aggregate, event; short edges', async () => {
         const storming = await parse(`storming S {
   event Opened event Approved event Shipped event Closed
   actor Clerk
@@ -242,11 +245,19 @@ describe('layout of an Event Storming view', () => {
             const box = (id: string): NodeLayout => laid.nodeLayout[id]!;
             const centre = (id: string): number => box(id).x + box(id).width / 2;
             // a timeline draws the cause of its events too: Open, which no policy issues
-            for (const command of ['Open', 'Close']) {
+            for (const [command, event] of [
+                ['Open', 'Opened'],
+                ['Close', 'Closed'],
+            ]) {
                 const c = `n:${command}`;
-                expect(centre(`n:Clerk@${command}`)).toBeLessThan(centre(c));
+                const e = laid.nodes.find((n) => n.kind === 'esEvent' && n.elementId.endsWith(`/${event}`))!.id;
+                // the actor stuck on top of its command, the read model on its left, the aggregate between it and the event
+                expect(box(`n:Clerk@${command}`).x).toBe(box(c).x);
+                expect(box(`n:Clerk@${command}`).y + box(`n:Clerk@${command}`).height).toBeLessThan(box(c).y);
+                expect(laid.nodes.find((n) => n.id === `n:Clerk@${command}`)?.attachTo).toBe(c);
                 expect(centre(`n:Board@${command}`)).toBeLessThan(centre(c));
                 expect(centre(`n:Ticket@${command}`)).toBeGreaterThan(centre(c));
+                expect(centre(`n:Ticket@${command}`)).toBeLessThan(centre(e));
                 // each copy's edge is short: no longer than a few notes, though the two commands lie far apart
                 for (const copy of ['Clerk', 'Board', 'Ticket']) {
                     const points = laid.edgeLayout[laid.edges.find((e) => [e.source, e.target].includes(`n:${copy}@${command}`))!.id]!.points;
@@ -255,6 +266,27 @@ describe('layout of an Event Storming view', () => {
                 }
             }
             if (options.timelineId === undefined) expect(centre('n:Close') - centre('n:Open')).toBeGreaterThan(6 * STICKY_NOTE.side);
+        }
+    });
+
+    test('sticks a hotspot on its event: above it, not a step of the flow', async () => {
+        const storming = await parse(`storming S {
+  event A event B
+  hotspot H1 { on B }
+  hotspot H2 { on B }
+  timeline T { A B }
+}`);
+        for (const options of [{ level: 'big-picture' }, { level: 'big-picture', timelineId: 'T' }] satisfies ViewOptions[]) {
+            const laid = await engine.layout(graphOf(storming, options));
+            expectReadable(laid);
+            const id = (name: string): string => laid.nodes.find((n) => n.elementId.endsWith(`/${name}`))!.id;
+            const box = (name: string): NodeLayout => laid.nodeLayout[id(name)]!;
+            for (const h of ['H1', 'H2']) {
+                expect(box(h).x).toBe(box('B').x);
+                expect(box(h).y + box(h).height).toBeLessThan(box('B').y);
+            }
+            // B is the step right after A: no layer of hotspots between them
+            expect(box('B').x - (box('A').x + box('A').width)).toBeLessThan(STICKY_NOTE.side);
         }
     });
 

@@ -281,7 +281,8 @@ describe('views (spec §6, §9.3)', () => {
         expect(nodeIds(happy)).toEqual(['n:AfterPlaced', 'n:Cart@Pay', 'n:Late', 'n:Order@Pay', 'n:Pay', 'n:Psp@Pay', 't:e:Placed', 't:e:Placed>e:Paid']);
         expect(semanticEdges(happy)).toEqual([
             'actor:n:Psp@Pay->n:Pay',
-            'emits:n:Pay->t:e:Placed>e:Paid',
+            // the command's events come out of its aggregate (Event Storming's grammar)
+            'emits:n:Order@Pay->t:e:Placed>e:Paid',
             'hotspot-on:n:Late->t:e:Placed>e:Paid',
             'issues:n:AfterPlaced->n:Pay',
             'on:t:e:Placed->n:AfterPlaced',
@@ -317,7 +318,7 @@ describe('views (spec §6, §9.3)', () => {
         expect(elementIds(projectView(shop, BP))).toContain('Open');
     });
 
-    test('R10: a causal cycle is drawn once, without expansion', () => {
+    test('R10: a causal cycle is drawn without expansion: a note per step of its events, never more', () => {
         const s = storming(
             ...events('E', 'F'),
             el('policy', 'P', ['on', 'E'], ['issues', 'C']),
@@ -327,8 +328,18 @@ describe('views (spec §6, §9.3)', () => {
             tl('T', 'E', 'F', 'E', 'F'),
         );
         const g = projectView(s, { level: 'design-level', timelineId: 'T' });
-        expect(elementIds(g)).toEqual(['C', 'D', 'P', 'Q']);
+        // each repeated event's cause and reaction drawn at each of its steps (a drawing-only split, §7.3, §10.2)
+        expect(nodeIds(g).filter((id) => id.startsWith('n:'))).toEqual(['n:C#1', 'n:C#2', 'n:D#1', 'n:D#2', 'n:P#1', 'n:P#2', 'n:Q#1', 'n:Q#2']);
         expect(nodesOf(g, 'E')).toHaveLength(2);
+        // a policy's note issues the command's note at the next step of its own; the last one, with none after it, every note
+        expect(semanticEdges(g).filter((e) => e.startsWith('issues:'))).toEqual([
+            'issues:n:P#1->n:C#1',
+            'issues:n:P#2->n:C#2',
+            'issues:n:Q#1->n:D#2',
+            'issues:n:Q#2->n:D#1',
+            'issues:n:Q#2->n:D#2',
+        ]);
+        // the integrated canvas draws each event once: one note of each element
         expect(semanticEdges(projectView(s, DL))).toHaveLength(2 * 2 + 2 + 2 * 2);
     });
 
@@ -401,9 +412,13 @@ describe('actors, external systems, read models and aggregates drawn once per us
             'target:n:C1->n:Order@C1',
             'target:n:C2->n:Order@C2',
         ]);
-        // every copy has exactly one edge
-        for (const n of g.nodes)
-            if (n.type === 'element' && n.use !== undefined) expect(g.edges.filter((e) => e.source === n.id || e.target === n.id)).toHaveLength(1);
+        // every actor's and read model's copy has exactly one edge; an aggregate's copy, its command's and the events it emits
+        for (const n of g.nodes) {
+            if (n.type !== 'element' || n.use === undefined) continue;
+            const own = g.edges.filter((e) => e.source === n.id || e.target === n.id);
+            if (n.kind !== 'aggregate') expect(own).toHaveLength(1);
+            else expect(own.map((e) => (e.type === 'semantic' ? e.kind : e.type))).toEqual(['emits', 'target']);
+        }
     });
 
     test('copy IDs are stable: the declaration order changes nothing, another use adds a copy and keeps the others', () => {
@@ -612,11 +627,17 @@ describe('§12.3 properties', () => {
                         const n = byId.get(id);
                         return n?.type === 'event' ? n.eventId : n?.type === 'element' ? n.elementId : undefined;
                     };
+                    /** An `emits` comes out of its command's aggregate when the command has one: the copy beside it. */
+                    const commandOf = (id: string) => {
+                        const n = byId.get(id);
+                        return n?.type === 'element' && n.kind === 'aggregate' && n.use !== undefined ? elementOf(`n:${n.use}`) : elementOf(id);
+                    };
                     for (const e of g.edges) {
                         if (e.type !== 'semantic') continue;
                         const edge = keys.get(e.semantic);
                         expect(edge).toBeDefined();
-                        expect([e.kind, elementOf(e.source), elementOf(e.target)]).toEqual([edge!.kind, edge!.sourceId, edge!.targetId]);
+                        const source = e.kind === 'emits' ? commandOf(e.source) : elementOf(e.source);
+                        expect([e.kind, source, elementOf(e.target)]).toEqual([edge!.kind, edge!.sourceId, edge!.targetId]);
                     }
                 }
                 expect(s).toEqual(copy);

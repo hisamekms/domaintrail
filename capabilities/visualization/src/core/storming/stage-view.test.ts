@@ -36,6 +36,14 @@ const eventOf = (g: RenderGraph, id: string): string => {
     const n = g.nodes.find((x) => x.id === id);
     return n?.type === 'event' ? n.eventId : id;
 };
+/** The chain into an event note: the command's note that causes it and the note of its aggregate the `emits` comes out of. */
+const chainInto = (g: RenderGraph, eventNode: string): { command: string; aggregate?: string } => {
+    const emits = g.edges.find((e) => e.type === 'semantic' && e.kind === 'emits' && e.target === eventNode)!;
+    const source = g.nodes.find((n) => n.id === emits.source)!;
+    return source.type === 'element' && source.kind === 'aggregate' ? { command: `n:${source.use}`, aggregate: source.id } : { command: source.id };
+};
+/** The element IDs of the element nodes of a view, each once. */
+const elementsOf = (g: RenderGraph): string[] => [...new Set(g.nodes.flatMap((n) => (n.type === 'element' ? [n.elementId] : [])))].sort();
 const edgesOf = (g: RenderGraph, type: 'rejoin' | 'stage'): string[] =>
     g.edges
         .filter((e) => e.type === type)
@@ -332,27 +340,37 @@ describe('Design Level elements in a view of stages', () => {
   }
 }
 `;
-    test('stand above the main row, at the column of the event they belong to; the others below every stage', async () => {
+    test('read left to right in the band above their event’s lane: command → aggregate → event → policy; the others below every stage', async () => {
         const s = await parse(text);
         const render = projectView(s, DL);
         const cells = render.grid!.cells;
-        const col = (eventId: string): number => cells[only(render, eventId).id]!.col;
-        // a hotspot nearest to its event, then the command
-        expect(cells['n:Pay']).toEqual({ col: col('Paid'), row: -2 });
-        // the aggregate and the actor beside the command, in its column
-        expect(cells['n:Order@Pay']).toEqual({ col: col('Paid'), row: -4 });
-        expect(cells['n:Customer@Pay']).toEqual({ col: col('Paid'), row: -5 });
-        expect(cells['n:Limit']).toEqual({ col: col('Failed'), row: -1 });
-        expect(cells['n:RetryFailed']!.col).toBe(col('Failed'));
-        expect(cells['n:Retry']!.col).toBe(col('Retried'));
-        expect(cells['n:Lonely']!.row).toBe(render.grid!.looseRow!);
+        const cell = (id: string) => cells[id]!;
+        const at = (eventId: string) => cell(only(render, eventId).id);
+        // Pay emits Paid (the main flow) and Failed (the exception's lane): a chain into each, in the band above its lane
+        for (const eventId of ['Paid', 'Failed']) {
+            const { command, aggregate } = chainInto(render, only(render, eventId).id);
+            expect(render.nodes.find((n) => n.id === command)).toMatchObject({ elementId: 'Pay' });
+            expect(cell(command).row).toBe(at(eventId).row - 1);
+            expect(cell(aggregate!)).toEqual({ col: cell(command).col + 1, row: cell(command).row });
+            expect(cell(aggregate!).col).toBe(at(eventId).col - 1);
+            // the actor stuck on top of its command
+            expect(cell(`n:Customer@${command.slice(2)}`)).toEqual({ col: cell(command).col, row: cell(command).row - 1 });
+        }
+        expect(at('Failed').row).toBeGreaterThan(at('Paid').row);
+        // the hotspot on top of its event; the policy after its trigger, before the command it issues
+        expect(cell('n:Limit')).toEqual({ col: at('Failed').col, row: at('Failed').row - 1 });
+        expect(cell('n:RetryFailed')).toEqual({ col: at('Failed').col + 1, row: at('Failed').row - 1 });
+        expect(cell('n:Retry')).toEqual({ col: at('Retried').col - 1, row: at('Retried').row - 1 });
+        expect(cell('n:RetryFailed').col).toBeLessThan(cell('n:Retry').col);
+        expect(cell('n:Lonely').row).toBe(render.grid!.looseRow!);
         expect(crossings(laidOut(render, s))).toEqual([]);
-        // Big Picture: the hotspot only
+        // Big Picture: the hotspot only, on top of its event
         const bp = projectView(s, BP);
         expect(Object.keys(bp.grid!.cells).filter((id) => id.startsWith('n:'))).toEqual(['n:Limit']);
+        expect(bp.grid!.cells['n:Limit']).toEqual({ col: bp.grid!.cells[only(bp, 'Failed').id]!.col, row: bp.grid!.cells[only(bp, 'Failed').id]!.row - 1 });
     });
 
-    test('an actor, read model or aggregate used by several commands: a note in each command’s stack, its edge within the column', async () => {
+    test('an actor, read model or aggregate used by several commands: a note beside each command note, its edge to the next cell', async () => {
         const s = await parse(
             text.replace(
                 '  command Retry {\n    emits Retried\n  }',
@@ -361,31 +379,29 @@ describe('Design Level elements in a view of stages', () => {
         );
         const render = projectView(s, DL);
         const cells = render.grid!.cells;
-        const col = (eventId: string): number => cells[only(render, eventId).id]!.col;
-        expect(col('Retried')).not.toBe(col('Paid'));
-        for (const [id, command] of [
-            ['n:Customer@Pay', 'n:Pay'],
-            ['n:Order@Pay', 'n:Pay'],
-            ['n:Customer@Retry', 'n:Retry'],
-            ['n:Order@Retry', 'n:Retry'],
-            ['n:Cart@Retry', 'n:Retry'],
-        ] as const) {
-            expect(cells[id]!.col).toBe(cells[command]!.col);
-            expect(cells[id]!.row).toBeLessThan(cells[command]!.row);
+        const commands = render.nodes.filter((n) => n.type === 'element' && n.kind === 'command').map((n) => n.id);
+        expect(commands).toEqual(['n:Pay#1', 'n:Pay#2', 'n:Retry']);
+        for (const command of commands) {
+            const c = cells[command]!;
+            const key = command.slice(2);
+            expect(cells[`n:Customer@${key}`]).toEqual({ col: c.col, row: c.row - 1 });
+            expect(cells[`n:Order@${key}`]).toEqual({ col: c.col + 1, row: c.row });
         }
-        // the nearest first: the aggregate, the read model, the actor
-        expect([cells['n:Order@Retry']!.row, cells['n:Cart@Retry']!.row, cells['n:Customer@Retry']!.row]).toEqual([-2, -3, -4]);
+        // the read model on the command's left, on its row
+        expect(cells['n:Cart@Retry']).toEqual({ col: cells['n:Retry']!.col - 1, row: cells['n:Retry']!.row });
         expect(cells['n:Customer']).toBeUndefined();
         const g = laidOut(render, s);
-        // every edge of a copy is the short one to its command, in the same column
-        for (const e of render.edges.filter((x) => x.source.includes('@') || x.target.includes('@'))) expect(cells[e.source]!.col).toBe(cells[e.target]!.col);
+        // every edge between a copy and its command joins neighbouring cells
+        for (const e of render.edges.filter((x) => x.type === 'semantic' && ['actor', 'reads', 'target'].includes(x.kind))) {
+            const [a, b] = [cells[e.source]!, cells[e.target]!];
+            expect(Math.abs(a.col - b.col) + Math.abs(a.row - b.row)).toBe(1);
+        }
         expect(crossings(g)).toEqual([]);
     });
 
     test('the cause of an event, with its actor and aggregate, in every view of it: the stages, the stage, a main flow and an exception', async () => {
         const s = await parse(text);
         // Pay emits Paid (the main flow) and Failed (the exception); no policy issues it
-        const cause = ['n:Customer@Pay', 'n:Order@Pay', 'n:Pay'];
         const views: [ViewOptions, string][] = [
             [DL, 'Paid'],
             [{ ...DL, stageId: 'Ordering' }, 'Paid'],
@@ -394,18 +410,24 @@ describe('Design Level elements in a view of stages', () => {
         ];
         for (const [options, eventId] of views) {
             const render = projectView(s, options);
-            expect(render.nodes.map((n) => n.id)).toEqual(expect.arrayContaining(cause));
-            const ids = render.edges.filter((e) => e.type === 'semantic').map((e) => `${e.kind}:${eventOf(render, e.source)}->${eventOf(render, e.target)}`);
-            expect(ids).toEqual(expect.arrayContaining([`emits:n:Pay->${eventId}`, 'actor:n:Customer@Pay->n:Pay', 'target:n:Pay->n:Order@Pay']));
+            const event = only(render, eventId).id;
+            const { command, aggregate } = chainInto(render, event);
+            const key = command.slice(2);
+            expect(render.nodes.find((n) => n.id === command)).toMatchObject({ elementId: 'Pay' });
+            expect(aggregate).toBe(`n:Order@${key}`);
+            const ids = render.edges.filter((e) => e.type === 'semantic').map((e) => `${e.kind}:${e.source}->${e.target}`);
+            expect(ids).toEqual(expect.arrayContaining([`actor:n:Customer@${key}->${command}`, `target:${command}->${aggregate}`]));
+            // never an emits from the command itself: it goes through its aggregate
+            expect(render.edges.some((e) => e.type === 'semantic' && e.kind === 'emits' && e.source === command)).toBe(false);
             if (render.grid) {
                 const cells = render.grid.cells;
-                const col = cells[only(render, 'Paid').id]!.col;
-                for (const id of cause) expect(cells[id]!.col).toBe(col);
+                expect(cells[command]!.col).toBeLessThan(cells[aggregate!]!.col);
+                expect(cells[aggregate!]!.col).toBeLessThan(cells[event]!.col);
                 expect(crossings(laidOut(render, s))).toEqual([]);
             }
             // Big Picture: none of them
             const bp = projectView(s, { ...options, level: 'big-picture' });
-            for (const id of cause) expect(bp.nodes.map((n) => n.id)).not.toContain(id);
+            expect(elementsOf(bp)).not.toContain('Pay');
         }
         // Failed is not in the main flow: its emits is not drawn there
         const main = projectView(s, { ...DL, timelineId: 'Main' });
@@ -427,17 +449,19 @@ describe('Design Level elements in a view of stages', () => {
         );
         const has = (options: ViewOptions, ids: string[]): void => {
             const render = projectView(s, options);
-            expect(render.nodes.map((n) => n.id)).toEqual(expect.arrayContaining(ids));
+            expect(elementsOf(render)).toEqual(expect.arrayContaining(ids));
             if (render.grid) expect(crossings(laidOut(render, s))).toEqual([]);
         };
-        const enterPin = ['n:EnterPin', 'n:Resident@EnterPin', 'n:Card@EnterPin'];
-        const resetPin = ['n:ResetPin', 'n:Resident@ResetPin'];
+        const enterPin = ['EnterPin', 'Resident', 'Card'];
+        const resetPin = ['ResetPin', 'Resident'];
         has(DL, [...enterPin, ...resetPin]);
         has({ ...DL, stageId: 'Issuance' }, [...enterPin, ...resetPin]);
         has({ ...DL, timelineId: 'IssuanceFlow' }, enterPin);
         has({ ...DL, timelineId: 'PinLockedBranch' }, resetPin);
         const stage = projectView(s, { ...DL, stageId: 'Issuance' });
-        expect(stage.grid!.cells['n:EnterPin']!.col).toBe(stage.grid!.cells[only(stage, 'PinEntered').id]!.col);
+        const pinEntered = only(stage, 'PinEntered').id;
+        expect(chainInto(stage, pinEntered)).toEqual({ command: 'n:EnterPin', aggregate: 'n:Card@EnterPin' });
+        expect(stage.grid!.cells['n:Card@EnterPin']).toEqual({ col: stage.grid!.cells[pinEntered]!.col - 1, row: stage.grid!.cells[pinEntered]!.row - 1 });
     });
 });
 
@@ -582,15 +606,21 @@ describe('without the exceptions at Design Level: the elements of the events onl
             const emits = without.edges
                 .filter((e) => e.type === 'semantic' && e.kind === 'emits')
                 .map((e) => `${eventOf(without, e.source)}->${eventOf(without, e.target)}`);
-            expect(emits).toContain('n:EnterPin->PinEntered');
+            expect(emits).toContain('n:MyNumberCard@EnterPin->PinEntered');
             expect(emits.some((e) => e.endsWith('->PinLocked'))).toBe(false);
             const cells = without.grid!.cells;
-            for (const id of KEPT) expect(cells[id]!.col).toBe(cells[only(without, 'PinEntered').id]!.col);
+            // the chain left of its event: command (its actor on top), aggregate, event
+            const pinEntered = cells[only(without, 'PinEntered').id]!;
+            expect(cells['n:EnterPin']!.col).toBe(cells['n:Resident@EnterPin']!.col);
+            expect(cells['n:MyNumberCard@EnterPin']!.col).toBe(pinEntered.col - 1);
             expect(crossings(laidOut(without, s))).toEqual([]);
             expect(crossings(layoutGrid(renderToGraph(without, s), 'compact'))).toEqual([]);
 
+            // with the exceptions, all of them (EnterPin also emits PinLocked: a note at each of its events' steps)
             const on = projectView(s, options);
-            expect(ids(on)).toEqual(expect.arrayContaining([...KEPT, ...GONE]));
+            expect(elementsOf(on)).toEqual(
+                expect.arrayContaining(['EnterPin', 'ForgetPin', 'GuidePinReset', 'ResetPin', 'Resident', 'MyNumberCard', 'CityOfficer']),
+            );
         }
     });
 

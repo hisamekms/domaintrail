@@ -111,7 +111,7 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
     }
     if (render.options.timelineId !== undefined) {
         const edge = (e: RenderEdge): GraphEdge => ({ id: e.id, kind: edgeKind(e), source: e.source, target: e.target });
-        return { id: stormingGraphId(storming.id, render.options), nodes: render.nodes.map(node), edges: render.edges.map(edge) };
+        return attach({ id: stormingGraphId(storming.id, render.options), nodes: render.nodes.map(node), edges: render.edges.map(edge) });
     }
 
     // The integrated view draws each event once, without the groups: a step shared or not, an event is one note, and the
@@ -150,7 +150,26 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
         const ids = [...s.timelineIds].sort();
         edges.set(id, { id, kind: 'esSequence', source: s.source, target: s.target, ...(ids.length < every.size ? { label: timelinesOf(ids) } : {}) });
     }
-    return { id: stormingGraphId(storming.id, render.options), nodes: [...nodes.values()], edges: [...edges.values()] };
+    return attach({ id: stormingGraphId(storming.id, render.options), nodes: [...nodes.values()], edges: [...edges.values()] });
+}
+
+/**
+ * The notes stuck on another one in a layered layout (`GraphNode.attachTo`; the grid places them in its cells itself): a
+ * hotspot on the one event it is `on`, an actor or external system on the command it issues (its copy beside it). Only
+ * a note whose every edge joins it to that node, in the same container, is stuck on it.
+ */
+function attach(graph: Graph): Graph {
+    const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+    const nodes = graph.nodes.map((n): GraphNode => {
+        if (n.kind !== 'esHotspot' && n.kind !== 'esActor' && n.kind !== 'esExternal') return n;
+        const own = graph.edges.filter((e) => e.source === n.id || e.target === n.id);
+        const others = new Set(own.map((e) => (e.source === n.id ? e.target : e.source)));
+        if (others.size !== 1) return n;
+        const anchor = byId.get([...others][0]!);
+        const fits = n.kind === 'esHotspot' ? anchor?.kind === 'esEvent' : anchor?.kind === 'esCommand';
+        return anchor && fits && anchor.parent === n.parent ? { ...n, attachTo: anchor.id } : n;
+    });
+    return { ...graph, nodes };
 }
 
 /** What a resolved hotspot's team agreed (§3.5; empty when its `resolution` is missing); none while it is open. */
