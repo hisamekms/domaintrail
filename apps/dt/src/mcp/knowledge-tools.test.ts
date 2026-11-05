@@ -50,10 +50,11 @@ const add = (
     labels: Knowledge.Labels,
     message: string,
     at: string,
+    title = text.split('。')[0],
 ): Extract<Knowledge.Operation, { kind: 'Add' }> => ({
     kind: 'Add',
     id: made(Knowledge.makeKnowledgeItemId(id)),
-    content: { text: made(Knowledge.makeItemText(text)), labels, about: about.map(ref) },
+    content: { title: made(Knowledge.makeItemTitle(title)), text: made(Knowledge.makeItemText(text)), labels, about: about.map(ref) },
     sources: [
         {
             session: made(Knowledge.makeSessionRef('s1')),
@@ -87,6 +88,7 @@ beforeAll(async () => {
                 { when: 'to_be', kind: 'rule', origin: 'agreed' },
                 'm2',
                 '2026-11-05T09:01:00Z',
+                '注文の確定は取り消しできない',
             ),
         ],
     });
@@ -144,7 +146,8 @@ describe('knowledge_for_element', () => {
                 '',
                 "Labels: kind, when (as_is / to_be), origin (said: one person, unconfirmed; agreed: several agreed; investigated: the AI checked code or documents; inferred: the AI's guess), perspective.",
                 '',
-                '## kn_00000001 — flow · as_is · said · 営業 (2026-11-05)',
+                '## kn_00000001 — 確定は営業が電話で確かめてから押す',
+                'flow · as_is · said · 営業 (2026-11-05)',
                 'about: Ordering.ConfirmOrder "注文を確定する" (command, dt:Sales.Order.confirm)',
                 '',
                 '確定は営業が電話で確かめてから押す。',
@@ -161,7 +164,7 @@ describe('knowledge_for_element', () => {
         expect(aggregate.text).toContain('Ordering.Order "注文" (aggregate, dt:Sales.Order), Ordering.ConfirmOrder');
         expect(aggregate.text.indexOf('## kn_00000002')).toBeLessThan(aggregate.text.indexOf('## kn_00000001'));
         const event = await call('knowledge_for_element', { element: 'dt:Sales.OrderConfirmed' });
-        expect(event.text).toContain('## kn_00000002 — rule · to_be · agreed (2026-11-05)');
+        expect(event.text).toContain('## kn_00000002 — 注文の確定は取り消しできない\nrule · to_be · agreed (2026-11-05)');
     });
 
     test('a .dt element no sticky refs: says so, not an error', async () => {
@@ -172,7 +175,7 @@ describe('knowledge_for_element', () => {
 
     test('a long text is cut in a list; a sticky the stormings lack is said', async () => {
         const r = await call('knowledge_for_element', { element: 'Ordering.Shipped' });
-        expect(r.text).toContain('## kn_00000003 — pain · inferred (2026-11-06)');
+        expect(r.text).toContain('## kn_00000003 — 出荷は月末にまとめる\npain · inferred (2026-11-06)');
         expect(r.text).toContain('about: Ordering.Shipped "出荷した" (event), Gone.Sticky (no such sticky in the stormings now)');
         expect(r.text).toContain('… (cut; knowledge_get has all of it)');
         expect(r.text.length).toBeLessThan(LIST_TEXT_CHARS + 1000);
@@ -203,6 +206,8 @@ describe('knowledge_search', () => {
         const ids = async (args: Record<string, unknown>): Promise<string[]> =>
             [...(await call('knowledge_search', args)).text.matchAll(/^## (kn_\w+)/gm)].map((m) => m[1]);
         expect(await ids({ query: '取り消せない' })).toEqual(['kn_00000002']);
+        // the title is searched too
+        expect(await ids({ query: '取り消しできない' })).toEqual(['kn_00000002']);
         expect(await ids({ about: 'Ordering.ConfirmOrder' })).toEqual(['kn_00000001']);
         expect(await ids({ about: ['dt:Sales.OrderConfirmed', 'Ordering.Shipped'] })).toEqual(['kn_00000003', 'kn_00000002']);
         expect(await ids({ when: 'as_is' })).toEqual(['kn_00000001']);
@@ -229,7 +234,7 @@ describe('knowledge_get', () => {
         const r = await call('knowledge_get', { id: 'kn_00000001', history: true });
         expect(r.text).toBe(
             [
-                '## kn_00000001',
+                '## kn_00000001 — 確定は営業が電話で確かめてから押す',
                 'kind: flow (流れ) · when: as_is (AS-IS) · origin: said (発言) · perspective: 営業',
                 'version 1 · created 2026-11-05 09:00Z in session s1 · updated 2026-11-05 09:00Z',
                 'about: Ordering.ConfirmOrder "注文を確定する" (command, dt:Sales.Order.confirm)',

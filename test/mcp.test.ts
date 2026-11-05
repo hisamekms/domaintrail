@@ -17,6 +17,7 @@ const ITEM = [
     '---',
     'id: kn_00000001',
     'version: 1',
+    'title: 注文は在庫を確かめてから受ける',
     'when: as_is',
     'kind: rule',
     'origin: agreed',
@@ -72,7 +73,7 @@ describe('dt mcp', () => {
         const result = call.result as { content: { type: string; text: string }[]; isError?: boolean };
         expect(result.isError).toBeUndefined();
         expect(result.content[0].text).toContain('dt:Sales.Order.place is drawn as: Ordering.PlaceOrder "注文する"');
-        expect(result.content[0].text).toContain('## kn_00000001 — rule · as_is · agreed (2026-11-05)');
+        expect(result.content[0].text).toContain('## kn_00000001 — 注文は在庫を確かめてから受ける\nrule · as_is · agreed (2026-11-05)');
         expect(result.content[0].text).toContain('注文は在庫を確かめてから受ける。');
 
         child.stdin.end();

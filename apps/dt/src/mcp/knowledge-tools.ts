@@ -99,10 +99,11 @@ function shortText(text: string): string {
     return t.length <= LIST_TEXT_CHARS ? t : `${t.slice(0, LIST_TEXT_CHARS).trimEnd()}… (cut; knowledge_get has all of it)`;
 }
 
-/** An item in a list: its ID, labels and date, the stickies it is about, its conflicts, and its text (cut). */
+/** An item in a list: its ID and title, labels and date, the stickies it is about, its conflicts, and its text (cut). */
 export function itemSummary(item: Knowledge.LiveKnowledgeItem, stickies: StickyIndex): string {
     return [
-        `## ${item.id} — ${labelsLine(item.content.labels)} (${dates(item)})`,
+        `## ${item.id} — ${item.content.title}`,
+        `${labelsLine(item.content.labels)} (${dates(item)})`,
         ...(item.content.about.length ? [`about: ${item.content.about.map((a) => stickyText(a, stickies)).join(', ')}`] : []),
         ...(item.conflictsWith.length ? [`conflicts with: ${item.conflictsWith.join(', ')} (contradicts it; read both)`] : []),
         '',
@@ -241,7 +242,7 @@ export function knowledgeTools(options: KnowledgeToolsOptions): McpTool[] {
             name: 'knowledge_for_element',
             title: 'Knowledge about an element',
             description:
-                "Call this before implementing or changing an element of the domain model: it returns what the project learned about it in its modeling sessions — why it is so, rules, examples, terms, pains, wants and decisions, each with its labels, date and ID. `element` is a sticky of an Event Storming ('<Storming>.<LocalId>', e.g. 'Ordering.CreateSpecification') or a .dt element ('dt:<Context>.<Aggregate>.<command>', 'dt:<Context>.<Aggregate>', 'dt:<Context>.<Event>'), resolved through the stickies whose `ref` points to it. Newest first; open one with knowledge_get for its sources and the whole text.",
+                "Call this before implementing or changing an element of the domain model: it returns what the project learned about it in its modeling sessions — why it is so, rules, examples, terms, pains, wants and decisions, each with its ID, title, labels and date. `element` is a sticky of an Event Storming ('<Storming>.<LocalId>', e.g. 'Ordering.CreateSpecification') or a .dt element ('dt:<Context>.<Aggregate>.<command>', 'dt:<Context>.<Aggregate>', 'dt:<Context>.<Event>'), resolved through the stickies whose `ref` points to it. Newest first; open one with knowledge_get for its sources and the whole text.",
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -268,11 +269,11 @@ export function knowledgeTools(options: KnowledgeToolsOptions): McpTool[] {
             name: 'knowledge_search',
             title: 'Search the knowledge',
             description:
-                "Searches the project's knowledge (what was said and found in its modeling sessions). Every given filter must hold; none lists the newest items. `query` is full text (every word must appear, in the text or the quotes); `about` stickies ('Storming.LocalId') or .dt elements ('dt:Sales.Order.confirm'); `when`, `kind`, `origin` one value or a list; `perspective` a role (案件担当, 営業, …). Newest first.",
+                "Searches the project's knowledge (what was said and found in its modeling sessions). Every given filter must hold; none lists the newest items. `query` is full text (every word must appear, in the title, the text or the quotes); `about` stickies ('Storming.LocalId') or .dt elements ('dt:Sales.Order.confirm'); `when`, `kind`, `origin` one value or a list; `perspective` a role (案件担当, 営業, …). Newest first.",
             inputSchema: {
                 type: 'object',
                 properties: {
-                    query: { type: 'string', description: 'Full text: every word must appear in the text or a quote.' },
+                    query: { type: 'string', description: 'Full text: every word must appear in the title, the text or a quote.' },
                     about: {
                         description: "Items about any of these: stickies 'Storming.LocalId', or .dt elements 'dt:Context.Aggregate.command'.",
                         anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
@@ -339,7 +340,7 @@ export function knowledgeTools(options: KnowledgeToolsOptions): McpTool[] {
             name: 'knowledge_get',
             title: 'One knowledge item',
             description:
-                "One knowledge item by its ID ('kn_…'): its whole text, labels, the stickies it is about, the items it conflicts with, and its sources (session, message, time and a short quote of what was said). With `history`, also its earlier versions.",
+                "One knowledge item by its ID ('kn_…'): its title and whole text, labels, the stickies it is about, the items it conflicts with, and its sources (session, message, time and a short quote of what was said). With `history`, also its earlier versions.",
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -372,16 +373,12 @@ export function itemDetail(
     history?: readonly { readonly version: Knowledge.ItemVersion; readonly content: Knowledge.ItemContent; readonly replacedAt: Date }[],
 ): string {
     const { labels } = item.content;
-    const firstLine = (t: string): string => {
-        const line = t.trim().split('\n')[0] ?? '';
-        return line.length > 120 ? `${line.slice(0, 120)}…` : line;
-    };
     const out = [
-        `## ${item.id}`,
+        `## ${item.id} — ${item.content.title}`,
         `kind: ${labels.kind} (${KIND[labels.kind]}) · when: ${labels.when} (${WHEN[labels.when]}) · origin: ${labels.origin} (${ORIGIN[labels.origin]})${labels.perspective !== undefined ? ` · perspective: ${labels.perspective}` : ''}`,
         `version ${item.version} · created ${minute(item.createdAt)}${item.createdIn !== undefined ? ` in session ${item.createdIn}` : ''} · updated ${minute(item.updatedAt)}`,
         `about: ${item.content.about.length ? item.content.about.map((a) => stickyText(a, stickies)).join(', ') : '(no sticky)'}`,
-        ...conflicts.map(({ other, item: o }) => `conflicts with ${other}: ${o ? firstLine(o.content.text) : '(deleted)'}`),
+        ...conflicts.map(({ other, item: o }) => `conflicts with ${other}: ${o ? o.content.title : '(deleted)'}`),
         '',
         item.content.text.trim(),
         '',
@@ -400,8 +397,7 @@ export function itemDetail(
             );
         for (const h of history)
             out.push(
-                `- v${h.version} (replaced ${minute(h.replacedAt)}): ${labelsLine(h.content.labels)}; about ${h.content.about.join(', ') || '(no sticky)'}`,
-                `  ${firstLine(h.content.text)}`,
+                `- v${h.version} (replaced ${minute(h.replacedAt)}): ${h.content.title} — ${labelsLine(h.content.labels)}; about ${h.content.about.join(', ') || '(no sticky)'}`,
             );
     }
     return out.join('\n');
