@@ -1,7 +1,8 @@
 # ADR 0031: Knowledge — what a project learns in its sessions, kept apart from the model and read from the stickies
 
-- Status: proposed (2026-11-05). The decisions below were taken by the maintainer in one design discussion (marked
-  *Decided by the maintainer*); those marked *Proposed* fill in what the discussion left open. Nothing is implemented.
+- Status: accepted (2026-11-06), implemented per [the plan](../plans/knowledge.md). The decisions below were taken by
+  the maintainer in a design discussion and while trying the implementation (marked *Decided by the maintainer*);
+  those marked *Proposed* fill in what was left open.
 - Date: 2026-11-05
 - Input: the design discussion of 2026-11-05 (held from the dmcore-prototype workspace, the first user), with two
   previews the maintainer answered in: the store's API and MCP, and the Live View. The plan is
