@@ -152,6 +152,15 @@ describe('rendering an answer', () => {
         expect(out).toContain('<div class="md-table"><table><thead><tr><th>h</th></tr></thead><tbody><tr><td>v</td></tr></tbody></table></div>');
     });
 
+    test('headings as paragraphs (a knowledge item): every level an ordinary paragraph, its marks dropped; the chat keeps its heading', () => {
+        const src = '# x\n## y\n\ntext';
+        const para = renderToStaticMarkup(<MarkdownText text={src} headings="paragraph" renderText={(t) => t} />);
+        expect(para).toBe('<p>x</p><p>y</p><p>text</p>');
+        expect(renderToStaticMarkup(<MarkdownText text={src} renderText={(t) => t} />)).toBe(
+            '<p class="md-heading" role="heading" aria-level="4">x</p><p class="md-heading" role="heading" aria-level="4">y</p><p>text</p>',
+        );
+    });
+
     test('an attached image is drawn where the page resolves it, bounded and lazy; text where it does not (the chat today)', () => {
         const src = '![伝票](image:img_0000abcd) ![](image:img_0000ef01) ![外](https://e.com/i.png)';
         expect(html(src)).toBe('<p>伝票 (image:img_0000abcd) image:img_0000ef01 外 (https://e.com/i.png)</p>');

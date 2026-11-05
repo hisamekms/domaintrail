@@ -1,5 +1,6 @@
 // An item's text as the knowledge's panels show it (ADR 0031, sections 2 and 10), in the Live View and on the Worker's
-// page: opened, as Markdown with the chat's rules (`shared/markdown-text.tsx`), its attached images drawn from the
+// page: opened, as Markdown with the chat's rules (`shared/markdown-text.tsx`) but for its headings, drawn as ordinary
+// paragraphs (the item's title is its heading), its attached images drawn from the
 // page's knowledge API (dt's route in the Live View, the Worker's on its page); closed, plain, its marks dropped and its
 // images left out, for the two lines of a row. Its element references name the stickies as the canvas does (the
 // panels' `label`); opened, a sticky's reference is a link that selects it (`select`), on either page. A reference to
@@ -56,14 +57,14 @@ function References({
     });
 }
 
-/** An opened item's text: Markdown, its stickies linked, its images drawn. */
+/** An opened item's text: Markdown, its headings as paragraphs, its stickies linked, its images drawn. */
 export function KnowledgeMarkdown({ text }: { text: string }): ReactElement {
     const view = useKnowledgeView();
     const naming = useTargetNaming();
     const api = useKnowledgeApi();
     return (
         <MarkdownImages.Provider value={(id) => api.imageUrl(id)}>
-            <MarkdownText text={text} renderText={(t) => <References text={t} links view={view} naming={naming} />} />
+            <MarkdownText text={text} headings="paragraph" renderText={(t) => <References text={t} links view={view} naming={naming} />} />
         </MarkdownImages.Provider>
     );
 }

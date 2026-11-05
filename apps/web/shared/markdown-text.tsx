@@ -1,7 +1,8 @@
 // A Markdown text as the page shows it — an answer of the AI in the chat (ADR 0030), an item of the knowledge in the
 // Live View and on the Worker's page (ADR 0031): its Markdown (`markdown.ts`) as React elements, never as HTML, its runs
 // of text through the caller's `renderText` (which shows the element references in them as links). One heading style
-// for every level; a code block and a table wider than the column scroll inside it. An attached image
+// for every level, or none (`headings: 'paragraph'`: a knowledge item has its title for a heading, so its text's
+// headings are ordinary paragraphs, their `#` dropped); a code block and a table wider than the column scroll inside it. An attached image
 // (`![alt](image:<id>)`) is drawn from where the page's `MarkdownImages` resolves its id, bounded by the column; without
 // a resolver (the chat, for now) it stays text, as other images do. The container gives `.markdown` its blocks' spacing.
 import { createContext, Fragment, useContext, type ReactNode } from 'react';
@@ -60,9 +61,18 @@ function List({ list, renderText }: { list: MdList; renderText: RenderText }): R
 
 const alignStyle = (a: Align): { textAlign: 'center' | 'right' } | undefined => (a === 'center' || a === 'right' ? { textAlign: a } : undefined);
 
-function MdBlock({ block, renderText }: { block: Block; renderText: RenderText }): ReactNode {
+/** How a heading is drawn: as one heading style (the chat), or as an ordinary paragraph of its text (a knowledge item). */
+export type MarkdownHeadings = 'heading' | 'paragraph';
+
+function MdBlock({ block, renderText, headings }: { block: Block; renderText: RenderText; headings: MarkdownHeadings }): ReactNode {
     switch (block.kind) {
         case 'heading':
+            if (headings === 'paragraph')
+                return (
+                    <p>
+                        <Inlines content={block.content} renderText={renderText} />
+                    </p>
+                );
             return (
                 <p className="md-heading" role="heading" aria-level={4}>
                     <Inlines content={block.content} renderText={renderText} />
@@ -114,7 +124,7 @@ function MdBlock({ block, renderText }: { block: Block; renderText: RenderText }
     }
 }
 
-/** The text as Markdown, its blocks one under the other. */
-export function MarkdownText({ text, renderText }: { text: string; renderText: RenderText }): ReactNode {
-    return parseMarkdown(text).map((block, i) => <MdBlock key={i} block={block} renderText={renderText} />);
+/** The text as Markdown, its blocks one under the other; its headings as `headings` says (one heading style by default). */
+export function MarkdownText({ text, renderText, headings = 'heading' }: { text: string; renderText: RenderText; headings?: MarkdownHeadings }): ReactNode {
+    return parseMarkdown(text).map((block, i) => <MdBlock key={i} block={block} renderText={renderText} headings={headings} />);
 }

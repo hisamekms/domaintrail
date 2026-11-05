@@ -151,6 +151,11 @@ describe('the extraction prompt', () => {
         expect<unknown>(a).toContain("plain text (no Markdown, no line break, no trailing period), never a person's name");
     });
 
+    test('the instructions: the text has no headings, the title being its heading', () => {
+        const a = extractorInstructions();
+        expect<unknown>(a).toContain("No headings (`#` lines):\n  the title is the item's heading, so do not start the text with one nor use any in it.");
+    });
+
     test('the message holds the talk, the items and the stickies as JSON in a block its text cannot close', () => {
         const prompt = buildExtractionPrompt(job(1), 'n0nce');
         expect<unknown>(prompt).toContain('<talk-n0nce>');

@@ -226,10 +226,10 @@ describe("an item: its title and labels' line while closed, its text as Markdown
         expect(h).not.toContain('knowledge-chip');
     });
 
-    test('opened: the head unchanged, the text as Markdown outside it (the sticky a link, the attached image drawn from the page)', () => {
+    test('opened: the head unchanged, the text as Markdown outside it (its heading a paragraph, the sticky a link, the attached image drawn from the page)', () => {
         const h = row(true);
         expect(head(h)).toBe('<span class="knowledge-kind">ルール</span><span class="knowledge-item-title">締めは月末の翌日</span>');
-        expect(h).toMatch(/<\/button>.*<div class="knowledge-body markdown"><p class="md-heading" role="heading" aria-level="4">締め<\/p>/s);
+        expect(h).toMatch(/<\/button>.*<div class="knowledge-body markdown"><p>締め<\/p>/s);
         expect(h).toContain('<ul><li><strong>月末</strong>は <a class="reply-element">受注した</a> の翌日</li><li>例外あり</li></ul>');
         expect(h).toContain('<img class="md-image" src="/images/img_0000abcd" alt="伝票" loading="lazy"/>');
         expect(h).toContain('外 (https://e.com/x.png)');
