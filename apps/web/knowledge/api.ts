@@ -6,9 +6,23 @@ import { createContext, useContext } from 'react';
 import type { Knowledge, ItemWithHistory, Page, StickyCount, Deletion } from '@domaintrail/knowledge';
 import { deletion, extractionSwitch, itemWithHistory, liveItem, liveItems, page, stickyCounts, type Decoder } from '@domaintrail/knowledge/protocol';
 import { isSignInRedirect, reloadForSignIn, SAME_ORIGIN } from '../app/sign-in';
+import type { HandOver } from './model';
 import { SessionApiError } from '../session/api';
 
 const BASE = '/api/session/knowledge';
+
+/** The body of `GET /api/session/knowledge/hand-overs`: the presses of ホットスポットにする still waiting for their run. */
+const handOvers: Decoder<HandOver[]> = (v, at) => {
+    const list: unknown = typeof v === 'object' && v !== null ? Reflect.get(v, 'handOvers') : undefined;
+    if (!Array.isArray(list)) throw new Error(`${at}.handOvers: expected a list`);
+    return list.flatMap((h: unknown) => {
+        const request: unknown = typeof h === 'object' && h !== null ? Reflect.get(h, 'request') : undefined;
+        const items: unknown = typeof h === 'object' && h !== null ? Reflect.get(h, 'items') : undefined;
+        if (typeof request !== 'string' || !Array.isArray(items)) return [];
+        const [a, b]: unknown[] = items;
+        return typeof a === 'string' && typeof b === 'string' ? [{ request, items: [a, b] as const }] : [];
+    });
+};
 /** Whether the session extracts its knowledge (ADR 0031, section 3): read by anyone, switched by the facilitator. */
 const EXTRACTION = '/api/session/extraction';
 
@@ -66,6 +80,8 @@ export interface KnowledgeApi {
     imageUrl(id: string): string;
     /** A conflict can be made a hotspot (a message to the session's AI): only where there is a session. */
     readonly hotspots: boolean;
+    /** ホットスポットにする pressed, its message sent (ADR 0031, section 4): only where there is a session. */
+    pressHotspot?(request: string, items: readonly [string, string]): Promise<unknown>;
 }
 
 /** The items about one sticky, every page of `search`'s, newest first. */
@@ -98,6 +114,10 @@ export const knowledgeApi = {
     restore: (id: string): Promise<Knowledge.LiveKnowledgeItem> => call(`/items/${enc(id)}/restore`, liveItem, { json: {} }),
     unlink: (id: string, other: string): Promise<Knowledge.LiveKnowledgeItem[]> => call(`/items/${enc(id)}/unlink`, liveItems, { json: { other } }),
     attachImage: (id: string, file: Blob): Promise<Knowledge.LiveKnowledgeItem> => call(`/items/${enc(id)}/images`, liveItem, { blob: file }),
+    /** The conflicts being made hotspots (ADR 0031, section 4). */
+    handOvers: (): Promise<HandOver[]> => call('/hand-overs', handOvers),
+    /** ホットスポットにする pressed, its message sent: the conflict shows as being made a hotspot until its run ends. */
+    pressHotspot: (request: string, items: readonly [string, string]): Promise<unknown> => call('/hand-overs', (v) => v, { json: { request, items } }),
     /** Whether the session extracts its knowledge (404 without a store). */
     extraction: async (): Promise<boolean> => (await call('', extractionSwitch, undefined, EXTRACTION)).enabled,
     /** The facilitator switches the session's extraction on or off; the answer is the state now. */

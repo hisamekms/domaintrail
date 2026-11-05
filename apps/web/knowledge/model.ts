@@ -151,6 +151,18 @@ export function hotspotBody(input: {
     return { targets, body: `@${mentionName(input.aiName)}[p1] ${input.text(mentions, quote(pair.a), quote(pair.b))}`, mentions: ['ai'] };
 }
 
+/** A conflict's key, whichever side comes first. */
+export const pairKey = (a: string, b: string): string => [a, b].sort().join('|');
+
+/** A press of ホットスポットにする still waiting for its run (ADR 0031, section 4): its message and the two items. */
+export interface HandOver {
+    readonly request: string;
+    readonly items: readonly [string, string];
+}
+
+/** The conflicts being made hotspots, by `pairKey`. */
+export const makingHotspots = (handOvers: readonly HandOver[]): ReadonlySet<string> => new Set(handOvers.map((h) => pairKey(h.items[0], h.items[1])));
+
 /** Whether the session extracts its knowledge, from a message of dt's WebSocket (`knowledge.extraction`); none for another. */
 export function extractionOfMessage(message: { readonly type: string }): boolean | undefined {
     if (message.type !== 'knowledge.extraction') return undefined;

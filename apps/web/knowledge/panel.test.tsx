@@ -4,7 +4,8 @@ import { describe, expect, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { I18nProvider } from '../i18n';
-import { ExtractionSwitch } from './panel';
+import { ConflictBox, ExtractionSwitch } from './panel';
+import { pairKey, type KnowledgeItem } from './model';
 import { KnowledgeContext, type KnowledgeView } from './useKnowledge';
 
 const view = (extraction: boolean | undefined): KnowledgeView =>
@@ -26,10 +27,10 @@ const view = (extraction: boolean | undefined): KnowledgeView =>
         setError: () => undefined,
     }) satisfies KnowledgeView;
 
-const render = (extraction: boolean | undefined, node: ReactNode): string =>
+const render = (extraction: boolean | undefined, node: ReactNode, making: ReadonlySet<string> = new Set()): string =>
     renderToStaticMarkup(
         <I18nProvider lang="ja">
-            <KnowledgeContext.Provider value={view(extraction)}>{node}</KnowledgeContext.Provider>
+            <KnowledgeContext.Provider value={{ ...view(extraction), makingHotspots: making }}>{node}</KnowledgeContext.Provider>
         </I18nProvider>,
     );
 
@@ -51,5 +52,35 @@ describe("the session's extraction in the app bar", () => {
     test('nothing without a store, or once the page is out of the session', () => {
         expect(render(undefined, <ExtractionSwitch facilitator live />)).toBe('');
         expect(render(true, <ExtractionSwitch facilitator live={false} />)).toBe('');
+    });
+});
+
+describe('a conflict made a hotspot (ADR 0031, section 4)', () => {
+    const item = (id: string, other: string): KnowledgeItem =>
+        ({
+            state: 'Live',
+            id,
+            content: { text: `the finding of ${id}`, labels: { when: 'as_is', kind: 'rule', origin: 'said' }, about: ['Ordering.Placed'] },
+            sources: [],
+            version: 1,
+            conflictsWith: [other],
+            createdAt: new Date('2026-11-05T09:00:00Z'),
+            updatedAt: new Date('2026-11-05T09:00:00Z'),
+        }) as unknown as KnowledgeItem;
+    const pair = { a: item('kn_00000002', 'kn_00000001'), b: item('kn_00000001', 'kn_00000002') };
+    const box = <ConflictBox pair={pair} from="Ordering.Placed" isOpen={() => false} onToggle={() => undefined} />;
+
+    test('its two buttons, until ホットスポットにする is pressed', () => {
+        const html = render(true, box);
+        expect(html).toContain('ホットスポットにする');
+        expect(html).toContain('食い違いではない');
+        expect(html).not.toContain('ホットスポットを作っています');
+    });
+
+    test('pressed (on any page): the box shows that the hotspot is being made, without its buttons', () => {
+        const html = render(true, box, new Set([pairKey('kn_00000001', 'kn_00000002')]));
+        expect(html).toMatch(/role="status"[^>]*>.*<button[^>]*disabled[^>]*>.*ホットスポットを作っています/s);
+        expect(html).not.toContain('食い違いではない');
+        expect(html).not.toContain('>ホットスポットにする<');
     });
 });
