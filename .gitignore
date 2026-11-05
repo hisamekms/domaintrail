@@ -5,6 +5,7 @@ generated/
 !shared/kernel/src/generated/
 !contexts/modeling/src/generated/
 !contexts/collaboration/src/generated/
+!contexts/knowledge/src/generated/
 *.log
 .DS_Store
 dist/
