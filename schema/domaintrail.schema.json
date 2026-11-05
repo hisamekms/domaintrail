@@ -535,6 +535,68 @@
           }
         }
       }
+    },
+    "knowledge": {
+      "description": "The knowledge taken from the sessions (ADR 0031): where it is kept, the project this workspace reads and writes, and when it is extracted from the talk. The Access service token of the cloudflare store is never here: it is read from the environment variables DOMAINTRAIL_KNOWLEDGE_CLIENT_ID and DOMAINTRAIL_KNOWLEDGE_CLIENT_SECRET.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "store": {
+          "description": "files: one Markdown file per item in the workspace's knowledge/ directory, versions left to git. cloudflare: the Worker you deploy from DomainTrail's template (D1 and R2, behind Cloudflare Access), needed when personal data must be deletable.",
+          "enum": ["files", "cloudflare"],
+          "default": "files"
+        },
+        "project": {
+          "description": "The project whose knowledge this workspace reads and writes, the same in every clone and worktree. Required with cloudflare; with files, by default the workspace's directory name made into a project name (lowercased, other characters than letters and digits made '-').",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+        },
+        "url": {
+          "description": "The Worker's base URL (https; http only on localhost), required with cloudflare, unused with files.",
+          "type": "string",
+          "format": "uri",
+          "pattern": "^(https://[^/?#@]+|http://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?)(/[^?#]*)?$",
+          "examples": ["https://knowledge.example.com"]
+        },
+        "extraction": {
+          "description": "When the knowledge is extracted from the talk of a session.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "quietSeconds": {
+              "description": "Seconds without a message after a person's message before an extraction (one also follows each answer of the AI, and the end of the session).",
+              "type": "number",
+              "minimum": 0,
+              "default": 30
+            },
+            "minIntervalSeconds": {
+              "description": "The fewest seconds between two extractions of a session.",
+              "type": "number",
+              "minimum": 0,
+              "default": 60
+            },
+            "contextMinutes": {
+              "description": "Minutes of the talk before the new messages that the extraction is given as context.",
+              "type": "number",
+              "minimum": 0,
+              "default": 10
+            },
+            "settleSeconds": {
+              "description": "Seconds of quiet on a topic after which a held update or conflict applies (else it applies when the next extraction makes the same call).",
+              "type": "number",
+              "minimum": 0,
+              "default": 120
+            }
+          }
+        }
+      },
+      "if": {
+        "properties": { "store": { "const": "cloudflare" } },
+        "required": ["store"]
+      },
+      "then": {
+        "required": ["project", "url"]
+      }
     }
   }
 }

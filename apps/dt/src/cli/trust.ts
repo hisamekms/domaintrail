@@ -30,8 +30,9 @@ export interface StartFlags {
  * The security-relevant settings of `cfg`, effective (merged), with their keys: what each role reads outside the
  * workspace, the runner's tools and its `dt`; who may reach the session (`collab.identity`, `collab.host`,
  * `collab.access`, `collab.link`, `open.host`, and `--tunnel`: the session on the internet); and where the addressed
- * messages are sent (`classifier`, but its threshold). `collab.link` and the tunnel are there only when set, so that
- * the settings approved before them keep their hash.
+ * messages are sent (`classifier`, but its threshold), and where the knowledge goes with the store's service token
+ * (`knowledge`'s Worker and project, with the `cloudflare` store). `collab.link`, the tunnel and the `cloudflare` store
+ * are there only when set, so that the settings approved before them keep their hash.
  */
 export function securitySettings(cfg: ResolvedConfig, flags: StartFlags = {}): Record<string, unknown> {
     const { threshold: _threshold, ...classifier } = cfg.classifier;
@@ -47,6 +48,7 @@ export function securitySettings(cfg: ResolvedConfig, flags: StartFlags = {}): R
         ...(flags.tunnel && { 'collab --tunnel': 'a public cloudflared quick tunnel (trycloudflare.com), identity link' }),
         'open.host': cfg.open.host,
         classifier,
+        ...(cfg.knowledge.store === 'cloudflare' && { 'knowledge (cloudflare)': { url: cfg.knowledge.url, project: cfg.knowledge.project } }),
     };
 }
 
