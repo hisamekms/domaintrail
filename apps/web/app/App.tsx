@@ -10,7 +10,7 @@ import { changeCount, ChangesList, problemCounts, ProblemsList } from '../lists'
 import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from '../model-utils';
 import { StatesCanvas } from '../states-canvas';
 import { useSessionPage } from '../session/page';
-import { chooseScope, isStormingSelection, StormingDetails, stormingExists, stormingSelectionTitle } from '../storming';
+import { chooseScope, StormingDetails, stormingExists } from '../storming';
 import { StormingNavigator } from '../storming-navigator';
 import { NameSwitch } from '../view/toolbar';
 import { ViewWorkspace, useViewWorkspace } from '../view/workspace';
@@ -92,10 +92,7 @@ export function App() {
     /** The tree's fold over the detail; folded, its head line names the world and what is selected. */
     const fold: TreeFold = {
         folded: panes.treeFolded,
-        label: [
-            t.worlds[worlds.world],
-            ...(selected ? [isStormingSelection(selected) ? stormingSelectionTitle(stormings, selected, mode) : selectionName(selected, mode, model)] : []),
-        ].join(' › '),
+        label: [t.worlds[worlds.world], ...(selected ? [selectionName(selected, mode, model, stormings)] : [])].join(' › '),
         onToggle: () => panes.setTreeFolded(!panes.treeFolded),
     };
 
@@ -234,6 +231,7 @@ export function App() {
                     <Inspector
                         model={model}
                         mode={mode}
+                        stormings={stormings}
                         selected={selected}
                         diagnostics={current?.diagnostics ?? []}
                         diff={current?.diff ?? empty}
