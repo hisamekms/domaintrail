@@ -91,6 +91,7 @@ export function App() {
         stormings,
         mode,
         select: (id) => select(id),
+        showList: () => showLeft('knowledge'),
     });
 
     const locate = (d: Diagnostic) => {

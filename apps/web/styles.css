@@ -5353,7 +5353,7 @@ a.chat-chip.chat-target:hover {
    which has no panes): a link to it (violet, a thin underline), never bold */
 .pane a.chat-mention,
 .pane a.reply-element,
-.knowledge-text a.reply-element {
+.knowledge-body a.reply-element {
     color: var(--accent);
     text-decoration: underline;
     text-decoration-thickness: 1px;
@@ -5363,7 +5363,7 @@ a.chat-chip.chat-target:hover {
 }
 .pane a.chat-mention:hover,
 .pane a.reply-element:hover,
-.knowledge-text a.reply-element:hover {
+.knowledge-body a.reply-element:hover {
     text-decoration-color: currentColor;
 }
 .chat-mention.stale {
@@ -9066,7 +9066,7 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
     margin: 0;
     padding: 0;
 }
-/* an item: its kind in the left column, the rest from the text's left edge (opened, its detail too) */
+/* an item: its kind in the left column, the rest from the title's left edge (its labels' line, and opened, its detail) */
 .knowledge-item {
     position: relative;
     isolation: isolate;
@@ -9080,9 +9080,9 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
 }
 /* opened: one card, outlined, on a light wash; the rows around it stay flat. The card is painted outside the row's
    box (--space-2 to each side; the head's padding is its room above), so opening moves nothing of the item: the
-   card fades in, its detail unfolds (.knowledge-unfold) with the card's room below it, and its text's clamp is
-   released as the text's height moves (panel.tsx, useClampMotion; whole while it closes: .unfolded). The lists'
-   padding holds the card (.knowledge-list-body, the detail's) */
+   card fades in, the head (its title) stays, the labels' line folds away (.knowledge-fold) as the detail unfolds
+   (.knowledge-unfold) with the card's room below it. The lists' padding holds the card (.knowledge-list-body, the
+   detail's) */
 .knowledge-item::before {
     content: '';
     position: absolute;
@@ -9102,6 +9102,9 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
     background-color: var(--surface-muted);
     box-shadow: inset 0 0 0 1px var(--action);
 }
+.knowledge-item:not(.open):hover::before {
+    background-color: var(--row-hover);
+}
 .knowledge-item.open + .knowledge-item {
     border-top-color: transparent;
 }
@@ -9111,16 +9114,13 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
     grid-template-columns: subgrid;
     align-items: baseline;
     width: 100%;
-    padding: var(--space-2) 0;
+    padding: var(--space-2) 0 var(--space-1);
     border: none;
     background: none;
     color: inherit;
     font: inherit;
     text-align: left;
     cursor: pointer;
-}
-.knowledge-item-head:hover {
-    background: var(--row-hover);
 }
 .knowledge-kind {
     flex: none;
@@ -9129,32 +9129,31 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
     font-weight: 700;
     color: var(--action);
 }
-.knowledge-item-main {
-    flex: 1;
+/* an item's title: one short line of plain text (wrapped when the column is narrow), open or closed alike */
+.knowledge-item-title {
     min-width: 0;
-    position: relative;
+    font-weight: var(--fw-strong);
+    overflow-wrap: anywhere;
+}
+/* an opened item's text */
+.knowledge-body {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+/* the labels' line under a closed item (and the stickies' names in the ナレッジ list) fold away as it opens; a click
+   on it opens the item, as one on the head does */
+.knowledge-item > .knowledge-fold {
+    grid-column: 2 / -1;
+    cursor: pointer;
+}
+.knowledge-item.open > .knowledge-fold {
+    cursor: auto;
+}
+.knowledge-item-labels {
     display: flex;
     flex-direction: column;
+    padding-bottom: var(--space-2);
 }
-.knowledge-text {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    white-space: pre-wrap;
-}
-.knowledge-item.unfolded .knowledge-text {
-    display: block;
-}
-/* the plain text clamped, unseen while the item is unfolded: the height it closes to (panel.tsx, useClampMotion) */
-.knowledge-item.unfolded .knowledge-text-twin {
-    display: -webkit-box;
-    position: absolute;
-    inset: 0 0 auto;
-    visibility: hidden;
-    pointer-events: none;
-}
-/* the stickies' names under a closed item of the ナレッジ list fold away as it opens */
 .knowledge-fold {
     display: grid;
     grid-template-rows: 1fr;
@@ -9186,9 +9185,6 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
     flex: none;
     align-self: center;
     color: var(--status-danger-ink);
-}
-.knowledge-item.open .knowledge-item-head:hover {
-    background: none;
 }
 .knowledge-item > .knowledge-unfold {
     grid-column: 2 / -1;
@@ -9250,13 +9246,20 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
     color: var(--text-secondary);
     white-space: pre-wrap;
 }
+.knowledge-version-title {
+    font-weight: var(--fw-strong);
+}
+/* an opened item's labels as the list's chips, its date after them */
+.knowledge-labels {
+    align-items: center;
+}
 .knowledge-form {
     display: flex;
     flex-direction: column;
     gap: var(--gap-inside);
     padding-bottom: var(--space-3);
 }
-.knowledge-form textarea {
+.knowledge-form :is(textarea, input[type='text']) {
     width: 100%;
     box-sizing: border-box;
     padding: var(--space-2);
@@ -9329,9 +9332,6 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
 .knowledge-conflict > .knowledge-unfold > .knowledge-unfold-inner > *,
 .knowledge-hotspot > .knowledge-unfold > .knowledge-unfold-inner > * {
     margin-top: var(--gap-inside);
-}
-.knowledge-side .knowledge-text {
-    display: block;
 }
 .knowledge-conflict .knowledge-side .knowledge-kind {
     color: var(--status-danger-ink);
