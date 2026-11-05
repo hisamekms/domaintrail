@@ -7,13 +7,21 @@
 // Redacting a message forgets, in the one session database: the extraction's held operations quoting it
 // (`forgetHeldQuotes`), then the message and its copies (`createRedaction`), whose transaction is followed by a WAL
 // checkpoint. A page of this session is sent the session's state again when one of its messages was redacted.
+//
+// The conflicts made hotspots (ADR 0031, section 4) are kept here too: the presses of ホットスポットにする in the session
+// database, settled when the server starts and whenever the session moved (`handOvers.settle`, called by the session
+// server), the pages told (`knowledge.changed`) when one is kept or settled.
 import type { DatabaseSync } from 'node:sqlite';
 import { type Clock, createRedaction } from '@domaintrail/collaboration';
 
 type UnitOfWork = Parameters<typeof createRedaction>[0]['uow'];
 import {
+    createHotspotHandOvers,
     createRedactionSync,
+    createSqliteHotspotHandOvers,
     createSqliteRedactionCursors,
+    type HotspotHandOvers,
+    type RequestOutcome,
     forgetHeldQuotes,
     type Knowledge,
     type KnowledgeStore,
@@ -42,6 +50,14 @@ export interface LiveKnowledgeDeps {
     readonly sessionRedacted: () => void;
     readonly everyMs?: number;
     readonly log: (line: string) => void;
+    /**
+     * What became of a message sent to the AI, and whether a message is a participant's own: the hand-overs of conflicts
+     * made hotspots follow them (ADR 0031, section 4). Absent: no hand-overs.
+     */
+    readonly requests?: {
+        readonly outcomeOf: (request: string) => Promise<RequestOutcome>;
+        readonly isOwn: (request: string, participant: string) => Promise<boolean>;
+    };
 }
 
 export interface LiveKnowledge {
@@ -49,6 +65,8 @@ export interface LiveKnowledge {
     readonly store: KnowledgeStore;
     readonly routes: KnowledgeRoutes;
     readonly redactions: RedactionSync;
+    /** The conflicts being made hotspots: settled whenever the session moved (absent without `requests`). */
+    readonly handOvers?: HotspotHandOvers;
     stop(): void;
 }
 
@@ -81,13 +99,45 @@ export function startLiveKnowledge(deps: LiveKnowledgeDeps): LiveKnowledge {
         },
         log,
     });
+    const requests = deps.requests;
+    const handOvers = requests
+        ? createHotspotHandOvers({
+              session: deps.session,
+              project: deps.project,
+              store: deps.store,
+              pending: createSqliteHotspotHandOvers(deps.db),
+              outcomeOf: requests.outcomeOf,
+              now: () => deps.clock.now(),
+              changed,
+              log,
+          })
+        : undefined;
+    // what a restart left: presses whose run ended meanwhile
+    void handOvers?.settle();
     void redactions.run();
     const timer = setInterval(() => void redactions.run(), deps.everyMs ?? REDACTION_EVERY_MS);
     timer.unref();
     return {
         store: tellingExtractions(deps.store, changed),
-        routes: createKnowledgeRoutes({ store: deps.store, project: deps.project, changed, log }),
+        routes: createKnowledgeRoutes({
+            store: deps.store,
+            project: deps.project,
+            changed,
+            log,
+            ...(handOvers &&
+                requests && {
+                    handOvers: {
+                        list: () => handOvers.list(),
+                        async press({ request, items, by, participant }) {
+                            if (!(await requests.isOwn(request, participant))) return false;
+                            await handOvers.press({ request, items, by });
+                            return true;
+                        },
+                    },
+                }),
+        }),
         redactions,
+        ...(handOvers && { handOvers }),
         stop: () => clearInterval(timer),
     };
 }
