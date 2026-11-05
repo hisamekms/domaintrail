@@ -1,9 +1,10 @@
 // The read-only page's state without React: its place in the query, the storming shown, the drawing of a level
-// checked for what the canvas reads, the stickies' names across the published stormings, and the date of the drawing.
+// checked for what the canvas reads, the stickies' names and the hotspots across the published stormings, and the date
+// of the drawing.
 import { describe, expect, test } from 'bun:test';
 import type { PublishedStorming } from '@domaintrail/knowledge';
 import { stickyRef } from '@domaintrail/knowledge/protocol';
-import { DEFAULT_LEVEL, DrawingError, drawingDate, drawingOf, locationOf, searchOf, shownStorming, stickyNames } from './model';
+import { DEFAULT_LEVEL, DrawingError, drawingDate, drawingOf, hotspotStickies, locationOf, searchOf, shownStorming, stickyNames } from './model';
 
 const graph = { id: 'es-dl', nodes: [{ id: 'n1', elementId: 'es/Ordering/Placed', label: {} }], edges: [], nodeLayout: {}, edgeLayout: {} };
 const form = (over: Partial<PublishedStorming> = {}): PublishedStorming => ({
@@ -58,4 +59,10 @@ test('the stickies’ names as the canvas shows them; a sticky no published stor
     expect(name('Ordering.Place')).toBe('Place');
     expect(name('Billing.Paid')).toBe('Billing.Paid');
     expect(stickyNames([form()], 'name')('Ordering.Placed')).toBe('Placed');
+});
+
+test('the hotspots, as the drawings draw them', () => {
+    const hot = { ...graph, nodes: [...graph.nodes, { id: 'n2', kind: 'esHotspot', elementId: 'es/Ordering/CutOff', label: {} }] };
+    expect([...hotspotStickies([form({ views: { 'big-picture': hot, 'design-level': graph } })])]).toEqual(['Ordering.CutOff']);
+    expect([...hotspotStickies([form({ views: { 'big-picture': {}, 'design-level': graph } })])]).toEqual([]);
 });

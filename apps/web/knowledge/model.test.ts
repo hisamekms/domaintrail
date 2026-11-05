@@ -1,11 +1,15 @@
 // The knowledge as the page shows it (model.ts): a sticky's selection, the orders, the conflicts, the marks, the
-// filters' query, the text without its images, the message ホットスポットにする sends, and the extraction's switch.
+// filters' query, the text without its images, the message ホットスポットにする sends, the items kept with a hotspot,
+// why a press got its buttons back, and the extraction's switch.
 import { describe, expect, test } from 'bun:test';
+import { MESSAGES } from '../i18n';
 import {
+    clearedReasons,
     conflictPairs,
     extractionControl,
     extractionOfMessage,
     hotspotBody,
+    hotspotGroups,
     imagesOf,
     marksOf,
     missingConflicts,
@@ -16,6 +20,7 @@ import {
     queryOf,
     selectionOfSticky,
     stickyOfSelection,
+    pairKey,
     toggled,
     type KnowledgeItem,
 } from './model';
@@ -133,5 +138,57 @@ describe('the knowledge on the page', () => {
             body: '@AI[p1] #注文した[1] #支払った[2]: 締めは前日17時 / 締めは当日9時',
             mentions: ['ai'],
         });
+    });
+
+    test('ホットスポットにする asks the runner to reuse a hotspot that asks the same question, and to name the one it made or used', () => {
+        const text = MESSAGES.ja.knowledge.hotspotText('#注文した[1]', 'a', 'b');
+        expect(text).toContain('同じ問いのホットスポットがすでにあれば、新しく作らずにそれを使ってください');
+        expect(text).toContain('作った、または使ったホットスポットを返答で名指ししてください');
+    });
+
+    test('why a press got its buttons back, by its conflict whichever side comes first', () => {
+        const reasons = clearedReasons([
+            { items: ['b', 'a'], reason: 'none' },
+            { items: ['c', 'd'], reason: 'several' },
+        ]);
+        expect(reasons.get(pairKey('a', 'b'))).toBe('none');
+        expect(reasons.get(pairKey('d', 'c'))).toBe('several');
+    });
+});
+
+describe('the items kept with a hotspot (ADR 0031, section 4)', () => {
+    const isHotspot = (s: string): boolean => s.startsWith('Ordering.Hot');
+
+    test('items about the sticky and one hotspot: grouped by it, newest first; later items about it join', () => {
+        const handed = [
+            item('a', { about: ['Ordering.Placed', 'Ordering.HotCutOff'], at: '2026-11-05T09:00:00Z' }),
+            item('b', { about: ['Ordering.Placed', 'Ordering.HotCutOff'], at: '2026-11-05T09:01:00Z' }),
+        ];
+        const later = item('c', { about: ['Ordering.HotCutOff', 'Ordering.Placed', 'Ordering.Paid'], at: '2026-11-05T10:00:00Z' });
+        const plain = item('d', { about: ['Ordering.Placed'] });
+        const { groups, rest } = hotspotGroups([plain, ...handed, later], 'Ordering.Placed', isHotspot);
+        expect(groups.map((g) => [g.hotspot, g.items.map((i) => i.id as string)])).toEqual([['Ordering.HotCutOff', ['c', 'b', 'a']]]);
+        expect(rest.map((i) => i.id as string)).toEqual(['d']);
+    });
+
+    test('two hotspots: each its own box; an item about two hotspots stays in the list', () => {
+        const items = [
+            item('a', { about: ['Ordering.Placed', 'Ordering.HotA'], at: '2026-11-05T09:00:00Z' }),
+            item('b', { about: ['Ordering.Placed', 'Ordering.HotB'], at: '2026-11-05T10:00:00Z' }),
+            item('c', { about: ['Ordering.Placed', 'Ordering.HotA', 'Ordering.HotB'] }),
+        ];
+        const { groups, rest } = hotspotGroups(items, 'Ordering.Placed', isHotspot);
+        expect(groups.map((g) => g.hotspot)).toEqual(['Ordering.HotB', 'Ordering.HotA']);
+        expect(rest.map((i) => i.id as string)).toEqual(['c']);
+    });
+
+    test("in the hotspot's own detail, nothing is grouped", () => {
+        const items = [item('a', { about: ['Ordering.Placed', 'Ordering.HotCutOff'] }), item('b', { about: ['Ordering.Paid', 'Ordering.HotCutOff'] })];
+        expect(hotspotGroups(items, 'Ordering.HotCutOff', isHotspot)).toEqual({ groups: [], rest: items });
+    });
+
+    test('no hotspots known (no storming read): nothing is grouped', () => {
+        const items = [item('a', { about: ['Ordering.Placed', 'Ordering.HotCutOff'] })];
+        expect(hotspotGroups(items, 'Ordering.Placed', () => false)).toEqual({ groups: [], rest: items });
     });
 });

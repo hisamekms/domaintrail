@@ -9236,13 +9236,27 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
     font-size: var(--fs-small);
 }
 /* a conflict: the two items side by side on the danger's wash */
-.knowledge-conflict {
+.knowledge-conflict,
+.knowledge-hotspot {
     display: flex;
     flex-direction: column;
     gap: var(--gap-inside);
     padding: var(--space-2);
     border-radius: 6px;
     background: var(--status-danger-bg);
+}
+/* the items handed over to a hotspot: side by side on a calm tint, the hotspot linked */
+.knowledge-hotspot {
+    background: var(--neutral-tint);
+}
+.knowledge-hotspot .knowledge-pair {
+    grid-template-columns: repeat(auto-fit, minmax(40%, 1fr));
+}
+/* why the buttons came back, a line above them */
+.knowledge-cleared {
+    flex-basis: 100%;
+    color: var(--muted);
+    font-size: var(--fs-small);
 }
 .knowledge-pair {
     display: grid;
@@ -9272,16 +9286,18 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
     box-shadow: inset 0 0 0 1px var(--action);
 }
 /* a side's detail in the box: the box's gap comes with it as it unfolds, not before */
-.knowledge-conflict > .knowledge-unfold {
+.knowledge-conflict > .knowledge-unfold,
+.knowledge-hotspot > .knowledge-unfold {
     margin-top: calc(-1 * var(--gap-inside));
 }
-.knowledge-conflict > .knowledge-unfold > .knowledge-unfold-inner > * {
+.knowledge-conflict > .knowledge-unfold > .knowledge-unfold-inner > *,
+.knowledge-hotspot > .knowledge-unfold > .knowledge-unfold-inner > * {
     margin-top: var(--gap-inside);
 }
 .knowledge-side .knowledge-text {
     display: block;
 }
-.knowledge-side .knowledge-kind {
+.knowledge-conflict .knowledge-side .knowledge-kind {
     color: var(--status-danger-ink);
 }
 /* the ナレッジ list */

@@ -6,22 +6,38 @@ import { createContext, useContext } from 'react';
 import type { Knowledge, ItemWithHistory, Page, StickyCount, Deletion } from '@domaintrail/knowledge';
 import { deletion, extractionSwitch, itemWithHistory, liveItem, liveItems, page, stickyCounts, type Decoder } from '@domaintrail/knowledge/protocol';
 import { isSignInRedirect, reloadForSignIn, SAME_ORIGIN } from '../app/sign-in';
-import type { HandOver } from './model';
+import type { ClearedHandOver, HandOver, HandOvers } from './model';
 import { SessionApiError } from '../session/api';
 
 const BASE = '/api/session/knowledge';
 
-/** The body of `GET /api/session/knowledge/hand-overs`: the presses of ホットスポットにする still waiting for their run. */
-const handOvers: Decoder<HandOver[]> = (v, at) => {
+/** Two items' IDs, else undefined. */
+const pairOf = (v: unknown): readonly [string, string] | undefined => {
+    if (!Array.isArray(v)) return undefined;
+    const [a, b]: unknown[] = v;
+    return typeof a === 'string' && typeof b === 'string' ? [a, b] : undefined;
+};
+
+/**
+ * The body of `GET /api/session/knowledge/hand-overs`: the presses of ホットスポットにする still waiting for their run,
+ * and those cleared lately with why (an unknown reason read as none found).
+ */
+const handOvers: Decoder<HandOvers> = (v, at) => {
     const list: unknown = typeof v === 'object' && v !== null ? Reflect.get(v, 'handOvers') : undefined;
+    const cleared: unknown = typeof v === 'object' && v !== null ? Reflect.get(v, 'cleared') : undefined;
     if (!Array.isArray(list)) throw new Error(`${at}.handOvers: expected a list`);
-    return list.flatMap((h: unknown) => {
-        const request: unknown = typeof h === 'object' && h !== null ? Reflect.get(h, 'request') : undefined;
-        const items: unknown = typeof h === 'object' && h !== null ? Reflect.get(h, 'items') : undefined;
-        if (typeof request !== 'string' || !Array.isArray(items)) return [];
-        const [a, b]: unknown[] = items;
-        return typeof a === 'string' && typeof b === 'string' ? [{ request, items: [a, b] as const }] : [];
+    const field = (h: unknown, key: string): unknown => (typeof h === 'object' && h !== null ? Reflect.get(h, key) : undefined);
+    const pending = list.flatMap((h: unknown): HandOver[] => {
+        const request = field(h, 'request');
+        const items = pairOf(field(h, 'items'));
+        return typeof request === 'string' && items ? [{ request, items }] : [];
     });
+    const reasons = (Array.isArray(cleared) ? cleared : []).flatMap((h: unknown): ClearedHandOver[] => {
+        const items = pairOf(field(h, 'items'));
+        const reason = field(h, 'reason');
+        return items ? [{ items, reason: reason === 'several' || reason === 'ended' ? reason : 'none' }] : [];
+    });
+    return { pending, cleared: reasons };
 };
 /** Whether the session extracts its knowledge (ADR 0031, section 3): read by anyone, switched by the facilitator. */
 const EXTRACTION = '/api/session/extraction';
@@ -114,8 +130,8 @@ export const knowledgeApi = {
     restore: (id: string): Promise<Knowledge.LiveKnowledgeItem> => call(`/items/${enc(id)}/restore`, liveItem, { json: {} }),
     unlink: (id: string, other: string): Promise<Knowledge.LiveKnowledgeItem[]> => call(`/items/${enc(id)}/unlink`, liveItems, { json: { other } }),
     attachImage: (id: string, file: Blob): Promise<Knowledge.LiveKnowledgeItem> => call(`/items/${enc(id)}/images`, liveItem, { blob: file }),
-    /** The conflicts being made hotspots (ADR 0031, section 4). */
-    handOvers: (): Promise<HandOver[]> => call('/hand-overs', handOvers),
+    /** The conflicts being made hotspots, and those whose press was cleared lately (ADR 0031, section 4). */
+    handOvers: (): Promise<HandOvers> => call('/hand-overs', handOvers),
     /** ホットスポットにする pressed, its message sent: the conflict shows as being made a hotspot until its run ends. */
     pressHotspot: (request: string, items: readonly [string, string]): Promise<unknown> => call('/hand-overs', (v) => v, { json: { request, items } }),
     /** Whether the session extracts its knowledge (404 without a store). */

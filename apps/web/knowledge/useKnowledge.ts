@@ -11,7 +11,7 @@ import type { ViewSocket } from '../app/useViewSocket';
 import { nameIn } from '../model-utils';
 import { SessionApiError } from '../session/api';
 import { knowledgeApi, type KnowledgeApi } from './api';
-import { extractionOfMessage, makingHotspots, marksOf, type StickyMark } from './model';
+import { clearedReasons, extractionOfMessage, makingHotspots, marksOf, type ClearedReason, type StickyMark } from './model';
 
 /** How long a deletion can be undone on the page (ADR 0031, section 7; the store keeps it longer). */
 export const UNDO_MS = 10_000;
@@ -42,6 +42,10 @@ export interface KnowledgeView {
     setExtraction(enabled: boolean): Promise<void>;
     /** The conflicts being made hotspots, by `pairKey` (ADR 0031, section 4); none where there is no session. */
     readonly makingHotspots?: ReadonlySet<string>;
+    /** Why a conflict's press of ホットスポットにする got its buttons back lately, by `pairKey`. */
+    readonly clearedHotspots?: ReadonlyMap<string, ClearedReason>;
+    /** Whether a sticky is a hotspot (the items about it and another sticky are kept together there); none: no sticky is. */
+    readonly isHotspot?: (sticky: string) => boolean;
     /**
      * A source's message when this page's session holds it: who said it, named as the chat names them now (never stored
      * in the item), and going to it in the chat; none for another session's message and on the Worker's page.
@@ -116,6 +120,7 @@ export function useKnowledge(input: {
     const [error, setError] = useState<string | undefined>();
     const [extraction, setExtractionState] = useState<boolean | undefined>();
     const [making, setMaking] = useState<ReadonlySet<string>>(new Set());
+    const [cleared, setCleared] = useState<ReadonlyMap<string, ClearedReason>>(new Map());
     const changed = useCallback(() => setVersion((v) => v + 1), []);
 
     // dt says the knowledge changed: read it again
@@ -168,8 +173,16 @@ export function useKnowledge(input: {
         if (!session) return;
         let stale = false;
         knowledgeApi.handOvers().then(
-            (h) => !stale && setMaking(makingHotspots(h)),
-            () => !stale && setMaking(new Set()),
+            (h) => {
+                if (stale) return;
+                setMaking(makingHotspots(h.pending));
+                setCleared(clearedReasons(h.cleared));
+            },
+            () => {
+                if (stale) return;
+                setMaking(new Set());
+                setCleared(new Map());
+            },
         );
         return () => {
             stale = true;
@@ -207,6 +220,13 @@ export function useKnowledge(input: {
         },
         [labels, mode],
     );
+    const isHotspot = useCallback(
+        (sticky: string): boolean => {
+            const dot = sticky.indexOf('.');
+            return labels.get(sticky.slice(0, dot))?.get(sticky.slice(dot + 1))?.kind === 'hotspot';
+        },
+        [labels],
+    );
 
     return {
         available,
@@ -223,6 +243,8 @@ export function useKnowledge(input: {
         extraction,
         setExtraction,
         makingHotspots: making,
+        clearedHotspots: cleared,
+        isHotspot,
         error,
         setError,
     };

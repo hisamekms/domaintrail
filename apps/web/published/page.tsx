@@ -24,7 +24,7 @@ import { FlowCanvas } from '../view/flow-canvas';
 import { selectedElement } from '../view/navigation';
 import { LevelSwitch, SubjectName, SubjectPicker } from '../view/toolbar';
 import { publishedApi, workerKnowledgeApi } from './api';
-import { drawingDate, drawingOf, locationOf, searchOf, shownStorming, stickyNames, type PageLocation } from './model';
+import { drawingDate, drawingOf, hotspotStickies, locationOf, searchOf, shownStorming, stickyNames, type PageLocation } from './model';
 
 const LEVEL_ICONS: Record<PublishedLevel, LucideIcon> = { 'big-picture': Telescope, 'design-level': Microscope };
 const NO_DIFF = { added: [], changed: [], removed: [] };
@@ -302,6 +302,7 @@ function usePageKnowledge(input: {
     }, [canvas, drawn]);
 
     const label = useMemo(() => stickyNames(forms, mode), [forms, mode]);
+    const hotspots = useMemo(() => hotspotStickies(forms), [forms]);
     const setLit = useCallback((stickies: readonly string[]) => setLitState((old) => (old.join() === stickies.join() ? old : stickies)), []);
     if (!api) return undefined;
     return {
@@ -315,6 +316,7 @@ function usePageKnowledge(input: {
         undo: deletion.undo,
         changed,
         label,
+        isHotspot: (sticky) => hotspots.has(sticky),
         select(sticky) {
             if (!canvas) return;
             const item = canvas.findElement(selectionOfSticky(sticky));
