@@ -19,6 +19,9 @@ import {
     type StormingDetailSession,
 } from './storming';
 import { beginActions, problemText } from './storming-detail';
+import { Inspector, type InspectorProps } from './inspector';
+import { check } from './test-helpers';
+import type { DisplayMode } from '@domaintrail/visualization';
 
 const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 
@@ -294,5 +297,54 @@ describe('a storming selection’s name (the folded tree’s head line)', () => 
         expect(stormingSelectionTitle(stormings, 'es/DeliveryCancellation/ShipmentCancelled', 'name')).toBe('ShipmentCancelled');
         expect(stormingSelectionTitle(stormings, 'es/DeliveryCancellation', 'label')).toBe('配送キャンセル');
         expect(stormingSelectionTitle(stormings, 'es/DeliveryCancellation/Gone', 'label')).toBe('Gone');
+    });
+});
+
+describe('the detail’s back button', () => {
+    /** The text and tooltip of the back button in the detail of `selected`, back to `backTo`, in `mode`. */
+    const backButton = async (selected: string, backTo: string, mode: DisplayMode): Promise<{ name: string; tooltip: string }> => {
+        const { stormings } = await viewService().refresh();
+        const model = (await check({ 'a.dt': 'context Delivery {\n  aggregate Shipment "配送" {}\n  aggregate Route {}\n}\n' })).model!;
+        const props: InspectorProps = {
+            model,
+            mode,
+            stormings,
+            selected,
+            diagnostics: [],
+            diff: { added: [], changed: [], removed: [] },
+            base: null,
+            sources: [],
+            sourceFocus: undefined,
+            statesView: () => null,
+            stormingView: (_id, history) => history,
+            tab: 'structure',
+            onTab: () => {},
+            onSelect: () => {},
+            onReveal: () => {},
+            onFocusContext: () => {},
+            backTo,
+            onBack: () => {},
+        };
+        const html = renderToStaticMarkup(
+            <I18nProvider lang="en">
+                <Inspector {...props} />
+            </I18nProvider>,
+        );
+        return { name: html.match(/<span class="back-name">([^<]*)<\/span>/)![1], tooltip: html.match(/data-tooltip="([^"]*)"/)![1] };
+    };
+
+    test('names a storming element by its label in ラベル, by its ID in 名前', async () => {
+        expect(await backButton('Delivery.Shipment', 'es/DeliveryCancellation/ShipmentCancelled', 'label')).toEqual({
+            name: '配送がキャンセルされた',
+            tooltip: 'Back to 配送がキャンセルされた',
+        });
+        expect((await backButton('Delivery.Shipment', 'es/DeliveryCancellation/ShipmentCancelled', 'name')).name).toBe('ShipmentCancelled');
+        expect((await backButton('Delivery.Shipment', 'es/DeliveryCancellation', 'label')).name).toBe('配送キャンセル');
+    });
+
+    test('names a model element by its label in ラベル, by its name in 名前, and by its name when it has no label', async () => {
+        expect((await backButton('es/DeliveryCancellation/ShipmentCancelled', 'Delivery.Shipment', 'label')).name).toBe('配送');
+        expect((await backButton('es/DeliveryCancellation/ShipmentCancelled', 'Delivery.Shipment', 'name')).name).toBe('Shipment');
+        expect((await backButton('es/DeliveryCancellation/ShipmentCancelled', 'Delivery.Route', 'label')).name).toBe('Route');
     });
 });

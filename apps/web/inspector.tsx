@@ -44,7 +44,8 @@ import {
 import { ownerElement } from './render';
 import { diffRows, rowClass, type RowChange } from './row-diff';
 import { SourceView, type SourceFocus } from './source';
-import { isStormingSelection, stormingSelectionName } from './storming';
+import { isStormingSelection, stormingSelectionTitle } from './storming';
+import type { StormingView } from '@domaintrail/visualization/protocol';
 import { usagesOf } from './usages';
 import { Act } from './shared/act';
 
@@ -67,6 +68,8 @@ const useBase = () => useContext(BaseContext);
 export interface InspectorProps {
     model: DomainModel | null;
     mode: DisplayMode;
+    /** The stormings, to name a storming element the back button returns to. */
+    stormings: readonly StormingView[];
     selected: string | undefined;
     diagnostics: Diagnostic[];
     diff: ModelDiff;
@@ -123,15 +126,18 @@ function revealTargets(r: Resolved): RevealTarget[] {
     return out;
 }
 
-/** A selection's name, as the back button and the folded tree's head line give it: a file's path, a storming element's ID, else the item's name. */
-export function selectionName(id: string, mode: DisplayMode, model: DomainModel | null): string {
-    return selectedFile(id) ?? (isStormingSelection(id) ? stormingSelectionName(id) : namer(mode, model).id(id));
+/**
+ * A selection's name, as the back button and the folded tree's head line give it: a file's path, else the storming
+ * element's or the item's name in the display mode (its label in ラベル, its name when it has no label).
+ */
+export function selectionName(id: string, mode: DisplayMode, model: DomainModel | null, stormings: readonly StormingView[]): string {
+    return selectedFile(id) ?? (isStormingSelection(id) ? stormingSelectionTitle(stormings, id, mode) : namer(mode, model).id(id));
 }
 
 export function Inspector(props: InspectorProps) {
     const { model, selected } = props;
     const tx = useT();
-    const backName = props.backTo && selectionName(props.backTo, props.mode, model);
+    const backName = props.backTo && selectionName(props.backTo, props.mode, model, props.stormings);
     // its own row above the kind badge, when there is somewhere to go back to
     const history = backName ? (
         <div className="history">

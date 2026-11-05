@@ -133,7 +133,7 @@ export function stormingLocation(stormings: readonly StormingView[], id: string)
     return range && { file: range.file, line: range.start.line, endLine: range.end.line };
 }
 
-/** The name of a selection in the inspector's back button. */
+/** A storming selection's local ID (its name when it is not found). */
 export const stormingSelectionName = (id: string): string => id.slice(id.lastIndexOf('/') + 1);
 
 /** The `.dt` item a `ref` names, when the model has it (an event or an aggregate `Ctx.Name`, a command `Ctx.Agg.cmd`). */
