@@ -562,9 +562,11 @@ const STORMING = `storming Checkout "注文" {
   /// The customer places an order.
   event OrderPlaced "注文確定" { ref Sales.OrderPlaced }
   aggregate Order { ref Sales.Order }
+  actor Customer
   command Place {
     ref Sales.Order.place
-    target Order
+    by Customer
+    handledBy Order
     emits OrderPlaced
   }
   event Lost { ref Sales.Missing }
@@ -574,7 +576,7 @@ const STORMING = `storming Checkout "注文" {
 
 describe('dt lsp with .dtes files', () => {
     test('publishes the diagnostics of dt check for .dtes files, S rules and the .dt refs included', async () => {
-        const client = await start({ 'common.dt': COMMON, 'sales.dt': SALES, 'checkout.dtes': STORMING.replace('target Order', 'target OrderPlaced') });
+        const client = await start({ 'common.dt': COMMON, 'sales.dt': SALES, 'checkout.dtes': STORMING.replace('emits OrderPlaced', 'emits Order') });
         const diagnostics = await client.until('checkout.dtes', (d) => d.length > 0);
         expect(diagnostics.map((d) => d.code)).toEqual(['S003', 'S010']);
         expect(asCheckLines(diagnostics)).toEqual(await checkOutput(client.root, 'checkout.dtes'));
@@ -604,7 +606,7 @@ describe('dt lsp with .dtes files', () => {
                 .request<Link[] | null>('textDocument/definition', 'checkout.dtes', pos)
                 .then((links) => (links ?? []).map((l) => [path.basename(URI.parse(l.targetUri).fsPath), l.targetSelectionRange.start]));
 
-        expect(await definition(at(STORMING, 'target Order', 'target '.length))).toEqual([['checkout.dtes', at(STORMING, 'Order {', 0)]]);
+        expect(await definition(at(STORMING, 'handledBy Order', 'handledBy '.length))).toEqual([['checkout.dtes', at(STORMING, 'Order {', 0)]]);
         expect(await definition(at(STORMING, 'Main { OrderPlaced', 'Main { '.length))).toEqual([['checkout.dtes', at(STORMING, 'OrderPlaced "', 0)]]);
         expect(await definition(at(STORMING, 'ref Sales.Order.place', 'ref Sales.Order.'.length))).toEqual([['sales.dt', at(SALES, 'place()')]]);
         expect(await definition(at(STORMING, 'ref Sales.Order.place', 'ref Sales.'.length))).toEqual([['sales.dt', at(SALES, 'Order "', 0)]]);
@@ -626,6 +628,6 @@ describe('dt lsp with .dtes files', () => {
         type Symbol = { name: string; children?: Symbol[] };
         const symbols = await client.connection.sendRequest<Symbol[]>('textDocument/documentSymbol', { textDocument: { uri: client.uri('checkout.dtes') } });
         const names = (s: Symbol[]): unknown[] => s.map((x) => (x.children?.length ? [x.name, names(x.children)] : x.name));
-        expect(names(symbols)).toEqual([['Checkout', ['OrderPlaced', 'Order', 'Place', 'Lost', 'Main']]]);
+        expect(names(symbols)).toEqual([['Checkout', ['OrderPlaced', 'Order', 'Customer', 'Place', 'Lost', 'Main']]]);
     });
 });

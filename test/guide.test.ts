@@ -77,9 +77,10 @@ describe('dt guide', () => {
         expect(a.stormings.stormings.length).toBe(stormings.length);
     });
 
-    test('its storming examples use every keyword of the .dtes grammar', async () => {
+    test('its storming examples use every keyword of the .dtes grammar, but the relations ADR 0032 removed', async () => {
         const grammar = await readFile(path.join(ROOT, 'contexts', 'storming', 'src', 'infrastructure', 'syntax', 'storming.langium'), 'utf8');
-        const keywords = new Set([...grammar.matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]));
+        // `target` is parsed only to be reported (S023); `actor` is still the keyword of the element
+        const keywords = new Set([...grammar.matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]).filter((k) => k !== 'target'));
         const examples = blocks('dtes')
             .filter((b) => /^\/\/ \S+\.dtes\n/.test(b))
             .join('\n')

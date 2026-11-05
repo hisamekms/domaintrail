@@ -20,13 +20,16 @@ storming OrderToCash "注文から入金まで" {
   }
   event PaymentFailed "支払に失敗した" // an exception the .dt model does not have yet
   event PaymentAuthorized "与信が通った" {
+    from PaymentService // it arrives from the payment service, without a command of ours
     level design // how the payment service works, not a business fact: hidden at Big Picture
   }
 
   actor Customer "顧客"
   external PaymentService "決済サービス"
   readmodel Cart "カート"
-  readmodel OrderTotal "注文金額"
+  readmodel OrderTotal "注文金額" {
+    from ItemAdded // fed by the order's lines
+  }
 
   aggregate Order "注文" {
     ref Sales.Order
@@ -37,41 +40,40 @@ storming OrderToCash "注文から入金まで" {
 
   command PlaceOrder "注文する" {
     ref Sales.Order.place
-    actor Customer
-    target Order
+    by Customer
+    handledBy Order
     emits OrderPlaced
   }
   command AddItem "明細を追加する" {
     ref Sales.Order.addItem
-    actor Customer
+    by Customer
     reads Cart
-    target Order
+    handledBy Order
     emits ItemAdded
   }
   command ConfirmOrder "注文を確定する" {
     ref Sales.Order.confirm
-    actor Customer
+    by Customer
     reads Cart
-    target Order
+    handledBy Order
     emits OrderConfirmed
   }
   command CancelOrder "注文を取り消す" {
     ref Sales.Order.cancel
-    actor Customer
-    target Order
-    emits OrderCancelled
-    emits RefundRequested
+    by Customer
+    handledBy Order
+    emits OrderCancelled, RefundRequested
   }
-  command IssueInvoice "請求書を発行する" {
+  command IssueInvoice "請求書を発行する" { // issued by the policy BillConfirmedOrder: no `by`
     ref Billing.Invoice.issue
     reads OrderTotal
-    target Invoice
+    handledBy Invoice
     emits InvoiceIssued
   }
   command RecordPayment "入金を記録する" {
     ref Billing.Invoice.pay
-    actor PaymentService
-    target Invoice
+    by PaymentService
+    handledBy Invoice
     emits InvoicePaid
     emits PaymentFailed
   }

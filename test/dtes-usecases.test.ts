@@ -93,28 +93,28 @@ const DESIGN = `storming Rental "自転車レンタル" {
   aggregate LateFee "延滞料"
 
   command Reserve "予約する" {
-    actor Member
+    by Member
     reads Availability
-    target Reservation
+    handledBy Reservation
     emits BikeReserved
   }
   command Expire "期限切れにする" {
-    actor Clock
-    target Reservation
+    by Clock
+    handledBy Reservation
     emits ReservationExpired
   }
   command PickUp "借りる" {
-    actor Member
-    target Loan
+    by Member
+    handledBy Loan
     emits BikePickedUp
   }
   command GiveBack "返す" {
-    actor Member
-    target Loan
+    by Member
+    handledBy Loan
     emits BikeReturned
   }
   command ChargeLateFee "延滞料を課金する" {
-    target LateFee
+    handledBy LateFee
     emits LateFeeCharged
   }
 
@@ -332,7 +332,7 @@ describe('UC2: storming from the existing model of examples/shop', () => {
         const edited = original.replace('  event PaymentFailed', '  event InvoiceVoided "請求書が無効になった"\n    event PaymentFailed').replace(
             /\n}\n$/,
             `
-  command VoidInvoice "請求書を無効にする" { target Invoice
+  command VoidInvoice "請求書を無効にする" { handledBy Invoice
     emits InvoiceVoided }
   policy VoidInvoiceOfCancelledOrder { on RefundRequested
   issues VoidInvoice }
@@ -346,7 +346,7 @@ describe('UC2: storming from the existing model of examples/shop', () => {
         const fmt = await run('-r', dir, 'fmt');
         expect(fmt).toEqual({ code: 0, out: [SHOP_STORMING, '8 file(s): 1 formatted.'], err: [] });
         const formatted = await readFile(file, 'utf8');
-        expect(formatted).toContain('  command VoidInvoice "請求書を無効にする" {\n    target Invoice\n    emits InvoiceVoided\n  }\n');
+        expect(formatted).toContain('  command VoidInvoice "請求書を無効にする" {\n    handledBy Invoice\n    emits InvoiceVoided\n  }\n');
 
         const checked = await run('-r', dir, 'check');
         expect(checked).toEqual({ code: 0, out: ['8 file(s) checked: 0 error(s), 0 warning(s).'], err: [] });

@@ -39,27 +39,25 @@ storming CertificateIssuance "住民票のコンビニ交付" {
   aggregate Issuance "交付"
 
   command VerifyPin "暗証番号を照合する" {
-    actor Applicant
-    target CardCheck
+    by Applicant
+    handledBy CardCheck
     emits PinEntered
     emits PinLocked
   }
   command SelectOptions "種類と部数を選ぶ" {
-    actor Applicant
+    by Applicant
     reads IssuableCertificates
-    target Issuance
+    handledBy Issuance
     emits OptionsSelected
   }
   command PayFee "手数料を払う" {
-    actor Applicant
-    target Issuance
+    by Applicant
+    handledBy Issuance
     emits FeePaid
   }
-  command IssueCertificate "証明書を発行する" {
-    actor CityOfficeSystem
-    target Issuance
-    emits IssuanceRecorded
-    emits CertificateIssued
+  command IssueCertificate "証明書を発行する" { // issued by the policy IssueWhenPaid
+    handledBy CityOfficeSystem
+    emits IssuanceRecorded, CertificateIssued
   }
 
   policy IssueWhenPaid "払われたら発行する" {

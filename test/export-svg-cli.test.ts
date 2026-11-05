@@ -16,11 +16,17 @@ afterEach(async () => {
 });
 
 const STAGES = await readFile(path.join(import.meta.dir, 'fixtures', 'stages', 'convenience-store-stages.dtes'), 'utf8');
-/** A few notes of Design Level in the stage Issuance: an actor, a command and a policy. */
+/** A few notes of Design Level in the stage Issuance: an actor, an external system handling commands, two commands and a policy. */
 const NOTES = `
   actor Resident "住民"
+  external MultiCopier "マルチコピー機"
+  command PayFee "手数料を払う" {
+    by Resident
+    handledBy MultiCopier
+    emits FeePaid
+  }
   command IssueCertificate "証明書を発行する" {
-    actor Resident
+    handledBy MultiCopier
     emits CertificateIssuedAtMultiCopier
   }
   policy IssueAfterPayment "手数料が払われたら発行する" {
@@ -123,9 +129,11 @@ describe('dt export svg: an Event Storming', () => {
     test('Design Level draws the commands, the policies and the actors; names by ID with --names name', async () => {
         const root = await convenienceStore();
         const design = await svg(root, '--storming', 'ConvenienceStoreIssuance', '--stage', 'Issuance', '--level', 'design');
-        expect(stereotypes(design)).toMatchObject({ '«コマンド»': 1, '«ポリシー»': 1, '«アクター»': 1 });
+        expect(stereotypes(design)).toMatchObject({ '«コマンド»': 2, '«ポリシー»': 1, '«アクター»': 1, '«外部システム»': 2 });
         const named = await svg(root, '--storming', 'ConvenienceStoreIssuance', '--stage', 'Issuance', '--level', 'design', '--names', 'name');
-        expect(texts(named).join('')).toContain('«コマンド»IssueCertificate«アクター»Resident');
+        expect(texts(named).join('')).toContain('«コマンド»PayFee«アクター»Resident');
+        expect(texts(named).join('')).toContain('«コマンド»IssueCertificate');
+        expect(texts(named).join('')).not.toContain('✕');
     });
 
     test('dark: on the dark canvas, in the dark theme’s colours', async () => {
