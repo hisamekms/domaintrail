@@ -216,6 +216,24 @@ describe('the prompt', () => {
     });
 });
 
+describe('the .dtes syntax (ADR 0032)', () => {
+    test("the .dtes syntax by example follows the storming's way of working, for requests about the stormings only", () => {
+        const practice = { storming: 'STORMING', stormingSyntax: '### The .dtes syntax\n\nES-SYNTAX', modeling: 'MODELING' };
+        const prompt = (...requests: Json<Collaboration.FrozenRequest>[]): string => buildPrompt(input(requests), new Map(), 'n', [], [], { practice });
+        const dtes = prompt(frozen({ kind: 'DtesStorming', storming: 'Returns' }, 'x'));
+        expect(dtes).toContain(`STORMING\n\n${practice.stormingSyntax}`);
+        expect(dtes.indexOf('ES-SYNTAX')).toBeLessThan(dtes.indexOf('<requests-n>'));
+        expect(prompt(frozen({ kind: 'DtElement', element: 'Sales.Order' }, 'x'))).not.toContain('ES-SYNTAX');
+    });
+
+    test('rule 3: the relations in the grammar, and a hotspot, never a guess, for a relation nobody knows', () => {
+        const prompt = buildPrompt(input([frozen({ kind: 'DtesStorming', storming: 'S' }, 'x')]), new Map(), 'n');
+        expect(prompt).toContain("Write its relations in Event Storming's grammar (`dt guide dtes-quick`)");
+        expect(prompt).toContain('Never fill a relation you do not know by guessing');
+        expect(prompt).toContain('put a `hotspot` `on` that element asking it');
+    });
+});
+
 describe('events at Design Level only', () => {
     test('rule 15 gives the syntax of `level design`; when to mark an event is the practice, not repeated in the rules', () => {
         const prompt = buildPrompt(input([frozen({ kind: 'DtesStorming', storming: 'S' }, 'x')]), new Map(), 'n');
