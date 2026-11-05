@@ -276,7 +276,8 @@ type ViewOptions = {
 - Big Picture に戻しても、Design Level で追加・分割した Event 定義は消さない。
 - 名前付き timeline の選択に応じて、その timeline の EventOccurrence と関連要素を抽出。
 - 統合キャンバスでは timeline に属さない Event や孤立した要素も表示。
-- **使われるごとに描く要素**【確定（2026-11-03 追加）】: Design Level では Actor / External System（Command の実行者）、Read Model（Command の `reads`）、Aggregate（Command の `target`）を、そのビューで使う Command ごとに1枚ずつ、その Command の隣に描く（線は付箋から Command への短い1本）。どの Command にも使われないものは従来どおり1枚。表示上の分割で、`.dtes` も意味的なグラフも変わらない。どの付箋を選んでも同じ要素を選び（インスペクタは1つ）、同じ要素のほかの付箋を控えめに示す。変更マーク・参照・在席表示は要素に付くので全部の付箋に出る。チャットやカタログから要素へ飛ぶときは、画面の中央に最も近い付箋を選ぶ。
+- **使われるごとに描く要素**【確定（2026-11-03 追加）】: Design Level では Actor / External System（Command の実行者）、Read Model（Command の `reads`）、Aggregate（Command の `target`）を、そのビューで使う Command ごとに1枚ずつ、その Command の隣に描く（線は付箋と Command の間の短い1本。Aggregate からは、その Command の Event への `emits` も出る）。どの Command にも使われないものは従来どおり1枚。表示上の分割で、`.dtes` も意味的なグラフも変わらない。
+- **Event Storming の文法で描く**【確定（2026-11-05 追加）】: Design Level は一般的な Event Storming の読み方で左→右に描く。Read Model と Actor（Command の左上に貼る）→ Command → Aggregate → Event → Policy → Command …。`target` のある Command は Aggregate を経て Event に至る（Command → Aggregate、Aggregate → Event。`emits` の意味的エッジのキーは変えない）。`target` のない Command は従来どおり Command → Event。Hotspot は `on` の付箋に貼る注記で、流れの1ステップにはしない（その Event の上に置く）。1つのビューで Event が複数のステップに描かれるとき（timeline のビューで繰り返す Event、段階・例外のある storming）は、その Event を `emits` する Command（とその Actor・Read Model・Aggregate）、その Event に `on` する Policy、その Event への Hotspot を、ステップごとに1枚ずつ描く（ID `n:<要素>#<k>`。§7.3・§10.2 の表示上の分割）。Policy の付箋は、自分のステップの次にある Command の付箋へ `issues` を描く（後ろに無ければすべてへ）。統合キャンバス（段階・例外のない storming）は Event を1枚に描くので、この分割はしない。どの付箋を選んでも同じ要素を選び（インスペクタは1つ）、同じ要素のほかの付箋を控えめに示す。変更マーク・参照・在席表示は要素に付くので全部の付箋に出る。チャットやカタログから要素へ飛ぶときは、画面の中央に最も近い付箋を選ぶ。
 - 複数 timeline フィルタ／抽象度切替は `.dtes` を変更しない。
 - **段階・例外のある storming**（§3.7）: 統合キャンバスは区画を時間順に左→右へ並べ、段階をラベル付きの枠で描く（§8.6）。**段階ビュー**（その段階の本流と例外を同じ描き方で統合）を段階ごとに選べる。名前付き timeline のビューは従来どおり。
 - **例外の表示切替**（「例外を表示」）: 統合キャンバスと段階ビューで、例外を描かないこともできる。そのとき例外のステップ、例外にしか現れない Event、それらだけに付いた Hotspot、例外の `then` を描かない。デザインレベルでは、例外にしか現れない Event だけに関わる要素（それだけを emits する Command、それだけに `on` する Policy とそれが issues する Command、それらの Command の横の Actor・外部システム・Read Model・集約のコピー）も描かない。例外そのものの timeline ビューには影響しない。表示状態は閲覧者ごとの UI 状態で、`.dtes` を変更しない。
@@ -316,7 +317,7 @@ type SemanticEdge = {
 }
 ```
 
-Event 以外の要素は1ビュー1ノードだが、Actor / External System / Read Model / Aggregate は使う Command ごとのノード（ID `n:<要素>@<Command>`、要素の ID は共通。§6）になる。これも描画上の分割で、意味的な関係を増やさない。
+Event 以外の要素は1ビュー1ノードだが、Actor / External System / Read Model / Aggregate は使う Command の付箋ごとのノード（ID `n:<要素>@<Command の付箋>`、要素の ID は共通。§6）になり、Command / Policy / Hotspot はその Event が描かれるステップごとのノード（ID `n:<要素>#<k>`。§6）になり得る。これも描画上の分割で、意味的な関係を増やさない（`emits` は Aggregate の付箋から描いても、同じ意味的エッジの描画である）。
 
 **重要**: 同一 EventOccurrence を2か所に描画する案は将来の高度化として残す。**v0.1 の基本投影では各 EventOccurrence はちょうど1つの Event RenderNode に所属**し、同一 RenderNode 内に同じ timeline の異なる Occurrence を混在させない。
 
@@ -383,7 +384,7 @@ Render Graph（§7.3、本節 8.1〜8.4）は prefix trie のまま変えない�
 段階または `exception` のある storming（§3.7）の統合キャンバスと段階ビューは、prefix trie の代わりに区画ごとの木で描く。
 
 - 区画の木: 幹を先頭から、ほかの timeline を分岐点のノードから挿入する。分岐点の先頭ステップは分岐点のノードを共有し（§8 の prefix 共有と同じ扱い）、その後も同じように続く timeline はステップを共有する。分岐後の共通 suffix は共有しない（§8.1）。
-- 配置（**時間順が左→右**）: 1ステップ1列。区画を時間順に横に並べ、幹は全段階を通る1本の行（行0）。ほかの timeline は分岐ステップの下の **レーン** に右へ流れる（重ならないレーンは同じ行を共有し、別の本流を例外より上に置く）。例外は段階の枠の中に収める。Design Level の要素は属する Event の列の上に積み（Command ごとに描く Actor・Read Model・Aggregate は、その Command の列の上に）、どこにも属さないものは区画の下に置く。
+- 配置（**時間順が左→右**）: 1ステップ1列（Design Level では列の組。下記）。区画を時間順に横に並べ、幹の Event は全段階を通る1本の行。ほかの timeline は分岐ステップの下の **レーン** に右へ流れる（重ならないレーンは同じ行を共有し、別の本流を例外より上に置く）。例外は段階の枠の中に収める。Design Level では Event Storming の文法（§6）どおり、各ステップを左から Read Model・Command（その Actor を上に貼る）・Aggregate・Event（その Hotspot を上に貼る）・Policy の列に分け（そのステップの列で使うものだけ）、要素はその Event のレーンの行の上の帯に置く（例外の Event の要素は例外のレーンの上）。Command・Aggregate・Read Model は1行に並び、複数の Command は帯の中で縦に積む。どこにも属さないものは区画の下に置く（2026-11-05 改訂）。
 - 線: 段階の `after` は前の幹の最後から次の幹の最初へ。例外だけの時間順は例外の線（控えめな赤系の破線）で描く。`then` は最後のステップの下から戻り先の下へ入る点線。どの線も付箋と交差しない（列・行の間を通す）。レーンの最初の線にその timeline のラベルを添える。
 - 座標は DSL に保存しない。同じ `.dtes`・同じビューなら同じ配置（canonical）。
 
@@ -393,10 +394,10 @@ Render Graph（§7.3、本節 8.1〜8.4）は prefix trie のまま変えない�
 
 - `Event → Policy` (`on`)
 - `Policy → Command` (`issues`)
-- `Command → Event` (`emits`)
+- `Command → Event` (`emits`。描画は `target` があれば Aggregate の付箋から Event へ。§6)
 - `Actor → Command` (`actor`, 関連)
 - `Read Model → Command` (`reads`, 関連)
-- `Command → Aggregate` (`target`, 関連)
+- `Command → Aggregate` (`target`。描画は因果の線: Command が Aggregate に至り、Aggregate が判断して Event を出す。§6)
 - `Hotspot → Event` (`on`, 非因果)
 
 `on / issues / emits` は可能性・候補を表す。Policy に `on` と `issues` が複数あるとき、**Event → Command の直積の直接因果エッジを推論・生成しない**。Policy 自身を独立ノードとして保持する。
@@ -423,9 +424,9 @@ Render Graph（§7.3、本節 8.1〜8.4）は prefix trie のまま変えない�
 
 | エッジ | 例示スタイル |
 |---|---|
-| 型レベル因果エッジ | 実線＋方向 |
+| 型レベル因果エッジ（`on`・`issues`・`emits`・`target`） | 実線＋方向 |
 | Timeline の時系列 | 破線＋方向、またはレイアウト方向で表現 |
-| 非因果関連 | 点線・細線 |
+| 非因果関連（`actor`・`reads`） | 点線・細線、**方向なし**（矢印は因果と時間の向きだけ） |
 | Hotspot の `on` | 点線・細線、**方向なし**（因果でも時間順でもない） |
 
 付箋はすべて同じ大きさの正方形で描き、ラベルは折り返す（収まらないときは文字を小さくし、下限の大きさでも収まらないときは収まる行までで「…」で切る。全文はホバーとインスペクタで見られる）。付箋の色は Event Storming の慣習に従って種類を表す：イベント付箋はオレンジ、Command 青、Policy 紫、Aggregate 黄、Read Model 緑、Hotspot ピンク（Actor・External System などの割り当ては `docs/live-view.md`）。色は Live View の表示の約束で、`.dtes` の構文や意味論には含めない。種類は付箋のステレオタイプ（«イベント»）と凡例でも示し、色だけに頼らない。視認性・アクセシビリティを確保すること。

@@ -149,7 +149,12 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   frames), and a dashed arrow between two events names the timelines it belongs to when not all of them do; one
   timeline draws each occurrence, and a group is a frame around its events. Solid arrows are type-level causes
   (possible, not "happened"), dashed orange arrows the order of a timeline (the event's orange, not a warning),
-  dotted lines the other relations (without an arrowhead for a hotspot's event). The notes take the convention's
+  dotted lines without an arrowhead the other relations (an actor's and a read model's to its command, a hotspot's to
+  its event): arrows point along causes and time only. Design Level follows Event Storming's grammar, left to right:
+  read model, the actor stuck on top of its command, command → aggregate → event (a command with a `target` reaches its
+  events through its aggregate) → policy → the command it issues; a hotspot is stuck on top of its event, never a step
+  of the flow. Where an event is drawn at several steps, the command before it, its copies and the policy after it are
+  drawn at each step (ADR 0024, amendment of 2026-11-05). The notes take the convention's
   colours, and the legend shows each kind with its colour and name: event orange, command blue, policy purple,
   aggregate yellow, read model green, hotspot pink, actor pale yellow (rounded), external system lilac (dashed edge),
   and a group a dashed frame tinted with the event's orange. A resolved hotspot (`status resolved`) is a paler,
@@ -160,14 +165,16 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   muted deep paper of the same hue, a coloured edge and pale text. A storming whose file stops parsing stays as it last parsed, with a banner.
   A storming with stages or exceptions (`stage`, `exception`) is drawn in time order: the stages as labelled frames
   left to right, the trunk of the main flows one straight row through them, every other timeline on a row below the
-  step it branches off at (the exceptions' dashed arrows a quieter red, a dotted arrow back for `then`). The タイムライン
+  step it branches off at (the exceptions' dashed arrows a quieter red, a dotted arrow back for `then`). At Design
+  Level each step is a group of columns (read models, commands, aggregates, the event, policies) and the elements stand
+  in a band above the row of their event, an exception's above its lane. The タイムライン
   picker then also lists each stage (「…（例外を含む）」), and the 絞り込み has 「例外を表示」 (on by default,
   remembered per browser; off counts as one narrowing) to draw the integrated canvas and the stages without their exceptions.
   Selecting a note keeps it and what it is joined to in full view and dims the rest (a short fade; none with reduced
   motion): the steps before and after it in the timelines shown (an exception's first step and its `then` included),
-  the command that causes an event with its actor or external system, read model and aggregate, the policies that
-  react to it and its hotspots, and the edges between them; a command, policy or actor selected keeps the notes its
-  edges join. An element drawn once per use (an actor beside each command) counts as one: selecting one of its notes
+  the command that causes an event (through its aggregate) with its actor or external system, read model and
+  aggregate, the policies that react to it and its hotspots, and the edges between them; a command, policy or actor
+  selected keeps the notes its edges join, a command also the events its aggregate emits. An element drawn once per use (an actor beside each command) counts as one: selecting one of its notes
   keeps every copy. An event in a group is joined through its group's time order, and a group joined to the selection
   keeps its events; the stages' and groups' frames are never dimmed. Clicking the empty canvas (or `Escape`) clears the
   selection and brings everything back. Both drawings do it, the integrated canvas and a timeline laid out by ELK and

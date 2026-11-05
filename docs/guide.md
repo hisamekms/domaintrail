@@ -2219,13 +2219,20 @@ The integrated canvas draws each event once, without group frames: the time orde
 consecutive events, naming the timelines it belongs to when not all of them do, and an event that repeats loops back
 to its note. One timeline draws each occurrence of an event, and a group as a frame. Drawing an event once does not
 make two occurrences the same happening, so read a path along one timeline's name. Solid arrows are type-level causal
-relations (`on`, `issues`, `emits`: possible, not "happened"), dotted lines the other relations (`actor`, `reads`,
-`target`; a hotspot's `on` without an arrowhead), dashed arrows the order of a timeline.
+relations (possible, not "happened"), dashed arrows the order of a timeline, and dotted lines without an arrowhead the
+other relations (an actor's and a read model's to a command, a hotspot's `on`): arrows point along causes and time only.
+Design Level reads left to right as Event Storming does: a read model and the actor (stuck on top of its command) →
+command → aggregate → event → policy → the command it issues → … A command with a `target` goes to its aggregate, which
+decides and emits the command's events, so the `emits` arrows start at the aggregate; a command without `target` emits
+them itself. A hotspot is stuck on top of the event it is `on`, not a step of the flow.
 A hotspot with `status resolved` is drawn paler, with a green check in its corner and a fainter `on` (hovering it shows
 its `resolution`), so the open ones stand out; to settle one, ask the AI in the chat.
 At Design Level an actor or external system, a read model and an aggregate are drawn next to each command that uses
-them, one note per command, so their lines stay short (one that no command uses is drawn once); selecting any of these
-notes selects the element and marks its other notes with a fainter dashed ring.
+them, one note per command, so their lines stay short (one that no command uses is drawn once). Where one view draws
+an event at several steps (a timeline's view, a stage, a storming with stages), a command is drawn before each step of
+its events, with its own actor, read model and aggregate, a policy after each step of the events it is `on`, and a
+hotspot on each note of its event, so every chain reads left to right into its own event. Selecting any of these notes
+selects the element and marks its other notes with a fainter dashed ring.
 Every note is a square of the same size: a long label is drawn smaller, and one too long even then is cut short with
 «…» (hovering it shows the whole label; S015 warns about it), so keep labels short (about 12 Japanese characters).
 The layout is automatic, left to right; positions are kept in the workspace's cache directory, outside the workspace
@@ -2242,7 +2249,9 @@ one column per step, the trunks as one straight row through every frame (the `af
 the next one's start). Every other timeline hangs below the step it branches off at, on a row of its own flowing right
 and named by its label: the other main flows first, then the exceptions, whose dashed arrows are a quieter red. The
 step an exception branches off at is one note for both; a dotted arrow goes from an exception's last step back to the
-step of its `then`. Elements of Design Level stand above the event they belong to. The timeline picker lists the
+step of its `then`. At Design Level each step is a group of columns — read models, commands (their actors on top),
+aggregates, the event (its hotspots on top), policies — and the elements stand in a band above the row of the event
+they belong to, an exception's on its own lane: the chain reads left to right into each event. The timeline picker lists the
 stages (「コンビニでの発行（例外を含む）」) between すべて（統合） and the timelines; clicking a stage's frame selects
 it (its main flows, its exceptions and 「この段階を表示」). 「例外を表示」 in the view bar's 絞り込み (a storming with
 exceptions only) hides the exceptions of the integrated canvas and of a stage: their steps, the events only they have, the
