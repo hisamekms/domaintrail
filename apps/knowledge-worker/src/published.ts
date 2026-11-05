@@ -1,6 +1,7 @@
 // The published stormings (ADR 0031, section 11): `dt publish`, run by CI when `main` changes, sends each storming's
-// published form, which the `published` table keeps whole (one row per project and storming, the latest only); the
-// read-only page reads the list, a storming's form, and the items about stickies no published storming has.
+// published form, which the `published` table keeps whole (one row per project and storming, the latest only), and
+// with `--prune` removes those no longer in the workspace; the read-only page reads the list, a storming's form, and
+// the items about stickies no published storming has.
 import type { Knowledge, MissingStickies, PublishedEntry, PublishedStorming, PublishResult } from '@domaintrail/knowledge';
 import { publishedEntries, stickyRef } from '@domaintrail/knowledge/protocol';
 import type { D1Database } from './env.js';
@@ -56,6 +57,18 @@ export async function putPublished(db: D1Database, project: Knowledge.ProjectNam
     const row = await db.prepare(`SELECT ${ENTRY_COLUMNS} FROM published WHERE project = ?1 AND storming = ?2`).bind(project, form.storming).first<EntryRow>();
     if (!row) throw new Error(`the published ${form.storming} was not kept`);
     return { entry: entryOf(row), changed: before?.version !== form.version };
+}
+
+/**
+ * Removes the published form of a storming (`dt publish --prune`, for a storming no longer in the workspace); whether
+ * there was one. Its knowledge stays: the items about its stickies are then listed apart, as about missing stickies.
+ */
+export async function deletePublished(db: D1Database, project: Knowledge.ProjectName, storming: string): Promise<boolean> {
+    const row = await db
+        .prepare('DELETE FROM published WHERE project = ?1 AND storming = ?2 RETURNING storming')
+        .bind(project, storming)
+        .first<{ storming: string }>();
+    return row !== null;
 }
 
 /** The published stormings of a project, by ID. */

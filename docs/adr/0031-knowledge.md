@@ -193,6 +193,7 @@ merged.
 | `GET /redactions?after=` | dt | the redaction log from a cursor (section 7) |
 | `POST /knowledge/:id/images` | dt (a person) | attach an image to an item (section 10) |
 | `PUT /published/:storming` | `dt publish` | the published storming (section 11) |
+| `DELETE /published/:storming` | `dt publish --prune` | removes a storming no longer in the workspace (section 11) |
 
 - **Extractions are sent as operations, not as resulting states.** An extraction takes a while. If a person deletes or
   corrects an item meanwhile, an operation on it is dropped and the person's change stands. Sending states would bring a

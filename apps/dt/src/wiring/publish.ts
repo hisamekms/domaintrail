@@ -38,6 +38,7 @@ async function destination(options: PublishOptions, deps: PublishDeps): Promise<
 
 export async function publishStormings(options: PublishOptions, deps: PublishDeps = {}): Promise<PublishReport> {
     const { config: cfg, log } = options;
+    if (options.prune && options.out !== undefined) throw new PublishError('--prune removes what the Worker keeps: it does not go with --out.', 2);
     const now = deps.now ?? ((): Date => new Date());
     const lastCommit = deps.lastCommit ?? ((root: string, file: string): Promise<FileCommit | undefined> => gitLastCommit(root, file));
     // the destination first: nothing is laid out for a store that cannot take it
@@ -45,6 +46,13 @@ export async function publishStormings(options: PublishOptions, deps: PublishDep
 
     const views = await (deps.views ?? loadDiagramViews)({ root: cfg.root, sources: cfg.sources, respectGitignore: cfg.respectGitignore });
     try {
+        if (options.prune) {
+            // a .dtes file with an error may hold a storming that is not drawn (it does not parse, or its ID is taken):
+            // pruning then would remove one the workspace still has, so nothing is sent
+            const broken = [...new Set(views.payload.diagnostics.filter((d) => d.severity === 'error' && d.file.endsWith('.dtes')).map((d) => d.file))];
+            if (broken.length)
+                throw new PublishError(`Not published: --prune needs every .dtes file without errors (${broken.join(', ')}): run \`dt check\`.`, 1);
+        }
         const stormings = chosenStormings(views.payload.stormings, options.stormings);
         if (stormings.length === 0) throw new PublishError(`No storming to publish: the workspace has no .dtes file (sources: ${cfg.sources.join(', ')}).`, 1);
         const report: PublishReport = { published: [] };
@@ -72,8 +80,31 @@ export async function publishStormings(options: PublishOptions, deps: PublishDep
                 changed: result.changed,
             });
         }
+        // only after every storming was published
+        if (options.prune && to)
+            report.removed = await prune(
+                to,
+                views.payload.stormings.map((s) => s.id),
+            );
         return report;
     } finally {
         views.dispose();
     }
+}
+
+/**
+ * Removes from the Worker the published stormings that the workspace no longer has (`--prune`): removed or renamed
+ * since they were published. The knowledge about their stickies stays, listed apart on the page.
+ */
+async function prune(to: Destination, kept: readonly string[]): Promise<string[]> {
+    const removed: string[] = [];
+    const fail = (e: unknown, what: string): never => {
+        const message = e instanceof Error ? e.message : String(e);
+        throw new PublishError(`Not pruned: ${what}: ${message}${removed.length ? ` (removed before it: ${removed.join(', ')})` : ''}`, 1);
+    };
+    const published = await to.publisher.published(to.project).catch((e: unknown) => fail(e, 'the published stormings'));
+    for (const { storming } of published.filter((e) => !kept.includes(e.storming))) {
+        if (await to.publisher.unpublish(to.project, storming).catch((e: unknown) => fail(e, storming))) removed.push(storming);
+    }
+    return removed;
 }

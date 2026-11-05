@@ -27,9 +27,11 @@ import {
     liveItems,
     page,
     projectPath,
+    publishedEntries,
     publishResult,
     redactionEntries,
     stickyCounts,
+    unpublishResult,
     type Decoder,
 } from '../protocol.js';
 
@@ -290,6 +292,15 @@ export function cloudflareKnowledgeStore(settings: CloudflareKnowledgeStoreSetti
         async publish(project, published) {
             const res = await request(project, `/published/${encodeURIComponent(published.storming)}`, { method: 'PUT', json: published });
             return read(res, publishResult, `publishing ${published.storming}`);
+        },
+
+        async published(project) {
+            return read(await request(project, '/published'), publishedEntries, 'the published stormings');
+        },
+
+        async unpublish(project, storming) {
+            const res = await request(project, `/published/${encodeURIComponent(storming)}`, { method: 'DELETE' });
+            return read(res, unpublishResult, `removing the published ${storming}`);
         },
     };
 }

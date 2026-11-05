@@ -147,6 +147,8 @@ export interface PublishOptions {
     stormings?: readonly string[];
     /** Write the published forms as `<storming>.json` into this directory instead of sending them. */
     out?: string;
+    /** After publishing, remove from the Worker the published stormings the workspace no longer has (not with `out`). */
+    prune?: boolean;
     log: (line: string) => void;
 }
 
@@ -161,6 +163,8 @@ export interface PublishReport {
         /** Written: the file. */
         file?: string;
     }[];
+    /** With `prune`: the stormings removed from the Worker, by ID. */
+    removed?: string[];
 }
 
 /** What `dt open --host <non-loopback>` asks of the Live View. */

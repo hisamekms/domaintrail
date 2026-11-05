@@ -16,6 +16,7 @@
 // | GET /audit                         | audit             | read    |
 // | GET /redactions?after=             | the redaction log | read    |
 // | PUT /published/:storming           | putPublished (`dt publish`) | publish |
+// | DELETE /published/:storming        | deletePublished (`dt publish --prune`) | publish |
 // | GET /published, /published/:storming | listPublished, publishedBody | read |
 // | GET /missing                       | missingStickies   | read    |
 //
@@ -51,7 +52,7 @@ import {
 import { callerName, identify, mayWrite, type AccessSettings, type AccessTokenVerifier, type Caller } from './access.js';
 import type { Env } from './env.js';
 import { D1KnowledgeStore, IdempotencyKeyReused } from './store.js';
-import { listPublished, missingStickies, projectList, publishedBody, putPublished } from './published.js';
+import { deletePublished, listPublished, missingStickies, projectList, publishedBody, putPublished } from './published.js';
 
 export interface HandleOptions {
     readonly now?: () => Date;
@@ -288,6 +289,12 @@ async function route(
                 if (form instanceof Response) return form;
                 if (form.storming !== storming) throw new WireError(`body.storming: expected ${storming}, the storming of the path`);
                 return json(await putPublished(env.DB, project, form, callerName(caller), (options.now ?? ((): Date => new Date()))()));
+            }
+            if (method === 'DELETE') {
+                const denied = allow('publish');
+                if (denied) return denied;
+                // idempotent: removing a storming that is not published answers `removed: false`
+                return json({ storming, removed: await deletePublished(env.DB, project, storming) });
             }
             break;
         }

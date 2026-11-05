@@ -613,6 +613,9 @@ export const publishResult: Decoder<PublishResult> = (v, at) => {
     return { entry: publishedEntry(o.entry, `${at}.entry`), changed: bool(o.changed, `${at}.changed`) };
 };
 
+/** The body of `DELETE /published/:storming`'s answer: `{ storming, removed }`, whether there was a form to remove. */
+export const unpublishResult: Decoder<boolean> = (v, at) => bool(obj(v, at).removed, `${at}.removed`);
+
 /** The body of `GET /missing`: the stickies no published storming has, and the items about them. */
 export const missingStickies: Decoder<MissingStickies> = (v, at) => {
     const o = obj(v, at);

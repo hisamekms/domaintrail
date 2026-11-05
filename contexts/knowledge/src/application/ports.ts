@@ -228,4 +228,11 @@ export interface MissingStickies {
 export interface StormingPublisher {
     /** Replaces the published form of a storming (`PUT /published/:storming`). */
     publish(project: Project, published: PublishedStorming): Promise<PublishResult>;
+    /** The published stormings of the project, by ID (`GET /published`). */
+    published(project: Project): Promise<readonly PublishedEntry[]>;
+    /**
+     * Removes the published form of a storming (`DELETE /published/:storming`), for one no longer in the workspace
+     * (`dt publish --prune`); whether there was one. The knowledge about its stickies stays.
+     */
+    unpublish(project: Project, storming: string): Promise<boolean>;
 }

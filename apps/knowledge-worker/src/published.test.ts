@@ -1,7 +1,7 @@
 // The published stormings in workerd (Miniflare), through the `cloudflare` adapter as `dt publish` sends them and as the
-// read-only page reads them: `PUT /published/:storming` by the writing service token only, the list and the form, the
-// items about stickies no published storming has, a person's writes from the Worker's own page only, and the page's
-// files behind the Access check.
+// read-only page reads them: `PUT /published/:storming` by the writing service token only, `DELETE` likewise (`dt
+// publish --prune`), the list and the form, the items about stickies no published storming has, a person's writes from
+// the Worker's own page only, and the page's files behind the Access check.
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -83,6 +83,23 @@ describe('publishing', () => {
         expect((await fetch(`${worker.url}${wire.projectPath(project)}/published`, { headers: PERSON }).then((r) => r.json())) as unknown).toEqual({
             stormings: [],
         });
+    });
+
+    test('the writing token removes a published storming (dt publish --prune), again harmlessly; not a reading one, not a person', async () => {
+        const project = newProject();
+        await store.publish(project, form());
+        await store.publish(project, form({ storming: 'Billing', label: '請求', stickies: [] }));
+        expect(await reader.unpublish(project, 'Ordering').catch((e: unknown) => e)).toMatchObject({ status: 403, type: 'Forbidden' });
+        const byPerson = await fetch(`${worker.url}${wire.projectPath(project)}/published/Ordering`, {
+            method: 'DELETE',
+            headers: { ...PERSON, Origin: worker.url },
+        });
+        expect(byPerson.status).toBe(403);
+        expect((await store.published(project)).map((e) => e.storming)).toEqual(['Billing', 'Ordering']);
+        expect(await store.unpublish(project, 'Ordering')).toBe(true);
+        expect(await store.unpublish(project, 'Ordering')).toBe(false);
+        expect((await reader.published(project)).map((e) => e.storming)).toEqual(['Billing']);
+        expect((await fetch(`${worker.url}${wire.projectPath(project)}/published/Ordering`, { headers: { 'CF-Access-Client-Id': READER } })).status).toBe(404);
     });
 
     test('a form that is not the API’s, of another storming, or too large is refused', async () => {
