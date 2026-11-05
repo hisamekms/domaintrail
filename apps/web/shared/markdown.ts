@@ -1,7 +1,8 @@
 // The Markdown the page shows: the AI's answers in the chat (ADR 0030) and the knowledge's items (ADR 0031, section 2),
 // in the Live View and on the Worker's page. Paragraphs (their line breaks kept), bullet and numbered lists (one level
 // of nesting; deeper items are flattened to that level), headings (any number of `#`, all one level: the columns are
-// too narrow to tell several apart), fenced code blocks, GFM tables, inline code, **bold** and *italic*. An image of
+// too narrow to tell several apart; a knowledge item's are drawn as paragraphs, its title being its heading), fenced
+// code blocks, GFM tables, inline code, **bold** and *italic*. An image of
 // the page's own (`![label](image:<id>)`, an attached image) is an image, drawn where the page can resolve its id
 // (`markdown-text.tsx`); other links and images are text (`label (url)`), never followed nor loaded; HTML is text, never
 // markup. Whatever is not understood stays as written. The texts are short and the columns narrow, so a small parser

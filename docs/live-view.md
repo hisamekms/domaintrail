@@ -487,8 +487,9 @@ dt only (`/api/session/knowledge`):
   A closed item shows its kind, its title (one line of plain text) and its labels' line (`AS-IS · 発言 · 営業 · 11/5`),
   no text; the cards of a conflict and of a hotspot's box show their titles too. An item opens, as one outlined card:
   its title stays where it was, the labels' line folds away as the rest unfolds (their heights move together, so
-  nothing jumps): its whole text as Markdown with the chat's rules (its `@{es:…}` references linking the
-  stickies, each selects it; its images drawn, as wide as the column at most), its labels as the ナレッジ tab's filter
+  nothing jumps): its whole text as Markdown with the chat's rules (but its headings drawn as ordinary paragraphs,
+  the title being its heading; its `@{es:…}` references linking the stickies, each selects it; its images drawn, as
+  wide as the column at most), its labels as the ナレッジ tab's filter
   chips (when, kind, origin, and the perspective it has; pressing one opens the tab filtered by that label alone, the
   search and the other filters cleared), its sources as the chat's reference lines (`↩ who: quote`: a
   message of this session by who said it, a click moves to it in the chat; another session's by its date; the whole

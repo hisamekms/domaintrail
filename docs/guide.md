@@ -3065,7 +3065,8 @@ drawing stays the same but reading or changing it correctly needs the text, it i
 | Written by | the AI tidies, people correct | taken from what people say and the AI answers; people delete what is wrong |
 
 **An item** holds one finding: its **title** (one short line of plain text, at most 40 characters, which a closed item
-shows alone), its text (Markdown; images as `![…](image:img_…)`), the stickies it is `about`
+shows alone), its text (Markdown, without headings — the title is its heading, and a `#` line shows as an ordinary
+paragraph; images as `![…](image:img_…)`), the stickies it is `about`
 (`<Storming>.<LocalId>`, so that a label can be renamed in place), its **sources** (the session, the message, its time
 and a short quote, which lets a reader check the wording without the session database), a version, and the items it
 **conflicts with**. Four labels, fixed for now:

@@ -100,7 +100,8 @@ Every operation has a short \`reason\` (why this operation, in the talk's langua
   language of the talk, plain text (no Markdown, no line break, no trailing period), never a person's name. It is what
   a closed item shows; the text says the rest.
 - Write \`text\` in the language of the talk, in Markdown, self-contained (it is read without the chat: no "as said
-  above", no "this"), with the numbers, the conditions and the exceptions that were said. Never a person's name: the
+  above", no "this"), with the numbers, the conditions and the exceptions that were said. No headings (\`#\` lines):
+  the title is the item's heading, so do not start the text with one nor use any in it. Never a person's name: the
   authors \`P1\`, \`P2\`, … are not names to write either; write roles.
 - One finding per item. Prefer few, solid items to many thin ones. An empty list is a good reply when nothing new was
   found.
