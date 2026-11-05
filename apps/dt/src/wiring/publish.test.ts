@@ -92,7 +92,7 @@ test('--out writes the forms as files, sending nothing, whatever the store; an u
         { storming: 'Returns', version: expect.any(String) as string, commit: 'abc1234def', file: path.join(out, 'Returns.json') },
     ]);
     const written = publishedStorming(JSON.parse(await readFile(path.join(out, 'Returns.json'), 'utf8')), 'file');
-    expect(written.stickies).toEqual([{ ref: 'Returns.ReturnRequested', label: '返品が依頼された' }] as unknown[]);
+    expect(JSON.parse(JSON.stringify(written.stickies)) as unknown).toEqual([{ ref: 'Returns.ReturnRequested', label: '返品が依頼された' }]);
     const unknown = await publishStormings({ config: config({}), approval: undefined, stormings: ['Ordering'], out, log: () => {} }).catch((e: unknown) => e);
     expect(String(unknown)).toContain("Unknown storming 'Ordering'");
 });

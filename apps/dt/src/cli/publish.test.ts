@@ -43,16 +43,19 @@ beforeAll(async () => {
 });
 afterAll(() => rm(root, { recursive: true, force: true }));
 
+/** A value as its JSON: compared with plain values. */
+const plain = (v: unknown): unknown => JSON.parse(JSON.stringify(v));
+
 const drawn = { at: new Date('2026-11-04T10:00:00.000Z'), commit: 'abc1234def' };
 
 describe('the published form', () => {
     test('the stickies once each, with their labels, never the timelines, groups or stages', () => {
-        expect(stickiesOf(returns)).toEqual([
+        expect(plain(stickiesOf(returns))).toEqual([
             { ref: 'Returns.ReturnRequested', label: '返品が依頼された' },
             { ref: 'Returns.RefundPaid', label: '返金した' },
             { ref: 'Returns.Refund', label: '返金する' },
             { ref: 'Returns.Deadline', label: '返品は注文から何日まで？' },
-        ] as unknown[]);
+        ]);
     });
 
     test('both levels of the whole storming as the Live View lays them out, the commit and the date', () => {
