@@ -217,7 +217,7 @@ export const MAP: Record<string, Module> = {
         sources: 'apps/dt/src',
         // the one binary: the CLI, the language server, the servers, and the wiring of every adapter (`main.ts`,
         // `wiring/`; presentation and composition before T8)
-        upstream: ['agent', 'analysis', 'collaboration', 'generation', 'kernel', 'modeling', 'storming', 'visualization', 'workspace'],
+        upstream: ['agent', 'analysis', 'collaboration', 'generation', 'kernel', 'knowledge', 'modeling', 'storming', 'visualization', 'workspace'],
     },
     web: {
         kind: 'app',

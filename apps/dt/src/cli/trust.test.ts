@@ -59,6 +59,18 @@ describe('the security-relevant settings', () => {
         expect(Object.keys(securitySettings(defaultConfig('/w'), { tunnel: true }))).toContain('collab --tunnel');
     });
 
+    test("the knowledge store's Worker and project change them (the service token goes there), the files store and the timing do not", () => {
+        const file = path.resolve('/w/domaintrail.jsonc');
+        const plain = settingsHash(securitySettings(defaultConfig('/w')));
+        const files = resolveConfig('{ "knowledge": { "project": "shop", "extraction": { "quietSeconds": 5 } } }', file);
+        expect(settingsHash(securitySettings(files))).toBe(plain);
+        const cloudflare = (url: string): Record<string, unknown> =>
+            securitySettings(resolveConfig(`{ "knowledge": { "store": "cloudflare", "project": "shop", "url": "${url}" } }`, file));
+        expect(cloudflare('https://k.example.com')['knowledge (cloudflare)']).toEqual({ url: 'https://k.example.com', project: 'shop' });
+        expect(settingsHash(cloudflare('https://k.example.com'))).not.toBe(plain);
+        expect(settingsHash(cloudflare('https://k.example.com'))).not.toBe(settingsHash(cloudflare('https://elsewhere.example.com')));
+    });
+
     test('--tunnel asks for approval even with the default settings, and is refused without a terminal or --yes', async () => {
         const root = await scratch();
         const store = fileTrustStore(path.join(await scratch(), 'trust.json'));

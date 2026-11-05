@@ -2843,8 +2843,9 @@ are a config error.
 
 **Approving the security-relevant settings.** `dt open`, `dt collab` and `dt agent` start only with security-relevant
 settings you approved for the workspace: what the AI reads outside the workspace (`agent.read.paths` and the roles'),
-`agent.run.allowedTools`, `agent.run.dt`, `collab.identity`, `collab.host`, `collab.access`, `open.host` and
-`classifier` (but its `threshold`), as they are after the local file is merged. When they differ from the defaults and
+`agent.run.allowedTools`, `agent.run.dt`, `collab.identity`, `collab.host`, `collab.access`, `open.host`,
+`classifier` (but its `threshold`) and, with the `cloudflare` knowledge store, `knowledge.url` and `knowledge.project`
+(where the knowledge and the store's service token go), as they are after the local file is merged. When they differ from the defaults and
 from what you approved last for this workspace (by its real path), they are printed and asked about (`Start with
 these settings? [y/N]`); without a terminal, `--yes` approves them, else the command refuses to start. Approvals are
 kept outside the workspace, in `$XDG_CONFIG_HOME/domaintrail/trust.json` (by default `~/.config/domaintrail/trust.json`,
@@ -2884,10 +2885,44 @@ without your seeing it.
   // design-level, storming, model, element, aggregate, event, state, none
   "templates": [
     { "id": "glossary", "name": { "ja": "用語を確かめる", "en": "Check the terms" }, "text": "用語集と食い違うところを挙げて", "when": ["model"] }
-  ]
+  ],
+  // the knowledge taken from the sessions (ADR 0031): see below
+  "knowledge": { "store": "files" },                        // default: files, the project named after the directory
   // collab, agent and classifier: see dt guide session-config
 }
 ```
+
+**Knowledge: `knowledge`.** Where the knowledge taken from the sessions is kept, which project it belongs to, and when it
+is extracted from the talk. Every key is optional; with `cloudflare`, `project` and `url` are required.
+
+```jsonc
+{
+  "knowledge": {
+    // files: one Markdown file per item in the workspace's knowledge/ (versions left to git; anything in it stays in
+    // git's history). cloudflare: the Worker you deploy from DomainTrail's template, behind Cloudflare Access (an item
+    // and its personal data can be deleted for good)
+    "store": "cloudflare",                                  // default: "files"
+    // the project this workspace reads and writes: lowercase letters, digits and "-", 63 characters at most. Required
+    // with cloudflare, so that every clone and worktree names the same one; with files, by default the workspace's
+    // directory name made into one ("My Shop" → "my-shop"), which changes nothing: the files are the workspace's own
+    "project": "shop",
+    // the Worker's base URL: https (http only on localhost, for wrangler dev); required with cloudflare, unused with files
+    "url": "https://knowledge.example.com",
+    "extraction": {
+      "quietSeconds": 30,        // an extraction after this many seconds without a message after a person's (and after each answer of the AI, and at the end)
+      "minIntervalSeconds": 60,  // at most one extraction per this many seconds
+      "contextMinutes": 10,      // the talk before the new messages given as context, in minutes
+      "settleSeconds": 120       // a held update or conflict applies after this many seconds of quiet on its topic
+    }
+  }
+}
+```
+
+The `cloudflare` store's Access service token is never in the file: dt reads it from the environment variables
+`DOMAINTRAIL_KNOWLEDGE_CLIENT_ID` and `DOMAINTRAIL_KNOWLEDGE_CLIENT_SECRET` (sent as `CF-Access-Client-Id` and
+`CF-Access-Client-Secret`). Give the session's dt the token that writes and `dt mcp` the one that reads. Since the token
+goes to `knowledge.url`, the Worker's URL and the project are security-relevant settings you approve (above). A
+`"store": "files"` in your local file tries things out without the Worker, the project's `url` left unused.
 
 CLI options win over the file: `generate ts --out`, `open --port`, `open --host` (and `collab --port`, `collab --host`). `--out` replaces `generate.ts.out`
 only; contexts listed in `generate.ts.contexts` keep their own directories. Sources and output directories, `--out`
