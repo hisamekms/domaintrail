@@ -7,7 +7,8 @@ const echo: McpTool = {
     name: 'echo',
     description: 'Says what it is given.',
     inputSchema: { type: 'object', properties: { say: { type: 'string' } } },
-    call: async (args) => (args.say === 'boom' ? Promise.reject(new Error('it broke')) : { text: String(args.say), ...(args.say === 'no' && { isError: true }) }),
+    call: async (args) =>
+        args.say === 'boom' ? Promise.reject(new Error('it broke')) : { text: String(args.say), ...(args.say === 'no' && { isError: true }) },
 };
 
 /** Sends `lines` to a server and returns what it wrote, one parsed message per line, once the input ended. */

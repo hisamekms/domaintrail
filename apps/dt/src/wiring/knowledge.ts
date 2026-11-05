@@ -3,12 +3,16 @@
 //
 // - `files`: the items in `<root>/knowledge`, the deleted items and the extractions applied in the workspace's state
 //   directory (outside it, `<state>/knowledge`).
-// - `cloudflare`: not in this version yet (the Worker and its adapter come with K7 of docs/plans/knowledge.md); the
-//   result says so, and the caller says it in its own words.
+// - `cloudflare`: the Worker at `knowledge.url`, reached with the Access service token of the environment
+//   (`knowledgeCredentials`). Without one, the result says which variables to set (a Worker on a loopback host —
+//   `wrangler dev` — is reached without one).
 import * as path from 'node:path';
 import {
+    cloudflareKnowledgeStore,
     createFilesKnowledgeStore,
     err,
+    knowledgeCredentials,
+    missingCredentialsMessage,
     Knowledge,
     KNOWLEDGE_DIR,
     ok,
@@ -42,11 +46,13 @@ export interface KnowledgeStoreOptions {
     readonly stateDir?: (root: string) => Promise<string>;
     /** The clock (tests). */
     readonly now?: () => Date;
+    /** Where the `cloudflare` store's service token is read (default: `process.env`). */
+    readonly env?: Readonly<Record<string, string | undefined>>;
+    /** The `cloudflare` store's `fetch` (tests). */
+    readonly fetch?: typeof fetch;
 }
 
-/** The message of the `cloudflare` store before it is built. */
-export const CLOUDFLARE_NOT_AVAILABLE =
-    "the knowledge store 'cloudflare' is not available in this version of dt yet; use \"knowledge\": { \"store\": \"files\" } (in domaintrail.local.jsonc to try it out)";
+const LOOPBACK = ['localhost', '127.0.0.1', '[::1]'];
 
 /**
  * Opens the knowledge store the workspace at `root` names in `knowledge` (the resolved config's section). Rejects with
@@ -69,7 +75,17 @@ export async function openKnowledgeStore(
             });
             return ok({ kind: 'files', store, project: knowledge.project, sweep: () => store.sweep() });
         }
-        case 'cloudflare':
-            return err({ type: 'KnowledgeStoreUnavailable', store: 'cloudflare', message: CLOUDFLARE_NOT_AVAILABLE });
+        case 'cloudflare': {
+            const credentials = knowledgeCredentials(options.env ?? process.env);
+            const loopback = LOOPBACK.includes(new URL(knowledge.url).hostname);
+            if (!credentials.ok && !loopback)
+                return err({ type: 'KnowledgeStoreUnavailable', store: 'cloudflare', message: missingCredentialsMessage(credentials.error) });
+            const store = cloudflareKnowledgeStore({
+                url: knowledge.url,
+                ...(credentials.ok && { serviceToken: credentials.value }),
+                ...(options.fetch && { fetch: options.fetch }),
+            });
+            return ok({ kind: 'cloudflare', store, project: knowledge.project });
+        }
     }
 }

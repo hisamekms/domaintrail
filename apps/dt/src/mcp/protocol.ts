@@ -30,7 +30,7 @@ export interface McpToolResult {
 
 export interface McpTool extends McpToolDefinition {
     /** Runs the call; a rejection is turned into an error of the tool with its message. */
-    call(args: Readonly<Record<string, unknown>>): Promise<McpToolResult>;
+    readonly call: (args: Readonly<Record<string, unknown>>) => Promise<McpToolResult>;
 }
 
 export interface McpServerOptions {
@@ -101,9 +101,9 @@ async function handle(method: string, params: Record<string, unknown>, options: 
             const tool = options.tools.find((t) => t.name === params.name);
             if (!tool) return { error: { code: INVALID_PARAMS, message: `Unknown tool: ${String(params.name)}` } };
             const args = isObject(params.arguments) ? params.arguments : {};
-            const done = await tool.call(args).catch(
-                (e: unknown): McpToolResult => ({ text: `${tool.name} failed: ${e instanceof Error ? e.message : String(e)}`, isError: true }),
-            );
+            const done = await tool
+                .call(args)
+                .catch((e: unknown): McpToolResult => ({ text: `${tool.name} failed: ${e instanceof Error ? e.message : String(e)}`, isError: true }));
             return { result: { content: [{ type: 'text', text: done.text }], ...(done.isError && { isError: true }) } };
         }
         default:

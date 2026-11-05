@@ -1,11 +1,11 @@
 // The one factory of the knowledge store: `files` in `<root>/knowledge` with its state in `<state>/knowledge`, and
-// `cloudflare` refused as not available yet.
+// `cloudflare` at `knowledge.url` with the environment's service token (refused, in one line, without one).
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { Knowledge, resolveKnowledgeConfig } from '@domaintrail/knowledge';
-import { CLOUDFLARE_NOT_AVAILABLE, openKnowledgeStore } from './knowledge.js';
+import { openKnowledgeStore } from './knowledge.js';
 
 const made = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
     if (!r.ok) throw new Error(JSON.stringify(r.error));
@@ -67,12 +67,39 @@ describe('openKnowledgeStore', () => {
         expect(opened.ok && opened.value.project).toBe(made(Knowledge.makeProjectName('my-shop')));
     });
 
-    test('cloudflare: not available yet, said in one line', async () => {
-        const opened = await openKnowledgeStore(
-            resolveKnowledgeConfig({ store: 'cloudflare', project: 'shop', url: 'https://knowledge.example.com' }, 'shop'),
-            root,
-            { stateDir: () => Promise.reject(new Error('the state directory is not opened for cloudflare')) },
-        );
-        expect(opened).toEqual({ ok: false, error: { type: 'KnowledgeStoreUnavailable', store: 'cloudflare', message: CLOUDFLARE_NOT_AVAILABLE } });
+    const cloudflare = (url = 'https://knowledge.example.com') => resolveKnowledgeConfig({ store: 'cloudflare', project: 'shop', url }, 'shop');
+    const noState = { stateDir: () => Promise.reject(new Error('the state directory is not opened for cloudflare')) };
+
+    test('cloudflare: the Worker at knowledge.url, with the service token of the environment', async () => {
+        const seen: Request[] = [];
+        const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+            seen.push(new Request(input, init));
+            return Response.json({ items: [] });
+        }) as typeof globalThis.fetch;
+        const env = { DOMAINTRAIL_KNOWLEDGE_CLIENT_ID: 'id.access', DOMAINTRAIL_KNOWLEDGE_CLIENT_SECRET: 'secret' };
+        const opened = await openKnowledgeStore(cloudflare(), root, { ...noState, env, fetch });
+        expect(opened.ok).toBe(true);
+        if (!opened.ok) return;
+        expect(opened.value.kind).toBe('cloudflare');
+        expect(opened.value.sweep).toBeUndefined();
+        await opened.value.store.search(opened.value.project, {});
+        expect(seen).toHaveLength(1);
+        expect(new URL(seen[0].url).origin).toBe('https://knowledge.example.com');
+        expect(seen[0].headers.get('CF-Access-Client-Id')).toBe('id.access');
+        expect(seen[0].headers.get('CF-Access-Client-Secret')).toBe('secret');
+    });
+
+    test('cloudflare without a service token: the variables to set, in one line (none needed on loopback)', async () => {
+        const opened = await openKnowledgeStore(cloudflare(), root, { ...noState, env: { DOMAINTRAIL_KNOWLEDGE_CLIENT_ID: 'id.access' } });
+        expect(opened).toEqual({
+            ok: false,
+            error: {
+                type: 'KnowledgeStoreUnavailable',
+                store: 'cloudflare',
+                message: "the knowledge store 'cloudflare' needs an Access service token: set DOMAINTRAIL_KNOWLEDGE_CLIENT_SECRET",
+            },
+        });
+        const local = await openKnowledgeStore(cloudflare('http://localhost:8787'), root, { ...noState, env: {} });
+        expect(local.ok).toBe(true);
     });
 });

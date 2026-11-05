@@ -41,9 +41,7 @@ export function stickyIndex(stormings: readonly Storming[]): StickyIndex {
 }
 
 /** The store the tools read, or why there is none (said by every tool). */
-export type KnowledgeAccess =
-    | { readonly store: KnowledgeStore; readonly project: Knowledge.ProjectName }
-    | { readonly unavailable: string };
+export type KnowledgeAccess = { readonly store: KnowledgeStore; readonly project: Knowledge.ProjectName } | { readonly unavailable: string };
 
 export interface KnowledgeToolsOptions {
     readonly access: KnowledgeAccess;
@@ -113,7 +111,7 @@ export function itemSummary(item: Knowledge.LiveKnowledgeItem, stickies: StickyI
 }
 
 const legend =
-    'Labels: kind, when (as_is / to_be), origin (said: one person, unconfirmed; agreed: several agreed; investigated: the AI checked code or documents; inferred: the AI\'s guess), perspective.';
+    "Labels: kind, when (as_is / to_be), origin (said: one person, unconfirmed; agreed: several agreed; investigated: the AI checked code or documents; inferred: the AI's guess), perspective.";
 
 function itemList(items: readonly Knowledge.LiveKnowledgeItem[], stickies: StickyIndex): string {
     return [legend, ...items.map((i) => itemSummary(i, stickies))].join('\n\n');
@@ -165,7 +163,8 @@ interface Resolved {
     readonly note: string;
 }
 
-const STICKY_FORMAT = "a sticky as '<Storming>.<LocalId>' (e.g. 'Ordering.CreateSpecification'), or a .dt element as 'dt:<Context>.<Aggregate>[.<command>]' or 'dt:<Context>.<Event>'";
+const STICKY_FORMAT =
+    "a sticky as '<Storming>.<LocalId>' (e.g. 'Ordering.CreateSpecification'), or a .dt element as 'dt:<Context>.<Aggregate>[.<command>]' or 'dt:<Context>.<Event>'";
 
 /**
  * A sticky (`Ordering.CreateSpecification`), or a `.dt` element (`dt:Sales.Order.confirm`) resolved through the
@@ -285,7 +284,12 @@ export function knowledgeTools(options: KnowledgeToolsOptions): McpTool[] {
                         "said (one person, unconfirmed), agreed (several people agreed), investigated (the AI checked code or documents), inferred (the AI's guess).",
                     ),
                     perspective: { type: 'string', description: 'A role, e.g. 案件担当, 営業, 外注先 (exactly as labelled).' },
-                    limit: { type: 'integer', minimum: 1, maximum: MAX_SEARCH_LIMIT, description: `At most this many items (default ${DEFAULT_SEARCH_LIMIT}).` },
+                    limit: {
+                        type: 'integer',
+                        minimum: 1,
+                        maximum: MAX_SEARCH_LIMIT,
+                        description: `At most this many items (default ${DEFAULT_SEARCH_LIMIT}).`,
+                    },
                 },
                 additionalProperties: false,
             },
@@ -395,7 +399,10 @@ export function itemDetail(
                     : '- (none: this is the first version)',
             );
         for (const h of history)
-            out.push(`- v${h.version} (replaced ${minute(h.replacedAt)}): ${labelsLine(h.content.labels)}; about ${h.content.about.join(', ') || '(no sticky)'}`, `  ${firstLine(h.content.text)}`);
+            out.push(
+                `- v${h.version} (replaced ${minute(h.replacedAt)}): ${labelsLine(h.content.labels)}; about ${h.content.about.join(', ') || '(no sticky)'}`,
+                `  ${firstLine(h.content.text)}`,
+            );
     }
     return out.join('\n');
 }

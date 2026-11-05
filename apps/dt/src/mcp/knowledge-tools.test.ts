@@ -71,15 +71,38 @@ beforeAll(async () => {
     await store.applyExtraction(project, {
         by: by(1),
         operations: [
-            add('kn_00000001', '確定は営業が電話で確かめてから押す。', ['Ordering.ConfirmOrder'], { when: 'as_is', kind: 'flow', origin: 'said', perspective: made(Knowledge.makePerspective('営業')) }, 'm1', '2026-11-05T09:00:00Z'),
-            add('kn_00000002', '確定した注文は取り消せない。', ['Ordering.Order', 'Ordering.OrderConfirmed'], { when: 'to_be', kind: 'rule', origin: 'agreed' }, 'm2', '2026-11-05T09:01:00Z'),
+            add(
+                'kn_00000001',
+                '確定は営業が電話で確かめてから押す。',
+                ['Ordering.ConfirmOrder'],
+                { when: 'as_is', kind: 'flow', origin: 'said', perspective: made(Knowledge.makePerspective('営業')) },
+                'm1',
+                '2026-11-05T09:00:00Z',
+            ),
+            add(
+                'kn_00000002',
+                '確定した注文は取り消せない。',
+                ['Ordering.Order', 'Ordering.OrderConfirmed'],
+                { when: 'to_be', kind: 'rule', origin: 'agreed' },
+                'm2',
+                '2026-11-05T09:01:00Z',
+            ),
         ],
     });
     clock = new Date('2026-11-06T10:00:00Z');
     await store.applyExtraction(project, {
         by: by(2),
         operations: [
-            { ...add('kn_00000003', `出荷は月末にまとめる。${'長い説明。'.repeat(200)}`, ['Ordering.Shipped', 'Gone.Sticky'], { when: 'none', kind: 'pain', origin: 'inferred' }, 'm3', '2026-11-06T10:00:00Z') },
+            {
+                ...add(
+                    'kn_00000003',
+                    `出荷は月末にまとめる。${'長い説明。'.repeat(200)}`,
+                    ['Ordering.Shipped', 'Gone.Sticky'],
+                    { when: 'none', kind: 'pain', origin: 'inferred' },
+                    'm3',
+                    '2026-11-06T10:00:00Z',
+                ),
+            },
         ],
     });
     stickies = stickyIndex((await analyzeStormings([{ path: 'ordering.dtes', text: DTES }], undefined)).stormings);
@@ -91,7 +114,12 @@ afterAll(async () => {
 
 describe('stickyIndex', () => {
     test('the node elements by Storming.LocalId, with their label, kind and ref', () => {
-        expect(stickies.get('Ordering.ConfirmOrder')).toEqual({ ref: ref('Ordering.ConfirmOrder'), kind: 'command', label: '注文を確定する', dt: 'Sales.Order.confirm' });
+        expect(stickies.get('Ordering.ConfirmOrder')).toEqual({
+            ref: ref('Ordering.ConfirmOrder'),
+            kind: 'command',
+            label: '注文を確定する',
+            dt: 'Sales.Order.confirm',
+        });
         expect(stickies.get('Ordering.Shipped')).toEqual({ ref: ref('Ordering.Shipped'), kind: 'event', label: '出荷した' });
         expect([...stickies.keys()]).toEqual(['Ordering.OrderConfirmed', 'Ordering.Order', 'Ordering.ConfirmOrder', 'Ordering.Shipped']);
     });
