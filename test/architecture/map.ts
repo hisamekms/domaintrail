@@ -154,6 +154,15 @@ export const MAP: Record<string, Module> = {
         // the map does not carry that edge over (ADR 0027).
         upstream: ['kernel', 'modeling', 'storming'],
     },
+    knowledge: {
+        kind: 'context',
+        dir: 'contexts/knowledge',
+        sources: 'contexts/knowledge/src',
+        // the knowledge taken from sessions (ADR 0031): its items refer to stickies by `<Storming>.<LocalId>` as plain
+        // values (whether a sticky exists is `dt check`'s), and to sessions and messages by their IDs, so it takes no
+        // other context
+        upstream: [],
+    },
     analysis: {
         kind: 'capability',
         dir: 'capabilities/analysis',

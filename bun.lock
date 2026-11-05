@@ -21,6 +21,7 @@
         "@domaintrail/dt": "workspace:*",
         "@domaintrail/generation": "workspace:*",
         "@domaintrail/kernel": "workspace:*",
+        "@domaintrail/knowledge": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "@domaintrail/storming": "workspace:*",
         "@domaintrail/visualization": "workspace:*",
@@ -144,6 +145,12 @@
         "fast-check": "4.10.2",
       },
     },
+    "contexts/knowledge": {
+      "name": "@domaintrail/knowledge",
+      "devDependencies": {
+        "fast-check": "4.10.2",
+      },
+    },
     "contexts/modeling": {
       "name": "@domaintrail/modeling",
       "dependencies": {
@@ -199,6 +206,8 @@
     "@domaintrail/generation": ["@domaintrail/generation@workspace:capabilities/generation"],
 
     "@domaintrail/kernel": ["@domaintrail/kernel@workspace:shared/kernel"],
+
+    "@domaintrail/knowledge": ["@domaintrail/knowledge@workspace:contexts/knowledge"],
 
     "@domaintrail/modeling": ["@domaintrail/modeling@workspace:contexts/modeling"],
 

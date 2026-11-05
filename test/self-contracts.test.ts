@@ -1,6 +1,6 @@
 // DomainTrail's own model (ADR 0027, Modeling is described in its own `.dt`; ADR 0028, decision 9): the root
-// domaintrail.jsonc covers the kernel (shared/kernel/model), Modeling (contexts/modeling/model) and Collaboration
-// (contexts/collaboration/model), and writes each into its package's src/generated (committed), with its contract
+// domaintrail.jsonc covers the kernel (shared/kernel/model), Modeling (contexts/modeling/model), Collaboration
+// (contexts/collaboration/model) and Knowledge (contexts/knowledge/model), and writes each into its package's src/generated (committed), with its contract
 // tests in src/generated/tests. The model checks clean and is formatted, and generating it again gives exactly the
 // committed files, but for the version of domaintrail their contract tests state: after changing the model or the
 // generator, run `bun run dt generate ts` at the root
@@ -15,7 +15,7 @@ import { withoutVersion } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
 /** The packages written to, with their model and the directory of their generated code. */
-const PACKAGES = ['shared/kernel', 'contexts/modeling', 'contexts/collaboration'];
+const PACKAGES = ['shared/kernel', 'contexts/modeling', 'contexts/collaboration', 'contexts/knowledge'];
 const GENERATED = 'src/generated';
 
 const dirs: string[] = [];
