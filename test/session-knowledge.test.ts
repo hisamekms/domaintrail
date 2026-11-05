@@ -71,6 +71,7 @@ function memoryStore(): KnowledgeStore & { readonly extractions: Knowledge.Extra
         counts: unused,
         get: unused,
         correct: unused,
+        unlinkConflict: unused,
         delete: unused,
         deleteSession: unused,
         restore: unused,

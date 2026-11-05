@@ -232,7 +232,8 @@ export const MAP: Record<string, Module> = {
         kind: 'app',
         dir: 'apps/web',
         sources: 'apps/web',
-        // its unit tests analyze examples/shop through the project analysis (a devDependency)
-        upstream: ['analysis', 'collaboration', 'kernel', 'modeling', 'storming', 'visualization'],
+        // its unit tests analyze examples/shop through the project analysis (a devDependency); the knowledge's values
+        // as dt serves them, decoded with the store's protocol (ADR 0031, section 10)
+        upstream: ['analysis', 'collaboration', 'kernel', 'knowledge', 'modeling', 'storming', 'visualization'],
     },
 };

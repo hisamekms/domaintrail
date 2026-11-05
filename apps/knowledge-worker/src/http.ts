@@ -8,6 +8,7 @@
 // | PATCH /knowledge/:id               | correct           | correct |
 // | DELETE /knowledge/:id              | delete            | delete  |
 // | POST /knowledge/:id/restore        | restore (元に戻す) | delete  |
+// | POST /knowledge/:id/unlink         | unlinkConflict    | correct |
 // | POST /knowledge/:id/images         | attachImage       | correct |
 // | GET /counts?storming=              | counts            | read    |
 // | POST /extractions                  | applyExtraction   | extract |
@@ -32,6 +33,7 @@ import {
     itemContent,
     itemId,
     knowledgeQueryOf,
+    unlinkBody,
     limitOf,
     projectName,
     sessionRef,
@@ -169,6 +171,13 @@ async function route(
                 if (denied) return denied;
                 const r = await store.restore(project, item, actor());
                 return r.ok ? json(r.value) : itemError(r.error);
+            }
+            if (sub === 'unlink' && method === 'POST') {
+                const denied = allow('correct');
+                if (denied) return denied;
+                const other = unlinkBody(await body(), 'body');
+                const r = await store.unlinkConflict(project, item, other, actor());
+                return r.ok ? json({ items: r.value }) : itemError(r.error);
             }
             if (sub === 'images' && method === 'POST') {
                 const denied = allow('correct');

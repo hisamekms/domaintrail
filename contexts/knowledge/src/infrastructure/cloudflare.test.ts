@@ -82,6 +82,16 @@ describe('the cloudflare adapter', () => {
         expect(await store().get(project, itemId('kn_00000001'))).toBeUndefined();
     });
 
+    test('unlinks a conflict with the other item in the body, and reads both sides back', async () => {
+        const a = liveItem('kn_00000001');
+        const b = liveItem('kn_00000002');
+        reset(() => Response.json({ items: [a, b] }));
+        const r = await store().unlinkConflict(project, a.id, b.id, userName('a@example.com'));
+        expect(r).toEqual({ ok: true, value: [a, b] });
+        expect(seen[0]).toMatchObject({ method: 'POST', path: '/base/v1/projects/dmcore/knowledge/kn_00000001/unlink' });
+        expect(JSON.parse(seen[0].body)).toEqual({ other: 'kn_00000002' });
+    });
+
     test('pages through a search to list the items about stickies, newest first', async () => {
         const older = liveItem('kn_00000001');
         const newer = { ...liveItem('kn_00000002'), updatedAt: new Date('2026-11-06T00:00:00Z') };

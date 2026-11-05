@@ -116,6 +116,34 @@ describe('the files store', () => {
         ]);
     });
 
+    test('unlinkConflict unlinks both sides, keeps their versions and audits it; counts lose the mark', async () => {
+        await apply('s0', 1, add('kn_00000001', { session: 's0', about: ['Ordering.Placed'] }));
+        await apply('s1', 1, {
+            kind: 'Conflict',
+            id: itemId('kn_00000002'),
+            content: content('the other way round', 'said', ['Ordering.Placed']),
+            sources: [source('s1', 'm-9')],
+            item: itemId('kn_00000001'),
+            base: version(1),
+        });
+        const r = await store.unlinkConflict(project, itemId('kn_00000002'), itemId('kn_00000001'), alice);
+        expect(r.ok && r.value.map((i) => [i.id, i.conflictsWith, i.version])).toEqual([
+            ['kn_00000002', [], 1],
+            ['kn_00000001', [], 1],
+        ] as unknown as [Knowledge.KnowledgeItemId, Knowledge.KnowledgeItemId[], Knowledge.ItemVersion][]);
+        expect((await store.get(project, itemId('kn_00000001')))?.item.conflictsWith).toEqual([]);
+        expect(await store.counts(project, 'Ordering')).toEqual([{ sticky: 'Ordering.Placed' as Knowledge.StickyRef, hasItems: true, hasConflict: false }]);
+        const audit = await store.audit(project, {});
+        expect(audit.items.slice(0, 2).map((e) => [e.item, e.operation])).toEqual([
+            ['kn_00000001', 'unlinkConflict'],
+            ['kn_00000002', 'unlinkConflict'],
+        ] as unknown as [Knowledge.KnowledgeItemId, Knowledge.AuditOperation][]);
+        expect(await store.unlinkConflict(project, itemId('kn_00000009'), itemId('kn_00000001'), alice)).toEqual({
+            ok: false,
+            error: { type: 'KnowledgeItemNotFound', itemId: itemId('kn_00000009') },
+        });
+    });
+
     test('correct makes a new version; correcting a deleted item says it is gone', async () => {
         await apply('s1', 1, add('kn_00000001'));
         const r = await store.correct(project, itemId('kn_00000001'), content('corrected'), alice);

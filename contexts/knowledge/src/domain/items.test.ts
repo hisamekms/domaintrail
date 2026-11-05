@@ -144,3 +144,24 @@ describe("a person's edits", () => {
         expect(back).toEqual(item);
     });
 });
+
+describe('unlinkConflict', () => {
+    test('removes the link, keeps the content and the version, and records who', () => {
+        const item = liveItem('kn_00000001', { conflictsWith: ['kn_00000002', 'kn_00000003'] });
+        const { aggregate, events } = value(commands.unlinkConflict(item, { other: itemId('kn_00000002'), by: userName('alice@example.com'), at: later })).Live;
+        expect(aggregate).toMatchObject({ version: 1, content: item.content, conflictsWith: ['kn_00000003'], updatedAt: later });
+        expect(events.KnowledgeConflictUnlinked).toEqual({
+            type: 'KnowledgeConflictUnlinked',
+            itemId: item.id,
+            version: item.version,
+            other: itemId('kn_00000002'),
+            by: userName('alice@example.com'),
+            at: later,
+        });
+    });
+
+    test('refuses the item itself', () => {
+        const item = liveItem('kn_00000001');
+        expect(error(commands.unlinkConflict(item, { other: item.id, by: userName('alice@example.com'), at: later }))).toEqual({ type: 'ConflictWithItself' });
+    });
+});

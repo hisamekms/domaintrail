@@ -73,6 +73,14 @@ context Knowledge {
       changes conflictsWith, updatedAt
       emits KnowledgeConflictLinked
 
+    /// 人が、食い違いとしてつながれた2つを、食い違いではないと決める（「食い違いではない」）。つなぎを外すだけで、中身も版も
+    /// 変えない（ストアは相手のナレッジからも外す）。
+    command unlinkConflict(other: KnowledgeItemId "食い違うナレッジ", by: UserName, at: Timestamp) "食い違いを外す"
+      Live -> Live
+      requires notItself "自分とは食い違わない" { other != id } else ConflictWithItself
+      changes conflictsWith, updatedAt
+      emits KnowledgeConflictUnlinked
+
     /// 人が本文・ラベル・付箋を直す。いつも新しい版になる。
     command correct(corrected: ItemContent, by: UserName, at: Timestamp) "直す"
       Live -> Live
@@ -135,6 +143,14 @@ context Knowledge {
     other: KnowledgeItemId "食い違うナレッジ"
     by: ExtractionRef
     reason: Reason?
+    at: Timestamp
+  }
+
+  persistent event KnowledgeConflictUnlinked "食い違いを外した" {
+    itemId: KnowledgeItemId
+    version: ItemVersion
+    other: KnowledgeItemId "食い違うナレッジ"
+    by: UserName
     at: Timestamp
   }
 

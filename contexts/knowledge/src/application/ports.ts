@@ -121,6 +121,18 @@ export interface KnowledgeStore {
     ): Promise<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>>;
 
     /**
+     * A person decides that two items linked as a conflict do not conflict (食い違いではない): the link goes from both
+     * sides (the other's only while it is live), recorded in the audit log; the contents and versions stay. Returns the
+     * items as they are now (the item first). Unlinking what is not linked answers the items as they are.
+     */
+    unlinkConflict(
+        project: Project,
+        id: ItemId,
+        other: ItemId,
+        by: Knowledge.UserName,
+    ): Promise<Result<readonly Knowledge.LiveKnowledgeItem[], Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>>;
+
+    /**
      * A person deletes an item: hidden from every read at once, and recorded in the audit log. It can be restored until
      * the store's own sweep — every few minutes, after the page's undo window (ADR 0031 section 7), whether or not the
      * page that deleted it is still open — removes every version of it and the images only it refers to, drops the

@@ -90,9 +90,11 @@ export {
     type SessionMessage,
     type SessionTalk,
 } from './application/extraction.js';
+export { createRedactionSync, type RedactionCursors, type RedactionSync, type RedactionSyncDeps } from './application/redaction-sync.js';
 export { createExtractionScheduler, type ExtractionScheduler, type ExtractionSchedulerDeps, type Timers } from './application/extraction-scheduler.js';
 // the checkpoint in the session database (an adapter, wired by the app)
-export { CHECKPOINT_SCHEMA, createSqliteCheckpoints, extractionCosts } from './infrastructure/sqlite-checkpoints.js';
+export { CHECKPOINT_SCHEMA, createSqliteCheckpoints, extractionCosts, forgetHeldQuotes } from './infrastructure/sqlite-checkpoints.js';
+export { createSqliteRedactionCursors, REDACTION_CURSOR_SCHEMA } from './infrastructure/sqlite-redaction-cursors.js';
 
 // ---- its settings in domaintrail.jsonc (the `knowledge` section), and the store's credentials from the environment --
 export {

@@ -5,8 +5,8 @@ import { clampSize, usePersistentState } from '../shared/layout';
 import { effectiveLayout, keptOverrides, NO_OVERRIDES, type Overrides } from './responsive';
 import { scaledSize } from './text-size';
 
-/** The lists of the navigator (the top of the left column), chosen in its activity bar. */
-export type LeftView = 'tree' | 'problems' | 'changes';
+/** The lists of the navigator (the top of the left column), chosen in its activity bar; `knowledge` in a session with a knowledge store. */
+export type LeftView = 'tree' | 'problems' | 'changes' | 'knowledge';
 
 /**
  * Which panes are open, their sizes and contents, and whether each view's legend is open (remembered per browser). The left

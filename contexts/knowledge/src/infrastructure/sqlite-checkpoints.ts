@@ -132,3 +132,32 @@ export function extractionCosts(db: DatabaseSync, session: string): readonly Rec
             return isObject(data) ? [data] : [];
         });
 }
+
+/** Whether an operation (as this module's JSON) cites one of the messages among its sources. */
+function cites(operation: unknown, messages: ReadonlySet<string>): boolean {
+    if (!isObject(operation)) return false;
+    const sources = [...(Array.isArray(operation.sources) ? operation.sources : []), ...(operation.source === undefined ? [] : [operation.source])];
+    return sources.some((s: unknown) => isObject(s) && messages.has(JSON.stringify([s.session, s.message])));
+}
+
+/**
+ * Forgets the held operations that quote one of these messages (ADR 0031, section 7: a redacted message's quote must
+ * not stay in the checkpoint, where a held operation would apply it later). Dropping a held operation is what the
+ * guards do with one the talk moved past; the extraction goes on. How many were dropped.
+ */
+export function forgetHeldQuotes(db: DatabaseSync, messages: readonly Knowledge.MessageKey[]): number {
+    if (messages.length === 0) return 0;
+    db.exec(CHECKPOINT_SCHEMA);
+    const keys = new Set(messages.map((m) => JSON.stringify([m.session, m.message])));
+    const update = db.prepare('UPDATE knowledge_extractions SET held = :held WHERE session_id = :session');
+    let dropped = 0;
+    for (const row of db.prepare('SELECT session_id, held FROM knowledge_extractions').all()) {
+        const raw: unknown = JSON.parse(String(row.held));
+        if (!Array.isArray(raw)) continue;
+        const kept = raw.filter((h: unknown) => !(isObject(h) && cites(h.operation, keys)));
+        if (kept.length === raw.length) continue;
+        dropped += raw.length - kept.length;
+        update.run({ session: String(row.session_id), held: JSON.stringify(kept) });
+    }
+    return dropped;
+}
