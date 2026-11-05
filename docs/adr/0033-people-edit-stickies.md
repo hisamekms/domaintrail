@@ -1,0 +1,132 @@
+# ADR 0033: People edit the stickies themselves, and the actions on a sticky
+
+- Status: accepted, implemented (`feat/sticky-actions`). Decided by the maintainer: every participant may edit, the
+  edits a running run drops are re-applied automatically, and a run's other wording of the same sticky is kept and
+  offered to people as a choice (marked *Decided by the maintainer*).
+- Date: 2026-11-06
+- Input: the approved preview 「付箋の操作」 (one list of actions; a toolbar, a menu, keys and ⌘K drawn from it; the
+  edit window), and `docs/plans/listening.md` §2 (people correct a sticky's wording on the canvas, dt writes the label
+  without an AI run). ADR 0031 and 0032 are taken on other branches.
+
+## Context
+
+A live Collab test asked for people to write the stickies' wording themselves (`docs/plans/listening.md`). Until now
+every change of a `.dtes` went through a message to the AI and a run, even a typo in a label. The canvas had one action
+on a selection, the 💬 that adds it to the chat; the others (the detail's 見る, its `ref`, the timelines it is in) were
+spread over the detail.
+
+## Decision
+
+### One list of actions (`apps/web/stickies/registry.ts`)
+
+Each action of a sticky (a storming's element drawn as a note) has an ID, a lucide icon, its label, its key, the
+stickies it applies to (their kind, and what they have: a `ref` the model has, the timelines an event is in, a live
+session), whether it works on several selected at once, its group, and whether it is frequent. Everything is drawn from
+it, so an action added there shows everywhere at once:
+
+- **the toolbar** above the selected stickies (below them when there is no room), shown on selection, never on hover:
+  the frequent actions as icon buttons (`icon-button`, an `aria-label` and a tooltip with the key), then 「…」; with
+  several selected, how many and the actions for several only. On the storming canvas it replaces the 💬 that appeared
+  on a click (the other views keep it);
+- **the menu** of every action that applies, by group (よく使う, 見る, 書く, そのほか), with its key, from 「…」 or a
+  right-click on a sticky (`apps/web/shared/menu.tsx`: `role="menu"`, the arrow keys, Home / End, Escape and Tab close
+  it and give the focus back);
+- **the keys** while stickies are selected and nothing that takes text has the focus: Enter adds them to the chat (`C`
+  still does), F2 edits, ⌘⇧C (Ctrl+Shift+C) copies the link; Escape, which clears the selection, stays the canvas's; a
+  double-click edits;
+- **the command palette** (`apps/web/shared/palette.tsx`, ⌘K / Ctrl+K): the actions on the selection, then every
+  sticky of every storming by name. It is generic (sections of items with a label, a detail, an icon, a key and what it
+  runs), so that other features give it their items later.
+
+| Action | Kinds | Several | Frequent | Key | Needs |
+|---|---|---|---|---|---|
+| チャットに追加 | all | yes | yes | Enter | a live session |
+| 直す（ラベル・名前） | all | no | yes | F2 | a live session |
+| ドメインモデルで見る | event, command, aggregate with a `ref` the model has | no | no | | |
+| このタイムラインで見る | an event in a timeline the view does not show | no | no | | |
+| ホットスポットを付ける | event (`HOTSPOT_TARGETS`, the grammar's rule; widened there) | no | no | | a live session |
+| 解決を書く | hotspot | no | no | | a live session |
+| リンクをコピー | all | no | no | ⌘⇧C | |
+
+The `see` actions have the `see` look (the eye) and name their place in the tooltip (「ドメインモデルの 注文 › 確定する
+を見る」, in the display mode). 知見を見る (the knowledge feature, on another branch) is one more entry of the `see` group
+when it lands; nothing of it is drawn before.
+
+**Links.** A link names an element in the page's fragment, `#select=es/<Storming>/<Local>`: the view state stays the
+page's (per browser, not in the URL), and the page opens the world and the storming's view that draws the element
+(its integrated canvas, at a level that draws it), selects it and drops the fragment. A fragment never reaches the
+server.
+
+### Writing `.dtes` without an AI run
+
+- **Planned on the AST** (`contexts/storming/src/infrastructure/syntax/edit.ts`, `planStickyEdit`): the storming and
+  the declaration are found by their IDs in the parsed file; only the ranges of the tokens concerned are replaced or
+  text inserted next to them — the label string, the declaration's name and every reference to it in the storming
+  (relation clauses, the steps of timelines and groups, an exception's `then`, a stage's `after`; the IR's
+  `referencesTo` finds the same places, and the page counts them with it). No `dt fmt` of the file: the rest stays byte
+  for byte. A new hotspot goes after the storming's last hotspot (else after its last element), in the canonical
+  layout (`hotspot <Name> "<question>" { on <Event> }`); resolving writes `status resolved` and `resolution "…"` where
+  they belong. A name is checked first (the grammar's ID, not a keyword, not another declaration's ID: one namespace),
+  a label on one line; the result must parse again (a safety net).
+- **Elsewhere than the `.dtes`.** The journey file is keyed by storming IDs only (no element is named there), and the
+  layout is the cache's (outside the workspace, keyed by the render graph; a renamed note is laid out anew). Neither is
+  rewritten.
+- **Where.** `POST /api/session/stickies { kind: 'wording' | 'addHotspot' | 'resolveHotspot', …, body }`, any
+  participant, behind the watcher's hold (the view refreshed once). Collaboration's `editSticky` plans it through a port
+  (`StickyEditor`, wired by the app with Storming's planner: a context takes no other's syntax), reads the sources,
+  writes the whole set with the same refusal as every write (the sources must be as read; refused for a run's write in
+  between, read again up to three times), and checks that every `.dtes` parses.
+- **Optimistic concurrency.** A wording edit carries the label and the name the page saw (`expected`); when the file
+  says otherwise the edit is refused (`StickyStale`, 409) with what the sticky is now, and the window says so.
+
+### Recorded as a unit of work, reverted as one
+
+*Decided by the maintainer*: every participant may edit (unlike the AI's requests, these are small and quickly fixed by
+another edit) — not a proposal for the facilitator.
+
+An edit is recorded like a run's work, so that it shows and is reverted with the existing mechanism (ADR 0026, "revert a
+run"): a message (`Request.recordEdit`, its `edit: StickyEdit` — `Wording` with the name and label before and after
+and the references rewritten, `HotspotAdded`, `HotspotResolved` — and the page's sentence 「旧」を「新」に直す) and a
+run created in the new state `Edited` (`AgentRun.recordEdit`: never queued, never claimed), with base and result
+revisions (`RunBase`, `RunResult`), `queuedBy` the person. The message stays out of the chat; AI の作業 shows the unit as
+「◯◯が直しました」 with its time and old → new, and 打ち消す (the facilitator's, as every revert) sends the revert request
+「〈何を直したか〉の変更を打ち消す」 through the queue, which the server reverts mechanically. Migration: none (runs and
+requests are JSON rows; the new event types `run.edited`, `run.edit_conflicted`).
+
+### Edits while a run runs (*Decided by the maintainer*: re-apply)
+
+Edits are allowed even on the elements a running run targets. The server writes them one at a time (one queue in the
+application for the edits and the re-application; a run's agent writes the files itself, so its writes are not the
+server's to queue). When a run ends with a result (completed or failed by the rule, asked, declined; before the agent is answered, so before
+it claims the next run), `reapplyEdits` compares, for each wording edit recorded while it ran and not reverted, what
+was there before the edit, what the person wrote, and what the run left (a three-way compare per sticky):
+
+- the person's label and name are still there: nothing to do;
+- the run left the old label, or the old name (it wrote a file as it had read it before the edit): the edit is written
+  again — for a rename, the old name the run left and every reference to it, including those the run wrote — as one new
+  `Edited` run attributed to the same person, `reapplies` the run;
+- the run changed the same label to something else: the run's is kept, and the edit records the conflict
+  (`EditConflict { run, runLabel, settled }`, `noteConflict`); AI の作業 shows both wordings with AI の文言のまま and 人の文言にする
+  (a new edit over the run's, then settled; `POST /api/session/runs/:id/settle`).
+
+The runner is told: a starting run gets `peopleEdits` (the edits since the previous run started, who and old → new);
+the prompt shows them in `changedSinceYourLastRun.editedByPeople` for an agent that continues its conversation, else as
+`editedByPeople`, and rule 3 says to keep people's wording — never set it back nor change it unless a request asks.
+
+### Limits
+
+- A revert is line based (ADR 0026): reverting a rename after a later edit used the new name (a hotspot `on` it) leaves
+  that later reference as written.
+- An edit made while a run runs is inside that run's base → result: reverting the run also takes it back where the run's
+  result kept it (the run's revert is the facilitator's, who sees the edit in AI の作業).
+- The comparison after a run reads labels and names only: a run that renamed the sticky to a third name, or removed it,
+  is left alone.
+- Only the wording of a sticky, a hotspot and its resolution are written by hand; placing stickies and the other clauses
+  stay the AI's (`docs/plans/listening.md` §2).
+
+## Consequences
+
+- The canvas is no longer read-only for its words: a typo costs an edit, not a run. The AI keeps the tidying.
+- `Edited` is a state every consumer of runs knows (the chat's stream leaves it out; AI の作業 draws it; the prompt
+  calls it "edited by a person").
+- The menu and the palette are shared components for the next features (知見を見る, other worlds' actions).

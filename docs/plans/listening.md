@@ -23,10 +23,15 @@ The human facilitator stays and keeps every approval. The AI acts on its own ini
 
 Letting the AI approve changes within the journey's scope, and a session without a human facilitator, come later.
 
-### 2. People correct a sticky's wording on the canvas
+### 2. People correct a sticky's wording on the canvas (done)
 
 A sticky the AI wrote can be renamed in place (double-click, edit, Enter); dt writes the label without an AI run. The
 AI keeps the tidying: consistent names, exception candidates. Placing and moving stickies on the canvas stay out.
+
+*Done* on `feat/sticky-actions` ([ADR 0033](../adr/0033-people-edit-stickies.md)): the label and the name (with its
+references), a hotspot on an event and a hotspot's resolution, by anyone in the session, recorded in AI の作業 and
+reverted like a run's work; edits made while a run works are re-applied when its result drops them. The actions on a
+sticky (a toolbar, a menu, keys, ⌘K) come from one list. Placing and moving stickies stay out, as decided.
 
 ### 3. Listening to the meeting
 
@@ -76,7 +81,7 @@ give the AI useful summaries and candidates. Write the full plan from what the s
 
 ### Order
 
-1. The co-facilitating AI and the in-place rename.
+1. The co-facilitating AI and the in-place rename (the rename: done, ADR 0033).
 2. The spike, then the plan for listening.
 3. Tab capture, local Whisper, the transcript in the session, the listening indicator.
 4. The AI's periodic summary and candidates.
