@@ -204,6 +204,16 @@ describe('the prompt', () => {
         // without the guide's text, no section
         expect(buildPrompt(input([frozen({ kind: 'Workspace' }, 'x')]), names, 'n')).not.toContain('How to work');
     });
+
+    test("the .dt syntax by example follows the modeling's way of working, for requests about the .dt model only", () => {
+        const practice = { storming: 'STORMING', modeling: 'MODELING', modelingSyntax: '### The syntax by example\n\nSYNTAX' };
+        const prompt = (...requests: Json<Collaboration.FrozenRequest>[]): string => buildPrompt(input(requests), names, 'n', [], [], { practice });
+        const dt = prompt(frozen({ kind: 'DtElement', element: 'Sales.Order' }, 'x'));
+        expect(dt).toContain(`MODELING\n\n${practice.modelingSyntax}\n\nYour final answer is the reply`);
+        expect(prompt(frozen({ kind: 'DtesStorming', storming: 'Returns' }, 'x'))).not.toContain('SYNTAX');
+        // in the stable part of the prompt, before the block of data
+        expect(prompt(frozen({ kind: 'Workspace' }, 'x')).indexOf('SYNTAX')).toBeLessThan(dt.indexOf('<requests-n>'));
+    });
 });
 
 describe('events at Design Level only', () => {

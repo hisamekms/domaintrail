@@ -3587,7 +3587,8 @@ only (any other tool is refused without asking, and no MCP server is loaded). Th
 the `.dt` and `.dtes` sources, keep a storming exploratory, and change no `.dt` when the requests are only about
 stormings, and lets it answer instead (status `answered`) a request that turns out to be a question. It also gives the
 ways of working of the languages the requests are about, as `dt guide storming-practice` and `dt guide
-modeling-practice` print them (both for a request about the whole workspace); the answerer's prompts give them too.
+modeling-practice` print them (both for a request about the whole workspace), with the `.dt` syntax by example of `dt
+guide dsl-quick` after the modeling's; the answerer's prompts give them too (its interviews without the syntax).
 Then `dt fmt` and `dt check` run when the run changed files (else both are skipped), and the server records the
 result.
 
