@@ -276,11 +276,13 @@ function replyDescription(): string {
 - outcome: "done" (you carried the requests out), "clarification" (rule 6) or "declined" (rule 7).
 - title: a short title (about ${L.titleAim} characters, at most ${L.title}, one line, in the requests' language) naming
   what these requests are about; people see it as the name of this change.
-- summary: 1-2 sentences, at most ${L.summary} characters; for "declined", why.
+- summary: 1-2 sentences, at most ${L.summary} characters; for "declined", why. It is shown as Markdown, as the
+  answer is.
 - requests: one entry per request, by its number: status "done", "partial", "skipped", "question" or "answered"
   (rule 13); a note (at most ${L.requestNote} characters) is required for "partial" and "skipped".
 - answer (only with "done", required when a request is "answered", at most ${L.answer} characters): your answer to
-  the requests that were questions (rule 13).
+  the requests that were questions (rule 13). It is shown as Markdown (paragraphs, lists, \`code\`, code blocks,
+  tables): use at most one heading level (\`#\`), and no links or images (they are shown as plain text).
 - questions (only for "clarification", 1 to ${L.questions}): id, text (at most ${L.questionText}), requests (numbers),
   options (0 to ${L.options}: id, label at most ${L.optionLabel}, detail at most ${L.optionDetail}), multiple (several
   options may be chosen). Never add an "other" or free-text option: people can always answer in their own words.

@@ -140,6 +140,30 @@ const runs = async (s: Ctx): Promise<void> => {
         },
     });
 
+    // answered instead of edited: the run judged the message a question; its answer is Markdown (a heading, a list,
+    // bold, element links), clamped on the card as the AI's answers are
+    const states = await s.say('takahashi', '#注文[1] はどんな状態を通って確定まで進みますか？', {
+        targets: [s.dt('Sales.Order', '注文')],
+        reads: 'request',
+    });
+    await s.apply([states], {
+        kind: 'reply',
+        reply: {
+            outcome: 'done',
+            title: '注文の状態の流れ',
+            summary: '@{Sales.Order} の状態の流れに答えました。変更はしていません。',
+            requests: [{ request: 1, status: 'answered' }],
+            answer: [
+                '## @{Sales.Order} の状態',
+                '',
+                '1. **@{Sales.Order#Draft}**: 明細を足したり外したりできます',
+                '2. @{Sales.Order:confirm} で @{Sales.Order#Confirmed} になります（明細が1件以上のときだけ）',
+                '',
+                'どちらからでも、取り消すと @{Sales.Order#Cancelled} です。',
+            ].join('\n'),
+        },
+    });
+
     // failed: the agent exits non-zero (with its report), and an agent that cannot run at all
     const rebuild = await s.say('tanaka', '返品のストーミングを、受付・検品・返金の3つのタイムラインに作り直してください', { reads: 'request' });
     await s.apply([rebuild], { kind: 'exit', exitCode: 1 });

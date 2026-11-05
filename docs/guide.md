@@ -3312,10 +3312,12 @@ base revision as its result.
 **The agent's reply** is structured (Claude Code's structured output, `--json-schema`): a short summary, a line per
 request (✓ done, ◐ partly, – not done, ? a question, with a note for the last ones), the assumptions it made where a
 request left a choice open (with the alternatives it saw), and for a question up to 3 questions, each with up to 5
-options (the page always adds "other"). The chat shows what the AI says, as plain text, then the files the run
-changed on a small line of their own (a file-diff icon, `billing.dt、tax.dt`: a link comparing the revisions before and
-after the run); nothing when no file changed. The AI names
-elements by identifier (`@{Sales.Order}`, `@{es:Returns/ReturnRequested}`); the page shows each by its own name in the
+options (the page always adds "other"). The chat shows what the AI says — its summary, an answer given instead of an
+edit, a question asked without the form — as Markdown, the way it shows the AI's answers (lists, **bold**, `code`,
+code blocks and tables; every heading level one heading; links and images as text, never HTML), its short texts (a
+request's note, an assumption, a question and its options) as plain text, then the files the run changed on a small
+line of their own (a file-diff icon, `billing.dt、tax.dt`: a link comparing the revisions before and after the run);
+nothing when no file changed. The AI names elements by identifier (`@{Sales.Order}`, `@{es:Returns/ReturnRequested}`); the page shows each by its own name in the
 name display setting (a state or a command without its aggregate, a storming element without its storming; the whole
 name in its tooltip), as a link to the element. Whether a run succeeded is
 never taken from the reply. A reply that does not fit its shape or limits is shown as far as it can be read (its
