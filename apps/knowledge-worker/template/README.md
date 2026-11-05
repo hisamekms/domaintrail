@@ -42,16 +42,19 @@ is recommended: an extraction writes in one D1 batch, and the Free plan allows 5
    ```
 
 3. **Set up Access** (Zero Trust dashboard):
-   - Access → Service credentials → Service tokens: create two tokens, one for **writing** (the dt that runs a session:
-     it adds what the extractor finds, and people correct and delete through it) and one for **reading** (the MCP server
-     `dt mcp`). Keep each Client ID and Client Secret.
+   - Access → Service credentials → Service tokens: create a token for **writing** (the dt that runs a session: it adds
+     what the extractor finds, and people correct and delete through it), one for **reading** (the MCP server `dt mcp`
+     of each developer), and, if CI publishes the stormings, another writing one for CI. Keep each Client ID and Client
+     Secret. A service token has a duration (a year by default): renew it before it expires, and give dt and CI the new
+     secret.
    - Access → Applications → Add an application → Self-hosted, for the Worker's host name (`knowledge.example.com`).
      Give it two policies: an **Allow** policy for the people who may read the knowledge page (an e-mail domain, a
      group), and a **Service Auth** policy that includes both service tokens.
    - From the application's Overview, copy the **Application Audience (AUD) tag**.
 
 4. **Fill in `wrangler.jsonc`**: the host name in `routes`; `ACCESS_TEAM_DOMAIN` (`<team>.cloudflareaccess.com`);
-   `ACCESS_AUD` (the AUD tag); `WRITER_TOKENS` (the **writing** token's Client ID; other tokens can only read).
+   `ACCESS_AUD` (the AUD tag); `WRITER_TOKENS` (the Client IDs of the **writing** tokens, comma-separated: the
+   sessions' and CI's; any other token can only read). The bucket's and the database's names are those of step 2.
 
 5. **Deploy** and check it:
 
@@ -61,9 +64,17 @@ is recommended: an extraction writes in one D1 batch, and the Free plan allows 5
    # {"api":"v1","caller":"service:<id>"}
    ```
 
-6. **Point dt at it**: `knowledge.store: "cloudflare"` with the Worker's URL and your project's name in the
-   workspace's `domaintrail.jsonc`, and the service token in the environment of the dt that runs sessions (see
-   `dt guide config`).
+6. **Point dt at it**: in the workspace's `domaintrail.jsonc`,
+
+   ```jsonc
+   "knowledge": { "store": "cloudflare", "project": "<your-project>", "url": "https://knowledge.example.com" }
+   ```
+
+   and the service token in the environment: `DOMAINTRAIL_KNOWLEDGE_CLIENT_ID` and
+   `DOMAINTRAIL_KNOWLEDGE_CLIENT_SECRET`, the writing token's for the dt that runs sessions (`dt open`, `dt collab`),
+   the reading token's for `dt mcp`. The first `dt open` or `dt collab` asks you to approve the URL and the project
+   (they decide where the token goes); `dt mcp` uses them only once approved. See `dt guide knowledge` and
+   `dt guide config`. The items a `files` store kept in `knowledge/` are not moved to the Worker.
 
 7. **Publish the stormings** from your repository's CI, so that the page has something to draw (see below).
 
@@ -126,7 +137,7 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
-      - run: npx dt publish # add `-r domain` when the config is in domain/
+      - run: npx dt publish --prune # add `-r domain` when the config is in domain/
         env:
           DOMAINTRAIL_PUBLISH_URL: ${{ vars.KNOWLEDGE_URL }}
           DOMAINTRAIL_PUBLISH_PROJECT: ${{ vars.KNOWLEDGE_PROJECT }}
@@ -135,8 +146,10 @@ jobs:
 ```
 
 It prints one line per storming (`published`, or `unchanged` when the drawing is the one kept). A storming that does
-not parse is not published (`dt check` first). `dt publish --out <dir>` writes the forms as files instead, to look at
-what would be sent.
+not parse is not published (`dt check` first). `--prune` then removes the published stormings that the workspace no
+longer has (`DELETE /v1/projects/<project>/published/<storming>`, a writing token only; `removed` lines), so that a
+storming removed or renamed leaves the page; the knowledge about its stickies stays, listed apart. It sends nothing while
+a `.dtes` file has an error. `dt publish --out <dir>` writes the forms as files instead, to look at what would be sent.
 
 ## How it keeps the knowledge
 
@@ -155,17 +168,60 @@ what would be sent.
 - **Search** uses D1's full-text search (FTS5, trigram tokenizer: any substring of three characters or more, Japanese
   included; shorter terms are scanned).
 
-D1 keeps 30 days of history (Time Travel), which ADR 0031 accepts for deleted data. `wrangler d1 export` does not
-export a database with a full-text table; use Time Travel to restore.
+## Deleting personal data
+
+Anyone who can open the project deletes an item from the page or from a session's Live View (消す). For a request to
+delete what was said about someone:
+
+1. Find the items: search the page's ナレッジ list for the name (the search covers the text and the quotes), or call
+   the API with a token:
+
+   ```bash
+   curl -G -H "CF-Access-Client-Id: <id>" -H "CF-Access-Client-Secret: <secret>" \
+     --data-urlencode "q=<name>" https://knowledge.example.com/v1/projects/<project>/knowledge
+   ```
+
+2. Delete each one, on the page, or with the **writing** token on behalf of the person who asked
+   (`X-Knowledge-Actor`, recorded in the audit log); every item of one session at once with `?session=<session>`:
+
+   ```bash
+   curl -X DELETE -H "CF-Access-Client-Id: <id>" -H "CF-Access-Client-Secret: <secret>" \
+     -H "X-Knowledge-Actor: <you@example.com>" https://knowledge.example.com/v1/projects/<project>/knowledge/<kn_…>
+   ```
+
+3. Wait for the sweep (`SWEEP_AFTER_SECONDS`, then the next run of the Cron Trigger): it removes every version and
+   image, and the reasons of the audit records, and puts the source messages on the redaction log. Each facilitator's
+   dt redacts them in its own session database the next time it starts (or within minutes, if a session is running),
+   so ask those who held sessions of the project to start `dt open` or `dt collab` once.
+
+What remains: D1's Time Travel (below) for 30 days, and anything copied out of the store before (a chat elsewhere, a
+`files` store's git history).
+
+## Backups and Time Travel
+
+D1 keeps 30 days of history (Time Travel), which ADR 0031 accepts for deleted data. It is the backup:
+
+```bash
+npx wrangler d1 time-travel info knowledge                                # the bookmark of now
+npx wrangler d1 time-travel restore knowledge --timestamp=<RFC 3339 time> # the database as it was then
+```
+
+Restoring brings back what was deleted since that time, personal data included: delete those items again. `wrangler
+d1 export` does not export a database with a full-text table, as this one has. The images in R2 are not in Time
+Travel: an image the sweep removed stays removed.
 
 ## Upgrade
 
-The template's version is DomainTrail's. When you upgrade dt, upgrade the Worker to the same version:
+The template's version is DomainTrail's. When you upgrade dt, upgrade the Worker to the same version, and read the new
+version's changelog (`node_modules/domaintrail/CHANGELOG.md`) for anything to do:
 
-1. copy the new `worker.js`, `page/` and `migrations/` over yours (keep your `wrangler.jsonc`, and compare it with the new one
-   for settings it added);
-2. `npx wrangler d1 migrations apply knowledge --remote` (migrations are only ever added; apply them before deploying);
-3. `npx wrangler deploy`.
+1. copy the new `worker.js`, `page/` and `migrations/` over yours, as in step 1 of Deploy (keep your
+   `wrangler.jsonc`, and compare it with the new one for settings it added);
+2. `npx wrangler d1 migrations apply knowledge --remote` (migrations are only ever added; apply them before deploying,
+   so that the old Worker runs on the new schema for a moment, never the other way round);
+3. `npx wrangler deploy`;
+4. run the publish workflow once (`workflow_dispatch`), so that the page draws the stormings as the new version lays
+   them out (the page says so when a published form is of a version it cannot draw).
 
 The API's paths carry its version (`/v1`); a version of dt that needs another one says so in its changelog.
 

@@ -32,6 +32,7 @@ import {
     type RedactionEntry,
     type Result,
     type StickyCount,
+    withLiveConflicts,
 } from '@domaintrail/knowledge';
 import {
     DEFAULT_LIMIT,
@@ -203,6 +204,18 @@ export class D1KnowledgeStore implements KnowledgeStore {
         return (await this.db.prepare('SELECT * FROM items WHERE project = ?1 AND id = ?2').bind(project, id).first<ItemRow>()) ?? undefined;
     }
 
+    /** The items as they are read: each one's conflicts with live items only (`withLiveConflicts`). */
+    private async shown(project: string, items: readonly Knowledge.LiveKnowledgeItem[]): Promise<Knowledge.LiveKnowledgeItem[]> {
+        const linked = [...new Set(items.flatMap((i) => i.conflictsWith))];
+        if (linked.length === 0) return [...items];
+        const { results } = await this.db
+            .prepare("SELECT id FROM items WHERE project = ?1 AND state = 'Live' AND id IN (SELECT value FROM json_each(?2))")
+            .bind(project, JSON.stringify(linked))
+            .all<{ id: string }>();
+        const live = new Set(results.map((r) => r.id));
+        return items.map((i) => withLiveConflicts(i, (id) => live.has(id)));
+    }
+
     async about(project: Knowledge.ProjectName, stickies: readonly Knowledge.StickyRef[]): Promise<readonly Knowledge.LiveKnowledgeItem[]> {
         const items: Knowledge.LiveKnowledgeItem[] = [];
         let cursor: string | undefined;
@@ -245,7 +258,10 @@ export class D1KnowledgeStore implements KnowledgeStore {
             .bind(...binds)
             .all<ItemRow>();
         const shown = results.slice(0, limit);
-        const items = shown.map(itemOf).filter((i): i is Knowledge.LiveKnowledgeItem => i.state === 'Live');
+        const items = await this.shown(
+            project,
+            shown.map(itemOf).filter((i): i is Knowledge.LiveKnowledgeItem => i.state === 'Live'),
+        );
         return results.length > limit ? { items, next: cursorOf(shown[shown.length - 1]) } : { items };
     }
 
@@ -268,8 +284,9 @@ export class D1KnowledgeStore implements KnowledgeStore {
     async get(project: Knowledge.ProjectName, id: Knowledge.KnowledgeItemId, options?: { readonly history?: boolean }): Promise<ItemWithHistory | undefined> {
         const row = await this.row(project, id);
         if (!row) return undefined;
-        const item = itemOf(row);
-        if (item.state !== 'Live') return undefined;
+        const found = itemOf(row);
+        if (found.state !== 'Live') return undefined;
+        const [item] = await this.shown(project, [found]);
         if (!options?.history) return { item };
         const { results } = await this.db
             .prepare('SELECT version, content, replaced_at FROM item_versions WHERE project = ?1 AND item = ?2 ORDER BY version DESC')

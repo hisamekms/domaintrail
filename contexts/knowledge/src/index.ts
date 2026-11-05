@@ -6,7 +6,7 @@
 export { Knowledge, err, ok, type Result } from './generated/index.js';
 
 // ---- published language: the commands of an item, an extraction's operations, what an item leaves behind --------
-export { FIRST_VERSION, knowledgeItemCommands, nextVersion, raisedOrigin, rewritesInPlace } from './domain/items.js';
+export { FIRST_VERSION, knowledgeItemCommands, nextVersion, raisedOrigin, rewritesInPlace, withLiveConflicts } from './domain/items.js';
 export {
     applyExtraction,
     idempotencyKey,

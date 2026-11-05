@@ -114,6 +114,13 @@ describe('the files store', () => {
             { sticky: 'Ordering.Paid' as Knowledge.StickyRef, hasItems: true, hasConflict: false },
             { sticky: 'Ordering.Placed' as Knowledge.StickyRef, hasItems: true, hasConflict: false },
         ]);
+        // the remaining side is read without the conflict, in every read; restoring the other side brings it back
+        const other = itemId('kn_00000002');
+        expect((await store.get(project, other))?.item.conflictsWith).toEqual([]);
+        expect((await store.about(project, ['Ordering.Paid' as Knowledge.StickyRef])).map((i) => i.conflictsWith)).toEqual([[]]);
+        expect((await store.search(project, {})).items.map((i) => i.conflictsWith)).toEqual([[]]);
+        await store.restore(project, itemId('kn_00000001'), alice);
+        expect((await store.get(project, other))?.item.conflictsWith).toEqual([itemId('kn_00000001')]);
     });
 
     test('unlinkConflict unlinks both sides, keeps their versions and audits it; counts lose the mark', async () => {

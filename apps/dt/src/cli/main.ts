@@ -932,6 +932,7 @@ Examples:
         .description("Publish the stormings to the knowledge store's Worker for its read-only page (run by CI when main changes).")
         .option('--storming <ids...>', 'only these stormings (their IDs; default: all)')
         .option('--out <dir>', 'write the published form of each storming as <ID>.json into this directory instead, sending nothing')
+        .option('--prune', 'then remove from the Worker the published stormings the workspace no longer has')
         .addHelpText(
             'after',
             `
@@ -939,7 +940,8 @@ Lays out every storming as the Live View does (its Big Picture and its Design Le
 last commit that changed its file, and sends it to the Worker of \`knowledge.store: "cloudflare"\` (PUT
 /v1/projects/<project>/published/<storming>), whose read-only page draws it with the knowledge (ADR 0031). The
 published form holds the stickies, their labels, links and places, and the commit and date: no chat, no person. A
-drawing published before is replaced; the same drawing again changes nothing.
+drawing published before is replaced; the same drawing again changes nothing. --prune then removes the published
+stormings that the workspace no longer has (removed or renamed); the knowledge about their stickies stays.
 
 It sends the writing service token of the environment (DOMAINTRAIL_KNOWLEDGE_CLIENT_ID and _SECRET) to
 knowledge.url, so the workspace's settings must be approved: as \`dt open\` approves them (asked here in a terminal),
@@ -951,9 +953,10 @@ Exits 0 when published (or written), 1 when nothing could be, 2 on an invalid co
 Examples:
   dt publish
   dt publish --storming OrderToCash
+  dt publish --prune
   dt publish --out published/`,
         )
-        .action(async (opts: { storming?: string[]; out?: string }) => {
+        .action(async (opts: { storming?: string[]; out?: string; prune?: boolean }) => {
             const cfg = await config();
             const sending = opts.out === undefined && cfg.knowledge.store === 'cloudflare';
             const approval = sending ? await publishApproval(cfg) : undefined;
@@ -963,6 +966,7 @@ Examples:
                     approval,
                     ...(opts.storming && { stormings: opts.storming }),
                     ...(opts.out !== undefined && { out: opts.out }),
+                    ...(opts.prune && { prune: true }),
                     log: io.err,
                 })
                 .catch((e: unknown) => {
@@ -976,6 +980,7 @@ Examples:
                     io.out(`${p.storming}: written to ${rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : p.file} (${drawn})`);
                 } else io.out(`${p.storming}: ${p.changed ? 'published' : 'unchanged'} (${drawn}, drawing ${p.version})`);
             }
+            for (const storming of report.removed ?? []) io.out(`${storming}: removed (no longer in the workspace)`);
         });
 
     /**
