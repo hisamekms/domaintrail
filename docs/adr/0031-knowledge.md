@@ -129,6 +129,11 @@ merged.
   storming's diff before and after it; both items then get the hotspot in `about` and their conflict is unlinked, with
   the hotspot as the reason in the audit log. The box and the mark go; the hotspot's sticky lists the two items. If the
   run declines or fails, or added no hotspot or more than one, the box gets its two buttons back.
+- *Decided by the maintainer* (after trying it): the hotspot is the one the run added, else the existing one it
+  changed, else the one its reply names (the request asks the runner to reuse a hotspot that already asks the
+  question, and to name it); exactly one candidate is handed over, otherwise the box gets its buttons back with a short
+  reason. On the original sticky, the items that are also about one hotspot stay together in a calm box (not the
+  conflict's red one) with a link to the hotspot instead of the buttons; this is derived from `about`, not stored.
 - When a hotspot is resolved, its resolution is also kept as an item of kind `decision`. Whether the resolved hotspot
   stays in the `.dtes` follows ADR 0024 (only the important ones stay).
 
