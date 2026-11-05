@@ -76,6 +76,12 @@ export interface CliDeps {
      */
     startMcpServer(options: McpServerStartOptions): Promise<void>;
     /**
+     * `dt publish`: the workspace's stormings laid out and dated by their last commit, sent to the knowledge store's
+     * Worker for its read-only page (ADR 0031, section 11), or written as JSON files (`out`). Rejects with
+     * `PublishError` (cli/publish.ts) when nothing can be published.
+     */
+    publishStormings(options: PublishOptions): Promise<PublishReport>;
+    /**
      * `dt session prune`: the state and cache directories of workspaces that are gone (or, with `olderThanDays`, not
      * used for that long), removed when `remove`. Absent: the command says it cannot here.
      */
@@ -89,6 +95,8 @@ export interface CliDeps {
     trust?: TrustStore;
     /** Asks the person a yes/no question on the terminal; absent when there is none (stdin or stderr not a TTY). */
     confirm?(question: string): Promise<boolean>;
+    /** The environment the commands read (`dt publish`'s pinned destination); default `process.env`. */
+    env?: Readonly<Record<string, string | undefined>>;
 }
 
 /** What `dt export sources` (and the Live View's download) archives: the workspace's sources and its config file. */
@@ -128,6 +136,31 @@ export interface McpServerStartOptions {
     approval: SettingsApproval | undefined;
     /** Where it says what goes wrong (stderr: stdout is the protocol's). */
     log: (line: string) => void;
+}
+
+/** What `dt publish` asks. */
+export interface PublishOptions {
+    config: ResolvedConfig;
+    /** The proof that the knowledge settings are approved (`approveSettings`, `checkApproved` or `pinnedApproval`); none with `out`. */
+    approval: SettingsApproval | undefined;
+    /** The stormings to publish (their IDs); all of them when absent. */
+    stormings?: readonly string[];
+    /** Write the published forms as `<storming>.json` into this directory instead of sending them. */
+    out?: string;
+    log: (line: string) => void;
+}
+
+/** What `dt publish` did, storming by storming. */
+export interface PublishReport {
+    published: {
+        storming: string;
+        version: string;
+        commit?: string;
+        /** Sent: whether the Worker's drawing changed. */
+        changed?: boolean;
+        /** Written: the file. */
+        file?: string;
+    }[];
 }
 
 /** What `dt open --host <non-loopback>` asks of the Live View. */

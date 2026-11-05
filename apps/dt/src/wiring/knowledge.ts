@@ -29,6 +29,7 @@ import {
     ok,
     type KnowledgeStore,
     type ResolvedKnowledgeConfig,
+    type StormingPublisher,
     type Result,
     createExtractionScheduler,
     createSessionExtraction,
@@ -54,6 +55,8 @@ export interface OpenedKnowledgeStore {
      * it on a timer). Absent where the store sweeps by itself.
      */
     readonly sweep?: () => Promise<void>;
+    /** Where `dt publish` sends the published stormings: the `cloudflare` store's Worker; absent for `files`. */
+    readonly publisher?: StormingPublisher;
 }
 
 /** Why the workspace's store cannot be opened, as one line. */
@@ -114,7 +117,7 @@ export async function openKnowledgeStore(
                 ...(credentials.ok && { serviceToken: credentials.value }),
                 ...(options.fetch && { fetch: options.fetch }),
             });
-            return ok({ kind: 'cloudflare', store, project: knowledge.project });
+            return ok({ kind: 'cloudflare', store, project: knowledge.project, publisher: store });
         }
     }
 }

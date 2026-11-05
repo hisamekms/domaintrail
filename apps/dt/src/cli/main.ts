@@ -27,7 +27,17 @@ import {
 } from './ports.js';
 import { checkSvgOptions, exportSvg, SvgExportError, type SvgExportOptions } from './export-svg.js';
 import { lookup, showJson, showText } from './show.js';
-import { approveSettings, checkApproved, NotApproved, type SettingsApproval, type StartFlags } from './trust.js';
+import {
+    approveSettings,
+    checkApproved,
+    NotApproved,
+    pinnedApproval,
+    PUBLISH_PROJECT_ENV,
+    PUBLISH_URL_ENV,
+    type SettingsApproval,
+    type StartFlags,
+} from './trust.js';
+import { PublishError } from './publish.js';
 import guide from '../../../../docs/guide.md' with { type: 'text' };
 
 export interface CliIO {
@@ -916,6 +926,79 @@ Examples:
             const approval = await checkApproved(cfg, deps.trust);
             await deps.startMcpServer({ config: cfg, approval, log: io.err });
         });
+
+    program
+        .command('publish')
+        .description("Publish the stormings to the knowledge store's Worker for its read-only page (run by CI when main changes).")
+        .option('--storming <ids...>', 'only these stormings (their IDs; default: all)')
+        .option('--out <dir>', 'write the published form of each storming as <ID>.json into this directory instead, sending nothing')
+        .addHelpText(
+            'after',
+            `
+Lays out every storming as the Live View does (its Big Picture and its Design Level, from scratch), dates it by the
+last commit that changed its file, and sends it to the Worker of \`knowledge.store: "cloudflare"\` (PUT
+/v1/projects/<project>/published/<storming>), whose read-only page draws it with the knowledge (ADR 0031). The
+published form holds the stickies, their labels, links and places, and the commit and date: no chat, no person. A
+drawing published before is replaced; the same drawing again changes nothing.
+
+It sends the writing service token of the environment (DOMAINTRAIL_KNOWLEDGE_CLIENT_ID and _SECRET) to
+knowledge.url, so the workspace's settings must be approved: as \`dt open\` approves them (asked here in a terminal),
+or, in CI, by pinning the destination outside the repository with ${PUBLISH_URL_ENV} and ${PUBLISH_PROJECT_ENV}:
+publishing then goes ahead only when the config names exactly that Worker and project. With the \`files\` store
+there is nothing to publish to; --out writes the forms to look at. See \`dt guide publish\`.
+Exits 0 when published (or written), 1 when nothing could be, 2 on an invalid config.
+
+Examples:
+  dt publish
+  dt publish --storming OrderToCash
+  dt publish --out published/`,
+        )
+        .action(async (opts: { storming?: string[]; out?: string }) => {
+            const cfg = await config();
+            const sending = opts.out === undefined && cfg.knowledge.store === 'cloudflare';
+            const approval = sending ? await publishApproval(cfg) : undefined;
+            const report = await deps
+                .publishStormings({
+                    config: cfg,
+                    approval,
+                    ...(opts.storming && { stormings: opts.storming }),
+                    ...(opts.out !== undefined && { out: opts.out }),
+                    log: io.err,
+                })
+                .catch((e: unknown) => {
+                    if (e instanceof PublishError) throw new CliError(e.message, e.exitCode);
+                    throw e;
+                });
+            for (const p of report.published) {
+                const drawn = p.commit ? `commit ${p.commit.slice(0, 12)}` : 'not committed';
+                if (p.file !== undefined) {
+                    const rel = path.relative(process.cwd(), p.file);
+                    io.out(`${p.storming}: written to ${rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : p.file} (${drawn})`);
+                } else io.out(`${p.storming}: ${p.changed ? 'published' : 'unchanged'} (${drawn}, drawing ${p.version})`);
+            }
+        });
+
+    /**
+     * The proof that `cfg`'s knowledge settings may be used to send the service token, for `dt publish`: the destination
+     * pinned by the environment (CI), else the settings approved before, else asked in a terminal (`approve`).
+     */
+    const publishApproval = async (cfg: ResolvedConfig): Promise<SettingsApproval> => {
+        let pinned: SettingsApproval | undefined;
+        try {
+            pinned = pinnedApproval(cfg, deps.env ?? process.env);
+        } catch (e) {
+            if (e instanceof NotApproved) throw new CliError(e.message);
+            throw e;
+        }
+        if (pinned) return pinned;
+        const before = await checkApproved(cfg, deps.trust);
+        if (before) return before;
+        if (!deps.confirm)
+            throw new CliError(
+                `Not published: this workspace's settings (knowledge.url among them) are not approved. Run \`dt publish\` (or \`dt open\`) in a terminal once to approve them, or, in CI, pin the destination with ${PUBLISH_URL_ENV} and ${PUBLISH_PROJECT_ENV}.`,
+            );
+        return approve(cfg, false);
+    };
 
     program
         .command('show')

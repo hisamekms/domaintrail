@@ -200,3 +200,32 @@ export async function approveSettings(cfg: ResolvedConfig, deps: ApprovalDeps, y
     deps.out('Approved for this workspace.');
     return approval(cfg);
 }
+
+/** The Worker's URL that a non-interactive `dt publish` may send the service token to (CI: a repository variable). */
+export const PUBLISH_URL_ENV = 'DOMAINTRAIL_PUBLISH_URL';
+/** The project that a non-interactive `dt publish` may publish to, with `PUBLISH_URL_ENV`. */
+export const PUBLISH_PROJECT_ENV = 'DOMAINTRAIL_PUBLISH_PROJECT';
+
+const withoutSlash = (url: string): string => url.trim().replace(/\/+$/, '');
+
+/**
+ * The approval of `cfg`'s knowledge settings without asking anyone, for `dt publish` in CI, where no one can be asked
+ * and the trust store does not last: given only when the environment pins the destination — `PUBLISH_URL_ENV` and
+ * `PUBLISH_PROJECT_ENV` — and the config names exactly that Worker and project. The pin comes from outside the
+ * repository (CI's settings, beside the service token's secrets), so a commit that changes `knowledge.url` in the
+ * config cannot send the token anywhere else: the publish is refused. `undefined` when nothing is pinned; refused
+ * (`NotApproved`) when the pin and the config differ, or the store is not `cloudflare`.
+ */
+export function pinnedApproval(cfg: ResolvedConfig, env: Readonly<Record<string, string | undefined>>): SettingsApproval | undefined {
+    const url = env[PUBLISH_URL_ENV]?.trim();
+    const project = env[PUBLISH_PROJECT_ENV]?.trim();
+    if (!url && !project) return undefined;
+    if (!url || !project) throw new NotApproved(`Not published: set both ${PUBLISH_URL_ENV} and ${PUBLISH_PROJECT_ENV}, or neither.`);
+    const { knowledge } = cfg;
+    if (knowledge.store !== 'cloudflare') throw new NotApproved(`Not published: ${PUBLISH_URL_ENV} is set, but knowledge.store is not "cloudflare".`);
+    if (withoutSlash(knowledge.url) !== withoutSlash(url) || knowledge.project !== project)
+        throw new NotApproved(
+            `Not published: the config's knowledge (url ${JSON.stringify(knowledge.url)}, project ${JSON.stringify(knowledge.project)}) is not the one ${PUBLISH_URL_ENV} and ${PUBLISH_PROJECT_ENV} pin (${JSON.stringify(url)}, ${JSON.stringify(project)}).`,
+        );
+    return approval(cfg);
+}

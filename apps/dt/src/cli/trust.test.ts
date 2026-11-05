@@ -5,7 +5,18 @@ import { mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { defaultConfig, resolveConfig, resolveConfigWithLocal } from '../config/config.js';
-import { approveSettings, fileTrustStore, NotApproved, securitySettings, settingsHash, trustFile } from './trust.js';
+import {
+    approvedFor,
+    approveSettings,
+    fileTrustStore,
+    NotApproved,
+    pinnedApproval,
+    PUBLISH_PROJECT_ENV,
+    PUBLISH_URL_ENV,
+    securitySettings,
+    settingsHash,
+    trustFile,
+} from './trust.js';
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -156,5 +167,33 @@ describe('approving them', () => {
         expect(trustFile({ XDG_CONFIG_HOME: '/x/conf' })).toBe(path.resolve('/x/conf/domaintrail/trust.json'));
         expect(trustFile({ XDG_CONFIG_HOME: 'relative' })).toMatch(/\.config[\\/]domaintrail[\\/]trust\.json$/);
         expect(trustFile({})).toMatch(/\.config[\\/]domaintrail[\\/]trust\.json$/);
+    });
+});
+
+describe('the destination pinned for CI (`dt publish`)', () => {
+    const cloudflare = (root: string, url = 'https://knowledge.example.com', project = 'shop'): ReturnType<typeof resolveConfig> =>
+        resolveConfig(JSON.stringify({ knowledge: { store: 'cloudflare', project, url } }), path.join(root, 'domaintrail.jsonc'));
+    const pin = { [PUBLISH_URL_ENV]: 'https://knowledge.example.com/', [PUBLISH_PROJECT_ENV]: 'shop' };
+
+    test('nothing pinned: no approval from it (the trust store or a terminal decides)', async () => {
+        expect(pinnedApproval(cloudflare(await scratch()), {})).toBeUndefined();
+    });
+
+    test('pinned and named alike by the config: approved for that config only, which opens the store', async () => {
+        const root = await scratch();
+        const cfg = cloudflare(root);
+        const proof = pinnedApproval(cfg, pin);
+        expect(proof).toBeDefined();
+        expect(approvedFor(proof, cfg)).toBe(true);
+        // a config changed since proves nothing
+        expect(approvedFor(proof, cloudflare(root, 'https://elsewhere.example.com'))).toBe(false);
+    });
+
+    test('a config naming another Worker or project, a half pin, or the files store: refused, the token never sent', async () => {
+        const root = await scratch();
+        expect(() => pinnedApproval(cloudflare(root, 'https://attacker.example.com'), pin)).toThrow(NotApproved);
+        expect(() => pinnedApproval(cloudflare(root, 'https://knowledge.example.com', 'other'), pin)).toThrow(/is not the one/);
+        expect(() => pinnedApproval(cloudflare(root), { [PUBLISH_URL_ENV]: 'https://knowledge.example.com' })).toThrow(/both/);
+        expect(() => pinnedApproval(resolveConfig('{}', path.join(root, 'domaintrail.jsonc')), pin)).toThrow(/not "cloudflare"/);
     });
 });
