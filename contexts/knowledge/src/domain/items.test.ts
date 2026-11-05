@@ -37,19 +37,48 @@ describe('add', () => {
 });
 
 describe('update', () => {
-    test('rewrites an item of this session in place, without a new version', () => {
+    test('a rewording of an item of this session, resting on a message it already has, is rewritten in place', () => {
         const item = liveItem('kn_00000001', { createdIn: 's1' });
         const { aggregate, events } = value(
-            commands.update(item, { revised: content('more precise'), base: version(1), by: extraction('s1', 3), at: later }),
+            commands.update(item, {
+                revised: content('more precise'),
+                newSources: [source('s1', 'm-kn_00000001')],
+                base: version(1),
+                by: extraction('s1', 3),
+                at: later,
+            }),
         ).Live;
-        expect(aggregate).toMatchObject({ version: 1, content: content('more precise'), updatedAt: later });
+        expect(aggregate).toMatchObject({ version: 1, content: content('more precise'), sources: item.sources, updatedAt: later });
         expect(Object.keys(events)).toEqual(['KnowledgeItemRewritten']);
+    });
+
+    test('an update that adds a source makes a new version even of an item of this session, the source appended once', () => {
+        const item = liveItem('kn_00000001', { createdIn: 's1' });
+        const correction = source('s1', 'm-correction', '14日は間違いで、正しくは30日');
+        const { aggregate, events } = value(
+            commands.update(item, {
+                revised: content('返品は30日まで'),
+                newSources: [correction, source('s1', 'm-kn_00000001'), correction],
+                base: version(1),
+                by: extraction('s1', 3),
+                at: later,
+            }),
+        ).Live;
+        expect(aggregate.version).toBe(version(2));
+        expect(aggregate.sources).toEqual([...item.sources, correction]);
+        expect(Object.keys(events)).toEqual(['KnowledgeItemRevised']);
     });
 
     test('makes a new version of an item of an earlier session, or written by hand', () => {
         for (const item of [liveItem('kn_00000001', { createdIn: 's0' }), liveItem('kn_00000002')]) {
             const { aggregate, events } = value(
-                commands.update(item, { revised: content('more precise'), base: version(1), by: extraction('s1', 3), at: later }),
+                commands.update(item, {
+                    revised: content('more precise'),
+                    newSources: [source('s1', 'm-new')],
+                    base: version(1),
+                    by: extraction('s1', 3),
+                    at: later,
+                }),
             ).Live;
             expect(aggregate.version).toBe(version(2));
             expect(events).toEqual({
@@ -61,7 +90,13 @@ describe('update', () => {
     test('makes a new version of an item of this session that a person corrected: the correction is never overwritten', () => {
         const item = liveItem('kn_00000001', { createdIn: 's1', version: 2 });
         const { aggregate, events } = value(
-            commands.update(item, { revised: content('more precise'), base: version(2), by: extraction('s1', 3), at: later }),
+            commands.update(item, {
+                revised: content('more precise'),
+                newSources: [source('s1', 'm-new')],
+                base: version(2),
+                by: extraction('s1', 3),
+                at: later,
+            }),
         ).Live;
         expect(aggregate.version).toBe(version(3));
         expect(events.KnowledgeItemRevised).toBeDefined();
@@ -69,7 +104,11 @@ describe('update', () => {
 
     test('refuses an item that changed since the extraction saw it', () => {
         const item = liveItem('kn_00000001', { createdIn: 's1', version: 2 });
-        expect(error(commands.update(item, { revised: content('more precise'), base: version(1), by: extraction('s1', 3), at }))).toEqual({
+        expect(
+            error(
+                commands.update(item, { revised: content('more precise'), newSources: [source('s1', 'm-new')], base: version(1), by: extraction('s1', 3), at }),
+            ),
+        ).toEqual({
             type: 'StaleOperation',
         });
     });

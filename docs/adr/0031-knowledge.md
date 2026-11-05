@@ -109,6 +109,13 @@ merged.
 - **Nobody decides item by item what to keep.** Everything extracted is kept; what is wrong or unwanted is deleted
   afterwards. Items carry no "confirmed" mark: an item records what was said or found at a time. `origin` tells how far
   to trust it.
+- *Decided by the maintainer* (after trying it: people seldom point at a sticky, so items had no `about`): both models
+  are also given the workspace's stickies — those of the storming the facilitator's page has open (else one any page
+  has open) and of the session's current journey; when neither is known, every storming's; at most a few hundred
+  (300), stormings taken whole in that order. The extractor chooses `about` among them by meaning, preferring the
+  stickies the talk points at; the list goes in the system prompt after the instructions, so that the prompt cache
+  keeps it. The items given are those made in this session, those about the stickies pointed at, and those about the
+  stickies the new messages name by label, bounded.
 - The extraction compares with the existing items about the same stickies and decides, per finding, one of:
   **add**, **addSource** (the same finding again: one more source, and `said` may become `agreed`), **update** (more
   precise: a new version) or **conflict** (both kept, linked by `conflictsWith`).

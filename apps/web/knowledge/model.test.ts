@@ -18,6 +18,7 @@ import {
     outsideConflicts,
     plainText,
     queryOf,
+    sourcesNewestFirst,
     selectionOfSticky,
     stickyOfSelection,
     pairKey,
@@ -190,5 +191,16 @@ describe('the items kept with a hotspot (ADR 0031, section 4)', () => {
     test('no hotspots known (no storming read): nothing is grouped', () => {
         const items = [item('a', { about: ['Ordering.Placed', 'Ordering.HotCutOff'] })];
         expect(hotspotGroups(items, 'Ordering.Placed', () => false)).toEqual({ groups: [], rest: items });
+    });
+});
+
+describe("an item's sources", () => {
+    test('newest first, so that the message of a correction is on top; those of the same time, the later one first', () => {
+        const source = (message: string, at: string) => ({ message, at });
+        expect(
+            sourcesNewestFirst([source('m1', '2026-11-05T09:00:00Z'), source('m2', '2026-11-05T09:10:00Z'), source('m3', '2026-11-05T09:10:00Z')]).map(
+                (s) => s.message,
+            ),
+        ).toEqual(['m3', 'm2', 'm1']);
     });
 });

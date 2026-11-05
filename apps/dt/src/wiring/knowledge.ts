@@ -2,7 +2,9 @@
 // the extraction of a session and the Live View all open the store here, so that they read and write the same one. Below
 // it, the session's extractions wired to the session server (ADR 0031, section 3): its talk read from the collaboration
 // (each person's message judged surely nothing or not by the triage's stage 1), its checkpoint and its switch in the
-// session database, its extractor and light model reached through the agent API, its timing on the server's timers.
+// session database, its extractor and light model reached through the agent API, its timing on the server's timers, and
+// what the session looks at for the workspace's stickies both models are given (`stickyFocus`): the stormings the
+// server's view analysed, the storming the facilitator's page has open (its presence), the current journey's stormings.
 //
 // - `files`: the items in `<root>/knowledge`, the deleted items and the extractions applied in the workspace's state
 //   directory (outside it, `<state>/knowledge`).
@@ -18,7 +20,17 @@
 import { statSync } from 'node:fs';
 import * as path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
-import { type Collaboration, type CollaborationUseCases, isAi, mechanicalVerdict, plainBody } from '@domaintrail/collaboration';
+import {
+    agentJourneys,
+    type Collaboration,
+    type CollaborationUseCases,
+    isAi,
+    type JourneyFile,
+    mechanicalVerdict,
+    plainBody,
+} from '@domaintrail/collaboration';
+import type { Presence } from '@domaintrail/collaboration/protocol';
+import { declarations, type Storming } from '@domaintrail/storming';
 import {
     cloudflareKnowledgeStore,
     createFilesKnowledgeStore,
@@ -40,6 +52,7 @@ import {
     loadExtractionSwitch,
     type SessionMessage,
     type SessionTalk,
+    type StickyFocus,
 } from '@domaintrail/knowledge';
 import type { ExtractionDispatcher } from '../server/session/extractions.js';
 import { approvedFor, type SettingsApproval } from '../cli/trust.js';
@@ -205,6 +218,42 @@ export function sessionTalk(collaboration: CollaborationUseCases, session: Colla
     };
 }
 
+/**
+ * What the session looks at, for the workspace's stickies of an extraction (knowledge's `domain/stickies.ts`): every
+ * storming with its stickies (the node elements, as the knowledge tools of `dt mcp` count them: not the timelines,
+ * groups and stages; an ID no sticky reference can name left out); the stormings the facilitator's pages have open — else
+ * those any page has open, as the next best sign of what is talked about —; the current journey's stormings.
+ */
+export function stickyFocus(
+    stormings: readonly Storming[],
+    pages: readonly Pick<Presence, 'participant' | 'location'>[],
+    journey: readonly string[],
+): StickyFocus {
+    const open = (from: readonly Pick<Presence, 'participant' | 'location'>[]): string[] => [
+        ...new Set(from.flatMap((p) => (p.location.kind === 'dtes' ? [p.location.stormingId] : []))),
+    ];
+    const facilitator = open(pages.filter((p) => p.participant.role === 'facilitator'));
+    return {
+        stormings: stormings.map((s) => ({
+            id: s.id,
+            stickies: declarations(s).flatMap((d) =>
+                d.kind === 'timeline' || d.kind === 'group' || d.kind === 'stage' || !Knowledge.makeStickyRef(`${s.id}.${d.id}`).ok
+                    ? []
+                    : [{ local: d.id, ...(d.label !== undefined && { label: d.label }), kind: d.kind }],
+            ),
+        })),
+        open: facilitator.length > 0 ? facilitator : open(pages),
+        journey,
+    };
+}
+
+/** The stormings of the session's current journey (the one chosen, else the most recent active one): none without one. */
+export function journeyStormings(file: JourneyFile | undefined, chosen: string | undefined): readonly string[] {
+    if (!file) return [];
+    const given = agentJourneys(file, chosen);
+    return given.journeys.find((j) => j.key === given.current)?.stormings ?? [];
+}
+
 export interface SessionKnowledgeDeps {
     readonly store: KnowledgeStore;
     readonly config: ResolvedKnowledgeConfig;
@@ -217,6 +266,8 @@ export interface SessionKnowledgeDeps {
     readonly log: (line: string) => void;
     /** The facilitator switched the extraction (after it was kept): tell the pages. */
     readonly switched?: (enabled: boolean) => void;
+    /** What the session looks at now (`stickyFocus`), for the workspace's stickies of each extraction. */
+    readonly workspace?: () => Promise<StickyFocus | undefined>;
 }
 
 export interface SessionKnowledge {
@@ -248,6 +299,7 @@ export async function startSessionKnowledge(deps: SessionKnowledgeDeps): Promise
         store: deps.store,
         checkpoints: createSqliteCheckpoints(deps.db),
         talk: sessionTalk(deps.collaboration, deps.session),
+        ...(deps.workspace && { workspace: deps.workspace }),
         extractor: deps.extractor,
         config: config.extraction,
         now: deps.now,

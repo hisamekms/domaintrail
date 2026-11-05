@@ -8,7 +8,10 @@ import * as path from 'node:path';
 import { Knowledge, projectFromDirName } from '@domaintrail/knowledge';
 import { resolveConfig, type ResolvedConfig } from '../config/config.js';
 import { approveSettings, checkApproved, type SettingsApproval, type TrustStore } from '../cli/trust.js';
-import { knowledgeForAgents, NOT_APPROVED, openKnowledgeStore } from './knowledge.js';
+import { analyzeStormings } from '@domaintrail/storming';
+import { Collaboration, readJourney } from '@domaintrail/collaboration';
+import type { Presence } from '@domaintrail/collaboration/protocol';
+import { journeyStormings, knowledgeForAgents, NOT_APPROVED, openKnowledgeStore, stickyFocus } from './knowledge.js';
 
 const made = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
     if (!r.ok) throw new Error(JSON.stringify(r.error));
@@ -167,5 +170,73 @@ describe('knowledgeForAgents', () => {
         expect(!without.usable && without.reason).toContain('DOMAINTRAIL_KNOWLEDGE_CLIENT_ID');
         const local = config(cloudflare('http://127.0.0.1:8787'));
         expect(knowledgeForAgents(local, await approved(local), {})).toEqual({ usable: true });
+    });
+});
+
+describe('what the session looks at, for the stickies of an extraction', () => {
+    const DTES = `storming Ordering "注文" {
+  actor Customer "お客さま"
+  event Placed "注文された"
+  hotspot Q "締めは？" {
+    on Placed
+  }
+  timeline Main "本線" {
+    Placed
+  }
+}
+storming Returns "返品" {
+  event Requested "返品が依頼された"
+}
+`;
+    const page = (role: 'facilitator' | 'participant', location: Presence['location']): Pick<Presence, 'participant' | 'location'> => ({
+        participant: { id: made(Collaboration.makeParticipantId(`dev:${role}`)), name: role, role },
+        location,
+    });
+    const onStorming = (stormingId: string): Presence['location'] => ({ kind: 'dtes', stormingId, level: 'big-picture', layoutKey: 'k' });
+    const onModel: Presence['location'] = { kind: 'dt', viewKey: 'structure', layoutKey: 'k' };
+
+    test("every storming's stickies (not its timelines), the storming the facilitator's page has open, else any page's", async () => {
+        const { stormings } = await analyzeStormings([{ path: 'shop.dtes', text: DTES }], undefined);
+        const focus = stickyFocus(stormings, [page('participant', onStorming('Returns')), page('facilitator', onStorming('Ordering'))], ['Returns']);
+        expect<unknown>(focus.stormings).toEqual([
+            {
+                id: 'Ordering',
+                stickies: [
+                    { local: 'Customer', label: 'お客さま', kind: 'actor' },
+                    { local: 'Placed', label: '注文された', kind: 'event' },
+                    { local: 'Q', label: '締めは？', kind: 'hotspot' },
+                ],
+            },
+            { id: 'Returns', stickies: [{ local: 'Requested', label: '返品が依頼された', kind: 'event' }] },
+        ]);
+        expect<unknown>([focus.open, focus.journey]).toEqual([['Ordering'], ['Returns']]);
+        expect<unknown>(stickyFocus(stormings, [page('facilitator', onModel), page('participant', onStorming('Returns'))], []).open).toEqual(['Returns']);
+        expect<unknown>(stickyFocus(stormings, [], []).open).toEqual([]);
+    });
+
+    test("the current journey's stormings: the one chosen, else the most recent active one; none without a file", () => {
+        const { file, problems } = readJourney(
+            JSON.stringify({
+                version: 1,
+                stormings: { Ordering: { purpose: 'p', participants: [], use: 'modeling', level: 'BigPicture', state: 'active', marks: [] } },
+                modeling: [
+                    {
+                        id: 'carve',
+                        name: 'n',
+                        purpose: 'p',
+                        participants: [],
+                        pattern: 'FromStorming',
+                        from: { stormings: ['Ordering', 'Returns'] },
+                        goal: 'invariants',
+                        state: 'active',
+                        marks: { steps: [], contexts: {} },
+                    },
+                ],
+            }),
+        );
+        expect<unknown>(problems).toEqual([]);
+        expect<unknown>(journeyStormings(file, undefined)).toEqual(['Ordering', 'Returns']);
+        expect<unknown>(journeyStormings(file, 'es:Ordering')).toEqual(['Ordering']);
+        expect<unknown>(journeyStormings(undefined, 'es:Ordering')).toEqual([]);
     });
 });

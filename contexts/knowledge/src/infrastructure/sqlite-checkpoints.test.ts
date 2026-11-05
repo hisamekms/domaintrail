@@ -27,7 +27,11 @@ describe('forgetHeldQuotes', () => {
                     heldIn: 1,
                     heldAt,
                 },
-                { operation: { kind: 'Update', item: itemId('kn_00000001'), base: version(1), revised: content('y') }, heldIn: 2, heldAt },
+                {
+                    operation: { kind: 'Update', item: itemId('kn_00000001'), base: version(1), revised: content('y'), sources: [source('s1', 'm2')] },
+                    heldIn: 2,
+                    heldAt,
+                },
             ],
         });
         expect(forgetHeldQuotes(db, [{ session, message: source('s1', 'm1').message }])).toBe(1);

@@ -6,9 +6,11 @@
 // - add / addConflicting: a new item, version 1, made in the extraction's session;
 // - addSource: one more source; `agreed` raises `said` to `agreed` and leaves the other origins (what the AI found or
 //   guessed does not become a person's word by being said again);
-// - update: rewritten in place, without a new version, while the item is the one its session made (created in that
-//   session and still version 1: a person's correction makes version 2, which is never overwritten); otherwise a new
-//   version, the store keeping the item it replaced;
+// - update: the messages it rests on join the sources (those already there once); one that adds a source always makes
+//   a new version, the store keeping the item it replaced, so that a correction can be followed to its message (ADR
+//   0031, section 3, as amended); a rewording that adds no source is rewritten in place, without a new version, while
+//   the item is the one its session made (created in that session and still version 1: a person's correction, or an
+//   update with a source, makes version 2, which is never overwritten), else a new version too;
 // - linkConflict: the older side of a conflict, linked to the new one; both sides must have a source;
 // - unlinkConflict: a person decides two linked items do not conflict (食い違いではない): the link goes, the content and
 //   the version stay (the store unlinks both sides);
@@ -31,12 +33,24 @@ function knownVersion(v: number): Knowledge.ItemVersion {
 /** The version after this one. */
 export const nextVersion = (v: Knowledge.ItemVersion): Knowledge.ItemVersion => knownVersion(v + 1);
 
+/** The sources not yet among the item's (by session and message), each once. */
+export function newSourcesOf(item: Pick<Knowledge.KnowledgeItemCommon, 'sources'>, sources: readonly Knowledge.Source[]): Knowledge.Source[] {
+    const key = (s: Knowledge.Source): string => `${s.session}\u0000${s.message}`;
+    const seen = new Set(item.sources.map(key));
+    return sources.filter((s) => {
+        if (seen.has(key(s))) return false;
+        seen.add(key(s));
+        return true;
+    });
+}
+
 /**
- * Whether an update of the extraction `by` rewrites the item in place: the item was made in that session and nobody
- * has made another version of it since (ADR 0031, section 3: versions are kept only for items of earlier sessions).
+ * Whether an update of the extraction `by` with `sources` rewrites the item in place: it adds no source (a rewording),
+ * the item was made in that session and nobody has made another version of it since (ADR 0031, section 3: an update
+ * that adds a source keeps a version, so that the correction can be followed to its message).
  */
-export const rewritesInPlace = (item: Knowledge.KnowledgeItemCommon, by: Knowledge.ExtractionRef): boolean =>
-    item.createdIn === by.session && item.version === FIRST_VERSION;
+export const rewritesInPlace = (item: Knowledge.KnowledgeItemCommon, by: Knowledge.ExtractionRef, sources: readonly Knowledge.Source[] = []): boolean =>
+    newSourcesOf(item, sources).length === 0 && item.createdIn === by.session && item.version === FIRST_VERSION;
 
 /** The labels after one more source: `said` becomes `agreed` when the talk agreed; other origins stay. */
 export function raisedOrigin(labels: Knowledge.Labels, agreed: boolean): Knowledge.Labels {
@@ -134,19 +148,20 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
     update: decide<Knowledge.UpdateKnowledgeItemDecision>(Knowledge.KnowledgeItemShape, {
         Live: (item, params) => {
             if (Knowledge.checkUpdateKnowledgeItemRequires(item, params) === 'current') return err({ type: 'StaleOperation' });
-            const { revised, by, reason, at } = params;
+            const { revised, newSources, by, reason, at } = params;
             const why = reason && { reason };
-            if (rewritesInPlace(item, by))
+            const sources = [...item.sources, ...newSourcesOf(item, newSources)];
+            if (rewritesInPlace(item, by, newSources))
                 return ok({
                     Live: {
-                        set: { content: revised, version: item.version, updatedAt: at },
+                        set: { content: revised, sources, version: item.version, updatedAt: at },
                         events: { KnowledgeItemRewritten: { type: 'KnowledgeItemRewritten', itemId: item.id, version: item.version, by, ...why, at } },
                     },
                 });
             const version = nextVersion(item.version);
             return ok({
                 Live: {
-                    set: { content: revised, version, updatedAt: at },
+                    set: { content: revised, sources, version, updatedAt: at },
                     events: { KnowledgeItemRevised: { type: 'KnowledgeItemRevised', itemId: item.id, version, by, ...why, at } },
                 },
             });

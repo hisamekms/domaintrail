@@ -161,8 +161,8 @@ describe('the reply made into operations', () => {
         const made = operationsOf(
             read({
                 operations: [
-                    { op: 'update', item: 'k1', ...finding, reason: 'more precise' },
-                    { op: 'update', item: 'k9', ...finding, reason: 'r' },
+                    { op: 'update', item: 'k1', ...finding, sources: [{ message: 'm2', quote: '当日中' }], reason: 'more precise' },
+                    { op: 'update', item: 'k9', ...finding, sources: [{ message: 'm2', quote: '当日中' }], reason: 'r' },
                     { op: 'addSource', item: 'k1', sources: [{ message: 'm9', quote: 'q' }], reason: 'r' },
                     {
                         op: 'addSource',
@@ -210,8 +210,52 @@ describe('the reply made into operations', () => {
         const op = made.operations[0];
         expect(plain(op.kind === 'Add' && [op.content.about, op.sources.length])).toEqual([['Ordering.Estimate'], 1]);
         expect(made.rejected.map((r) => r.message)).toEqual([
-            'Billing.Invoice is not a sticky of the talk; left out.',
-            'not a ref is not a sticky of the talk; left out.',
+            'Billing.Invoice is not a sticky that was given; left out.',
+            'not a ref is not a sticky that was given; left out.',
         ]);
+    });
+
+    test('a sticky of the workspace given, which no message points at, is kept in `about`; one not given is still left out', () => {
+        const given: ExtractionInput = {
+            ...input,
+            workspaceStickies: [
+                { ref: 'Ordering.Rush', label: '急ぎの見積もり', kind: 'event' },
+                { ref: 'Ordering.Sales', label: '営業', kind: 'actor' },
+            ],
+        };
+        const made = operationsOf(
+            read({
+                operations: [
+                    {
+                        op: 'add',
+                        ...finding,
+                        about: ['Ordering.Rush', 'Ordering.Sales', 'Ordering.Estimate', 'Billing.Invoice'],
+                        sources: [{ message: 'm2', quote: '当日中' }],
+                        reason: 'r',
+                    },
+                ],
+            }),
+            given,
+        );
+        const op = made.operations[0];
+        expect(plain(op.kind === 'Add' && op.content.about)).toEqual(['Ordering.Rush', 'Ordering.Sales', 'Ordering.Estimate']);
+        expect(made.rejected.map((r) => r.message)).toEqual(['Billing.Invoice is not a sticky that was given; left out.']);
+    });
+
+    test('an update names the messages it rests on: one without a source is dropped with why; its sources are made like an add’s', () => {
+        const reply = read({
+            operations: [
+                { op: 'update', item: 'k1', ...finding, reason: 'more precise' },
+                { op: 'update', item: 'k1', ...finding, sources: [{ message: 'm9', quote: 'x' }], reason: 'r' },
+                { op: 'update', item: 'k1', ...finding, sources: [{ message: 'm2', quote: '当日中' }], reason: 'corrected' },
+            ],
+        });
+        expect(reply.rejected).toEqual([{ path: 'reply.operations[0].sources', message: 'Expected at least one source.' }]);
+        const made = operationsOf(reply, input);
+        // the one read without a source, then the one whose only source is not a message given
+        expect(made.rejected.map((r) => r.path)).toEqual(['reply.operations[0].sources', 'reply.operations[0].sources[0]', 'reply.operations[0].sources']);
+        const [op] = made.operations;
+        expect(plain(made.operations.length)).toBe(1);
+        expect(plain(op.kind === 'Update' && op.sources.map((s) => [s.message, s.quote]))).toEqual([['r-2', '当日中']]);
     });
 });

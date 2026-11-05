@@ -51,7 +51,7 @@ import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/analysis';
 import { type Connection, createWebSocketHub } from '../server/websocket/hub.js';
 import { createAgentApi } from '../server/session/agent.js';
 import { createExtractionDispatcher } from '../server/session/extractions.js';
-import { openKnowledgeStore, type SessionKnowledge, startSessionKnowledge } from './knowledge.js';
+import { journeyStormings, openKnowledgeStore, type SessionKnowledge, startSessionKnowledge, stickyFocus } from './knowledge.js';
 import { type LiveKnowledge, startLiveKnowledge } from './knowledge-live.js';
 import { ownRequest, requestOutcomes } from './knowledge-hotspots.js';
 import type { SettingsApproval } from '../cli/trust.js';
@@ -673,6 +673,17 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 now: () => clock.now(),
                 log,
                 switched: (enabled) => hub.publish({ type: 'knowledge.extraction', enabled }),
+                // the workspace's stickies of each extraction: the stormings the view analysed, those the pages have open, the journey's
+                workspace: async () => {
+                    const file = journeys.file();
+                    const state = file ? await collaboration.sessionState({ session }) : undefined;
+                    const chosen = state?.ok ? state.value.session.currentJourney : undefined;
+                    return stickyFocus(
+                        view.state.stormings.map((s) => s.storming),
+                        presence.presences(),
+                        journeyStormings(file, chosen),
+                    );
+                },
             });
         const stage = createTriageStage({
             session,

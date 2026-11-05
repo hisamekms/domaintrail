@@ -21,6 +21,7 @@ import {
     type SessionMessage,
 } from './extraction.js';
 import { createSqliteCheckpoints, extractionCosts } from '../infrastructure/sqlite-checkpoints.js';
+import type { StickyFocus } from '../domain/stickies.js';
 import { content, liveItem, memoryStore } from '../test-helpers.js';
 
 const SESSION = 'sess-1';
@@ -115,7 +116,7 @@ const addFinding = (message: string, text = '急ぎの見積もりは当日中�
     sources: [{ message, quote: 'estimate' }],
     reason: 'a rule was stated',
 });
-const updateFinding = (item: string, text = '急ぎの見積もりは当日17時までに出す') => ({
+const updateFinding = (item: string, text = '急ぎの見積もりは当日17時までに出す', message = 'm1') => ({
     op: 'update',
     item,
     text,
@@ -123,13 +124,14 @@ const updateFinding = (item: string, text = '急ぎの見積もりは当日17時
     kind: 'rule',
     origin: 'said',
     about: ['Ordering.Estimate'],
+    sources: [{ message, quote: 'estimate' }],
     reason: 'more precise',
 });
 
 function setup(
     messages: SessionMessage[],
     extractor: Extractor,
-    over: { items?: Knowledge.LiveKnowledgeItem[]; now?: () => Date; config?: Partial<typeof config> } = {},
+    over: { items?: Knowledge.LiveKnowledgeItem[]; now?: () => Date; config?: Partial<typeof config>; workspace?: () => Promise<StickyFocus | undefined> } = {},
 ) {
     const store = memoryStore(over.items);
     const checkpoints = memoryCheckpoints();
@@ -142,6 +144,7 @@ function setup(
             store,
             checkpoints,
             talk: { messages: async () => messages },
+            ...(over.workspace && { workspace: over.workspace }),
             extractor,
             config: { ...config, ...over.config },
             now: over.now ?? (() => now),
@@ -171,6 +174,56 @@ describe("a session's extraction", () => {
             ['k2', 'kn_00000077', false],
         ]);
         expect<unknown>(input.stickies).toEqual([{ ref: 'Ordering.Estimate', label: '見積もり' }]);
+    });
+
+    test("the workspace's stickies: both models see the same ones; the items of those the new messages write out are given after the pointed-at ones", async () => {
+        const messages = [message('ctx', 500), message('new', 1000, { text: '急ぎの見積もりは営業が当日中に出す', stickies: [] })];
+        const focus: StickyFocus = {
+            stormings: [
+                {
+                    id: 'Ordering',
+                    stickies: [
+                        { local: 'Estimate', label: '見積もり', kind: 'event' },
+                        { local: 'Rush', label: '急ぎの見積もり', kind: 'policy' },
+                        { local: 'Sales', label: '営業', kind: 'actor' },
+                        { local: 'Paid', label: '支払われた', kind: 'event' },
+                    ],
+                },
+                { id: 'Billing', stickies: [{ local: 'Invoiced', kind: 'event' }] },
+            ],
+            open: ['Ordering'],
+            journey: [],
+        };
+        const aboutPointed = { ...liveItem('kn_00000077', { createdIn: 'sess-0' }), content: content('見積もりは営業が出す', 'said', ['Ordering.Estimate']) };
+        const aboutRush = { ...liveItem('kn_00000076', { createdIn: 'sess-0' }), content: content('急ぎは別料金', 'said', ['Ordering.Rush']) };
+        const aboutPaid = { ...liveItem('kn_00000075', { createdIn: 'sess-0' }), content: content('支払いは月末', 'said', ['Ordering.Paid']) };
+        const extractor = fakeExtractor(reply());
+        const { extraction, checkpoints, log } = setup(messages, extractor, { items: [aboutPointed, aboutRush, aboutPaid], workspace: async () => focus });
+        await checkpoints.save(SESSION, { ...EMPTY_CHECKPOINT, number: 1, lastMessage: 'ctx', lastMessageAt: t(500) });
+        await extraction.extract('quiet');
+        const [input] = extractor.inputs;
+        expect<unknown>(input.workspaceStickies).toEqual([
+            { ref: 'Ordering.Estimate', label: '見積もり', kind: 'event' },
+            { ref: 'Ordering.Rush', label: '急ぎの見積もり', kind: 'policy' },
+            { ref: 'Ordering.Sales', label: '営業', kind: 'actor' },
+            { ref: 'Ordering.Paid', label: '支払われた', kind: 'event' },
+        ]);
+        // pointed at by the context: not "written out" again
+        expect<unknown>(input.mentioned).toEqual(['Ordering.Rush', 'Ordering.Sales']);
+        expect<unknown>(input.items.map((i) => i.id)).toEqual(['kn_00000077', 'kn_00000076']);
+        expect<unknown>(extractor.gateInputs[0].workspaceStickies).toEqual(['見積もり', '急ぎの見積もり', '営業', '支払われた']);
+        expect<unknown>(checkpoints.costs[0].stickies).toEqual({ given: 4, basis: 'focus', left: 0, mentioned: 2 });
+        expect<unknown>(log.at(-1)).toContain('2 items, 4 stickies (the stormings looked at; 2 written out))');
+    });
+
+    test("the workspace's stickies that cannot be read: said, and the extraction goes on with those the talk points at", async () => {
+        const extractor = fakeExtractor(reply());
+        const { extraction, log } = setup([message('r1', 900)], extractor, {
+            workspace: () => Promise.reject(new Error('no view')),
+        });
+        expect<unknown>(await extraction.extract('quiet')).toEqual({ applied: 0, held: 0, dropped: 0, rejected: 0 });
+        expect<unknown>(extractor.inputs[0].workspaceStickies).toBeUndefined();
+        expect(log).toContain("knowledge: extraction 1: the workspace's stickies could not be read (no view); only those the talk points at");
     });
 
     test('adds apply at once, with the idempotency key of the session and the number; the checkpoint moves on; the cost is recorded', async () => {
@@ -213,9 +266,13 @@ describe("a session's extraction", () => {
     test('an update is held, unseen, and applies when the next extraction makes the same call', async () => {
         const messages = [message('r1', 900)];
         const mine = liveItem('kn_00000001', { createdIn: SESSION });
-        const { extraction, store, checkpoints } = setup(messages, fakeExtractor(reply(updateFinding('k1')), reply(updateFinding('k1', '急ぎは17時まで'))), {
-            items: [mine],
-        });
+        const { extraction, store, checkpoints } = setup(
+            messages,
+            fakeExtractor(reply(updateFinding('k1')), reply(updateFinding('k1', '急ぎは17時まで', 'm2'))),
+            {
+                items: [mine],
+            },
+        );
         expect<unknown>(await extraction.extract('quiet')).toEqual({ applied: 0, held: 1, dropped: 0, rejected: 0 });
         expect<unknown>(store.applied).toEqual([]);
         expect<unknown>(checkpoints.saved().held.map((h) => [h.operation.kind, h.operation.item, h.heldIn, h.heldAt])).toEqual([
@@ -224,7 +281,12 @@ describe("a session's extraction", () => {
         messages.push(message('r2', 1000));
         expect<unknown>(await extraction.extract('quiet')).toEqual({ applied: 1, held: 0, dropped: 0, rejected: 0 });
         const item = store.items.get('kn_00000001');
-        expect<unknown>(item?.state === 'Live' && [item.content.text, item.version]).toEqual(['急ぎは17時まで', 1]);
+        // the messages of both calls join the sources; a source added makes a version even in this session
+        expect<unknown>(item?.state === 'Live' && [item.content.text, item.version, item.sources.map((s) => s.message)]).toEqual([
+            '急ぎは17時まで',
+            2,
+            [mine.sources[0].message, 'r1', 'r2'],
+        ]);
     });
 
     test('a held update the next extraction calls otherwise is dropped; one nobody returns to applies once settled', async () => {

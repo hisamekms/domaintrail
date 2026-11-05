@@ -121,6 +121,13 @@ export const plainText = (text: string): string =>
         .trim();
 
 /** The images an item's text refers to, in order. */
+/** An item's sources newest first (the store keeps them in the order they came): a correction's message on top. */
+export function sourcesNewestFirst<S extends { readonly at: string | Date }>(sources: readonly S[]): S[] {
+    const time = (s: S): number => new Date(s.at).getTime();
+    // reversed first, so that sources of the same time keep the later one on top (the sort is stable)
+    return [...sources].reverse().sort((a, b) => time(b) - time(a));
+}
+
 export const imagesOf = (text: string): string[] => [...new Set([...text.matchAll(/\(image:(img_[0-9a-z]+)\)/g)].map((m) => m[1] ?? ''))].filter(Boolean);
 
 /**

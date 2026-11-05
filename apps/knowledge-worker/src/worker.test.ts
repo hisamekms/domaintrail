@@ -80,32 +80,44 @@ describe('extractions', () => {
         expect(refused).toMatchObject({ status: 409, type: 'IdempotencyKeyReused' });
     });
 
-    test('adds a source, rewrites in place within the session, makes a new version later, links a conflict', async () => {
+    test('adds a source, rewrites in place within the session, makes a new version for a correction with its message and later, links a conflict', async () => {
         const project = newProject();
         await store.applyExtraction(project, extraction('s1', 1, [add(1, '見積もりは案件担当が作る')]));
         const second = await store.applyExtraction(
             project,
             extraction('s1', 2, [
                 { kind: 'AddSource', item: id(1), base: 1, source: source('s1', 'm9'), agreed: true },
-                { kind: 'Update', item: id(1), base: 1, revised: content('見積もりは案件担当が作り、営業が確かめる') },
+                { kind: 'Update', item: id(1), base: 1, revised: content('見積もりは案件担当が作り、営業が確かめる'), sources: [source('s1', 'm9')] },
             ]),
         );
-        // one more source, and the content rewritten in place (version 1: the item is this session's), its labels the revised ones
+        // one more source, and the content rewritten in place (version 1: the item is this session's, the update adds no source)
         expect(plain(second.items.map((i) => [i.version, i.content.text, i.sources.length]))).toEqual([[1, '見積もりは案件担当が作り、営業が確かめる', 2]]);
         expect((await store.audit(project, { item: id(1) })).items.map((a) => a.operation)).toEqual(['rewrite', 'addSource', 'add']);
+
+        // a correction in the same session: its message joins the sources, and the content before it is kept as version 1
+        const corrected = await store.applyExtraction(
+            project,
+            extraction('s1', 3, [
+                { kind: 'Update', item: id(1), base: 1, revised: content('見積もりは営業が確かめる（訂正）'), sources: [source('s1', 'm10')] },
+            ]),
+        );
+        expect(plain(corrected.items.map((i) => [i.version, i.sources.map((x) => x.message)]))).toEqual([[2, ['m1', 'm9', 'm10']]]);
 
         const later = await store.applyExtraction(
             project,
             extraction('s2', 1, [
-                { kind: 'Update', item: id(1), base: 1, revised: content('見積もりは案件担当が作り、営業と所長が確かめる') },
-                { kind: 'Conflict', id: id(2), content: content('見積もりは営業が作る'), sources: [source('s2', 'm1')], item: id(1), base: 2 },
+                { kind: 'Update', item: id(1), base: 2, revised: content('見積もりは案件担当が作り、営業と所長が確かめる'), sources: [source('s2', 'm2')] },
+                { kind: 'Conflict', id: id(2), content: content('見積もりは営業が作る'), sources: [source('s2', 'm1')], item: id(1), base: 3 },
             ]),
         );
         expect(later.dropped).toEqual([]);
         const got = await store.get(project, id(1), { history: true });
-        expect(got?.item.version).toBe(wire.itemVersion(2, 'test'));
+        expect(got?.item.version).toBe(wire.itemVersion(3, 'test'));
         expect(got?.item.conflictsWith).toEqual([id(2)]);
-        expect(plain(got?.history?.map((h) => [h.version, h.content.text]))).toEqual([[1, '見積もりは案件担当が作り、営業が確かめる']]);
+        expect(plain(got?.history?.map((h) => [h.version, h.content.text]))).toEqual([
+            [2, '見積もりは営業が確かめる（訂正）'],
+            [1, '見積もりは案件担当が作り、営業が確かめる'],
+        ]);
         expect(await store.counts(project, 'Ordering')).toEqual([
             { sticky: wire.stickyRef('Ordering.CreateSpecification', 'test'), hasItems: true, hasConflict: true },
         ]);
@@ -189,7 +201,7 @@ describe('extractions', () => {
         const applied = await store.applyExtraction(
             project,
             extraction('s2', 1, [
-                { kind: 'Update', item: id(1), base: 1, revised: content('締めは月末の営業日') },
+                { kind: 'Update', item: id(1), base: 1, revised: content('締めは月末の営業日'), sources: [source('s2', 'm5')] },
                 { kind: 'AddSource', item: id(2), base: 1, source: source('s2', 'm1'), agreed: false },
             ]),
         );

@@ -9,13 +9,17 @@ import { content, itemId, source, version } from '../test-helpers.js';
 const SETTLE = 120_000;
 const t = (s: number): Date => new Date(Date.UTC(2026, 10, 5, 9, 0, s));
 
-const update = (item: string, over: { kind?: Knowledge.KnowledgeKind; when?: Knowledge.When; about?: string[]; text?: string } = {}): HeldKind => {
+const update = (
+    item: string,
+    over: { kind?: Knowledge.KnowledgeKind; when?: Knowledge.When; about?: string[]; text?: string; source?: string } = {},
+): HeldKind => {
     const c = content(over.text ?? 'more precise', 'said', over.about ?? ['Ordering.CreateSpecification']);
     return {
         kind: 'Update',
         item: itemId(item),
         base: version(1),
         revised: { ...c, labels: { ...c.labels, kind: over.kind ?? 'rule', when: over.when ?? 'as_is' } },
+        sources: [source('s1', over.source ?? 'm1')],
     };
 };
 const conflict = (item: string, id = 'kn_00000099'): HeldKind => ({

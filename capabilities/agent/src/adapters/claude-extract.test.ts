@@ -79,4 +79,22 @@ describe("the extractor role's Claude Code", () => {
         expect(valueOf(a.args, '--append-system-prompt')).toBe(gateInstructions());
         expect(valueOf(b.args, '--model')).toBe('claude-haiku-4-5');
     });
+
+    test("a job's stable part (the workspace's stickies) follows the instructions in the system prompt", async () => {
+        const root = await mkdtemp(path.join(tmpdir(), 'domaintrail-extractor-'));
+        const plan = path.join(root, '..', `${path.basename(root)}.plan.json`);
+        await writeFile(plan, JSON.stringify({ runs: [{ reply: { operations: [] } }, { reply: { verdict: 'no', messages: [] } }] }));
+        cleanups.push(() => Promise.all([rm(root, { recursive: true, force: true }), rm(plan, { force: true }), rm(`${plan}.log`, { force: true })]));
+        const agent = createClaudeExtractor({ root, command: { command: process.execPath, args: [FAKE, plan] } });
+        const signal = new AbortController().signal;
+        await agent.extract({ prompt: 'the talk', context: '<workspace-stickies>\n[]\n</workspace-stickies>\n', signal });
+        await agent.gate({ prompt: 'the talk', context: '<workspace-stickies>\n["a"]\n</workspace-stickies>\n', signal });
+        const [a, b] = readFileSync(`${plan}.log`, 'utf8')
+            .split('\n')
+            .filter(Boolean)
+            .map((l) => JSON.parse(l) as { args: string[]; prompt: string });
+        expect(valueOf(a.args, '--append-system-prompt')).toBe(`${extractorInstructions()}\n<workspace-stickies>\n[]\n</workspace-stickies>\n`);
+        expect(valueOf(b.args, '--append-system-prompt')).toBe(`${gateInstructions()}\n<workspace-stickies>\n["a"]\n</workspace-stickies>\n`);
+        expect(a.prompt).toBe('the talk');
+    });
 });
