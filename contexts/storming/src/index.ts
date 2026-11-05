@@ -60,6 +60,7 @@ export {
     type Section,
     type StageOrder,
 } from './domain/stages.js';
+export { localNameProblem, referencesTo, STORMING_KEYWORDS, type LocalNameProblem, type ReferenceSite, type StormingReference } from './domain/references.js';
 export type { StormingRuleId } from './domain/rule-ids.js';
 export { isStormingFile } from './domain/files.js';
 export { estimatedLabelLines, labelOverflowsNote, LINES_AT_FLOOR, STICKY_NOTE } from './domain/sticky-note.js';
@@ -67,6 +68,17 @@ export { estimatedLabelLines, labelOverflowsNote, LINES_AT_FLOOR, STICKY_NOTE } 
 // ---- use cases: Storming's analysis of the `.dtes` sources against the typed model; formatting -----------------
 export { analyzeStormings } from './application/analyze.js';
 export { formatStorming } from './infrastructure/syntax/format.js';
+export {
+    MAX_RESOLUTION,
+    MAX_STICKY_LABEL,
+    planStickyEdit,
+    quoteLabel,
+    type StickyEditInput,
+    type StickyEditPlan,
+    type StickyEditProblem,
+    type StickyEditResult,
+    type StickyWording,
+} from './infrastructure/syntax/edit.js';
 
 // ---- the syntax, for the language server -----------------------------------------------------------------------
 export * as stormingAst from './infrastructure/syntax/generated/ast.js';
