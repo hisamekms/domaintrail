@@ -280,6 +280,11 @@ export interface UnitOfWork {
      * time; `work` must not wait for anything but the stores (no workspace or blob I/O inside).
      */
     transaction<T>(work: (stores: Stores) => T | Promise<T>): Promise<T>;
+    /**
+     * Leaves no earlier copy of what the transactions before it overwrote where the store keeps its log of changes (a
+     * redaction: the SQLite WAL checkpointed and truncated). Absent where there is no such log.
+     */
+    checkpoint?(): Promise<void>;
 }
 
 /** The bytes of the files of snapshots, by content hash: storing the same content twice keeps one copy. */

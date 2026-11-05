@@ -61,6 +61,7 @@ import {
     viewedAt as viewedAtInput,
     type InvalidInput,
 } from './input.js';
+import { isKnowledgePath, type KnowledgeRoutes } from './knowledge.js';
 import { joinPage, messagePage, nameCookie, pageLanguage, rememberedName, safeNext } from './pages.js';
 import { publicParticipant } from './presence.js';
 import { stateFor, triageFor } from './views.js';
@@ -122,6 +123,8 @@ export interface SessionHttpDeps {
     readonly guideWorkspace?: () => GuideWorkspace;
     /** The journey file and the requests about it (absent: no journey routes). */
     readonly journeys?: SessionJourneys;
+    /** The knowledge of the workspace's store, below `/api/session/knowledge` (absent: no store opened, 404). */
+    readonly knowledge?: KnowledgeRoutes;
     readonly log: (line: string) => void;
 }
 
@@ -1115,6 +1118,11 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
     ];
 
     const api: SessionSurface['api'] = async (req, url, res, auth) => {
+        // the knowledge (ADR 0031): for any participant, answered by its own module (./knowledge.ts)
+        if (deps.knowledge && isKnowledgePath(url.pathname)) {
+            if (auth.kind !== 'participant') return sendError(res, 401, 'Unauthenticated', 'Sign in to the session first.');
+            return deps.knowledge(req, url, res, auth);
+        }
         const matching = routes.filter((r) => r.path.test(url.pathname));
         const route = matching.find((r) => r.method === req.method);
         // without an identity only the sign-in is answered: nothing else, not even what exists

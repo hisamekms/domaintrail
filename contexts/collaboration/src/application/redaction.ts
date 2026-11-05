@@ -3,6 +3,9 @@
 // several machines). Each is redacted in one transaction with the copies of its body (`domain/redaction.ts`): the
 // message itself (`redact`), the runs that froze it, and its `RequestSent` in the outbox. A message this database does
 // not hold, of another session than named, or redacted already is left as it is: reading the log again is harmless.
+// On disk, the overwritten text leaves no copy behind: the store zeroes what it frees and empties its WAL afterwards
+// (`UnitOfWork.checkpoint`). Backups and copies on other machines are not reached here; each dt that holds a copy of the
+// database follows the same redaction log.
 import { Collaboration } from '../generated/index.js';
 import { requestCommands } from '../domain/commands.js';
 import { REDACTED_BODY, redactedEvent, redactedRun } from '../domain/redaction.js';
@@ -27,8 +30,8 @@ export interface Redaction {
 
 export function createRedaction(deps: { readonly uow: UnitOfWork; readonly clock: Clock }): Redaction {
     return {
-        redactMessages: (messages) =>
-            deps.uow.transaction((stores) => {
+        redactMessages: async (messages) => {
+            const done = await deps.uow.transaction((stores) => {
                 const requests: Collaboration.RequestId[] = [];
                 const sessions = new Set<Collaboration.SessionId>();
                 const at = deps.clock.now();
@@ -53,6 +56,10 @@ export function createRedaction(deps: { readonly uow: UnitOfWork; readonly clock
                     sessions.add(request.session);
                 }
                 return { requests, sessions: [...sessions] };
-            }),
+            });
+            // the overwritten bodies leave no copy in the store's log either (freed pages are zeroed: `secure_delete`)
+            if (done.requests.length > 0) await deps.uow.checkpoint?.();
+            return done;
+        },
     };
 }

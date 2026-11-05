@@ -417,6 +417,8 @@ export function openDatabase(file: string): DatabaseSync {
     try {
         db.exec('PRAGMA foreign_keys = ON');
         db.exec('PRAGMA busy_timeout = 5000');
+        // what a redaction overwrites or a deletion frees is zeroed on disk, not left in free pages (ADR 0031, section 7)
+        db.exec('PRAGMA secure_delete = ON');
         if (file !== ':memory:') {
             db.exec('PRAGMA journal_mode = WAL');
             db.exec('PRAGMA synchronous = NORMAL');
@@ -1127,6 +1129,17 @@ export function createUnitOfWork(db: DatabaseSync): UnitOfWork {
             };
             const next = tail.then(run);
             // the next transaction waits for this one whatever its outcome; the outcome itself goes to the caller
+            tail = next.then(
+                () => undefined,
+                () => undefined,
+            );
+            return next;
+        },
+        checkpoint() {
+            // after the transactions queued before it: the WAL's pages copied into the database, then the WAL emptied
+            const next = tail.then(() => {
+                db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+            });
             tail = next.then(
                 () => undefined,
                 () => undefined,

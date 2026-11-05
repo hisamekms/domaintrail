@@ -44,6 +44,19 @@ export const MAX_LIMIT = 200;
 /** The most stickies one `about` filter names (D1 binds at most 100 parameters per statement). */
 export const MAX_ABOUT = 50;
 
+// ---- the Live View --------------------------------------------------------------------------------------------
+
+/**
+ * What dt sends the Live View's pages over their WebSocket when the knowledge changed (an extraction applied, a person's
+ * correction, deletion or undo, the redaction log followed): the pages read what they show again, through dt's
+ * `/api/session/knowledge` (whose bodies are this API's).
+ */
+export interface KnowledgeChangedMessage {
+    readonly type: 'knowledge.changed';
+}
+
+export const KNOWLEDGE_CHANGED: KnowledgeChangedMessage = { type: 'knowledge.changed' };
+
 // ---- errors -----------------------------------------------------------------------------------------------------
 
 /**

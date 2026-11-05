@@ -2,6 +2,9 @@
 // froze it, the reply quoting it, its `RequestSent` in the outbox — become the redacted body; the row stays; a message
 // of another session than named, unknown, or redacted already is left as it is.
 import { describe, expect, test } from 'bun:test';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
 import { Collaboration as C, type Result } from '../generated/index.js';
 import { sha256Hex } from '../domain/sha256.js';
 import { REDACTED_BODY } from '../domain/redaction.js';
@@ -20,10 +23,10 @@ const facilitatorId = value(C.makeParticipantId('local:facilitator'));
 const facilitator: Actor = { kind: 'participant', participant: facilitatorId, role: 'Facilitator' };
 const text = (t: string): C.Text => value(C.makeText(t));
 
-async function open() {
+async function open(file = ':memory:') {
     let t = Date.parse('2026-11-05T09:00:00Z');
     let n = 0;
-    const db = openDatabase(':memory:');
+    const db = openDatabase(file);
     const uow = createUnitOfWork(db);
     const clock = { now: () => new Date((t += 1000)) };
     const deps: CollaborationDeps = {
@@ -39,7 +42,7 @@ async function open() {
     };
     const use = createCollaboration(deps);
     const session = value(await use.openSession({ mode: 'Collab', facilitator: facilitatorId, name: value(C.makeDisplayName('Ada')) })).session.id;
-    return { use, session, uow, redaction: createRedaction({ uow, clock }) };
+    return { use, session, uow, db, redaction: createRedaction({ uow, clock }) };
 }
 
 describe('redactMessages', () => {
@@ -86,5 +89,27 @@ describe('redactMessages', () => {
         const first = value(await use.sessionState({ session })).requests[0]?.redactedAt;
         expect((await redaction.redactMessages([{ session, message: said.id }])).requests).toEqual([]);
         expect(value(await use.sessionState({ session })).requests[0]?.redactedAt).toEqual(first);
+    });
+
+    test('leaves no copy of the text in the database file or its WAL', async () => {
+        const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-redaction-'));
+        try {
+            const file = path.join(dir, 'session.db');
+            const { use, session, db, redaction } = await open(file);
+            const secret = '山田さんの携帯は 090-1234-5678';
+            const said = value(await use.sendMessage({ session, actor: facilitator, targets: [], body: text(secret) })).request;
+            value(await use.queueRun({ session, requests: [said.id], actor: facilitator }));
+            // many more messages, so that pages are rewritten and freed
+            for (let i = 0; i < 50; i++) value(await use.sendMessage({ session, actor: facilitator, targets: [], body: text(`メッセージ ${i} ${'あ'.repeat(200)}`) }));
+            const bytes = async (): Promise<Buffer> =>
+                Buffer.concat(await Promise.all([file, `${file}-wal`].map((f) => readFile(f).catch(() => Buffer.alloc(0)))));
+            expect((await bytes()).includes(Buffer.from('090-1234-5678'))).toBe(true);
+            await redaction.redactMessages([{ session, message: said.id }]);
+            expect((await bytes()).includes(Buffer.from('090-1234-5678'))).toBe(false);
+            db.close();
+            expect((await bytes()).includes(Buffer.from('090-1234-5678'))).toBe(false);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
     });
 });

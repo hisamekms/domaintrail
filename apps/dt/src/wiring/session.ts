@@ -52,6 +52,7 @@ import { type Connection, createWebSocketHub } from '../server/websocket/hub.js'
 import { createAgentApi } from '../server/session/agent.js';
 import { createExtractionDispatcher } from '../server/session/extractions.js';
 import { openKnowledgeStore, type SessionKnowledge, startSessionKnowledge } from './knowledge.js';
+import { type LiveKnowledge, startLiveKnowledge } from './knowledge-live.js';
 import type { SettingsApproval } from '../cli/trust.js';
 import type { ResolvedConfig } from '../config/config.js';
 import { createApiRoutes } from '../server/http/routes.js';
@@ -104,8 +105,6 @@ const CLASSIFY_TIMEOUT_MS = 8_000;
 export const ANSWER_TIMEOUT_MS = 120_000;
 /** The most seconds an extraction of knowledge may take, unless given (`agent.extract.timeout`). */
 const EXTRACT_TIMEOUT_S = 180;
-/** How often the `files` knowledge store's sweep completes the deletions past their undo window. */
-const KNOWLEDGE_SWEEP_MS = 3 * 60_000;
 /** Where the server's one line per triage goes when no `debug` log is given: printed when this variable is set. */
 export const DEBUG_ENV = 'DOMAINTRAIL_DEBUG';
 /** Where the Clef classifier is asked instead of Cloudflare's API (a local mock, for tests and demos). */
@@ -150,8 +149,13 @@ export interface SessionServerOptions extends ViewServerOptions {
      * Absent: the session keeps no knowledge.
      */
     knowledge?: { readonly config: ResolvedConfig; readonly approval: SettingsApproval | undefined };
-    /** A knowledge store instead of the workspace's, with `session.knowledge` its settings: for the tests only. */
-    knowledgeStore?: KnowledgeStore;
+    /**
+     * A knowledge store instead of the workspace's, with `session.knowledge` its settings, and its sweep where dt runs
+     * it (the `files` store's): for the tests only.
+     */
+    knowledgeStore?: KnowledgeStore & { readonly sweep?: () => Promise<void> };
+    /** How often the knowledge's redaction log is read (default `REDACTION_EVERY_MS`, 3 minutes): for the tests. */
+    redactionEveryMs?: number;
     /** The name a session started now gives its facilitator. Default: in `Solo`, git's `user.name` or the OS user's; else `Facilitator`. */
     facilitatorName?: Collaboration.DisplayName;
 }
@@ -537,8 +541,9 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         const agentToken = randomSecrets.newSecret();
         // the knowledge of the session (ADR 0031): extracted only when the workspace's store opens; else said, and none
         const knowledgeConfig = options.knowledge?.config.knowledge ?? config.knowledge;
-        let sweep: (() => Promise<void>) | undefined;
-        let store: KnowledgeStore | undefined = options.knowledgeStore;
+        const given = options.knowledgeStore;
+        let sweep: (() => Promise<void>) | undefined = given?.sweep && (() => given.sweep?.() ?? Promise.resolve());
+        let store: KnowledgeStore | undefined = given;
         if (!store && options.knowledge) {
             const opened = await openKnowledgeStore(options.knowledge.config, options.knowledge.approval).catch((e: unknown) => ({
                 ok: false as const,
@@ -549,6 +554,24 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 sweep = opened.value.sweep;
             } else log(`knowledge: not extracted in this session (${opened.error.message})`);
         }
+        // the Live View's knowledge over the same store: its routes, the pages told of changes, the redaction log followed
+        const liveKnowledge: LiveKnowledge | undefined =
+            store && knowledgeConfig
+                ? startLiveKnowledge({
+                      store,
+                      project: knowledgeConfig.project,
+                      ...(sweep && { sweep }),
+                      db,
+                      uow,
+                      clock,
+                      session,
+                      publish: (message) => hub.publish(message),
+                      sessionRedacted: facilitatorChanged,
+                      ...(options.redactionEveryMs !== undefined && { everyMs: options.redactionEveryMs }),
+                      log,
+                  })
+                : undefined;
+        if (liveKnowledge) store = liveKnowledge.store;
         const extractTimeoutMs = (config.agent.extractTimeout ?? EXTRACT_TIMEOUT_S) * 1000;
         let knowledge: SessionKnowledge | undefined;
         const extractions = store
@@ -744,6 +767,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             knownViewNames: () => knownViewNames(view.state),
             guideWorkspace: guideWorkspaceNow,
             journeys,
+            ...(liveKnowledge && { knowledge: liveKnowledge.routes }),
             log,
         });
         const http = createViewHttpServer({
@@ -800,14 +824,6 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             void linkJoin?.sweep().catch((e: unknown) => log(`join requests failed: ${e instanceof Error ? e.message : String(e)}`));
         }, options.expireEveryMs ?? EXPIRE_EVERY_MS);
         expiring.unref();
-        // the `files` store's deletions past their undo window, completed now and then while the session runs
-        const sweeping = sweep
-            ? setInterval(
-                  () => void sweep?.().catch((e: unknown) => log(`knowledge: the sweep failed (${e instanceof Error ? e.message : String(e)})`)),
-                  KNOWLEDGE_SWEEP_MS,
-              )
-            : undefined;
-        sweeping?.unref();
         // a revert left at the head of the queue when the server last stopped; triages left waiting for stage 2
         void reverts.kick();
         stage.kick();
@@ -841,7 +857,8 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 stopped ??= (async () => {
                     soloSignIn.revoke();
                     clearInterval(expiring);
-                    if (sweeping) clearInterval(sweeping);
+                    // the `files` store's sweep runs with the redaction log's reading (./knowledge-live.ts)
+                    liveKnowledge?.stop();
                     // the links and pairing codes not used yet die with the server; in `link`, every sign-in too
                     await access.revokeLinks(session).catch(() => undefined);
                     if (linkMode) await access.signOutAll(session).catch(() => undefined);
