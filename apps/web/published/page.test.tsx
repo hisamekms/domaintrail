@@ -3,6 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { I18nProvider, MESSAGES } from '../i18n';
+import { NO_FILTERS } from '../knowledge/model';
 import { KnowledgeContext, type KnowledgeView } from '../knowledge/useKnowledge';
 import { StickyDetail } from './page';
 
@@ -22,6 +23,9 @@ const view: KnowledgeView = {
     setExtraction: async () => undefined,
     error: undefined,
     setError: () => undefined,
+    filters: NO_FILTERS,
+    setFilters: () => undefined,
+    filterByLabel: () => undefined,
 };
 
 const render = (sticky: string | undefined): string =>

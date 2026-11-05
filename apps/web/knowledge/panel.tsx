@@ -1,17 +1,18 @@
 // The knowledge on the page (ADR 0031, section 10; the maintainer's approved preview): a sticky's items in its detail
 // (its conflicts side by side first, each side opening to its detail, then the items kept with the hotspot they were
 // handed over to, then the other items newest first or by kind), the ナレッジ list of the left column
-// with its search and filters, an item opened to its quotes, the other stickies it concerns, its versions and images,
-// with 直す / 画像を付ける / 消す; the deletion's 元に戻す; the dot and the conflict mark on the canvas, the stickies
-// an opened item lights up, and the session's extraction switch in the app bar (section 3).
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from 'react';
+// with its search and filters, an item closed to its title and its labels' line, opened to its text (Markdown), its
+// labels as the list's chips (a press filters the list by it), its quotes, the other stickies it concerns, its versions
+// and images, with 直す / 画像を付ける / 消す; the deletion's 元に戻す; the dot and the conflict mark on the canvas, the
+// stickies an opened item lights up, and the session's extraction switch in the app bar (section 3).
+import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { Bot, CircleAlert, ImagePlus, Lightbulb, LightbulbOff, PanelLeftClose, Pencil, Search, Trash2 } from 'lucide-react';
 import { latestRevision } from '../session/state';
 import { sessionApi } from '../session/api';
 import { AI_NAME } from '../session/ai';
 import { useLang, useT } from '../i18n';
 import { Act } from '../shared/act';
-import { growMotion, motionEasing, motionMs, useStaying } from '../shared/motion';
+import { motionMs, useStaying } from '../shared/motion';
 import { ReferenceLine, TargetLink } from '../shared/reference';
 import { useCanvasValue, type DiagramCanvas } from '../view/diagram';
 import { useKnowledgeApi } from './api';
@@ -21,6 +22,7 @@ import {
     hotspotBody,
     hotspotGroups,
     KINDS,
+    labelChips,
     missingConflicts,
     NO_FILTERS,
     ordered,
@@ -36,6 +38,7 @@ import {
     type Filters,
     type HotspotGroup,
     type KnowledgeItem,
+    type LabelChip,
     type Order,
 } from './model';
 import { KnowledgeMarkdown, KnowledgePlain } from './text';
@@ -70,7 +73,7 @@ function OrderSwitch({ order, onOrder }: { order: Order; onOrder: (o: Order) => 
     );
 }
 
-/** The labels of an item on one line: its when (TO-BE stands out), its origin (the AI's quieter), perspective, date. */
+/** The labels of a closed item on one line: its when (TO-BE stands out), its origin (the AI's quieter), perspective, date. */
 function Meta({ item }: { item: KnowledgeItem }): ReactElement {
     const t = useT().knowledge;
     const date = useShortDate();
@@ -106,19 +109,57 @@ function Meta({ item }: { item: KnowledgeItem }): ReactElement {
     );
 }
 
-/** 直す: the text and the labels of an item, edited; a new version once saved. */
+/**
+ * The labels of an opened item as the ナレッジ list's filter chips (when, kind, origin, and the perspective it has), and
+ * its date: a chip pressed shows the list filtered by that label alone (`onlyLabel`).
+ */
+function LabelChips({ item }: { item: KnowledgeItem }): ReactElement {
+    const t = useT().knowledge;
+    const view = useKnowledgeView();
+    const date = useShortDate();
+    const name = (chip: LabelChip): string =>
+        chip.axis === 'perspective'
+            ? chip.value
+            : chip.axis === 'when'
+              ? t.whens[chip.value]
+              : chip.axis === 'kind'
+                ? t.kinds[chip.value]
+                : t.origins[chip.value];
+    return (
+        <span className="knowledge-chips knowledge-labels" role="group" aria-label={t.labels}>
+            {labelChips(item.content.labels).map((chip) => (
+                <button
+                    key={chip.axis}
+                    type="button"
+                    className="knowledge-chip"
+                    data-tooltip={t.filterBy(t.axes[chip.axis])}
+                    onClick={() => view?.filterByLabel(chip)}
+                >
+                    {name(chip)}
+                </button>
+            ))}
+            <span className="knowledge-meta">{date(item.createdAt)}</span>
+        </span>
+    );
+}
+
+/** The most characters of a title (`ItemTitle`). */
+const TITLE_MAX = 40;
+
+/** 直す: the title, the text and the labels of an item, edited; a new version once saved. */
 function CorrectForm({ item, onDone }: { item: KnowledgeItem; onDone: () => void }): ReactElement {
     const t = useT().knowledge;
     const view = useKnowledgeView();
     const api = useKnowledgeApi();
-    // edited as plain strings: dt checks them again (the item's text and its labels)
+    // edited as plain strings: dt checks them again (the item's title, text and labels)
+    const [title, setTitle] = useState<string>(item.content.title);
     const [text, setText] = useState<string>(item.content.text);
     const [labels, setLabels] = useState<Readonly<Record<string, string>>>({ ...item.content.labels });
     const [busy, setBusy] = useState(false);
     const save = async (): Promise<void> => {
         setBusy(true);
         try {
-            await api.correct(item.id, { ...item.content, text, labels });
+            await api.correct(item.id, { ...item.content, title: title.trim(), text, labels });
             view?.changed();
             onDone();
         } catch (e) {
@@ -138,6 +179,7 @@ function CorrectForm({ item, onDone }: { item: KnowledgeItem; onDone: () => void
     );
     return (
         <div className="knowledge-form">
+            <input type="text" aria-label={t.itemTitle} value={title} maxLength={TITLE_MAX} onChange={(e) => setTitle(e.target.value)} />
             <textarea aria-label={t.text} value={text} rows={4} onChange={(e) => setText(e.target.value)} />
             <span className="knowledge-form-labels">
                 {select('kind', KINDS, t.kinds)}
@@ -145,7 +187,7 @@ function CorrectForm({ item, onDone }: { item: KnowledgeItem; onDone: () => void
                 {select('origin', ORIGINS, t.origins)}
             </span>
             <span className="knowledge-actions">
-                <Act kind="decide" disabled={busy || text.trim() === ''} onClick={() => void save()}>
+                <Act kind="decide" disabled={busy || title.trim() === '' || text.trim() === ''} onClick={() => void save()}>
                     {t.save}
                 </Act>
                 <Act kind="stop" onClick={onDone}>
@@ -171,6 +213,7 @@ function Versions({ item, history }: { item: KnowledgeItem; history: readonly Pa
                     <span className="knowledge-meta">
                         {t.version(v.version)} · {date(v.replacedAt)}
                     </span>
+                    <span className="knowledge-version-title">{v.content.title}</span>
                     <span>
                         <KnowledgePlain text={v.content.text} />
                     </span>
@@ -189,7 +232,10 @@ function SourceLine({ source }: { source: KnowledgeItem['sources'][number] }): R
     return <ReferenceLine who={said?.who ?? date(source.at)} head={source.quote} tooltip={`${source.quote}\n${time(source.at)}`} onClick={said?.open} />;
 }
 
-/** An item opened (its text, with its images, is in its head): its sources, the other stickies, its versions, and its actions. */
+/**
+ * An item opened, under its title: its text as Markdown (with its images), its labels as chips, its sources, the other
+ * stickies, its versions, and its actions; 直す puts the form in their place.
+ */
 function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefined }): ReactElement {
     const t = useT().knowledge;
     const view = useKnowledgeView();
@@ -220,6 +266,10 @@ function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefi
     const others = item.content.about.filter((s) => s !== from);
     return (
         <div className="knowledge-detail">
+            <div className="knowledge-body markdown">
+                <KnowledgeMarkdown text={item.content.text} />
+            </div>
+            <LabelChips item={item} />
             {item.sources.length > 0 && (
                 <div className="knowledge-sources" role="group" aria-label={t.sources}>
                     {sourcesNewestFirst(item.sources).map((s) => (
@@ -284,59 +334,11 @@ function Unfold({ open, children }: { open: boolean; children: ReactNode }): Rea
 }
 
 /**
- * The text's clamp (two lines while closed) released and applied as its height moves (`--motion-medium`), not at once:
- * the text is whole, as Markdown, while the item is open and while it closes (`.unfolded`), and plain and clamped once
- * it closed. Each change measures the text whole and the plain text clamped (`twin`, an unseen copy of it while it is
- * unfolded: the Markdown on screen clamps to another height), and moves from where it is to the other; the switch from
- * plain to Markdown comes at the start of the opening, from them back at the end of the closing, at the same height.
- * Nothing moves with "reduce motion".
+ * One item of a list. Its head (the button) holds its kind, its title and the conflict's mark, and stays as it is:
+ * closed, its labels' line (and, in the ナレッジ list, the stickies' names) under it; opened, those fold away as its
+ * detail unfolds under the head (its text, its label chips, …), both moving their heights at once, so that nothing
+ * jumps (`.knowledge-fold`, `Unfold`).
  */
-function useClampMotion(ref: RefObject<HTMLElement | null>, twin: RefObject<HTMLElement | null>, open: boolean, shown: boolean): void {
-    const phase = open ? 'open' : shown ? 'closing' : 'closed';
-    const first = useRef(true);
-    // the height it had when a move was cut short (opened again while it closed): the next one starts there
-    const cut = useRef<number | undefined>(undefined);
-    useLayoutEffect(() => {
-        if (first.current) {
-            first.current = false;
-            return;
-        }
-        const el = ref.current;
-        if (!el || phase === 'closed' || typeof el.animate !== 'function') return;
-        const whole = el.getBoundingClientRect().height;
-        const clamped = twin.current?.getBoundingClientRect().height ?? whole;
-        const from = cut.current ?? (phase === 'open' ? clamped : whole);
-        cut.current = undefined;
-        const grow = growMotion(from, phase === 'open' ? whole : clamped, motionMs('--motion-medium'));
-        if (!grow) return;
-        // closing, it keeps the clamped height until the clamp is applied (the next phase), which ends it
-        const move = (g: NonNullable<typeof grow>): Animation =>
-            el.animate([{ height: `${g.from}px` }, { height: `${g.to}px` }], {
-                duration: g.ms,
-                easing: motionEasing('--motion-ease-standard'),
-                fill: phase === 'closing' ? 'forwards' : 'none',
-            });
-        let animation = move(grow);
-        // opening, an image of the text that loads meanwhile (not measured: it had no size yet) moves it on from where
-        // it is to its new whole height, instead of a jump at the end
-        const loaded = (e: Event): void => {
-            if (phase !== 'open' || !(e.target instanceof HTMLImageElement) || animation.playState !== 'running') return;
-            const now = el.getBoundingClientRect().height;
-            animation.cancel();
-            const next = growMotion(now, el.getBoundingClientRect().height, motionMs('--motion-medium'));
-            if (next) animation = move(next);
-        };
-        el.addEventListener('load', loaded, true);
-        return () => {
-            el.removeEventListener('load', loaded, true);
-            cut.current = animation.playState === 'running' ? el.getBoundingClientRect().height : undefined;
-            animation.cancel();
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [phase]);
-}
-
-/** One item of a list: its kind, two lines of its text (plain) and its labels; opened, its text whole (Markdown) and its detail. */
 export function ItemRow({
     item,
     from,
@@ -352,32 +354,24 @@ export function ItemRow({
     const t = useT().knowledge;
     const view = useKnowledgeView();
     const shown = useStaying(open);
-    const text = useRef<HTMLSpanElement>(null);
-    const twin = useRef<HTMLSpanElement>(null);
-    useClampMotion(text, twin, open, shown);
     return (
-        <li className={`knowledge-item${open ? ' open' : ''}${shown ? ' unfolded' : ''}`}>
+        <li className={`knowledge-item${open ? ' open' : ''}`}>
             <button type="button" className="knowledge-item-head" aria-expanded={open} onClick={onToggle}>
                 <span className="knowledge-kind">{t.kinds[item.content.labels.kind]}</span>
-                <span className="knowledge-item-main">
-                    <span ref={text} className={`knowledge-text${shown ? ' markdown' : ''}`}>
-                        {shown ? <KnowledgeMarkdown text={item.content.text} /> : <KnowledgePlain text={item.content.text} />}
-                    </span>
-                    {shown && (
-                        <span ref={twin} className="knowledge-text knowledge-text-twin" aria-hidden>
-                            <KnowledgePlain text={item.content.text} />
-                        </span>
-                    )}
-                    <Meta item={item} />
-                    {/* the stickies' names fold away as it opens (its detail links them) */}
-                    {!from && item.content.about.length > 0 && (
-                        <span className={`knowledge-fold${open ? ' shut' : ''}`} aria-hidden={open || undefined}>
-                            <span className="knowledge-about">{item.content.about.map((s) => view?.label(s) ?? s).join('、')}</span>
-                        </span>
-                    )}
-                </span>
+                <span className="knowledge-item-title">{item.content.title}</span>
                 {item.conflictsWith.length > 0 && <CircleAlert className="knowledge-conflict-icon" size={14} aria-label={t.conflict} />}
             </button>
+            {/* the labels' line is the row's too: a click on it opens the item (the head is the keyboard's target) */}
+            <div className={`knowledge-fold${open ? ' shut' : ''}`} aria-hidden={open || undefined} onClick={open ? undefined : onToggle}>
+                <div>
+                    <div className="knowledge-item-labels">
+                        <Meta item={item} />
+                        {!from && item.content.about.length > 0 && (
+                            <span className="knowledge-about">{item.content.about.map((s) => view?.label(s) ?? s).join('、')}</span>
+                        )}
+                    </div>
+                </div>
+            </div>
             {shown && (
                 <Unfold open={open}>
                     <ItemDetail item={item} from={from} />
@@ -469,7 +463,7 @@ export function ConflictBox({
     );
 }
 
-/** Items side by side in a box (a conflict's two, a hotspot's), each card opening to its detail under them. */
+/** Items side by side in a box (a conflict's two, a hotspot's), each card its title and labels, opening to its detail under them. */
 function SideBySide({
     items,
     from,
@@ -488,15 +482,7 @@ function SideBySide({
                 {items.map((i) => (
                     <button key={i.id} type="button" className="knowledge-side" aria-expanded={isOpen(i.id)} onClick={() => onToggle(i)}>
                         <span className="knowledge-kind">{t.kinds[i.content.labels.kind]}</span>
-                        {isOpen(i.id) ? (
-                            <span className="knowledge-text markdown">
-                                <KnowledgeMarkdown text={i.content.text} />
-                            </span>
-                        ) : (
-                            <span className="knowledge-text">
-                                <KnowledgePlain text={i.content.text} />
-                            </span>
-                        )}
+                        <span className="knowledge-item-title">{i.content.title}</span>
                         <Meta item={i} />
                     </button>
                 ))}
@@ -653,7 +639,10 @@ export function KnowledgeList({ onClose, closeLabel }: { onClose: () => void; cl
     const t = useT().knowledge;
     const view = useKnowledgeView();
     const api = useKnowledgeApi();
-    const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+    // the page's (a label chip of an opened item sets them, wherever it is)
+    const [ownFilters, setOwnFilters] = useState<Filters>(NO_FILTERS);
+    const filters = view?.filters ?? ownFilters;
+    const setFilters = view?.setFilters ?? setOwnFilters;
     const [order, setOrder] = useState<Order>('newest');
     const [items, setItems] = useState<readonly KnowledgeItem[]>([]);
     const [next, setNext] = useState<string | undefined>();
@@ -713,6 +702,16 @@ export function KnowledgeList({ onClose, closeLabel }: { onClose: () => void; cl
                         on={filters.origin}
                         onToggle={(v) => setFilters(toggled(filters, 'origin', v))}
                     />
+                    {/* the perspective has no fixed values: chosen from an item's chip, shown while it filters */}
+                    {filters.perspective !== undefined && (
+                        <ChipRow
+                            label={t.axes.perspective}
+                            values={[filters.perspective]}
+                            names={{ [filters.perspective]: filters.perspective }}
+                            on={[filters.perspective]}
+                            onToggle={() => setFilters({ q: filters.q, when: filters.when, kind: filters.kind, origin: filters.origin })}
+                        />
+                    )}
                 </div>
                 {items.length === 0 ? (
                     <p className="muted">{t.noMatch}</p>

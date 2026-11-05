@@ -262,6 +262,7 @@ const KNOWLEDGE_ITEM = [
     '---',
     'id: kn_00000001',
     'version: 1',
+    'title: 注文は在庫を確かめてから受ける',
     'when: as_is',
     'kind: rule',
     'origin: agreed',

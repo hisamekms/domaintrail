@@ -24,7 +24,16 @@ export const extraction = (session: string, number: number): Knowledge.Extractio
     number: known(Knowledge.makeExtractionNumber(number)),
 });
 
-export const content = (text: string, origin: Knowledge.Origin = 'said', about: string[] = ['Ordering.CreateSpecification']): Knowledge.ItemContent => ({
+export const title = (v: string): Knowledge.ItemTitle => known(Knowledge.makeItemTitle(v));
+
+/** A content; its title is the start of the text's first line (at most 40 characters) unless given. */
+export const content = (
+    text: string,
+    origin: Knowledge.Origin = 'said',
+    about: string[] = ['Ordering.CreateSpecification'],
+    heading: string = (text.split('\n')[0] ?? '').slice(0, 40).trim(),
+): Knowledge.ItemContent => ({
+    title: title(heading),
     text: known(Knowledge.makeItemText(text)),
     labels: { when: 'as_is', kind: 'rule', origin },
     about: about.map((a) => known(Knowledge.makeStickyRef(a))),

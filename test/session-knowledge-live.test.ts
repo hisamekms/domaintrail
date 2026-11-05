@@ -53,7 +53,12 @@ async function until<T>(what: string, probe: () => T | undefined | Promise<T | u
 }
 
 const json = { 'content-type': 'application/json' };
-const content = (text: string, about: string[]): unknown => ({ text, labels: { when: 'as_is', kind: 'rule', origin: 'said' }, about });
+const content = (text: string, about: string[]): unknown => ({
+    title: text.slice(0, 40),
+    text,
+    labels: { when: 'as_is', kind: 'rule', origin: 'said' },
+    about,
+});
 /** A 1×1 PNG. */
 const PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0));
 

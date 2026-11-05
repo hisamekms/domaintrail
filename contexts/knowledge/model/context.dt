@@ -16,6 +16,9 @@ context Knowledge "ナレッジ" {
   /// ナレッジとメンバーを持つ共有の単位の名前。ワークスペースは `knowledge.project` でこれを指す。API のパスに入る。
   primitive ProjectName "プロジェクト名": String { matches(value, "^[a-z0-9][a-z0-9-]{0,62}$") }
 
+  /// ナレッジの見出し: 1行の短い文（40字まで）。Markdown ではなく、ただの文字。前後に空白を置かない。閉じたナレッジはこれだけを見せる。
+  primitive ItemTitle "見出し": String { length(value) <= 40 and matches(value, "^\S(.*\S)?$") }
+
   /// ナレッジの本文（Markdown）。
   primitive ItemText "本文": String { length(value) >= 1 and length(value) <= 20000 }
 
@@ -71,8 +74,9 @@ context Knowledge "ナレッジ" {
     perspective: Perspective? "立場"
   }
 
-  /// ナレッジの中身: 本文、ラベル、どの付箋の話か。版ごとに残るのはこれ。
+  /// ナレッジの中身: 見出し、本文、ラベル、どの付箋の話か。版ごとに残るのはこれ。
   value ItemContent "中身" {
+    title: ItemTitle "見出し"
     text: ItemText "本文"
     labels: Labels "ラベル"
     about: StickyRef[0..*] "付箋"

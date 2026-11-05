@@ -61,7 +61,12 @@ async function until<T>(what: string, probe: () => T | undefined | Promise<T | u
 }
 
 const json = { 'content-type': 'application/json' };
-const content = (text: string): unknown => ({ text, labels: { when: 'as_is', kind: 'rule', origin: 'said' }, about: ['Returns.ReturnRequested'] });
+const content = (text: string): unknown => ({
+    title: text.slice(0, 40),
+    text,
+    labels: { when: 'as_is', kind: 'rule', origin: 'said' },
+    about: ['Returns.ReturnRequested'],
+});
 const id = (n: number): string => `kn_${String(n).padStart(8, '0')}`;
 
 const RETURNS = 'stormings/returns.dtes';

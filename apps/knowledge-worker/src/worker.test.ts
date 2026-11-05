@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { cloudflareKnowledgeStore, KnowledgeStoreError, type Knowledge, type KnowledgeStore } from '@domaintrail/knowledge';
 import * as wire from '@domaintrail/knowledge/protocol';
 import { guard } from './store.js';
-import { startWorker, type RunningWorker } from './test-helpers.js';
+import { statementsOf, startWorker, type RunningWorker } from './test-helpers.js';
 
 /** The error a promise rejects with (fails when it resolves). */
 async function thrown(p: Promise<unknown>): Promise<Error> {
@@ -39,13 +39,19 @@ const newProject = (): Knowledge.ProjectName => wire.projectName(`p${++projects}
 const user = wire.userName('facilitator@example.com', 'test');
 const id = (n: number): Knowledge.KnowledgeItemId => wire.itemId(`kn_${String(n).padStart(8, '0')}`, 'test');
 
-const content = (text: string, over: { about?: string[]; kind?: string; origin?: string } = {}): unknown => ({
+const content = (text: string, over: { about?: string[]; kind?: string; origin?: string; title?: string } = {}): unknown => ({
+    title: over.title ?? `${text.slice(0, 30).trim()}`,
     text,
     labels: { when: 'as_is', kind: over.kind ?? 'rule', origin: over.origin ?? 'said' },
     about: over.about ?? ['Ordering.CreateSpecification'],
 });
 const source = (session: string, message: string, quote = 'そういう決まりです'): unknown => ({ session, message, at: '2026-11-05T09:00:00.000Z', quote });
-const add = (n: number, text: string, session = 's1', over: { about?: string[]; kind?: string; message?: string; quote?: string } = {}): unknown => ({
+const add = (
+    n: number,
+    text: string,
+    session = 's1',
+    over: { about?: string[]; kind?: string; message?: string; quote?: string; title?: string } = {},
+): unknown => ({
     kind: 'Add',
     id: id(n),
     content: content(text, over),
@@ -236,7 +242,10 @@ describe('extractions', () => {
 describe('reading', () => {
     test('filters by stickies, labels, session and full text (Japanese, two characters too), newest first, a page at a time', async () => {
         const project = newProject();
-        await store.applyExtraction(project, extraction('s1', 1, [add(1, '見積もりは案件担当が作る', 's1', { quote: '見積もりは私たちが作っています' })]));
+        await store.applyExtraction(
+            project,
+            extraction('s1', 1, [add(1, '見積もりは案件担当が作る', 's1', { quote: '見積もりは私たちが作っています', title: '見積もりの担当' })]),
+        );
         await store.applyExtraction(project, extraction('s1', 2, [add(2, '請求書は月末に出す', 's1', { about: ['Billing.Issue'], kind: 'flow' })]));
         await store.applyExtraction(
             project,
@@ -258,6 +267,9 @@ describe('reading', () => {
         expect(texts((await store.search(project, { q: '案件担当' })).items)).toEqual(['見積もりは案件担当が作る']);
         expect(texts((await store.search(project, { q: '月末' })).items)).toEqual(['請求書は月末に出す']);
         expect(texts((await store.search(project, { q: '私たち' })).items)).toEqual(['見積もりは案件担当が作る']);
+        // and the titles
+        expect(texts((await store.search(project, { q: 'の担当' })).items)).toEqual(['見積もりは案件担当が作る']);
+        expect((await store.get(project, id(1)))?.item.content.title).toBe(wire.itemContent(content('x', { title: '見積もりの担当' }), 'test').title);
         expect(texts((await store.search(project, { q: 'invoices 100%' })).items)).toEqual(['Invoices go out at 100% of the order']);
         expect(texts((await store.search(project, { q: '0%' })).items)).toEqual(['Invoices go out at 100% of the order']);
 
@@ -381,6 +393,53 @@ describe('who may call', () => {
             await unconfigured.dispose();
         }
     });
+});
+
+test('migration 2: the items from before titles are removed, and a new row must have its title', async () => {
+    const bare = await startWorker({ INSECURE_SKIP_ACCESS_CHECK: 'true', ACCESS_TEAM_DOMAIN: '', ACCESS_AUD: '', WRITER_TOKENS: WRITER }, { migrate: false });
+    try {
+        const migrate = async (file: string): Promise<void> => {
+            const sql = await Bun.file(`${import.meta.dir}/../template/migrations/${file}`).text();
+            await bare.db.batch(statementsOf(sql).map((st) => bare.db.prepare(st)));
+        };
+        await migrate('0001_init.sql');
+        const s = cloudflareKnowledgeStore({ url: bare.url, serviceToken: { clientId: WRITER, clientSecret: 'x' } });
+        const project = newProject();
+        // an item as version 1 wrote it, without a title: its stickies, search text and version too
+        await bare.db.batch([
+            bare.db
+                .prepare(
+                    `INSERT INTO items (project, id, state, version, text, when_label, kind, origin, about, sources, conflicts_with, created_at, updated_at, rev)
+                     VALUES (?1, 'kn_00000001', 'Live', 2, '古い', 'as_is', 'rule', 'said', '["Ordering.A"]', '[]', '[]', '2026-11-05T09:00:00.000Z', '2026-11-05T09:00:00.000Z', 1)`,
+                )
+                .bind(project),
+            bare.db.prepare("INSERT INTO item_about (project, sticky, item) VALUES (?1, 'Ordering.A', 'kn_00000001')").bind(project),
+            bare.db.prepare("INSERT INTO item_search (rowid, body) VALUES (1, '古い')"),
+            bare.db.prepare("INSERT INTO item_versions (project, item, version, content, replaced_at) VALUES (?1, 'kn_00000001', 1, '{}', 'x')").bind(project),
+        ]);
+        await migrate('0002_item_title.sql');
+        for (const table of ['items', 'item_about', 'item_search', 'item_versions'])
+            expect(await bare.db.prepare(`SELECT count(*) AS n FROM ${table}`).first<{ n: number }>()).toEqual({ n: 0 });
+        // a row without its title is refused; the store writes it
+        expect(
+            await bare.db
+                .prepare(
+                    `INSERT INTO items (project, id, state, version, text, when_label, kind, origin, about, sources, conflicts_with, created_at, updated_at, rev)
+                     VALUES ('p', 'kn_00000002', 'Live', 1, 't', 'as_is', 'rule', 'said', '[]', '[]', '[]', 'x', 'x', 1)`,
+                )
+                .run()
+                .then(
+                    () => 'written',
+                    () => 'refused',
+                ),
+        ).toBe('refused');
+        await s.applyExtraction(project, extraction('s1', 1, [add(3, '新しい', 's1', { title: '新しい見出し' })]));
+        expect((await s.search(project, {})).items.map((i) => i.content.title)).toEqual([
+            wire.itemContent(content('x', { title: '新しい見出し' }), 'test').title,
+        ]);
+    } finally {
+        await bare.dispose();
+    }
 });
 
 test('an unmigrated database answers 503', async () => {

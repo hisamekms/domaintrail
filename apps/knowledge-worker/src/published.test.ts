@@ -46,7 +46,7 @@ const form = (over: Partial<PublishedStorming> = {}): PublishedStorming => ({
 const add = (n: number, about: string[]): unknown => ({
     kind: 'Add',
     id: `kn_${String(n).padStart(8, '0')}`,
-    content: { text: `finding ${n}`, labels: { when: 'as_is', kind: 'rule', origin: 'said' }, about },
+    content: { title: `finding ${n}`, text: `finding ${n}`, labels: { when: 'as_is', kind: 'rule', origin: 'said' }, about },
     sources: [{ session: 's1', message: `m${n}`, at: '2026-11-05T09:00:00.000Z', quote: 'そういう決まりです' }],
 });
 

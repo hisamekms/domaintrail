@@ -119,15 +119,15 @@ const RAW_BUTTONS: Readonly<Record<string, { readonly count: number; readonly re
     },
     'knowledge/panel.tsx knowledge-item-head': {
         count: 1,
-        reason: "a knowledge item's row (kind, text, labels) that opens it: a row or card whose whole box is the target (a list's row, a disclosure head): its layout is the row's, not a button's",
+        reason: "a knowledge item's head (kind, title) that opens it: a row or card whose whole box is the target (a list's row, a disclosure head): its layout is the row's, not a button's",
     },
     'knowledge/panel.tsx knowledge-side': {
         count: 1,
-        reason: "a side of a knowledge conflict (kind, text, labels) that opens it under the pair: a row or card whose whole box is the target (a list's row, a disclosure head): its layout is the card's, not a button's",
+        reason: "a side of a knowledge conflict (kind, title, labels) that opens it under the pair: a row or card whose whole box is the target (a list's row, a disclosure head): its layout is the card's, not a button's",
     },
     'knowledge/panel.tsx knowledge-chip': {
-        count: 1,
-        reason: 'a filter of the ナレッジ list (AS-IS, ルール, 発言…), on or off: a chip or badge of its own (a count, a reaction, a status pill): a view setting',
+        count: 2,
+        reason: "a filter of the ナレッジ list (AS-IS, ルール, 発言…), on or off, and an opened item's label as the same chip, which filters the list by it: a chip or badge of its own (a count, a reaction, a status pill): a view setting",
     },
     'lists.tsx problem': {
         count: 1,

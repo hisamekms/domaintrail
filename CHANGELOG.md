@@ -15,7 +15,7 @@ one, oldest first, and follow its steps. This file is in the package: `node_modu
 
 - **Knowledge from the sessions** (`dt guide knowledge`, ADR 0031): what is said and found in a session — why, how
   often, who said so, what the AI found — kept item by item apart from the `.dtes` and `.dt` files, tied to the
-  stickies it is about. An item has a Markdown text (with images), labels (`when` AS-IS / TO-BE, `kind`,
+  stickies it is about. An item has a title (one short line), a Markdown text (with images), labels (`when` AS-IS / TO-BE, `kind`,
   `origin` 発言 / 合意 / 調査 / 推測, an optional `perspective`), the stickies it is `about`, its sources with a short
   quote of each message, versions, and the items it conflicts with.
   - **Extraction in the session**: a third role of the AI, the extractor (`agent.extract`: `model`, `gateModel`,
@@ -34,8 +34,9 @@ one, oldest first, and follow its steps. This file is in the package: `node_modu
     `knowledge.project` are security-relevant settings you approve. `dt check` reports an item file that does not
     read (K001) and an item about a sticky no storming has (K002, warning).
   - **In the Live View** (`docs/live-view.md`): a dot on each sticky with knowledge and a mark for a conflict; a
-    sticky's items in its detail, newest first or by kind, each opening to its quotes, other stickies, versions and
-    images; the ナレッジ tab with search and filters; 直す, 画像を付ける and 消す; a conflict side by side with
+    sticky's items in its detail, newest first or by kind, each closed to its title and labels and opening to its text,
+    its labels as the ナレッジ tab's filter chips (a press shows the tab filtered by it), quotes, other stickies, versions
+    and images; the ナレッジ tab with search and filters; 直す, 画像を付ける and 消す; a conflict side by side with
     ホットスポットにする and 食い違いではない.
   - **Deleting**: an item is hidden from everyone at once, with 元に戻す for 10 seconds; the store's sweep then removes
     every version and image and puts the source messages on the project's redaction log, which every dt of the project

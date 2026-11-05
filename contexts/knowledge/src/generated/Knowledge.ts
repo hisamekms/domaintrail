@@ -142,17 +142,63 @@ export const makeProjectName: MakeProjectName = (value) => {
 };
 
 /**
+ * 見出し
+ * ナレッジの見出し: 1行の短い文（40字まで）。Markdown ではなく、ただの文字。前後に空白を置かない。閉じたナレッジはこれだけを見せる。
+ * @invariant valid: length(value) <= 40 and matches(value, "^\S(.*\S)?$")
+ * Make it with `makeItemTitle`; never `as ItemTitle` (see dt guide lint).
+ * @see contexts/knowledge/model/context.dt:20
+ */
+export type ItemTitle = string & { readonly __domain: 'Knowledge.ItemTitle' };
+
+/**
+ * A value that violates an invariant of ItemTitle.
+ * @see contexts/knowledge/model/context.dt:20
+ */
+export interface InvalidItemTitle {
+    readonly type: 'InvalidItemTitle';
+    readonly value: string;
+    /** The violated invariant. */
+    readonly invariant: 'valid';
+}
+
+/**
+ * Creates a ItemTitle, checking its invariants: generated as `makeItemTitle`, or written by hand.
+ * @see contexts/knowledge/model/context.dt:20
+ */
+export type MakeItemTitle = (value: string) => Result<ItemTitle, InvalidItemTitle>;
+
+/**
+ * The invariants of ItemTitle that a value violates, in declaration order; empty when it is a ItemTitle.
+ * @see contexts/knowledge/model/context.dt:20
+ */
+export function checkItemTitle(value: string): readonly InvalidItemTitle['invariant'][] {
+    const violated: InvalidItemTitle['invariant'][] = [];
+    if (!((value.length <= 40) && /^\S(.*\S)?$/.test(value))) violated.push('valid');
+    return violated;
+}
+
+/**
+ * Creates a ItemTitle, checking its invariants with `checkItemTitle`: the first one violated is reported.
+ * @see contexts/knowledge/model/context.dt:20
+ */
+export const makeItemTitle: MakeItemTitle = (value) => {
+    const [invariant] = checkItemTitle(value);
+    if (invariant === undefined) return ok(value as ItemTitle);
+    return err({ type: 'InvalidItemTitle', value, invariant });
+};
+
+/**
  * 本文
  * ナレッジの本文（Markdown）。
  * @invariant valid: length(value) >= 1 and length(value) <= 20000
  * Make it with `makeItemText`; never `as ItemText` (see dt guide lint).
- * @see contexts/knowledge/model/context.dt:20
+ * @see contexts/knowledge/model/context.dt:23
  */
 export type ItemText = string & { readonly __domain: 'Knowledge.ItemText' };
 
 /**
  * A value that violates an invariant of ItemText.
- * @see contexts/knowledge/model/context.dt:20
+ * @see contexts/knowledge/model/context.dt:23
  */
 export interface InvalidItemText {
     readonly type: 'InvalidItemText';
@@ -163,13 +209,13 @@ export interface InvalidItemText {
 
 /**
  * Creates a ItemText, checking its invariants: generated as `makeItemText`, or written by hand.
- * @see contexts/knowledge/model/context.dt:20
+ * @see contexts/knowledge/model/context.dt:23
  */
 export type MakeItemText = (value: string) => Result<ItemText, InvalidItemText>;
 
 /**
  * The invariants of ItemText that a value violates, in declaration order; empty when it is a ItemText.
- * @see contexts/knowledge/model/context.dt:20
+ * @see contexts/knowledge/model/context.dt:23
  */
 export function checkItemText(value: string): readonly InvalidItemText['invariant'][] {
     const violated: InvalidItemText['invariant'][] = [];
@@ -179,7 +225,7 @@ export function checkItemText(value: string): readonly InvalidItemText['invarian
 
 /**
  * Creates a ItemText, checking its invariants with `checkItemText`: the first one violated is reported.
- * @see contexts/knowledge/model/context.dt:20
+ * @see contexts/knowledge/model/context.dt:23
  */
 export const makeItemText: MakeItemText = (value) => {
     const [invariant] = checkItemText(value);
@@ -192,13 +238,13 @@ export const makeItemText: MakeItemText = (value) => {
  * 出典のメッセージの短い引用。セッションのデータベースは1台にしか残らないので、AI の言い換えを読み手が確かめられるのはこれ。
  * @invariant valid: length(value) >= 1 and length(value) <= 500
  * Make it with `makeQuote`; never `as Quote` (see dt guide lint).
- * @see contexts/knowledge/model/context.dt:23
+ * @see contexts/knowledge/model/context.dt:26
  */
 export type Quote = string & { readonly __domain: 'Knowledge.Quote' };
 
 /**
  * A value that violates an invariant of Quote.
- * @see contexts/knowledge/model/context.dt:23
+ * @see contexts/knowledge/model/context.dt:26
  */
 export interface InvalidQuote {
     readonly type: 'InvalidQuote';
@@ -209,13 +255,13 @@ export interface InvalidQuote {
 
 /**
  * Creates a Quote, checking its invariants: generated as `makeQuote`, or written by hand.
- * @see contexts/knowledge/model/context.dt:23
+ * @see contexts/knowledge/model/context.dt:26
  */
 export type MakeQuote = (value: string) => Result<Quote, InvalidQuote>;
 
 /**
  * The invariants of Quote that a value violates, in declaration order; empty when it is a Quote.
- * @see contexts/knowledge/model/context.dt:23
+ * @see contexts/knowledge/model/context.dt:26
  */
 export function checkQuote(value: string): readonly InvalidQuote['invariant'][] {
     const violated: InvalidQuote['invariant'][] = [];
@@ -225,7 +271,7 @@ export function checkQuote(value: string): readonly InvalidQuote['invariant'][] 
 
 /**
  * Creates a Quote, checking its invariants with `checkQuote`: the first one violated is reported.
- * @see contexts/knowledge/model/context.dt:23
+ * @see contexts/knowledge/model/context.dt:26
  */
 export const makeQuote: MakeQuote = (value) => {
     const [invariant] = checkQuote(value);
@@ -238,13 +284,13 @@ export const makeQuote: MakeQuote = (value) => {
  * 立場（案件担当、営業、外注先など）。役割で書き、人の名前は書かない。
  * @invariant valid: length(value) >= 1 and length(value) <= 100
  * Make it with `makePerspective`; never `as Perspective` (see dt guide lint).
- * @see contexts/knowledge/model/context.dt:26
+ * @see contexts/knowledge/model/context.dt:29
  */
 export type Perspective = string & { readonly __domain: 'Knowledge.Perspective' };
 
 /**
  * A value that violates an invariant of Perspective.
- * @see contexts/knowledge/model/context.dt:26
+ * @see contexts/knowledge/model/context.dt:29
  */
 export interface InvalidPerspective {
     readonly type: 'InvalidPerspective';
@@ -255,13 +301,13 @@ export interface InvalidPerspective {
 
 /**
  * Creates a Perspective, checking its invariants: generated as `makePerspective`, or written by hand.
- * @see contexts/knowledge/model/context.dt:26
+ * @see contexts/knowledge/model/context.dt:29
  */
 export type MakePerspective = (value: string) => Result<Perspective, InvalidPerspective>;
 
 /**
  * The invariants of Perspective that a value violates, in declaration order; empty when it is a Perspective.
- * @see contexts/knowledge/model/context.dt:26
+ * @see contexts/knowledge/model/context.dt:29
  */
 export function checkPerspective(value: string): readonly InvalidPerspective['invariant'][] {
     const violated: InvalidPerspective['invariant'][] = [];
@@ -271,7 +317,7 @@ export function checkPerspective(value: string): readonly InvalidPerspective['in
 
 /**
  * Creates a Perspective, checking its invariants with `checkPerspective`: the first one violated is reported.
- * @see contexts/knowledge/model/context.dt:26
+ * @see contexts/knowledge/model/context.dt:29
  */
 export const makePerspective: MakePerspective = (value) => {
     const [invariant] = checkPerspective(value);
@@ -284,13 +330,13 @@ export const makePerspective: MakePerspective = (value) => {
  * 抽出が操作ごとに添える理由。監査のログに残る。
  * @invariant valid: length(value) >= 1 and length(value) <= 2000
  * Make it with `makeReason`; never `as Reason` (see dt guide lint).
- * @see contexts/knowledge/model/context.dt:29
+ * @see contexts/knowledge/model/context.dt:32
  */
 export type Reason = string & { readonly __domain: 'Knowledge.Reason' };
 
 /**
  * A value that violates an invariant of Reason.
- * @see contexts/knowledge/model/context.dt:29
+ * @see contexts/knowledge/model/context.dt:32
  */
 export interface InvalidReason {
     readonly type: 'InvalidReason';
@@ -301,13 +347,13 @@ export interface InvalidReason {
 
 /**
  * Creates a Reason, checking its invariants: generated as `makeReason`, or written by hand.
- * @see contexts/knowledge/model/context.dt:29
+ * @see contexts/knowledge/model/context.dt:32
  */
 export type MakeReason = (value: string) => Result<Reason, InvalidReason>;
 
 /**
  * The invariants of Reason that a value violates, in declaration order; empty when it is a Reason.
- * @see contexts/knowledge/model/context.dt:29
+ * @see contexts/knowledge/model/context.dt:32
  */
 export function checkReason(value: string): readonly InvalidReason['invariant'][] {
     const violated: InvalidReason['invariant'][] = [];
@@ -317,7 +363,7 @@ export function checkReason(value: string): readonly InvalidReason['invariant'][
 
 /**
  * Creates a Reason, checking its invariants with `checkReason`: the first one violated is reported.
- * @see contexts/knowledge/model/context.dt:29
+ * @see contexts/knowledge/model/context.dt:32
  */
 export const makeReason: MakeReason = (value) => {
     const [invariant] = checkReason(value);
@@ -330,13 +376,13 @@ export const makeReason: MakeReason = (value) => {
  * 付箋の参照 `<Storming>.<LocalId>`。ラベルを変えても切れない。付箋があるかは `dt check` が確かめる。
  * @invariant valid: matches(value, "^[_a-zA-Z][_a-zA-Z0-9]*\.[_a-zA-Z][_a-zA-Z0-9]*$")
  * Make it with `makeStickyRef`; never `as StickyRef` (see dt guide lint).
- * @see contexts/knowledge/model/context.dt:32
+ * @see contexts/knowledge/model/context.dt:35
  */
 export type StickyRef = string & { readonly __domain: 'Knowledge.StickyRef' };
 
 /**
  * A value that violates an invariant of StickyRef.
- * @see contexts/knowledge/model/context.dt:32
+ * @see contexts/knowledge/model/context.dt:35
  */
 export interface InvalidStickyRef {
     readonly type: 'InvalidStickyRef';
@@ -347,13 +393,13 @@ export interface InvalidStickyRef {
 
 /**
  * Creates a StickyRef, checking its invariants: generated as `makeStickyRef`, or written by hand.
- * @see contexts/knowledge/model/context.dt:32
+ * @see contexts/knowledge/model/context.dt:35
  */
 export type MakeStickyRef = (value: string) => Result<StickyRef, InvalidStickyRef>;
 
 /**
  * The invariants of StickyRef that a value violates, in declaration order; empty when it is a StickyRef.
- * @see contexts/knowledge/model/context.dt:32
+ * @see contexts/knowledge/model/context.dt:35
  */
 export function checkStickyRef(value: string): readonly InvalidStickyRef['invariant'][] {
     const violated: InvalidStickyRef['invariant'][] = [];
@@ -363,7 +409,7 @@ export function checkStickyRef(value: string): readonly InvalidStickyRef['invari
 
 /**
  * Creates a StickyRef, checking its invariants with `checkStickyRef`: the first one violated is reported.
- * @see contexts/knowledge/model/context.dt:32
+ * @see contexts/knowledge/model/context.dt:35
  */
 export const makeStickyRef: MakeStickyRef = (value) => {
     const [invariant] = checkStickyRef(value);
@@ -376,13 +422,13 @@ export const makeStickyRef: MakeStickyRef = (value) => {
  * セッションの ID（コラボレーションのセッション）。
  * @invariant valid: length(value) >= 1 and length(value) <= 100
  * Make it with `makeSessionRef`; never `as SessionRef` (see dt guide lint).
- * @see contexts/knowledge/model/context.dt:35
+ * @see contexts/knowledge/model/context.dt:38
  */
 export type SessionRef = string & { readonly __domain: 'Knowledge.SessionRef' };
 
 /**
  * A value that violates an invariant of SessionRef.
- * @see contexts/knowledge/model/context.dt:35
+ * @see contexts/knowledge/model/context.dt:38
  */
 export interface InvalidSessionRef {
     readonly type: 'InvalidSessionRef';
@@ -393,13 +439,13 @@ export interface InvalidSessionRef {
 
 /**
  * Creates a SessionRef, checking its invariants: generated as `makeSessionRef`, or written by hand.
- * @see contexts/knowledge/model/context.dt:35
+ * @see contexts/knowledge/model/context.dt:38
  */
 export type MakeSessionRef = (value: string) => Result<SessionRef, InvalidSessionRef>;
 
 /**
  * The invariants of SessionRef that a value violates, in declaration order; empty when it is a SessionRef.
- * @see contexts/knowledge/model/context.dt:35
+ * @see contexts/knowledge/model/context.dt:38
  */
 export function checkSessionRef(value: string): readonly InvalidSessionRef['invariant'][] {
     const violated: InvalidSessionRef['invariant'][] = [];
@@ -409,7 +455,7 @@ export function checkSessionRef(value: string): readonly InvalidSessionRef['inva
 
 /**
  * Creates a SessionRef, checking its invariants with `checkSessionRef`: the first one violated is reported.
- * @see contexts/knowledge/model/context.dt:35
+ * @see contexts/knowledge/model/context.dt:38
  */
 export const makeSessionRef: MakeSessionRef = (value) => {
     const [invariant] = checkSessionRef(value);
@@ -422,13 +468,13 @@ export const makeSessionRef: MakeSessionRef = (value) => {
  * セッションの中のメッセージの ID（人のメッセージか AI の答え）。
  * @invariant valid: length(value) >= 1 and length(value) <= 100
  * Make it with `makeMessageRef`; never `as MessageRef` (see dt guide lint).
- * @see contexts/knowledge/model/context.dt:38
+ * @see contexts/knowledge/model/context.dt:41
  */
 export type MessageRef = string & { readonly __domain: 'Knowledge.MessageRef' };
 
 /**
  * A value that violates an invariant of MessageRef.
- * @see contexts/knowledge/model/context.dt:38
+ * @see contexts/knowledge/model/context.dt:41
  */
 export interface InvalidMessageRef {
     readonly type: 'InvalidMessageRef';
@@ -439,13 +485,13 @@ export interface InvalidMessageRef {
 
 /**
  * Creates a MessageRef, checking its invariants: generated as `makeMessageRef`, or written by hand.
- * @see contexts/knowledge/model/context.dt:38
+ * @see contexts/knowledge/model/context.dt:41
  */
 export type MakeMessageRef = (value: string) => Result<MessageRef, InvalidMessageRef>;
 
 /**
  * The invariants of MessageRef that a value violates, in declaration order; empty when it is a MessageRef.
- * @see contexts/knowledge/model/context.dt:38
+ * @see contexts/knowledge/model/context.dt:41
  */
 export function checkMessageRef(value: string): readonly InvalidMessageRef['invariant'][] {
     const violated: InvalidMessageRef['invariant'][] = [];
@@ -455,7 +501,7 @@ export function checkMessageRef(value: string): readonly InvalidMessageRef['inva
 
 /**
  * Creates a MessageRef, checking its invariants with `checkMessageRef`: the first one violated is reported.
- * @see contexts/knowledge/model/context.dt:38
+ * @see contexts/knowledge/model/context.dt:41
  */
 export const makeMessageRef: MakeMessageRef = (value) => {
     const [invariant] = checkMessageRef(value);
@@ -468,13 +514,13 @@ export const makeMessageRef: MakeMessageRef = (value) => {
  * ユーザー（Access のメールアドレス）。
  * @invariant valid: length(value) >= 1 and length(value) <= 320
  * Make it with `makeUserName`; never `as UserName` (see dt guide lint).
- * @see contexts/knowledge/model/context.dt:41
+ * @see contexts/knowledge/model/context.dt:44
  */
 export type UserName = string & { readonly __domain: 'Knowledge.UserName' };
 
 /**
  * A value that violates an invariant of UserName.
- * @see contexts/knowledge/model/context.dt:41
+ * @see contexts/knowledge/model/context.dt:44
  */
 export interface InvalidUserName {
     readonly type: 'InvalidUserName';
@@ -485,13 +531,13 @@ export interface InvalidUserName {
 
 /**
  * Creates a UserName, checking its invariants: generated as `makeUserName`, or written by hand.
- * @see contexts/knowledge/model/context.dt:41
+ * @see contexts/knowledge/model/context.dt:44
  */
 export type MakeUserName = (value: string) => Result<UserName, InvalidUserName>;
 
 /**
  * The invariants of UserName that a value violates, in declaration order; empty when it is a UserName.
- * @see contexts/knowledge/model/context.dt:41
+ * @see contexts/knowledge/model/context.dt:44
  */
 export function checkUserName(value: string): readonly InvalidUserName['invariant'][] {
     const violated: InvalidUserName['invariant'][] = [];
@@ -501,7 +547,7 @@ export function checkUserName(value: string): readonly InvalidUserName['invarian
 
 /**
  * Creates a UserName, checking its invariants with `checkUserName`: the first one violated is reported.
- * @see contexts/knowledge/model/context.dt:41
+ * @see contexts/knowledge/model/context.dt:44
  */
 export const makeUserName: MakeUserName = (value) => {
     const [invariant] = checkUserName(value);
@@ -514,13 +560,13 @@ export const makeUserName: MakeUserName = (value) => {
  * ナレッジの版（1 から）。
  * @invariant valid: value >= 1
  * Make it with `makeItemVersion`; never `as ItemVersion` (see dt guide lint).
- * @see contexts/knowledge/model/context.dt:44
+ * @see contexts/knowledge/model/context.dt:47
  */
 export type ItemVersion = number & { readonly __domain: 'Knowledge.ItemVersion' };
 
 /**
  * A value that violates an invariant of ItemVersion.
- * @see contexts/knowledge/model/context.dt:44
+ * @see contexts/knowledge/model/context.dt:47
  */
 export interface InvalidItemVersion {
     readonly type: 'InvalidItemVersion';
@@ -531,13 +577,13 @@ export interface InvalidItemVersion {
 
 /**
  * Creates a ItemVersion, checking its invariants: generated as `makeItemVersion`, or written by hand.
- * @see contexts/knowledge/model/context.dt:44
+ * @see contexts/knowledge/model/context.dt:47
  */
 export type MakeItemVersion = (value: number) => Result<ItemVersion, InvalidItemVersion>;
 
 /**
  * The invariants of ItemVersion that a value violates, in declaration order; empty when it is a ItemVersion.
- * @see contexts/knowledge/model/context.dt:44
+ * @see contexts/knowledge/model/context.dt:47
  */
 export function checkItemVersion(value: number): readonly InvalidItemVersion['invariant'][] {
     const violated: InvalidItemVersion['invariant'][] = [];
@@ -547,7 +593,7 @@ export function checkItemVersion(value: number): readonly InvalidItemVersion['in
 
 /**
  * Creates a ItemVersion, checking its invariants with `checkItemVersion`: the first one violated is reported.
- * @see contexts/knowledge/model/context.dt:44
+ * @see contexts/knowledge/model/context.dt:47
  */
 export const makeItemVersion: MakeItemVersion = (value) => {
     const [invariant] = checkItemVersion(value);
@@ -560,13 +606,13 @@ export const makeItemVersion: MakeItemVersion = (value) => {
  * セッションの中での抽出の番号（1 から）。
  * @invariant valid: value >= 1
  * Make it with `makeExtractionNumber`; never `as ExtractionNumber` (see dt guide lint).
- * @see contexts/knowledge/model/context.dt:47
+ * @see contexts/knowledge/model/context.dt:50
  */
 export type ExtractionNumber = number & { readonly __domain: 'Knowledge.ExtractionNumber' };
 
 /**
  * A value that violates an invariant of ExtractionNumber.
- * @see contexts/knowledge/model/context.dt:47
+ * @see contexts/knowledge/model/context.dt:50
  */
 export interface InvalidExtractionNumber {
     readonly type: 'InvalidExtractionNumber';
@@ -577,13 +623,13 @@ export interface InvalidExtractionNumber {
 
 /**
  * Creates a ExtractionNumber, checking its invariants: generated as `makeExtractionNumber`, or written by hand.
- * @see contexts/knowledge/model/context.dt:47
+ * @see contexts/knowledge/model/context.dt:50
  */
 export type MakeExtractionNumber = (value: number) => Result<ExtractionNumber, InvalidExtractionNumber>;
 
 /**
  * The invariants of ExtractionNumber that a value violates, in declaration order; empty when it is a ExtractionNumber.
- * @see contexts/knowledge/model/context.dt:47
+ * @see contexts/knowledge/model/context.dt:50
  */
 export function checkExtractionNumber(value: number): readonly InvalidExtractionNumber['invariant'][] {
     const violated: InvalidExtractionNumber['invariant'][] = [];
@@ -593,7 +639,7 @@ export function checkExtractionNumber(value: number): readonly InvalidExtraction
 
 /**
  * Creates a ExtractionNumber, checking its invariants with `checkExtractionNumber`: the first one violated is reported.
- * @see contexts/knowledge/model/context.dt:47
+ * @see contexts/knowledge/model/context.dt:50
  */
 export const makeExtractionNumber: MakeExtractionNumber = (value) => {
     const [invariant] = checkExtractionNumber(value);
@@ -604,7 +650,7 @@ export const makeExtractionNumber: MakeExtractionNumber = (value) => {
 /**
  * いつの話
  * AS-IS の話か TO-BE の話か。どちらでもないときも `none` と決める。
- * @see contexts/knowledge/model/context.dt:50
+ * @see contexts/knowledge/model/context.dt:53
  */
 export type When =
     | 'as_is' // AS-IS
@@ -614,7 +660,7 @@ export type When =
 /**
  * 種類
  * ナレッジの種類。決まった軸で、設定では足さない（抽出のプロンプトと絞り込みをどこでも同じにする）。
- * @see contexts/knowledge/model/context.dt:53
+ * @see contexts/knowledge/model/context.dt:56
  */
 export type KnowledgeKind =
     | 'rule' // ルール
@@ -628,7 +674,7 @@ export type KnowledgeKind =
 /**
  * 出どころ
  * どこまで信じてよいか: ひとりが言った、居合わせた何人かが合意した、AI がコードや文書を調べた、AI の仮説（だれも言っていない）。
- * @see contexts/knowledge/model/context.dt:64
+ * @see contexts/knowledge/model/context.dt:67
  */
 export type Origin =
     | 'said' // 発言
@@ -639,7 +685,7 @@ export type Origin =
 /**
  * ラベル
  * 4つの独立したラベル。組み合わせ（「TO-BE で見込まれる困りごと」）を書けるように、軸を分ける。
- * @see contexts/knowledge/model/context.dt:67
+ * @see contexts/knowledge/model/context.dt:70
  */
 export interface Labels {
     /** いつの話 */
@@ -654,7 +700,7 @@ export interface Labels {
 
 /**
  * Whether two Labels values are equal: by all their fields (ADR 0016).
- * @see contexts/knowledge/model/context.dt:67
+ * @see contexts/knowledge/model/context.dt:70
  */
 export function equalLabels(a: Labels, b: Labels): boolean {
     return a.when === b.when && a.kind === b.kind && a.origin === b.origin && sameOptional(a.perspective, b.perspective, ($0: Perspective, $1: Perspective) => $0 === $1);
@@ -662,11 +708,13 @@ export function equalLabels(a: Labels, b: Labels): boolean {
 
 /**
  * 中身
- * ナレッジの中身: 本文、ラベル、どの付箋の話か。版ごとに残るのはこれ。
+ * ナレッジの中身: 見出し、本文、ラベル、どの付箋の話か。版ごとに残るのはこれ。
  * @invariant distinctAbout (付箋は1回): unique(about)
- * @see contexts/knowledge/model/context.dt:75
+ * @see contexts/knowledge/model/context.dt:78
  */
 export interface ItemContent {
+    /** 見出し */
+    readonly title: ItemTitle;
     /** 本文 */
     readonly text: ItemText;
     /** ラベル */
@@ -677,15 +725,15 @@ export interface ItemContent {
 
 /**
  * Whether two ItemContent values are equal: by all their fields (ADR 0016).
- * @see contexts/knowledge/model/context.dt:75
+ * @see contexts/knowledge/model/context.dt:78
  */
 export function equalItemContent(a: ItemContent, b: ItemContent): boolean {
-    return a.text === b.text && equalLabels(a.labels, b.labels) && sameList(a.about, b.about, ($2: StickyRef, $3: StickyRef) => $2 === $3);
+    return a.title === b.title && a.text === b.text && equalLabels(a.labels, b.labels) && sameList(a.about, b.about, ($2: StickyRef, $3: StickyRef) => $2 === $3);
 }
 
 /**
  * The invariants of ItemContent that a value violates, in declaration order; empty when it holds them all.
- * @see contexts/knowledge/model/context.dt:75
+ * @see contexts/knowledge/model/context.dt:78
  */
 export function checkItemContent(itemContent: ItemContent): readonly 'distinctAbout'[] {
     const violated: 'distinctAbout'[] = [];
@@ -696,7 +744,7 @@ export function checkItemContent(itemContent: ItemContent): readonly 'distinctAb
 /**
  * 出典
  * ナレッジのもとになったメッセージ1つ。
- * @see contexts/knowledge/model/context.dt:84
+ * @see contexts/knowledge/model/context.dt:88
  */
 export interface Source {
     /** セッション */
@@ -711,7 +759,7 @@ export interface Source {
 
 /**
  * Whether two Source values are equal: by all their fields (ADR 0016).
- * @see contexts/knowledge/model/context.dt:84
+ * @see contexts/knowledge/model/context.dt:88
  */
 export function equalSource(a: Source, b: Source): boolean {
     return a.session === b.session && a.message === b.message && a.at.getTime() === b.at.getTime() && a.quote === b.quote;
@@ -720,7 +768,7 @@ export function equalSource(a: Source, b: Source): boolean {
 /**
  * 抽出
  * セッションの何回目の抽出か。抽出の操作の冪等キーで、監査のログの「だれが」。
- * @see contexts/knowledge/model/context.dt:92
+ * @see contexts/knowledge/model/context.dt:96
  */
 export interface ExtractionRef {
     /** セッション */
@@ -731,7 +779,7 @@ export interface ExtractionRef {
 
 /**
  * Whether two ExtractionRef values are equal: by all their fields (ADR 0016).
- * @see contexts/knowledge/model/context.dt:92
+ * @see contexts/knowledge/model/context.dt:96
  */
 export function equalExtractionRef(a: ExtractionRef, b: ExtractionRef): boolean {
     return a.session === b.session && a.number === b.number;
@@ -740,7 +788,7 @@ export function equalExtractionRef(a: ExtractionRef, b: ExtractionRef): boolean 
 /**
  * 変えたもの
  * ナレッジを変えたもの: 抽出か、人（直す・消す・元に戻す）。
- * @see contexts/knowledge/model/context.dt:98
+ * @see contexts/knowledge/model/context.dt:102
  */
 export type Actor =
     /** 抽出 */
@@ -758,7 +806,7 @@ export type Actor =
 
 /**
  * Whether two Actor values are equal: by `kind` and the fields of the variant (ADR 0016).
- * @see contexts/knowledge/model/context.dt:98
+ * @see contexts/knowledge/model/context.dt:102
  */
 export function equalActor(a: Actor, b: Actor): boolean {
     if (a.kind !== b.kind) return false;

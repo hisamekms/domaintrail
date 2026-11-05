@@ -2,7 +2,8 @@
 // stickies an opened item lights up, deleting with 10 seconds to undo, and whether the session extracts (section 3).
 // What is shown is read again whenever dt says the knowledge changed (`knowledge.changed`, after an extraction or
 // anyone's change) and after this page's own; the extraction's state follows dt's `knowledge.extraction`. The conflicts
-// being made hotspots (ホットスポットにする pressed, its run not ended) are read with it.
+// being made hotspots (ホットスポットにする pressed, its run not ended) are read with it. The ナレッジ list's filters are
+// the page's, so that an opened item's label chip, wherever it is, shows the list filtered by its label.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { firstDeclarations } from '@domaintrail/storming';
 import type { DisplayMode } from '@domaintrail/visualization';
@@ -11,7 +12,18 @@ import type { ViewSocket } from '../app/useViewSocket';
 import { nameIn } from '../model-utils';
 import { SessionApiError } from '../session/api';
 import { knowledgeApi, type KnowledgeApi } from './api';
-import { clearedReasons, extractionOfMessage, makingHotspots, marksOf, type ClearedReason, type StickyMark } from './model';
+import {
+    clearedReasons,
+    extractionOfMessage,
+    makingHotspots,
+    marksOf,
+    NO_FILTERS,
+    onlyLabel,
+    type ClearedReason,
+    type Filters,
+    type LabelChip,
+    type StickyMark,
+} from './model';
 
 /** How long a deletion can be undone on the page (ADR 0031, section 7; the store keeps it longer). */
 export const UNDO_MS = 10_000;
@@ -54,6 +66,24 @@ export interface KnowledgeView {
     /** The last failure, said once. */
     readonly error: string | undefined;
     readonly setError: (error: string | undefined) => void;
+    /** The ナレッジ list's filters, kept while the list is closed. */
+    readonly filters: Filters;
+    readonly setFilters: (filters: Filters) => void;
+    /** An opened item's label chip pressed: the ナレッジ list shown, filtered by that label alone (`onlyLabel`). */
+    readonly filterByLabel: (chip: LabelChip) => void;
+}
+
+/** The ナレッジ list's filters of a page, and a label chip's press: those filters, and the list shown (`showList`). */
+export function useListFilters(showList: () => void): Pick<KnowledgeView, 'filters' | 'setFilters' | 'filterByLabel'> {
+    const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+    // the page's latest: it may be made anew on each render
+    const show = useRef(showList);
+    show.current = showList;
+    const filterByLabel = useCallback((chip: LabelChip): void => {
+        setFilters(onlyLabel(chip));
+        show.current();
+    }, []);
+    return { filters, setFilters, filterByLabel };
 }
 
 /** A source's message in this page's session: who said it, and going to it in the chat. */
@@ -111,8 +141,11 @@ export function useKnowledge(input: {
     readonly stormings: readonly StormingView[];
     readonly mode: DisplayMode;
     readonly select: (selection: string) => void;
+    /** Shows the ナレッジ list (the left column, at its tab). */
+    readonly showList: () => void;
 }): KnowledgeView {
-    const { socket, session, storming, stormings, mode, select } = input;
+    const { socket, session, storming, stormings, mode, select, showList } = input;
+    const listFilters = useListFilters(showList);
     const [available, setAvailable] = useState(false);
     const [version, setVersion] = useState(0);
     const [marks, setMarks] = useState<ReadonlyMap<string, StickyMark>>(new Map());
@@ -247,5 +280,6 @@ export function useKnowledge(input: {
         isHotspot,
         error,
         setError,
+        ...listFilters,
     };
 }

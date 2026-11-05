@@ -87,8 +87,9 @@ unset. `workers_dev` and `preview_urls` are off, so the Worker has no URL outsid
 `https://knowledge.example.com/` is a page for the people from the business (ADR 0031, section 11): they read the
 knowledge at any time, on the canvas of a storming, behind the same Access application (its Allow policy). It shows a
 published storming at its Big Picture or Design Level, with a dot on each sticky that has knowledge and a mark on one
-with a conflict; selecting a sticky lists its items (newest first, or by kind), and an item opens to its text, quotes,
-the other stickies it is about, its versions and images. The ナレッジ list searches and filters every item; the items
+with a conflict; selecting a sticky lists its items (newest first, or by kind), each by its title, and an item opens to
+its text, its labels as chips (pressing one filters the ナレッジ list by it), quotes, the other stickies it is about, its
+versions and images. The ナレッジ list searches and filters every item; the items
 about stickies that no published storming has (removed or renamed since) are listed apart; the bar says the date and
 commit of the drawing. Anyone who can open the page may correct and delete, with 元に戻す for 10 seconds, as in a
 session. The page's address keeps what it shows (`?project=…&storming=…&level=…`), so a link opens the same view.
@@ -218,7 +219,9 @@ version's changelog (`node_modules/domaintrail/CHANGELOG.md`) for anything to do
 1. copy the new `worker.js`, `page/` and `migrations/` over yours, as in step 1 of Deploy (keep your
    `wrangler.jsonc`, and compare it with the new one for settings it added);
 2. `npx wrangler d1 migrations apply knowledge --remote` (migrations are only ever added; apply them before deploying,
-   so that the old Worker runs on the new schema for a moment, never the other way round);
+   so that the old Worker runs on the new schema for a moment, never the other way round; migration 2, which gives
+   items their title, removes the items written before it, and the old Worker's writes fail until the new one is
+   deployed);
 3. `npx wrangler deploy`;
 4. run the publish workflow once (`workflow_dispatch`), so that the page draws the stormings as the new version lays
    them out (the page says so when a published form is of a version it cannot draw).

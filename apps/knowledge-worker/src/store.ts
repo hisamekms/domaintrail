@@ -56,6 +56,7 @@ export interface ItemRow {
     readonly id: string;
     readonly state: string;
     readonly version: number;
+    readonly title: string;
     readonly text: string;
     readonly when_label: string;
     readonly kind: string;
@@ -79,6 +80,7 @@ export function itemOf(row: ItemRow): Knowledge.KnowledgeItem {
             state: row.state,
             id: row.id,
             content: {
+                title: row.title,
                 text: row.text,
                 labels: { when: row.when_label, kind: row.kind, origin: row.origin, ...(row.perspective !== null && { perspective: row.perspective }) },
                 about: JSON.parse(row.about),
@@ -96,8 +98,8 @@ export function itemOf(row: ItemRow): Knowledge.KnowledgeItem {
     );
 }
 
-/** What full-text search reads of an item: its text and its sources' quotes. */
-const searchBody = (item: Knowledge.KnowledgeItem): string => [item.content.text, ...item.sources.map((s) => s.quote)].join('\n');
+/** What full-text search reads of an item: its title, its text and its sources' quotes. */
+const searchBody = (item: Knowledge.KnowledgeItem): string => [item.content.title, item.content.text, ...item.sources.map((s) => s.quote)].join('\n');
 
 /** A decoder of a single value of the store's own rows (trusted: a failure is a broken store, never input). */
 const one =
@@ -381,6 +383,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
                 id: i.id,
                 state: i.state,
                 version: i.version,
+                title: i.content.title,
                 text: i.content.text,
                 when: i.content.labels.when,
                 kind: i.content.labels.kind,
@@ -402,15 +405,15 @@ export class D1KnowledgeStore implements KnowledgeStore {
             this.db.prepare("INSERT INTO projects (name, visibility, created_at) VALUES (?1, 'open', ?2) ON CONFLICT DO NOTHING").bind(project, at),
             this.db
                 .prepare(
-                    `INSERT INTO items (project, id, state, version, text, when_label, kind, origin, perspective, about, sources, conflicts_with,
+                    `INSERT INTO items (project, id, state, version, title, text, when_label, kind, origin, perspective, about, sources, conflicts_with,
                                         created_in, created_at, updated_at, deleted_by, deleted_at, rev)
-                     SELECT ?1, j.value ->> 'id', j.value ->> 'state', j.value ->> 'version', j.value ->> 'text', j.value ->> 'when',
+                     SELECT ?1, j.value ->> 'id', j.value ->> 'state', j.value ->> 'version', j.value ->> 'title', j.value ->> 'text', j.value ->> 'when',
                             j.value ->> 'kind', j.value ->> 'origin', j.value ->> 'perspective', j.value -> 'about', j.value -> 'sources',
                             j.value -> 'conflictsWith', j.value ->> 'createdIn', j.value ->> 'createdAt', j.value ->> 'updatedAt',
                             j.value ->> 'deletedBy', j.value ->> 'deletedAt', 1
                      FROM json_each(?2) j WHERE true
                      ON CONFLICT (project, id) DO UPDATE SET
-                       state = excluded.state, version = excluded.version, text = excluded.text, when_label = excluded.when_label,
+                       state = excluded.state, version = excluded.version, title = excluded.title, text = excluded.text, when_label = excluded.when_label,
                        kind = excluded.kind, origin = excluded.origin, perspective = excluded.perspective, about = excluded.about,
                        sources = excluded.sources, conflicts_with = excluded.conflicts_with, updated_at = excluded.updated_at,
                        deleted_by = excluded.deleted_by, deleted_at = excluded.deleted_at, rev = items.rev + 1`,

@@ -276,10 +276,11 @@ const labels: Decoder<Knowledge.Labels> = (v, at) => {
     };
 };
 
-/** An item's content: its text, labels and the stickies it is about, each once. */
+/** An item's content: its title, text, labels and the stickies it is about, each once. */
 export const itemContent: Decoder<Knowledge.ItemContent> = (v, at) => {
     const o = obj(v, at);
     const content: Knowledge.ItemContent = {
+        title: branded(Knowledge.makeItemTitle, str)(o.title, `${at}.title`),
         text: branded(Knowledge.makeItemText, str)(o.text, `${at}.text`),
         labels: labels(o.labels, `${at}.labels`),
         about: list(stickyRef)(o.about, `${at}.about`),

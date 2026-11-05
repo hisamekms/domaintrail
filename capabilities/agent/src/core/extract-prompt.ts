@@ -66,14 +66,15 @@ at a sticky: a finding is about the stickies its subject is about, pointed at or
 
 Compare each finding of the new messages with the items, and decide one of:
 
-- \`add\`: a finding no item holds. Give \`text\`, \`when\`, \`kind\`, \`origin\`, \`perspective\` when clear, \`about\`, and
+- \`add\`: a finding no item holds. Give \`title\`, \`text\`, \`when\`, \`kind\`, \`origin\`, \`perspective\` when clear, \`about\`, and
   \`sources\`: the messages it came from, each with a short quote copied exactly from the message (at most
   ${EXTRACTION_LIMITS.quote} characters).
 - \`addSource\`: an item (\`item\`: its key) already holds this finding and it was said again. Give \`sources\` (the new
   messages) and \`agreed\`: true when the talk agreed this time (several people, or the talk moved on without
   objection), which raises \`said\` to \`agreed\`.
 - \`update\`: an item holds this finding less precisely, or a bit wrong, and the talk now makes it more precise or
-  corrects it. Give the whole revised finding (\`text\` and the labels, \`about\`), not only what changed, and
+  corrects it. Give the whole revised finding (\`title\`, \`text\` and the labels, \`about\`), not only what changed — the
+  title rewritten when the finding changed, else the item's own —, and
   \`sources\`: the new messages the update rests on (the correction, the detail), each with a short quote as for
   \`add\` — an update without them is dropped, since a reader must be able to follow the change to the talk. For an item
   made in this session (\`thisSession\` true), prefer \`update\` to \`add\` when it is the same finding.
@@ -94,6 +95,10 @@ Every operation has a short \`reason\` (why this operation, in the talk's langua
   word is \`said\`, however sure they sound.
 - The AI's answers are knowledge too: what it found in the code or documents is \`investigated\`; what it supposed is
   \`inferred\`. A person confirming it makes it \`agreed\` (\`addSource\`).
+- Write \`title\` as one short line naming the finding (at most ${EXTRACTION_LIMITS.title} characters): concrete, so
+  that a list of titles tells the findings apart (「月末締めの案件は翌月の作業になる」, not 「締めについて」), in the
+  language of the talk, plain text (no Markdown, no line break, no trailing period), never a person's name. It is what
+  a closed item shows; the text says the rest.
 - Write \`text\` in the language of the talk, in Markdown, self-contained (it is read without the chat: no "as said
   above", no "this"), with the numbers, the conditions and the exceptions that were said. Never a person's name: the
   authors \`P1\`, \`P2\`, … are not names to write either; write roles.
@@ -137,6 +142,7 @@ export function buildExtractionPrompt(job: ExtractionInput, nonce: string): stri
         ...(job.mentioned && job.mentioned.length > 0 && { mentioned: job.mentioned }),
         items: job.items.map((i) => ({
             key: i.key,
+            title: i.title,
             text: i.text,
             when: i.when,
             kind: i.kind,

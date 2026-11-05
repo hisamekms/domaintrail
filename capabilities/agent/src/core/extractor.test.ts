@@ -42,6 +42,7 @@ const job = (n: number, over: Partial<ExtractJob> = {}): ExtractJob => ({
             key: 'k1',
             id: 'kn_0000000001',
             version: 1,
+            title: '見積もりは営業が出す',
             text: '見積もりは営業が出す',
             when: 'as_is',
             kind: 'rule',
@@ -142,6 +143,14 @@ describe('the extraction prompt', () => {
         expect<unknown>(a).toContain('`agreed` only when the talk moved on without objection');
     });
 
+    test('the instructions: a title for every add, update and conflict, one short concrete line, never a name', () => {
+        const a = extractorInstructions();
+        expect<unknown>(a).toContain('Give `title`, `text`, `when`');
+        expect<unknown>(a).toContain('(`title`, `text` and the labels, `about`)');
+        expect<unknown>(a).toContain('Write `title` as one short line naming the finding (at most 40 characters)');
+        expect<unknown>(a).toContain("plain text (no Markdown, no line break, no trailing period), never a person's name");
+    });
+
     test('the message holds the talk, the items and the stickies as JSON in a block its text cannot close', () => {
         const prompt = buildExtractionPrompt(job(1), 'n0nce');
         expect<unknown>(prompt).toContain('<talk-n0nce>');
@@ -157,6 +166,7 @@ describe('the extraction prompt', () => {
         expect<unknown>(data.items).toEqual([
             {
                 key: 'k1',
+                title: '見積もりは営業が出す',
                 text: '見積もりは営業が出す',
                 when: 'as_is',
                 kind: 'rule',

@@ -13,7 +13,7 @@ import { I18nProvider, useLang, useT } from '../i18n';
 import { KnowledgeApiContext } from '../knowledge/api';
 import { marksOf, selectionOfSticky, stickyOfSelection, type StickyMark } from '../knowledge/model';
 import { ItemRow, KnowledgeList, KnowledgeMarks, KnowledgeNotice, StickyKnowledge } from '../knowledge/panel';
-import { KnowledgeContext, useDeletion, type KnowledgeView } from '../knowledge/useKnowledge';
+import { KnowledgeContext, useDeletion, useListFilters, type KnowledgeView } from '../knowledge/useKnowledge';
 import { buildScene } from '../render';
 import { applyTheme } from '../theme';
 import { Tooltips } from '../tooltip';
@@ -131,6 +131,7 @@ function Page({ theme, mode }: { theme: 'light' | 'dark'; mode: ReturnType<typeo
         canvas,
         level,
         show: (s, l) => go({ ...where, project: projectName, storming: s, level: l }),
+        showList: () => setListOpen(true),
     });
     const selectedSticky = stickyOfSelection(useCanvasValue(canvas, selectedElement, []));
 
@@ -267,8 +268,11 @@ function usePageKnowledge(input: {
     readonly level: PublishedLevel;
     /** Shows another storming or level. */
     readonly show: (storming: string, level: PublishedLevel) => void;
+    /** Opens the ナレッジ list. */
+    readonly showList: () => void;
 }): KnowledgeView | undefined {
-    const { api, storming, forms, mode, canvas, level, show } = input;
+    const { api, storming, forms, mode, canvas, level, show, showList } = input;
+    const listFilters = useListFilters(showList);
     const [version, setVersion] = useState(0);
     const [marks, setMarks] = useState<ReadonlyMap<string, StickyMark>>(new Map());
     const [lit, setLitState] = useState<readonly string[]>([]);
@@ -339,6 +343,7 @@ function usePageKnowledge(input: {
         setExtraction: async () => {},
         error,
         setError,
+        ...listFilters,
     };
 }
 

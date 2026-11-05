@@ -85,15 +85,51 @@ export function marksOf(counts: readonly { readonly sticky: string; readonly has
     return new Map(counts.filter((c) => c.hasItems).map((c) => [selectionOfSticky(c.sticky), c.hasConflict ? 'conflict' : 'dot'] as const));
 }
 
-/** The ナレッジ list's filters: each axis, the values chosen (none: every value). */
+/**
+ * The ナレッジ list's filters: each axis, the values chosen (none: every value); and the perspective, one or none (it
+ * has no fixed values: it is chosen from an item's label chip, not offered as a row of chips).
+ */
 export interface Filters {
     readonly q: string;
     readonly when: readonly When[];
     readonly kind: readonly Kind[];
     readonly origin: readonly Origin[];
+    readonly perspective?: string;
 }
 
 export const NO_FILTERS: Filters = { q: '', when: [], kind: [], origin: [] };
+
+/** A label of an item, as its chip in the opened item names it: one value of one axis. */
+export type LabelChip =
+    | { readonly axis: 'when'; readonly value: When }
+    | { readonly axis: 'kind'; readonly value: Kind }
+    | { readonly axis: 'origin'; readonly value: Origin }
+    | { readonly axis: 'perspective'; readonly value: string };
+
+/**
+ * The chips of an item's labels, in the order of the list's filters: when (not `none`, which no filter has), kind,
+ * origin, and the perspective when it has one.
+ */
+export function labelChips(labels: Knowledge.Labels): LabelChip[] {
+    return [
+        ...(labels.when !== 'none' ? [{ axis: 'when', value: labels.when } as const] : []),
+        { axis: 'kind', value: labels.kind },
+        { axis: 'origin', value: labels.origin },
+        ...(labels.perspective !== undefined ? [{ axis: 'perspective', value: labels.perspective } as const] : []),
+    ];
+}
+
+/**
+ * The filters a label chip asks for: that label alone, the search and the other filters dropped. A chip answers "the
+ * other items with this label"; kept with the filters of before, it would show an intersection nobody asked for (or,
+ * on the same axis, widen it), and from a sticky's detail the list's filters are not even in sight.
+ */
+export function onlyLabel(chip: LabelChip): Filters {
+    if (chip.axis === 'perspective') return { ...NO_FILTERS, perspective: chip.value };
+    if (chip.axis === 'when') return { ...NO_FILTERS, when: [chip.value] };
+    if (chip.axis === 'kind') return { ...NO_FILTERS, kind: [chip.value] };
+    return { ...NO_FILTERS, origin: [chip.value] };
+}
 
 /** A value of an axis chosen or no longer chosen. */
 export function toggled<K extends 'when' | 'kind' | 'origin'>(filters: Filters, axis: K, value: Filters[K][number]): Filters {
@@ -108,17 +144,11 @@ export function queryOf(filters: Filters, cursor?: string): URLSearchParams {
     for (const w of filters.when) params.append('when', w);
     for (const k of filters.kind) params.append('kind', k);
     for (const o of filters.origin) params.append('origin', o);
+    if (filters.perspective !== undefined) params.set('perspective', filters.perspective);
     if (filters.q.trim() !== '') params.set('q', filters.q.trim());
     if (cursor !== undefined) params.set('cursor', cursor);
     return params;
 }
-
-/** The text of an item without its images, for the quotes of ホットスポットにする. */
-export const plainText = (text: string): string =>
-    text
-        .replace(/!\[[^\]]*\]\(image:img_[0-9a-z]+\)/g, '')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
 
 /** An item's sources newest first (the store keeps them in the order they came): a correction's message on top. */
 export function sourcesNewestFirst<S extends { readonly at: string | Date }>(sources: readonly S[]): S[] {
@@ -151,8 +181,7 @@ export function hotspotBody(input: {
         };
     });
     const mentions = targets.map((t, i) => `#${mentionName(t.label)}[${i + 1}]`).join(' ');
-    const quote = (i: KnowledgeItem): string => plainText(i.content.text).replace(/\s+/g, ' ').slice(0, 300);
-    return { targets, body: `@${mentionName(input.aiName)}[p1] ${input.text(mentions, quote(pair.a), quote(pair.b))}`, mentions: ['ai'] };
+    return { targets, body: `@${mentionName(input.aiName)}[p1] ${input.text(mentions, pair.a.content.title, pair.b.content.title)}`, mentions: ['ai'] };
 }
 
 /** A conflict's key, whichever side comes first. */

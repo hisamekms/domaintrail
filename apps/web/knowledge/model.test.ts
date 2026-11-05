@@ -1,5 +1,5 @@
 // The knowledge as the page shows it (model.ts): a sticky's selection, the orders, the conflicts, the marks, the
-// filters' query, the text without its images, the message ホットスポットにする sends, the items kept with a hotspot,
+// filters' query and an item's label chips, the message ホットスポットにする sends, the items kept with a hotspot,
 // why a press got its buttons back, and the extraction's switch.
 import { describe, expect, test } from 'bun:test';
 import { MESSAGES } from '../i18n';
@@ -10,12 +10,13 @@ import {
     extractionOfMessage,
     hotspotBody,
     hotspotGroups,
+    labelChips,
     marksOf,
     missingConflicts,
     NO_FILTERS,
+    onlyLabel,
     ordered,
     outsideConflicts,
-    plainText,
     queryOf,
     sourcesNewestFirst,
     selectionOfSticky,
@@ -25,12 +26,13 @@ import {
     type KnowledgeItem,
 } from './model';
 
-const item = (id: string, over: { kind?: string; at?: string; about?: string[]; conflictsWith?: string[]; text?: string } = {}): KnowledgeItem =>
+const item = (id: string, over: { kind?: string; at?: string; about?: string[]; conflictsWith?: string[]; title?: string } = {}): KnowledgeItem =>
     ({
         state: 'Live',
         id,
         content: {
-            text: over.text ?? `text of ${id}`,
+            title: over.title ?? `title of ${id}`,
+            text: `text of ${id}`,
             labels: { when: 'as_is', kind: over.kind ?? 'rule', origin: 'said' },
             about: over.about ?? ['Ordering.Placed'],
         },
@@ -112,16 +114,29 @@ describe('the knowledge on the page', () => {
         expect(queryOf(f).toString()).toBe('kind=rule&kind=pain&origin=said&q=%E7%B7%A0%E3%82%81');
         expect(toggled(f, 'kind', 'rule').kind).toEqual(['pain']);
         expect(queryOf(NO_FILTERS, 'c1').toString()).toBe('cursor=c1');
+        expect(queryOf({ ...NO_FILTERS, perspective: '営業' }).toString()).toBe('perspective=%E5%96%B6%E6%A5%AD');
     });
 
-    test('the text without its images', () => {
-        const text = '締めは前日\n\n![](image:img_abcdefgh)\n';
-        expect(plainText(text)).toBe('締めは前日');
+    test("an item's label chips: when (not none), kind, origin and the perspective it has", () => {
+        expect(labelChips({ when: 'to_be', kind: 'pain', origin: 'said', perspective: '営業' } as never)).toEqual([
+            { axis: 'when', value: 'to_be' },
+            { axis: 'kind', value: 'pain' },
+            { axis: 'origin', value: 'said' },
+            { axis: 'perspective', value: '営業' },
+        ]);
+        expect(labelChips({ when: 'none', kind: 'rule', origin: 'agreed' } as never).map((c) => c.axis)).toEqual(['kind', 'origin']);
     });
 
-    test('ホットスポットにする: a message to the AI about both items, with their stickies as targets', () => {
-        const a = item('a', { text: '締めは前日17時', about: ['Ordering.Placed'] });
-        const b = item('b', { text: '締めは当日9時', about: ['Ordering.Placed', 'Ordering.Paid'] });
+    test('a label chip pressed: the list filtered by that label alone', () => {
+        expect(onlyLabel({ axis: 'kind', value: 'pain' })).toEqual({ ...NO_FILTERS, kind: ['pain'] });
+        expect(onlyLabel({ axis: 'when', value: 'as_is' })).toEqual({ ...NO_FILTERS, when: ['as_is'] });
+        expect(onlyLabel({ axis: 'origin', value: 'inferred' })).toEqual({ ...NO_FILTERS, origin: ['inferred'] });
+        expect(onlyLabel({ axis: 'perspective', value: '営業' })).toEqual({ ...NO_FILTERS, perspective: '営業' });
+    });
+
+    test('ホットスポットにする: a message to the AI naming both items by their titles, with their stickies as targets', () => {
+        const a = item('a', { title: '締めは前日17時', about: ['Ordering.Placed'] });
+        const b = item('b', { title: '締めは当日9時', about: ['Ordering.Placed', 'Ordering.Paid'] });
         const body = hotspotBody({
             pair: { a, b } as never,
             label: (s) => (s === 'Ordering.Placed' ? '注文した' : '支払った'),

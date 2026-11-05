@@ -1,6 +1,7 @@
 // The session's extraction in the app bar (panel.tsx, ExtractionSwitch): the facilitator's switch, pressed while on;
-// the others' mark while on and nothing while off; nothing without a store. A conflict's box and the hotspot's box. An
-// item's text, plain while closed and Markdown once opened.
+// the others' mark while on and nothing while off; nothing without a store. A conflict's box and the hotspot's box, their
+// cards by their titles. An item: its title and labels' line while closed; opened, its text as Markdown (outside its
+// head's button) and its labels as the list's chips, a press of one filtering the list by it.
 import { describe, expect, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -8,7 +9,7 @@ import { I18nProvider } from '../i18n';
 import { workerKnowledgeApi } from '../published/api';
 import { KnowledgeApiContext, sessionKnowledgeApi } from './api';
 import { ConflictBox, ExtractionSwitch, HotspotBox, ItemRow } from './panel';
-import { pairKey, type ClearedReason, type KnowledgeItem } from './model';
+import { NO_FILTERS, pairKey, type ClearedReason, type KnowledgeItem, type LabelChip } from './model';
 import { KnowledgeContext, type KnowledgeView } from './useKnowledge';
 
 const view = (extraction: boolean | undefined): KnowledgeView =>
@@ -28,6 +29,9 @@ const view = (extraction: boolean | undefined): KnowledgeView =>
         setExtraction: async () => undefined,
         error: undefined,
         setError: () => undefined,
+        filters: NO_FILTERS,
+        setFilters: () => undefined,
+        filterByLabel: () => undefined,
     }) satisfies KnowledgeView;
 
 const render = (
@@ -68,7 +72,12 @@ describe('a conflict made a hotspot (ADR 0031, section 4)', () => {
         ({
             state: 'Live',
             id,
-            content: { text: `the finding of ${id}`, labels: { when: 'as_is', kind: 'rule', origin: 'said' }, about: ['Ordering.Placed'] },
+            content: {
+                title: `the title of ${id}`,
+                text: `the finding of ${id}`,
+                labels: { when: 'as_is', kind: 'rule', origin: 'said' },
+                about: ['Ordering.Placed'],
+            },
             sources: [],
             version: 1,
             conflictsWith: [other],
@@ -80,6 +89,9 @@ describe('a conflict made a hotspot (ADR 0031, section 4)', () => {
 
     test('its two buttons, until ホットスポットにする is pressed', () => {
         const html = render(true, box);
+        // each card by its title, not its text
+        expect(html).toMatch(/class="knowledge-side"[^>]*>.*<span class="knowledge-item-title">the title of kn_00000002<\/span>/s);
+        expect(html).not.toContain('the finding of');
         expect(html).toContain('ホットスポットにする');
         expect(html).toContain('食い違いではない');
         expect(html).not.toContain('ホットスポットを作っています');
@@ -134,7 +146,12 @@ describe('an item opened (the approved preview)', () => {
     const item = {
         state: 'Live',
         id: 'kn_00000001',
-        content: { text: '受注と Order は同じ', labels: { when: 'none', kind: 'term', origin: 'investigated' }, about: ['O.Placed', 'O.Order'] },
+        content: {
+            title: '受注は Order のこと',
+            text: '受注と Order は同じ',
+            labels: { when: 'none', kind: 'term', origin: 'investigated' },
+            about: ['O.Placed', 'O.Order'],
+        },
         sources: [
             { session: 's_now', message: 'm1', at: new Date('2026-11-05T09:02:00Z'), quote: 'sales/order.dt を確認' },
             { session: 's_old', message: 'm9', at: new Date('2026-11-03T05:00:00Z'), quote: '画面では受注と呼ぶ' },
@@ -173,12 +190,12 @@ describe('an item opened (the approved preview)', () => {
     });
 });
 
-describe("an item's text: plain while closed, Markdown with its images once opened (the chat's rules)", () => {
+describe("an item: its title and labels' line while closed, its text as Markdown and its label chips once opened", () => {
     const text = '# 締め\n\n- **月末**は @{es:O/Placed} の翌日\n- 例外あり\n\n![伝票](image:img_0000abcd)\n\n![外](https://e.com/x.png)';
     const item = {
         state: 'Live',
         id: 'kn_00000003',
-        content: { text, labels: { when: 'as_is', kind: 'rule', origin: 'said' }, about: ['O.Placed'] },
+        content: { title: '締めは月末の翌日', text, labels: { when: 'as_is', kind: 'rule', origin: 'said', perspective: '営業' }, about: ['O.Placed'] },
         sources: [],
         version: 1,
         conflictsWith: [],
@@ -186,32 +203,49 @@ describe("an item's text: plain while closed, Markdown with its images once open
         updatedAt: new Date('2026-11-05T09:10:00Z'),
     } as unknown as KnowledgeItem;
     const api = { ...sessionKnowledgeApi, imageUrl: (id: string) => `/images/${id}` };
-    const row = (open: boolean): string =>
+    const row = (open: boolean, filterByLabel: (chip: LabelChip) => void = () => undefined): string =>
         renderToStaticMarkup(
             <I18nProvider lang="ja">
                 <KnowledgeApiContext.Provider value={api}>
-                    <KnowledgeContext.Provider value={{ ...view(true), label: (s: string) => (s === 'O.Placed' ? '受注した' : s) }}>
+                    <KnowledgeContext.Provider value={{ ...view(true), label: (s: string) => (s === 'O.Placed' ? '受注した' : s), filterByLabel }}>
                         <ItemRow item={item} from="O.Placed" open={open} onToggle={() => undefined} />
                     </KnowledgeContext.Provider>
                 </KnowledgeApiContext.Provider>
             </I18nProvider>,
         );
 
-    test('closed: its marks dropped and its images left out, the stickies by their names, no link', () => {
+    /** The head: the row's button, whatever is in it. */
+    const head = (h: string): string => /<button type="button" class="knowledge-item-head"[^>]*>(.*?)<\/button>/s.exec(h)?.[1] ?? '';
+
+    test("closed: the head holds its kind and its title only; the labels' line under it; no text, no chip", () => {
         const h = row(false);
-        expect(h).toContain('<span class="knowledge-text">締め\n月末は 受注した の翌日\n例外あり\n外 (https://e.com/x.png)</span>');
+        expect(head(h)).toBe('<span class="knowledge-kind">ルール</span><span class="knowledge-item-title">締めは月末の翌日</span>');
+        expect(h).toMatch(/<div class="knowledge-fold">.*<span class="knowledge-meta"><span>AS-IS<\/span>.*<span>発言<\/span>.*<span>営業<\/span>/s);
+        expect(h).not.toContain('月末は');
         expect(h).not.toContain('<img');
-        expect(h).not.toContain('knowledge-text-twin');
+        expect(h).not.toContain('knowledge-chip');
     });
 
-    test('opened: Markdown, the sticky a link, the attached image drawn from the page, another image as text', () => {
+    test('opened: the head unchanged, the text as Markdown outside it (the sticky a link, the attached image drawn from the page)', () => {
         const h = row(true);
-        expect(h).toContain('<span class="knowledge-text markdown"><p class="md-heading" role="heading" aria-level="4">締め</p>');
+        expect(head(h)).toBe('<span class="knowledge-kind">ルール</span><span class="knowledge-item-title">締めは月末の翌日</span>');
+        expect(h).toMatch(/<\/button>.*<div class="knowledge-body markdown"><p class="md-heading" role="heading" aria-level="4">締め<\/p>/s);
         expect(h).toContain('<ul><li><strong>月末</strong>は <a class="reply-element">受注した</a> の翌日</li><li>例外あり</li></ul>');
         expect(h).toContain('<img class="md-image" src="/images/img_0000abcd" alt="伝票" loading="lazy"/>');
         expect(h).toContain('外 (https://e.com/x.png)');
-        // the plain text clamped, unseen: the height it closes to
-        expect(h).toContain('<span class="knowledge-text knowledge-text-twin" aria-hidden="true">締め\n');
+        // the labels' line folds away
+        expect(h).toContain('<div class="knowledge-fold shut" aria-hidden="true">');
+    });
+
+    test("opened: its labels as the ナレッジ list's chips (when, kind, origin, perspective), each filtering by itself", () => {
+        const h = row(true);
+        const chips = [...h.matchAll(/<button type="button" class="knowledge-chip" data-tooltip="([^"]*)">([^<]*)<\/button>/g)].map((m) => [m[2], m[1]]);
+        expect(chips).toEqual([
+            ['AS-IS', 'このいつの話で絞り込む'],
+            ['ルール', 'この種類で絞り込む'],
+            ['発言', 'この出どころで絞り込む'],
+            ['営業', 'この立場で絞り込む'],
+        ]);
     });
 
     test("on the Worker's page, the image comes from the Worker", () => {
