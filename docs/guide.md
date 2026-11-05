@@ -130,7 +130,8 @@ Storming](#event-storming-dtes)). They are not generated: `dt generate ts` write
 
 How to work, beyond the rules of the languages: `dt guide storming-practice` for running a storming (Big Picture, then
 Design Level) and `dt guide modeling-practice` for growing the `.dt` model (terms, aggregates by their invariants,
-commands as contracts, small steps).
+the DSL's types rather than strings, commands as contracts, small steps); `dt guide dsl-quick` shows the `.dt` syntax
+in one example.
 
 `dt --help` and `dt <command> --help` list the options with examples.
 
@@ -175,6 +176,72 @@ This is a convention, not a rule: `check` neither requires nor warns about any l
 ## DSL
 
 The examples below are the files of one valid workspace (the file name is in the first comment).
+
+<!-- topic: dsl-quick -->
+### The syntax by example
+
+One file with each kind of declaration; the topics below explain each. Write in this style.
+
+```dt
+// rental/lease.dt
+context Rental "レンタル" { // a bounded context; "…" is a label (表示名)
+  id MemberId: UUID // an ID type: each aggregate and entity has its own
+  id LeaseId: UUID
+  enum Plan { Basic Premium } // a closed set of values
+  value Fee { // a value object
+    amount: Int
+  }
+  union Discount { // variants that carry different fields (none do: an enum)
+    Coupon {
+      code: String
+    }
+    Points {
+      points: Int
+    }
+  }
+
+  aggregate Member "会員" {
+    id: MemberId // its identity, of its own ID type
+    plan: Plan
+    command upgrade() // no states: no transitions
+      changes plan
+      emits MemberUpgraded
+  }
+
+  aggregate Lease "貸出" {
+    id: LeaseId
+    references member: MemberId -> Member // another aggregate, by its ID type
+    owns fee: Fee // a value or entity held by the aggregate
+    discount: Discount? // ? = optional, [0..*] = a list
+    invariant feePositive { fee.amount > 0 }
+    state Active
+    state Closed {
+      closedAt: Timestamp // only in this state
+    }
+    create command start(id: LeaseId, member: MemberId, fee: Fee) // takes the new ID
+      -> Active
+      emits LeaseStarted
+    command close(closedAt: Timestamp)
+      Active -> Closed
+      requires settled { not exists(discount) } else DiscountPending
+      emits LeaseClosed
+  }
+
+  event LeaseStarted {
+    leaseId: LeaseId
+    member: MemberId
+  }
+  event LeaseClosed {
+    leaseId: LeaseId
+    closedAt: Timestamp
+  }
+  event MemberUpgraded {
+    memberId: MemberId
+  }
+  error DiscountPending
+  policy UpgradeAfterLease when LeaseClosed -> Member.upgrade // when the event happens, the command runs
+}
+```
 
 <!-- topic: aggregates -->
 ### Contexts and aggregates
@@ -1187,6 +1254,13 @@ description.
 - Write the invariants as expressions where the DSL can (see [Invariant expressions](#invariant-expressions)), and as
   a label or `///` where it cannot. Keep aggregates small; refer to another aggregate by its ID.
 - States (a union of states) when the allowed commands depend on where the thing is in its life.
+
+**The DSL's types, not strings.** `dt check` warns about the first two (M026, M027).
+- A closed set of values is an `enum` (`enum Plan { Basic Premium }`): not a `union` whose variants have no fields,
+  and not a `String` with the values in a comment. A `union` is for variants that carry different fields.
+- Refer to another aggregate by its ID type: `references member: MemberId -> Member`. Never copy its fields, and never
+  keep its ID as a `String` or `UUID` (`memberId: String`).
+- Each aggregate and entity has an ID type of its own (`id LeaseId: UUID`, and `id: LeaseId` in it).
 
 **Commands as contracts.**
 - A command says what it needs (`requires`), what it changes, and exactly which events it emits (`emits` is exhaustive:
