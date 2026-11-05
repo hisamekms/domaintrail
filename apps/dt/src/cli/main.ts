@@ -3,11 +3,12 @@ import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { contextNames, formatDomain } from '@domaintrail/modeling';
-import { formatStorming, isStormingFile } from '@domaintrail/storming';
+import { declarations, formatStorming, isStormingFile } from '@domaintrail/storming';
 import { generateTypeScript, policyModes, staysInside, testsWarnings } from '@domaintrail/generation';
 import { type Analysis, analyze } from '@domaintrail/analysis';
 import { compareDiagnostics, formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/kernel';
 import { JOURNEY_FILE, journeyDiagnostics, journeyNames } from '@domaintrail/collaboration';
+import { KNOWLEDGE_DIR, knowledgeDiagnostics, readKnowledgeFiles } from '@domaintrail/knowledge';
 import { checkTestsTypes, checkTsContexts, ConfigError, type ResolvedConfig } from '../config/config.js';
 import { guideTopic, parseGuide, practiceOf, quickReference } from './guide.js';
 import {
@@ -96,10 +97,37 @@ async function journeyCheck(root: string, analysis: Analysis): Promise<Analysis>
     };
 }
 
+/**
+ * The knowledge items' files (`knowledge/kn_*.md` at the root, the `files` store of ADR 0031), when there are any: K001
+ * when one does not read (an error), K002 when an item is about a sticky that no `.dtes` of the workspace has.
+ */
+async function knowledgeCheck(root: string, analysis: Analysis): Promise<Analysis> {
+    const files = await readKnowledgeFiles(path.join(root, KNOWLEDGE_DIR), root);
+    if (files.length === 0) return analysis;
+    const { stormings } = analysis;
+    const found = knowledgeDiagnostics(files, {
+        stickies: new Set(
+            stormings.stormings.flatMap((s) =>
+                declarations(s)
+                    .filter((d) => d.kind !== 'timeline' && d.kind !== 'group' && d.kind !== 'stage')
+                    .map((d) => `${s.id}.${d.id}`),
+            ),
+        ),
+        stormings: new Set(stormings.stormings.map((s) => s.id)),
+        complete: stormings.syntaxOk,
+    });
+    if (found.length === 0) return analysis;
+    return {
+        ...analysis,
+        diagnostics: [...analysis.diagnostics, ...found].sort(compareDiagnostics),
+        ok: analysis.ok && !found.some((d) => d.severity === 'error'),
+    };
+}
+
 async function runCheck(config: ResolvedConfig, io: CliIO, deps: CliDeps, report?: JsonReport): Promise<Analysis> {
     const root = config.root;
     const sources = await deps.loadWorkspace(root, config.sources, config.respectGitignore);
-    const analysis = await journeyCheck(root, await analyze(sources));
+    const analysis = await knowledgeCheck(root, await journeyCheck(root, await analyze(sources)));
     const errors = analysis.diagnostics.filter((d) => d.severity === 'error').length;
     const warnings = analysis.diagnostics.length - errors;
     const noFiles = noSourcesMessage(config);
@@ -165,6 +193,7 @@ Prints \`file:line:col - error CODE: message\` per problem (errors on stderr, wa
 indented \`hint:\` line when there is a suggested fix, then a summary line. With --format json, prints one JSON document
 on stdout instead: {"diagnostics": [...], "summary": {...}}, or {"error": "..."} when the check could not run.
 Checks the Event Storming files (.dtes) too, their \`ref\`s against the .dt model; their rules start with S.
+Checks the knowledge items' files (knowledge/kn_*.md) when there are any; their rules start with K.
 Exits 0 when there are no errors, 1 on errors or when no .dt or .dtes file is found, 2 on an invalid config.
 
 Examples:

@@ -33,3 +33,16 @@ export type {
     StickyCount,
 } from './application/ports.js';
 export { authorize, type KnowledgeAction } from './application/authorize.js';
+
+// ---- the items' files and `dt check` on them -------------------------------------------------------------------
+export { IMAGES_DIR, KNOWLEDGE_DIR, printItemFile, readItemFile, type FileProblem, type ItemFile } from './domain/item-file.js';
+export { knowledgeDiagnostics, type KnowledgeFile, type KnowledgeNames, type KnowledgeRuleId } from './domain/check.js';
+
+// ---- infrastructure, for the app that wires it -----------------------------------------------------------------
+export {
+    createFilesKnowledgeStore,
+    DEFAULT_UNDO_WINDOW_MS,
+    readKnowledgeFiles,
+    type FilesKnowledgeStore,
+    type FilesKnowledgeStoreOptions,
+} from './infrastructure/files.js';

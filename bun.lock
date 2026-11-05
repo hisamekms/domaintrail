@@ -56,6 +56,7 @@
         "@domaintrail/collaboration": "workspace:*",
         "@domaintrail/generation": "workspace:*",
         "@domaintrail/kernel": "workspace:*",
+        "@domaintrail/knowledge": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "@domaintrail/storming": "workspace:*",
         "@domaintrail/visualization": "workspace:*",
@@ -147,6 +148,9 @@
     },
     "contexts/knowledge": {
       "name": "@domaintrail/knowledge",
+      "dependencies": {
+        "@domaintrail/kernel": "workspace:*",
+      },
       "devDependencies": {
         "fast-check": "4.10.2",
       },
