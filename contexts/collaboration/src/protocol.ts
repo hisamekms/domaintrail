@@ -745,6 +745,18 @@ export interface AgentStartedBody {
     readonly sessionSoFarSince?: AgentSessionSoFar;
     /** The journeys when the run starts (the current one, where it stands, the others): what the work is for and how far it goes. */
     readonly journeys?: AgentJourneysBody;
+    /**
+     * The people's edits of the stickies since the previous run started (ADR 0033), oldest first: who, when, what (old →
+     * new). Absent when there were none, and from a server before them.
+     */
+    readonly peopleEdits?: readonly AgentPeopleEdit[];
+}
+
+/** A person's edit of a sticky as a starting run is told of it. */
+export interface AgentPeopleEdit {
+    readonly by: string;
+    readonly at: string;
+    readonly edit: Json<Collaboration.StickyEdit>;
 }
 
 /**

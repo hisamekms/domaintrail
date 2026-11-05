@@ -66,7 +66,7 @@ import { SessionError, type SessionSettings } from '../cli/ports.js';
 import type { ViewService } from '@domaintrail/visualization';
 import { createGuardedTextFile, createWorkspaceSnapshot, watchFile } from '@domaintrail/workspace';
 import { processAlive } from './process.js';
-import { createModelValidator, createSourceFormatter } from './validator.js';
+import { createModelValidator, createSourceFormatter, createStickyEditor } from './validator.js';
 import { prepareLiveView, serverUrl, watchLiveView, type ViewServerOptions } from './view.js';
 import { createWatcherHold, type WatcherHold } from './watcher-hold.js';
 import { workspaceState } from './state.js';
@@ -318,6 +318,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             blobs: await openSessionBlobs(state.state),
             validator: createModelValidator(),
             formatter: createSourceFormatter(),
+            stickies: createStickyEditor(),
             clock,
             ids: randomIds,
         });
@@ -562,6 +563,16 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 if (activities.set(run, activity)) hub.publish({ type: 'run.activity', run, activity });
             },
             reverts: () => void reverts.kick(),
+            // the people's edits a run dropped are written again before the agent claims the next run (ADR 0033)
+            afterRun: async (run) => {
+                const r = await watcherHold.aroundWrite(
+                    () => collaboration.reapplyEdits({ session, run }),
+                    (done) => done.reapplied !== undefined,
+                );
+                if (r.reapplied) log(`re-applied people's edits after run ${run} (run ${r.reapplied.id})`);
+                if (r.conflicts.length > 0) log(`run ${run} changed ${r.conflicts.length} edited label(s) otherwise: left to people`);
+                await pump();
+            },
             answerTimeoutMs: options.answerTimeoutMs ?? ANSWER_TIMEOUT_MS,
             onPresence: () => presenceChanged(),
             log,

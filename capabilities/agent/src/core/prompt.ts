@@ -20,7 +20,7 @@ import {
     slashCommandName,
     viewedAtData,
 } from '@domaintrail/collaboration';
-import type { AgentJourneysBody, AgentPreviousRun, AgentRevertedRun, Json } from '@domaintrail/collaboration/protocol';
+import type { AgentJourneysBody, AgentPeopleEdit, AgentPreviousRun, AgentRevertedRun, Json } from '@domaintrail/collaboration/protocol';
 
 /**
  * The marker of the former outcome line, `DT-OUTCOME: {…}` as the reply's last line: still read when the agent gives no
@@ -382,6 +382,43 @@ export interface PromptContext {
     readonly practice?: Practice;
     /** The journeys when the run starts: with a current one, the run keeps within it (rules 20, 21); none: as without. */
     readonly journeys?: AgentJourneysBody;
+    /**
+     * The stickies people edited by hand since the previous run started (ADR 0033), oldest first: in
+     * `changedSinceYourLastRun` for an agent that continues its conversation, else as `editedByPeople` (rule 3).
+     */
+    readonly peopleEdits?: readonly AgentPeopleEdit[];
+}
+
+/** A person's edit as the prompt shows it: who, the storming, and what changed, old → new. */
+function peopleEditOf(e: AgentPeopleEdit, names: ReadonlyMap<string, string>): Record<string, unknown> {
+    const by = names.get(e.by) ?? e.by;
+    const edit = e.edit;
+    switch (edit.kind) {
+        case 'Wording':
+            return {
+                by,
+                storming: edit.storming,
+                element: edit.nameAfter,
+                ...(edit.nameBefore !== edit.nameAfter && { name: { from: edit.nameBefore, to: edit.nameAfter } }),
+                ...(edit.labelBefore !== edit.labelAfter && { label: { from: edit.labelBefore ?? null, to: edit.labelAfter ?? null } }),
+            };
+        case 'HotspotAdded':
+            return { by, storming: edit.storming, addedHotspot: edit.hotspot, label: edit.label, on: edit.on };
+        case 'HotspotResolved':
+            return { by, storming: edit.storming, resolvedHotspot: edit.hotspot, resolution: edit.resolution };
+    }
+}
+
+/**
+ * What changed since the agent's last run (rule 11) and what people edited by hand (rule 3): the edits inside
+ * `changedSinceYourLastRun` for an agent that continues its conversation, else on their own as `editedByPeople`.
+ */
+function changedAndEdited(context: PromptContext, names: ReadonlyMap<string, string>): Record<string, unknown> {
+    const edits = context.peopleEdits && context.peopleEdits.length > 0 ? context.peopleEdits.map((e) => peopleEditOf(e, names)) : undefined;
+    if (!context.changedSinceYourLastRun) return edits ? { editedByPeople: edits } : {};
+    const changed = changedList(context.changedSinceYourLastRun);
+    if (!edits) return { changedSinceYourLastRun: changed };
+    return { changedSinceYourLastRun: { ...(Array.isArray(changed) ? { files: changed } : changed), editedByPeople: edits } };
 }
 
 /** The changed paths as the prompt shows them: at most `MAX_CHANGED_SHOWN`, then how many more (read the files then). */
@@ -437,7 +474,7 @@ export function buildPrompt(
         ...(input.proposals && { approvedProposals: approvedProposalsOf(input, input.proposals) }),
         ...(input.brief && { confirmedBrief: confirmedBriefOf(input.brief) }),
         ...(input.candidates && { chosenCandidates: chosenCandidatesOf(input.candidates) }),
-        ...(context.changedSinceYourLastRun && { changedSinceYourLastRun: changedList(context.changedSinceYourLastRun) }),
+        ...changedAndEdited(context, names),
         ...(context.sessionSoFar !== undefined && { sessionSoFar: context.sessionSoFar }),
         ...(journeys && { journeys }),
     };
@@ -464,6 +501,10 @@ Rules:
 2. Edit only \`.dt\` and \`.dtes\` source files of this workspace. Create, change or delete no other file.
 3. A \`.dtes\` storming stays exploratory: open hotspots and events without a model counterpart are fine. Keep its
    labels short (\`dt check\` warns, S015). Never copy or sync \`.dtes\` content into \`.dt\` files by yourself.
+   People also write the stickies' wording themselves, on the canvas: \`editedByPeople\` (or
+   \`changedSinceYourLastRun.editedByPeople\`), when present, lists the labels and names they set by hand, the hotspots
+   they added and resolved, old → new. Keep people's wording: never set such a label or name back to its old value, nor
+   change it, unless a request asks for that; refer to a renamed element by its new name only.
 4. ${scope}
 5. Run no command except \`dt check\` and \`dt guide\`: \`dt check\` only when you need its diagnostics to fix your edit
    (\`dt fmt\` and \`dt check\` are run on the workspace after your turn anyway), \`dt guide <topic>\` to look up the
@@ -494,7 +535,8 @@ Rules:
    go with its changes; ask nothing about them.
 11. \`changedSinceYourLastRun\`, when present: this conversation continues your earlier runs of this session, and
    these files changed since your last run (edited by people or another agent, formatted by \`dt fmt\`, or restored):
-   what you remember of them is out of date, so read them again before relying on them or editing them.
+   what you remember of them is out of date, so read them again before relying on them or editing them. Its
+   \`editedByPeople\`, when present, says what people edited by hand among them (rule 3).
 12. \`approvedProposals\`, when present: the facilitator approved these change proposals for the requests they name —
    the elements to change (\`targets\`), how, and the option the facilitator chose (\`chosenOption\`) when the proposal
    offered several; carry them out as approved, to that option's extent — the approved text is what to do, the

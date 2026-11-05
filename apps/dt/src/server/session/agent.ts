@@ -72,6 +72,11 @@ export interface AgentApiDeps {
     readonly pair?: (code: string) => Promise<boolean>;
     /** The journeys as the answerer and a starting run are given them (absent: none given). */
     readonly journeys?: () => Promise<AgentJourneysBody | undefined>;
+    /**
+     * A run just ended with its result: the people's edits it dropped are written again (ADR 0033), behind the
+     * watcher's hold, before the agent is answered (so that it claims the next run after them). Absent: none.
+     */
+    readonly afterRun?: (run: Collaboration.AgentRunId) => Promise<void>;
 }
 
 export interface AgentApi {
@@ -231,6 +236,20 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         sendJson(res, 200, body(result.value));
     };
 
+    /** A run that ended now (not a replay): what people edited meanwhile is compared with its result first. */
+    const ended = async <T extends { readonly replayed: boolean }>(
+        run: Collaboration.AgentRunId,
+        result: { ok: true; value: T } | { ok: false; error: { readonly type: string } },
+    ): Promise<typeof result> => {
+        if (result.ok && !result.value.replayed && deps.afterRun) {
+            await deps.pump();
+            await deps
+                .afterRun(run)
+                .catch((e: unknown) => deps.log?.(`run ${run}: re-applying people's edits failed: ${e instanceof Error ? e.message : String(e)}`));
+        }
+        return result;
+    };
+
     /** Whether a reply of the agent carries the agent's own credential (it would reach the pages). */
     const leaks = (v: unknown): boolean => v !== undefined && JSON.stringify(v).includes(deps.token);
     const refuseLeak = (res: ServerResponse, run: Collaboration.AgentRunId): void => {
@@ -266,6 +285,8 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
                 const sessionSoFarSince = typeof since === 'number' ? await soFar(since) : undefined;
                 // the journeys as they are now, as the answerer gets them: the run keeps within the current one
                 const journeys = await deps.journeys?.().catch(() => undefined);
+                // the people's edits since the previous run started (ADR 0033): the agent keeps their wording
+                const peopleEdits = await use.peopleEditsSince({ run });
                 return answer(res, started, (v) => ({
                     run: v.run,
                     baseRevision: v.base,
@@ -274,6 +295,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
                     ...(sessionSoFar && { sessionSoFar }),
                     ...(sessionSoFarSince && { sessionSoFarSince }),
                     ...(journeys && { journeys }),
+                    ...(peopleEdits.length > 0 && { peopleEdits: peopleEdits.map((e) => ({ by: e.by, at: e.at.toISOString(), edit: e.edit })) }),
                 }));
             }
             case 'heartbeat': {
@@ -321,12 +343,15 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
                 if (reply && !reply.ok) return sendError(res, 400, 'InvalidInput', reply.error.message, { field: reply.error.field });
                 return answer(
                     res,
-                    await use.finishRun({
+                    await ended(
                         run,
-                        token: String(b.token),
-                        facts: { exitCode, formatted: fmt, checked: check },
-                        ...(reply && { reply: reply.value }),
-                    }),
+                        await use.finishRun({
+                            run,
+                            token: String(b.token),
+                            facts: { exitCode, formatted: fmt, checked: check },
+                            ...(reply && { reply: reply.value }),
+                        }),
+                    ),
                     (v) => v,
                 );
             }
@@ -340,7 +365,10 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
                 if (reply && !reply.ok) return sendError(res, 400, 'InvalidInput', reply.error.message, { field: reply.error.field });
                 return answer(
                     res,
-                    await use.askClarification({ run, token: String(b.token), question: question.value, ...(reply && { reply: reply.value }) }),
+                    await ended(
+                        run,
+                        await use.askClarification({ run, token: String(b.token), question: question.value, ...(reply && { reply: reply.value }) }),
+                    ),
                     (v) => v,
                 );
             }
@@ -350,7 +378,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
                 if (leaks(b.reply)) return refuseLeak(res, run);
                 const reply = agentReply(b.reply, 'declined');
                 if (!reply.ok) return sendError(res, 400, 'InvalidInput', reply.error.message, { field: reply.error.field });
-                return answer(res, await use.declineRun({ run, token: String(b.token), reply: reply.value }), (v) => v);
+                return answer(res, await ended(run, await use.declineRun({ run, token: String(b.token), reply: reply.value })), (v) => v);
             }
             case 'fail': {
                 const b = await input(req, res, ['token', 'reason']);

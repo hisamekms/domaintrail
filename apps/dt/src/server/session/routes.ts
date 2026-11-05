@@ -56,6 +56,7 @@ import {
     modelTarget,
     replyTarget,
     requestTargets,
+    stickyEditInput,
     text,
     uuid,
     viewedAt as viewedAtInput,
@@ -159,6 +160,10 @@ export function statusOf(type: string): number {
         case 'NotAJourneyMark':
         case 'NotAJourneyBrief':
         case 'GuideMarksInJourneyFile':
+        case 'InvalidStickyName':
+        case 'InvalidStickyText':
+        case 'WrongStickyKind':
+        case 'NothingToChange':
             return 400;
         case 'NotTheInterviewer':
         case 'NotTheStarter':
@@ -188,6 +193,8 @@ export function statusOf(type: string): number {
         case 'TriageOfAnotherSession':
         case 'JourneyNotFound':
         case 'NoJourneyFile':
+        case 'StickyNotFound':
+        case 'StickyEditsUnavailable':
             return 404;
         case 'BlobMissing':
         case 'ManualRecoveryNeeded':
@@ -988,6 +995,39 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                         ? runs.filter((r) => r.state === 'Running' || (r.state === 'Queued' && runs.indexOf(r) < runs.indexOf(run))).length
                         : 0;
                 sendJson(res, 201, { request: requested.value.request, run, ahead });
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/stickies$/,
+            role: 'participant',
+            handle: async ({ req, res, auth }) => {
+                // a person's edit of a sticky (ADR 0033): anyone's, written by dt itself (no AI run), behind the watcher's
+                // hold; refused with what the sticky is now when the page saw it otherwise
+                const raw = await input(req, res, ['kind', 'storming', 'element', 'expected', 'label', 'name', 'on', 'resolution', 'body']);
+                if (!raw) return;
+                const edit = checked(res, stickyEditInput(raw));
+                if (!edit) return;
+                const message = checked(res, text(raw.body, 'body', MAX_NOTE));
+                if (!message) return;
+                const me = who(auth);
+                const edited = await deps.holdWatcher(
+                    () => use.editSticky({ session, actor: me.actor, edit, body: message }),
+                    (r) => r.ok,
+                );
+                if (edited.ok) deps.log(`${me.participant.id} edited ${edit.storming} (run ${edited.value.run.id})`);
+                await answer(res, edited, 201, (v) => v);
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/runs\/([^/]+)\/settle$/,
+            role: 'participant',
+            handle: async ({ res, params }) => {
+                // people chose about an edit that a run's result changed otherwise (ADR 0033): anyone may say so
+                const id = checked(res, uuid(params[0], 'id'));
+                if (!id) return;
+                await answer(res, await use.settleConflict({ session, run: knownAgentRunId(id) }), 200, (run) => ({ run }));
             },
         },
         {

@@ -20,6 +20,7 @@ import {
     readViewedAt,
     REPLY_LIMITS,
     type ReplyOutcome,
+    type StickyEditInput,
     type Result,
     toAgentReply,
     VOTE,
@@ -422,4 +423,73 @@ export function markSign(v: unknown, field = 'sign'): Result<Collaboration.MarkS
     const emoji = read === undefined ? undefined : makeEmoji(read);
     if (!emoji?.ok) return invalid(`${field}.emoji`, `Expected exactly one emoji (at most ${MAX_EMOJI_BYTES} bytes).`);
     return ok({ kind: 'Reaction', emoji: emoji.value });
+}
+
+/** The longest ID or label a sticky's edit carries (a label is checked again by the planner, `MAX_STICKY_LABEL`). */
+const MAX_STICKY_FIELD = 2000;
+
+/** A short string of a sticky's edit, on one line. */
+function stickyField(v: unknown, field: string): Result<string, InvalidInput> {
+    if (typeof v !== 'string' || !v.trim()) return invalid(field, 'Expected a non-empty string.');
+    if (v.length > MAX_STICKY_FIELD) return invalid(field, `At most ${MAX_STICKY_FIELD} characters.`);
+    if (hasControl(v)) return invalid(field, 'No control characters.');
+    return { ok: true, value: v };
+}
+
+/**
+ * A person's edit of a sticky (`POST /api/session/stickies`, ADR 0033): `wording` (the label and/or the name, with what
+ * the page saw in `expected`), `addHotspot` or `resolveHotspot`. What it may change is the planner's to check.
+ */
+export function stickyEditInput(raw: Record<string, unknown>): Result<StickyEditInput, InvalidInput> {
+    const storming = stickyField(raw.storming, 'storming');
+    if (!storming.ok) return storming;
+    const field = (name: string): Result<string, InvalidInput> => stickyField(raw[name], name);
+    const optional = (name: string): Result<string | undefined, InvalidInput> => (raw[name] === undefined ? { ok: true, value: undefined } : field(name));
+    switch (raw.kind) {
+        case 'wording': {
+            const element = field('element');
+            if (!element.ok) return element;
+            const label = optional('label');
+            if (!label.ok) return label;
+            const name = optional('name');
+            if (!name.ok) return name;
+            const expected = raw.expected;
+            if (typeof expected !== 'object' || expected === null || Array.isArray(expected)) return invalid('expected', 'Expected what the page saw.');
+            const seenName = stickyField(Reflect.get(expected, 'name'), 'expected.name');
+            if (!seenName.ok) return seenName;
+            const rawLabel: unknown = Reflect.get(expected, 'label');
+            const seenLabel = rawLabel === undefined ? { ok: true as const, value: undefined } : stickyField(rawLabel, 'expected.label');
+            if (!seenLabel.ok) return seenLabel;
+            if (label.value === undefined && name.value === undefined) return invalid('label', 'Expected a new label or name.');
+            return {
+                ok: true,
+                value: {
+                    kind: 'wording',
+                    storming: storming.value,
+                    element: element.value,
+                    expected: { name: seenName.value, ...(seenLabel.value !== undefined && { label: seenLabel.value }) },
+                    ...(label.value !== undefined && { label: label.value }),
+                    ...(name.value !== undefined && { name: name.value }),
+                },
+            };
+        }
+        case 'addHotspot': {
+            const on = field('on');
+            if (!on.ok) return on;
+            const name = field('name');
+            if (!name.ok) return name;
+            const label = field('label');
+            if (!label.ok) return label;
+            return { ok: true, value: { kind: 'addHotspot', storming: storming.value, on: on.value, name: name.value, label: label.value } };
+        }
+        case 'resolveHotspot': {
+            const element = field('element');
+            if (!element.ok) return element;
+            const resolution = field('resolution');
+            if (!resolution.ok) return resolution;
+            return { ok: true, value: { kind: 'resolveHotspot', storming: storming.value, element: element.value, resolution: resolution.value } };
+        }
+        default:
+            return invalid('kind', "Expected 'wording', 'addHotspot' or 'resolveHotspot'.");
+    }
 }

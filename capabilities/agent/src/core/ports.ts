@@ -18,6 +18,7 @@ import type {
     EventMessage,
     Json,
     RunActivity,
+    AgentPeopleEdit,
 } from '@domaintrail/collaboration/protocol';
 import type { Collaboration, CommandReplyShape, ReplyData, ReplyOutcome } from '@domaintrail/collaboration';
 
@@ -72,6 +73,8 @@ export interface Started {
     readonly sessionSoFarSince?: AgentSessionSoFar;
     /** The journeys when the run starts (absent: no journey file, or an older server). */
     readonly journeys?: AgentJourneysBody;
+    /** The stickies people edited by hand since the previous run started (absent: none, or an older server). */
+    readonly peopleEdits?: readonly AgentPeopleEdit[];
 }
 
 /** The agent API of the session server (loopback, bearer token). */

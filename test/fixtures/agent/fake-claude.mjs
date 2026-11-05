@@ -2,10 +2,11 @@
 // its invocation and follows the next step of a plan, a JSON file whose path is its first argument:
 //
 //   { "runs": [ { "edits": [{ "path": "a.dtes", "replace": ["from", "to"] } | { "path", "append" } | { "path", "write" }],
-//                 "delayMs": 0, "hang": false, "exitCode": 0, "outcome": { "outcome": "done", "summary": "…" },
+//                 "waitForFile": "/abs/flag", "delayMs": 0, "hang": false, "exitCode": 0, "outcome": { "outcome": "done", "summary": "…" },
 //                 "reply": { "outcome": "done", "summary": "…", "requests": [{ "request": 1, "status": "done" }] } }, … ] }
 //
-// Step n is used by the n-th invocation (counted in `<plan>.log`, one JSON line per invocation: pid, the pid of a
+// `waitForFile` holds the step's edits until that file exists (a test does something while the agent runs, then
+// creates it). Step n is used by the n-th invocation (counted in `<plan>.log`, one JSON line per invocation: pid, the pid of a
 // child it started when hanging, the arguments, the working directory and the prompt). It prints the last line of what
 // `claude --print --output-format stream-json` prints: one JSON result event, with `reply` as its structured output (as
 // `--json-schema` gives it), else with the former outcome line at the end of its `result`.
@@ -27,6 +28,11 @@ const nextStep = () => {
     return plan.runs[n] ?? plan.runs.at(-1) ?? {};
 };
 const print = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
+
+/** Waits until the step's `waitForFile` exists (none: at once). */
+async function ready(step) {
+    while (step.waitForFile && !existsSync(step.waitForFile)) await new Promise((resolve) => setTimeout(resolve, 20));
+}
 
 function edit(step) {
     for (const edit of step.edits ?? []) {
@@ -71,6 +77,7 @@ if (args.includes('--input-format')) {
         print({ type: 'system', subtype: 'init', session_id: 'fake' });
         const child = step.hang ? spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }) : undefined;
         appendFileSync(logFile, `${JSON.stringify({ pid: process.pid, childPid: child?.pid, args, cwd: process.cwd(), prompt })}\n`);
+        await ready(step);
         edit(step);
         if (step.delayMs) await new Promise((resolve) => setTimeout(resolve, step.delayMs));
         if (step.hang) {
@@ -90,6 +97,7 @@ if (args.includes('--input-format')) {
 
     const child = step.hang ? spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }) : undefined;
     appendFileSync(logFile, `${JSON.stringify({ pid: process.pid, childPid: child?.pid, args, cwd: process.cwd(), prompt })}\n`);
+    await ready(step);
     edit(step);
     if (step.delayMs) await new Promise((resolve) => setTimeout(resolve, step.delayMs));
     if (step.hang) await new Promise(() => setInterval(() => {}, 1000));
