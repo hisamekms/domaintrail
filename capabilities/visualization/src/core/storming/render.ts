@@ -6,7 +6,7 @@
  * At Big Picture, the events marked `level design` are left out as if their timeline steps were not written: the trie is
  * built over the visible steps only, so the order edges join the neighbours of a hidden event, a group of hidden events
  * only disappears, and timelines that differ only in hidden events share their prefix (§8 on the visible sequence).
- * Hotspots stay, without their `on` edge to a hidden event.
+ * Hotspots stay, without their `on` edge to a hidden event; a hotspot on a sticky of Design Level (a command, …) does not.
  */
 import {
     buildSemanticGraph,
@@ -22,7 +22,7 @@ import { LEVEL_KINDS, type RenderEdge, type RenderEventNode, type RenderGraph, t
 import { buildTrie, compare, memberId, type TrieNode } from './trie.js';
 import { filterEdges } from './filter.js';
 import { hasStages, projectStageView } from './stage-view.js';
-import { drawChains, type EventPlace } from './chains.js';
+import { drawChains, hotspotsOnDesignLevel, type EventPlace } from './chains.js';
 
 export function projectView(storming: Storming, options: ViewOptions): RenderGraph {
     // a storming with stages: its integrated canvas and its stages are views of stages (a timeline's view is as ever)
@@ -91,11 +91,16 @@ export function projectView(storming: Storming, options: ViewOptions): RenderGra
         drawn = filterEdges(semantic.edges, new Set(events.filter((id) => kinds.get(id) === 'event')));
     }
 
+    // at Big Picture, a hotspot on a sticky of Design Level goes with it
+    const designOnly = options.level === 'big-picture' ? hotspotsOnDesignLevel(semantic.edges, kinds) : new Set<string>();
     const elements = semantic.nodes.filter(
         (n): n is NodeElement & { kind: Exclude<NodeElementKind, 'event'> } =>
-            n.kind !== 'event' && shown.has(n.kind) && (timelineId === undefined || drawn.some((e) => e.sourceId === n.id || e.targetId === n.id)),
+            n.kind !== 'event' &&
+            shown.has(n.kind) &&
+            !designOnly.has(n.id) &&
+            (timelineId === undefined || drawn.some((e) => e.sourceId === n.id || e.targetId === n.id)),
     );
-    // the Design Level along the grammar: copies per use (and, in a timeline's view, per step), the aggregate deciding
+    // the Design Level along the grammar: copies per use (and, in a timeline's view, per step), the handler deciding
     const chains = drawChains(elements, drawn, places);
     for (const n of chains.nodes) nodes.set(n.id, n);
     for (const e of chains.edges) edges.set(e.id, e);

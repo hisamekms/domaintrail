@@ -43,6 +43,7 @@ export interface DiagramTexts {
         esException: string;
         esRejoin: string;
         esRelated: string;
+        esFeeds: string;
         esHotspot: string;
     };
     stormingArrowNote: string;
@@ -87,11 +88,12 @@ const ja: DiagramTexts = {
         aggregateReferences: '参照（ID で別の集約へ。エンティティや値オブジェクトを経由するものも含む）',
         aggregateValue: '別の集約を値として持つ',
         transition: 'コマンドによる遷移（⇒ 発生させるドメインイベント）',
-        esCausal: '型レベルの因果（コマンド → 集約 → イベント → ポリシー → コマンド。起こりうる関係で、実際に起きたとは限らない）',
+        esCausal: '型レベルの因果（コマンド → 処理する集約・外部システム → イベント → ポリシー → コマンド。起こりうる関係で、実際に起きたとは限らない）',
         esSequence: 'タイムラインの時間順',
         esException: '例外の時間順',
         esRejoin: '例外から本流へ戻る',
-        esRelated: 'コマンドのアクター・リードモデル（向きを持たない）',
+        esRelated: 'コマンドを発行する人・システムと、その人が見るリードモデル（向きを持たない）',
+        esFeeds: 'イベントがリードモデルに反映される',
         esHotspot: 'ホットスポットの対象（向きを持たない）',
     },
     stormingArrowNote: '矢印は因果と時間の向き',
@@ -147,11 +149,13 @@ const en: DiagramTexts = {
         aggregateReferences: 'References (by ID, another aggregate, also through entities and value objects)',
         aggregateValue: 'Holds another aggregate as a value',
         transition: 'Transition by a command (⇒ events it raises)',
-        esCausal: 'Type-level cause (command → aggregate → event → policy → command; a possibility, not something that happened)',
+        esCausal:
+            'Type-level cause (command → its handling aggregate or external system → event → policy → command; a possibility, not something that happened)',
         esSequence: 'Time order of a timeline',
         esException: 'Time order of an exception',
         esRejoin: 'An exception returning to the main flow (then)',
-        esRelated: 'A command’s actor or read model (no direction)',
+        esRelated: 'Who issues a command, and the read model they look at (no direction)',
+        esFeeds: 'An event feeding a read model',
         esHotspot: 'A hotspot’s subject (no direction)',
     },
     stormingArrowNote: 'Arrows point along causes and time',

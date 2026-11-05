@@ -155,8 +155,8 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
 
 /**
  * The notes stuck on another one in a layered layout (`GraphNode.attachTo`; the grid places them in its cells itself): a
- * hotspot on the one event it is `on`, an actor or external system on the command it issues (its copy beside it). Only
- * a note whose every edge joins it to that node, in the same container, is stuck on it.
+ * hotspot on the one sticky it is `on`, an actor or external system on the command it issues (its copy beside it, when
+ * no read model leads to it). Only a note whose every edge joins it to that node, in the same container, is stuck on it.
  */
 function attach(graph: Graph): Graph {
     const byId = new Map(graph.nodes.map((n) => [n.id, n]));
@@ -166,7 +166,7 @@ function attach(graph: Graph): Graph {
         const others = new Set(own.map((e) => (e.source === n.id ? e.target : e.source)));
         if (others.size !== 1) return n;
         const anchor = byId.get([...others][0]!);
-        const fits = n.kind === 'esHotspot' ? anchor?.kind === 'esEvent' : anchor?.kind === 'esCommand';
+        const fits = n.kind === 'esHotspot' ? anchor !== undefined && anchor.kind !== 'esHotspot' : anchor?.kind === 'esCommand';
         return anchor && fits && anchor.parent === n.parent ? { ...n, attachTo: anchor.id } : n;
     });
     return { ...graph, nodes };
@@ -178,7 +178,10 @@ function resolution(declaration: AnyDeclaration | undefined): string | undefined
     return declaration.clauses.find((c) => c.type === 'resolution')?.text ?? '';
 }
 
-/** §9.4: causal edges solid and directed, the time order dashed, other relations dotted; a hotspot's `on` has no direction. */
+/**
+ * §9.4: causal edges solid and directed, the time order dashed, other relations dotted: an event feeding a read model
+ * with an arrowhead, an issuer's and a read model's relation to a command (`by`, `reads`) and a hotspot's `on` without.
+ */
 const edgeKind = (e: RenderEdge): EdgeKind =>
     e.type === 'rejoin'
         ? 'esRejoin'
@@ -190,4 +193,6 @@ const edgeKind = (e: RenderEdge): EdgeKind =>
               ? 'esCausal'
               : e.kind === 'hotspot-on'
                 ? 'esHotspot'
-                : 'esRelated';
+                : e.kind === 'readmodel-from'
+                  ? 'esFeeds'
+                  : 'esRelated';

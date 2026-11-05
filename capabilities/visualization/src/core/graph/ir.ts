@@ -32,9 +32,10 @@ export type NodeKind =
     | 'esStage';
 
 /**
- * `dependsOn`: a context dependency that borrows types, not only IDs (Context Map). Event Storming: `esCausal` (a policy's
- * `on`, `issues`, a command's `target` and `emits`, from its aggregate when it has one), `esRelated` (`actor`, `reads`,
- * undirected), `esHotspot` (a hotspot's `on`, undirected), `esSequence` (timeline order, and a stage's `after`)
+ * `dependsOn`: a context dependency that borrows types, not only IDs (Context Map). Event Storming (ADR 0032):
+ * `esCausal` (a policy's `on`, `issues`, a command's `handledBy` and `emits`, from its handler when it has one, an event
+ * `from` an external system), `esRelated` (`by`, `reads`, undirected), `esFeeds` (an event feeding a read model, a read
+ * model's `from`), `esHotspot` (a hotspot's `on`, undirected), `esSequence` (timeline order, and a stage's `after`)
  * `esException` (the time order of exceptions only) and `esRejoin` (an exception's `then`, back to a main flow).
  */
 export type EdgeKind =
@@ -45,6 +46,7 @@ export type EdgeKind =
     | 'dependsOn'
     | 'esCausal'
     | 'esRelated'
+    | 'esFeeds'
     | 'esHotspot'
     | 'esSequence'
     | 'esException'

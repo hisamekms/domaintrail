@@ -1,21 +1,26 @@
 /**
- * The Design Level elements of a view drawn along Event Storming's grammar (ADR 0024, amendment of 2026-11-05), read
- * left to right: read model and actor → command → aggregate → event → policy → command → … Shared by both projections
- * (`render.ts`, `stage-view.ts`); only the drawing changes: the `.dtes`, the semantic graph and the edges' semantic keys
- * do not.
+ * The Design Level elements of a view drawn along Event Storming's grammar (ADR 0024, amendment of 2026-11-05; ADR 0032),
+ * read left to right: read model → issuer (actor or external system) → command → handler (aggregate or external system)
+ * → event → policy → command → … Shared by both projections (`render.ts`, `stage-view.ts`); only the drawing changes:
+ * the `.dtes`, the semantic graph and the edges' semantic keys do not.
  *
- * - **Copies per use**: an actor or external system (the issuer of a command), a read model (what a command `reads`) and
- *   an aggregate (a command's `target`) get a note beside each command note that uses them, `n:<element>@<command
- *   note>`; an element no command of the view uses is drawn once, `n:<element>`.
- * - **The aggregate decides**: a command with a `target` reaches its events through its aggregate's note: the `target`
- *   edge runs from the command to the aggregate's copy, each `emits` from that copy to the event (with the `emits`
- *   edge's semantic key). A command without a `target` keeps its `emits` from itself.
+ * - **Copies per use**: the issuers of a command (`by`), its read models (`reads`) and its handler (`handledBy`) get a
+ *   note beside each command note, `n:<element>@<command note>`; an external system that an event comes `from` gets a
+ *   note beside each note of that event, `n:<element>@<event note>`. An element no note of the view uses is drawn
+ *   once, `n:<element>`.
+ * - **The handler decides**: a command with a `handledBy` reaches its events through its handler's note: the
+ *   `handledBy` edge runs from the command to the handler's copy, each `emits` from that copy to the event (with the
+ *   `emits` edge's semantic key). A command without one keeps its `emits` from itself.
+ * - **The issuer looks**: a read model's `reads` edge runs to the issuers' copies of the command note when it has some
+ *   (`by`), else to the command note itself (a policy's command). An event feeding a read model (`readmodel-from`) runs
+ *   to each copy of it, from the event's note at the nearest slot before the copy (every note with a single slot).
  * - **Copies per step** (spec §7.3, §10.2: drawing-only splits): the projection says at which *slot* (a step of a
  *   timeline, or one slot for the whole view) each event note stands. A command whose events stand at several slots
- *   gets a note per slot, `n:<command>#<k>` (with its own actor, read model and aggregate); a policy on events at
- *   several slots a note after each, `n:<policy>#<k>`; a hotspot on an event drawn at several slots a note on each,
- *   `n:<hotspot>#<k>`. `k` counts from 1 in slot order. A policy's note issues the command's note at the nearest slot
- *   after its own (every note of the command when none is after it). With a single slot, nothing is copied.
+ *   gets a note per slot, `n:<command>#<k>` (with its own issuer, read model and handler); a policy on events at
+ *   several slots a note after each, `n:<policy>#<k>`. A hotspot gets a note on each note of its sticky: of an event,
+ *   one per slot, `n:<hotspot>#<k>`; of any other sticky, one per note of it, `n:<hotspot>#<k>` in the order of those
+ *   notes. `k` counts from 1. A policy's note issues the command's note at the nearest slot after its own (every note of
+ *   the command when none is after it). With a single slot, nothing is copied per step.
  */
 import type { NodeElement, NodeElementKind, SemanticEdge } from '@domaintrail/storming';
 import { semanticEdgeKey } from '@domaintrail/storming';
@@ -35,18 +40,18 @@ export interface EventPlace {
 export interface Chains {
     nodes: RenderElementNode[];
     edges: RenderEdge[];
-    /** The slot a note of a command, policy or hotspot stands at (none for a note of no event in view). */
+    /** The slot each note stands at, when it stands at one (a note of no event in view stands at none). */
     slots: Map<string, string>;
 }
 
-/** The use a semantic edge stands for: `actor` and `reads` from the element, `target` to it; none for the other kinds. */
+/** The use a semantic edge stands for: a command's issuer, read model or handler; none for the other kinds. */
 function useOf(e: SemanticEdge): { elementId: string; commandId: string } | undefined {
-    if (e.kind === 'actor' || e.kind === 'reads') return { elementId: e.sourceId, commandId: e.targetId };
-    if (e.kind === 'target') return { elementId: e.targetId, commandId: e.sourceId };
+    if (e.kind === 'by' || e.kind === 'reads') return { elementId: e.sourceId, commandId: e.targetId };
+    if (e.kind === 'handledBy') return { elementId: e.targetId, commandId: e.sourceId };
     return undefined;
 }
 
-/** The commands that use each element (an actor, external system, read model or aggregate) among `edges`, in edge order. */
+/** The commands that use each element (an issuer, read model or handler) among `edges`, in edge order. */
 export function usersOf(edges: readonly SemanticEdge[]): Map<string, string[]> {
     const users = new Map<string, string[]>();
     for (const e of edges) {
@@ -56,12 +61,20 @@ export function usersOf(edges: readonly SemanticEdge[]): Map<string, string[]> {
     return users;
 }
 
-/** The render node ID of an element's copy beside a command's note (`command`: that note's ID without `n:`). */
-export const useNodeId = (elementId: string, command: string): string => `n:${elementId}@${command}`;
+/**
+ * The hotspots on a sticky of Design Level only (a command, policy, actor, external system, aggregate or read model):
+ * Big Picture, which draws events and hotspots, leaves them out with their sticky.
+ */
+export function hotspotsOnDesignLevel(edges: readonly SemanticEdge[], kinds: ReadonlyMap<string, NodeElementKind>): Set<string> {
+    return new Set(edges.filter((e) => e.kind === 'hotspot-on' && kinds.get(e.targetId) !== 'event').map((e) => e.sourceId));
+}
+
+/** The render node ID of an element's copy beside a note (a command note's ID without `n:`, or an event note's ID). */
+export const useNodeId = (elementId: string, note: string): string => `n:${elementId}@${note}`;
 
 type ElementOfView = NodeElement & { kind: Exclude<NodeElementKind, 'event'> };
 
-/** A note of an anchored element (a command, policy or hotspot): its ID without `n:`, and its slot. */
+/** A note of an element: its ID without `n:`, and its slot. */
 interface Note {
     key: string;
     slot?: string;
@@ -90,34 +103,51 @@ export function drawChains(elements: readonly ElementOfView[], drawn: readonly S
         edgesOf(kind)
             .filter((e) => e[end === 'sourceId' ? 'targetId' : 'sourceId'] === id)
             .flatMap((e) => eventsOf.get(e[end]) ?? []);
+    const at = (note: Note): Pick<Note, 'slot' | 'position'> => (note.slot !== undefined ? { slot: note.slot, position: note.position } : {});
 
+    /** The notes of each element drawn. */
     const notes = new Map<string, Note[]>();
-    for (const n of elements) {
-        if (n.kind === 'command') notes.set(n.id, notesAt(n.id, placesOf('emits', 'targetId', n.id)));
-        else if (n.kind === 'policy') notes.set(n.id, notesAt(n.id, placesOf('on', 'sourceId', n.id)));
-        else if (n.kind === 'hotspot') notes.set(n.id, notesAt(n.id, placesOf('hotspot-on', 'targetId', n.id)));
-    }
     const nodes = new Map<string, RenderElementNode>();
     const slots = new Map<string, string>();
-    for (const [id, list] of notes) {
-        const n = shown.get(id)!;
-        for (const note of list) {
-            nodes.set(`n:${note.key}`, { type: 'element', id: `n:${note.key}`, elementId: id, kind: n.kind });
-            if (note.slot !== undefined) slots.set(`n:${note.key}`, note.slot);
-        }
-    }
-    // an actor, external system, read model or aggregate beside each note of each command that uses it
-    const users = new Map<string, string[]>();
-    for (const [element, commands] of usersOf(edgesOf('actor').concat(edgesOf('reads'), edgesOf('target')))) {
-        if (!shown.has(element)) continue;
-        const keys = commands.flatMap((c) => (notes.get(c) ?? []).map((note) => note.key));
-        users.set(element, [...new Set(keys)]);
-    }
+    const addNote = (n: ElementOfView, note: Note, use?: string): void => {
+        const id = `n:${note.key}`;
+        nodes.set(id, { type: 'element', id, elementId: n.id, kind: n.kind, ...(use !== undefined && { use }) });
+        if (note.slot !== undefined) slots.set(id, note.slot);
+        notes.set(n.id, [...(notes.get(n.id) ?? []), note]);
+    };
     for (const n of elements) {
-        if (notes.has(n.id)) continue;
-        const list = users.get(n.id);
-        if (!list?.length) nodes.set(`n:${n.id}`, { type: 'element', id: `n:${n.id}`, elementId: n.id, kind: n.kind });
-        for (const use of list ?? []) nodes.set(useNodeId(n.id, use), { type: 'element', id: useNodeId(n.id, use), elementId: n.id, kind: n.kind, use });
+        if (n.kind === 'command') for (const note of notesAt(n.id, placesOf('emits', 'targetId', n.id))) addNote(n, note);
+        if (n.kind === 'policy') for (const note of notesAt(n.id, placesOf('on', 'sourceId', n.id))) addNote(n, note);
+    }
+    // an issuer, read model or handler beside each note of each command that uses it
+    const copies = new Map<string, Note[]>();
+    for (const [element, commands] of usersOf(edgesOf('by').concat(edgesOf('reads'), edgesOf('handledBy')))) {
+        const list = commands.flatMap((c) => notes.get(c) ?? []);
+        copies.set(element, [...new Map(list.map((note) => [note.key, note])).values()]);
+    }
+    // an external system beside each note of an event that comes from it
+    const sources = new Map<string, EventPlace[]>();
+    for (const e of edgesOf('event-from')) sources.set(e.sourceId, [...(sources.get(e.sourceId) ?? []), ...(eventsOf.get(e.targetId) ?? [])]);
+    for (const n of elements) {
+        if (n.kind === 'command' || n.kind === 'policy' || n.kind === 'hotspot') continue;
+        const uses = copies.get(n.id) ?? [];
+        const places = sources.get(n.id) ?? [];
+        if (!uses.length && !places.length) addNote(n, { key: n.id });
+        for (const use of uses) addNote(n, { key: `${n.id}@${use.key}`, ...at(use) }, use.key);
+        for (const p of places) addNote(n, { key: `${n.id}@${p.id}`, slot: p.slot, position: p.position }, p.id);
+    }
+    // a hotspot on each note of its sticky
+    const subjectOf = new Map(edgesOf('hotspot-on').map((e) => [e.sourceId, e.targetId]));
+    for (const n of elements) {
+        if (n.kind !== 'hotspot') continue;
+        const subject = subjectOf.get(n.id);
+        if (subject === undefined || kindOf(subject) === 'event') {
+            for (const note of notesAt(n.id, subject === undefined ? [] : (eventsOf.get(subject) ?? []))) addNote(n, note);
+            continue;
+        }
+        const on = notes.get(subject) ?? [];
+        if (on.length <= 1) addNote(n, { key: n.id, ...(on[0] && at(on[0])) });
+        else on.forEach((note, i) => addNote(n, { key: `${n.id}#${i + 1}`, ...at(note) }));
     }
 
     const edges = new Map<string, RenderEdge>();
@@ -129,40 +159,74 @@ export function drawChains(elements: readonly ElementOfView[], drawn: readonly S
         const id = `${key}@${source}->${target}`;
         edges.set(id, { type: 'semantic', id, kind: e.kind, source, target, semantic: key });
     };
+    const notesOf = (id: string): Note[] => notes.get(id) ?? [];
     /** The event notes of `eventId` at a note's slot (every one when the note has none). */
     const eventsAt = (eventId: string, note: Note): EventPlace[] =>
         (eventsOf.get(eventId) ?? []).filter((p) => note.slot === undefined || p.slot === note.slot);
-    const targetOf = new Map<string, string>();
-    for (const e of edgesOf('target')) for (const note of notes.get(e.sourceId) ?? []) targetOf.set(note.key, useNodeId(e.targetId, note.key));
+    /** The copy of an element beside a command's note, when it is drawn. */
+    const copyAt = (elementId: string, note: Note): string | undefined => {
+        const id = useNodeId(elementId, note.key);
+        return nodes.has(id) ? id : undefined;
+    };
+    const handlerOf = new Map<string, string>();
+    for (const e of edgesOf('handledBy')) for (const note of notesOf(e.sourceId)) handlerOf.set(note.key, e.targetId);
+    const issuersOf = new Map<string, string[]>();
+    for (const e of edgesOf('by')) issuersOf.set(e.targetId, [...(issuersOf.get(e.targetId) ?? []), e.sourceId]);
     for (const e of drawn) {
         switch (e.kind) {
             case 'emits':
-                for (const note of notes.get(e.sourceId) ?? []) {
-                    const target = targetOf.get(note.key);
-                    const source = target !== undefined && nodes.has(target) ? target : `n:${note.key}`;
+                for (const note of notesOf(e.sourceId)) {
+                    const handler = handlerOf.get(note.key);
+                    const source = (handler !== undefined && copyAt(handler, note)) || `n:${note.key}`;
                     for (const p of eventsAt(e.targetId, note)) add(e, source, p.id);
                 }
                 break;
-            case 'target':
-            case 'actor':
-            case 'reads': {
-                const use = useOf(e)!;
-                for (const note of notes.get(use.commandId) ?? []) {
-                    const copy = useNodeId(use.elementId, note.key);
-                    if (e.kind === 'target') add(e, `n:${note.key}`, copy);
-                    else add(e, copy, `n:${note.key}`);
+            case 'by':
+                for (const note of notesOf(e.targetId)) {
+                    const copy = copyAt(e.sourceId, note);
+                    if (copy) add(e, copy, `n:${note.key}`);
                 }
                 break;
-            }
+            case 'handledBy':
+                for (const note of notesOf(e.sourceId)) {
+                    const copy = copyAt(e.targetId, note);
+                    if (copy) add(e, `n:${note.key}`, copy);
+                }
+                break;
+            case 'reads':
+                for (const note of notesOf(e.targetId)) {
+                    const copy = copyAt(e.sourceId, note);
+                    if (!copy) continue;
+                    const issuers = (issuersOf.get(e.targetId) ?? []).flatMap((i) => copyAt(i, note) ?? []);
+                    // the read model is what the issuer looks at; a policy's command reads it itself
+                    for (const target of issuers.length ? issuers : [`n:${note.key}`]) add(e, copy, target);
+                }
+                break;
+            case 'readmodel-from':
+                for (const note of notesOf(e.targetId)) for (const p of feeding(eventsOf.get(e.sourceId) ?? [], note)) add(e, p.id, `n:${note.key}`);
+                break;
+            case 'event-from':
+                for (const p of eventsOf.get(e.targetId) ?? []) {
+                    const copy = useNodeId(e.sourceId, p.id);
+                    add(e, nodes.has(copy) ? copy : `n:${e.sourceId}`, p.id);
+                }
+                break;
             case 'on':
-                for (const note of notes.get(e.targetId) ?? []) for (const p of eventsAt(e.sourceId, note)) add(e, p.id, `n:${note.key}`);
+                for (const note of notesOf(e.targetId)) for (const p of eventsAt(e.sourceId, note)) add(e, p.id, `n:${note.key}`);
                 break;
             case 'hotspot-on':
-                for (const note of notes.get(e.sourceId) ?? []) for (const p of eventsAt(e.targetId, note)) add(e, `n:${note.key}`, p.id);
+                if (kindOf(e.targetId) === 'event') {
+                    for (const note of notesOf(e.sourceId)) for (const p of eventsAt(e.targetId, note)) add(e, `n:${note.key}`, p.id);
+                } else {
+                    const on = notesOf(e.targetId);
+                    notesOf(e.sourceId).forEach((note, i) => {
+                        const subject = on[i];
+                        if (subject) add(e, `n:${note.key}`, `n:${subject.key}`);
+                    });
+                }
                 break;
             case 'issues':
-                for (const note of notes.get(e.sourceId) ?? [])
-                    for (const c of issued(note, notes.get(e.targetId) ?? [])) add(e, `n:${note.key}`, `n:${c.key}`);
+                for (const note of notesOf(e.sourceId)) for (const c of issued(note, notesOf(e.targetId))) add(e, `n:${note.key}`, `n:${c.key}`);
                 break;
         }
     }
@@ -176,4 +240,16 @@ function issued(policy: Note, commands: Note[]): Note[] {
     if (!after.length) return commands;
     const nearest = Math.min(...after.map((c) => c.position!));
     return after.filter((c) => c.position === nearest);
+}
+
+/**
+ * The notes of an event that feed a read model's note: those at the nearest slot at or before it, else at the first
+ * slot after it; every one when the note has no slot or the event stands at a single place in time.
+ */
+function feeding(places: readonly EventPlace[], note: Note): EventPlace[] {
+    const positions = [...new Set(places.map((p) => p.position))];
+    if (note.position === undefined || positions.length <= 1) return [...places];
+    const before = positions.filter((p) => p <= note.position!);
+    const time = before.length ? Math.max(...before) : Math.min(...positions);
+    return places.filter((p) => p.position === time);
 }

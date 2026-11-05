@@ -26,7 +26,7 @@ const DTES = `storming Kyushoku "給食当番" {
   event Spilled "こぼした"
   event Cleaned "掃除した"
   event Returned "食缶を戻した"
-  command PutOnSmock "白衣を着る" { actor Toban emits SmockPutOn }
+  command PutOnSmock "白衣を着る" { by Toban emits SmockPutOn }
   actor Toban "給食当番"
   external Kitchen "給食室"
   policy WhenSpilled "こぼしたら" { on Spilled issues PutOnSmock }

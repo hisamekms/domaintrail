@@ -47,6 +47,7 @@ export function legendRows(view: LegendView, words: DiagramTexts['legendRows']):
                 { kind: 'esException', text: words.esException },
                 { kind: 'esRejoin', text: words.esRejoin },
                 { kind: 'esRelated', text: words.esRelated },
+                { kind: 'esFeeds', text: words.esFeeds },
                 { kind: 'esHotspot', text: words.esHotspot },
             ];
         case 'states':

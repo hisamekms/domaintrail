@@ -10,10 +10,12 @@ import type { EventOccurrence, NodeElementKind, SemanticEdgeKind, TimelineStep }
 // ---- Semantic edges as drawn (spec §9.4) ----
 
 /**
- * How a semantic edge is drawn (spec §9.4): solid causal, dotted related. A command's `target` is drawn as a cause: the
- * command goes to its aggregate, which decides and emits the events (Event Storming's grammar, `chains.ts`).
+ * How a semantic edge is drawn (spec §9.4): solid causal, dotted related. A command's `handledBy` is drawn as a cause:
+ * the command goes to its handler, which decides and emits the events (Event Storming's grammar, `chains.ts`); so is an
+ * event arriving `from` an external system.
  */
-export const isCausal = (kind: SemanticEdgeKind): boolean => kind === 'on' || kind === 'issues' || kind === 'emits' || kind === 'target';
+export const isCausal = (kind: SemanticEdgeKind): boolean =>
+    kind === 'on' || kind === 'issues' || kind === 'emits' || kind === 'handledBy' || kind === 'event-from';
 
 // ---- Timeline steps compared (spec §7.2, §8.3) ----
 
@@ -85,20 +87,22 @@ export interface RenderGroupNode {
 }
 
 /**
- * Any other element, drawn along Event Storming's grammar (`chains.ts`): once per view, an actor, external system, read
- * model or aggregate once per command note that uses it, beside it, and a command, policy or hotspot once per step of
- * its events when those are at several steps.
+ * Any other element, drawn along Event Storming's grammar (`chains.ts`): once per view; an issuer, read model or
+ * handler once per command note that uses it, beside it, an external system once per note of an event that comes from
+ * it; a command, policy or hotspot once per step of its events when those are at several steps (a hotspot on another
+ * sticky once per note of it).
  */
 export interface RenderElementNode {
     type: 'element';
     /**
      * `n:<local ID>`; `n:<local ID>#<k>` for the k-th note of a command, policy or hotspot drawn per step;
-     * `n:<local ID>@<command note>` for a copy beside a command's note (`<command note>`: its ID without `n:`).
+     * `n:<local ID>@<note>` for a copy beside a command's note (`<note>`: its ID without `n:`) or an event's note (its
+     * ID).
      */
     id: string;
     elementId: string;
     kind: Exclude<NodeElementKind, 'event'>;
-    /** The command note a copy stands beside: its ID without `n:` (`C` or `C#2`). */
+    /** The note a copy stands beside: a command note's ID without `n:` (`C` or `C#2`), or an event note's ID. */
     use?: string;
 }
 

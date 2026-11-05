@@ -172,14 +172,15 @@ describe('an element of a storming drawn once per use (Design Level)', () => {
     const dtes = (clerk: string, boss: string): { path: string; text: string } => ({
         path: 'es.dtes',
         text: `storming S {
-  event Opened event Approved event Closed
+  event Opened event Approved event Closed event Archived
   actor Clerk ${clerk}
   ${boss}
-  command Open { actor Clerk emits Opened }
+  command Open { by Clerk emits Opened }
   command Approve { emits Approved }
-  command Close { actor Clerk ${boss ? 'actor Boss ' : ''}emits Closed }
+  command Close { by Clerk ${boss ? 'by Boss ' : ''}emits Closed }
+  command Archive { emits Archived }
   policy P1 { on Opened issues Approve }
-  policy P2 { on Approved issues Close }
+  policy P2 { on Approved issues Archive }
   timeline T { Opened Approved Closed }
 }
 `,
@@ -201,7 +202,7 @@ describe('an element of a storming drawn once per use (Design Level)', () => {
         // removed since the previous graph: a ghost where each of its notes was
         const before = await graph();
         const without = dtes('', 'actor Boss');
-        const [after] = await viewPayloads([{ ...without, text: without.text.replace(/ {2}actor Clerk \n/, '').replaceAll('actor Clerk ', '') }]);
+        const [after] = await viewPayloads([{ ...without, text: without.text.replace(/ {2}actor Clerk \n/, '').replaceAll('by Clerk ', '') }]);
         const ghosts = buildScene(after!.stormings[0]!.views['design-level|']!.graph, {
             diff: { added: [], changed: [], removed: ids('es/S/Clerk') },
             diagnostics: [],
@@ -298,7 +299,7 @@ describe('the focus of a selected note in a view of stages (the grid) and a time
   event A event B event C event D event X
   event G1 event G2
   actor Clerk
-  command DoB { actor Clerk emits B }
+  command DoB { by Clerk emits B }
   command DoC { emits C }
   policy P { on B issues DoC }
   hotspot H { on B }

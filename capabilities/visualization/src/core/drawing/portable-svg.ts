@@ -404,6 +404,7 @@ const EDGE_LOOKS: Record<string, EdgeLook> = {
     esException: { stroke: '--es-exception', width: 1.6, dash: '7 5', head: '--es-exception', label: '--es-exception-text', bold: true },
     esRejoin: { stroke: '--es-sequence', width: 1.6, dash: '2 4', head: '--es-sequence', label: '--model-edge-label' },
     esRelated: { stroke: '--model-edge-quiet', width: 1.1, dash: '1.5 3', head: '--model-edge-quiet', label: '--model-edge-label' },
+    esFeeds: { stroke: '--model-edge-quiet', width: 1.1, dash: '1.5 3', head: '--model-edge-quiet', label: '--model-edge-label' },
     esHotspot: { stroke: '--model-edge-quiet', width: 1.1, dash: '1.5 3', head: '--model-edge-quiet', label: '--model-edge-label' },
 };
 const DEFAULT_EDGE: EdgeLook = { stroke: '--model-edge', width: 1.4, head: '--model-edge', label: '--model-edge-label' };

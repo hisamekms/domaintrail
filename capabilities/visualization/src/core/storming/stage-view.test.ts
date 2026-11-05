@@ -15,7 +15,8 @@ const read = (name: string): Promise<string> => readFile(path.join(FIXTURES, nam
 
 async function parse(text: string): Promise<Storming> {
     const a = await analyzeStormings([{ path: 's.dtes', text }], undefined);
-    expect(a.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    // an incomplete design (S024, S027) is drawn as written
+    expect(a.diagnostics.filter((d) => d.severity === 'error' && d.code !== 'S024' && d.code !== 'S027')).toEqual([]);
     return a.stormings[0]!;
 }
 
@@ -310,8 +311,8 @@ describe('Design Level elements in a view of stages', () => {
   actor Customer
   aggregate Order
   command Pay {
-    actor Customer
-    target Order
+    by Customer
+    handledBy Order
     emits Paid
     emits Failed
   }
@@ -374,7 +375,7 @@ describe('Design Level elements in a view of stages', () => {
         const s = await parse(
             text.replace(
                 '  command Retry {\n    emits Retried\n  }',
-                '  readmodel Cart\n  command Retry {\n    actor Customer\n    reads Cart\n    target Order\n    emits Retried\n  }',
+                '  readmodel Cart\n  command Retry {\n    reads Cart\n    handledBy Order\n    emits Retried\n  }',
             ),
         );
         const render = projectView(s, DL);
@@ -384,15 +385,17 @@ describe('Design Level elements in a view of stages', () => {
         for (const command of commands) {
             const c = cells[command]!;
             const key = command.slice(2);
-            expect(cells[`n:Customer@${key}`]).toEqual({ col: c.col, row: c.row - 1 });
+            // Retry, which a policy issues, has no actor
+            if (key !== 'Retry') expect(cells[`n:Customer@${key}`]).toEqual({ col: c.col, row: c.row - 1 });
             expect(cells[`n:Order@${key}`]).toEqual({ col: c.col + 1, row: c.row });
         }
-        // the read model on the command's left, on its row
+        expect(cells['n:Customer@Retry']).toBeUndefined();
+        // the read model on the command's left, on its row (a policy's command reads it itself)
         expect(cells['n:Cart@Retry']).toEqual({ col: cells['n:Retry']!.col - 1, row: cells['n:Retry']!.row });
         expect(cells['n:Customer']).toBeUndefined();
         const g = laidOut(render, s);
         // every edge between a copy and its command joins neighbouring cells
-        for (const e of render.edges.filter((x) => x.type === 'semantic' && ['actor', 'reads', 'target'].includes(x.kind))) {
+        for (const e of render.edges.filter((x) => x.type === 'semantic' && ['by', 'reads', 'handledBy'].includes(x.kind))) {
             const [a, b] = [cells[e.source]!, cells[e.target]!];
             expect(Math.abs(a.col - b.col) + Math.abs(a.row - b.row)).toBe(1);
         }
@@ -416,7 +419,7 @@ describe('Design Level elements in a view of stages', () => {
             expect(render.nodes.find((n) => n.id === command)).toMatchObject({ elementId: 'Pay' });
             expect(aggregate).toBe(`n:Order@${key}`);
             const ids = render.edges.filter((e) => e.type === 'semantic').map((e) => `${e.kind}:${e.source}->${e.target}`);
-            expect(ids).toEqual(expect.arrayContaining([`actor:n:Customer@${key}->${command}`, `target:${command}->${aggregate}`]));
+            expect(ids).toEqual(expect.arrayContaining([`by:n:Customer@${key}->${command}`, `handledBy:${command}->${aggregate}`]));
             // never an emits from the command itself: it goes through its aggregate
             expect(render.edges.some((e) => e.type === 'semantic' && e.kind === 'emits' && e.source === command)).toBe(false);
             if (render.grid) {
@@ -441,8 +444,8 @@ describe('Design Level elements in a view of stages', () => {
                 [
                     '  actor Resident',
                     '  aggregate Card',
-                    '  command EnterPin {\n    actor Resident\n    target Card\n    emits PinEntered\n  }',
-                    '  command ResetPin {\n    actor Resident\n    emits PinResetAtCityOffice\n  }',
+                    '  command EnterPin {\n    by Resident\n    handledBy Card\n    emits PinEntered\n  }',
+                    '  command ResetPin {\n    by Resident\n    emits PinResetAtCityOffice\n  }',
                     '  stage Preparation',
                 ].join('\n'),
             ),
@@ -486,6 +489,70 @@ function crossings(g: LaidOutGraph): string[] {
     }
     return out;
 }
+
+describe('the grammar of ADR 0032 in a view of stages', () => {
+    const text = `storming G {
+  event Asked
+  event Allocated
+  event Notified {
+    from Bank
+  }
+  external Batch
+  external Bank
+  readmodel Requests {
+    from Asked
+  }
+  command Allocate {
+    by Batch
+    reads Requests
+    handledBy Bank
+    emits Allocated
+  }
+  hotspot Why "なぜ外部？" {
+    on Allocate
+  }
+  stage S {
+    timeline Main {
+      Asked
+      Allocated
+      Notified
+    }
+  }
+}
+`;
+    test('read model → issuer above its command, the external system handling it, a hotspot on the command above the chain', async () => {
+        const s = await parse(text);
+        const render = projectView(s, DL);
+        const cells = render.grid!.cells;
+        const at = (eventId: string) => cells[only(render, eventId).id]!;
+        const command = cells['n:Allocate']!;
+        expect(command.row).toBe(at('Allocated').row - 1);
+        // the issuer on top of its command; the read model it looks at on the issuer's row, on the left
+        expect(cells['n:Batch@Allocate']).toEqual({ col: command.col, row: command.row - 1 });
+        expect(cells['n:Requests@Allocate']).toEqual({ col: command.col - 1, row: command.row - 1 });
+        // the handler, an external system, between the command and its event
+        expect(cells['n:Bank@Allocate']).toEqual({ col: command.col + 1, row: command.row });
+        expect(cells['n:Bank@Allocate']!.col).toBe(at('Allocated').col - 1);
+        // the hotspot on the command, above its chain
+        expect(cells['n:Why']).toEqual({ col: command.col, row: command.row - 2 });
+        // the external system an event comes from: in the handler's column, above the event
+        const source = render.nodes.find((n) => n.type === 'element' && n.elementId === 'Bank' && n.use === only(render, 'Notified').id)!;
+        expect(cells[source.id]).toEqual({ col: at('Notified').col - 1, row: at('Notified').row - 1 });
+        const edges = render.edges.filter((e) => e.type === 'semantic').map((e) => `${e.kind}:${e.source}->${e.target}`);
+        expect(edges).toEqual(
+            expect.arrayContaining([
+                'reads:n:Requests@Allocate->n:Batch@Allocate',
+                `readmodel-from:${only(render, 'Asked').id}->n:Requests@Allocate`,
+                `emits:n:Bank@Allocate->${only(render, 'Allocated').id}`,
+                `event-from:${source.id}->${only(render, 'Notified').id}`,
+                'hotspot-on:n:Why->n:Allocate',
+            ]),
+        );
+        expect(crossings(laidOut(render, s))).toEqual([]);
+        // Big Picture: a hotspot on a command is not drawn
+        expect(Object.keys(projectView(s, BP).grid!.cells).filter((id) => id.startsWith('n:'))).toEqual([]);
+    });
+});
 
 describe('without the exceptions (「例外を表示」 off)', () => {
     const text = `storming T {
@@ -566,14 +633,14 @@ describe('without the exceptions (「例外を表示」 off)', () => {
 describe('without the exceptions at Design Level: the elements of the events only exceptions have go with them', () => {
     // EnterPin emits a main flow's event and an exception's: kept. ForgetPin emits only PinForgotten, GuidePinReset is on
     // only PinLocked and the ResetPin it issues emits only PinResetAtCityOffice (all of exceptions only): not drawn, nor
-    // their copies of Resident, MyNumberCard and CityOfficer (whom no other command has).
+    // their copies of Resident, MyNumberCard and LockedCards (which no other command has).
     const extra = [
         '  actor Resident "住民"',
-        '  actor CityOfficer "窓口"',
+        '  readmodel LockedCards "ロック中のカード"',
         '  aggregate MyNumberCard "マイナンバーカード"',
-        '  command EnterPin "暗証番号を入力する" {\n    actor Resident\n    target MyNumberCard\n    emits PinEntered\n    emits PinLocked\n  }',
-        '  command ForgetPin "暗証番号を思い出せない" {\n    actor Resident\n    target MyNumberCard\n    emits PinForgotten\n  }',
-        '  command ResetPin "暗証番号を再設定する" {\n    actor CityOfficer\n    target MyNumberCard\n    emits PinResetAtCityOffice\n  }',
+        '  command EnterPin "暗証番号を入力する" {\n    by Resident\n    handledBy MyNumberCard\n    emits PinEntered\n    emits PinLocked\n  }',
+        '  command ForgetPin "暗証番号を思い出せない" {\n    by Resident\n    handledBy MyNumberCard\n    emits PinForgotten\n  }',
+        '  command ResetPin "暗証番号を再設定する" {\n    reads LockedCards\n    handledBy MyNumberCard\n    emits PinResetAtCityOffice\n  }',
         '  policy GuidePinReset "再設定を案内する" {\n    on PinLocked\n    issues ResetPin\n  }',
         '  stage Preparation',
     ].join('\n');
@@ -585,7 +652,7 @@ describe('without the exceptions at Design Level: the elements of the events onl
         'n:MyNumberCard@ForgetPin',
         'n:GuidePinReset',
         'n:ResetPin',
-        'n:CityOfficer@ResetPin',
+        'n:LockedCards@ResetPin',
         'n:MyNumberCard@ResetPin',
     ];
     const ids = (render: RenderGraph): string[] => render.nodes.map((n) => n.id);
@@ -619,7 +686,7 @@ describe('without the exceptions at Design Level: the elements of the events onl
             // with the exceptions, all of them (EnterPin also emits PinLocked: a note at each of its events' steps)
             const on = projectView(s, options);
             expect(elementsOf(on)).toEqual(
-                expect.arrayContaining(['EnterPin', 'ForgetPin', 'GuidePinReset', 'ResetPin', 'Resident', 'MyNumberCard', 'CityOfficer']),
+                expect.arrayContaining(['EnterPin', 'ForgetPin', 'GuidePinReset', 'ResetPin', 'Resident', 'MyNumberCard', 'LockedCards']),
             );
         }
     });
@@ -629,13 +696,13 @@ describe('without the exceptions at Design Level: the elements of the events onl
   event A
   event B
   event X
-  actor Clerk
+  readmodel Inbox
   readmodel Board
   command Fix {
     emits X
   }
   command Notify {
-    actor Clerk
+    reads Inbox
   }
   policy OnA {
     on A
@@ -666,7 +733,7 @@ describe('without the exceptions at Design Level: the elements of the events onl
             ids(projectView(s, DL))
                 .filter((id) => id.startsWith('n:'))
                 .sort(),
-        ).toEqual(['n:Board', 'n:Clerk@Notify', 'n:Fix', 'n:Notify', 'n:OnA', 'n:OnX']);
+        ).toEqual(['n:Board', 'n:Fix', 'n:Inbox@Notify', 'n:Notify', 'n:OnA', 'n:OnX']);
     });
 });
 

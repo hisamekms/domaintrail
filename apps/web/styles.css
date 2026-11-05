@@ -1636,10 +1636,14 @@ a.field-origin {
     fill: var(--es-sequence);
 }
 .de-esRelated .de-line,
+.de-esFeeds .de-line,
 .de-esHotspot .de-line {
     stroke: var(--model-edge-quiet);
     stroke-width: 1.1;
     stroke-dasharray: 1.5 3;
+}
+.de-esFeeds .de-head {
+    fill: var(--model-edge-quiet);
 }
 .de-esHotspot.de-resolved .de-line {
     stroke: var(--es-hotspot-resolved-edge);
