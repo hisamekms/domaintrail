@@ -85,7 +85,7 @@ as `domaintrail`, its full name, for when `dt` clashes with another command.
 - **`dt open`**: the Live View — context map, structure, state transitions, behaviour, source and the changes since the
   last save or a git revision, in Japanese or English; and each storming at Big Picture or Design Level, as a whole or
   one timeline at a time.
-- **`dt show`**: one element resolved, for people and agents, as text or JSON.
+- **`dt show`**: one element resolved, as text or JSON; **`dt mcp`**: the project's knowledge, for Claude Code.
 - **`dt lsp`**: a language server for `.dt` and `.dtes` files — diagnostics, definitions, references, hover, rename,
   formatting; a [Zed extension](editors/zed) and a [tree-sitter grammar](tree-sitter-domaintrail) (`.dt` only).
 - **`dt guide`**: the guide in the terminal, one topic at a time.

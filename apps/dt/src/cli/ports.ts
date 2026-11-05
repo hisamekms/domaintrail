@@ -3,7 +3,7 @@ import type { AnswerConfig, ExtractConfig, Practice, RunConfig, TriageConfig } f
 import type { ResolvedClassifierConfig, ResolvedCollabConfig, ResolvedConfig, ResolvedKnowledgeConfig } from '../config/config.js';
 import type { MessageTemplateConfig } from '@domaintrail/collaboration';
 import type { LanguageServerOptions } from '../lsp/server.js';
-import type { TrustStore } from './trust.js';
+import type { SettingsApproval, TrustStore } from './trust.js';
 import type { LaidOutGraph, StructureLevel } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 
@@ -71,6 +71,11 @@ export interface CliDeps {
     /** Starts the language server over stdio; resolves once it listens. */
     startLanguageServer(options: LanguageServerOptions): Promise<void>;
     /**
+     * Serves `dt mcp` over stdio: the read-only knowledge tools on the workspace's store and stormings (ADR 0031,
+     * section 9). Resolves when the client closes stdin.
+     */
+    startMcpServer(options: McpServerStartOptions): Promise<void>;
+    /**
      * `dt session prune`: the state and cache directories of workspaces that are gone (or, with `olderThanDays`, not
      * used for that long), removed when `remove`. Absent: the command says it cannot here.
      */
@@ -116,6 +121,15 @@ export interface DiagramViews {
     dispose(): void;
 }
 
+/** What `dt mcp` reads of the configuration. */
+export interface McpServerStartOptions {
+    config: ResolvedConfig;
+    /** The proof that the workspace's security-relevant settings are approved (`checkApproved`), if they are. */
+    approval: SettingsApproval | undefined;
+    /** Where it says what goes wrong (stderr: stdout is the protocol's). */
+    log: (line: string) => void;
+}
+
 /** What `dt open --host <non-loopback>` asks of the Live View. */
 export interface ViewServerOptions {
     root: string;
@@ -148,6 +162,8 @@ export interface SessionServerOptions {
     quickTunnel?: boolean;
     /** `link`: the public URL, asked once the server listens, with the port bound (`--tunnel` starts its tunnel then). */
     publicUrlAfterListen?: (port: number) => Promise<string>;
+    /** The config and the proof its settings were approved: the knowledge store is opened from them (ADR 0031). */
+    knowledge?: { readonly config: ResolvedConfig; readonly approval: SettingsApproval | undefined };
     log: (line: string) => void;
 }
 

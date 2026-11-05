@@ -159,9 +159,9 @@ export const MAP: Record<string, Module> = {
         dir: 'contexts/knowledge',
         sources: 'contexts/knowledge/src',
         // the knowledge taken from sessions (ADR 0031): its items refer to stickies by `<Storming>.<LocalId>` as plain
-        // values (whether a sticky exists is `dt check`'s), and to sessions and messages by their IDs, so it takes no
-        // other context
-        upstream: [],
+        // values (whether a sticky exists is `dt check`'s, which it reports with its own rule IDs: the kernel's
+        // `Diagnostic`), and to sessions and messages by their IDs, so it takes no other context
+        upstream: ['kernel'],
     },
     analysis: {
         kind: 'capability',
@@ -219,6 +219,14 @@ export const MAP: Record<string, Module> = {
         // the one binary: the CLI, the language server, the servers, and the wiring of every adapter (`main.ts`,
         // `wiring/`; presentation and composition before T8)
         upstream: ['agent', 'analysis', 'collaboration', 'generation', 'kernel', 'knowledge', 'modeling', 'storming', 'visualization', 'workspace'],
+    },
+    'knowledge-worker': {
+        kind: 'app',
+        dir: 'apps/knowledge-worker',
+        sources: 'apps/knowledge-worker/src',
+        // the knowledge store's Worker that users deploy from the template (ADR 0031, section 5): it applies the
+        // knowledge context's decisions on D1 and R2 and serves the protocol of its `cloudflare` adapter
+        upstream: ['knowledge'],
     },
     web: {
         kind: 'app',

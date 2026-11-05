@@ -3,11 +3,12 @@ import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { contextNames, formatDomain } from '@domaintrail/modeling';
-import { formatStorming, isStormingFile } from '@domaintrail/storming';
+import { declarations, formatStorming, isStormingFile } from '@domaintrail/storming';
 import { generateTypeScript, policyModes, staysInside, testsWarnings } from '@domaintrail/generation';
 import { type Analysis, analyze } from '@domaintrail/analysis';
 import { compareDiagnostics, formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/kernel';
 import { JOURNEY_FILE, journeyDiagnostics, journeyNames } from '@domaintrail/collaboration';
+import { KNOWLEDGE_DIR, knowledgeDiagnostics, readKnowledgeFiles } from '@domaintrail/knowledge';
 import { checkTestsTypes, checkTsContexts, ConfigError, type ResolvedConfig } from '../config/config.js';
 import { guideTopic, parseGuide, practiceOf, quickReference } from './guide.js';
 import {
@@ -26,7 +27,7 @@ import {
 } from './ports.js';
 import { checkSvgOptions, exportSvg, SvgExportError, type SvgExportOptions } from './export-svg.js';
 import { lookup, showJson, showText } from './show.js';
-import { approveSettings, NotApproved, type StartFlags } from './trust.js';
+import { approveSettings, checkApproved, NotApproved, type SettingsApproval, type StartFlags } from './trust.js';
 import guide from '../../../../docs/guide.md' with { type: 'text' };
 
 export interface CliIO {
@@ -96,10 +97,39 @@ async function journeyCheck(root: string, analysis: Analysis): Promise<Analysis>
     };
 }
 
+/**
+ * The knowledge items' files (`knowledge/kn_*.md` at the root, the `files` store of ADR 0031), when there are any: K001
+ * when one does not read (an error), K002 when an item is about a sticky that no `.dtes` of the workspace has.
+ */
+async function knowledgeCheck(root: string, analysis: Analysis): Promise<Analysis> {
+    const files = await readKnowledgeFiles(path.join(root, KNOWLEDGE_DIR), root);
+    if (files.length === 0) return analysis;
+    const { stormings } = analysis;
+    const found = knowledgeDiagnostics(files, {
+        stickies: new Set(
+            stormings.stormings.flatMap((s) =>
+                declarations(s)
+                    .filter((d) => d.kind !== 'timeline' && d.kind !== 'group' && d.kind !== 'stage')
+                    .map((d) => `${s.id}.${d.id}`),
+            ),
+        ),
+        stormings: new Set(stormings.stormings.map((s) => s.id)),
+        complete: stormings.syntaxOk,
+    });
+    if (found.length === 0) return analysis;
+    return {
+        ...analysis,
+        diagnostics: [...analysis.diagnostics, ...found].sort(compareDiagnostics),
+        ok: analysis.ok && !found.some((d) => d.severity === 'error'),
+    };
+}
+
 async function runCheck(config: ResolvedConfig, io: CliIO, deps: CliDeps, report?: JsonReport): Promise<Analysis> {
     const root = config.root;
     const sources = await deps.loadWorkspace(root, config.sources, config.respectGitignore);
-    const analysis = await journeyCheck(root, await analyze(sources));
+    const checked = await journeyCheck(root, await analyze(sources));
+    // the items' files are the `files` store's: with `cloudflare` the workspace has none to check
+    const analysis = config.knowledge.store === 'files' ? await knowledgeCheck(root, checked) : checked;
     const errors = analysis.diagnostics.filter((d) => d.severity === 'error').length;
     const warnings = analysis.diagnostics.length - errors;
     const noFiles = noSourcesMessage(config);
@@ -147,6 +177,7 @@ Examples:
   dt fmt                        rewrite every .dt and .dtes file in the canonical layout (run it after editing)
   dt open                       the Live View with the chat and the AI at http://127.0.0.1:4321 (runs until Ctrl+C)
   dt lsp                        language server over stdio, started by editors and AI agents
+  dt mcp                        MCP server over stdio: the project's knowledge for Claude Code (read-only)
   dt show Sales.Order           one element resolved (field sets, labels, commands, used by), instead of reading files
   dt export sources             the .dt and .dtes files and the config as <workspace>-sources.zip, to share without git
   dt export svg --storming S -o s.svg   a diagram as the Live View's 書き出し → SVG saves it, without a browser
@@ -165,6 +196,8 @@ Prints \`file:line:col - error CODE: message\` per problem (errors on stderr, wa
 indented \`hint:\` line when there is a suggested fix, then a summary line. With --format json, prints one JSON document
 on stdout instead: {"diagnostics": [...], "summary": {...}}, or {"error": "..."} when the check could not run.
 Checks the Event Storming files (.dtes) too, their \`ref\`s against the .dt model; their rules start with S.
+Checks the knowledge items' files (knowledge/kn_*.md) when there are any and the knowledge store is \`files\`; their
+rules start with K.
 Exits 0 when there are no errors, 1 on errors or when no .dt or .dtes file is found, 2 on an invalid config.
 
 Examples:
@@ -504,7 +537,7 @@ Examples:
         'host to bind (default: open.host, else 127.0.0.1; a non-loopback address serves the Live View read-only)',
     ).action(async (opts: ServeOptions) => {
         const cfg = await config();
-        await approve(cfg, opts.yes);
+        const approval = await approve(cfg, opts.yes);
         const { UnknownRevisionError } = await import('@domaintrail/visualization');
         const port = opts.port ?? cfg.open.port;
         const host = opts.host ?? cfg.open.host;
@@ -528,6 +561,7 @@ Examples:
                 base: opts.base,
                 mode: 'Solo',
                 session: openSettings(cfg, port, host),
+                knowledge: { config: cfg, approval },
                 log: io.out,
             })
             .catch((e: unknown) => {
@@ -578,7 +612,7 @@ Examples:
             throw new CliError(
                 '--tunnel starts a quick tunnel for the link identity mode; with identity "access", run your own named tunnel (docs/session-access.md).',
             );
-        await approve(cfg, opts.yes, { tunnel: opts.tunnel ?? false });
+        const approval = await approve(cfg, opts.yes, { tunnel: opts.tunnel ?? false });
         const { UnknownRevisionError } = await import('@domaintrail/visualization');
         let settings = sessionSettings(cfg, cfg.collab, opts);
         let tunnel: StartedTunnel | undefined;
@@ -599,6 +633,7 @@ Examples:
                 base: opts.base,
                 mode: 'Collab',
                 session: settings,
+                knowledge: { config: cfg, approval },
                 ...(opts.tunnel && { quickTunnel: true, publicUrlAfterListen: startTunnel }),
                 log: io.out,
             })
@@ -859,6 +894,30 @@ Examples:
         });
 
     program
+        .command('mcp')
+        .description("Start the MCP server over stdio: the project's knowledge, read-only, for Claude Code (runs until the client exits).")
+        .addHelpText(
+            'after',
+            `
+Speaks the Model Context Protocol on stdin/stdout, with three read-only tools over the knowledge store of the
+workspace (\`knowledge\` in the config; ADR 0031): knowledge_for_element (a sticky 'Storming.LocalId', or a .dt element
+'dt:Context.Aggregate.command' through the stickies that \`ref\` it), knowledge_search and knowledge_get. Started by an
+MCP client, not by hand; nothing but the protocol is written to stdout. With the \`cloudflare\` store, the
+workspace's security-relevant settings must have been approved (by \`dt open\`, \`dt collab\` or \`dt agent\` in a
+terminal): until then the tools answer that they are not. See \`dt guide mcp\`.
+
+Examples:
+  claude mcp add domaintrail -- dt mcp
+  dt -r domain mcp`,
+        )
+        .action(async () => {
+            const cfg = await config();
+            // no one to ask (stdin is the protocol's): the settings approved before, by `dt open`, `dt collab` or `dt agent`
+            const approval = await checkApproved(cfg, deps.trust);
+            await deps.startMcpServer({ config: cfg, approval, log: io.err });
+        });
+
+    program
         .command('show')
         .description('Print the resolved model of one element, state, command or context (all contexts without a name).')
         .argument('[name]', 'Sales.Order, Order, Sales, Sales.Order.confirm (a command), Sales.Order.Confirmed (a state)')
@@ -1030,9 +1089,12 @@ Examples:
         for (const line of readScopeLines(cfg, roles)) io.out(line);
     };
 
-    /** Starts only with approved security-relevant settings (`approveSettings`); refused: a one-line error. */
-    const approve = async (cfg: ResolvedConfig, yes: boolean | undefined, flags: StartFlags = {}): Promise<void> => {
-        await approveSettings(
+    /**
+     * Starts only with approved security-relevant settings (`approveSettings`); refused: a one-line error. Returns the
+     * proof of the approval, which opening the `cloudflare` knowledge store needs (`openKnowledgeStore`).
+     */
+    const approve = async (cfg: ResolvedConfig, yes: boolean | undefined, flags: StartFlags = {}): Promise<SettingsApproval> =>
+        approveSettings(
             cfg,
             { ...(deps.trust && { trust: deps.trust }), ...(deps.confirm && { confirm: (q: string) => deps.confirm!(q) }), out: io.out },
             yes ?? false,
@@ -1041,7 +1103,6 @@ Examples:
             if (e instanceof NotApproved) throw new CliError(e.message);
             throw e;
         });
-    };
 
     const config = async () => {
         const start = path.resolve(program.opts().root);

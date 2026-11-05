@@ -7,8 +7,8 @@
 // role its jobs (the agent API's answers entry point) and tells the pages which agents are connected. In the `link`
 // identity mode (docs/session-link.md) it answers its public URL's host and origin only besides loopback, requires an
 // Origin on every request that changes something, and lets people in through the invite link and the facilitator's
-// approval (../server/session/link-join.ts). When the workspace keeps knowledge (ADR 0031: a store for its `knowledge`
-// section, ./knowledge.ts), the server extracts it from the talk through the extractor role (the agent API's extraction
+// approval (../server/session/link-join.ts). When the workspace's knowledge store opens (ADR 0031: `openKnowledgeStore`,
+// ./knowledge.ts, with the proof that its settings were approved), the server extracts knowledge from the talk through the extractor role (the agent API's extraction
 // entry point), the last time when the session closes.
 import {
     type AccessAdapterOptions,
@@ -51,7 +51,9 @@ import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/analysis';
 import { type Connection, createWebSocketHub } from '../server/websocket/hub.js';
 import { createAgentApi } from '../server/session/agent.js';
 import { createExtractionDispatcher } from '../server/session/extractions.js';
-import { knowledgeStore, type SessionKnowledge, startSessionKnowledge } from './knowledge.js';
+import { openKnowledgeStore, type SessionKnowledge, startSessionKnowledge } from './knowledge.js';
+import type { SettingsApproval } from '../cli/trust.js';
+import type { ResolvedConfig } from '../config/config.js';
 import { createApiRoutes } from '../server/http/routes.js';
 import { createEventRelay, lastSeq } from '../server/session/relay.js';
 import { createPresenceRelay, type SessionConnection } from '../server/session/presence.js';
@@ -102,6 +104,8 @@ const CLASSIFY_TIMEOUT_MS = 8_000;
 export const ANSWER_TIMEOUT_MS = 120_000;
 /** The most seconds an extraction of knowledge may take, unless given (`agent.extract.timeout`). */
 const EXTRACT_TIMEOUT_S = 180;
+/** How often the `files` knowledge store's sweep completes the deletions past their undo window. */
+const KNOWLEDGE_SWEEP_MS = 3 * 60_000;
 /** Where the server's one line per triage goes when no `debug` log is given: printed when this variable is set. */
 export const DEBUG_ENV = 'DOMAINTRAIL_DEBUG';
 /** Where the Clef classifier is asked instead of Cloudflare's API (a local mock, for tests and demos). */
@@ -140,7 +144,13 @@ export interface SessionServerOptions extends ViewServerOptions {
     debug?: (line: string) => void;
     /** `Solo` (`dt open`: one person, loopback, the facilitator without signing in) or `Collab` (`dt collab`). Default: `Collab`. */
     mode?: Collaboration.SessionMode;
-    /** The knowledge store instead of the workspace's (`knowledgeStore`): for the tests only. */
+    /**
+     * The workspace's config and the proof that its security-relevant settings were approved as they are now
+     * (`approve` of the CLI): the knowledge store is opened from them (`openKnowledgeStore`), never without the proof.
+     * Absent: the session keeps no knowledge.
+     */
+    knowledge?: { readonly config: ResolvedConfig; readonly approval: SettingsApproval | undefined };
+    /** A knowledge store instead of the workspace's, with `session.knowledge` its settings: for the tests only. */
     knowledgeStore?: KnowledgeStore;
     /** The name a session started now gives its facilitator. Default: in `Solo`, git's `user.name` or the OS user's; else `Facilitator`. */
     facilitatorName?: Collaboration.DisplayName;
@@ -525,8 +535,20 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         const ending: ReadonlySet<string> = new Set(RUN_ENDING_EVENTS);
 
         const agentToken = randomSecrets.newSecret();
-        // the knowledge of the session (ADR 0031): extracted only when the workspace has a store
-        const store = config.knowledge && (options.knowledgeStore ?? knowledgeStore(config.knowledge, root));
+        // the knowledge of the session (ADR 0031): extracted only when the workspace's store opens; else said, and none
+        const knowledgeConfig = options.knowledge?.config.knowledge ?? config.knowledge;
+        let sweep: (() => Promise<void>) | undefined;
+        let store: KnowledgeStore | undefined = options.knowledgeStore;
+        if (!store && options.knowledge) {
+            const opened = await openKnowledgeStore(options.knowledge.config, options.knowledge.approval).catch((e: unknown) => ({
+                ok: false as const,
+                error: { message: e instanceof Error ? e.message : String(e) },
+            }));
+            if (opened.ok) {
+                store = opened.value.store;
+                sweep = opened.value.sweep;
+            } else log(`knowledge: not extracted in this session (${opened.error.message})`);
+        }
         const extractTimeoutMs = (config.agent.extractTimeout ?? EXTRACT_TIMEOUT_S) * 1000;
         let knowledge: SessionKnowledge | undefined;
         const extractions = store
@@ -607,10 +629,10 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 return { ...given, ...(where && { where }) };
             },
         });
-        if (store && extractions && config.knowledge)
+        if (store && extractions && knowledgeConfig)
             knowledge = startSessionKnowledge({
                 store,
-                config: config.knowledge,
+                config: knowledgeConfig,
                 session,
                 collaboration,
                 db,
@@ -778,6 +800,14 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             void linkJoin?.sweep().catch((e: unknown) => log(`join requests failed: ${e instanceof Error ? e.message : String(e)}`));
         }, options.expireEveryMs ?? EXPIRE_EVERY_MS);
         expiring.unref();
+        // the `files` store's deletions past their undo window, completed now and then while the session runs
+        const sweeping = sweep
+            ? setInterval(
+                  () => void sweep?.().catch((e: unknown) => log(`knowledge: the sweep failed (${e instanceof Error ? e.message : String(e)})`)),
+                  KNOWLEDGE_SWEEP_MS,
+              )
+            : undefined;
+        sweeping?.unref();
         // a revert left at the head of the queue when the server last stopped; triages left waiting for stage 2
         void reverts.kick();
         stage.kick();
@@ -811,6 +841,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 stopped ??= (async () => {
                     soloSignIn.revoke();
                     clearInterval(expiring);
+                    if (sweeping) clearInterval(sweeping);
                     // the links and pairing codes not used yet die with the server; in `link`, every sign-in too
                     await access.revokeLinks(session).catch(() => undefined);
                     if (linkMode) await access.signOutAll(session).catch(() => undefined);
