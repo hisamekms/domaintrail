@@ -2,19 +2,21 @@
 // answers are the store's values as JSON, decoded with the store's own protocol (`@domaintrail/knowledge/protocol`).
 // A session without a store answers 404: the page then shows no knowledge at all.
 import type { Knowledge, ItemWithHistory, Page, StickyCount, Deletion } from '@domaintrail/knowledge';
-import { deletion, itemWithHistory, liveItem, liveItems, page, stickyCounts, type Decoder } from '@domaintrail/knowledge/protocol';
+import { deletion, extractionSwitch, itemWithHistory, liveItem, liveItems, page, stickyCounts, type Decoder } from '@domaintrail/knowledge/protocol';
 import { isSignInRedirect, reloadForSignIn, SAME_ORIGIN } from '../app/sign-in';
 import { SessionApiError } from '../session/api';
 
 const BASE = '/api/session/knowledge';
+/** Whether the session extracts its knowledge (ADR 0031, section 3): read by anyone, switched by the facilitator. */
+const EXTRACTION = '/api/session/extraction';
 
 /** A POST's body: JSON, or an image's bytes with their type. */
 type Post = { readonly json: unknown } | { readonly blob: Blob };
 
-async function call<T>(path: string, decode: Decoder<T>, init?: Post): Promise<T> {
+async function call<T>(path: string, decode: Decoder<T>, init?: Post, base: string = BASE): Promise<T> {
     let res: Response;
     try {
-        res = await fetch(`${BASE}${path}`, {
+        res = await fetch(`${base}${path}`, {
             ...(init && {
                 method: 'POST',
                 headers: { 'content-type': 'blob' in init ? init.blob.type : 'application/json' },
@@ -71,6 +73,10 @@ export const knowledgeApi = {
     restore: (id: string): Promise<Knowledge.LiveKnowledgeItem> => call(`/items/${enc(id)}/restore`, liveItem, { json: {} }),
     unlink: (id: string, other: string): Promise<Knowledge.LiveKnowledgeItem[]> => call(`/items/${enc(id)}/unlink`, liveItems, { json: { other } }),
     attachImage: (id: string, file: Blob): Promise<Knowledge.LiveKnowledgeItem> => call(`/items/${enc(id)}/images`, liveItem, { blob: file }),
+    /** Whether the session extracts its knowledge (404 without a store). */
+    extraction: async (): Promise<boolean> => (await call('', extractionSwitch, undefined, EXTRACTION)).enabled,
+    /** The facilitator switches the session's extraction on or off; the answer is the state now. */
+    setExtraction: async (enabled: boolean): Promise<boolean> => (await call('', extractionSwitch, { json: { enabled } }, EXTRACTION)).enabled,
 };
 
 /** Where the page shows an image of the knowledge from. */

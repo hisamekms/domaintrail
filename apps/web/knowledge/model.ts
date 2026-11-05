@@ -1,6 +1,7 @@
 // The knowledge as the Live View shows it (ADR 0031, section 10), without React: a sticky's reference and its
 // selection, the order of a list (newest first, or by kind), the conflicts among items, the marks on the canvas, the
-// filters of the ナレッジ list, and the message that asks the AI to make a conflict a hotspot.
+// filters of the ナレッジ list, the message that asks the AI to make a conflict a hotspot, and the session's extraction
+// switch.
 import type { Knowledge } from '@domaintrail/knowledge';
 import type { SendRequestBody } from '@domaintrail/collaboration/protocol';
 import { mentionName } from '../session/mentions';
@@ -62,6 +63,12 @@ export function conflictPairs(items: readonly KnowledgeItem[], lookup: (id: stri
             pairs.push({ a, b });
         }
     return pairs;
+}
+
+/** The items of a list that are in none of its conflicts shown side by side: those are listed in their box only. */
+export function outsideConflicts(items: readonly KnowledgeItem[], pairs: readonly ConflictPair[]): KnowledgeItem[] {
+    const paired = new Set<string>(pairs.flatMap((p) => [p.a.id, p.b.id]));
+    return items.filter((i) => !paired.has(i.id));
 }
 
 /** The IDs the items link to as conflicts but are not among them: fetched to show the pair. */
@@ -142,4 +149,25 @@ export function hotspotBody(input: {
     const mentions = targets.map((t, i) => `#${mentionName(t.label)}[${i + 1}]`).join(' ');
     const quote = (i: KnowledgeItem): string => plainText(i.content.text).replace(/\s+/g, ' ').slice(0, 300);
     return { targets, body: `@${mentionName(input.aiName)}[p1] ${input.text(mentions, quote(pair.a), quote(pair.b))}`, mentions: ['ai'] };
+}
+
+/** Whether the session extracts its knowledge, from a message of dt's WebSocket (`knowledge.extraction`); none for another. */
+export function extractionOfMessage(message: { readonly type: string }): boolean | undefined {
+    if (message.type !== 'knowledge.extraction') return undefined;
+    const enabled: unknown = Reflect.get(message, 'enabled');
+    return typeof enabled === 'boolean' ? enabled : undefined;
+}
+
+/**
+ * What a page shows of the session's extraction (ADR 0031, section 3): the facilitator a switch; the others a mark
+ * while it is on (their talk is being turned into knowledge), nothing while it is off; nothing at all without a
+ * knowledge store (`enabled` unknown) or once the page is out of the session.
+ */
+export type ExtractionControl = 'switch' | 'on' | 'none';
+
+export function extractionControl(input: { readonly enabled: boolean | undefined; readonly facilitator: boolean; readonly live: boolean }): ExtractionControl {
+    const { enabled, facilitator, live } = input;
+    if (enabled === undefined || !live) return 'none';
+    if (facilitator) return 'switch';
+    return enabled ? 'on' : 'none';
 }

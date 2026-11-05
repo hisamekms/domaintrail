@@ -1,10 +1,10 @@
 // The knowledge on the page (ADR 0031, section 10; the maintainer's approved preview): a sticky's items in its detail
-// (its conflicts side by side first, then the items newest first or by kind), the ナレッジ list of the left column
+// (its conflicts side by side first, each side opening to its detail, then the other items newest first or by kind), the ナレッジ list of the left column
 // with its search and filters, an item opened to its quotes, the other stickies it concerns, its versions and images,
-// with 直す / 画像を付ける / 消す; the deletion's 元に戻す; the dot and the conflict mark on the canvas, and the stickies
-// an opened item lights up.
-import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
-import { CircleAlert, PanelLeftClose, Search } from 'lucide-react';
+// with 直す / 画像を付ける / 消す; the deletion's 元に戻す; the dot and the conflict mark on the canvas, the stickies
+// an opened item lights up, and the session's extraction switch in the app bar (section 3).
+import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { CircleAlert, Lightbulb, LightbulbOff, PanelLeftClose, Search } from 'lucide-react';
 import { latestRevision } from '../session/state';
 import { sessionApi } from '../session/api';
 import { AI_NAME } from '../session/ai';
@@ -14,6 +14,7 @@ import { useCanvasValue, type DiagramCanvas } from '../view/diagram';
 import { imageUrl, knowledgeApi } from './api';
 import {
     conflictPairs,
+    extractionControl,
     hotspotBody,
     imagesOf,
     KINDS,
@@ -21,6 +22,7 @@ import {
     NO_FILTERS,
     ordered,
     ORIGINS,
+    outsideConflicts,
     plainText,
     queryOf,
     toggled,
@@ -275,8 +277,22 @@ export function ItemRow({
     );
 }
 
-/** A conflict: the two items side by side, ホットスポットにする (a message to the AI) and 食い違いではない. */
-export function ConflictBox({ pair }: { pair: ConflictPair }): ReactElement {
+/**
+ * A conflict: the two items side by side, ホットスポットにする (a message to the AI) and 食い違いではない. Each side
+ * opens to its detail under the pair (the sticky's list does not repeat them).
+ */
+export function ConflictBox({
+    pair,
+    from,
+    isOpen,
+    onToggle,
+}: {
+    pair: ConflictPair;
+    /** The sticky whose detail shows the box. */
+    from: string | undefined;
+    isOpen: (id: string) => boolean;
+    onToggle: (item: KnowledgeItem) => void;
+}): ReactElement {
     const t = useT().knowledge;
     const view = useKnowledgeView();
     const [asked, setAsked] = useState(false);
@@ -302,13 +318,14 @@ export function ConflictBox({ pair }: { pair: ConflictPair }): ReactElement {
         <div className="knowledge-conflict" role="group" aria-label={t.conflict}>
             <div className="knowledge-pair">
                 {[pair.a, pair.b].map((i) => (
-                    <div key={i.id} className="knowledge-side">
+                    <button key={i.id} type="button" className="knowledge-side" aria-expanded={isOpen(i.id)} onClick={() => onToggle(i)}>
                         <span className="knowledge-kind">{t.kinds[i.content.labels.kind]}</span>
                         <span className="knowledge-text">{plainText(i.content.text)}</span>
                         <Meta item={i} />
-                    </div>
+                    </button>
                 ))}
             </div>
+            {[pair.a, pair.b].map((i) => isOpen(i.id) && <ItemDetail key={i.id} item={i} from={from} />)}
             <span className="knowledge-actions">
                 {asked ? (
                     <span className="knowledge-meta">{t.hotspotAsked}</span>
@@ -341,7 +358,7 @@ function useOpened(
     return { isOpen: (id) => id === opened, toggle: (i) => setOpened((o) => (o === i.id ? undefined : i.id)) };
 }
 
-/** The items about a sticky (its detail): its conflicts side by side, then the items, newest first or by kind. */
+/** The items about a sticky (its detail): its conflicts side by side, then the other items, newest first or by kind. */
 export function StickyKnowledge({ sticky }: { sticky: string }): ReactElement | null {
     const t = useT().knowledge;
     const view = useKnowledgeView();
@@ -363,27 +380,32 @@ export function StickyKnowledge({ sticky }: { sticky: string }): ReactElement | 
             stale = true;
         };
     }, [sticky, version]);
-    const opened = useOpened(view, items ?? []);
+    const shown = useMemo(() => [...(items ?? []), ...others], [items, others]);
+    const opened = useOpened(view, shown);
     if (!view?.available || items === undefined) return null;
-    const all = new Map([...items, ...others].map((i) => [i.id as string, i]));
+    const all = new Map(shown.map((i) => [i.id as string, i]));
     const pairs = conflictPairs(items, (id) => all.get(id));
+    // an item in a conflict box is shown there only
+    const rest = outsideConflicts(items, pairs);
     return (
         <section className="knowledge-sticky" aria-label={t.title}>
             <div className="knowledge-head">
                 <span className="knowledge-title">{t.title}</span>
-                {items.length > 1 && <OrderSwitch order={order} onOrder={setOrder} />}
+                {rest.length > 1 && <OrderSwitch order={order} onOrder={setOrder} />}
             </div>
             {pairs.map((p) => (
-                <ConflictBox key={`${p.a.id}|${p.b.id}`} pair={p} />
+                <ConflictBox key={`${p.a.id}|${p.b.id}`} pair={p} from={sticky} isOpen={opened.isOpen} onToggle={opened.toggle} />
             ))}
             {items.length === 0 ? (
                 <p className="muted">{t.none}</p>
             ) : (
-                <ul className="knowledge-items">
-                    {ordered(items, order).map((i) => (
-                        <ItemRow key={i.id} item={i} from={sticky} open={opened.isOpen(i.id)} onToggle={() => opened.toggle(i)} />
-                    ))}
-                </ul>
+                rest.length > 0 && (
+                    <ul className="knowledge-items">
+                        {ordered(rest, order).map((i) => (
+                            <ItemRow key={i.id} item={i} from={sticky} open={opened.isOpen(i.id)} onToggle={() => opened.toggle(i)} />
+                        ))}
+                    </ul>
+                )
             )}
         </section>
     );
@@ -495,6 +517,44 @@ export function KnowledgeList({ onClose, closeLabel }: { onClose: () => void; cl
                 )}
             </div>
         </div>
+    );
+}
+
+/**
+ * Whether the session extracts its knowledge (ADR 0031, section 3), in the app bar with the session's other controls
+ * of the whole page, where everyone sees it whatever is open: the facilitator's switch (💡 pressed while on); the
+ * others' 💡 while their talk is being turned into knowledge, nothing while it is off. Nothing without a store.
+ */
+export function ExtractionSwitch({ facilitator, live }: { facilitator: boolean; live: boolean }): ReactElement | null {
+    const t = useT().knowledge;
+    const view = useKnowledgeView();
+    const [busy, setBusy] = useState(false);
+    const enabled = view?.extraction;
+    const control = extractionControl({ enabled, facilitator, live });
+    if (!view || control === 'none') return null;
+    if (control === 'on')
+        return (
+            <span className="knowledge-extraction" role="img" aria-label={t.extracting} data-tooltip={t.extracting}>
+                <Lightbulb size={15} aria-hidden />
+            </span>
+        );
+    const toggle = async (): Promise<void> => {
+        setBusy(true);
+        await view.setExtraction(!enabled);
+        setBusy(false);
+    };
+    return (
+        <button
+            type="button"
+            className="icon-button knowledge-extraction"
+            aria-pressed={enabled === true}
+            aria-label={t.extraction}
+            data-tooltip={enabled ? t.stopExtracting : t.startExtracting}
+            disabled={busy}
+            onClick={() => void toggle()}
+        >
+            {enabled ? <Lightbulb size={15} aria-hidden /> : <LightbulbOff size={15} aria-hidden />}
+        </button>
     );
 }
 

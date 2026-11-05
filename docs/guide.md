@@ -2928,7 +2928,8 @@ messages that are surely nothing (empty, emoji only, a fixed acknowledgement) st
 model (`agent.extract.gateModel`, Haiku unless configured) decides whether the new messages hold a finding, and stops
 it only when sure; then the extractor (`agent.extract.model`) extracts, the messages the light model named first. Each
 extraction's stages and what each model cost are recorded in the session database. Switched on again after being off,
-the extraction picks up the talk of the last `contextMinutes`, not everything said while it was off.
+the extraction picks up the talk of the last `contextMinutes`, not everything said while it was off. The facilitator
+switches it with the 💡 in the Live View's app bar; the others see a 💡 there while it is on.
 
 The `cloudflare` store's Access service token is never in the file: dt reads it from the environment variables
 `DOMAINTRAIL_KNOWLEDGE_CLIENT_ID` and `DOMAINTRAIL_KNOWLEDGE_CLIENT_SECRET` (sent as `CF-Access-Client-Id` and

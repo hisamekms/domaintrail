@@ -478,9 +478,11 @@ page shows what the sessions found, through dt only (`/api/session/knowledge`):
 
 - On the canvas, a sticky with knowledge has a dot at its top right corner, and a red `!` when one of its items is in a
   conflict; no count.
-- Selecting a sticky shows ナレッジ in its detail: its conflicts first, the two items side by side with
+- Selecting a sticky shows ナレッジ in its detail: its conflicts first, the two items side by side (each opens to its detail
+  there, and is not listed again below) with
   ホットスポットにする (a message to the AI, as 聞くことをメモ sends: the facilitator's goes to the runner, a
-  participant's becomes a proposal) and 食い違いではない (the link removed from both); then its items, 新しい順 or 種類の順.
+  participant's becomes a proposal) and 食い違いではない (the link removed from both); then its other items, 新しい順 or
+  種類の順.
   An item opens to its images, its quotes with their dates, the other stickies it concerns (each selects it), its
   versions, and 直す (its text and labels, a new version), 画像を付ける (PNG, JPEG, GIF or WebP, at the end of its text)
   and 消す. Deleting hides it from everyone at once; 元に戻す shows for 10 seconds. Once the store's undo window has
@@ -488,4 +490,8 @@ page shows what the sessions found, through dt only (`/api/session/knowledge`):
   project reads (when it starts and every few minutes) to redact them in its own session database.
 - ナレッジ in the activity bar lists every item, with a search over the text and the quotes and filters by AS-IS /
   TO-BE, kind and origin. Opening an item rings its stickies on the canvas.
+- Whether the talk is turned into knowledge shows in the app bar, with the session's other controls: the facilitator
+  has a 💡 switch (pressed while the extraction is on, struck through while off; `POST /api/session/extraction`), the
+  others a 💡 while it is on and nothing while it is off. Every page follows a change at once (`knowledge.extraction`
+  over the WebSocket). None of it without a knowledge store.
 - The page reads the knowledge again whenever it changes: after an extraction, or anyone's change.

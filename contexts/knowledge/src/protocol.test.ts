@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Knowledge } from './generated/index.js';
 import type { AppliedExtraction } from './application/ports.js';
-import { WireError, appliedExtraction, extraction, knowledgeItem, knowledgeQueryOf, knowledgeQueryParams } from './protocol.js';
+import { WireError, appliedExtraction, extraction, extractionSwitch, knowledgeItem, knowledgeQueryOf, knowledgeQueryParams } from './protocol.js';
 import { at, content, extraction as extractionRef, itemId, liveItem, reason, source, userName, version } from './test-helpers.js';
 
 const overJson = (v: unknown): unknown => JSON.parse(JSON.stringify(v));
@@ -75,5 +75,10 @@ describe('the wire', () => {
         expect(knowledgeQueryOf(new URLSearchParams(knowledgeQueryParams(query).toString()))).toEqual(query);
         expect(() => knowledgeQueryOf(new URLSearchParams('when=later'))).toThrow('when[0]: expected one of as_is, to_be, none');
         expect(() => knowledgeQueryOf(new URLSearchParams('limit=1000'))).toThrow('limit: expected an integer from 1 to 200');
+    });
+
+    test("the extraction switch's body", () => {
+        expect(extractionSwitch({ enabled: false }, 'body')).toEqual({ enabled: false });
+        expect(() => extractionSwitch({ enabled: 'yes' }, 'body')).toThrow('body.enabled: expected a boolean');
     });
 });

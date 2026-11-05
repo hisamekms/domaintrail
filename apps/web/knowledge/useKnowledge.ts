@@ -1,6 +1,7 @@
 // The page's knowledge (ADR 0031, section 10): whether the session has a store, the marks of the storming shown, the
-// stickies an opened item lights up, and deleting with 10 seconds to undo. What is shown is read again whenever dt
-// says the knowledge changed (`knowledge.changed`, after an extraction or anyone's change) and after this page's own.
+// stickies an opened item lights up, deleting with 10 seconds to undo, and whether the session extracts (section 3).
+// What is shown is read again whenever dt says the knowledge changed (`knowledge.changed`, after an extraction or
+// anyone's change) and after this page's own; the extraction's state follows dt's `knowledge.extraction`.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { firstDeclarations } from '@domaintrail/storming';
 import type { DisplayMode } from '@domaintrail/visualization';
@@ -9,7 +10,7 @@ import type { ViewSocket } from '../app/useViewSocket';
 import { nameIn } from '../model-utils';
 import { SessionApiError } from '../session/api';
 import { knowledgeApi } from './api';
-import { marksOf, type StickyMark } from './model';
+import { extractionOfMessage, marksOf, type StickyMark } from './model';
 
 /** How long a deletion can be undone on the page (ADR 0031, section 7; the store keeps it longer). */
 export const UNDO_MS = 10_000;
@@ -34,6 +35,10 @@ export interface KnowledgeView {
     label(sticky: string): string;
     /** Selects a sticky on the canvas. */
     select(sticky: string): void;
+    /** Whether the session extracts its knowledge; undefined until known and without a store. */
+    readonly extraction: boolean | undefined;
+    /** The facilitator switches the extraction on or off. */
+    setExtraction(enabled: boolean): Promise<void>;
     /** The last failure, said once. */
     readonly error: string | undefined;
     readonly setError: (error: string | undefined) => void;
@@ -59,6 +64,7 @@ export function useKnowledge(input: {
     const [lit, setLitState] = useState<readonly string[]>([]);
     const [undoable, setUndoable] = useState<string | undefined>();
     const [error, setError] = useState<string | undefined>();
+    const [extraction, setExtractionState] = useState<boolean | undefined>();
     const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const changed = useCallback(() => setVersion((v) => v + 1), []);
 
@@ -68,9 +74,24 @@ export function useKnowledge(input: {
             socket.subscribe((message) => {
                 const type: string = message.type;
                 if (type === 'knowledge.changed') changed();
+                const enabled = extractionOfMessage(message);
+                if (enabled !== undefined) setExtractionState(enabled);
             }),
         [socket, changed],
     );
+    // whether the session extracts, read once (dt sends it on connect too, perhaps before this page listened); none
+    // without a store (404)
+    useEffect(() => {
+        if (!session) return;
+        let stale = false;
+        knowledgeApi.extraction().then(
+            (enabled) => !stale && setExtractionState((known) => known ?? enabled),
+            () => undefined,
+        );
+        return () => {
+            stale = true;
+        };
+    }, [session]);
 
     // the marks of the storming shown (and whether there is a store at all: a session without one answers 404)
     useEffect(() => {
@@ -131,6 +152,14 @@ export function useKnowledge(input: {
         }
     };
 
+    const setExtraction = async (enabled: boolean): Promise<void> => {
+        try {
+            setExtractionState(await knowledgeApi.setExtraction(enabled));
+        } catch (e) {
+            failed(e);
+        }
+    };
+
     const labels = useMemo(() => new Map(stormings.map((s) => [s.id, firstDeclarations(s.storming)] as const)), [stormings]);
     const label = useCallback(
         (sticky: string): string => {
@@ -153,6 +182,8 @@ export function useKnowledge(input: {
         changed,
         label,
         select: (sticky) => select(`es/${sticky.replace('.', '/')}`),
+        extraction,
+        setExtraction,
         error,
         setError,
     };

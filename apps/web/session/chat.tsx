@@ -36,6 +36,7 @@ import type { ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
 import { motionMs, useGrow, useSwap } from '../shared/motion';
 import { useLang, useT } from '../i18n';
+import { ExtractionSwitch } from '../knowledge/panel';
 import { useChatActions, type QuestionChoice } from './actions';
 import { ActivityLine } from './activity';
 import {
@@ -664,7 +665,8 @@ export function SessionChat(props: {
 
 /**
  * The session's controls of the whole page, put in the app bar (rendered here, inside the chat's context): the collab
- * menu (the avatars ▾; in Solo a plain ⋯, after the AI's state) and the AI's state at a glance.
+ * menu (the avatars ▾; in Solo a plain ⋯, after the AI's state), whether the talk is turned into knowledge (with a
+ * knowledge store) and the AI's state at a glance.
  */
 function SessionBar(props: {
     slot: HTMLElement | null;
@@ -703,6 +705,7 @@ function SessionBar(props: {
     return createPortal(
         <div className="session-chat session-bar">
             {!solo && menu}
+            <ExtractionSwitch facilitator={session.me.participant.role === 'facilitator'} live={props.live} />
             {/* idle says nothing: only running, a question or a queued run shows; a click opens it in AI の作業 */}
             <span className="chat-status-slot" aria-live="polite">
                 {presence.kind === 'missing' && (
