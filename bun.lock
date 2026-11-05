@@ -96,6 +96,7 @@
       "name": "@domaintrail/agent",
       "dependencies": {
         "@domaintrail/collaboration": "workspace:*",
+        "@domaintrail/knowledge": "workspace:*",
       },
     },
     "capabilities/analysis": {

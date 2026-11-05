@@ -13,6 +13,17 @@ export interface ClaudeResult {
     readonly structured?: unknown;
     /** `result`: the final text (the structured output as JSON with `--json-schema`), else the raw output. */
     readonly text: string;
+    /** What the turn cost, when the `result` event says (`usage`, `total_cost_usd`). */
+    readonly usage?: TurnUsage;
+}
+
+/** What a turn cost: the tokens of its input (those read from and written to the prompt cache apart) and output, and dollars. */
+export interface TurnUsage {
+    readonly inputTokens?: number;
+    readonly outputTokens?: number;
+    readonly cacheReadTokens?: number;
+    readonly cacheCreationTokens?: number;
+    readonly costUsd?: number;
 }
 
 /** Most characters kept of what is not a stream event (the fallback result), and of one line. */
@@ -23,7 +34,23 @@ export const isObject = (v: unknown): v is Record<string, unknown> => typeof v =
 /** A `result` event (or the JSON of `--output-format json`) as the result, if it is one. */
 export function resultEvent(value: unknown): ClaudeResult | undefined {
     if (!isObject(value) || typeof value.result !== 'string') return undefined;
-    return { text: value.result, ...(value.structured_output != null && { structured: value.structured_output }) };
+    const usage = usageOf(value);
+    return { text: value.result, ...(value.structured_output != null && { structured: value.structured_output }), ...(usage && { usage }) };
+}
+
+const tokens = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined);
+
+/** The usage a `result` event reports (`usage.input_tokens`, …, `total_cost_usd`), if any. */
+export function usageOf(event: Readonly<Record<string, unknown>>): TurnUsage | undefined {
+    const u = isObject(event.usage) ? event.usage : {};
+    const usage: TurnUsage = {
+        ...(tokens(u.input_tokens) !== undefined && { inputTokens: tokens(u.input_tokens) }),
+        ...(tokens(u.output_tokens) !== undefined && { outputTokens: tokens(u.output_tokens) }),
+        ...(tokens(u.cache_read_input_tokens) !== undefined && { cacheReadTokens: tokens(u.cache_read_input_tokens) }),
+        ...(tokens(u.cache_creation_input_tokens) !== undefined && { cacheCreationTokens: tokens(u.cache_creation_input_tokens) }),
+        ...(tokens(event.total_cost_usd) !== undefined && { costUsd: tokens(event.total_cost_usd) }),
+    };
+    return Object.keys(usage).length ? usage : undefined;
 }
 
 /** The result in `claude --output-format json`'s output (`{"type":"result","result":"…","structured_output":{…},…}`), else the raw output. */

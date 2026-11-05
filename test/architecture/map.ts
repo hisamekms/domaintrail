@@ -190,7 +190,8 @@ export const MAP: Record<string, Module> = {
         kind: 'capability',
         dir: 'capabilities/agent',
         sources: 'capabilities/agent/src',
-        upstream: ['collaboration'],
+        // the extractor role builds its prompt from Knowledge's extraction input and checks its reply (ADR 0031)
+        upstream: ['collaboration', 'knowledge'],
     },
     workspace: {
         kind: 'platform',
