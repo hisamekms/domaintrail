@@ -583,7 +583,7 @@ Examples:
         io.out(`Live View: ${server.facilitatorLink ?? server.url}`);
         io.out(`  (a link for you only: opened once within 60 minutes, it signs that browser in; then ${server.url}; \`dt open link\` prints another)`);
         io.out(`Session: ${server.session} (${server.opened}, solo)`);
-        await serveWithAgent(cfg, opts, server);
+        await serveWithAgent(cfg, opts, server, approval);
     });
 
     const collab = serveOptions(
@@ -670,7 +670,7 @@ Examples:
         }
         io.out(`Agent API: ${server.agentUrl} (another agent pairs with a code: dt collab agent-link)`);
         try {
-            await serveWithAgent(cfg, opts, server);
+            await serveWithAgent(cfg, opts, server, approval);
         } finally {
             await tunnel?.stop();
         }
@@ -806,11 +806,17 @@ Examples:
         )
         .action(async (opts: { agent: 'claude'; role?: AgentRole; once?: boolean; code: string; url?: string; yes?: boolean }) => {
             const cfg = await config();
-            await approve(cfg, opts.yes);
+            const approval = await approve(cfg, opts.yes);
             await printConfig(cfg, opts.role ? [opts.role] : AGENT_ROLES);
             const connect = { code: opts.code, ...(opts.url !== undefined && { url: opts.url }) };
             const agent = await deps
-                .startAgent({ ...agentOptions(cfg, opts.agent), connect, roles: opts.role ? [opts.role] : AGENT_ROLES, once: opts.once ?? false, log: io.out })
+                .startAgent({
+                    ...agentOptions(cfg, opts.agent, approval),
+                    connect,
+                    roles: opts.role ? [opts.role] : AGENT_ROLES,
+                    once: opts.once ?? false,
+                    log: io.out,
+                })
                 .catch((e: unknown) => {
                     if (e instanceof SessionError) throw new CliError(e.message);
                     throw e;
@@ -1090,7 +1096,11 @@ Examples:
         });
 
     /** The agent's settings for `dt agent` or the agent in process. */
-    const agentOptions = (cfg: ResolvedConfig, agent: 'claude'): Omit<AgentOptions, 'roles' | 'once' | 'log' | 'connect'> => {
+    const agentOptions = (
+        cfg: ResolvedConfig,
+        agent: 'claude',
+        approval: SettingsApproval | undefined,
+    ): Omit<AgentOptions, 'roles' | 'once' | 'log' | 'connect'> => {
         const configPath = program.opts<{ config?: string }>().config;
         return {
             root: cfg.root,
@@ -1105,6 +1115,7 @@ Examples:
             extract: cfg.agent.extract,
             read: cfg.agent.read,
             practice: practiceOf(parseGuide(guide)),
+            knowledge: { config: cfg, approval },
         };
     };
 
@@ -1113,7 +1124,7 @@ Examples:
      * Claude Code is not usable, says why in one line and goes on without it (an error with `--agent claude`). Then
      * serves until the session closes.
      */
-    const serveWithAgent = async (cfg: ResolvedConfig, opts: ServeOptions, server: StartedSession): Promise<void> => {
+    const serveWithAgent = async (cfg: ResolvedConfig, opts: ServeOptions, server: StartedSession, approval: SettingsApproval): Promise<void> => {
         let agent: StartedAgent | undefined;
         try {
             if (opts.agent === false) io.out('AI: not started (--no-agent); start it with `dt agent`');
@@ -1125,7 +1136,7 @@ Examples:
                 } else {
                     agent = await deps
                         .startAgent({
-                            ...agentOptions(cfg, 'claude'),
+                            ...agentOptions(cfg, 'claude', approval),
                             // the credential in memory: never on disk
                             connect: { credential: { url: server.agentUrl, token: server.agentToken, session: server.session } },
                             roles: AGENT_ROLES,

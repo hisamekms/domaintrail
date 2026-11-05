@@ -2,13 +2,13 @@
 // `cloudflare` at `knowledge.url` with the environment's service token (refused, in one line, without one), only with
 // the proof that the workspace's settings — the URL among them — are approved as they are now.
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { Knowledge, projectFromDirName } from '@domaintrail/knowledge';
 import { resolveConfig, type ResolvedConfig } from '../config/config.js';
 import { approveSettings, checkApproved, type SettingsApproval, type TrustStore } from '../cli/trust.js';
-import { NOT_APPROVED, openKnowledgeStore } from './knowledge.js';
+import { knowledgeForAgents, NOT_APPROVED, openKnowledgeStore } from './knowledge.js';
 
 const made = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
     if (!r.ok) throw new Error(JSON.stringify(r.error));
@@ -145,5 +145,27 @@ describe('openKnowledgeStore', () => {
         });
         const local = config(cloudflare('http://localhost:8787'));
         expect((await openKnowledgeStore(local, await approved(local), { ...noState, env: {} })).ok).toBe(true);
+    });
+});
+
+describe('knowledgeForAgents', () => {
+    test('files: usable once knowledge/ exists; before, quietly not (nothing to read yet)', async () => {
+        expect(knowledgeForAgents(config(), undefined)).toEqual({ usable: false, reason: 'no knowledge/ in the workspace', quiet: true });
+        await mkdir(path.join(root, 'knowledge'));
+        expect(knowledgeForAgents(config(), undefined)).toEqual({ usable: true });
+    });
+
+    test('cloudflare: only approved as it is now and with a service token (none needed on loopback), as openKnowledgeStore opens it', async () => {
+        const cfg = config(cloudflare());
+        expect(knowledgeForAgents(cfg, await approved(cfg), TOKEN)).toEqual({ usable: true });
+        expect(knowledgeForAgents(cfg, undefined, TOKEN)).toEqual({ usable: false, reason: NOT_APPROVED });
+        // approved before knowledge.url changed: proves nothing
+        const moved = config(cloudflare('https://attacker.example.net'));
+        expect(knowledgeForAgents(moved, await approved(cfg), TOKEN)).toEqual({ usable: false, reason: NOT_APPROVED });
+        const without = knowledgeForAgents(cfg, await approved(cfg), {});
+        expect(without.usable).toBe(false);
+        expect(!without.usable && without.reason).toContain('DOMAINTRAIL_KNOWLEDGE_CLIENT_ID');
+        const local = config(cloudflare('http://127.0.0.1:8787'));
+        expect(knowledgeForAgents(local, await approved(local), {})).toEqual({ usable: true });
     });
 });

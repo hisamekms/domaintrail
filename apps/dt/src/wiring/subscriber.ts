@@ -10,6 +10,12 @@
 //   knowledge (ADR 0031: Claude Code with no tools at all, `agent.extract`), from the extraction entry point — a role of
 //   its own on the agent API, read-only like the answerer, so it is taken with it. A session that keeps no knowledge
 //   answers its stream 404, and it ends then without a word more.
+//
+// With a usable knowledge store (`knowledgeForAgents`), the answerer's answers and proposals and the runner's runs read
+// knowledge through the same read-only tools as `dt mcp` (ADR 0031, Consequences): Claude Code starts `dt mcp` of the
+// agent's pinned `dt` on the workspace as its one MCP server, through a launcher outside the workspace, and is allowed
+// its three tools by name. `dt mcp` checks the approval of the workspace's settings by itself. The triage, the
+// interviews, the commands and the extractor never get them.
 import { mkdtemp, rm } from 'node:fs/promises';
 import { homedir, hostname, tmpdir } from 'node:os';
 import * as path from 'node:path';
@@ -25,6 +31,8 @@ import {
     createDtTools,
     createWarmClaudeRunner,
     createHttpAgentApi,
+    type KnowledgeMcp,
+    writeKnowledgeMcpLauncher,
     type DtCommand,
     type ExtractConfig,
     type Extractor,
@@ -68,6 +76,9 @@ import { workspaceState } from './state.js';
 import { configFileRules, configGuardScan } from './config-guard.js';
 import { processAlive } from './process.js';
 import { answererExtraViews, runnerReadScope } from './read-scope.js';
+import type { ResolvedConfig } from '../config/config.js';
+import type { SettingsApproval } from '../cli/trust.js';
+import { knowledgeForAgents } from './knowledge.js';
 
 export type { SubscriberEnd };
 
@@ -108,6 +119,11 @@ export interface SubscriberOptions {
     practice?: Practice;
     /** What each role may read outside the workspace, read-only (`agent.read.paths` and its own; absolute paths). */
     read?: { readonly answer: readonly string[]; readonly run: readonly string[] };
+    /**
+     * The workspace's config and the proof that its settings were approved: with a usable knowledge store, the
+     * answerer and the runner get the knowledge tools of `dt mcp` (`knowledgeForAgents`). None: no knowledge tools.
+     */
+    knowledge?: { readonly config: ResolvedConfig; readonly approval: SettingsApproval | undefined };
     /** The answerer's program instead of `agentCommand`: for the tests only. */
     answerCommand?: AgentCommand;
     log?: (line: string) => void;
@@ -198,6 +214,10 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
         for (const s of skipped) log(`${role === 'answer' ? 'answerer' : 'runner'}: not reading ${s}`);
         return targets;
     };
+    // the knowledge tools of `dt mcp`, for the answers and the runs alike; its launcher goes when the subscriber ends
+    const launcher = await knowledgeLauncher(options, root, log);
+    const knowledgeMcp: KnowledgeMcp | undefined = launcher && { command: launcher.command, args: launcher.args };
+    const knowledgeGone = <T>(done: Promise<T>): Promise<T> => (launcher ? done.finally(() => launcher.dispose()) : done);
     // the answerer reads a view of the workspace: the files git does not ignore, without .domaintrail/ and .git/; and
     // views of what it reads outside it
     const view = roles.has('answer') ? answererView(root) : undefined;
@@ -217,6 +237,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
                           root: viewDir,
                           prepare,
                           ...(extraViews && { extraRead: extraViews.extra }),
+                          ...(knowledgeMcp && { knowledge: knowledgeMcp }),
                           ...((options.answerCommand ?? options.agentCommand) && { command: options.answerCommand ?? options.agentCommand }),
                           answer: {
                               warm: answerConfig.warm,
@@ -238,6 +259,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
                       timeoutMs: answerConfig.timeout * 1000,
                       ...(options.reconnect && { reconnect: options.reconnect }),
                       ...(options.practice && { practice: options.practice }),
+                      ...(knowledgeMcp && { knowledge: true }),
                   },
               )
             : undefined;
@@ -269,10 +291,12 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
         await extractor?.stop();
     };
     if (!roles.has('run')) {
-        const done = (answerer?.done ?? Promise.resolve<SubscriberEnd>('stopped')).then(async (why) => {
-            await readOnlyEnd(why);
-            return why;
-        });
+        const done = knowledgeGone(
+            (answerer?.done ?? Promise.resolve<SubscriberEnd>('stopped')).then(async (why) => {
+                await readOnlyEnd(why);
+                return why;
+            }),
+        );
         return {
             session: session.value.session,
             roles: taken,
@@ -300,6 +324,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             readScope: () => runnerReadScope(() => runnerDeniedPaths(root), runTargets),
             // a -c file and its local override, never edited (the default names are denied at any depth already)
             ...(options.configPath && { configFiles: configFileRules(options.configPath, root) }),
+            ...(knowledgeMcp && { knowledge: knowledgeMcp }),
             ...((run?.model ?? user.model) !== undefined && { model: run?.model ?? user.model }),
             ...((run?.effort ?? user.effort) !== undefined && { effort: run?.effort ?? user.effort }),
         };
@@ -313,7 +338,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
                   })
                 : await createClaudeCodeRunner(claude);
     } catch (e) {
-        await Promise.all([answerer?.stop(), extractor?.stop()]);
+        await Promise.all([answerer?.stop(), extractor?.stop(), launcher?.dispose()]);
         throw new SessionError(e instanceof Error ? e.message : String(e));
     }
     const subscriber: Subscriber = subscribe(
@@ -338,14 +363,17 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             heartbeatMs: options.heartbeatMs,
             reconnect: options.reconnect,
             ...(options.practice && { practice: options.practice }),
+            ...(knowledgeMcp && { knowledge: true }),
         },
     );
     // the runner's end ends the answerer and the extractor too (the session closed — after the last extraction —, the
     // server is gone, Ctrl+C, `--once`)
-    const done = subscriber.done.then(async (why) => {
-        await readOnlyEnd(why);
-        return why;
-    });
+    const done = knowledgeGone(
+        subscriber.done.then(async (why) => {
+            await readOnlyEnd(why);
+            return why;
+        }),
+    );
     return {
         session: session.value.session,
         roles: taken,
@@ -355,6 +383,32 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             return why;
         },
     };
+}
+
+/**
+ * The launcher of `dt mcp` for the agent's Claude Code when the workspace's knowledge store is usable
+ * (`knowledgeForAgents`), with the agent's `dt` pinned (outside the workspace); else none, said in the log unless there
+ * is simply nothing to read yet (a `files` store without `knowledge/`).
+ */
+async function knowledgeLauncher(
+    options: SubscriberOptions,
+    root: string,
+    log: (line: string) => void,
+): Promise<(KnowledgeMcp & { dispose(): Promise<void> }) | undefined> {
+    if (!options.knowledge) return undefined;
+    const usable = knowledgeForAgents(options.knowledge.config, options.knowledge.approval);
+    if (!usable.usable) {
+        if (!usable.quiet) log(`knowledge: the AI reads none (${usable.reason})`);
+        return undefined;
+    }
+    try {
+        const launcher = await writeKnowledgeMcpLauncher(pinDt(options.dt, root), root, options.configPath);
+        log('knowledge: the answers and the runs read it through dt mcp');
+        return launcher;
+    } catch (e) {
+        log(`knowledge: the AI reads none (dt mcp cannot be started: ${e instanceof Error ? e.message : String(e)})`);
+        return undefined;
+    }
 }
 
 /**

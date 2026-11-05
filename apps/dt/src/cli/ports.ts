@@ -289,6 +289,8 @@ export interface AgentOptions {
     practice?: Practice;
     /** What each role may read outside the workspace, read-only (`agent.read.paths` and its own; absolute paths). */
     read?: { readonly answer: readonly string[]; readonly run: readonly string[] };
+    /** The config and the proof of its approval: with a usable knowledge store, the AI reads it through `dt mcp`'s tools. */
+    knowledge?: { readonly config: ResolvedConfig; readonly approval: SettingsApproval | undefined };
     log: (line: string) => void;
 }
 

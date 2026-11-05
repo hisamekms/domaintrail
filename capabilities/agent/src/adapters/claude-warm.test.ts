@@ -8,6 +8,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { AgentInvocation, AgentOutcome, AgentRunner } from '../core/ports.js';
+import { createClaudeCodeRunner } from './claude-code.js';
 import { createWarmClaudeRunner, type WarmRunnerOptions } from './claude-warm.js';
 
 const FAKE = path.join(import.meta.dir, '..', '..', 'test-fixtures', 'warm-claude.mjs');
@@ -112,6 +113,31 @@ describe('the warm runner', () => {
         // the user's Stop hook notifies on every turn: logged once, nothing else
         expect(log.filter((l) => l.includes('notified "stop-hook-error"'))).toHaveLength(1);
         expect(log.filter((l) => l.includes('started a warm'))).toHaveLength(1);
+    });
+
+    test("the knowledge tools: dt mcp as the process's one MCP server, its tools allowed beside the facilitator's; cold too", async () => {
+        const knowledge = { command: '/tmp/domaintrail-dt-mcp-x/dt-mcp', args: [] };
+        const { runner, logged } = await setup([{ reply: reply('First.') }], { knowledge });
+        await runner.run(invocation(1));
+        const cold = await setup([{ reply: reply('Cold.') }]);
+        const coldRunner = await createClaudeCodeRunner({
+            root: cold.root,
+            command: { command: process.execPath, args: [FAKE, `${cold.root}.plan.json`] },
+            knowledge,
+        });
+        expect((await coldRunner.run(invocation(2))).summary).toBe('Cold.');
+        for (const { args } of [logged()[0], cold.logged()[0]]) {
+            expect(JSON.parse(args[args.indexOf('--mcp-config') + 1])).toEqual({
+                mcpServers: { domaintrail: { type: 'stdio', command: knowledge.command, args: [] } },
+            });
+            expect(args[args.indexOf('--tools') + 1]).toBe('Read,Edit');
+            expect(args.slice(args.indexOf('--allowedTools') + 1)).toEqual([
+                'Edit(./**)',
+                'mcp__domaintrail__knowledge_for_element',
+                'mcp__domaintrail__knowledge_search',
+                'mcp__domaintrail__knowledge_get',
+            ]);
+        }
     });
 
     test('an error result is a run that exited 1; the process stays', async () => {

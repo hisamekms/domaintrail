@@ -27,7 +27,7 @@ import {
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { issueAgentLink, type RunningSubscriber, type SessionServer, startSessionServer, startSubscriber, type SubscriberOptions } from '@domaintrail/dt';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
-import type { SessionSettings } from '@domaintrail/dt';
+import { resolveConfig, type SessionSettings } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { findDomainFiles } from '@domaintrail/workspace';
 import { tempCopyOfExamples } from './helpers';
@@ -98,6 +98,8 @@ interface Step {
     outcome?: Record<string, unknown>;
     /** The structured output (`--json-schema`): the reply as the agent gives it, requests by number. */
     reply?: Record<string, unknown>;
+    /** A call of a tool of the `domaintrail` MCP server of `--mcp-config` (a cold run), its result logged. */
+    mcp?: { tool: string; arguments?: Record<string, unknown> };
 }
 
 interface Invocation {
@@ -106,6 +108,8 @@ interface Invocation {
     args: string[];
     cwd: string;
     prompt: string;
+    /** The result of the step's MCP call. */
+    mcp?: { content: { text: string }[]; isError?: boolean };
 }
 
 interface Context {
@@ -252,6 +256,26 @@ const alive = (pid: number): boolean => {
         return false;
     }
 };
+
+/** A knowledge item of the `files` store about a sticky of examples/shop. */
+const KNOWLEDGE_ITEM = [
+    '---',
+    'id: kn_00000001',
+    'version: 1',
+    'when: as_is',
+    'kind: rule',
+    'origin: agreed',
+    'about:',
+    '  - OrderToCash.OrderPlaced',
+    'conflictsWith: []',
+    'createdAt: 2026-11-05T09:00:00.000Z',
+    'updatedAt: 2026-11-05T09:00:00.000Z',
+    'sources: []',
+    '---',
+    '',
+    '注文は在庫を確かめてから受ける。',
+    '',
+].join('\n');
 
 const RETURNS = 'stormings/returns.dtes';
 const ADD_RETURN_CANCELLED: Step['edits'] = [
@@ -637,6 +661,42 @@ describe('the pipeline', () => {
         expect(invocation.args.join('\n')).not.toContain('answers');
         expect(log).toContain(`runner: not reading ${path.join(outside, 'missing')} (not found)`);
     });
+
+    integration(
+        'a workspace with knowledge: the runner reads it through dt mcp, which its Claude Code starts from outside the workspace; none without',
+        async () => {
+            const ctx = await setup();
+            const file = path.join(ctx.root, 'domaintrail.jsonc');
+            const knowledge = { config: resolveConfig(await readFile(file, 'utf8'), file), approval: undefined };
+            // no knowledge/ yet: nothing to read, no tools, the prompt does not name them, nothing said
+            const first = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
+            const without = await subscribe(ctx, await ctx.plan([{}]), { knowledge, once: true });
+            expect((await until(ctx, first, ['Completed', 'Failed'])).state).toBe('Completed');
+            await without.subscriber.done;
+            const [plain] = await ctx.invocations();
+            expect(plain.args).not.toContain('--mcp-config');
+            expect(plain.prompt).not.toContain('knowledge_');
+            expect(without.log.join('\n')).not.toContain('knowledge');
+
+            await mkdir(path.join(ctx.root, 'knowledge'));
+            await writeFile(path.join(ctx.root, 'knowledge', 'kn_00000001.md'), KNOWLEDGE_ITEM);
+            const second = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something else.')]);
+            const call = { tool: 'knowledge_for_element', arguments: { element: 'OrderToCash.OrderPlaced' } };
+            const { log } = await subscribe(ctx, await ctx.plan([{}, { mcp: call }]), { knowledge });
+            expect((await until(ctx, second, ['Completed', 'Failed'])).state).toBe('Completed');
+            const [, invocation] = await ctx.invocations();
+            expect(log).toContain('knowledge: the answers and the runs read it through dt mcp');
+            expect(invocation.args).toEqual(expect.arrayContaining(['mcp__domaintrail__knowledge_for_element', 'mcp__domaintrail__knowledge_get']));
+            const launcher = (JSON.parse(invocation.args[invocation.args.indexOf('--mcp-config') + 1]) as { mcpServers: { domaintrail: { command: string } } })
+                .mcpServers.domaintrail.command;
+            expect(launcher.startsWith(ctx.root)).toBe(false);
+            expect(invocation.prompt).toContain('Before changing an element, call\nknowledge_for_element');
+            // the tool answered from the workspace's files store
+            expect(invocation.mcp?.isError).toBeUndefined();
+            expect(invocation.mcp?.content[0].text).toContain('## kn_00000001');
+            expect(invocation.mcp?.content[0].text).toContain('注文は在庫を確かめてから受ける。');
+        },
+    );
 
     integration('an agent that writes a configuration file in any case beside a -c file outside the workspace: its run fails', async () => {
         const ctx = await setup();

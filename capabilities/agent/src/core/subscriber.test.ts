@@ -6,7 +6,16 @@
 import { describe, expect, test } from 'bun:test';
 import { buildPrompt, MAX_CHANGED_SHOWN, MAX_QUESTION, OUTCOME_MARKER, parseReply } from './prompt.js';
 import { changedPaths, changesOutsideSources, showPaths } from './subscriber.js';
-import { caseless, CONFIG_EDIT_DENIED, claudeArguments, READ_DENIED, scopedRules, toolNames } from '../adapters/claude-code.js';
+import {
+    caseless,
+    CONFIG_EDIT_DENIED,
+    claudeArguments,
+    KNOWLEDGE_TOOL_RULES,
+    knowledgeMcpConfig,
+    READ_DENIED,
+    scopedRules,
+    toolNames,
+} from '../adapters/claude-code.js';
 import { resultOf } from '../adapters/claude-stream.js';
 import { type Collaboration, type JourneySummary, REPLY_LIMITS, replyJsonSchema } from '@domaintrail/collaboration';
 import { parseSse } from '../adapters/http-agent-api.js';
@@ -204,6 +213,18 @@ describe('the prompt', () => {
 });
 
 describe('events at Design Level only', () => {
+    test('with the knowledge tools: check the elements before changing them, cite the items in the reply; without, never named', () => {
+        const run = input([frozen({ kind: 'DtElement', element: 'Sales.Order' }, 'Add a cancel.')]);
+        const prompt = buildPrompt(run, new Map(), 'n', [], [], { knowledge: true, practice: { storming: 'STORMING', modeling: 'MODELING' } });
+        expect(prompt).toContain('Knowledge: the tools knowledge_for_element, knowledge_search and knowledge_get');
+        expect(prompt).toContain('Before changing an element, call\nknowledge_for_element with it');
+        expect(prompt).toContain("cite its ID (`kn_…`) in the summary or the request's note");
+        // after the rules, before the ways of working and the block of data
+        expect(prompt.indexOf('Knowledge: the tools')).toBeGreaterThan(prompt.indexOf('Rules:'));
+        expect(prompt.indexOf('Knowledge: the tools')).toBeLessThan(prompt.indexOf('MODELING'));
+        expect(buildPrompt(run, new Map(), 'n')).not.toContain('knowledge_');
+    });
+
     test('rule 15 gives the syntax of `level design`; when to mark an event is the practice, not repeated in the rules', () => {
         const prompt = buildPrompt(input([frozen({ kind: 'DtesStorming', storming: 'S' }, 'x')]), new Map(), 'n');
         expect(prompt).toContain(
@@ -734,6 +755,31 @@ describe('the Claude Code arguments', () => {
         const at = withSchema.indexOf('--json-schema');
         expect(JSON.parse(withSchema[at + 1] ?? '')).toEqual(replyJsonSchema(2));
         expect(withSchema.slice(at + 2, at + 3)).toEqual(['--disallowedTools']);
+    });
+
+    test('the knowledge tools: dt mcp as the one MCP server, its three tools allowed by name, no built-in tool more', () => {
+        const knowledge = { command: '/tmp/domaintrail-dt-mcp-x/dt-mcp', args: [] };
+        const args = claudeArguments(DEFAULT_AGENT_TOOLS, 1, { knowledge });
+        const at = args.indexOf('--mcp-config');
+        expect(args.slice(at - 1, at + 3)).toEqual(['--strict-mcp-config', '--mcp-config', knowledgeMcpConfig(knowledge), '--setting-sources']);
+        expect(JSON.parse(args[at + 1])).toEqual({ mcpServers: { domaintrail: { type: 'stdio', command: '/tmp/domaintrail-dt-mcp-x/dt-mcp', args: [] } } });
+        expect(args[args.indexOf('--tools') + 1]).toBe('Read,Edit,Write,Glob,Grep,Bash');
+        expect(args.slice(args.indexOf('--allowedTools') + 1)).toEqual([
+            'Edit(./**)',
+            'Bash(dt fmt:*)',
+            'Bash(dt check:*)',
+            'Bash(dt guide:*)',
+            'mcp__domaintrail__knowledge_for_element',
+            'mcp__domaintrail__knowledge_search',
+            'mcp__domaintrail__knowledge_get',
+        ]);
+        expect(KNOWLEDGE_TOOL_RULES).toHaveLength(3);
+        // with no other rule (a read-only role), the three alone
+        expect(claudeArguments(['Read', 'Grep', 'Glob'], undefined, { knowledge }).slice(-4)).toEqual(['--allowedTools', ...KNOWLEDGE_TOOL_RULES]);
+        // without: no MCP server at all
+        expect(claudeArguments(DEFAULT_AGENT_TOOLS, 1)).not.toContain('--mcp-config');
+        expect(claudeArguments(DEFAULT_AGENT_TOOLS, 1).join('\n')).not.toContain('mcp__');
+        expect(() => knowledgeMcpConfig({ command: '/a\nb', args: [] })).toThrow('Not a command word');
     });
 
     test('a rule that would become an option or another line is refused', () => {
