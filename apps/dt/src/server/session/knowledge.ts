@@ -43,14 +43,16 @@ export type KnowledgeRoutes = (req: IncomingMessage, url: URL, res: ServerRespon
 export const isKnowledgePath = (pathname: string): boolean => pathname === KNOWLEDGE_API || pathname.startsWith(`${KNOWLEDGE_API}/`);
 
 /**
- * The person a participant's change is by, as the store records it: the e-mail of an Access identity, else the name the
- * participant goes by (`dev`, `link`: no e-mail is known).
+ * The person a participant's change is by, as the store records it, namespaced by how the identity was proven so that
+ * the two can never be taken for each other: `access:<e-mail>` for an identity Cloudflare Access verified, else
+ * `guest:<name>` (`dev`, `link`: a name the person typed, unverified — it may even look like an e-mail).
  */
 export function actorOf(who: Identified): Knowledge.UserName {
     const { identity } = who.participant;
-    const made = Knowledge.makeUserName(identity.email ?? identity.displayName);
+    const raw = identity.provider === 'access' && identity.email ? `access:${identity.email}` : `guest:${identity.displayName}`;
+    const made = Knowledge.makeUserName(raw);
     if (made.ok) return made.value;
-    const fallback = Knowledge.makeUserName(who.participant.id);
+    const fallback = Knowledge.makeUserName(`guest:${who.participant.id}`);
     if (!fallback.ok) throw new Error(`No user name for ${who.participant.id}`);
     return fallback.value;
 }

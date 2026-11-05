@@ -151,7 +151,7 @@ describe('the Live View’s knowledge', () => {
         expect(wire.liveItem(await corrected.json(), 'item').version).toBe(wire.itemVersion(2, 'test'));
         await until('the change told', () => (told.includes('knowledge.changed') ? true : undefined));
         const audit = await store.audit(project, { item: wire.itemId('kn_00000001', 'test') });
-        expect(audit.items[0]?.actor).toEqual({ kind: 'Person', user: wire.userName('Ada', 'test') });
+        expect(audit.items[0]?.actor).toEqual({ kind: 'Person', user: wire.userName('guest:Ada', 'test') });
 
         // 画像を付ける: the image at the end of the text, served back
         const attached = await api('/items/kn_00000001/images', { method: 'POST', headers: { 'content-type': 'image/png' }, body: PNG });

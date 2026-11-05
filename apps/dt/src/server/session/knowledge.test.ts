@@ -3,14 +3,17 @@ import { describe, expect, test } from 'bun:test';
 import type { Identified } from '../http/access.js';
 import { actorOf, imageLine, isKnowledgePath } from './knowledge.js';
 
-const who = (identity: { displayName: string; email?: string }): Identified =>
+const who = (identity: { provider: 'dev' | 'access' | 'link'; displayName: string; email?: string }): Identified =>
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- only the identity is read
-    ({ participant: { id: 'dev:x', identity: { provider: 'dev', subject: 'x', ...identity } } }) as unknown as Identified;
+    ({ participant: { id: `${identity.provider}:x`, identity: { subject: 'x', ...identity } } }) as unknown as Identified;
 
 describe('the knowledge routes', () => {
-    test('a change is by the e-mail of an Access identity, else by the name', () => {
-        expect(actorOf(who({ displayName: '山田', email: 'yamada@example.com' }))).toBe('yamada@example.com' as never);
-        expect(actorOf(who({ displayName: '山田' }))).toBe('山田' as never);
+    test('a change is by the verified e-mail of an Access identity, else by the typed name, each namespaced', () => {
+        expect(actorOf(who({ provider: 'access', displayName: '山田', email: 'yamada@example.com' }))).toBe('access:yamada@example.com' as never);
+        expect(actorOf(who({ provider: 'dev', displayName: '山田' }))).toBe('guest:山田' as never);
+        // a typed name that looks like an e-mail is never taken for a verified one
+        expect(actorOf(who({ provider: 'link', displayName: 'alice@corp.com' }))).toBe('guest:alice@corp.com' as never);
+        expect(actorOf(who({ provider: 'dev', displayName: 'x', email: 'alice@corp.com' }))).toBe('guest:x' as never);
     });
 
     test('its paths, and the line of an attached image', () => {
