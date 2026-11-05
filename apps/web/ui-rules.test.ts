@@ -170,9 +170,9 @@ const RAW_BUTTONS: Readonly<Record<string, { readonly count: number; readonly re
         count: 1,
         reason: 'the AI avatar and ↓ that jump to a turn: icon-only, on a shape of its own (round, bordered or sized to its place): not a text button',
     },
-    'session/chat.tsx chat-reply-ref': {
-        count: 2,
-        reason: 'the quote of what a reply answers: a reference in running text (a quote, a time, a chip of an element) that jumps to its source: its look is the text it stands for',
+    'shared/reference.tsx chat-reply-ref': {
+        count: 1,
+        reason: "the quote of what a reply answers, and a knowledge item's source: a reference in running text (a quote, a time, a chip of an element) that jumps to its source: its look is the text it stands for",
     },
     'session/chat.tsx role=menuitem': {
         count: 2,

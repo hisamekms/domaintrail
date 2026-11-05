@@ -4,6 +4,7 @@ import { CircleAlert, Unlink2 } from 'lucide-react';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import type { TargetStatus } from '@domaintrail/collaboration';
 import type { Messages } from '../i18n';
+import { TargetLink } from '../shared/reference';
 import { SessionApiError } from './api';
 import { isAiAuthor } from './ai';
 import { parseBody } from './mentions';
@@ -55,14 +56,13 @@ export function TargetChip({
 }) {
     const naming = useTargetNaming();
     const text = targetText(target, tx.workspace, naming);
-    const shown = <span className="chat-chip-name">#{targetShortText(target, tx.workspace, naming)}</span>;
-    const kind = `chat-chip chat-target kind-${target.target.kind}`;
+    const short = targetShortText(target, tx.workspace, naming);
     if (status === 'current' && target.target.kind !== 'Workspace')
         return (
-            <a className={kind} onClick={() => onNavigate(target.target)} data-tooltip={`${text}\n${tx.targetStatusHint.current}`}>
-                {shown}
-            </a>
+            <TargetLink name={short} tooltip={`${text}\n${tx.targetStatusHint.current}`} kind={target.target.kind} onClick={() => onNavigate(target.target)} />
         );
+    const shown = <span className="chat-chip-name">#{short}</span>;
+    const kind = `chat-chip chat-target kind-${target.target.kind}`;
     const Icon = status === 'stale' ? Unlink2 : status === 'unknown' ? CircleAlert : undefined;
     return (
         <span

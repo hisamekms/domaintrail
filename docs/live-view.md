@@ -484,7 +484,9 @@ dt only (`/api/session/knowledge`):
   ホットスポットにする (a message to the AI, as 聞くことをメモ sends: the facilitator's goes to the runner, a
   participant's becomes a proposal) and 食い違いではない (the link removed from both); a conflict whose other side was
   deleted no longer shows. Then its other items, 新しい順 or 種類の順.
-  An item opens to its images, its quotes with their dates, the other stickies it concerns (each selects it), its
+  An item opens, as one outlined card, to its images, its sources as the chat's reference lines (`↩ who: quote`: a
+  message of this session by who said it, a click moves to it in the chat; another session's by its date; the whole
+  quote and its time in the tooltip), the other stickies it concerns as the chat's `#name` chips (each selects it), its
   versions, and 直す (its text and labels, a new version), 画像を付ける (PNG, JPEG, GIF or WebP, at the end of its text)
   and 消す. Deleting hides it from everyone at once; 元に戻す shows for 10 seconds. Once the store's undo window has
   passed, its sweep removes the item for good and puts its source messages on the redaction log, which every dt of the

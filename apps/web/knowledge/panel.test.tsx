@@ -4,7 +4,7 @@ import { describe, expect, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { I18nProvider } from '../i18n';
-import { ConflictBox, ExtractionSwitch } from './panel';
+import { ConflictBox, ExtractionSwitch, ItemRow } from './panel';
 import { pairKey, type KnowledgeItem } from './model';
 import { KnowledgeContext, type KnowledgeView } from './useKnowledge';
 
@@ -82,5 +82,48 @@ describe('a conflict made a hotspot (ADR 0031, section 4)', () => {
         expect(html).toMatch(/role="status"[^>]*>.*<button[^>]*disabled[^>]*>.*ホットスポットを作っています/s);
         expect(html).not.toContain('食い違いではない');
         expect(html).not.toContain('>ホットスポットにする<');
+    });
+});
+
+describe('an item opened (the approved preview)', () => {
+    const item = {
+        state: 'Live',
+        id: 'kn_00000001',
+        content: { text: '受注と Order は同じ', labels: { when: 'none', kind: 'term', origin: 'investigated' }, about: ['O.Placed', 'O.Order'] },
+        sources: [
+            { session: 's_now', message: 'm1', at: new Date('2026-11-05T09:02:00Z'), quote: 'sales/order.dt を確認' },
+            { session: 's_old', message: 'm9', at: new Date('2026-11-03T05:00:00Z'), quote: '画面では受注と呼ぶ' },
+        ],
+        version: 1,
+        conflictsWith: [],
+        createdAt: new Date('2026-11-05T09:10:00Z'),
+        updatedAt: new Date('2026-11-05T09:10:00Z'),
+    } as unknown as KnowledgeItem;
+    const html = (from: string | undefined): string =>
+        renderToStaticMarkup(
+            <I18nProvider lang="ja">
+                <KnowledgeContext.Provider
+                    value={{
+                        ...view(true),
+                        label: (s: string) => (s === 'O.Order' ? '注文' : '注文を受け付けた'),
+                        messageOf: (session: string) => (session === 's_now' ? { who: '佐藤', open: () => undefined } : undefined),
+                    }}
+                >
+                    <ItemRow item={item} from={from} open onToggle={() => undefined} />
+                </KnowledgeContext.Provider>
+            </I18nProvider>,
+        );
+
+    test("its sources are the chat's reference lines: this session's by who said it (a link), another's by its date (text)", () => {
+        const h = html('O.Placed');
+        expect(h).toMatch(/<button class="chat-reply-ref"[^>]*>.*↩ 佐藤:.*sales\/order\.dt を確認/s);
+        expect(h).toMatch(/<span class="chat-reply-ref"[^>]*>.*↩ 11\/3:.*画面では受注と呼ぶ/s);
+    });
+
+    test("the other stickies as the chat's #chips (not the sticky whose detail it is); every sticky in the list", () => {
+        const inDetail = html('O.Placed');
+        expect(inDetail).toContain('#注文<');
+        expect(inDetail).not.toContain('#注文を受け付けた');
+        expect(html(undefined)).toContain('#注文を受け付けた');
     });
 });

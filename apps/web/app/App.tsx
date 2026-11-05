@@ -108,7 +108,7 @@ export function App() {
 
     return (
         <I18nProvider lang={lang}>
-            <KnowledgeContext.Provider value={knowledge}>
+            <KnowledgeContext.Provider value={session.messageOf ? { ...knowledge, messageOf: session.messageOf } : knowledge}>
                 <AppShell
                     panes={panes}
                     workspaceName={current ? workspaceName(current.root) : boot?.workspaceName}
