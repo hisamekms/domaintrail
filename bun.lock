@@ -148,6 +148,9 @@
     },
     "contexts/knowledge": {
       "name": "@domaintrail/knowledge",
+      "dependencies": {
+        "@domaintrail/kernel": "workspace:*",
+      },
       "devDependencies": {
         "fast-check": "4.10.2",
       },

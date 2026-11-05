@@ -2618,6 +2618,8 @@ storming](#diagnostics-of-a-storming).
 | J001 | `domaintrail.journey.json` reads against its schema (`schema/journey.schema.json`): JSON, the keys and enums it allows, the goals and marks of each pattern, unique journey IDs |
 | J002 | (warning) a journey names a storming that does not exist (an ES journey's key, a `FromStorming` journey's `from.stormings`) |
 | J003 | (warning) a journey names a context that does not exist (a `OneContext` journey's `from.context`) |
+| K001 | a knowledge item's file (`knowledge/kn_*.md`) reads: its front matter, the fields and values it allows, the file named by the item's ID (the store skips a file that does not) |
+| K002 | (warning) a knowledge item is `about` a sticky (`<Storming>.<LocalId>`) that no `.dtes` of the workspace has |
 
 <!-- topic: journey -->
 ## The journey file

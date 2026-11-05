@@ -159,9 +159,9 @@ export const MAP: Record<string, Module> = {
         dir: 'contexts/knowledge',
         sources: 'contexts/knowledge/src',
         // the knowledge taken from sessions (ADR 0031): its items refer to stickies by `<Storming>.<LocalId>` as plain
-        // values (whether a sticky exists is `dt check`'s), and to sessions and messages by their IDs, so it takes no
-        // other context
-        upstream: [],
+        // values (whether a sticky exists is `dt check`'s, which it reports with its own rule IDs: the kernel's
+        // `Diagnostic`), and to sessions and messages by their IDs, so it takes no other context
+        upstream: ['kernel'],
     },
     analysis: {
         kind: 'capability',
