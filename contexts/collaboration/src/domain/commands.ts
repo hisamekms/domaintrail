@@ -98,7 +98,7 @@ export const requestCommands: Collaboration.RequestCommands = {
         return ok({
             Sent: {
                 // a reply names the run it answers; whether it runs is the facilitator's to decide, as for any message
-                set: { id, session, author, targets, body, sentAt, replyTo, mentions, reverts: undefined, viewedAt, journeyNote: undefined },
+                set: { id, session, author, targets, body, sentAt, replyTo, mentions, reverts: undefined, viewedAt, journeyNote: undefined, redactedAt: undefined },
                 events: {
                     RequestSent: {
                         type: 'RequestSent',
@@ -125,7 +125,7 @@ export const requestCommands: Collaboration.RequestCommands = {
         const reverts: Collaboration.AgentRunId = params.reverts;
         return ok({
             Sent: {
-                set: { id, session, author, targets: [], body, sentAt, replyTo: undefined, mentions: [], reverts, viewedAt: undefined, journeyNote: undefined },
+                set: { id, session, author, targets: [], body, sentAt, replyTo: undefined, mentions: [], reverts, viewedAt: undefined, journeyNote: undefined, redactedAt: undefined },
                 events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, mentions: [], reverts } },
             },
         });
@@ -139,7 +139,7 @@ export const requestCommands: Collaboration.RequestCommands = {
         const author = AI_PARTICIPANT_ID;
         return ok({
             Sent: {
-                set: { id, session, author, targets: [], body, sentAt, replyTo, mentions: [], reverts: undefined, viewedAt: undefined, journeyNote },
+                set: { id, session, author, targets: [], body, sentAt, replyTo, mentions: [], reverts: undefined, viewedAt: undefined, journeyNote, redactedAt: undefined },
                 events: {
                     RequestSent: {
                         type: 'RequestSent',
@@ -156,6 +156,28 @@ export const requestCommands: Collaboration.RequestCommands = {
                 },
             },
         });
+    }),
+
+    // a redaction (ADR 0031, section 7): the body becomes the given text, once; a message redacted already stays as it is
+    redact: decide<Collaboration.RedactRequestDecision>(Collaboration.RequestShape, {
+        Sent: (request, { body, at }) => {
+            const redactedAt = request.redactedAt ?? at;
+            return ok({
+                Sent: {
+                    set: { body: request.redactedAt ? request.body : body, redactedAt },
+                    events: { RequestRedacted: { type: 'RequestRedacted', requestId: request.id, redactedAt } },
+                },
+            });
+        },
+        Dismissed: (request, { body, at }) => {
+            const redactedAt = request.redactedAt ?? at;
+            return ok({
+                Dismissed: {
+                    set: { body: request.redactedAt ? request.body : body, redactedAt },
+                    events: { RequestRedacted: { type: 'RequestRedacted', requestId: request.id, redactedAt } },
+                },
+            });
+        },
     }),
 };
 

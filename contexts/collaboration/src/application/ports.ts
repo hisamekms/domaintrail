@@ -176,6 +176,10 @@ export interface EventOutbox {
     append(session: SessionId, events: readonly Collaboration.PersistentEvent[], recordedAt: Date): void;
     /** At most `limit` entries after `cursor` (0: from the start), in order; of one session when given. */
     readAfter(cursor: number, limit: number, session?: SessionId): OutboxEntry[];
+    /** The `RequestSent` entries of a message (one, unless the outbox was replayed into another database). */
+    requestSent(request: Collaboration.RequestId): OutboxEntry[];
+    /** Replaces the event of an entry, at its position (a redaction: `domain/redaction.ts`). */
+    replace(seq: number, event: Collaboration.PersistentEvent): void;
 }
 
 /** A sign-in of the `dev` identity mode: the session cookie's hash and the identity it stands for. */
