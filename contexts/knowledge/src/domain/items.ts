@@ -12,6 +12,8 @@
 // - linkConflict: the older side of a conflict, linked to the new one; both sides must have a source;
 // - unlinkConflict: a person decides two linked items do not conflict (食い違いではない): the link goes, the content and
 //   the version stay (the store unlinks both sides);
+// - handOverToHotspot: a conflict a person made a hotspot is handed over to the hotspot the AI added: the hotspot joins
+//   `about` and the link goes, in one decision; the text, the labels and the version stay (the store does both sides);
 // - correct: a person's edit, always a new version;
 // - delete / restore: a person hides the item at once, and may undo it until the store's sweep removes it.
 import { decide, err, Knowledge, ok } from '../generated/index.js';
@@ -184,6 +186,23 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                     set: { conflictsWith, updatedAt: at },
                     events: {
                         KnowledgeConflictUnlinked: { type: 'KnowledgeConflictUnlinked', itemId: item.id, version: item.version, other, by, at },
+                    },
+                },
+            });
+        },
+    }),
+
+    handOverToHotspot: decide<Knowledge.HandOverToHotspotKnowledgeItemDecision>(Knowledge.KnowledgeItemShape, {
+        Live: (item, params) => {
+            if (Knowledge.checkHandOverToHotspotKnowledgeItemRequires(item, params) === 'notItself') return err({ type: 'ConflictWithItself' });
+            const { hotspot, other, by, at } = params;
+            // handing over again changes nothing but the time (a retry after a failure half-way)
+            const about = item.content.about.includes(hotspot) ? item.content.about : [...item.content.about, hotspot];
+            return ok({
+                Live: {
+                    set: { content: { ...item.content, about }, conflictsWith: item.conflictsWith.filter((id) => id !== other), updatedAt: at },
+                    events: {
+                        KnowledgeHandedOverToHotspot: { type: 'KnowledgeHandedOverToHotspot', itemId: item.id, version: item.version, hotspot, other, by, at },
                     },
                 },
             });

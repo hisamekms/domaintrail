@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Knowledge } from '../generated/index.js';
 import { knowledgeItemCommands as commands } from './items.js';
-import { at, content, extraction, itemId, later, liveItem, source, userName, version } from '../test-helpers.js';
+import { at, content, extraction, itemId, later, liveItem, source, stickyRef, userName, version } from '../test-helpers.js';
 
 const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
     if (!r.ok) throw new Error(`unexpected error: ${JSON.stringify(r.error)}`);
@@ -163,5 +163,46 @@ describe('unlinkConflict', () => {
     test('refuses the item itself', () => {
         const item = liveItem('kn_00000001');
         expect(error(commands.unlinkConflict(item, { other: item.id, by: userName('alice@example.com'), at: later }))).toEqual({ type: 'ConflictWithItself' });
+    });
+});
+
+describe('handOverToHotspot', () => {
+    const hotspot = stickyRef('Ordering.CutOffUnclear');
+
+    test('adds the hotspot to about and removes the link in one decision, keeping the text, labels and version', () => {
+        const item = liveItem('kn_00000001', { conflictsWith: ['kn_00000002', 'kn_00000003'] });
+        const { aggregate, events } = value(
+            commands.handOverToHotspot(item, { hotspot, other: itemId('kn_00000002'), by: userName('alice@example.com'), at: later }),
+        ).Live;
+        expect(aggregate).toMatchObject({
+            version: 1,
+            content: { ...item.content, about: [...item.content.about, hotspot] },
+            conflictsWith: ['kn_00000003'],
+            updatedAt: later,
+        });
+        expect(events.KnowledgeHandedOverToHotspot).toEqual({
+            type: 'KnowledgeHandedOverToHotspot',
+            itemId: item.id,
+            version: item.version,
+            hotspot,
+            other: itemId('kn_00000002'),
+            by: userName('alice@example.com'),
+            at: later,
+        });
+    });
+
+    test('a second hand-over changes nothing but the time', () => {
+        const item = liveItem('kn_00000001', { conflictsWith: ['kn_00000002'] });
+        const once = value(commands.handOverToHotspot(item, { hotspot, other: itemId('kn_00000002'), by: userName('a@example.com'), at })).Live.aggregate;
+        const twice = value(commands.handOverToHotspot(once, { hotspot, other: itemId('kn_00000002'), by: userName('a@example.com'), at: later })).Live
+            .aggregate;
+        expect(twice).toEqual({ ...once, updatedAt: later });
+    });
+
+    test('refuses the item itself', () => {
+        const item = liveItem('kn_00000001');
+        expect(error(commands.handOverToHotspot(item, { hotspot, other: item.id, by: userName('a@example.com'), at: later }))).toEqual({
+            type: 'ConflictWithItself',
+        });
     });
 });

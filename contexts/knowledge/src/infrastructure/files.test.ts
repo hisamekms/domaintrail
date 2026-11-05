@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { Knowledge } from '../generated/index.js';
 import { createFilesKnowledgeStore, readKnowledgeFiles, type FilesKnowledgeStore } from './files.js';
-import { content, extraction, itemId, reason, sessionRef, source, userName, version } from '../test-helpers.js';
+import { content, extraction, itemId, reason, sessionRef, source, stickyRef, userName, version } from '../test-helpers.js';
 
 const project = 'shop' as Knowledge.ProjectName;
 const alice = userName('alice@example.com');
@@ -139,6 +139,41 @@ describe('the files store', () => {
             ['kn_00000002', 'unlinkConflict'],
         ] as unknown as [Knowledge.KnowledgeItemId, Knowledge.AuditOperation][]);
         expect(await store.unlinkConflict(project, itemId('kn_00000009'), itemId('kn_00000001'), alice)).toEqual({
+            ok: false,
+            error: { type: 'KnowledgeItemNotFound', itemId: itemId('kn_00000009') },
+        });
+    });
+
+    test('handOverToHotspot puts the hotspot in both items’ about and unlinks them, keeping their versions; the hotspot is the audit’s reason', async () => {
+        await apply('s0', 1, add('kn_00000001', { session: 's0', about: ['Ordering.Placed'] }));
+        await apply('s1', 1, {
+            kind: 'Conflict',
+            id: itemId('kn_00000002'),
+            content: content('the other way round', 'said', ['Ordering.Placed']),
+            sources: [source('s1', 'm-9')],
+            item: itemId('kn_00000001'),
+            base: version(1),
+        });
+        const hotspot = stickyRef('Ordering.CutOffUnclear');
+        const r = await store.handOverToHotspot(project, itemId('kn_00000002'), itemId('kn_00000001'), hotspot, alice);
+        expect(r.ok && r.value.map((i) => [i.id, i.content.about, i.conflictsWith, i.version])).toEqual([
+            ['kn_00000002', ['Ordering.Placed', 'Ordering.CutOffUnclear'], [], 1],
+            ['kn_00000001', ['Ordering.Placed', 'Ordering.CutOffUnclear'], [], 1],
+        ] as unknown as [Knowledge.KnowledgeItemId, Knowledge.StickyRef[], Knowledge.KnowledgeItemId[], Knowledge.ItemVersion][]);
+        expect((await store.get(project, itemId('kn_00000001')))?.item.content.about).toEqual([
+            'Ordering.Placed',
+            'Ordering.CutOffUnclear',
+        ] as unknown as Knowledge.StickyRef[]);
+        expect(await store.counts(project, 'Ordering')).toEqual([
+            { sticky: 'Ordering.CutOffUnclear' as Knowledge.StickyRef, hasItems: true, hasConflict: false },
+            { sticky: 'Ordering.Placed' as Knowledge.StickyRef, hasItems: true, hasConflict: false },
+        ]);
+        const audit = await store.audit(project, {});
+        expect(audit.items.slice(0, 2).map((e) => [e.item, e.operation, e.actor, e.reason])).toEqual([
+            ['kn_00000001', 'handOverToHotspot', { kind: 'Person', user: alice }, 'hotspot Ordering.CutOffUnclear'],
+            ['kn_00000002', 'handOverToHotspot', { kind: 'Person', user: alice }, 'hotspot Ordering.CutOffUnclear'],
+        ] as unknown as [Knowledge.KnowledgeItemId, Knowledge.AuditOperation, Knowledge.Actor, Knowledge.Reason][]);
+        expect(await store.handOverToHotspot(project, itemId('kn_00000009'), itemId('kn_00000001'), hotspot, alice)).toEqual({
             ok: false,
             error: { type: 'KnowledgeItemNotFound', itemId: itemId('kn_00000009') },
         });

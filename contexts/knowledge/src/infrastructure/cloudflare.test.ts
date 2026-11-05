@@ -3,7 +3,7 @@
 // as a KnowledgeStoreError). The adapter against the real Worker is apps/knowledge-worker's test.
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import type { Knowledge } from '../generated/index.js';
-import { content, extraction, itemId, liveItem, source, userName } from '../test-helpers.js';
+import { content, extraction, itemId, liveItem, source, stickyRef, userName } from '../test-helpers.js';
 import { cloudflareKnowledgeStore, KnowledgeStoreError } from './cloudflare.js';
 
 /** The error a promise rejects with (fails when it resolves). */
@@ -90,6 +90,16 @@ describe('the cloudflare adapter', () => {
         expect(r).toEqual({ ok: true, value: [a, b] });
         expect(seen[0]).toMatchObject({ method: 'POST', path: '/base/v1/projects/dmcore/knowledge/kn_00000001/unlink' });
         expect(JSON.parse(seen[0].body)).toEqual({ other: 'kn_00000002' });
+    });
+
+    test('hands a conflict over to a hotspot with the other item and the hotspot in the body, and reads both sides back', async () => {
+        const a = liveItem('kn_00000001');
+        const b = liveItem('kn_00000002');
+        reset(() => Response.json({ items: [a, b] }));
+        const r = await store().handOverToHotspot(project, a.id, b.id, stickyRef('Ordering.CutOffUnclear'), userName('a@example.com'));
+        expect(r).toEqual({ ok: true, value: [a, b] });
+        expect(seen[0]).toMatchObject({ method: 'POST', path: '/base/v1/projects/dmcore/knowledge/kn_00000001/hand-over' });
+        expect(JSON.parse(seen[0].body)).toEqual({ other: 'kn_00000002', hotspot: 'Ordering.CutOffUnclear' });
     });
 
     test('pages through a search to list the items about stickies, newest first', async () => {

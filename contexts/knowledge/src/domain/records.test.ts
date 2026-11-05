@@ -2,7 +2,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Knowledge } from '../generated/index.js';
 import { auditOf, imagesIn, pastVersionOf, redactionOf, withoutReason } from './records.js';
-import { at, extraction, later, liveItem, reason, source, userName } from '../test-helpers.js';
+import { at, extraction, later, liveItem, reason, source, stickyRef, userName } from '../test-helpers.js';
 
 describe('the redaction log', () => {
     test("records a deleted item's ID and the messages it came from, once each, and nothing of its text", () => {
@@ -44,6 +44,20 @@ describe('the audit log', () => {
             version: item.version,
             operation: 'add',
             actor: { kind: 'Extractor', extraction: extraction('s1', 1) },
+            at,
+        });
+    });
+
+    test('a hand-over to a hotspot names the person who pressed ホットスポットにする, with the hotspot as the reason', () => {
+        const person = userName('a@example.com');
+        const item = liveItem('kn_00000001');
+        const hotspot = stickyRef('Ordering.CutOffUnclear');
+        expect(auditOf({ type: 'KnowledgeHandedOverToHotspot', itemId: item.id, version: item.version, hotspot, other: item.id, by: person, at })).toEqual({
+            item: item.id,
+            version: item.version,
+            operation: 'handOverToHotspot',
+            actor: { kind: 'Person', user: person },
+            reason: reason('hotspot Ordering.CutOffUnclear'),
             at,
         });
     });

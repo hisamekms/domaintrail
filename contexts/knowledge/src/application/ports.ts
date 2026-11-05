@@ -133,6 +133,21 @@ export interface KnowledgeStore {
     ): Promise<Result<readonly Knowledge.LiveKnowledgeItem[], Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>>;
 
     /**
+     * A conflict a person made a hotspot (ホットスポットにする) is handed over to the hotspot the AI's run added (ADR 0031
+     * section 4): on both sides (the other's only while it is live) the hotspot joins `about` and the link goes, each in
+     * one decision recorded in the audit log with the hotspot as its reason, by the person who pressed the button; the
+     * text, the labels and the versions stay. Returns the items as they are now (the item first). Handing over again
+     * answers the items as they are.
+     */
+    handOverToHotspot(
+        project: Project,
+        id: ItemId,
+        other: ItemId,
+        hotspot: Knowledge.StickyRef,
+        by: Knowledge.UserName,
+    ): Promise<Result<readonly Knowledge.LiveKnowledgeItem[], Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>>;
+
+    /**
      * A person deletes an item: hidden from every read at once, and recorded in the audit log. It can be restored until
      * the store's own sweep — every few minutes, after the page's undo window (ADR 0031 section 7), whether or not the
      * page that deleted it is still open — removes every version of it and the images only it refers to, drops the
