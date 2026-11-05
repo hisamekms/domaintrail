@@ -10,7 +10,6 @@ import {
     extractionOfMessage,
     hotspotBody,
     hotspotGroups,
-    imagesOf,
     marksOf,
     missingConflicts,
     NO_FILTERS,
@@ -115,10 +114,9 @@ describe('the knowledge on the page', () => {
         expect(queryOf(NO_FILTERS, 'c1').toString()).toBe('cursor=c1');
     });
 
-    test('the text without its images, and the images apart', () => {
+    test('the text without its images', () => {
         const text = '締めは前日\n\n![](image:img_abcdefgh)\n';
         expect(plainText(text)).toBe('締めは前日');
-        expect(imagesOf(text)).toEqual(['img_abcdefgh']);
     });
 
     test('ホットスポットにする: a message to the AI about both items, with their stickies as targets', () => {

@@ -1,9 +1,12 @@
 // The session's extraction in the app bar (panel.tsx, ExtractionSwitch): the facilitator's switch, pressed while on;
-// the others' mark while on and nothing while off; nothing without a store. A conflict's box and the hotspot's box.
+// the others' mark while on and nothing while off; nothing without a store. A conflict's box and the hotspot's box. An
+// item's text, plain while closed and Markdown once opened.
 import { describe, expect, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { I18nProvider } from '../i18n';
+import { workerKnowledgeApi } from '../published/api';
+import { KnowledgeApiContext, sessionKnowledgeApi } from './api';
 import { ConflictBox, ExtractionSwitch, HotspotBox, ItemRow } from './panel';
 import { pairKey, type ClearedReason, type KnowledgeItem } from './model';
 import { KnowledgeContext, type KnowledgeView } from './useKnowledge';
@@ -167,5 +170,61 @@ describe('an item opened (the approved preview)', () => {
         expect(inDetail).toContain('#注文<');
         expect(inDetail).not.toContain('#注文を受け付けた');
         expect(html(undefined)).toContain('#注文を受け付けた');
+    });
+});
+
+describe("an item's text: plain while closed, Markdown with its images once opened (the chat's rules)", () => {
+    const text = '# 締め\n\n- **月末**は @{es:O/Placed} の翌日\n- 例外あり\n\n![伝票](image:img_0000abcd)\n\n![外](https://e.com/x.png)';
+    const item = {
+        state: 'Live',
+        id: 'kn_00000003',
+        content: { text, labels: { when: 'as_is', kind: 'rule', origin: 'said' }, about: ['O.Placed'] },
+        sources: [],
+        version: 1,
+        conflictsWith: [],
+        createdAt: new Date('2026-11-05T09:10:00Z'),
+        updatedAt: new Date('2026-11-05T09:10:00Z'),
+    } as unknown as KnowledgeItem;
+    const api = { ...sessionKnowledgeApi, imageUrl: (id: string) => `/images/${id}` };
+    const row = (open: boolean): string =>
+        renderToStaticMarkup(
+            <I18nProvider lang="ja">
+                <KnowledgeApiContext.Provider value={api}>
+                    <KnowledgeContext.Provider value={{ ...view(true), label: (s: string) => (s === 'O.Placed' ? '受注した' : s) }}>
+                        <ItemRow item={item} from="O.Placed" open={open} onToggle={() => undefined} />
+                    </KnowledgeContext.Provider>
+                </KnowledgeApiContext.Provider>
+            </I18nProvider>,
+        );
+
+    test('closed: its marks dropped and its images left out, the stickies by their names, no link', () => {
+        const h = row(false);
+        expect(h).toContain('<span class="knowledge-text">締め\n月末は 受注した の翌日\n例外あり\n外 (https://e.com/x.png)</span>');
+        expect(h).not.toContain('<img');
+        expect(h).not.toContain('knowledge-text-twin');
+    });
+
+    test('opened: Markdown, the sticky a link, the attached image drawn from the page, another image as text', () => {
+        const h = row(true);
+        expect(h).toContain('<span class="knowledge-text markdown"><p class="md-heading" role="heading" aria-level="4">締め</p>');
+        expect(h).toContain('<ul><li><strong>月末</strong>は <a class="reply-element">受注した</a> の翌日</li><li>例外あり</li></ul>');
+        expect(h).toContain('<img class="md-image" src="/images/img_0000abcd" alt="伝票" loading="lazy"/>');
+        expect(h).toContain('外 (https://e.com/x.png)');
+        // the plain text clamped, unseen: the height it closes to
+        expect(h).toContain('<span class="knowledge-text knowledge-text-twin" aria-hidden="true">締め\n');
+    });
+
+    test("on the Worker's page, the image comes from the Worker", () => {
+        const h = renderToStaticMarkup(
+            <I18nProvider lang="ja">
+                <KnowledgeApiContext.Provider value={workerKnowledgeApi('shop')}>
+                    <KnowledgeContext.Provider value={view(true)}>
+                        <ItemRow item={item} from={undefined} open onToggle={() => undefined} />
+                    </KnowledgeContext.Provider>
+                </KnowledgeApiContext.Provider>
+            </I18nProvider>,
+        );
+        expect(h).toContain(`src="${workerKnowledgeApi('shop').imageUrl('img_0000abcd')}"`);
+        expect(h).toContain('src="/v1/projects/shop/images/img_0000abcd"');
     });
 });

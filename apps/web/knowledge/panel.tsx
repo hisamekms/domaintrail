@@ -20,7 +20,6 @@ import {
     extractionControl,
     hotspotBody,
     hotspotGroups,
-    imagesOf,
     KINDS,
     missingConflicts,
     NO_FILTERS,
@@ -28,7 +27,6 @@ import {
     ORIGINS,
     pairKey,
     outsideConflicts,
-    plainText,
     queryOf,
     sourcesNewestFirst,
     toggled,
@@ -40,6 +38,7 @@ import {
     type KnowledgeItem,
     type Order,
 } from './model';
+import { KnowledgeMarkdown, KnowledgePlain } from './text';
 import { useKnowledgeView, type KnowledgeView } from './useKnowledge';
 import type { PastVersion } from '@domaintrail/knowledge';
 
@@ -172,7 +171,9 @@ function Versions({ item, history }: { item: KnowledgeItem; history: readonly Pa
                     <span className="knowledge-meta">
                         {t.version(v.version)} · {date(v.replacedAt)}
                     </span>
-                    <span>{plainText(v.content.text)}</span>
+                    <span>
+                        <KnowledgePlain text={v.content.text} />
+                    </span>
                 </p>
             ))}
         </details>
@@ -188,7 +189,7 @@ function SourceLine({ source }: { source: KnowledgeItem['sources'][number] }): R
     return <ReferenceLine who={said?.who ?? date(source.at)} head={source.quote} tooltip={`${source.quote}\n${time(source.at)}`} onClick={said?.open} />;
 }
 
-/** An item opened: its images, sources, the other stickies, its versions, and its actions. */
+/** An item opened (its text, with its images, is in its head): its sources, the other stickies, its versions, and its actions. */
 function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefined }): ReactElement {
     const t = useT().knowledge;
     const view = useKnowledgeView();
@@ -219,9 +220,6 @@ function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefi
     const others = item.content.about.filter((s) => s !== from);
     return (
         <div className="knowledge-detail">
-            {imagesOf(item.content.text).map((id) => (
-                <img key={id} className="knowledge-image" src={api.imageUrl(id)} alt="" />
-            ))}
             {item.sources.length > 0 && (
                 <div className="knowledge-sources" role="group" aria-label={t.sources}>
                     {sourcesNewestFirst(item.sources).map((s) => (
@@ -287,10 +285,13 @@ function Unfold({ open, children }: { open: boolean; children: ReactNode }): Rea
 
 /**
  * The text's clamp (two lines while closed) released and applied as its height moves (`--motion-medium`), not at once:
- * the text is whole while the item is open and while it closes (`.unfolded`), and clamped once it closed. Each change
- * measures the text whole and clamped, and moves from where it is to the other; nothing moves with "reduce motion".
+ * the text is whole, as Markdown, while the item is open and while it closes (`.unfolded`), and plain and clamped once
+ * it closed. Each change measures the text whole and the plain text clamped (`twin`, an unseen copy of it while it is
+ * unfolded: the Markdown on screen clamps to another height), and moves from where it is to the other; the switch from
+ * plain to Markdown comes at the start of the opening, from them back at the end of the closing, at the same height.
+ * Nothing moves with "reduce motion".
  */
-function useClampMotion(ref: RefObject<HTMLElement | null>, open: boolean, shown: boolean): void {
+function useClampMotion(ref: RefObject<HTMLElement | null>, twin: RefObject<HTMLElement | null>, open: boolean, shown: boolean): void {
     const phase = open ? 'open' : shown ? 'closing' : 'closed';
     const first = useRef(true);
     // the height it had when a move was cut short (opened again while it closed): the next one starts there
@@ -303,20 +304,31 @@ function useClampMotion(ref: RefObject<HTMLElement | null>, open: boolean, shown
         const el = ref.current;
         if (!el || phase === 'closed' || typeof el.animate !== 'function') return;
         const whole = el.getBoundingClientRect().height;
-        el.style.display = '-webkit-box';
-        const clamped = el.getBoundingClientRect().height;
-        el.style.removeProperty('display');
+        const clamped = twin.current?.getBoundingClientRect().height ?? whole;
         const from = cut.current ?? (phase === 'open' ? clamped : whole);
         cut.current = undefined;
         const grow = growMotion(from, phase === 'open' ? whole : clamped, motionMs('--motion-medium'));
         if (!grow) return;
         // closing, it keeps the clamped height until the clamp is applied (the next phase), which ends it
-        const animation = el.animate([{ height: `${grow.from}px` }, { height: `${grow.to}px` }], {
-            duration: grow.ms,
-            easing: motionEasing('--motion-ease-standard'),
-            fill: phase === 'closing' ? 'forwards' : 'none',
-        });
+        const move = (g: NonNullable<typeof grow>): Animation =>
+            el.animate([{ height: `${g.from}px` }, { height: `${g.to}px` }], {
+                duration: g.ms,
+                easing: motionEasing('--motion-ease-standard'),
+                fill: phase === 'closing' ? 'forwards' : 'none',
+            });
+        let animation = move(grow);
+        // opening, an image of the text that loads meanwhile (not measured: it had no size yet) moves it on from where
+        // it is to its new whole height, instead of a jump at the end
+        const loaded = (e: Event): void => {
+            if (phase !== 'open' || !(e.target instanceof HTMLImageElement) || animation.playState !== 'running') return;
+            const now = el.getBoundingClientRect().height;
+            animation.cancel();
+            const next = growMotion(now, el.getBoundingClientRect().height, motionMs('--motion-medium'));
+            if (next) animation = move(next);
+        };
+        el.addEventListener('load', loaded, true);
         return () => {
+            el.removeEventListener('load', loaded, true);
             cut.current = animation.playState === 'running' ? el.getBoundingClientRect().height : undefined;
             animation.cancel();
         };
@@ -324,7 +336,7 @@ function useClampMotion(ref: RefObject<HTMLElement | null>, open: boolean, shown
     }, [phase]);
 }
 
-/** One item of a list: its kind, two lines of its text and its labels; opened, its detail. */
+/** One item of a list: its kind, two lines of its text (plain) and its labels; opened, its text whole (Markdown) and its detail. */
 export function ItemRow({
     item,
     from,
@@ -341,15 +353,21 @@ export function ItemRow({
     const view = useKnowledgeView();
     const shown = useStaying(open);
     const text = useRef<HTMLSpanElement>(null);
-    useClampMotion(text, open, shown);
+    const twin = useRef<HTMLSpanElement>(null);
+    useClampMotion(text, twin, open, shown);
     return (
         <li className={`knowledge-item${open ? ' open' : ''}${shown ? ' unfolded' : ''}`}>
             <button type="button" className="knowledge-item-head" aria-expanded={open} onClick={onToggle}>
                 <span className="knowledge-kind">{t.kinds[item.content.labels.kind]}</span>
                 <span className="knowledge-item-main">
-                    <span ref={text} className="knowledge-text">
-                        {plainText(item.content.text)}
+                    <span ref={text} className={`knowledge-text${shown ? ' markdown' : ''}`}>
+                        {shown ? <KnowledgeMarkdown text={item.content.text} /> : <KnowledgePlain text={item.content.text} />}
                     </span>
+                    {shown && (
+                        <span ref={twin} className="knowledge-text knowledge-text-twin" aria-hidden>
+                            <KnowledgePlain text={item.content.text} />
+                        </span>
+                    )}
                     <Meta item={item} />
                     {/* the stickies' names fold away as it opens (its detail links them) */}
                     {!from && item.content.about.length > 0 && (
@@ -470,7 +488,15 @@ function SideBySide({
                 {items.map((i) => (
                     <button key={i.id} type="button" className="knowledge-side" aria-expanded={isOpen(i.id)} onClick={() => onToggle(i)}>
                         <span className="knowledge-kind">{t.kinds[i.content.labels.kind]}</span>
-                        <span className="knowledge-text">{plainText(i.content.text)}</span>
+                        {isOpen(i.id) ? (
+                            <span className="knowledge-text markdown">
+                                <KnowledgeMarkdown text={i.content.text} />
+                            </span>
+                        ) : (
+                            <span className="knowledge-text">
+                                <KnowledgePlain text={i.content.text} />
+                            </span>
+                        )}
                         <Meta item={i} />
                     </button>
                 ))}

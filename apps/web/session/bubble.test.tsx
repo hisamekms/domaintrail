@@ -9,12 +9,12 @@ const styles = readFileSync(join(import.meta.dir, '..', 'styles.css'), 'utf8');
 
 describe("a clamped AI message's fade", () => {
     test('only when it is cut (taller than the clamp): a short one in the history shows whole, unfaded', () => {
-        expect(clampedClass({ blocks: true, open: false, cut: false })).toBe('chat-text chat-markdown clamped');
-        expect(clampedClass({ blocks: true, open: false, cut: true })).toBe('chat-text chat-markdown clamped cut');
-        expect(clampedClass({ blocks: true, open: true, cut: true })).toBe('chat-text chat-markdown');
+        expect(clampedClass({ blocks: true, open: false, cut: false })).toBe('chat-text markdown clamped');
+        expect(clampedClass({ blocks: true, open: false, cut: true })).toBe('chat-text markdown clamped cut');
+        expect(clampedClass({ blocks: true, open: true, cut: true })).toBe('chat-text markdown');
         expect(clampedClass({ blocks: false, className: 'reply-answer', open: false, cut: false })).toBe('chat-text reply-answer clamped');
         // the mask is the cut one's only
-        expect(styles).toMatch(/\.chat-text\.chat-markdown\.clamped\.cut \{\s+mask-image:/);
-        expect(styles).not.toMatch(/\.chat-text\.chat-markdown\.clamped \{[^}]*mask-image/);
+        expect(styles).toMatch(/\.chat-text\.markdown\.clamped\.cut \{\s+mask-image:/);
+        expect(styles).not.toMatch(/\.chat-text\.markdown\.clamped \{[^}]*mask-image/);
     });
 });
