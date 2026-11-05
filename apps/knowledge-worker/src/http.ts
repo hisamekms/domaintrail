@@ -15,11 +15,15 @@
 // | POST /images, GET /images/:id      | putImage, getImage | correct, read |
 // | GET /audit                         | audit             | read    |
 // | GET /redactions?after=             | the redaction log | read    |
-// | PUT /published/:storming           | (`dt publish`: not yet) | — |
+// | PUT /published/:storming           | putPublished (`dt publish`) | publish |
+// | GET /published, /published/:storming | listPublished, publishedBody | read |
+// | GET /missing                       | missingStickies   | read    |
 //
-// Every call needs a caller (access.ts); a write needs a person or a writing service token, and every call passes
-// `authorize(user, project, action)`, which today allows everyone. The bodies are the protocol's
-// (contexts/knowledge/src/protocol.ts).
+// and `GET /v1/projects` (the projects the page offers). Every call needs a caller (access.ts); a write needs a person
+// or a writing service token, publishing a writing service token only (CI's `dt publish`, never a page), and every call
+// passes `authorize(user, project, action)`, which today allows everyone. A person's write must come from the Worker's
+// own page (its `Origin`), so that another site cannot make a signed-in reader's browser delete. The bodies are the
+// protocol's (contexts/knowledge/src/protocol.ts).
 import { authorize, idempotencyKey, type Knowledge, type KnowledgeAction } from '@domaintrail/knowledge';
 import {
     ACTOR_HEADER,
@@ -27,6 +31,7 @@ import {
     IDEMPOTENCY_HEADER,
     IMAGE_MEDIA_TYPES,
     MAX_IMAGE_BYTES,
+    MAX_PUBLISHED_BYTES,
     WireError,
     extraction as extractionOf,
     imageId,
@@ -36,7 +41,9 @@ import {
     unlinkBody,
     limitOf,
     projectName,
+    publishedStorming,
     sessionRef,
+    stormingId,
     userName,
     type ApiErrorType,
     type ErrorBody,
@@ -44,6 +51,7 @@ import {
 import { callerName, identify, mayWrite, type AccessSettings, type AccessTokenVerifier, type Caller } from './access.js';
 import type { Env } from './env.js';
 import { D1KnowledgeStore, IdempotencyKeyReused } from './store.js';
+import { listPublished, missingStickies, projectList, publishedBody, putPublished } from './published.js';
 
 export interface HandleOptions {
     readonly now?: () => Date;
@@ -51,8 +59,8 @@ export interface HandleOptions {
     readonly verifier?: (settings: AccessSettings) => AccessTokenVerifier;
 }
 
-const json = (body: unknown, status = 200): Response =>
-    new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
+const JSON_HEADERS = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
+const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 
 const failure = (status: number, type: ErrorBody['error']['type'], message?: string, itemId?: string): Response =>
     json({ error: { type, ...(itemId !== undefined && { itemId }), ...(message !== undefined && { message }) } } satisfies ErrorBody, status);
@@ -81,9 +89,12 @@ export async function handle(request: Request, env: Env, options: HandleOptions 
     if (!('kind' in caller)) return apiError(caller.status, caller.type, caller.message);
 
     if (parts.length === 2 && parts[1] === 'health' && request.method === 'GET') return json({ api: API_VERSION, caller: callerName(caller) });
-    if (parts[1] !== 'projects' || parts.length < 4) return apiError(404, 'NotFound', `no route ${url.pathname}`);
+    const crossOrigin = refusedOrigin(request, url, caller);
+    if (crossOrigin) return crossOrigin;
 
     try {
+        if (parts.length === 2 && parts[1] === 'projects' && request.method === 'GET') return json({ projects: await projectList(env.DB) });
+        if (parts[1] !== 'projects' || parts.length < 4) return apiError(404, 'NotFound', `no route ${url.pathname}`);
         const project = projectName(decoded(parts[2], 'project'), 'project');
         return await route(request, url, parts.slice(3), project, caller, env, options);
     } catch (e) {
@@ -113,6 +124,9 @@ async function route(
     /** The caller, if it may do `action`; otherwise the answer refusing it. */
     const allow = (action: KnowledgeAction): Response | undefined => {
         if (action !== 'read' && !mayWrite(caller, env)) return apiError(403, 'Forbidden', 'this service token may only read (WRITER_TOKENS)');
+        // the drawing comes from the repository's `main`, through CI: a person (the page) never replaces it
+        if (action === 'publish' && caller.kind !== 'service')
+            return apiError(403, 'Forbidden', '`dt publish`, with a writing service token, publishes; a person does not');
         const user = userName(callerName(caller), 'caller');
         // `visibility: members` is stored (the projects table) but not enforced yet: authorize allows everyone
         if (!authorize(user, project, action)) return apiError(403, 'Forbidden', `not allowed to ${action} in ${project}`);
@@ -254,11 +268,64 @@ async function route(
                 return json({ entries: await store.redactionsPage(project, q.get('after') ?? undefined, limit) });
             }
             break;
-        case 'published':
-            if (method === 'PUT' && id !== undefined) return apiError(501, 'NotImplemented', '`dt publish` is not served by this version of the Worker');
+        case 'published': {
+            if (id === undefined) {
+                if (method === 'GET') return allow('read') ?? json({ stormings: await listPublished(env.DB, project) });
+                break;
+            }
+            if (sub !== undefined) break;
+            const storming = stormingId(decoded(id, 'storming'), 'storming');
+            if (method === 'GET') {
+                const denied = allow('read');
+                if (denied) return denied;
+                const kept = await publishedBody(env.DB, project, storming);
+                return kept === undefined ? apiError(404, 'NotFound', `${storming} is not published`) : new Response(kept, { headers: JSON_HEADERS });
+            }
+            if (method === 'PUT') {
+                const denied = allow('publish');
+                if (denied) return denied;
+                const form = await publishedOf(request);
+                if (form instanceof Response) return form;
+                if (form.storming !== storming) throw new WireError(`body.storming: expected ${storming}, the storming of the path`);
+                return json(await putPublished(env.DB, project, form, callerName(caller), (options.now ?? ((): Date => new Date()))()));
+            }
+            break;
+        }
+        case 'missing':
+            if (method === 'GET' && id === undefined) return allow('read') ?? json(await missingStickies(env.DB, store, project));
             break;
     }
     return apiError(404, 'NotFound', `no route ${method} ${url.pathname}`);
+}
+
+/**
+ * A person's write that does not come from the Worker's own page: refused (403), so that another site cannot make the
+ * browser of someone signed in to Access delete or correct (the Access cookie goes with any request to the host). A
+ * browser sends `Origin` with every write; a call without one (a script with a token) is not a browser's. Service tokens
+ * (dt) are not browsers.
+ */
+function refusedOrigin(request: Request, url: URL, caller: Caller): Response | undefined {
+    if (caller.kind !== 'person' || request.method === 'GET' || request.method === 'HEAD') return undefined;
+    const origin = request.headers.get('Origin');
+    const site = request.headers.get('Sec-Fetch-Site');
+    if ((origin !== null && origin !== url.origin) || (site !== null && site !== 'same-origin'))
+        return apiError(403, 'CrossOrigin', "a person's change is taken from the Worker's own page only");
+    return undefined;
+}
+
+/** The published form of a request's body, or the answer refusing it (its size). */
+async function publishedOf(request: Request): Promise<ReturnType<typeof publishedStorming> | Response> {
+    const tooLarge = (): Response => apiError(413, 'TooLarge', `a published storming is at most ${MAX_PUBLISHED_BYTES} bytes of JSON`);
+    if (Number(request.headers.get('Content-Length') ?? '0') > MAX_PUBLISHED_BYTES) return tooLarge();
+    const bytes = new Uint8Array(await request.arrayBuffer());
+    if (bytes.byteLength > MAX_PUBLISHED_BYTES) return tooLarge();
+    let body: unknown;
+    try {
+        body = JSON.parse(new TextDecoder().decode(bytes));
+    } catch {
+        throw new WireError('body: not JSON');
+    }
+    return publishedStorming(body, 'body');
 }
 
 /** The image of a request's body, or the answer refusing it (its media type, its size). */

@@ -163,3 +163,69 @@ export interface KnowledgeStore {
     /** An image, or `undefined` when it is missing (or removed with the item that referred to it). */
     getImage(project: Project, id: Knowledge.ImageId): Promise<KnowledgeImage | undefined>;
 }
+
+// ---- the published stormings (ADR 0031, section 11) -------------------------------------------------------------
+
+/** The levels of a storming that are published: its Big Picture and its Design Level, each the whole storming. */
+export const PUBLISHED_LEVELS = ['big-picture', 'design-level'] as const;
+export type PublishedLevel = (typeof PUBLISHED_LEVELS)[number];
+
+/** A sticky of a published storming: its reference and its label (the name stands in without one). */
+export interface PublishedSticky {
+    readonly ref: Knowledge.StickyRef;
+    readonly label?: string;
+}
+
+/**
+ * The published form of a storming (`dt publish`, run by CI when `main` changes): what the read-only page of the
+ * Worker draws, the stickies with their labels, links and places, and when the drawing was made. It holds the
+ * business's words only (the drawing is assumed to hold no personal data): no chat, no person, no file path.
+ */
+export interface PublishedStorming {
+    /** The form's version: 1. */
+    readonly format: 1;
+    /** The storming's ID. */
+    readonly storming: string;
+    readonly label?: string;
+    /** The drawing's own version: a hash of what is drawn, so that publishing the same drawing again changes nothing. */
+    readonly version: string;
+    /** The commit of the drawing and its date (absent: drawn from files not committed, dated when published). */
+    readonly drawing: { readonly at: Date; readonly commit?: string };
+    /** Every sticky of the storming (its declarations but the timelines, groups and stages), in source order. */
+    readonly stickies: readonly PublishedSticky[];
+    /** The drawing of each level: the Live View's laid-out graph, which the store keeps as it is and the page draws. */
+    readonly views: Readonly<Record<PublishedLevel, unknown>>;
+}
+
+/** A published storming as the list of them says it, without its drawing. */
+export interface PublishedEntry {
+    readonly storming: string;
+    readonly label?: string;
+    readonly version: string;
+    readonly drawing: { readonly at: Date; readonly commit?: string };
+    /** When it was last published. */
+    readonly publishedAt: Date;
+}
+
+/** What publishing a storming did: the entry as it is now, and whether the drawing differed from the one kept. */
+export interface PublishResult {
+    readonly entry: PublishedEntry;
+    readonly changed: boolean;
+}
+
+/** The items about stickies that no published storming has (a sticky renamed or removed since): listed apart. */
+export interface MissingStickies {
+    /** The stickies the items name that no published storming has, sorted. */
+    readonly stickies: readonly Knowledge.StickyRef[];
+    /** The live items about them, newest first. */
+    readonly items: readonly Knowledge.LiveKnowledgeItem[];
+}
+
+/**
+ * Where `dt publish` sends the published stormings: the `cloudflare` store's Worker, with the service token that
+ * writes. The `files` store has none (its items are read with the workspace, and the Live View draws the stormings).
+ */
+export interface StormingPublisher {
+    /** Replaces the published form of a storming (`PUT /published/:storming`). */
+    publish(project: Project, published: PublishedStorming): Promise<PublishResult>;
+}

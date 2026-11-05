@@ -307,7 +307,7 @@ describe('who may call', () => {
         expect(await bad.json()).toMatchObject({ error: { type: 'BadRequest', message: expect.stringContaining('body.by.number') } });
         const svg = await fetch(`${path}/images`, { method: 'POST', headers: { ...headers, 'Content-Type': 'image/svg+xml' }, body: '<svg/>' });
         expect(svg.status).toBe(415);
-        expect((await fetch(`${path}/published/Ordering`, { method: 'PUT', headers })).status).toBe(501);
+        expect((await fetch(`${path}/published/Ordering`, { method: 'PUT', headers })).status).toBe(400);
     });
 
     test('without Access settings the Worker refuses every call', async () => {

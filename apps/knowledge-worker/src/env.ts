@@ -42,12 +42,19 @@ export interface ExecutionContext {
     waitUntil(promise: Promise<unknown>): void;
 }
 
+/** A binding that answers requests: the static assets of the read-only page (Workers Static Assets). */
+export interface Fetcher {
+    fetch(request: Request): Promise<Response>;
+}
+
 /** The bindings and variables of template/wrangler.jsonc. */
 export interface Env {
     /** The D1 database: items, versions, sources, audit, redactions, projects and members (template/migrations). */
     readonly DB: D1Database;
     /** The R2 bucket of the images, by `<project>/<image id>`. */
     readonly IMAGES: R2Bucket;
+    /** The read-only page's files (`page/`: its HTML, script and styles), served behind the Worker's own Access check. */
+    readonly ASSETS?: Fetcher;
     /** `<team>.cloudflareaccess.com`: the issuer of the Access tokens the Worker verifies. */
     readonly ACCESS_TEAM_DOMAIN?: string;
     /** The Access application's audience tag (AUD). */

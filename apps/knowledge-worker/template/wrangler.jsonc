@@ -22,6 +22,10 @@
   ],
   "r2_buckets": [{ "binding": "IMAGES", "bucket_name": "<knowledge-images>" }],
 
+  // the read-only page (its HTML, script and styles, built by DomainTrail): every request reaches the Worker first, which
+  // verifies Access's token before it serves the page from here
+  "assets": { "directory": "page", "binding": "ASSETS", "run_worker_first": true },
+
   // the sweep that completes deletions: every 5 minutes
   "triggers": { "crons": ["*/5 * * * *"] },
 

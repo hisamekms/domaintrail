@@ -82,10 +82,18 @@ export type {
     KnowledgeImage,
     KnowledgeQuery,
     KnowledgeStore,
+    MissingStickies,
     Page,
+    PublishedEntry,
+    PublishedLevel,
+    PublishedSticky,
+    PublishedStorming,
+    PublishResult,
     RedactionEntry,
     StickyCount,
+    StormingPublisher,
 } from './application/ports.js';
+export { PUBLISHED_LEVELS } from './application/ports.js';
 export { authorize, type KnowledgeAction } from './application/authorize.js';
 export {
     costLine,
@@ -151,4 +159,10 @@ export {
     type FilesKnowledgeStore,
     type FilesKnowledgeStoreOptions,
 } from './infrastructure/files.js';
-export { cloudflareKnowledgeStore, KnowledgeStoreError, type AccessServiceToken, type CloudflareKnowledgeStoreSettings } from './infrastructure/cloudflare.js';
+export {
+    cloudflareKnowledgeStore,
+    KnowledgeStoreError,
+    type AccessServiceToken,
+    type CloudflareKnowledgeStore,
+    type CloudflareKnowledgeStoreSettings,
+} from './infrastructure/cloudflare.js';

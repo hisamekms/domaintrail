@@ -1,8 +1,9 @@
 // The knowledge store's Worker (ADR 0031, section 5): DomainTrail ships it as a template the user deploys
-// (template/README.md); dt creates nothing in Cloudflare. `fetch` serves the HTTP API (http.ts); the Cron Trigger runs
-// the sweep (sweep.ts) that completes deletions.
+// (template/README.md); dt creates nothing in Cloudflare. `fetch` serves the HTTP API under `/v1` (http.ts) and the
+// read-only page everywhere else (page.ts); the Cron Trigger runs the sweep (sweep.ts) that completes deletions.
 import type { Env, ExecutionContext, ScheduledController } from './env.js';
 import { handle } from './http.js';
+import { servePage } from './page.js';
 import { sweep } from './sweep.js';
 
 /** How long a deleted item waits for the sweep by default, in seconds: past the page's 10 s of 元に戻す. */
@@ -10,7 +11,8 @@ const SWEEP_AFTER_SECONDS = 60;
 
 export default {
     fetch(request: Request, env: Env): Promise<Response> {
-        return handle(request, env);
+        const path = new URL(request.url).pathname;
+        return path === '/v1' || path.startsWith('/v1/') ? handle(request, env) : servePage(request, env);
     },
 
     scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): void {

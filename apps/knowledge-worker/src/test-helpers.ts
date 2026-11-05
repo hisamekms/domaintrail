@@ -10,6 +10,7 @@ const TEMPLATE = path.join(ROOT, 'template');
 
 interface WranglerConfig {
     compatibility_date: string;
+    assets: { directory: string; binding: string };
     d1_databases: { binding: string }[];
     r2_buckets: { binding: string }[];
     triggers: { crons: string[] };
@@ -47,8 +48,17 @@ export function statementsOf(sql: string): string[] {
         .filter(Boolean);
 }
 
+export interface StartOptions {
+    /** Apply the template's migrations (default true). */
+    readonly migrate?: boolean;
+    /** The directory of the page's files, served as the Worker's static assets (the built `page/`); none by default. */
+    readonly page?: string;
+    /** The port to listen on (default: any free one). */
+    readonly port?: number;
+}
+
 /** Starts the Worker with the template's bindings, `vars` over its variables, and (unless `migrate: false`) its schema. */
-export async function startWorker(vars: Record<string, string> = {}, options: { migrate?: boolean } = {}): Promise<RunningWorker> {
+export async function startWorker(vars: Record<string, string> = {}, options: StartOptions = {}): Promise<RunningWorker> {
     const config = Bun.JSONC.parse(await Bun.file(path.join(TEMPLATE, 'wrangler.jsonc')).text()) as WranglerConfig;
     const mf = new Miniflare({
         modules: true,
@@ -57,8 +67,15 @@ export async function startWorker(vars: Record<string, string> = {}, options: { 
         d1Databases: config.d1_databases.map((d) => d.binding),
         r2Buckets: config.r2_buckets.map((r) => r.binding),
         bindings: { ...config.vars, ...vars },
+        ...(options.page !== undefined && {
+            assets: {
+                directory: options.page,
+                binding: config.assets.binding,
+                routerConfig: { has_user_worker: true, invoke_user_worker_ahead_of_assets: true },
+            },
+        }),
         host: '127.0.0.1',
-        port: 0,
+        port: options.port ?? 0,
     });
     const url = (await mf.ready).toString().replace(/\/$/, '');
     const db = (await mf.getD1Database('DB')) as unknown as D1Database;

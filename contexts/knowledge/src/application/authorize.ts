@@ -5,7 +5,8 @@
 import type { Knowledge } from '../generated/index.js';
 
 /** What a user does with a project's knowledge. */
-export type KnowledgeAction = 'read' | 'extract' | 'correct' | 'delete';
+/** `publish`: replace a storming's published form (`dt publish`), which only a writing service token may. */
+export type KnowledgeAction = 'read' | 'extract' | 'correct' | 'delete' | 'publish';
 
 /** Whether a user may act on a project's knowledge: today, always. */
 export function authorize(_user: Knowledge.UserName, _project: Knowledge.ProjectName, _action: KnowledgeAction): boolean {

@@ -7,7 +7,7 @@
 // 2xx — Access refusing the token, the Worker failing, a body that is not the API's — rejects the promise with a
 // `KnowledgeStoreError`, as the port says (`application/ports.ts`).
 import { err, ok, type Knowledge, type Result } from '../generated/index.js';
-import type { AuditQuery, KnowledgeImage, KnowledgeQuery, KnowledgeStore, Page, RedactionEntry } from '../application/ports.js';
+import type { AuditQuery, KnowledgeImage, KnowledgeQuery, KnowledgeStore, Page, RedactionEntry, StormingPublisher } from '../application/ports.js';
 import { idempotencyKey } from '../domain/extraction.js';
 import {
     ACCESS_CLIENT_ID_HEADER,
@@ -27,6 +27,7 @@ import {
     liveItems,
     page,
     projectPath,
+    publishResult,
     redactionEntries,
     stickyCounts,
     type Decoder,
@@ -66,15 +67,18 @@ export class KnowledgeStoreError extends Error {
 const REDACTIONS_PAGE = 1000;
 
 interface Call {
-    readonly method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+    readonly method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
     readonly query?: URLSearchParams;
     readonly json?: unknown;
     readonly bytes?: KnowledgeImage;
     readonly headers?: Record<string, string>;
 }
 
+/** The Worker's store: the knowledge, and the published stormings that `dt publish` sends (ADR 0031, section 11). */
+export interface CloudflareKnowledgeStore extends KnowledgeStore, StormingPublisher {}
+
 /** The `KnowledgeStore` of a Worker of the template, reached through Access. */
-export function cloudflareKnowledgeStore(settings: CloudflareKnowledgeStoreSettings): KnowledgeStore {
+export function cloudflareKnowledgeStore(settings: CloudflareKnowledgeStoreSettings): CloudflareKnowledgeStore {
     const base = new URL(settings.url);
     const prefix = base.pathname.replace(/\/+$/, '');
     const doFetch = settings.fetch ?? fetch;
@@ -281,6 +285,11 @@ export function cloudflareKnowledgeStore(settings: CloudflareKnowledgeStoreSetti
             }
             if (!res.ok) throw await failure(res, `image ${id}`);
             return { mediaType: res.headers.get('Content-Type') ?? 'application/octet-stream', bytes: new Uint8Array(await res.arrayBuffer()) };
+        },
+
+        async publish(project, published) {
+            const res = await request(project, `/published/${encodeURIComponent(published.storming)}`, { method: 'PUT', json: published });
+            return read(res, publishResult, `publishing ${published.storming}`);
         },
     };
 }
