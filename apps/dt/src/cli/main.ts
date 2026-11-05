@@ -955,6 +955,7 @@ Examples:
             run: cfg.agent.run,
             answer: cfg.agent.answer,
             triage: cfg.agent.triage,
+            extract: cfg.agent.extract,
             read: cfg.agent.read,
             practice: practiceOf(parseGuide(guide)),
         };
@@ -1094,9 +1095,10 @@ function openSettings(cfg: ResolvedConfig, port: number, host: string): SessionS
         identity: 'dev',
         maxParticipants: 1,
         quickReactions: cfg.collab.quickReactions,
-        agent: { port: cfg.agent.port, allowedTools: run.allowedTools, maxPreviousRunDiff: run.maxPreviousRunDiff },
+        agent: { port: cfg.agent.port, allowedTools: run.allowedTools, maxPreviousRunDiff: run.maxPreviousRunDiff, extractTimeout: cfg.agent.extract.timeout },
         classifier: cfg.classifier,
         templates: cfg.templates,
+        knowledge: cfg.knowledge,
     };
 }
 
@@ -1107,9 +1109,10 @@ function sessionSettings(cfg: ResolvedConfig, server: { port: number; host: stri
         ...cfg.collab,
         port: opts.port ?? server.port,
         host: opts.host ?? server.host,
-        agent: { port: cfg.agent.port, allowedTools: run.allowedTools, maxPreviousRunDiff: run.maxPreviousRunDiff },
+        agent: { port: cfg.agent.port, allowedTools: run.allowedTools, maxPreviousRunDiff: run.maxPreviousRunDiff, extractTimeout: cfg.agent.extract.timeout },
         classifier: cfg.classifier,
         templates: cfg.templates,
+        knowledge: cfg.knowledge,
     };
 }
 

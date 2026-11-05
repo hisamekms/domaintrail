@@ -6,8 +6,12 @@
 // - the runner: Claude Code (a warm process across runs, or one per run: `agent.run`), `dt fmt`/`dt check` (this CLI,
 //   or `agent.run.dt`, for the agent too) and the workspace's files;
 // - the answerer: stage 3 of the triage (a light model with no tools: `agent.triage`), answers and proposals (Claude
-//   Code with the reading tools only: `agent.answer`), from the answers entry point.
-import { homedir, hostname } from 'node:os';
+//   Code with the reading tools only: `agent.answer`), from the answers entry point; and with it the extractor of
+//   knowledge (ADR 0031: Claude Code with no tools at all, `agent.extract`), from the extraction entry point — a role of
+//   its own on the agent API, read-only like the answerer, so it is taken with it. A session that keeps no knowledge
+//   answers its stream 404, and it ends then without a word more.
+import { mkdtemp, rm } from 'node:fs/promises';
+import { homedir, hostname, tmpdir } from 'node:os';
 import * as path from 'node:path';
 import {
     AGENT_ROLES,
@@ -16,11 +20,14 @@ import {
     type AgentRunner,
     type AnswerConfig,
     createClaudeAnswerer,
+    createClaudeExtractor,
     createClaudeCodeRunner,
     createDtTools,
     createWarmClaudeRunner,
     createHttpAgentApi,
     type DtCommand,
+    type ExtractConfig,
+    type Extractor,
     dtCommandOf,
     pinDt,
     type PinnedDt,
@@ -32,6 +39,7 @@ import {
     type RunConfig,
     scanWorkspace,
     startAnswerer,
+    startExtractor,
     startSubscriber as subscribe,
     type Subscriber,
     type SubscriberEnd,
@@ -94,6 +102,8 @@ export interface SubscriberOptions {
     answer?: AnswerConfig;
     /** Stage 3 of the triage (`agent.triage`); default: `haiku`, a fresh process per triage. */
     triage?: TriageConfig;
+    /** The extractor of knowledge (`agent.extract`); default: the answerer's model and effort, 180 s. */
+    extract?: ExtractConfig;
     /** The ways of working the prompts give (the guide's); none without it. */
     practice?: Practice;
     /** What each role may read outside the workspace, read-only (`agent.read.paths` and its own; absolute paths). */
@@ -233,9 +243,44 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             : undefined;
     // the views go with the answerer
     void answerer?.done.then(() => Promise.all([view?.dispose(), extraViews?.dispose()]));
+    const extractor = roles.has('answer')
+        ? await startKnowledgeExtractor({
+              api,
+              ...((options.extract?.model ?? answerConfig.model ?? user.model) !== undefined && {
+                  model: options.extract?.model ?? answerConfig.model ?? user.model,
+              }),
+              ...((options.extract?.effort ?? answerConfig.effort ?? user.effort) !== undefined && {
+                  effort: options.extract?.effort ?? answerConfig.effort ?? user.effort,
+              }),
+              timeoutMs: (options.extract?.timeout ?? 180) * 1000,
+              ...((options.answerCommand ?? options.agentCommand) && { command: options.answerCommand ?? options.agentCommand }),
+              ...(options.reconnect && { reconnect: options.reconnect }),
+              log,
+          })
+        : undefined;
+    /**
+     * The read-only roles' end: the answerer stops; the extractor, when the session closed, is let finish the last
+     * extraction (the server tells it when it is done), at most its timeout and a little more.
+     */
+    const readOnlyEnd = async (why: SubscriberEnd | 'closed'): Promise<void> => {
+        const last = why === 'closed' && extractor ? withTimeout(extractor.done, (options.extract?.timeout ?? 180) * 1000 + 10_000) : undefined;
+        await Promise.all([answerer?.stop(), last?.then(() => extractor?.stop())]);
+        await extractor?.stop();
+    };
     if (!roles.has('run')) {
-        const done = answerer?.done ?? Promise.resolve<SubscriberEnd>('stopped');
-        return { session: session.value.session, roles: taken, done, stop: async () => (await answerer?.stop()) ?? 'stopped' };
+        const done = (answerer?.done ?? Promise.resolve<SubscriberEnd>('stopped')).then(async (why) => {
+            await readOnlyEnd(why);
+            return why;
+        });
+        return {
+            session: session.value.session,
+            roles: taken,
+            done,
+            stop: async () => {
+                const [why] = await Promise.all([answerer?.stop() ?? Promise.resolve<SubscriberEnd>('stopped'), extractor?.stop()]);
+                return why;
+            },
+        };
     }
 
     const runTargets = readOf('run');
@@ -267,7 +312,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
                   })
                 : await createClaudeCodeRunner(claude);
     } catch (e) {
-        await answerer?.stop();
+        await Promise.all([answerer?.stop(), extractor?.stop()]);
         throw new SessionError(e instanceof Error ? e.message : String(e));
     }
     const subscriber: Subscriber = subscribe(
@@ -294,9 +339,10 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             ...(options.practice && { practice: options.practice }),
         },
     );
-    // the runner's end ends the answerer too (the session closed, the server is gone, Ctrl+C, `--once`)
+    // the runner's end ends the answerer and the extractor too (the session closed — after the last extraction —, the
+    // server is gone, Ctrl+C, `--once`)
     const done = subscriber.done.then(async (why) => {
-        await answerer?.stop();
+        await readOnlyEnd(why);
         return why;
     });
     return {
@@ -304,7 +350,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
         roles: taken,
         done,
         stop: async () => {
-            const [why] = await Promise.all([subscriber.stop(), answerer?.stop()]);
+            const [why] = await Promise.all([subscriber.stop(), answerer?.stop(), extractor?.stop()]);
             return why;
         },
     };
@@ -358,4 +404,49 @@ export function runnerDeniedPaths(root: string, env?: NodeJS.ProcessEnv): Promis
         },
         ignores: (p, d) => (gitignore ??= new GitIgnore(root, { userExcludes: true, env })).ignores(p, d),
     });
+}
+
+/** Resolves with `promise`, or after `ms` (undefined). */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
+    return new Promise((resolve) => {
+        const timer = setTimeout(() => resolve(undefined), ms);
+        timer.unref();
+        void promise.then((v) => {
+            clearTimeout(timer);
+            resolve(v);
+        });
+    });
+}
+
+/**
+ * The extractor of knowledge (ADR 0031): Claude Code with no tools at all, a fresh process per extraction, in an empty
+ * directory of its own (removed when it ends), so that no file of the workspace — nor its `CLAUDE.md` — is read.
+ */
+async function startKnowledgeExtractor(options: {
+    api: Parameters<typeof startExtractor>[0]['api'];
+    model?: string;
+    effort?: string;
+    timeoutMs: number;
+    command?: AgentCommand;
+    reconnect?: { minMs: number; maxMs: number; giveUpMs: number };
+    log: (line: string) => void;
+}): Promise<Extractor> {
+    const dir = await mkdtemp(path.join(tmpdir(), 'dt-extractor-'));
+    const extractor = startExtractor(
+        {
+            api: options.api,
+            agent: createClaudeExtractor({
+                root: dir,
+                ...(options.model !== undefined && { model: options.model }),
+                ...(options.effort !== undefined && { effort: options.effort }),
+                ...(options.command && { command: options.command }),
+            }),
+            clock: systemClock,
+            nonce: randomNonce,
+            log: options.log,
+        },
+        { timeoutMs: options.timeoutMs, ...(options.reconnect && { reconnect: options.reconnect }) },
+    );
+    void extractor.done.then(() => rm(dir, { recursive: true, force: true })).catch(() => undefined);
+    return extractor;
 }

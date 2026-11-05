@@ -1,7 +1,8 @@
 // The sections `collab` and `agent` of domaintrail.jsonc (ADR 0026, ADR 0030) composed from their owners (ADR 0027,
 // Project analysis and configuration): in `collab`, the app's port, host and connection guards (./server.ts) and
 // Collaboration's identity mode, its Access settings and its `link` mode's public URL, participant limit and quick reactions; in `agent`, the app's
-// `port` (the agent API), the agent's roles (`run`, `answer`, `triage`) and Collaboration's `run.maxPreviousRunDiff`.
+// `port` (the agent API), the agent's roles (`run`, `answer`, `triage`, `extract`) and Collaboration's
+// `run.maxPreviousRunDiff`.
 // Each section's unknown keys are checked here, with a hint for a key that was valid in the old `session` section.
 import {
     AGENT_CONFIG_KEYS,
@@ -9,6 +10,7 @@ import {
     type AnswerConfig,
     checkDtOutsideWorkspace,
     checkReadPaths,
+    type ExtractConfig,
     type ReadPaths,
     type ResolvedRunConfig,
     resolveAgentConfig,
@@ -78,6 +80,8 @@ export interface ResolvedAgentSection {
     run: ResolvedRunConfig & { maxPreviousRunDiff: number };
     answer: AnswerConfig;
     triage: TriageConfig;
+    /** The extractor of knowledge (ADR 0031). */
+    extract: ExtractConfig;
     /** What each role reads outside the workspace (absolute paths): `agent.read.paths` and the role's own. */
     read: ReadPaths;
 }
@@ -127,7 +131,7 @@ export function validateAgent(agent: unknown, keys: Readonly<Record<string, read
     if (!isObject(agent)) return fail("'agent' must be an object");
     checkKeys(agent, 'agent', keys, fail);
     validateAgentApiConfig(agent, fail);
-    for (const role of ['run', 'answer', 'triage']) {
+    for (const role of ['run', 'answer', 'triage', 'extract']) {
         const part = agent[role];
         if (isObject(part)) checkKeys(part, `agent.${role}`, keys, fail);
         if (isObject(part) && isObject(part.read)) checkKeys(part.read, `agent.${role}.read`, keys, fail);
@@ -181,6 +185,7 @@ export function resolveAgent(agent: AgentSectionFile = {}, dir?: string): Resolv
         run: { ...roles.run, maxPreviousRunDiff: resolveCollaborationConfig({ agent }).maxPreviousRunDiff },
         answer: roles.answer,
         triage: roles.triage,
+        extract: roles.extract,
         read: roles.read,
     };
 }
