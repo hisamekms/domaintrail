@@ -5174,42 +5174,50 @@ a.chat-chip.chat-target:hover {
     line-clamp: 4;
     overflow: hidden;
 }
-/* an answer of the AI as Markdown (`markdown.ts`): blocks --space-2 apart; clamped by its height (four lines), since
-   line clamping does not reach into its lists and tables, its last line fading out only when it is cut (`cut`: taller
-   than the clamp); one that fits is shown whole, unfaded */
-.chat-text.chat-markdown.clamped {
+/* a Markdown text (`shared/markdown.ts`; the chat's answers, the knowledge's opened items): blocks --space-2 apart. An
+   answer of the AI is clamped by its height (four lines), since line clamping does not reach into its lists and
+   tables, its last line fading out only when it is cut (`cut`: taller than the clamp); one that fits is shown whole,
+   unfaded */
+.chat-text.markdown.clamped {
     display: block;
     max-height: calc(4em * var(--lh-body));
 }
-.chat-text.chat-markdown.clamped.cut {
+.chat-text.markdown.clamped.cut {
     mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5em), transparent);
 }
-.chat-markdown > * {
+.markdown > * {
     margin: 0;
 }
-.chat-markdown > * + * {
+.markdown > * + * {
     margin-top: var(--space-2);
 }
-.chat-markdown :is(ul, ol) {
+.markdown :is(ul, ol) {
     margin: 0;
     padding-left: 1.5em;
 }
+/* its own bullets, wherever the text is (an item of the knowledge is in a list itself) */
+.markdown ul {
+    list-style-type: disc;
+}
+.markdown :is(ul, ol) ul {
+    list-style-type: circle;
+}
 /* every heading level alike: a bold line, a little larger than the body */
-.chat-markdown .chat-md-heading {
+.markdown .md-heading {
     font-size: 1.0625em;
     font-weight: var(--fw-strong);
 }
-.chat-markdown strong {
+.markdown strong {
     font-weight: var(--fw-strong);
 }
-.chat-markdown code {
+.markdown code {
     font-size: 0.9em;
     padding: 0 3px;
     border-radius: 4px;
     background: var(--surface-muted);
 }
 /* a code block and a table: wider than the column, they scroll inside it, never widen the chat */
-.chat-markdown .chat-md-code {
+.markdown .md-code {
     max-width: 100%;
     padding: var(--space-2);
     overflow-x: auto;
@@ -5219,30 +5227,40 @@ a.chat-chip.chat-target:hover {
     line-height: var(--lh-small);
     white-space: pre;
 }
-.chat-md-code code {
+.md-code code {
     padding: 0;
     background: none;
     font-size: inherit;
 }
-.chat-markdown .chat-md-table {
+.markdown .md-table {
     max-width: 100%;
     overflow-x: auto;
 }
-.chat-md-table table {
+.md-table table {
     border-collapse: collapse;
     font-size: var(--fs-small);
     line-height: var(--lh-small);
 }
-.chat-md-table :is(th, td) {
+.md-table :is(th, td) {
     padding: 2px var(--space-2);
     border: 1px solid var(--border);
     text-align: left;
     vertical-align: top;
     white-space: nowrap;
 }
-.chat-md-table th {
+.md-table th {
     font-weight: var(--fw-strong);
     background: var(--surface-muted);
+}
+/* an attached image (`![…](image:<id>)`): the column's width at most, and not taller than a screenful's part, its
+   proportions kept */
+.markdown .md-image {
+    display: block;
+    max-width: 100%;
+    max-height: 20em;
+    height: auto;
+    border: 1px solid var(--border);
+    border-radius: 4px;
 }
 .chat-more {
     margin-top: calc(-1 * var(--space-1));
@@ -5331,9 +5349,11 @@ a.chat-chip.chat-target:hover {
     padding: var(--space-1) var(--space-2);
     font-size: var(--fs-small);
 }
-/* a mention in a sent body, and an element the AI's reply names: a link to it (violet, a thin underline), never bold */
+/* a mention in a sent body, and an element the AI's reply or an item of the knowledge names (on the Worker's page too,
+   which has no panes): a link to it (violet, a thin underline), never bold */
 .pane a.chat-mention,
-.pane a.reply-element {
+.pane a.reply-element,
+.knowledge-text a.reply-element {
     color: var(--accent);
     text-decoration: underline;
     text-decoration-thickness: 1px;
@@ -5342,7 +5362,8 @@ a.chat-chip.chat-target:hover {
     cursor: pointer;
 }
 .pane a.chat-mention:hover,
-.pane a.reply-element:hover {
+.pane a.reply-element:hover,
+.knowledge-text a.reply-element:hover {
     text-decoration-color: currentColor;
 }
 .chat-mention.stale {
@@ -9111,6 +9132,7 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
 .knowledge-item-main {
     flex: 1;
     min-width: 0;
+    position: relative;
     display: flex;
     flex-direction: column;
 }
@@ -9123,6 +9145,14 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
 }
 .knowledge-item.unfolded .knowledge-text {
     display: block;
+}
+/* the plain text clamped, unseen while the item is unfolded: the height it closes to (panel.tsx, useClampMotion) */
+.knowledge-item.unfolded .knowledge-text-twin {
+    display: -webkit-box;
+    position: absolute;
+    inset: 0 0 auto;
+    visibility: hidden;
+    pointer-events: none;
 }
 /* the stickies' names under a closed item of the ナレッジ list fold away as it opens */
 .knowledge-fold {
@@ -9200,11 +9230,6 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
     display: flex;
     flex-direction: column;
     min-width: 0;
-}
-.knowledge-image {
-    max-width: 100%;
-    border: 1px solid var(--border);
-    border-radius: 4px;
 }
 .knowledge-actions,
 .knowledge-form-labels {

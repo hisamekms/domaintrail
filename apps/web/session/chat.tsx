@@ -58,7 +58,7 @@ import {
 import { sessionApi } from './api';
 import { Bubble, Clamped, time } from './bubble';
 import { arrival, clamps, followTop, HEAD_MARGIN, PAGE_REVEAL, revealKeys } from './reveal';
-import { MarkdownText } from './markdown-text';
+import { MarkdownText } from '../shared/markdown-text';
 import { ChangedElements, ReplyButton, RunCard, useUnitAbout } from './card';
 import { AddReaction, ReactionRow, useMarking } from './mark-controls';
 import { messageMarks, updatedCards } from './cards';
@@ -109,6 +109,7 @@ import {
     type SlashItem,
     type SlashScope,
 } from './slash';
+import { ReplyText } from './reply';
 import { isReplyable, messageReference, messageReplyTargets, repliesToMe, replyReference, replyTargets, type ReplyDraft } from './replies';
 import { useRevisionTools } from './revisions';
 import { CancelButton, CancelDialog, RowActions, StatusSizer, StatusSlot, TurnLink } from './status-slot';
@@ -1345,7 +1346,7 @@ function AiMessageRow({ request: r, continues, hangs }: { request: RequestJson; 
             <Bubble avatar={<AiAvatar />} who={tx.chat.agent} at={r.sentAt} continues={continues} className="chat-bubble-ai">
                 {r.replyTo?.kind === 'Message' && !hangs && <MessageReferenceLine request={r.replyTo.request} />}
                 <Clamped tx={tx} revealKey={`message:${r.id}`} blocks>
-                    <MarkdownText text={r.body} onNavigate={onNavigate} />
+                    <MarkdownText text={r.body} renderText={(text) => <ReplyText text={text} onNavigate={onNavigate} />} />
                 </Clamped>
                 <InterviewChoices request={r.id} />
                 <JourneyNoteActions request={r} />

@@ -8,9 +8,10 @@ import { MESSAGES } from '../i18n';
 import { check } from '../test-helpers';
 import type { TriageRecord } from './ai';
 import { ChatProvider, type ChatContextValue } from './chat-context';
-import { MarkdownText } from './markdown-text';
+import { MarkdownText } from '../shared/markdown-text';
 import { TargetNamingProvider } from './naming';
 import { targetLabel } from './proposal-view';
+import { ReplyText } from './reply';
 import { parseReplyText, referencesAsText, referenceText } from './references';
 import { resolveTarget, viewOfDeclaration, type ModelTarget, type NamingContext } from './targets';
 import { TriageRecordPanel } from './triage-record';
@@ -172,7 +173,7 @@ describe('parsing next to punctuation and line breaks', () => {
 const html = (text: string): string =>
     renderToStaticMarkup(
         <TargetNamingProvider value={naming}>
-            <MarkdownText text={text} onNavigate={() => {}} />
+            <MarkdownText text={text} renderText={(t) => <ReplyText text={t} onNavigate={() => {}} />} />
         </TargetNamingProvider>,
     );
 const link = (label: string): string => `<a class="reply-element" data-tooltip="給食当番 / ${label}">${label}</a>`;
@@ -212,7 +213,7 @@ describe('references inside the Markdown of an answer', () => {
         expect(html('` @{es:Kyushoku/Normal} `')).toContain(link('いつもの流れ'));
         const out = html('`x = @{es:Kyushoku/Normal}` と\n\n```\n@{es:Kyushoku/Normal}\n```');
         expect(out).toContain('<code>x = @{es:Kyushoku/Normal}</code>');
-        expect(out).toContain('<pre class="chat-md-code"><code>@{es:Kyushoku/Normal}</code></pre>');
+        expect(out).toContain('<pre class="md-code"><code>@{es:Kyushoku/Normal}</code></pre>');
         expect(out).not.toContain('reply-element');
     });
 

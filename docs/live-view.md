@@ -484,7 +484,9 @@ dt only (`/api/session/knowledge`):
   ホットスポットにする (a message to the AI, as 聞くことをメモ sends: the facilitator's goes to the runner, a
   participant's becomes a proposal) and 食い違いではない (the link removed from both); a conflict whose other side was
   deleted no longer shows. Then its other items, 新しい順 or 種類の順.
-  An item opens, as one outlined card, to its images, its sources as the chat's reference lines (`↩ who: quote`: a
+  A closed item shows two lines of its text, plain (its Markdown marks dropped, its images left out). An item opens,
+  as one outlined card, to its whole text as Markdown with the chat's rules (its `@{es:…}` references linking the
+  stickies, each selects it; its images drawn, as wide as the column at most), its sources as the chat's reference lines (`↩ who: quote`: a
   message of this session by who said it, a click moves to it in the chat; another session's by its date; the whole
   quote and its time in the tooltip), the other stickies it concerns as the chat's `#name` chips (each selects it), its
   versions, and 直す (its text and labels, a new version), 画像を付ける (PNG, JPEG, GIF or WebP, at the end of its text)
