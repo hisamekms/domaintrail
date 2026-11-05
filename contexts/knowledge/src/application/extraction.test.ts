@@ -116,7 +116,7 @@ const addFinding = (message: string, text = '急ぎの見積もりは当日中�
     sources: [{ message, quote: 'estimate' }],
     reason: 'a rule was stated',
 });
-const updateFinding = (item: string, text = '急ぎの見積もりは当日17時までに出す') => ({
+const updateFinding = (item: string, text = '急ぎの見積もりは当日17時までに出す', message = 'm1') => ({
     op: 'update',
     item,
     text,
@@ -124,6 +124,7 @@ const updateFinding = (item: string, text = '急ぎの見積もりは当日17時
     kind: 'rule',
     origin: 'said',
     about: ['Ordering.Estimate'],
+    sources: [{ message, quote: 'estimate' }],
     reason: 'more precise',
 });
 
@@ -265,9 +266,13 @@ describe("a session's extraction", () => {
     test('an update is held, unseen, and applies when the next extraction makes the same call', async () => {
         const messages = [message('r1', 900)];
         const mine = liveItem('kn_00000001', { createdIn: SESSION });
-        const { extraction, store, checkpoints } = setup(messages, fakeExtractor(reply(updateFinding('k1')), reply(updateFinding('k1', '急ぎは17時まで'))), {
-            items: [mine],
-        });
+        const { extraction, store, checkpoints } = setup(
+            messages,
+            fakeExtractor(reply(updateFinding('k1')), reply(updateFinding('k1', '急ぎは17時まで', 'm2'))),
+            {
+                items: [mine],
+            },
+        );
         expect<unknown>(await extraction.extract('quiet')).toEqual({ applied: 0, held: 1, dropped: 0, rejected: 0 });
         expect<unknown>(store.applied).toEqual([]);
         expect<unknown>(checkpoints.saved().held.map((h) => [h.operation.kind, h.operation.item, h.heldIn, h.heldAt])).toEqual([
@@ -276,7 +281,12 @@ describe("a session's extraction", () => {
         messages.push(message('r2', 1000));
         expect<unknown>(await extraction.extract('quiet')).toEqual({ applied: 1, held: 0, dropped: 0, rejected: 0 });
         const item = store.items.get('kn_00000001');
-        expect<unknown>(item?.state === 'Live' && [item.content.text, item.version]).toEqual(['急ぎは17時まで', 1]);
+        // the messages of both calls join the sources; a source added makes a version even in this session
+        expect<unknown>(item?.state === 'Live' && [item.content.text, item.version, item.sources.map((s) => s.message)]).toEqual([
+            '急ぎは17時まで',
+            2,
+            [mine.sources[0].message, 'r1', 'r2'],
+        ]);
     });
 
     test('a held update the next extraction calls otherwise is dropped; one nobody returns to applies once settled', async () => {

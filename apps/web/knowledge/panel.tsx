@@ -30,6 +30,7 @@ import {
     outsideConflicts,
     plainText,
     queryOf,
+    sourcesNewestFirst,
     toggled,
     WHENS,
     selectionOfSticky,
@@ -223,7 +224,7 @@ function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefi
             ))}
             {item.sources.length > 0 && (
                 <div className="knowledge-sources" role="group" aria-label={t.sources}>
-                    {item.sources.map((s) => (
+                    {sourcesNewestFirst(item.sources).map((s) => (
                         <SourceLine key={`${s.session}/${s.message}`} source={s} />
                     ))}
                 </div>

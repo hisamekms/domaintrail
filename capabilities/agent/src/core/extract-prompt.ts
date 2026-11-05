@@ -73,8 +73,10 @@ Compare each finding of the new messages with the items, and decide one of:
   messages) and \`agreed\`: true when the talk agreed this time (several people, or the talk moved on without
   objection), which raises \`said\` to \`agreed\`.
 - \`update\`: an item holds this finding less precisely, or a bit wrong, and the talk now makes it more precise or
-  corrects it. Give the whole revised finding (\`text\` and the labels, \`about\`), not only what changed. An item made in
-  this session (\`thisSession\` true) is rewritten in place: prefer \`update\` to \`add\` when it is the same finding.
+  corrects it. Give the whole revised finding (\`text\` and the labels, \`about\`), not only what changed, and
+  \`sources\`: the new messages the update rests on (the correction, the detail), each with a short quote as for
+  \`add\` — an update without them is dropped, since a reader must be able to follow the change to the talk. For an item
+  made in this session (\`thisSession\` true), prefer \`update\` to \`add\` when it is the same finding.
 - \`conflict\`: the talk firmly contradicts an item. Give the new finding as for \`add\`, with its \`sources\`, and \`item\`:
   the item it contradicts. Both are kept, linked.
 

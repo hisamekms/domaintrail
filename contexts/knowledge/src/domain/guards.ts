@@ -4,7 +4,8 @@
 // - add and addSource apply at once (a wrong item costs a deletion);
 // - update and conflict are held, unseen, and apply only
 //   - when a later extraction — the talk has moved on: new messages came — makes the same call (`sameCall`): the later
-//     operation applies, with its wording and the version it saw, and the held one is done;
+//     operation applies, with its wording and the version it saw — an update with the sources of both, so that the
+//     messages it rests on are all kept —, and the held one is done;
 //   - or when the item's topic stayed quiet for `settleMs` since the held operation's talk: no later extraction made
 //     another call on the item meanwhile;
 //   otherwise they are dropped: a later extraction made another call on the same item (the newer one is held instead),
@@ -64,6 +65,20 @@ export interface GuardInput {
 
 const isHeldKind = (o: Knowledge.Operation): o is HeldKind => o.kind === 'Update' || o.kind === 'Conflict';
 
+/** The later of two same calls, an update with the earlier one's sources too (each message once, the earlier first). */
+function confirmedBy(before: HeldKind, later: HeldKind): HeldKind {
+    if (before.kind !== 'Update' || later.kind !== 'Update') return later;
+    const seen = new Set<string>();
+    const sources = [...before.sources, ...later.sources].filter((s) => {
+        const key = `${s.session}\u0000${s.message}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+    const [first, ...rest] = sources;
+    return first ? { ...later, sources: [first, ...rest] } : later;
+}
+
 const contentOf = (o: HeldKind): Knowledge.ItemContent => (o.kind === 'Update' ? o.revised : o.content);
 
 /** Whether two held kinds of operation make the same call (see the head of this file). */
@@ -111,7 +126,7 @@ export function guardExtraction(input: GuardInput): GuardDecision {
             earlier.delete(operation.item);
             if (before.heldIn < input.number && sameCall(before.operation, operation)) {
                 released.push({ held: before, outcome: 'confirmed' });
-                apply.push(operation);
+                apply.push(confirmedBy(before.operation, operation));
                 continue;
             }
             released.push({ held: before, outcome: 'superseded' });

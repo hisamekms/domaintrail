@@ -15,7 +15,13 @@ describe('the wire', () => {
             operations: [
                 { kind: 'Add', id: itemId('kn_00000001'), content: content('a rule'), sources: [source('s1', 'm1')], reason: reason('said') },
                 { kind: 'AddSource', item: itemId('kn_00000002'), base: version(2), source: source('s1', 'm2'), agreed: true },
-                { kind: 'Update', item: itemId('kn_00000002'), base: version(2), revised: content('more precise', 'agreed', []) },
+                {
+                    kind: 'Update',
+                    item: itemId('kn_00000002'),
+                    base: version(2),
+                    revised: content('more precise', 'agreed', []),
+                    sources: [source('s1', 'm4')],
+                },
                 {
                     kind: 'Conflict',
                     id: itemId('kn_00000003'),

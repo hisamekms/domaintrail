@@ -18,11 +18,12 @@ context Knowledge {
       agreed: Bool "合意"
       reason: Reason? "理由"
     }
-    /// 詳しくする。
+    /// 詳しくする。拠りどころのメッセージを出典として持つ。
     Update "詳しくする" {
       item: KnowledgeItemId "ナレッジ"
       base: ItemVersion "見た版"
       revised: ItemContent "中身"
+      sources: Source[1..*] "出典"
       reason: Reason? "理由"
     }
     /// 前のナレッジと食い違う発見を、両方残してつなぐ。

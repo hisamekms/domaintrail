@@ -44,8 +44,11 @@ register(
                             [ofEarlier, { source: source('s1', 'm9'), agreed: false, base: version(1), by, at }],
                         ],
                         update: [
-                            [ofThisSession, { revised: content('more precise'), base: version(1), by, at }],
-                            [ofEarlier, { revised: content('more precise'), base: version(1), by, reason: reason('the numbers'), at }],
+                            [ofThisSession, { revised: content('more precise'), newSources: [source('s1', 'm8')], base: version(1), by, at }],
+                            [
+                                ofEarlier,
+                                { revised: content('more precise'), newSources: [source('s1', 'm8')], base: version(1), by, reason: reason('the numbers'), at },
+                            ],
                         ],
                         linkConflict: [[ofEarlier, { other: itemId('kn_00000003'), base: version(1), by, at }]],
                         correct: [[ofThisSession, { corrected: content('as it is'), by: userName('a@example.com'), at }]],

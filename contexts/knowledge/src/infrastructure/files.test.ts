@@ -75,16 +75,27 @@ describe('the files store', () => {
         expect((await store.get(project, itemId('kn_00000001')))?.item.sources).toHaveLength(2);
     });
 
-    test('update: in place in the session that made it, a new version from a later one', async () => {
+    test('update: a rewording in place in the session that made it; one with a new source, or from a later session, a new version', async () => {
         await apply('s1', 1, add('kn_00000001'));
         const revised = content('more precisely');
-        const inPlace = await apply('s1', 2, { kind: 'Update', item: itemId('kn_00000001'), base: version(1), revised });
+        const own = [source('s1', 'm-kn_00000001')] as const;
+        const inPlace = await apply('s1', 2, { kind: 'Update', item: itemId('kn_00000001'), base: version(1), revised, sources: own });
         expect(inPlace.items[0].version).toBe(version(1));
         expect(inPlace.items[0].content.text).toBe(revised.text);
-        const later = await apply('s2', 1, { kind: 'Update', item: itemId('kn_00000001'), base: version(1), revised: content('later still') });
-        expect(later.items[0].version).toBe(version(2));
+        // the correction's message joins the sources, a new version
+        const corrected = await apply('s1', 3, {
+            kind: 'Update',
+            item: itemId('kn_00000001'),
+            base: version(1),
+            revised: content('30 days'),
+            sources: [source('s1', 'm-correction')],
+        });
+        expect(corrected.items[0].version).toBe(version(2));
+        expect(corrected.items[0].sources.map((s) => s.message)).toEqual(['m-kn_00000001', 'm-correction'] as Knowledge.MessageRef[]);
+        const later = await apply('s2', 1, { kind: 'Update', item: itemId('kn_00000001'), base: version(2), revised: content('later still'), sources: own });
+        expect(later.items[0].version).toBe(version(3));
         // a stale base is dropped, the item stands
-        const stale = await apply('s2', 2, { kind: 'Update', item: itemId('kn_00000001'), base: version(1), revised: content('stale') });
+        const stale = await apply('s2', 2, { kind: 'Update', item: itemId('kn_00000001'), base: version(1), revised: content('stale'), sources: own });
         expect(stale.items).toEqual([]);
         expect(stale.dropped.map((d) => d.reason.type)).toEqual(['StaleOperation']);
         expect((await store.get(project, itemId('kn_00000001')))?.item.content.text).toBe(content('later still').text);
@@ -292,7 +303,13 @@ describe('the files store', () => {
     test('an extraction sent again applies nothing and returns the first result', async () => {
         const operations = [
             add('kn_00000001'),
-            { kind: 'Update', item: itemId('kn_00000009'), base: version(1), revised: content('x') } satisfies Knowledge.Operation,
+            {
+                kind: 'Update',
+                item: itemId('kn_00000009'),
+                base: version(1),
+                revised: content('x'),
+                sources: [source('s1', 'm-x')],
+            } satisfies Knowledge.Operation,
         ];
         const first = await apply('s1', 1, ...operations);
         await store.correct(project, itemId('kn_00000001'), content('corrected meanwhile'), alice);

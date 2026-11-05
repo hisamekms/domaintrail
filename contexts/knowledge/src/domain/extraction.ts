@@ -118,7 +118,14 @@ function applyOperation(operation: Knowledge.Operation, by: Knowledge.Extraction
         case 'Update': {
             const item = liveAt(current, operation.item);
             if (!item.ok) return item;
-            const r = knowledgeItemCommands.update(item.value, { revised: operation.revised, base: operation.base, by, ...why, at });
+            const r = knowledgeItemCommands.update(item.value, {
+                revised: operation.revised,
+                newSources: operation.sources,
+                base: operation.base,
+                by,
+                ...why,
+                at,
+            });
             if (!r.ok) return r;
             const { aggregate, events } = r.value.Live;
             if (events.KnowledgeItemRevised) return { ok: true, value: [{ item: aggregate, replaced: item.value, event: events.KnowledgeItemRevised }] };

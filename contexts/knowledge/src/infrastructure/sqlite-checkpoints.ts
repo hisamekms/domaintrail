@@ -54,11 +54,15 @@ function reviveOperation(operation: unknown): unknown {
     };
 }
 
+/** An update written before updates carried their sources (ADR 0031, section 3, as amended): read back as none (dropped). */
+const sourcelessUpdate = (operation: unknown): boolean =>
+    isObject(operation) && operation.kind === 'Update' && !(Array.isArray(operation.sources) && operation.sources.length > 0);
+
 function readHeld(text: string): readonly HeldOperation[] {
     const raw: unknown = JSON.parse(text);
     if (!Array.isArray(raw)) return [];
     return raw.flatMap((h: unknown) =>
-        isObject(h) && typeof h.heldIn === 'number' && typeof h.heldAt === 'string'
+        isObject(h) && typeof h.heldIn === 'number' && typeof h.heldAt === 'string' && !sourcelessUpdate(h.operation)
             ? // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- this module's own JSON of a held operation, its dates revived
               [{ operation: reviveOperation(h.operation) as HeldOperation['operation'], heldIn: h.heldIn, heldAt: new Date(h.heldAt) }]
             : [],
@@ -70,7 +74,7 @@ function readPending(text: string | undefined): Knowledge.Extraction | undefined
     const raw: unknown = JSON.parse(text);
     if (!isObject(raw) || !Array.isArray(raw.operations)) return undefined;
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- this module's own JSON of an extraction, its dates revived
-    return { ...raw, operations: raw.operations.map(reviveOperation) } as unknown as Knowledge.Extraction;
+    return { ...raw, operations: raw.operations.filter((o) => !sourcelessUpdate(o)).map(reviveOperation) } as unknown as Knowledge.Extraction;
 }
 
 /** The checkpoints of the session database `db` (its tables made when missing). */

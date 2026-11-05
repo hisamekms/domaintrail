@@ -176,7 +176,7 @@ export interface ReplySource {
 export type ReplyOperation =
     | { readonly op: 'add'; readonly finding: ReplyFinding; readonly sources: readonly ReplySource[]; readonly reason: string }
     | { readonly op: 'addSource'; readonly item: string; readonly sources: readonly ReplySource[]; readonly agreed: boolean; readonly reason: string }
-    | { readonly op: 'update'; readonly item: string; readonly finding: ReplyFinding; readonly reason: string }
+    | { readonly op: 'update'; readonly item: string; readonly finding: ReplyFinding; readonly sources: readonly ReplySource[]; readonly reason: string }
     | {
           readonly op: 'conflict';
           readonly item: string;
@@ -316,7 +316,10 @@ function readOperation(raw: unknown, path: string): Read<ReplyOperation> {
             if (!target.ok) return target;
             const finding = readFinding(raw, path);
             if (!finding.ok) return finding;
-            return ok({ op: 'update', item: target.value, finding: finding.value, reason: reason.value });
+            // the message(s) it rests on: an update without one cannot be followed to the talk (ADR 0031, section 3)
+            const sources = readSources(raw.sources, `${path}.sources`);
+            if (!sources.ok) return sources;
+            return ok({ op: 'update', item: target.value, finding: finding.value, sources: sources.value, reason: reason.value });
         }
         case 'conflict': {
             const target = item();
@@ -493,7 +496,19 @@ export function operationsOf(reply: ExtractorReply, input: ExtractionInput): Ext
                     fail(revised.error);
                     break;
                 }
-                operations.push({ kind: 'Update', item: item.value.id, base: item.value.base, revised: revised.value, ...reasonOf(o.reason) });
+                const sources = sourcesOf(o.sources, path);
+                if (!sources.ok) {
+                    fail(sources.error);
+                    break;
+                }
+                operations.push({
+                    kind: 'Update',
+                    item: item.value.id,
+                    base: item.value.base,
+                    revised: revised.value,
+                    sources: sources.value,
+                    ...reasonOf(o.reason),
+                });
                 break;
             }
             case 'conflict': {

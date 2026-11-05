@@ -55,12 +55,13 @@ context Knowledge {
       changes content, sources, updatedAt
       emits KnowledgeSourceAdded
 
-    /// 抽出が詳しくする。このセッションで作ったナレッジ（まだ人が直していない、版 1 のもの）は版を作らずに書き換え、
-    /// ほかは新しい版にする。
-    command update(revised: ItemContent, base: ItemVersion, by: ExtractionRef, reason: Reason?, at: Timestamp) "詳しくする"
+    /// 抽出が詳しくする。拠りどころのメッセージを出典に足す（すでにあるものは1回）。新しい出典を足す更新は、いつも新しい版に
+    /// する（直しをメッセージまでたどれるように）。出典を足さない言い換えだけが、このセッションで作ったナレッジ（まだだれも
+    /// 新しい版を作っていない、版 1 のもの）を版を作らずに書き換える。
+    command update(revised: ItemContent, newSources: Source[1..*] "出典", base: ItemVersion, by: ExtractionRef, reason: Reason?, at: Timestamp) "詳しくする"
       Live -> Live
       requires current "抽出が見た版のまま" { base == version } else StaleOperation
-      changes content, version, updatedAt
+      changes content, sources, version, updatedAt
       emits KnowledgeItemRewritten?,
             KnowledgeItemRevised?
 

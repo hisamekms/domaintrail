@@ -24,7 +24,13 @@ const addSource = (item: string, base = 1): Knowledge.Operation => ({
     source: source('s2', 'm7'),
     agreed: true,
 });
-const update = (item: string, base = 1): Knowledge.Operation => ({ kind: 'Update', item: itemId(item), base: version(base), revised: content('more precise') });
+const update = (item: string, base = 1, message = 'm8'): Knowledge.Operation => ({
+    kind: 'Update',
+    item: itemId(item),
+    base: version(base),
+    revised: content('more precise'),
+    sources: [source('s2', message)],
+});
 
 describe('applying an extraction', () => {
     test('applies each operation and lists every item changed once, as the last operation left it', () => {
@@ -32,7 +38,8 @@ describe('applying an extraction', () => {
         const operations: Knowledge.Operation[] = [
             { kind: 'Add', id: itemId('kn_00000002'), content: content('a new rule'), sources: [source('s2', 'm1')], reason: reason('said by sales') },
             addSource('kn_00000001'),
-            update('kn_00000002'),
+            // a rewording resting on the message it already has
+            update('kn_00000002', 1, 'm1'),
         ];
         const outcome = applyExtraction({ by, operations }, store(older), at);
         expect(outcome.dropped).toEqual([]);
@@ -47,6 +54,14 @@ describe('applying an extraction', () => {
         ]);
         // an item made by this extraction's session is rewritten in place: no past version
         expect(outcome.pastVersions).toEqual([]);
+    });
+
+    test('an update with a new source makes a new version of an item this session made, the source appended, the replaced item kept', () => {
+        const mine = liveItem('kn_00000001', { createdIn: 's2' });
+        const outcome = applyExtraction({ by, operations: [update('kn_00000001')] }, store(mine), at);
+        expect(outcome.items[0].version).toBe(version(2));
+        expect(outcome.items[0].sources).toEqual([...mine.sources, source('s2', 'm8')]);
+        expect(outcome.pastVersions).toEqual([mine]);
     });
 
     test('keeps the replaced item when an update makes a new version', () => {

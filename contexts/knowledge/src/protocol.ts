@@ -335,6 +335,7 @@ const operation: Decoder<Knowledge.Operation> = (v, at) => {
                 item: itemId(o.item, `${at}.item`),
                 base: itemVersion(o.base, `${at}.base`),
                 revised: itemContent(o.revised, `${at}.revised`),
+                sources: nonEmpty(source)(o.sources, `${at}.sources`),
                 ...withReason(o, at),
             };
         case 'Conflict':
