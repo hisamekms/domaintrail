@@ -1,0 +1,67 @@
+storming DeliveryCancellation "配送キャンセル" {
+  event ShipmentCancelled "配送がキャンセルされた" {
+    ref Delivery.ShipmentCancelled
+  }
+  event BikeReleased "車両割当が解除された" {
+    ref Fleet.BikeReleased
+  }
+  event SlotReleased "配送枠が解放された"
+  event ReleaseFailed "車両割当の解放に失敗した"
+
+  actor Customer "顧客"
+  external PaymentGateway "決済サービス"
+  readmodel DeliveryDetails "配送詳細"
+
+  aggregate Shipment "配送" {
+    ref Delivery.Shipment
+  }
+  aggregate BikeAssignment "車両割当" {
+    ref Fleet.BikeAssignment
+  }
+  aggregate ShipmentSlot "配送枠"
+
+  command CancelShipment "配送キャンセル" {
+    ref Delivery.Shipment.cancel
+    actor Customer
+    reads DeliveryDetails
+    target Shipment
+    emits ShipmentCancelled
+  }
+  command ReleaseBike "車両割当解除" {
+    ref Fleet.BikeAssignment.release
+    target BikeAssignment
+    emits BikeReleased
+    emits ReleaseFailed
+  }
+  command ReceivePaymentNotice "決済通知受領" {
+    actor PaymentGateway
+  }
+  command ReleaseSlot "配送枠解除" {
+    target ShipmentSlot
+    emits SlotReleased
+  }
+
+  policy CleanupAfterCancel "キャンセル後処理" {
+    on ShipmentCancelled
+    issues ReleaseBike
+    issues ReleaseSlot
+  }
+
+  timeline Normal "通常キャンセル" {
+    ShipmentCancelled
+    group CleanupResults "後処理" {
+      BikeReleased
+      SlotReleased
+    }
+  }
+
+  timeline Failure "車両解放失敗" {
+    ShipmentCancelled
+    ReleaseFailed
+  }
+
+  hotspot Compensation "車両の解放に失敗した場合、配送キャンセルを補償する？" {
+    on ReleaseFailed
+    status open
+  }
+}

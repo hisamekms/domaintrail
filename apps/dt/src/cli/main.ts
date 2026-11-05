@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { contextNames, formatDomain } from '@domaintrail/modeling';
-import { formatStorming, isStormingFile } from '@domaintrail/storming';
+import { formatStorming, isStormingFile, migrateStorming } from '@domaintrail/storming';
 import { generateTypeScript, policyModes, staysInside, testsWarnings } from '@domaintrail/generation';
 import { type Analysis, analyze } from '@domaintrail/analysis';
 import { compareDiagnostics, formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/kernel';
@@ -145,6 +145,7 @@ Examples:
   dt check                      validate every .dt and .dtes file below the current directory
   dt -r domain generate ts      check, then write TypeScript (by default into domain/generated/domain)
   dt fmt                        rewrite every .dt and .dtes file in the canonical layout (run it after editing)
+  dt migrate dtes               rewrite .dtes files of v0.1 (\`actor\`, \`target\` in a command) to the current grammar
   dt open                       the Live View with the chat and the AI at http://127.0.0.1:4321 (runs until Ctrl+C)
   dt lsp                        language server over stdio, started by editors and AI agents
   dt show Sales.Order           one element resolved (field sets, labels, commands, used by), instead of reading files
@@ -351,6 +352,75 @@ Examples:
                 : `${sources.length} file(s): ${changed} formatted${skipped}.`;
             (broken.size || (opts.check && changed) ? io.err : io.out)(summary);
             exitCode = broken.size || (opts.check && changed) ? 1 : 0;
+        });
+
+    const migrating = program.command('migrate').description('Rewrite source files written for an earlier version of a DSL to the current one.');
+    migrating
+        .command('dtes')
+        .description('Rewrite the relation keywords of .dtes v0.1 in place: `actor X` → `by X`, `target X` → `handledBy X` in a command.')
+        .argument('[files...]', 'files to migrate, relative to the current directory (default: the .dtes sources of the workspace)')
+        .option('--dry-run', 'write nothing; list what would be rewritten and what is left')
+        .addHelpText(
+            'after',
+            `
+ADR 0032 made the relations of a command Event Storming's grammar: who issues it is \`by\` (was \`actor\`), who
+handles it is \`handledBy\` (was \`target\`, now an aggregate or an external system). This rewrites those two keywords
+in commands and changes nothing else, comments and layout included. It lists, without rewriting them, \`actor\` and
+\`target\` in other kinds of elements, and files that do not parse (an ID that is now a keyword: \`by\`,
+\`handledBy\`, \`from\`). Then it lists the errors \`dt check\` reports on the migrated files: those are decisions
+(a command without \`handledBy\`, an unused aggregate, …), to make or to mark with a hotspot, never to guess.
+Exits 0 when every removed keyword was rewritten (errors may remain), 1 when one is left or no .dtes file is found, 2 on
+an invalid config.
+
+Examples:
+  dt migrate dtes
+  dt migrate dtes --dry-run
+  dt migrate dtes stormings/checkout.dtes
+  dt -r domain migrate dtes`,
+        )
+        .action(async (files: string[], opts: { dryRun?: boolean }) => {
+            const cfg = await config();
+            const all = (await deps.findDomainFiles(cfg.root, cfg.sources, cfg.respectGitignore)).map((f) => ({ path: f, file: path.join(cfg.root, f) }));
+            const entries = files.length
+                ? files.map((f) => ({ path: path.relative(cfg.root, path.resolve(f)), file: path.resolve(f) }))
+                : all.filter((e) => isStormingFile(e.path));
+            if (!entries.length) throw new CliError(noSourcesMessage(cfg));
+            const chosen = new Set(entries.map((e) => e.file));
+            let rewritten = 0;
+            let left = 0;
+            let changed = 0;
+            const migrated = new Map<string, string>();
+            for (const e of entries) {
+                const m = migrateStorming(await readFile(e.file, 'utf8'));
+                for (const r of m.rewrites)
+                    io.out(`${e.path}:${r.line}:${r.column} - ${r.from} ${r.targets.join(', ')} → ${r.to} ${r.targets.join(', ')} (command ${r.element})`);
+                for (const l of m.left) io.err(`${e.path}:${l.line}:${l.column} - not rewritten: ${l.message}`);
+                rewritten += m.rewrites.length;
+                left += m.left.length;
+                if (!m.rewrites.length) continue;
+                changed++;
+                migrated.set(e.file, m.text);
+                if (!opts.dryRun) await writeFile(e.file, m.text);
+            }
+            io.out(`${entries.length} file(s): ${rewritten} keyword(s) ${opts.dryRun ? 'to rewrite' : 'rewritten'} in ${changed} file(s), ${left} left.`);
+            // what the current rules say of the migrated files, read with the rest of the workspace
+            const sources = await Promise.all(
+                [...new Set([...all.map((e) => e.file), ...chosen])].map(async (file) => ({
+                    path: path.relative(cfg.root, file),
+                    text: migrated.get(file) ?? (await readFile(file, 'utf8')),
+                })),
+            );
+            const remaining = (await analyze(sources)).diagnostics.filter(
+                (d) => d.severity === 'error' && isStormingFile(d.file) && chosen.has(path.join(cfg.root, d.file)),
+            );
+            if (remaining.length) {
+                const byCode = new Map<string, number>();
+                for (const d of remaining) byCode.set(d.code, (byCode.get(d.code) ?? 0) + 1);
+                io.err(
+                    `${remaining.length} error(s) remain for \`dt check\` to show (${[...byCode].map(([c, n]) => `${c} ×${n}`).join(', ')}): decide them, or mark what is not decided with a hotspot \`on\` the element (\`dt guide dtes-quick\`).`,
+                );
+            }
+            exitCode = left ? 1 : 0;
         });
 
     const exporting = program.command('export').description('Export the model: its sources as one ZIP archive, or a diagram as an SVG file.');
