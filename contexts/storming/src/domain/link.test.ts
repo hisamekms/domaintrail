@@ -47,7 +47,7 @@ const at = (): SourceRange => {
     return { file: 'flow.dtes', start: { line, column: 5 }, end: { line, column: 20 } };
 };
 const ref = (path: string): Clause => ({ type: 'ref', path, segments: path.split('.'), range: at() });
-const rel = (keyword: 'target' | 'emits' | 'on' | 'issues' | 'actor', target: string): Clause => ({
+const rel = (keyword: 'handledBy' | 'emits' | 'on' | 'issues' | 'by', target: string): Clause => ({
     type: 'relation',
     keyword,
     target,
@@ -72,8 +72,12 @@ const cancelFlow = (overrides: { command?: Clause[]; extra?: NodeElement[] } = {
     el('event', 'BikeReleased', ref('Fleet.BikeReleased')),
     el('aggregate', 'Shipment', ref('Delivery.Shipment')),
     el('aggregate', 'BikeAssignment', ref('Fleet.BikeAssignment')),
-    el('command', 'CancelShipment', ...(overrides.command ?? [ref('Delivery.Shipment.cancel'), rel('target', 'Shipment'), rel('emits', 'ShipmentCancelled')])),
-    el('command', 'ReleaseBike', ref('Fleet.BikeAssignment.release'), rel('target', 'BikeAssignment'), rel('emits', 'BikeReleased')),
+    el(
+        'command',
+        'CancelShipment',
+        ...(overrides.command ?? [ref('Delivery.Shipment.cancel'), rel('handledBy', 'Shipment'), rel('emits', 'ShipmentCancelled')]),
+    ),
+    el('command', 'ReleaseBike', ref('Fleet.BikeAssignment.release'), rel('handledBy', 'BikeAssignment'), rel('emits', 'BikeReleased')),
     el('policy', 'ReleaseBikeOnCancel', rel('on', 'ShipmentCancelled'), rel('issues', 'ReleaseBike')),
     ...(overrides.extra ?? []),
 ];
@@ -161,7 +165,7 @@ describe('linkStormings', () => {
             link(
                 el('event', 'ShipmentCancelled'),
                 el('aggregate', 'Shipment'),
-                el('command', 'CancelShipment', rel('target', 'Shipment'), rel('emits', 'ShipmentCancelled')),
+                el('command', 'CancelShipment', rel('handledBy', 'Shipment'), rel('emits', 'ShipmentCancelled')),
             ),
         ).toEqual([]);
         // An empty storming leaves the `.dt` symbols unreferenced.
@@ -194,7 +198,7 @@ describe('linkStormings', () => {
     });
 
     test('S012: a command ref of another aggregate than the target ref is a warning', () => {
-        const ds = link(...cancelFlow({ command: [ref('Delivery.Shipment.cancel'), rel('target', 'BikeAssignment')] }));
+        const ds = link(...cancelFlow({ command: [ref('Delivery.Shipment.cancel'), rel('handledBy', 'BikeAssignment')] }));
         expect(summary(ds)).toEqual([{ code: 'S012', severity: 'warning', elementId: 'es/Cancel/CancelShipment', hint: expect.any(String) }]);
         expect(ds[0].message).toContain("'Fleet.BikeAssignment'");
     });
@@ -202,18 +206,18 @@ describe('linkStormings', () => {
     test('S012 needs both refs resolved and a single valid target', () => {
         const noWarning = (command: Clause[], extra: NodeElement[] = []) => expect(link(...cancelFlow({ command, extra }))).toEqual([]);
         // The target has no `ref`.
-        noWarning([ref('Delivery.Shipment.cancel'), rel('target', 'Draft')], [el('aggregate', 'Draft')]);
+        noWarning([ref('Delivery.Shipment.cancel'), rel('handledBy', 'Draft')], [el('aggregate', 'Draft')]);
         // The command has no `ref`.
-        noWarning([rel('target', 'BikeAssignment')]);
+        noWarning([rel('handledBy', 'BikeAssignment')]);
         // Two targets (S004) or a target of another kind (S003) belong to the validator.
-        noWarning([ref('Delivery.Shipment.cancel'), rel('target', 'BikeAssignment'), rel('target', 'Shipment')]);
-        noWarning([ref('Delivery.Shipment.cancel'), rel('target', 'BikeReleased')]);
-        noWarning([ref('Delivery.Shipment.cancel'), rel('target', 'Missing')]);
+        noWarning([ref('Delivery.Shipment.cancel'), rel('handledBy', 'BikeAssignment'), rel('handledBy', 'Shipment')]);
+        noWarning([ref('Delivery.Shipment.cancel'), rel('handledBy', 'BikeReleased')]);
+        noWarning([ref('Delivery.Shipment.cancel'), rel('handledBy', 'Missing')]);
         // The target's `ref` does not resolve: only its S010.
         expect(
             link(
                 el('aggregate', 'Shipment', ref('Fleet.Bike')),
-                el('command', 'CancelShipment', ref('Delivery.Shipment.cancel'), rel('target', 'Shipment')),
+                el('command', 'CancelShipment', ref('Delivery.Shipment.cancel'), rel('handledBy', 'Shipment')),
             ).map((d) => d.code),
         ).toEqual(['S010']);
     });
@@ -221,7 +225,7 @@ describe('linkStormings', () => {
     test('S013: emitting an event that the exhaustive .dt emits never lists is a warning', () => {
         const ds = link(
             ...cancelFlow({
-                command: [ref('Delivery.Shipment.cancel'), rel('target', 'Shipment'), rel('emits', 'ShipmentCancelled'), rel('emits', 'BikeReleased')],
+                command: [ref('Delivery.Shipment.cancel'), rel('handledBy', 'Shipment'), rel('emits', 'ShipmentCancelled'), rel('emits', 'BikeReleased')],
             }),
         );
         expect(summary(ds)).toEqual([
@@ -235,15 +239,15 @@ describe('linkStormings', () => {
     test('S013 only when provable: no warning without both refs, or for events the .dtes leaves out', () => {
         const noWarning = (command: Clause[], extra: NodeElement[] = []) => expect(link(...cancelFlow({ command, extra }))).toEqual([]);
         // The `.dtes` lists fewer events than `.dt` (partial description): `deliver` would emit ShipmentDelivered.
-        noWarning([ref('Delivery.Shipment.deliver'), rel('target', 'Shipment')]);
+        noWarning([ref('Delivery.Shipment.deliver'), rel('handledBy', 'Shipment')]);
         // The emitted event has no `ref`.
-        noWarning([ref('Delivery.Shipment.cancel'), rel('target', 'Shipment'), rel('emits', 'Unknown')], [el('event', 'Unknown')]);
+        noWarning([ref('Delivery.Shipment.cancel'), rel('handledBy', 'Shipment'), rel('emits', 'Unknown')], [el('event', 'Unknown')]);
         // The command has no `ref`.
-        noWarning([rel('target', 'Shipment'), rel('emits', 'BikeReleased')]);
+        noWarning([rel('handledBy', 'Shipment'), rel('emits', 'BikeReleased')]);
         // `emits` to something that is not an event is the validator's S003.
-        noWarning([ref('Delivery.Shipment.cancel'), rel('target', 'Shipment'), rel('emits', 'BikeAssignment')]);
+        noWarning([ref('Delivery.Shipment.cancel'), rel('handledBy', 'Shipment'), rel('emits', 'BikeAssignment')]);
         // A command emitting nothing in `.dt` cannot be contradicted by a `.dtes` without `emits`.
-        noWarning([ref('Fleet.BikeAssignment.target'), rel('target', 'BikeAssignment')]);
+        noWarning([ref('Fleet.BikeAssignment.target'), rel('handledBy', 'BikeAssignment')]);
         // …but is by one with an `emits` whose event resolves.
         expect(link(...cancelFlow({ command: [ref('Fleet.BikeAssignment.target'), rel('emits', 'BikeReleased')] })).map((d) => d.code)).toEqual(['S013']);
     });
@@ -254,7 +258,7 @@ describe('linkStormings', () => {
                 command: [
                     ref('Delivery.Shipment.cancel'),
                     ref('Fleet.BikeAssignment.release'),
-                    rel('target', 'BikeAssignment'),
+                    rel('handledBy', 'BikeAssignment'),
                     rel('emits', 'ShipmentCancelled'),
                 ],
             }),
@@ -264,7 +268,7 @@ describe('linkStormings', () => {
     });
 
     test('never modifies the storming IR or the model', () => {
-        const s = storming(...cancelFlow({ command: [ref('Delivery.Shipment.cancel'), rel('target', 'BikeAssignment'), rel('emits', 'BikeReleased')] }));
+        const s = storming(...cancelFlow({ command: [ref('Delivery.Shipment.cancel'), rel('handledBy', 'BikeAssignment'), rel('emits', 'BikeReleased')] }));
         const before = { s: structuredClone(s), m: structuredClone(model) };
         expect(linkStormings([s], model).length).toBe(2);
         expect(s).toEqual(before.s);

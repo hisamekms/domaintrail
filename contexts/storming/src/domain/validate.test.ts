@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Diagnostic } from '@domaintrail/kernel';
-import type { Clause, Group, NodeElement, NodeElementKind, RelationKeyword, SourceRange, Storming, Timeline } from './ir.js';
+import type { Clause, Group, NodeElement, NodeElementKind, RelationKeyword, RemovedKeyword, SourceRange, Storming, Timeline } from './ir.js';
 import { validateStormings } from './validate.js';
 
 /**
@@ -15,7 +15,7 @@ function ir(text: string, file = 'cancel.dtes'): Storming[] {
     let element: NodeElement | undefined;
     let timeline: Timeline | undefined;
     let group: Group | undefined;
-    const RELATIONS = ['actor', 'reads', 'target', 'emits', 'on', 'issues'];
+    const RELATIONS = ['by', 'reads', 'handledBy', 'emits', 'on', 'issues', 'from', 'actor', 'target'];
     lines.forEach((raw, i) => {
         const l = raw.trim();
         if (!l) return;
@@ -45,7 +45,8 @@ function ir(text: string, file = 'cancel.dtes'): Storming[] {
             else if (word === 'status') clause = { type: 'status', value: id, range: at(i) };
             else if (word === 'resolution') clause = { type: 'resolution', text: label ?? '', range: at(i) };
             else if (word === 'level') clause = { type: 'level', value: id, range: at(i) };
-            else if (RELATIONS.includes(word!)) clause = { type: 'relation', keyword: word as RelationKeyword, target: id, range: at(i), targetRange: at(i) };
+            else if (RELATIONS.includes(word!))
+                clause = { type: 'relation', keyword: word as RelationKeyword | RemovedKeyword, target: id, range: at(i), targetRange: at(i) };
             else throw new Error(`test IR: unknown clause '${l}'`);
             element.clauses.push(clause);
         } else if (!storming) {
@@ -81,20 +82,25 @@ const cancel = (extra = '') => `storming DeliveryCancellation "配送キャン�
     ref Delivery.Shipment
   }
   aggregate BikeAssignment "車両割当"
+  aggregate ShipmentSlot "配送枠"
   command CancelShipment "配送キャンセル" {
     ref Delivery.Shipment.cancel
-    actor Customer
+    by Customer
     reads DeliveryDetails
-    target Shipment
+    handledBy Shipment
     emits ShipmentCancelled
   }
   command ReleaseBike "車両割当解除" {
-    target BikeAssignment
+    handledBy BikeAssignment
     emits BikeReleased
     emits ReleaseFailed
   }
   command ReleaseSlot "配送枠解除" {
+    handledBy ShipmentSlot
     emits SlotReleased
+  }
+  event PaymentRefunded "返金された" {
+    from PaymentGateway
   }
   policy CleanupAfterCancel "キャンセル後処理" {
     on ShipmentCancelled
@@ -150,28 +156,29 @@ describe('validateStormings', () => {
         expect(ds[1]!.elementId).toBe('es/DeliveryCancellation/Mixed');
     });
 
-    test('ES03 two `target`s are an error, none is legal', () => {
+    test('ES03 two `handledBy`s are an error', () => {
         const text = cancel(`  command Reassign {
-    target Shipment
-    target BikeAssignment
+    by Customer
+    handledBy Shipment
+    handledBy BikeAssignment
+    emits BikeReleased
   }`);
         const ds = validate(text);
-        expect(summary(ds)).toEqual([{ code: 'S004', severity: 'error', line: lineOf(text, 'target BikeAssignment', 50) }]);
-        expect(ds[0]!.message).toBe("Command 'Reassign' has more than one `target`; it takes at most one.");
-        expect(ds[0]!.hint).toBe('keep one `target` and remove the others');
-        // ReleaseSlot of the sample has no target.
-        expect(validate(cancel('  command Noop')).filter((d) => d.code === 'S004')).toEqual([]);
+        expect(summary(ds)).toEqual([{ code: 'S004', severity: 'error', line: lineOf(text, 'handledBy BikeAssignment', 50) }]);
+        expect(ds[0]!.message).toBe("Command 'Reassign' has more than one `handledBy`; it takes at most one.");
+        expect(ds[0]!.hint).toBe('keep one `handledBy` and remove the others');
     });
 
-    test('ES04 several `actor`s (actor or external), `reads` and `emits` are legal', () => {
+    test('ES04 several `by`s (actor or external), `reads` and `emits` are legal, and so is a list', () => {
         expect(
             validate(
                 cancel(`  readmodel Fleet
   command Release {
-    actor Customer
-    actor PaymentGateway
+    by Customer
+    by PaymentGateway
     reads DeliveryDetails
     reads Fleet
+    handledBy BikeAssignment
     emits BikeReleased
     emits ReleaseFailed
   }`),
@@ -205,8 +212,23 @@ describe('validateStormings', () => {
             { code: 'S008', severity: 'error', line: lineOf(text, 'policy Empty') },
         ]);
         expect(ds[0]!.message).toBe("Policy 'NoTrigger' has no `on`; a policy reacts to at least one event (`on`) and issues at least one command (`issues`).");
-        expect(ds[0]!.hint).toBe('add `on <Event>`; while it is unknown, record the question as a hotspot instead');
+        expect(ds[0]!.hint).toBe(
+            'add `on <Event>` if it is decided; don\'t guess: if it is not decided yet, add `hotspot NoTriggerOpen "何に反応する？" { on NoTrigger }`, which records the open question and turns this error off',
+        );
         expect(ds[2]!.message).toContain('has neither `on` nor `issues`');
+        // an open hotspot on the policy marks the gap as a question; a resolved one does not
+        const asked = cancel(`  policy Empty
+  hotspot WhatTrigger "何に反応する？" {
+    on Empty
+  }`);
+        expect(validate(asked)).toEqual([]);
+        const settled = cancel(`  policy Empty
+  hotspot WhatTrigger "何に反応する？" {
+    on Empty
+    status resolved
+    resolution "決めた"
+  }`);
+        expect(summary(validate(settled))).toEqual([{ code: 'S008', severity: 'error', line: lineOf(settled, 'policy Empty') }]);
     });
 
     test('ES08 hotspot status and resolution', () => {
@@ -243,9 +265,12 @@ describe('validateStormings', () => {
         expect(ds[3]!.hint).toBe("did you mean 'resolved'?");
     });
 
-    test('ES08 a hotspot `on` names one event at most', () => {
+    test('ES08 a hotspot `on` names one sticky at most, of any kind but a hotspot', () => {
         const text = cancel(`  hotspot OnCommand {
     on CancelShipment
+  }
+  hotspot OnHotspot {
+    on OnCommand
   }
   hotspot TwoEvents {
     on ShipmentCancelled
@@ -258,7 +283,7 @@ describe('validateStormings', () => {
     resolution "b"
   }`);
         expect(summary(validate(text))).toEqual([
-            { code: 'S003', severity: 'error', line: lineOf(text, 'on CancelShipment') },
+            { code: 'S003', severity: 'error', line: lineOf(text, 'on OnCommand') },
             { code: 'S004', severity: 'error', line: lineOf(text, 'on ReleaseFailed', lineOf(text, 'TwoEvents')) },
             { code: 'S004', severity: 'error', line: lineOf(text, 'status open', lineOf(text, 'Repeated') + 1) },
             { code: 'S009', severity: 'error', line: lineOf(text, 'resolution "a"') },
@@ -365,7 +390,8 @@ describe('validateStormings', () => {
     ref Delivery.Shipment
     ref Fleet.BikeAssignment
   }`);
-        const ds = validate(text);
+        // the elements no relation names are S027, left out here
+        const ds = validate(text).filter((d) => d.code !== 'S027');
         expect(summary(ds)).toEqual([
             { code: 'S005', severity: 'error', line: lineOf(text, 'ref Delivery.CleanupAfterCancel') },
             { code: 'S005', severity: 'error', line: lineOf(text, 'ref Delivery.Clerk') },
@@ -379,44 +405,53 @@ describe('validateStormings', () => {
         expect(ds[5]!.message).toBe("Aggregate 'Twice' has more than one `ref`; it takes at most one.");
     });
 
-    test('ES14 an `external` is legal as a command `actor`, and an error in every other reference', () => {
+    test('ES14 an `external` is legal as a command `by` and `handledBy`, an event `from` and a hotspot `on`, and an error elsewhere', () => {
+        const legal = cancel(`  command ReceivePaymentNotice {
+    by PaymentGateway
+    handledBy PaymentGateway
+    emits ReleaseFailed
+  }
+  hotspot Gateway {
+    on PaymentGateway
+  }`);
+        expect(validate(legal)).toEqual([]);
         const text = cancel(`  command ReceivePaymentNotice {
-    actor PaymentGateway
+    by PaymentGateway
     reads PaymentGateway
-    target PaymentGateway
+    handledBy PaymentGateway
     emits PaymentGateway
   }
   policy Notify {
     on PaymentGateway
     issues PaymentGateway
   }
-  hotspot Gateway {
-    on PaymentGateway
+  readmodel Payments {
+    from PaymentGateway
   }
   timeline Paid {
     PaymentGateway
   }`);
-        const ds = validate(text);
+        const ds = validate(text).filter((d) => d.code !== 'S027');
         expect(ds.every((d) => d.code === 'S003')).toBe(true);
-        const hotspot = lineOf(text, 'hotspot Gateway');
         expect(ds.map((d) => d.start.line)).toEqual([
             lineOf(text, 'reads PaymentGateway'),
-            lineOf(text, 'target PaymentGateway'),
             lineOf(text, 'emits PaymentGateway'),
             lineOf(text, 'on PaymentGateway'),
             lineOf(text, 'issues PaymentGateway'),
-            lineOf(text, 'on PaymentGateway', hotspot),
+            lineOf(text, 'from PaymentGateway', lineOf(text, 'readmodel Payments')),
             lineOf(text, 'PaymentGateway', lineOf(text, 'timeline Paid')),
         ]);
         expect(ds[0]!.message).toBe("`reads` of command 'ReceivePaymentNotice' names 'PaymentGateway', which is an external; it must name a read model.");
-        expect(ds[1]!.message).toContain('it must name an aggregate.');
+        expect(ds[0]!.hint).toBe('who issues the command is `by PaymentGateway`');
+        expect(ds[1]!.hint).toBe('who handles the command is `handledBy PaymentGateway`; `emits` names its events');
+        expect(ds[4]!.hint).toBe('data from an external system arrives as an event: declare `event <Id> { from PaymentGateway }` and write `from <Id>`');
     });
 
-    test('kind errors of every relation, with the closest name of the right kind as a hint', () => {
+    test('kind errors of every relation, with the relation that says it, or the closest name of the right kind, as a hint', () => {
         const text = cancel(`  command Wrong {
-    actor DeliveryDetails
+    by DeliveryDetails
     reads Customer
-    target ShipmentCancelled
+    handledBy ShipmentCancelled
     emits Shipment
   }
   policy WrongPolicy {
@@ -424,20 +459,56 @@ describe('validateStormings', () => {
     issues ShipmentCancelled
   }`);
         const ds = validate(text);
-        expect(ds.map((d) => [d.code, d.message])).toEqual([
-            ['S003', "`actor` of command 'Wrong' names 'DeliveryDetails', which is a read model; it must name an actor or an external."],
-            ['S003', "`reads` of command 'Wrong' names 'Customer', which is an actor; it must name a read model."],
-            ['S003', "`target` of command 'Wrong' names 'ShipmentCancelled', which is an event; it must name an aggregate."],
-            ['S003', "`emits` of command 'Wrong' names 'Shipment', which is an aggregate; it must name an event."],
-            ['S003', "`on` of policy 'WrongPolicy' names 'CancelShipment', which is a command; it must name an event."],
-            ['S003', "`issues` of policy 'WrongPolicy' names 'ShipmentCancelled', which is an event; it must name a command."],
+        expect(ds.map((d) => [d.code, d.message, d.hint])).toEqual([
+            [
+                'S003',
+                "`by` of command 'Wrong' names 'DeliveryDetails', which is a read model; it must name an actor or an external.",
+                'a read model is what the issuer looks at: write `reads DeliveryDetails`',
+            ],
+            ['S003', "`reads` of command 'Wrong' names 'Customer', which is an actor; it must name a read model.", 'who issues the command is `by Customer`'],
+            [
+                'S003',
+                "`handledBy` of command 'Wrong' names 'ShipmentCancelled', which is an event; it must name an aggregate or an external.",
+                'an event is an outcome: write `emits ShipmentCancelled`',
+            ],
+            [
+                'S003',
+                "`emits` of command 'Wrong' names 'Shipment', which is an aggregate; it must name an event.",
+                'who handles the command is `handledBy Shipment`; `emits` names its events',
+            ],
+            [
+                'S003',
+                "`on` of policy 'WrongPolicy' names 'CancelShipment', which is a command; it must name an event.",
+                "a policy reacts to an event: write `on <an event 'CancelShipment' emits>`",
+            ],
+            [
+                'S003',
+                "`issues` of policy 'WrongPolicy' names 'ShipmentCancelled', which is an event; it must name a command.",
+                'a policy issues commands; an event is emitted by the command it issues (`emits ShipmentCancelled` in that command)',
+            ],
         ]);
-        expect(ds[3]!.hint).toBe("name one of 'ShipmentCancelled', 'BikeReleased', 'SlotReleased', 'ReleaseFailed'");
-        expect(ds[1]!.hint).toBe("name one of 'DeliveryDetails'");
+        // the confusions of the grammar (ADR 0032): an aggregate as the issuer, an actor as the handler, a command issuing a command
+        const confused = cancel(`  command Mixed {
+    by Shipment
+    handledBy Customer
+    emits ReleaseBike
+  }`);
+        expect(validate(confused).map((d) => d.hint)).toEqual([
+            'an aggregate handles a command, it never issues one: write `handledBy Shipment`',
+            'an actor issues a command: write `by Customer`; the handler is an aggregate or an external system',
+            'a command never issues a command: let it emit an event, and put a policy between, `policy <Id> { on <that event> issues ReleaseBike }`',
+        ]);
         expect(
-            validate('storming S {\n  aggregate Shipment\n  event Shipped\n  command C {\n    target Shipmen\n    emits Shipment\n  }\n}\n').map((d) => d.hint),
-        ).toEqual(["did you mean 'Shipment'?", "name one of 'Shipped'"]);
-        expect(validate('storming S {\n  event E\n  command C {\n    reads E\n  }\n}\n')[0]!.hint).toBe('declare a read model first and name it here');
+            validate('storming S {\n  aggregate Shipment\n  event Shipped\n  command C {\n    handledBy Shipmen\n    emits Shipped\n  }\n}\n').find(
+                (d) => d.code === 'S002',
+            )!.hint,
+        ).toBe("did you mean 'Shipment'?");
+        expect(validate('storming S {\n  event E\n  command C {\n    reads E\n  }\n}\n').find((d) => d.code === 'S003')!.hint).toBe(
+            'a command reads a read model, not an event: declare `readmodel <Id> { from E }` and write `reads <Id>`',
+        );
+        expect(validate('storming S {\n  policy P\n  command C {\n    reads P\n  }\n}\n').find((d) => d.code === 'S003')!.hint).toBe(
+            'declare a read model first and name it here',
+        );
         // a duplicate declaration (S001) is listed once
         expect(validate('storming S {\n  event E\n  event E\n  command C\n  timeline T {\n    C\n  }\n}\n').find((d) => d.code === 'S003')!.hint).toBe(
             "name one of 'E'",
@@ -446,7 +517,8 @@ describe('validateStormings', () => {
 
     test('an undefined reference is an error, with a suggestion', () => {
         const text = cancel(`  command Typo {
-    target Shipmnt
+    by Customer
+    handledBy Shipmnt
     emits Nowhere
   }
   timeline Short {
@@ -457,7 +529,7 @@ describe('validateStormings', () => {
   }`);
         const ds = validate(text);
         expect(ds.map((d) => [d.code, d.message, d.hint])).toEqual([
-            ['S002', "`target` of command 'Typo' names 'Shipmnt', which is not declared in storming 'DeliveryCancellation'.", "did you mean 'Shipment'?"],
+            ['S002', "`handledBy` of command 'Typo' names 'Shipmnt', which is not declared in storming 'DeliveryCancellation'.", "did you mean 'Shipment'?"],
             [
                 'S002',
                 "`emits` of command 'Typo' names 'Nowhere', which is not declared in storming 'DeliveryCancellation'.",
@@ -479,7 +551,7 @@ describe('validateStormings', () => {
 
     test('a clause the element kind does not take is an error, and its target is not checked', () => {
         const text = cancel(`  event Moved {
-    target Shipment
+    handledBy Shipment
   }
   aggregate Fleet {
     emits Nowhere
@@ -487,19 +559,48 @@ describe('validateStormings', () => {
   policy Targeted {
     on ShipmentCancelled
     issues ReleaseBike
-    target Shipment
+    handledBy Shipment
   }
   command Opened {
     status open
     resolution "x"
+  }
+  command Chained {
+    by Customer
+    handledBy Shipment
+    emits ShipmentCancelled
+    issues ReleaseBike
+    on ReleaseFailed
   }`);
-        const ds = validate(text);
+        const ds = validate(text).filter((d) => d.code !== 'S024' && d.code !== 'S027');
         expect(ds.map((d) => [d.code, d.message, d.hint])).toEqual([
-            ['S006', "Event 'Moved' has `target Shipment`, but an event takes no relation.", 'remove the clause; `target` belongs in a command'],
-            ['S006', "Aggregate 'Fleet' has `emits Nowhere`, but an aggregate takes no relation.", 'remove the clause; `emits` belongs in a command'],
-            ['S006', "Policy 'Targeted' has `target Shipment`, but a policy takes `on`, `issues`.", 'remove the clause; `target` belongs in a command'],
+            [
+                'S006',
+                "Event 'Moved' has `handledBy Shipment`, but an event takes `from`.",
+                'remove it: an event is emitted by a command (`emits` in it), or arrives `from` an external system; a read model is fed `from` it',
+            ],
+            [
+                'S006',
+                "Aggregate 'Fleet' has `emits Nowhere`, but an aggregate takes no relation.",
+                'remove it: write the relation in the command instead (the command it handles has `handledBy` and its `emits`)',
+            ],
+            [
+                'S006',
+                "Policy 'Targeted' has `handledBy Shipment`, but a policy takes `on`, `issues`.",
+                'remove it: write `handledBy Shipment` in the command the policy `issues`',
+            ],
             ['S006', "Command 'Opened' has a `status` clause, which only a hotspot takes.", 'remove the `status` clause'],
             ['S006', "Command 'Opened' has a `resolution` clause, which only a hotspot takes.", 'remove the `resolution` clause'],
+            [
+                'S006',
+                "Command 'Chained' has `issues ReleaseBike`, but a command takes `by`, `reads`, `handledBy`, `emits`.",
+                'a command never issues a command: let it `emits` an event, and put a policy between, `policy <Id> { on <the event> issues ReleaseBike }`',
+            ],
+            [
+                'S006',
+                "Command 'Chained' has `on ReleaseFailed`, but a command takes `by`, `reads`, `handledBy`, `emits`.",
+                'a command does not react to an event: a policy does, `policy <Id> { on ReleaseFailed issues <this command> }`',
+            ],
         ]);
     });
 
@@ -553,6 +654,9 @@ describe('validateStormings', () => {
     level design
   }
   command LockBike {
+    by Customer
+    handledBy BikeAssignment
+    emits BikeReleased
     level design
   }
   hotspot Locking {
@@ -573,6 +677,7 @@ describe('validateStormings', () => {
 
     test('S014 a type-level cycle is a warning that does not claim an infinite loop', () => {
         const text = cancel(`  command RetryRelease {
+    handledBy BikeAssignment
     emits ReleaseFailed
   }
   policy RetryOnFailure {
@@ -593,10 +698,13 @@ describe('validateStormings', () => {
         const text = `storming Loop {
   event E1
   event E2
+  aggregate G
   command C1 {
+    handledBy G
     emits E1
   }
   command C2 {
+    handledBy G
     emits E2
   }
   policy A {
@@ -615,7 +723,12 @@ describe('validateStormings', () => {
         // `emits` from a policy is not a relation (S006), so it closes no cycle.
         const broken = `storming Loop {
   event E
-  command C
+  event F
+  aggregate G
+  command C {
+    handledBy G
+    emits F
+  }
   policy P {
     on E
     issues C
@@ -628,16 +741,17 @@ describe('validateStormings', () => {
 
     test('S014 terminates on a large, densely cyclic storming', () => {
         const n = 300;
-        const parts = ['storming Big {'];
+        const parts = ['storming Big {', '  aggregate G'];
         for (let i = 0; i < n; i++) {
-            parts.push(`  event E${i}`, `  command C${i} {`, `    emits E${i}`, `    emits E${(i + 1) % n}`, '  }');
+            parts.push(`  event E${i}`, `  command C${i} {`, `    handledBy G`, `    emits E${i}`, `    emits E${(i + 1) % n}`, '  }');
             parts.push(`  policy P${i} {`, `    on E${i}`, `    on E${(i * 7) % n}`, `    issues C${(i + 1) % n}`, `    issues C${(i * 3) % n}`, '  }');
         }
         parts.push('}');
         const started = performance.now();
         const ds = validate(parts.join('\n'));
         expect(performance.now() - started).toBeLessThan(5000);
-        expect(ds.map((d) => d.code)).toEqual(['S014']);
+        // a policy whose two `issues` (or `on`s) name one command (event) is S026
+        expect(ds.filter((d) => d.code !== 'S026').map((d) => d.code)).toEqual(['S014']);
     });
 
     test('S015 a label too long for its sticky note even at the smallest font is a warning', () => {
@@ -666,18 +780,11 @@ describe('validateStormings', () => {
         expect(validate(text)).toEqual([]);
     });
 
-    test('completeness is not diagnosed: unreferenced events, missing `emits`, events in no timeline, elements without `ref`', () => {
+    test('Big Picture completeness is not diagnosed: unreferenced events, events in no timeline, elements without `ref`', () => {
         expect(
             validate(`storming Explore {
   event Lonely
   event Unused
-  actor Nobody
-  readmodel Unread
-  aggregate Untargeted
-  command Silent
-  command Partial {
-    target Untargeted
-  }
   hotspot Open "未解決"
   timeline Partial2 {
     Lonely
@@ -686,6 +793,130 @@ describe('validateStormings', () => {
 }
 `),
         ).toEqual([]);
+    });
+
+    test('S024 a command without its issuer, handler or outcomes is an error, unless an open hotspot asks about it', () => {
+        const text = cancel(`  command Silent
+  command Unhandled {
+    by Customer
+    emits ShipmentCancelled
+  }
+  command Asked {
+    by Customer
+  }
+  hotspot WhoHandles "誰が処理する？" {
+    on Asked
+  }`);
+        const ds = validate(text);
+        expect(summary(ds)).toEqual([
+            { code: 'S024', severity: 'error', line: lineOf(text, 'command Silent') },
+            { code: 'S024', severity: 'error', line: lineOf(text, 'command Unhandled') },
+        ]);
+        expect(ds[0]!.message).toBe(
+            "Command 'Silent' does not say who issues it, who handles it and its outcomes. At Design Level a command's row is `by` (or a policy's `issues`) → `handledBy` → `emits`.",
+        );
+        expect(ds[1]!.message).toBe(
+            "Command 'Unhandled' does not say who handles it. It emits 'ShipmentCancelled', but nothing handles it to produce that event. At Design Level a command's row is `by` (or a policy's `issues`) → `handledBy` → `emits`.",
+        );
+        expect(ds[1]!.hint).toBe(
+            'add `handledBy <aggregate or external>` if it is decided; don\'t guess: if it is not decided yet, add `hotspot UnhandledOpen "誰が処理する？" { on Unhandled }`, which records the open question and turns this error off',
+        );
+        // a command a policy issues needs no `by` (ReleaseBike of the sample)
+        expect(validate(cancel()).filter((d) => d.code === 'S024')).toEqual([]);
+    });
+
+    test('S023 `actor` and `target` of v0.1 are errors that name their replacement', () => {
+        const text = cancel(`  command Old {
+    actor Customer
+    target Shipment
+    emits ShipmentCancelled
+  }
+  policy Odd {
+    on ShipmentCancelled
+    issues ReleaseBike
+    target Shipment
+  }`);
+        const ds = validate(text);
+        expect(ds.map((d) => [d.code, d.message, d.hint])).toEqual([
+            [
+                'S023',
+                "Command 'Old' has `actor Customer`, but `actor` is no longer a relation: who issues a command is `by`.",
+                'write `by Customer` (`dt migrate dtes` rewrites every `actor` and `target` of a command)',
+            ],
+            [
+                'S023',
+                "Command 'Old' has `target Shipment`, but `target` is no longer a relation: who handles a command is `handledBy`.",
+                'write `handledBy Shipment` (`dt migrate dtes` rewrites every `actor` and `target` of a command)',
+            ],
+            [
+                'S023',
+                "Policy 'Odd' has `target Shipment`, but `target` is no longer a relation: who handles a command is `handledBy`.",
+                'remove it; `handledBy Shipment` belongs in a command',
+            ],
+        ]);
+    });
+
+    test('S025 a command a policy issues has no `by`', () => {
+        const text = cancel(`  command Both {
+    by Customer
+    handledBy BikeAssignment
+    emits BikeReleased
+  }
+  policy Auto {
+    on ShipmentCancelled
+    issues Both
+  }`);
+        const ds = validate(text);
+        expect(summary(ds)).toEqual([{ code: 'S025', severity: 'error', line: lineOf(text, 'by Customer', lineOf(text, 'command Both')) }]);
+        expect(ds[0]!.message).toBe(
+            "Command 'Both' is issued by policy 'Auto', and also has `by Customer`; a command that a policy issues has the policy as its issuer.",
+        );
+    });
+
+    test('S026 a relation written twice', () => {
+        const text = cancel(`  command Twice {
+    by Customer
+    by Customer
+    handledBy BikeAssignment
+    emits BikeReleased
+  }`);
+        const ds = validate(text);
+        expect(summary(ds)).toEqual([{ code: 'S026', severity: 'error', line: lineOf(text, 'by Customer', lineOf(text, 'command Twice') + 1) }]);
+        expect(ds[0]!.message).toBe("Command 'Twice' has `by Customer` twice; a relation is written once.");
+    });
+
+    test('S027 an actor, external system, aggregate or read model that no relation names, unless an open hotspot asks about it', () => {
+        const text = cancel(`  actor Nobody
+  external Silent
+  aggregate Untargeted
+  readmodel Unread {
+    from ShipmentCancelled
+  }
+  aggregate Pending
+  hotspot WhoUses "どのコマンドが使う？" {
+    on Pending
+  }`);
+        const ds = validate(text);
+        expect(summary(ds)).toEqual([
+            { code: 'S027', severity: 'error', line: lineOf(text, 'actor Nobody') },
+            { code: 'S027', severity: 'error', line: lineOf(text, 'external Silent') },
+            { code: 'S027', severity: 'error', line: lineOf(text, 'aggregate Untargeted') },
+            { code: 'S027', severity: 'error', line: lineOf(text, 'readmodel Unread') },
+        ]);
+        expect(ds[3]!.hint).toContain('write `reads Unread` in the command whose issuer looks at it, or remove it');
+    });
+
+    test('S028 an event both emitted by a command and from an external system', () => {
+        const text = cancel(`  event BikeReleasedOutside {
+    from PaymentGateway
+  }
+  command ReleaseOutside {
+    by Customer
+    handledBy BikeAssignment
+    emits BikeReleasedOutside
+  }`);
+        const ds = validate(text);
+        expect(summary(ds)).toEqual([{ code: 'S028', severity: 'error', line: lineOf(text, 'from PaymentGateway', lineOf(text, 'BikeReleasedOutside')) }]);
     });
 
     test('the optional Info rule (several `on` and several `issues`) is not implemented', () => {

@@ -1,5 +1,5 @@
 /**
- * The Event Storming DSL (`.dtes`, docs/dtes-v0.1.md): the types shared by its parser, validator, `.dt` linker,
+ * The Event Storming DSL (`.dtes`, docs/dtes-v0.1.md, ADR 0032): the types shared by its parser, validator, `.dt` linker,
  * projection, CLI and Live View (ADR 0024). Three layers, kept apart (spec §7):
  *
  * - the **storming IR** (`Storming`, here): what a file says, as written — every clause in source order with its range,
@@ -26,8 +26,21 @@ export type ElementKind = 'event' | 'actor' | 'external' | 'command' | 'policy' 
 /** The declarations drawn as nodes of their own (a timeline, a group and a stage are drawn through their events). */
 export type NodeElementKind = Exclude<ElementKind, 'timeline' | 'group' | 'stage'>;
 
-/** The keywords of a relation clause inside an element's body (spec §3.2). */
-export type RelationKeyword = 'actor' | 'reads' | 'target' | 'emits' | 'on' | 'issues';
+/**
+ * The keywords of a relation clause inside an element's body (spec §3.2, ADR 0032): Event Storming's design-level
+ * grammar. A command is issued `by` an actor or external system, who `reads` read models to decide it, and is
+ * `handledBy` an aggregate or external system, which `emits` its events; a policy is `on` events and `issues` commands;
+ * a read model is fed `from` events and an event arrives `from` an external system; a hotspot is `on` any sticky.
+ */
+export type RelationKeyword = 'by' | 'reads' | 'handledBy' | 'emits' | 'on' | 'issues' | 'from';
+
+/** Every relation keyword, in the canonical order of a body (`dt fmt`, ADR 0032). */
+export const RELATION_KEYWORDS: readonly RelationKeyword[] = ['by', 'reads', 'handledBy', 'emits', 'on', 'issues', 'from'];
+
+/** The relation keywords of v0.1 that ADR 0032 removed: parsed only to be reported (S023), with the one that replaces each. */
+export type RemovedKeyword = 'actor' | 'target';
+export const REMOVED_KEYWORDS: Readonly<Record<RemovedKeyword, RelationKeyword>> = { actor: 'by', target: 'handledBy' };
+export const isRemovedKeyword = (keyword: string): keyword is RemovedKeyword => keyword === 'actor' || keyword === 'target';
 
 /**
  * A clause of an element's body, as written. The grammar accepts every clause in every body, so that a misplaced one is
@@ -36,8 +49,11 @@ export type RelationKeyword = 'actor' | 'reads' | 'target' | 'emits' | 'on' | 'i
 export type Clause =
     /** `ref Delivery.Shipment.cancel`: the `.dt` symbol the element corresponds to (spec §5.1). */
     | { type: 'ref'; path: string; segments: string[]; range: SourceRange }
-    /** `target Shipment`: a reference to another element of the same storming, by local ID. */
-    | { type: 'relation'; keyword: RelationKeyword; target: string; range: SourceRange; targetRange: SourceRange }
+    /**
+     * `handledBy Shipment`: a reference to another element of the same storming, by local ID. `emits A, B` is two
+     * clauses, one per target, with the range of the whole clause; `removed` for a keyword of v0.1 (S023).
+     */
+    | { type: 'relation'; keyword: RelationKeyword | RemovedKeyword; target: string; range: SourceRange; targetRange: SourceRange }
     /** `status open`: the word as written (only `open` and `resolved` are valid). */
     | { type: 'status'; value: string; range: SourceRange }
     /** `resolution "..."`: the text without its quotes, escapes resolved. */
@@ -148,15 +164,20 @@ export function nodeElements(storming: Storming): NodeElement[] {
 
 // ---- Rules shared by the validator and the projection ----
 
+/** The stickies a hotspot may be `on`: every node kind but a hotspot (ADR 0032). */
+const STICKIES: readonly NodeElementKind[] = ['event', 'actor', 'external', 'command', 'policy', 'aggregate', 'readmodel'];
+
 /**
- * Which relation clauses each element kind takes, and the kinds their targets must have (spec §3.2, §5.1, §14).
- * A relation outside this table, or to a target of another kind, is invalid: reported by the validator, left out of
- * the semantic graph. Multiplicities are checked by the validator only.
+ * Which relation clauses each element kind takes, and the kinds their targets must have (spec §3.2, §5.1, §14; ADR
+ * 0032). A relation outside this table, or to a target of another kind, is invalid: reported by the validator, left
+ * out of the semantic graph. Multiplicities are checked by the validator only.
  */
 export const RELATION_RULES: Readonly<Partial<Record<NodeElementKind, Readonly<Partial<Record<RelationKeyword, readonly NodeElementKind[]>>>>>> = {
-    command: { actor: ['actor', 'external'], reads: ['readmodel'], target: ['aggregate'], emits: ['event'] },
+    command: { by: ['actor', 'external'], reads: ['readmodel'], handledBy: ['aggregate', 'external'], emits: ['event'] },
     policy: { on: ['event'], issues: ['command'] },
-    hotspot: { on: ['event'] },
+    readmodel: { from: ['event'] },
+    event: { from: ['external'] },
+    hotspot: { on: STICKIES },
 };
 
 /** The element kinds that may have a `ref` to `.dt` (spec §5.1). */

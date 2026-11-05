@@ -75,20 +75,21 @@ describe('ES01: parsing the spec sample (docs/dtes-v0.1.md §4)', () => {
             'policy CleanupAfterCancel',
             'timeline Normal',
             'timeline Failure',
+            'hotspot NoticeOutcome',
             'hotspot Compensation',
         ]);
         expect(element(s, 'SlotReleased')).toMatchObject({ label: '配送枠が解放された', clauses: [] });
         expect(element(s, 'ShipmentCancelled').clauses.map(shape)).toEqual([{ ref: 'Delivery.ShipmentCancelled' }]);
         expect(element(s, 'CancelShipment').clauses.map(shape)).toEqual([
             { ref: 'Delivery.Shipment.cancel' },
-            { actor: 'Customer' },
+            { by: 'Customer' },
             { reads: 'DeliveryDetails' },
-            { target: 'Shipment' },
+            { handledBy: 'Shipment' },
             { emits: 'ShipmentCancelled' },
         ]);
         expect(element(s, 'ReleaseBike').clauses.map(shape)).toEqual([
             { ref: 'Fleet.BikeAssignment.release' },
-            { target: 'BikeAssignment' },
+            { handledBy: 'BikeAssignment' },
             { emits: 'BikeReleased' },
             { emits: 'ReleaseFailed' },
         ]);
@@ -114,15 +115,15 @@ describe('ES01: parsing the spec sample (docs/dtes-v0.1.md §4)', () => {
     test('source ranges: declarations, names, clauses, relation targets and steps (1-based, end exclusive)', async () => {
         const [s] = await parseOne(SAMPLE);
         const file = 'a.dtes';
-        expect(s.range).toEqual({ file, start: { line: 1, column: 1 }, end: { line: 67, column: 2 } });
+        expect(s.range).toEqual({ file, start: { line: 1, column: 1 }, end: { line: 70, column: 2 } });
         expect(s.nameRange).toEqual({ file, start: { line: 1, column: 10 }, end: { line: 1, column: 30 } });
         const cancel = element(s, 'CancelShipment');
         expect(cancel.range).toEqual({ file, start: { line: 23, column: 3 }, end: { line: 29, column: 4 } });
         expect(cancel.nameRange).toEqual({ file, start: { line: 23, column: 11 }, end: { line: 23, column: 25 } });
         expect(cancel.clauses[0].range).toEqual({ file, start: { line: 24, column: 5 }, end: { line: 24, column: 33 } });
         const target = cancel.clauses[3];
-        expect(target.type === 'relation' && target.targetRange).toEqual({ file, start: { line: 27, column: 12 }, end: { line: 27, column: 20 } });
-        expect(target.range).toEqual({ file, start: { line: 27, column: 5 }, end: { line: 27, column: 20 } });
+        expect(target.type === 'relation' && target.targetRange).toEqual({ file, start: { line: 27, column: 15 }, end: { line: 27, column: 23 } });
+        expect(target.range).toEqual({ file, start: { line: 27, column: 5 }, end: { line: 27, column: 23 } });
         const [first, group] = timeline(s, 'Normal').steps;
         expect(first.range).toEqual({ file, start: { line: 51, column: 5 }, end: { line: 51, column: 22 } });
         expect(group.type === 'group' && group.nameRange).toEqual({ file, start: { line: 52, column: 11 }, end: { line: 52, column: 25 } });
@@ -141,8 +142,8 @@ describe('end to end with the validator (T3)', () => {
             '  event E',
             '  aggregate G',
             '  command C {',
-            '    target G',
-            '    target G',
+            '    handledBy G',
+            '    handledBy G',
             '  }',
             '  policy P {',
             '    ref A.P',
@@ -153,6 +154,7 @@ describe('end to end with the validator (T3)', () => {
             '    C',
             '  }',
             '  hotspot H {',
+            '    on C',
             '    status maybe',
             '  }',
             '}',
@@ -162,7 +164,7 @@ describe('end to end with the validator (T3)', () => {
             ['S004', 6, 5],
             ['S005', 9, 5],
             ['S003', 14, 5],
-            ['S009', 17, 5],
+            ['S009', 18, 5],
         ]);
     });
 });
@@ -328,7 +330,11 @@ describe('syntax errors (spec §11 Syntax: 不正なブロック, 未知の関�
         await syntaxErrors(wrap('event level'));
         await syntaxErrors(wrap('event E { level }'));
         await syntaxErrors(wrap('event E { level design- }'));
-        await syntaxErrors(wrap('command { target G }'));
+        await syntaxErrors(wrap('command { handledBy G }'));
+        await syntaxErrors(wrap('command C { emits A, }'));
+        await syntaxErrors(wrap('command C { emits , A }'));
+        // `by`, `handledBy` and `from` are keywords (ADR 0032): not IDs
+        await syntaxErrors(wrap('event by'));
         await syntaxErrors(wrap('command C { ref Delivery. }'));
         await syntaxErrors('storming S {\n  event E');
         const [d] = await syntaxErrors(wrap('event E "unterminated'));
@@ -351,8 +357,19 @@ describe('syntax errors (spec §11 Syntax: 不正なブロック, 未知の関�
     });
 
     test('unknown local references are not syntax errors (S002 is the validator’s)', async () => {
-        const [s] = await parseOne(wrap('command C { target Nowhere\n emits Nothing }'));
-        expect(element(s, 'C').clauses.map(shape)).toEqual([{ target: 'Nowhere' }, { emits: 'Nothing' }]);
+        const [s] = await parseOne(wrap('command C { handledBy Nowhere\n emits Nothing }'));
+        expect(element(s, 'C').clauses.map(shape)).toEqual([{ handledBy: 'Nowhere' }, { emits: 'Nothing' }]);
+    });
+
+    test('a list of targets is one clause per target, with its own target range; `actor` and `target` still parse (S023)', async () => {
+        const [s] = await parseOne(wrap('command C {\n  emits A, B\n  actor X\n  target Y\n}\nevent E { from Z }\nreadmodel R { from E }'));
+        expect(element(s, 'C').clauses.map(shape)).toEqual([{ emits: 'A' }, { emits: 'B' }, { actor: 'X' }, { target: 'Y' }]);
+        const [a, b] = element(s, 'C').clauses;
+        expect(a!.range).toEqual(b!.range);
+        expect(a!.type === 'relation' && a.targetRange.start.column).toBe(9);
+        expect(b!.type === 'relation' && b.targetRange.start.column).toBe(12);
+        expect(element(s, 'E').clauses.map(shape)).toEqual([{ from: 'Z' }]);
+        expect(element(s, 'R').clauses.map(shape)).toEqual([{ from: 'E' }]);
     });
 });
 
@@ -367,11 +384,11 @@ describe('services: local references resolve within the storming, whatever the k
 
     test('a relation resolves to any declaration of its storming, groups of timelines included', async () => {
         const doc = await build(
-            'storming S {\n  aggregate G\n  command C { target G\n actor C\n emits Stage }\n  timeline T { group Stage { X } }\n}\nstorming O { event X }',
+            'storming S {\n  aggregate G\n  command C { handledBy G\n by C\n emits Stage }\n  timeline T { group Stage { X } }\n}\nstorming O { event X }',
         );
         const [s] = doc.parseResult.value.stormings;
         const cmd = s.elements.find(isEsCommand)!;
-        const targets = cmd.clauses.filter(isEsRelationClause).map((c) => c.target.ref?.$type);
+        const targets = cmd.clauses.filter(isEsRelationClause).flatMap((c) => c.targets.map((t) => t.ref?.$type));
         expect(targets).toEqual(['EsAggregate', 'EsCommand', 'EsGroup']);
         const tl = s.elements.find((e) => e.$type === 'EsTimeline');
         const step = tl && 'steps' in tl && tl.steps[0].$type === 'EsGroup' ? tl.steps[0].events[0] : undefined;

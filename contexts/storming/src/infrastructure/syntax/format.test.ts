@@ -140,17 +140,17 @@ describe('formatStorming', () => {
 
     test('invalid but well-formed files are formatted (validation is not the formatter’s)', () => {
         expect(formatStorming('storming S { policy P { target Nowhere target Nowhere ref A.B } timeline T { P } }')).toBe(
-            lines('storming S {', '  policy P {', '    target Nowhere', '    target Nowhere', '    ref A.B', '  }', '  timeline T {', '    P', '  }', '}'),
+            lines('storming S {', '  policy P {', '    ref A.B', '    target Nowhere', '    target Nowhere', '  }', '  timeline T {', '    P', '  }', '}'),
         );
     });
 
-    test('`level`: no space around its hyphens, and the clauses keep their written order', () => {
+    test('`level`: no space around its hyphens, and it is the last clause', () => {
         const text = 'storming S { event A { level design ref X.A } event B { ref X.B level design } event C { level  big -  picture } }';
         const out = lines(
             'storming S {',
             '  event A {',
-            '    level design',
             '    ref X.A',
+            '    level design',
             '  }',
             '  event B {',
             '    ref X.B',
@@ -158,6 +158,46 @@ describe('formatStorming', () => {
             '  }',
             '  event C {',
             '    level big-picture',
+            '  }',
+            '}',
+        );
+        expect(formatStorming(text)).toBe(out);
+        expect(formatStorming(out)).toBe(out);
+    });
+
+    test('clauses in the canonical order (ADR 0032), each with its comments; a list keeps one space after each comma', () => {
+        const text = lines(
+            'storming S {',
+            '  command C {',
+            '    emits A ,B // the outcomes',
+            '    // who handles it',
+            '    handledBy G',
+            '    reads R',
+            '    by X /* who */',
+            '    ref Ctx.G.c',
+            '  }',
+            '  hotspot H { status open on C }',
+            '  command D { emits A // last line comment',
+            '    by X }',
+            '}',
+        );
+        const out = lines(
+            'storming S {',
+            '  command C {',
+            '    ref Ctx.G.c',
+            '    by X /* who */',
+            '    reads R',
+            '    // who handles it',
+            '    handledBy G',
+            '    emits A, B // the outcomes',
+            '  }',
+            '  hotspot H {',
+            '    on C',
+            '    status open',
+            '  }',
+            '  command D {',
+            '    by X',
+            '    emits A // last line comment',
             '  }',
             '}',
         );

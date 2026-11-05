@@ -1,5 +1,5 @@
 /**
- * What a storming means, independent of how it is drawn (docs/dtes-v0.1.md, ADR 0024; spec §7.1, §7.2, §9.1):
+ * What a storming means, independent of how it is drawn (docs/dtes-v0.1.md, ADR 0024, ADR 0032; spec §7.1, §7.2, §9.1):
  *
  * - the **semantic graph** (`SemanticGraph`): its valid elements and relations, independent of timelines. Invalid input
  *   (reported by the validator) is left out rather than guessed: of two declarations with one ID only the first counts,
@@ -12,9 +12,12 @@ import {
     allTimelines,
     type AnyDeclaration,
     declarations,
+    isRemovedKeyword,
     nodeElements,
     type NodeElement,
+    type NodeElementKind,
     RELATION_RULES,
+    type RelationKeyword,
     type Stage,
     type Storming,
     type Timeline,
@@ -23,12 +26,18 @@ import {
 // ---- Semantic graph (spec §7.1, §9.1) ----
 
 /**
- * The kind of a semantic edge. `hotspot-on` is a hotspot's `on`, which is not causal; a policy's `on` is `on`.
- * `actor`, `reads` and `target` relate, `on`, `issues` and `emits` are type-level causal candidates.
+ * The kind of a semantic edge (ADR 0032): a relation clause's keyword, and for the clauses whose meaning depends on their
+ * owner the owner's kind too: `hotspot-on` is a hotspot's `on` (not causal; a policy's `on` is `on`), `readmodel-from`
+ * an event feeding a read model, `event-from` an event arriving from an external system. `on`, `issues`, `handledBy`,
+ * `emits` and `event-from` are type-level causal candidates; `by`, `reads` and `readmodel-from` relate.
  */
-export type SemanticEdgeKind = 'on' | 'issues' | 'emits' | 'target' | 'actor' | 'reads' | 'hotspot-on';
+export type SemanticEdgeKind = 'by' | 'reads' | 'handledBy' | 'emits' | 'on' | 'issues' | 'readmodel-from' | 'event-from' | 'hotspot-on';
 
-/** A valid relation, directed as in spec §9.1 (`Event → Policy`, `Actor → Command`, `Read Model → Command`, the others from the owner). */
+/**
+ * A valid relation, directed as Event Storming reads it: `Actor → Command` (`by`), `Read Model → Command` (`reads`),
+ * `Command → Aggregate` (`handledBy`), `Command → Event` (`emits`; the drawing starts it at the handler), `Event →
+ * Policy` (`on`), `Policy → Command` (`issues`), `Event → Read Model` and `External → Event` (`from`), `Hotspot → Sticky`.
+ */
 export interface SemanticEdge {
     /** Local IDs. */
     sourceId: string;
@@ -73,15 +82,24 @@ export function buildSemanticGraph(storming: Storming): SemanticGraph {
     const seen = new Set<string>();
     for (const owner of nodes) {
         const rules = RELATION_RULES[owner.kind] ?? {};
+        /** A command's handler and a hotspot's subject: only the first counts (a second is S004). */
+        let single = false;
         for (const clause of owner.clauses) {
             if (clause.type !== 'relation') continue;
-            const allowed = rules[clause.keyword];
+            const keyword = clause.keyword;
+            if (isRemovedKeyword(keyword)) continue; // S023
+            const allowed = rules[keyword];
             const target = byId.get(clause.target);
             if (!allowed || !target || target.kind === 'timeline' || target.kind === 'group' || target.kind === 'stage' || !allowed.includes(target.kind))
                 continue;
-            const kind: SemanticEdgeKind = owner.kind === 'hotspot' ? 'hotspot-on' : clause.keyword;
-            // §9.1: Event → Policy, Actor → Command and Read Model → Command; every other relation from its owner
-            const toOwner = clause.keyword === 'actor' || clause.keyword === 'reads' || kind === 'on';
+            const kind = edgeKind(owner.kind, keyword);
+            if (kind === 'handledBy' || kind === 'hotspot-on') {
+                if (single) continue;
+                single = true;
+            }
+            // Actor → Command, Read Model → Command, Event → Policy, Event → Read Model, External → Event; every other
+            // relation from its owner
+            const toOwner = kind === 'by' || kind === 'reads' || kind === 'on' || kind === 'readmodel-from' || kind === 'event-from';
             const edge: SemanticEdge = toOwner ? { sourceId: target.id, targetId: owner.id, kind } : { sourceId: owner.id, targetId: target.id, kind };
             const key = semanticEdgeKey(edge);
             if (seen.has(key)) continue;
@@ -90,6 +108,13 @@ export function buildSemanticGraph(storming: Storming): SemanticGraph {
         }
     }
     return { stormingId: storming.id, nodes, edges };
+}
+
+/** The kind of the edge of a valid relation clause of `owner`. */
+function edgeKind(owner: NodeElementKind, keyword: RelationKeyword): SemanticEdgeKind {
+    if (owner === 'hotspot') return 'hotspot-on';
+    if (keyword === 'from') return owner === 'readmodel' ? 'readmodel-from' : 'event-from';
+    return keyword;
 }
 
 // ---- Timelines and occurrences (spec §7.2, §8.3) ----
