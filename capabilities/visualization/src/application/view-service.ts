@@ -363,7 +363,7 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
                         ...whole,
                         ...timelines.map((t) => ({ level, timelineId: t.id })),
                         // the integrated canvas and the stages without their exceptions (「例外を表示」 off)
-                        ...(withExceptions ? whole.map((o): ViewOptions => ({ ...o, hideExceptions: true })) : []),
+                        ...(withExceptions ? whole.map((o): ViewOptions => ({ ...o, hidden: ['exceptions'] })) : []),
                     ];
                     for (const options of scopes) {
                         const render = projectView(storming, options);

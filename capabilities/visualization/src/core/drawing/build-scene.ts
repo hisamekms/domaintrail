@@ -15,6 +15,7 @@ import {
     type TransitionLabels,
     transitionText,
 } from '../graph/ir.js';
+import { RESOLVED_MARK } from './marks.js';
 import { DIAGRAM_TEXTS } from './texts.js';
 import {
     type ChangeMark,
@@ -30,6 +31,7 @@ import {
     type SceneGroup,
     type SceneInternal,
     type SceneNode,
+    type SettledHotspot,
 } from './scene.js';
 /** The elements marked added, changed or removed: a model's diff, or any other list of element IDs (a turn's stickies). */
 export interface ChangedElements {
@@ -84,9 +86,27 @@ export function buildScene(graph: LaidOutGraph, opts: RenderOptions): Scene {
     const groups: SceneGroup[] = [];
     const nodes: SceneNode[] = [];
     const internal: SceneInternal[] = [];
+    const settled = settledOn(graph, opts);
     for (const n of graph.nodes) {
         const l = graph.nodeLayout[n.id];
         if (!l) continue;
+        if (n.folded) {
+            // a hidden resolved hotspot: not drawn (its place left empty); at the check of the first sticky it is on
+            const sticky = n.folded[0] !== undefined ? graph.nodeLayout[n.folded[0]] : undefined;
+            if (!sticky) continue;
+            const at = checkPlace(sticky);
+            nodes.push({
+                id: nodeItemId(n.id),
+                type: 'node',
+                x: at.x,
+                y: at.y,
+                elementId: n.elementId,
+                graphNode: n.id,
+                on: nodeItemId(n.folded[0]!),
+                props: { ...nodeProps(graph, n, at, opts), change: 'none', badge: '', diag: 'none' },
+            });
+            continue;
+        }
         const isGroup = GROUP_KINDS.has(n.kind);
         const marks = { change: isGroup ? ('none' as const) : change(n.elementId), diag: isGroup ? ('none' as const) : (severity.get(n.elementId) ?? 'none') };
         const base = { id: nodeItemId(n.id), x: l.x, y: l.y, elementId: n.elementId, graphNode: n.id };
@@ -101,7 +121,12 @@ export function buildScene(graph: LaidOutGraph, opts: RenderOptions): Scene {
                 ...base,
                 ...(n.parent !== undefined && { parent: nodeItemId(n.parent) }),
                 type: 'node',
-                props: { ...nodeProps(graph, n, l, opts), ...marks, badge: badgeText(marks.change, opts.lang) },
+                props: {
+                    ...nodeProps(graph, n, l, opts),
+                    ...marks,
+                    badge: badgeText(marks.change, opts.lang),
+                    ...(settled.has(n.id) && { settled: settled.get(n.id) }),
+                },
             });
             internal.push(...internalRows(graph, n, l, opts, (id) => ({ change: change(id), diag: severity.get(id) ?? 'none' })));
         }
@@ -143,6 +168,21 @@ export function buildScene(graph: LaidOutGraph, opts: RenderOptions): Scene {
     }
 
     return { groups, nodes, ghosts, internal, edges };
+}
+
+/** The hidden resolved hotspots (`GraphNode.folded`) behind each sticky's check, by the sticky's graph node, in the graph's order. */
+function settledOn(graph: LaidOutGraph, v: Variant): Map<string, SettledHotspot[]> {
+    const out = new Map<string, SettledHotspot[]>();
+    for (const n of graph.nodes)
+        for (const sticky of n.folded ?? [])
+            out.set(sticky, [...(out.get(sticky) ?? []), { item: nodeItemId(n.id), label: textOf(n.label, v), resolution: n.resolution ?? '' }]);
+    return out;
+}
+
+/** Where a sticky's check stands (`RESOLVED_MARK`, inside its top-right corner). */
+function checkPlace(sticky: NodeLayout): NodeLayout {
+    const side = 2 * RESOLVED_MARK.radius;
+    return { x: sticky.x + sticky.width - RESOLVED_MARK.inset - side, y: sticky.y + RESOLVED_MARK.inset, width: side, height: side };
 }
 
 /** The change badge's text, in the Live View's language (the shape draws it, and its outline goes around it). */

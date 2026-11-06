@@ -34,7 +34,23 @@ export { PRIMITIVE_LABELS, typeText } from './core/graph/build.js';
 export { dependencyCounts } from './core/graph/context-map.js';
 
 // ---- core: the storming views ----------------------------------------------------------------------------------
-export { LEVEL_KINDS, VIEW_LEVELS, type GridCell, type RenderGraph, type StageGrid, type ViewLevel, type ViewOptions } from './core/storming/ir.js';
+export {
+    HIDDEN_BY,
+    HIDEABLE,
+    hides,
+    laidOutHidden,
+    LEVEL_KINDS,
+    VIEW_LEVELS,
+    type DrawnHideable,
+    type GridCell,
+    type Hideable,
+    type LaidOutHideable,
+    type RenderGraph,
+    type StageGrid,
+    type ViewLevel,
+    type ViewOptions,
+} from './core/storming/ir.js';
+export { drawsElement, hiddenInDrawing, hideInDrawing } from './core/storming/hide.js';
 export { stormingViewKey } from './core/storming/graph.js';
 
 // ---- core: the drawing of a laid-out graph, shared by the Live View's canvas and `dt export svg` ------------------
@@ -53,6 +69,7 @@ export {
     type EdgeProps,
     type EdgeTone,
     type GroupProps,
+    type SettledHotspot,
     type InternalProps,
     type NodeProps,
     type Point,

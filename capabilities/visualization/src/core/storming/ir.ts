@@ -44,11 +44,42 @@ export interface ViewOptions {
     /** One stage of a storming with stages: its main flows and its exceptions (never with `timelineId`). */
     stageId?: string;
     /**
-     * Without the exceptions (the integrated canvas and a stage of a storming drawn in sections only): their steps, the
-     * events only they have and the hotspots on those events are not drawn.
+     * What the view is laid out without (`HIDDEN_BY`: the kinds hidden in the layout), sorted, absent when none. The
+     * exceptions (the integrated canvas and a stage of a storming drawn in sections only): their steps, the events only
+     * they have and the hotspots on those events are not drawn.
      */
-    hideExceptions?: true;
+    hidden?: LaidOutHideable[];
 }
+
+// ---- What a view of a storming can hide (the 絞り込み's 「…を表示」, ADR 0032 §10) ----
+
+/**
+ * How each thing a reader can hide is left out: `layout`, by laying the view out without it (another graph of the view,
+ * `ViewOptions.hidden`: the exceptions take room of their own); `drawing`, by leaving it out of the drawing of the same
+ * layout (the resolved hotspots, drawn on their stickies: hiding them moves nothing, and the page does it alone). A new
+ * kind is one more entry here: only a `layout` one adds graphs to lay out.
+ */
+export const HIDDEN_BY = { exceptions: 'layout', resolvedHotspots: 'drawing' } as const satisfies Record<string, 'layout' | 'drawing'>;
+
+/** What a view of a storming can hide. */
+export type Hideable = keyof typeof HIDDEN_BY;
+export const HIDEABLE: readonly Hideable[] = ['exceptions', 'resolvedHotspots'];
+/** What is hidden by laying the view out without it. */
+export type LaidOutHideable = { [K in Hideable]: (typeof HIDDEN_BY)[K] extends 'layout' ? K : never }[Hideable];
+/** What is hidden by leaving it out of the drawing. */
+export type DrawnHideable = Exclude<Hideable, LaidOutHideable>;
+
+const isLaidOut = (k: Hideable): k is LaidOutHideable => HIDDEN_BY[k] === 'layout';
+
+/** The part of `hidden` the layout depends on, as `ViewOptions.hidden` holds it (in `HIDEABLE`'s order; absent when none). */
+export function laidOutHidden(hidden: Iterable<Hideable>): { hidden?: LaidOutHideable[] } {
+    const all = new Set(hidden);
+    const kinds = HIDEABLE.filter(isLaidOut).filter((k) => all.has(k));
+    return kinds.length ? { hidden: kinds } : {};
+}
+
+/** Whether a view is laid out without `kind`. */
+export const hides = (options: Pick<ViewOptions, 'hidden'>, kind: LaidOutHideable): boolean => options.hidden?.includes(kind) === true;
 
 export type ViewLevel = ViewOptions['level'];
 export const VIEW_LEVELS: ViewLevel[] = ['big-picture', 'design-level'];

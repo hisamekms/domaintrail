@@ -534,7 +534,8 @@ class Drawing {
             out.push(this.ring(x, y, p, radius));
             out.push(borderRect(x, y, p.w, p.h, radius, { fill: this.c(v.paper), stroke: this.c(v.border), width: border, dash: style }));
             out.push(this.noteHead(x, y, p, this.c(v.text)));
-            if (p.resolution !== undefined) {
+            // a resolved hotspot's check; a sticky's, for the resolved hotspots on it that are hidden
+            if (p.resolution !== undefined || p.settled) {
                 const r = RESOLVED_MARK.radius;
                 out.push(this.check(x + p.w - RESOLVED_MARK.inset - r, y + RESOLVED_MARK.inset + r, r, 2));
             }
@@ -1013,6 +1014,8 @@ export function portableSvg(input: PortableSvgInput): PortableSvg {
     }
     const items = sceneItems(scene).map((item) => {
         if (item.type === 'group') return draw.group(item.x, item.y, item.props);
+        // a hidden resolved hotspot: not drawn (its sticky's check stands for it)
+        if (item.type === 'node' && item.on !== undefined) return '';
         if (item.type === 'node') return draw.node(item.x, item.y, item.props);
         if (item.type === 'internal') return draw.internal(item.x, item.y, item.props);
         return draw.edge(item.x, item.y, item.props);
