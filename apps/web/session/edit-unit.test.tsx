@@ -1,4 +1,4 @@
-// A person's edit in AI の作業 (ADR 0033, session/edit-unit.tsx): 「◯◯が直しました」 with old → new, 打ち消す for the
+// A person's edit in AI の作業 (ADR 0033, session/edit-unit.tsx): 「◯◯が編集しました」 with old → new, 打ち消す for the
 // facilitator, the note of a re-application, and a conflict with a run's wording offered as a choice; and the edit
 // window's impact of a rename (stickies/forms.tsx).
 import { describe, expect, test } from 'bun:test';
@@ -61,7 +61,7 @@ function render(run: object, control: boolean, runs: object[] = [run]): string {
 describe("a person's edit in AI の作業", () => {
     test('who and when, old struck through → new, the references a rename rewrote, and 打ち消す for the facilitator', () => {
         const html = render(edited(), true);
-        expect(html).toContain('Bobが直しました');
+        expect(html).toContain('Bobが編集しました');
         expect(html).toContain('<del>返品が届いた</del> → <span>荷物が戻った</span>');
         expect(html).toContain('<del class="mono">Received</del> → <span class="mono">Arrived</span>');
         expect(html).toContain('参照 2 件も書き換え');

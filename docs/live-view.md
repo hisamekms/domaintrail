@@ -182,9 +182,9 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   **Acting on a sticky** ([ADR 0033](adr/0033-people-edit-stickies.md)): every action comes from one list, so the
   same ones are in four places. Selecting stickies shows a small toolbar above them (below them when there is no room;
   never on hover, hidden while the canvas moves): the frequent actions as icons — チャットに追加 (💬, a muted ✓ once
-  added) and 直す ✎ — then 「…」; with several selected, how many and the actions for several only. 「…」 and a
+  added) and 編集 ✎ — then 「…」; with several selected, how many and the actions for several only. 「…」 and a
   right-click on a sticky open the menu of every action that applies to it, by group with their keys: よく使う
-  (チャットに追加 `Enter`, 直す（ラベル・名前） `F2`), 見る (知見を見る for a sticky with knowledge, opening it in the detail; ドメインモデルで見る for an event, a command or an aggregate whose
+  (チャットに追加 `Enter`, 編集 `F2`), 見る (ナレッジを見る for a sticky with knowledge, opening it in the detail; ドメインモデルで見る for an event, a command or an aggregate whose
   `ref` the model has, its tooltip naming the element 「ドメインモデルの 注文 › 確定する を見る」; このタイムラインで見る for an
   event, opening a timeline it is in), 書く (ホットスポットを付ける on an event; 解決を書く on a hotspot) and そのほか (リンクをコピー
   `⌘⇧C`, a link that opens the Live View with that sticky selected). The arrow keys move in the menu, Escape closes
@@ -488,7 +488,7 @@ the journeys panel; the latest card follows the journey file as it is now. A few
   the source diff is open. The dialog keeps one width and its top in place whether the source diff is open or not; its
   body scrolls under the header. The facilitator cancels a running or
   queued card with ✕, after a dialog asks.
-  A person's edit of a sticky is a row of its own there (not in the chat): 「◯◯が直しました」, its time and what changed
+  A person's edit of a sticky is a row of its own there (not in the chat): 「◯◯が編集しました」, its time and what changed
   (ラベル: ~~旧~~ → 新; 名前 with the references it rewrote; a hotspot added; a resolution), and for the facilitator
   打ち消す, which reverts it as any card is reverted. An edit made while the AI was working and dropped by its result is
   written again after it (「AI の作業が落としたので…当て直しました」); when the AI's result gave the same sticky other

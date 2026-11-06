@@ -1,4 +1,4 @@
-// A person's edit of a sticky in AI の作業 (ADR 0033): 「◯◯が直しました」 with its time, what changed (old struck through
+// A person's edit of a sticky in AI の作業 (ADR 0033): 「◯◯が編集しました」 with its time, what changed (old struck through
 // → new; a rename with how many references it rewrote; a hotspot added; a resolution written), the note when it was
 // written again after a run that had dropped it, and — when a run's result gave the same sticky other wording — both
 // wordings with the choice between them. The facilitator reverts it as any run (打ち消す), through the same revert.

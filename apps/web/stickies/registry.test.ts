@@ -40,7 +40,7 @@ describe("the stickies' actions (ADR 0033): one list, by kind", () => {
         expect(ids('OrderPlaced', { live: true, hasModelElement: () => false })).not.toContain('seeModel');
     });
 
-    test('知見を見る: only for a sticky with knowledge, and never without a store', () => {
+    test('ナレッジを見る: only for a sticky with knowledge, and never without a store', () => {
         const withStore: ActionContext = { ...live, hasKnowledge: (s) => s.local === 'OrderPlaced' };
         expect(ids('OrderPlaced', withStore)).toEqual(['chat', 'edit', 'knowledge', 'seeModel', 'seeTimeline', 'addHotspot', 'copyLink']);
         expect(ids('PlaceOrder', withStore)).not.toContain('knowledge');

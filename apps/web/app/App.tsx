@@ -147,7 +147,7 @@ export function App() {
             requestAnimationFrame(() => requestAnimationFrame(() => select(then)));
         },
         onOpenSticky: openSticky,
-        // 知見を見る: the sticky's knowledge in the detail, under the tree (a session with a store only)
+        // ナレッジを見る: the sticky's knowledge in the detail, under the tree (a session with a store only)
         ...(knowledge.available && {
             knowledge: {
                 has: (id: string) => knowledge.marks.has(id),

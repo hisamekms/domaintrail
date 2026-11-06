@@ -215,8 +215,8 @@ const ja = {
         groups: { frequent: 'よく使う', see: '見る', write: '書く', other: 'そのほか' },
         actions: {
             chat: 'チャットに追加',
-            edit: '直す（ラベル・名前）',
-            knowledge: '知見を見る',
+            edit: '編集',
+            knowledge: 'ナレッジを見る',
             seeModel: 'ドメインモデルで見る',
             seeTimeline: 'このタイムラインで見る',
             addHotspot: 'ホットスポットを付ける',
@@ -228,14 +228,13 @@ const ja = {
         seeTimelineHint: (name: string) => `タイムライン「${name}」で見る`,
         linkCopied: 'リンクをコピーしました',
         linkNotCopied: 'リンクをコピーできませんでした',
-        saved: '直しました',
+        saved: '編集しました',
         edit: {
-            dialog: '付箋を直す',
+            dialog: '付箋を編集',
             label: 'ラベル',
             name: '名前',
             save: '保存',
             cancel: '取消',
-            keys: 'Enter で保存 · Esc で取消',
             impact: (n: number, dtes: number) => `参照 ${n} 件も書き換えます（.dtes ${dtes}）`,
             problems: {
                 format: '名前は英字か _ で始め、英数字と _ だけで書きます',
@@ -243,9 +242,9 @@ const ja = {
                 duplicate: (name: string) => `「${name}」はこのストーミングにすでにあります`,
             },
             emptyLabel: 'ラベルを書いてください',
-            stale: (now: string) => `先にほかの人か AI が直しました（いまは「${now}」）。見直してから保存してください`,
+            stale: (now: string) => `先にほかの人か AI が編集しました（いまは「${now}」）。見直してから保存してください`,
             failed: (why: string) => `書けませんでした: ${why}`,
-            body: (before: string, after: string) => `「${before}」を「${after}」に直す`,
+            body: (before: string, after: string) => `「${before}」を「${after}」に編集`,
         },
         hotspot: {
             dialog: 'ホットスポットを付ける',
@@ -270,7 +269,7 @@ const ja = {
         },
         // AI の作業: a person's edit, its conflict with a run, its revert
         history: {
-            edited: (who: string) => `${who}が直しました`,
+            edited: (who: string) => `${who}が編集しました`,
             label: 'ラベル',
             name: '名前',
             none: '（なし）',
@@ -1414,7 +1413,7 @@ const en: Messages = {
         groups: { frequent: 'Frequent', see: 'See', write: 'Write', other: 'Other' },
         actions: {
             chat: 'Add to the chat',
-            edit: 'Edit (label, name)',
+            edit: 'Edit',
             knowledge: 'See the knowledge',
             seeModel: 'See in the domain model',
             seeTimeline: 'See in this timeline',
@@ -1434,7 +1433,6 @@ const en: Messages = {
             name: 'Name',
             save: 'Save',
             cancel: 'Cancel',
-            keys: 'Enter saves · Esc cancels',
             impact: (n, dtes) => `Also rewrites ${n} ${n === 1 ? 'reference' : 'references'} (.dtes ${dtes})`,
             problems: {
                 format: 'A name starts with a letter or _, then letters, digits and _ only',

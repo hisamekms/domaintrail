@@ -6,7 +6,7 @@
 // - the keys while stickies are selected: Enter adds them to the chat, F2 edits, ⌘⇧C copies the link (Escape, which
 //   clears the selection, is the canvas's own); a double-click edits;
 // - the command palette's items (⌘K): the actions on the selection, and every sticky by name;
-// - the windows anchored to a sticky that edit it (`forms.tsx`), and a short status line (「直しました」).
+// - the windows anchored to a sticky that edit it (`forms.tsx`), and a short status line (「編集しました」).
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Check, Ellipsis } from 'lucide-react';
 import type { DomainModel } from '@domaintrail/modeling';

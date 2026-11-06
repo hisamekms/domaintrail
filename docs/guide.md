@@ -3834,7 +3834,7 @@ the `.dtes` at once, without an AI run, changing only the label string, or for a
 every reference to it in the storming (relations, timelines and groups, an exception's `then`, a stage's `after`) —
 the rest of the file stays as it was (no `dt fmt`). An edit is refused, with nothing written, when the sticky is no
 longer as the page showed it, when the name is not an ID of `.dtes` or is taken in the storming, or when the file would
-not parse. Each edit is a unit of work with its revisions before and after: it shows in AI の作業 as 「◯◯が直しました」
+not parse. Each edit is a unit of work with its revisions before and after: it shows in AI の作業 as 「◯◯が編集しました」
 with old → new, and the facilitator reverts it as any work. Edits are allowed while the AI works, even on what it is
 changing: when its run ends, an edit its result dropped (the old label or name left in the file) is written again, and
 a label the run changed to something else is kept as the run's, with both wordings offered to people in AI の作業. The

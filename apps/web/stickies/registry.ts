@@ -4,7 +4,7 @@
 // what they have, e.g. a `ref` to `.dt`), whether it works on several selected at once, and whether it is frequent (a
 // button of the toolbar; the others are in 「…」). What an action does is the layer's (`layer.tsx`), by its ID.
 //
-// 知見を見る opens the sticky's knowledge (ADR 0031) in the detail: offered only where the session keeps knowledge and
+// ナレッジを見る opens the sticky's knowledge (ADR 0031) in the detail: offered only where the session keeps knowledge and
 // the sticky has some.
 import { CircleCheck, Eye, Lightbulb, Link, MessageCircleQuestionMark, MessageSquarePlus, PencilLine, type LucideIcon } from 'lucide-react';
 import {
@@ -40,7 +40,7 @@ export interface ActionContext {
     readonly timelineShown?: string;
     /** Whether the `.dt` element a sticky's `ref` names is in the model now. */
     readonly hasModelElement: (sticky: Sticky) => boolean;
-    /** Whether a sticky has knowledge; absent where the session keeps none (no store): 知見を見る is never offered. */
+    /** Whether a sticky has knowledge; absent where the session keeps none (no store): ナレッジを見る is never offered. */
     readonly hasKnowledge?: (sticky: Sticky) => boolean;
 }
 
