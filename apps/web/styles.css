@@ -1606,52 +1606,50 @@ a.field-origin {
 .de-transition .de-head {
     fill: var(--model-command);
 }
-.de-esCausal .de-line {
-    stroke-width: 1.6;
-}
-.de-esSequence .de-line {
-    stroke: var(--es-sequence);
-    stroke-width: 1.8;
-    stroke-dasharray: 7 5;
-}
-.de-esSequence .de-head {
-    fill: var(--es-sequence);
-}
-.de-esSequence .de-label {
-    fill: var(--es-sequence-text);
-    font-weight: 600;
-}
-/* the time order of exceptions only: the timeline's dashes, in the hotspot's red (an exception, not an error) */
-.de-esException .de-line {
-    stroke: var(--es-exception);
-    stroke-width: 1.6;
-    stroke-dasharray: 7 5;
-}
-.de-esException .de-head {
-    fill: var(--es-exception);
-}
-.de-esException .de-label {
-    fill: var(--es-exception-text);
-    font-weight: 600;
-}
-/* an exception's `then`: back to the main flow, in the timeline's hue, dotted to tell it from the time order */
-.de-esRejoin .de-line {
-    stroke: var(--es-sequence);
-    stroke-width: 1.6;
-    stroke-dasharray: 2 4;
-}
-.de-esRejoin .de-head {
-    fill: var(--es-sequence);
-}
+/* a storming's edges in three looks (ADR 0032): every relation between stickies a flow (thin, solid, a head), the time
+   order dashed (only where the placement cannot show it at Design Level), a hotspot's subject a quiet line, no head */
+.de-esCausal .de-line,
 .de-esRelated .de-line,
-.de-esFeeds .de-line,
+.de-esFeeds .de-line {
+    stroke: var(--model-edge);
+    stroke-width: 1.4;
+}
+.de-esSequence .de-line,
+.de-esException .de-line,
+.de-esRejoin .de-line {
+    stroke: var(--model-edge);
+    stroke-width: 1.4;
+    stroke-dasharray: 6 5;
+}
+.de-esCausal .de-head,
+.de-esRelated .de-head,
+.de-esFeeds .de-head,
+.de-esSequence .de-head,
+.de-esException .de-head,
+.de-esRejoin .de-head {
+    fill: var(--model-edge);
+}
+.de-esSequence .de-label,
+.de-esException .de-label {
+    fill: var(--model-edge-label);
+    font-weight: 600;
+}
 .de-esHotspot .de-line {
     stroke: var(--model-edge-quiet);
-    stroke-width: 1.1;
-    stroke-dasharray: 1.5 3;
+    stroke-width: 1.2;
 }
-.de-esFeeds .de-head {
-    fill: var(--model-edge-quiet);
+.de-explain {
+    position: absolute;
+    pointer-events: none;
+    max-width: 280px;
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font: 13px var(--sans);
+    box-shadow: 0 2px 6px var(--shadow);
+    white-space: normal;
 }
 .de-esHotspot.de-resolved .de-line {
     stroke: var(--es-hotspot-resolved-edge);

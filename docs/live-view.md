@@ -147,11 +147,14 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   and read models). The choices are
   remembered per browser and never change the `.dtes` file. The integrated canvas draws each event once (no group
   frames), and a dashed arrow between two events names the timelines it belongs to when not all of them do; one
-  timeline draws each occurrence, and a group is a frame around its events. Solid arrows are type-level causes
-  (possible, not "happened"), dashed orange arrows the order of a timeline (the event's orange, not a warning),
-  a dotted arrow an event feeding a read model (its `from`), dotted lines without an arrowhead the other relations (an
-  issuer's to its command, a read model's to the issuer looking at it, a hotspot's to its sticky): arrows point along
-  causes and time only. Design Level follows Event Storming's grammar, left to right (ADR 0032): read model → issuer
+  timeline draws each occurrence, and a group is a frame around its events. The lines have three looks (ADR 0032):
+  **流れ**, a thin solid arrow in one colour, for every relation between stickies (read model → issuer, issuer →
+  command, command → handler, handler → event, event → policy, policy → command, an event feeding a read model, an
+  external system → its event, a policy's actor); **時間**, a dashed arrow in the same colour, for the time order where
+  the placement cannot show it; **問い**, a thin quiet line without a head, from a hotspot to its sticky (quieter still
+  when resolved). Exceptions are not told by a line colour. Hovering or selecting a line says what it means in plain
+  words, without the DSL's keywords (「配車を組む は 配車組 が処理する」「例外 自動配車の失敗 はここから分かれる」), and
+  selecting it keeps its two stickies in full view and dims the rest. Relations are possibilities, not "happened". Design Level follows Event Storming's grammar, left to right (ADR 0032): read model → issuer
   (`by`: an actor or external system, stuck on top of its command when no read model leads to it) → command → handler
   (`handledBy`: an aggregate or external system, from which the command's events come) → event → policy → the command it
   issues; commands converging on one event note through the same handler share one handler note before it (hovering
@@ -171,7 +174,7 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   muted deep paper of the same hue, a coloured edge and pale text. A storming whose file stops parsing stays as it last parsed, with a banner.
   A storming with stages or exceptions (`stage`, `exception`) is drawn in time order: the stages as labelled frames
   left to right, the trunk of the main flows one straight row through them, every other timeline on a row below the
-  step it branches off at (the exceptions' dashed arrows a quieter red, a dotted arrow back for `then`). At Design
+  step it branches off at (a dashed arrow into the lane, another back for `then`). At Design
   Level no line joins two events in time order where the placement shows it (left to right): only an exception's branch
   and its `then` are drawn; Big Picture keeps the time order lines. An undecided issuer or handler (an open hotspot on
   the command asks it) is an empty dashed note 「誰が処理する？」 where it would stand. At Design

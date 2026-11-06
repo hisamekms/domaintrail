@@ -42,12 +42,10 @@ export function legendRows(view: LegendView, words: DiagramTexts['legendRows']):
             ];
         case 'storming':
             return [
+                // three looks (ADR 0032): every relation between stickies is a flow, the time order a dashed line, a
+                // hotspot's subject a quiet line without a head
                 { kind: 'esCausal', text: words.esCausal },
                 { kind: 'esSequence', text: words.esSequence },
-                { kind: 'esException', text: words.esException },
-                { kind: 'esRejoin', text: words.esRejoin },
-                { kind: 'esRelated', text: words.esRelated },
-                { kind: 'esFeeds', text: words.esFeeds },
                 { kind: 'esHotspot', text: words.esHotspot },
             ];
         case 'states':

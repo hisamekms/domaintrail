@@ -296,8 +296,12 @@ describe('layout of an Event Storming view', () => {
                 (e) => e.source === handlers[0]!.id && e.kind === 'esCausal' && !graph.nodes.some((n) => n.id === e.target && n.kind !== 'esEvent'),
             );
             expect(emits).toHaveLength(1);
-            expect(emits[0]!.tooltip?.ja.label).toBe('コマンド: 登録する / 受注する');
-            expect(emits[0]!.tooltip?.en.name).toBe('Commands: Create / Receive');
+            expect(emits[0]!.tooltip?.ja.label).toBe('登録する・受注する は 依頼 が処理し、受け付けた が起きる');
+            expect(emits[0]!.tooltip?.en.name).toBe('Request handles Create, Receive, and Requested happens');
+            // every line says what it means, in plain words
+            const handled = graph.edges.find((e) => e.target === handlers[0]!.id && e.source === 'n:Create')!;
+            expect(handled.tooltip?.ja.label).toBe('登録する は 依頼 が処理する');
+            expect(graph.edges.find((e) => e.target === 'n:Create')!.tooltip?.ja.label).toBe('Clerk が 登録する を出す');
             expect(
                 graph.edges
                     .filter((e) => e.target === handlers[0]!.id)

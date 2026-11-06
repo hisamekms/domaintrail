@@ -248,10 +248,10 @@ describe('an element of a storming drawn once per use (Design Level)', () => {
         const edges = [...focusedItems(items, new Set(['n:e:Closed']))!].filter((id) => id.startsWith('e:'));
         expect(edges.every((id) => items.some((i) => i.id === id && i.type === 'edge'))).toBe(true);
         expect(edges.length).toBe(3);
-        // nothing selected, or an edge: nothing is dimmed
+        // nothing selected: nothing is dimmed; a line selected keeps itself and its two ends (ADR 0032)
         expect(focusedItems(items, new Set())).toBeUndefined();
-        const edge = items.find((s) => s.type === 'edge')!;
-        expect(focusedItems(items, new Set([edge.id]))).toBeUndefined();
+        const edge = items.find((s) => s.type === 'edge' && s.id === 'e:by:Boss->Close@n:Boss@Close->n:Close')!;
+        expect([...focusedItems(items, new Set([edge.id]))!].sort()).toEqual([edge.id, 'n:n:Boss@Close', 'n:n:Close'].sort());
     });
 });
 
@@ -372,6 +372,8 @@ describe('a handler shared by the commands converging on one event (ADR 0032)', 
         expect(focusElements(items, [handler.id])).toEqual(['Clerk', 'Create', 'Receive', 'Request', 'Requested', 'Shop'].map((id) => `es/S/${id}`));
         expect(focusElements(items, ['n:n:Create'])).toEqual(['Clerk', 'Create', 'Request', 'Requested'].map((id) => `es/S/${id}`));
         const emits = scene.edges.find((e) => e.source === handler.id)!;
-        expect(emits.props.tooltip).toBe('Commands: Create / Receive');
+        expect(emits.props.tooltip).toBe('Request handles Create, Receive, and Requested happens');
+        // a line selected keeps its two ends only
+        expect(focusElements(items, [emits.id])).toEqual(['Request', 'Requested'].map((id) => `es/S/${id}`));
     });
 });

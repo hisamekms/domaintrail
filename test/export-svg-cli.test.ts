@@ -97,9 +97,10 @@ describe('dt export svg: an Event Storming', () => {
         expect(lines[0]).toBe(
             'convenience-store › イベントストーミング › 住民票などのコンビニ交付（ビッグピクチャ） › コンビニでの発行 · ビッグピクチャー · 例外を含む',
         );
-        // the exceptions' captions and their own arrows
+        // the exceptions' captions; their arrows in the one colour of every line (ADR 0032: no red for exceptions)
         expect(lines).toContain('暗証番号を忘れた');
-        expect(stage).toContain('id="dt-arrow-es-exception"');
+        expect(stage).not.toContain('dt-arrow-es-exception');
+        expect(lines).toEqual(expect.arrayContaining(['問い（ホットスポットとその対象）']));
         expect(lines).toContain('凡例');
         expect(lines).not.toContain('依頼・準備');
         expect(outline(stage)).toMatchSnapshot();

@@ -74,7 +74,7 @@ const isStormingNote = (item: SceneItem): item is SceneNode => item.type === 'no
 export function focusedItems(items: Iterable<SceneItem>, selected: ReadonlySet<SceneId>): Set<SceneId> | undefined {
     const all = [...items];
     const seeds = all.filter((s) => selected.has(s.id) && isStormingNote(s));
-    if (seeds.length === 0) return undefined;
+    if (seeds.length === 0) return focusedLines(all, selected);
     const elements = new Set(seeds.map((s) => s.elementId));
     const notes = all.filter(isStormingNote);
     const edges = all.filter((s): s is SceneEdge => s.type === 'edge' && !s.ghost);
@@ -141,6 +141,25 @@ export function focusedItems(items: Iterable<SceneItem>, selected: ReadonlySet<S
         if (e.props.kind !== 'esRelated' || !issuers.includes(e.target) || kindOf(e.source) !== 'esReadModel') continue;
         kept.add(e.id);
         keep(e.source);
+    }
+    return kept;
+}
+
+/**
+ * What stays in full view while storming lines are selected (ADR 0032): the lines and the stickies at their two ends (a
+ * group's events for a group); `undefined` when no storming line is selected.
+ */
+function focusedLines(all: readonly SceneItem[], selected: ReadonlySet<SceneId>): Set<SceneId> | undefined {
+    const lines = all.filter((s): s is SceneEdge => s.type === 'edge' && !s.ghost && selected.has(s.id) && s.props.kind.startsWith('es'));
+    if (!lines.length) return undefined;
+    const kept = new Set<SceneId>();
+    for (const l of lines) {
+        kept.add(l.id);
+        for (const end of [l.source, l.target]) {
+            const item = all.find((s) => s.id === end);
+            if (item?.type === 'group') for (const m of all) if (m.type === 'node' && m.parent === end) kept.add(m.id);
+            if (item?.type === 'node') kept.add(end);
+        }
     }
     return kept;
 }

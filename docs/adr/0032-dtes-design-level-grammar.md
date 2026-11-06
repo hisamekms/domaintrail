@@ -188,6 +188,22 @@ remain (commands without `handledBy`), and no S025, S027 or S028.
   placement cannot show it: the edge into a lane that branches off (an exception's branch) and a `then`. Big Picture
   keeps its time order lines.
 
+### 8. Three looks of lines, each explained (2026-11-06)
+
+*Decided by the maintainer* (from a preview of 「2種類＋選ぶと説明」): a storming's lines have three looks. **流れ** — a
+thin solid arrow in one colour — for every relation between stickies (read model → issuer or command, issuer →
+command, command → handler, handler → event, event → policy, policy → command, event → read model, external → event,
+a policy's actor); it replaces the causal, related and feeding looks. **時間** — a dashed arrow in the same colour — for
+the time order where the placement cannot show it (at Design Level an exception's branch and its `then`; at Big
+Picture the time order lines), with no red for exceptions. **問い** — a thin quiet line without a head — from a hotspot
+to its sticky, quieter when resolved. The edge kinds stay apart (`esCausal`, `esRelated`, `esFeeds`, `esSequence`,
+`esException`, `esRejoin`, `esHotspot`): the grid routes and the focus still tell them apart; only their look is shared
+(the canvas's CSS, the portable SVG, the legend's three rows). Every line carries what it means in plain words, without
+the DSL's keywords (`GraphEdge.tooltip`, e.g. 「配車を組む は 配車組 が処理する」「定期バッチ が 未割当の依頼 を見て判断する」
+「例外 自動配車の失敗 はここから分かれる」「元の流れの 担当を割り当てた へ戻る」): hovering shows it as a tooltip, selecting
+shows it at the line's middle and keeps the two stickies in full view while the rest dims. Issuers and hotspots stay
+near their sticky (stacked above it in ELK, in their cells in the grid), joined by their line.
+
 ## Alternatives
 
 - **An arrow chain** (`UnassignedRequests -> Batch -> BuildAllocation -> CarAllocationPlan -> CarAllocated`): rejected

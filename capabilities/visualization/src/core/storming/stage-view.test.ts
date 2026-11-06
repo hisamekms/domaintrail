@@ -677,6 +677,40 @@ describe('gaps an open hotspot keeps open, and a policy applied by hand (ADR 003
     });
 });
 
+describe('lines at Design Level: only what the placement cannot show, each saying what it means (ADR 0032)', () => {
+    test('an exception branching off and its then are drawn and explained; the rest of the time order is not drawn', async () => {
+        const s = await parse(`storming L {
+  event A
+  event B
+  event X
+  stage S {
+    timeline Main {
+      A
+      B
+    }
+    exception Fail "失敗" {
+      A
+      X
+      then B
+    }
+  }
+}
+`);
+        const graph = renderToGraph(projectView(s, DL), s);
+        const shown = graph.edges.filter((e) => !e.hidden);
+        expect(shown.map((e) => [e.kind, e.tooltip?.ja.label])).toEqual(
+            expect.arrayContaining([
+                ['esException', '例外 失敗 はここから分かれる'],
+                ['esRejoin', '元の流れの B へ戻る'],
+            ]),
+        );
+        expect(shown.filter((e) => e.kind === 'esSequence')).toEqual([]);
+        // Big Picture keeps the time order
+        const big = renderToGraph(projectView(s, BP), s);
+        expect(big.edges.filter((e) => e.kind === 'esSequence' && !e.hidden).map((e) => e.tooltip?.ja.label)).toEqual(['A のあとに B']);
+    });
+});
+
 describe('without the exceptions (「例外を表示」 off)', () => {
     const text = `storming T {
   event A

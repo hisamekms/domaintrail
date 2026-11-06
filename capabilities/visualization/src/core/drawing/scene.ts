@@ -78,7 +78,7 @@ export interface EdgeProps {
     tone: EdgeTone;
     /** A resolved hotspot's `on`: drawn quieter, as its note is. */
     resolved?: true;
-    /** Shown on hover (an `emits` from a handler shared by several commands: their names). */
+    /** What the line means in plain words, shown on hover (a storming's line). */
     tooltip?: string;
 }
 

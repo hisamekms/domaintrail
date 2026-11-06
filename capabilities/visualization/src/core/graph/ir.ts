@@ -54,10 +54,10 @@ export type EdgeKind =
     | 'esRejoin';
 
 /**
- * The edges drawn without an arrowhead: in Event Storming, arrows point along causes and time only, so neither a
- * hotspot's subject nor an actor's or read model's relation to a command has one.
+ * The edges drawn without an arrowhead: in Event Storming, arrows point along the flow and time, so only a hotspot's
+ * line to its subject (a question, not a step) has none.
  */
-export const isUndirectedEdge = (kind: string): boolean => kind === 'esHotspot' || kind === 'esRelated';
+export const isUndirectedEdge = (kind: string): boolean => kind === 'esHotspot';
 
 /** How names are shown in the Live View: the label (the string after a declaration's name), the name, or both. */
 export type DisplayMode = 'label' | 'name' | 'both';
@@ -146,7 +146,7 @@ export interface GraphEdge {
     label?: Texts;
     /** Events a transition raises, shown with or instead of its command (see `TransitionLabels`). */
     events?: Texts;
-    /** Shown on hover: an Event Storming `emits` from a handler shared by several commands names them. */
+    /** What the line means in plain words, shown on hover and selection (an Event Storming line, ADR 0032). */
     tooltip?: Texts;
     /**
      * Laid out but not drawn: at Event Storming's Design Level, the time order the placement already shows (the steps

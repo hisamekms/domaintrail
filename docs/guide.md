@@ -2360,10 +2360,11 @@ A storming is viewed along two independent axes, neither of which changes the `.
 The integrated canvas draws each event once, without group frames: the time order is one dashed arrow per pair of
 consecutive events, naming the timelines it belongs to when not all of them do, and an event that repeats loops back
 to its note. One timeline draws each occurrence of an event, and a group as a frame. Drawing an event once does not
-make two occurrences the same happening, so read a path along one timeline's name. Solid arrows are type-level causal
-relations (possible, not "happened"), dashed arrows the order of a timeline, a dotted arrow an event feeding a read
-model (`from`), and dotted lines without an arrowhead the other relations (an issuer's to its command, a read model's to
-the issuer looking at it, a hotspot's `on`): arrows point along causes and time only.
+make two occurrences the same happening, so read a path along one timeline's name. The lines have three looks: a thin
+solid arrow (流れ) for every relation between stickies, a dashed arrow (時間) for the time order where the placement
+cannot show it, and a quiet line without a head (問い) from a hotspot to its sticky. Relations are possibilities, not
+"happened". Hovering or selecting a line says what it means in plain words (「配車を組む は 配車組 が処理する」), and
+selecting it keeps its two stickies in full view.
 Design Level reads left to right as Event Storming does (ADR 0032): read model → issuer (an actor or external system,
 stuck on top of its command when no read model leads to it) → command → handler (an aggregate or external system) →
 event → policy → the command it issues → … The read model goes to the issuer that looks at it; a command a policy
@@ -2398,9 +2399,8 @@ its view bar's subject (a breadcrumb at the left) and the level next to them; se
 A storming with stages or exceptions is drawn in time order instead: the stages left to right, each a labelled frame,
 one column per step, the trunks as one straight row through every frame (the `after` arrow joins one trunk's end to
 the next one's start). Every other timeline hangs below the step it branches off at, on a row of its own flowing right
-and named by its label: the other main flows first, then the exceptions, whose dashed arrows are a quieter red. The
-step an exception branches off at is one note for both; a dotted arrow goes from an exception's last step back to the
-step of its `then`. At Design Level each step is a group of columns — read models (on the row of the issuer that looks
+and named by its label: the other main flows first, then the exceptions. The step an exception branches off at is one
+note for both; a dashed arrow goes from an exception's last step back to the step of its `then`. At Design Level each step is a group of columns — read models (on the row of the issuer that looks
 at them), commands (their issuers on top, a hotspot on the command above them), handlers (aggregates and external
 systems, and the external system an event comes from), the event (its hotspots on top), policies (their hotspots on
 top) — and the elements stand in a band above the row of the event

@@ -8,6 +8,7 @@
 // keeps the zoom steps, fits and wheel zoom the Live View had with tldraw.
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from 'react';
 import {
+    EdgeLabelRenderer,
     Handle,
     Position,
     ReactFlow,
@@ -193,15 +194,29 @@ function Anchor(): ReactNode {
 }
 
 /** An edge drawn exactly along the route computed by the layout engine, at the item's origin (React Flow's own edges re-route). */
-function DomainEdge({ data }: EdgeProps<ItemEdge>): ReactNode {
+function DomainEdge({ data, selected }: EdgeProps<ItemEdge>): ReactNode {
     if (!data) return null;
     const { item } = data;
     if (item.props.points.length < 2) return null;
+    // a selected storming line says what it means, in plain words, at its middle (ADR 0032)
+    const explanation = selected && item.props.tooltip;
+    const mid = item.props.points[Math.floor(item.props.points.length / 2)]!;
+    const prev = item.props.points[Math.floor(item.props.points.length / 2) - 1] ?? mid;
+    const at = { x: item.x + (mid.x + prev.x) / 2, y: item.y + (mid.y + prev.y) / 2 };
     return (
-        <g className={edgeClassName(item.props)} transform={`translate(${item.x},${item.y})`}>
-            <EdgeContent p={item.props} />
-            <path className="diagram-outline-line" d={edgeOutlinePath(item.props.points)} />
-        </g>
+        <>
+            <g className={edgeClassName(item.props)} transform={`translate(${item.x},${item.y})`}>
+                <EdgeContent p={item.props} />
+                <path className="diagram-outline-line" d={edgeOutlinePath(item.props.points)} />
+            </g>
+            {explanation && (
+                <EdgeLabelRenderer>
+                    <div className="de-explain" role="status" style={{ transform: `translate(-50%, calc(-100% - 8px)) translate(${at.x}px, ${at.y}px)` }}>
+                        {explanation}
+                    </div>
+                </EdgeLabelRenderer>
+            )}
+        </>
     );
 }
 

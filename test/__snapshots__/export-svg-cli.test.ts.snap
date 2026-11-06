@@ -4,14 +4,14 @@ exports[`dt export svg: an Event Storming one stage with its exceptions, its hea
 {
   "shapes": {
     "circle": 1,
-    "marker": 2,
-    "path": 47,
+    "marker": 1,
+    "path": 39,
     "rect": 42,
-    "text": 94,
+    "text": 90,
   },
   "size": [
     2976,
-    2186,
+    2106,
   ],
   "texts": [
     "convenience-store › イベントストーミング › 住民票などのコンビニ交付（ビッグピクチャ） › コンビニでの発行 · ビッグピクチャー · 例外を含む",
@@ -129,13 +129,9 @@ exports[`dt export svg: an Event Storming one stage with its exceptions, its hea
     "交付先が対象外",
     "交付先が対象外",
     "凡例",
-    "型レベルの因果（コマンド → 処理する集約・外部システム → イベント → ポリシー → コマンド。起こりうる関係で、実際に起きたとは限らない）",
-    "タイムラインの時間順",
-    "例外の時間順",
-    "例外から本流へ戻る",
-    "コマンドを発行する人・システムと、その人が見るリードモデル（向きを持たない）",
-    "イベントがリードモデルに反映される",
-    "ホットスポットの対象（向きを持たない）",
+    "流れ（付箋どうしのつながり。線を選ぶと意味が出る）",
+    "時間の順（置き方で読めないところだけ：例外の分かれ目と元の流れへの戻り）",
+    "問い（ホットスポットとその対象）",
     "イベント",
     "コマンド",
     "ポリシー",
@@ -147,7 +143,7 @@ exports[`dt export svg: an Event Storming one stage with its exceptions, its hea
     "外部システム",
     "グループ",
     "段階",
-    "矢印は因果と時間の向き",
+    "矢印は流れと時間の向き",
   ],
 }
 `;

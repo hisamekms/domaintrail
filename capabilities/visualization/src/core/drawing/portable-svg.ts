@@ -401,13 +401,13 @@ const EDGE_LOOKS: Record<string, EdgeLook> = {
     references: { stroke: '--model-aggregate', width: 1.4, dash: '6 4', head: '--model-aggregate', label: '--model-aggregate' },
     dependsOn: { stroke: '--model-ink', width: 2, head: '--model-ink', label: '--model-ink', bold: true },
     transition: { stroke: '--model-command', width: 1.6, head: '--model-command', label: '--model-edge-label' },
-    esCausal: { stroke: '--model-edge', width: 1.6, head: '--model-edge', label: '--model-edge-label' },
-    esSequence: { stroke: '--es-sequence', width: 1.8, dash: '7 5', head: '--es-sequence', label: '--es-sequence-text', bold: true },
-    esException: { stroke: '--es-exception', width: 1.6, dash: '7 5', head: '--es-exception', label: '--es-exception-text', bold: true },
-    esRejoin: { stroke: '--es-sequence', width: 1.6, dash: '2 4', head: '--es-sequence', label: '--model-edge-label' },
-    esRelated: { stroke: '--model-edge-quiet', width: 1.1, dash: '1.5 3', head: '--model-edge-quiet', label: '--model-edge-label' },
-    esFeeds: { stroke: '--model-edge-quiet', width: 1.1, dash: '1.5 3', head: '--model-edge-quiet', label: '--model-edge-label' },
-    esHotspot: { stroke: '--model-edge-quiet', width: 1.1, dash: '1.5 3', head: '--model-edge-quiet', label: '--model-edge-label' },
+    esCausal: { stroke: '--model-edge', width: 1.4, head: '--model-edge', label: '--model-edge-label' },
+    esSequence: { stroke: '--model-edge', width: 1.4, dash: '6 5', head: '--model-edge', label: '--model-edge-label', bold: true },
+    esException: { stroke: '--model-edge', width: 1.4, dash: '6 5', head: '--model-edge', label: '--model-edge-label', bold: true },
+    esRejoin: { stroke: '--model-edge', width: 1.4, dash: '6 5', head: '--model-edge', label: '--model-edge-label' },
+    esRelated: { stroke: '--model-edge', width: 1.4, head: '--model-edge', label: '--model-edge-label' },
+    esFeeds: { stroke: '--model-edge', width: 1.4, head: '--model-edge', label: '--model-edge-label' },
+    esHotspot: { stroke: '--model-edge-quiet', width: 1.2, head: '--model-edge-quiet', label: '--model-edge-label' },
 };
 const DEFAULT_EDGE: EdgeLook = { stroke: '--model-edge', width: 1.4, head: '--model-edge', label: '--model-edge-label' };
 

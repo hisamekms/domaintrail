@@ -112,13 +112,95 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
             height: STICKY_NOTE.side,
         };
     };
-    /** The commands an `emits` from a merged handler stands for, on hover. */
-    const tooltip = (e: RenderEdge): { tooltip?: Texts } => {
-        if (e.type !== 'semantic' || !e.merged) return {};
-        const texts = e.merged.map((key) => label(key.slice(key.indexOf(':') + 1, key.indexOf('->'))));
-        return {
-            tooltip: mapTexts(texts[0]!, (_, lang, mode) => `${lang === 'ja' ? 'コマンド: ' : 'Commands: '}${texts.map((t) => t[lang][mode]).join(' / ')}`),
+    /** The name of the sticky a render node draws (an event, an element, a gap's command, a group). */
+    const byRender = new Map(render.nodes.map((n) => [n.id, n]));
+    const nameOf = (id: string): Texts => {
+        const n = byRender.get(id);
+        if (!n) return named(id, undefined);
+        if (n.type === 'event') return label(n.eventId);
+        if (n.type === 'element') return label(n.elementId);
+        if (n.type === 'gap') return label(n.commandId);
+        if (n.type === 'group') return label(n.groups[0]?.groupId ?? n.id);
+        return label(n.stageId);
+    };
+    /** A sentence in plain words for each language and display mode, the stickies by their names (`name(id)`). */
+    const say = (f: (name: (id: string) => string, lang: 'ja' | 'en') => string): Texts =>
+        mapTexts(nameOf(''), (_, lang, mode) => f((id) => nameOf(id)[lang][mode], lang));
+    const commandOfKey = (key: string): string => key.slice(key.indexOf(':') + 1, key.indexOf('->'));
+    /**
+     * What a line means, shown when it is hovered or selected (ADR 0032): plain words, never the DSL's keywords, e.g.
+     * 「配車を組む は 配車組 が処理する」.
+     */
+    const explain = (e: RenderEdge, lanes: Record<string, string[]> = {}): { tooltip?: Texts } => {
+        const kindOfNode = (id: string): string | undefined => {
+            const n = byRender.get(id);
+            return n?.type === 'element' ? n.kind : n?.type;
         };
+        const ja =
+            (s: string, t: string): ((name: (id: string) => string, lang: 'ja' | 'en') => string) =>
+            (name, lang) =>
+                (lang === 'ja' ? s : t).replaceAll('{S}', name(e.source)).replaceAll('{T}', name(e.target));
+        if (e.type === 'rejoin') return { tooltip: say(ja('元の流れの {T} へ戻る', 'Returns to {T} of the main flow')) };
+        if (e.type === 'stage') return { tooltip: say(ja('{S} のあと、次の段階へ', 'After {S}, the next stage')) };
+        if (e.type === 'sequence') {
+            const lane = lanes[e.id];
+            if (lane?.length) {
+                const names = lane.map(label);
+                return {
+                    tooltip: mapTexts(names[0]!, (_, lang, mode) => {
+                        const n = names.map((t) => t[lang][mode]).join(' / ');
+                        return lang === 'ja'
+                            ? `${e.exception ? '例外 ' : ''}${n} はここから分かれる`
+                            : `${e.exception ? 'The exception ' : ''}${n} branches off here`;
+                    }),
+                };
+            }
+            return { tooltip: say(ja('{S} のあとに {T}', '{T} comes after {S}')) };
+        }
+        switch (e.kind) {
+            case 'by':
+                return {
+                    tooltip: say(
+                        kindOfNode(e.target) === 'policy'
+                            ? ja('{S} が 決まり {T} を当てはめる', '{S} applies the rule {T}')
+                            : ja('{S} が {T} を出す', '{S} issues {T}'),
+                    ),
+                };
+            case 'reads':
+                return { tooltip: say(ja('{T} が {S} を見て判断する', '{T} looks at {S} to decide')) };
+            case 'handledBy':
+                return { tooltip: say(ja('{S} は {T} が処理する', '{S} is handled by {T}')) };
+            case 'emits': {
+                if (e.merged) {
+                    const commands = e.merged.map((k) => label(commandOfKey(k)));
+                    return {
+                        tooltip: mapTexts(commands[0]!, (_, lang, mode) => {
+                            const c = commands.map((t) => t[lang][mode]).join(lang === 'ja' ? '・' : ', ');
+                            const [s, t] = [nameOf(e.source)[lang][mode], nameOf(e.target)[lang][mode]];
+                            return lang === 'ja' ? `${c} は ${s} が処理し、${t} が起きる` : `${s} handles ${c}, and ${t} happens`;
+                        }),
+                    };
+                }
+                return {
+                    tooltip: say(
+                        kindOfNode(e.source) === 'command'
+                            ? ja('{S} の結果 {T} が起きる', '{S} results in {T}')
+                            : ja('{S} が処理した結果 {T} が起きる', '{S} handles it, and {T} happens'),
+                    ),
+                };
+            }
+            case 'on':
+                return { tooltip: say(ja('{S} に、決まり {T} が反応する', 'The rule {T} reacts to {S}')) };
+            case 'issues':
+                return { tooltip: say(ja('決まり {S} が {T} を出す', 'The rule {S} issues {T}')) };
+            case 'readmodel-from':
+                return { tooltip: say(ja('{S} で {T} が更新される', '{S} updates {T}')) };
+            case 'event-from':
+                return { tooltip: say(ja('{S} から {T} が届く', '{T} arrives from {S}')) };
+            case 'hotspot-on':
+                return { tooltip: say(ja('{T} への問い：{S}', 'A question about {T}: {S}')) };
+        }
+        return {};
     };
     const timelinesOf = (ids: readonly string[]): Texts => {
         const texts = ids.map(label);
@@ -135,7 +217,7 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
             source: e.source,
             target: e.target,
             ...(captions[e.id] && { label: timelinesOf(captions[e.id]) }),
-            ...tooltip(e),
+            ...explain(e, captions),
             ...(quiet(e) && { hidden: true as const }),
         });
         return {
@@ -151,7 +233,7 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
             kind: edgeKind(e),
             source: e.source,
             target: e.target,
-            ...tooltip(e),
+            ...explain(e),
             ...(design && e.type === 'sequence' && { hidden: true as const }),
         });
         return attach({ id: stormingGraphId(storming.id, render.options), nodes: render.nodes.map(node), edges: render.edges.map(edge) });
@@ -184,7 +266,7 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
                     sequences.set(id, s);
                 } else if (e.type === 'semantic') {
                     const id = `${e.semantic}@${source}->${target}`;
-                    edges.set(id, { id, kind: edgeKind(e), source, target, ...tooltip(e) });
+                    edges.set(id, { id, kind: edgeKind(e), source, target, ...explain(e) });
                 }
             }
         }
