@@ -624,6 +624,59 @@ describe('a handler shared by the chains converging on one event note, in a view
     });
 });
 
+describe('gaps an open hotspot keeps open, and a policy applied by hand (ADR 0032)', () => {
+    const text = `storming G {
+  event Asked
+  event Done
+  actor Clerk
+  aggregate Desk
+  command Undecided {
+    by Clerk
+    emits Asked
+  }
+  command Orphan {
+    emits Done
+  }
+  policy ByHand {
+    by Clerk
+    on Asked
+    issues Orphan
+  }
+  hotspot WhoHandles "誰が処理する？" {
+    on Undecided
+  }
+  stage S {
+    timeline Main {
+      Asked
+      Done
+    }
+  }
+}
+`;
+    test('the empty slot of an undecided handler beside its command; the actor of a policy above it', async () => {
+        const s = await parse(text);
+        const render = projectView(s, DL);
+        const cells = render.grid!.cells;
+        const gap = render.nodes.find((n) => n.type === 'gap');
+        expect(gap).toEqual({
+            type: 'gap',
+            id: 'n:?handledBy@Undecided',
+            commandId: 'Undecided',
+            hotspotId: 'WhoHandles',
+            missing: 'handledBy',
+            use: 'Undecided',
+        });
+        expect(cells['n:?handledBy@Undecided']).toEqual({ col: cells['n:Undecided']!.col + 1, row: cells['n:Undecided']!.row });
+        // Orphan is issued by the policy: no gap (and its missing handler is an error, not a question)
+        expect(render.nodes.filter((n) => n.type === 'gap')).toHaveLength(1);
+        expect(cells['n:Clerk@ByHand']).toEqual({ col: cells['n:ByHand']!.col, row: cells['n:ByHand']!.row - 1 });
+        expect(render.edges.some((e) => e.type === 'semantic' && e.id === 'by:Clerk->ByHand@n:Clerk@ByHand->n:ByHand')).toBe(true);
+        expect(crossings(laidOut(render, s))).toEqual([]);
+        // at Big Picture, nothing of it
+        expect(projectView(s, BP).nodes.some((n) => n.type === 'gap')).toBe(false);
+    });
+});
+
 describe('without the exceptions (「例外を表示」 off)', () => {
     const text = `storming T {
   event A

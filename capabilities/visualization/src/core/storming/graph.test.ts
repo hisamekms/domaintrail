@@ -15,7 +15,7 @@ async function parse(text: string): Promise<Storming> {
     const { stormings, diagnostics } = (await analyze([{ path: 'es.dtes', text }])).stormings;
     // without a .dt model its refs name nothing (S010–S013); the storming itself parses and validates clean, but for an
     // incomplete design (S024, S027), which is drawn as written
-    expect(diagnostics.filter((d) => !['S010', 'S011', 'S012', 'S013', 'S024', 'S027'].includes(d.code))).toEqual([]);
+    expect(diagnostics.filter((d) => d.severity !== 'info' && !['S010', 'S011', 'S012', 'S013', 'S024', 'S027'].includes(d.code))).toEqual([]);
     return stormings[0];
 }
 

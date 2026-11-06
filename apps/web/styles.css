@@ -1369,6 +1369,12 @@ a.field-origin {
     color: var(--es-actor-text);
     border-radius: 18px;
 }
+.dn-esGap {
+    border: 1.5px dashed var(--muted);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 3px;
+}
 .dn-esExternal {
     border-color: var(--es-external-border);
     background: var(--es-external);
@@ -1383,7 +1389,8 @@ a.field-origin {
 .dn-esExternal .dn-head,
 .dn-esAggregate .dn-head,
 .dn-esReadModel .dn-head,
-.dn-esHotspot .dn-head {
+.dn-esHotspot .dn-head,
+.dn-esGap .dn-head {
     border-bottom: none;
     display: flex;
     flex-direction: column;
@@ -1400,7 +1407,8 @@ a.field-origin {
 .dn-esExternal .dn-stereo,
 .dn-esAggregate .dn-stereo,
 .dn-esReadModel .dn-stereo,
-.dn-esHotspot .dn-stereo {
+.dn-esHotspot .dn-stereo,
+.dn-esGap .dn-stereo {
     color: inherit;
 }
 /* a label too long for its note even at the floor size: the lines that fit, the last ending with «…» */

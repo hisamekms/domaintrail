@@ -25,6 +25,7 @@ export type NodeKind =
     | 'esExternal'
     | 'esAggregate'
     | 'esReadModel'
+    | 'esGap'
     | 'esHotspot'
     /** A group step of a timeline: a container of its event notes, without an order among them. */
     | 'esGroup'
@@ -147,6 +148,11 @@ export interface GraphEdge {
     events?: Texts;
     /** Shown on hover: an Event Storming `emits` from a handler shared by several commands names them. */
     tooltip?: Texts;
+    /**
+     * Laid out but not drawn: at Event Storming's Design Level, the time order the placement already shows (the steps
+     * left to right), so that only the lines the placement cannot show are drawn (an exception's branch, a `then`).
+     */
+    hidden?: true;
 }
 
 /** A command that leaves a state as it is, drawn as a row in the state's box instead of a loop. */

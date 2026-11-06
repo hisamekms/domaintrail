@@ -11,6 +11,7 @@
 import {
     buildSemanticGraph,
     isDesignLevelOnly,
+    openGaps,
     type NodeElement,
     type NodeElementKind,
     type SemanticEdge,
@@ -108,8 +109,9 @@ export function projectView(storming: Storming, options: ViewOptions): RenderGra
             (timelineId === undefined || drawn.some((e) => e.sourceId === n.id || e.targetId === n.id)),
     );
     // the Design Level along the grammar: copies per use (and, in a timeline's view, per step), the handler deciding
-    const chains = drawChains(elements, drawn, places);
+    const chains = drawChains(elements, drawn, places, options.level === 'design-level' ? openGaps(storming) : []);
     for (const n of chains.nodes) nodes.set(n.id, n);
+    for (const n of chains.gaps) nodes.set(n.id, n);
     for (const e of chains.edges) edges.set(e.id, e);
     for (const edge of edges.values()) if (edge.type === 'sequence') edge.timelineIds.sort(compare);
 

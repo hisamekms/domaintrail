@@ -237,16 +237,17 @@ describe('an element of a storming drawn once per use (Design Level)', () => {
     test('selecting a note keeps what is joined to it in full view: a copy stands for its element', async () => {
         const items = sceneItems(await scene());
         const kept = (...selected: string[]): string[] => focusElements(items, selected);
-        // an event: the steps before and after, the command causing it with its actor's copy beside it, the policy reacting
-        expect(kept('n:e:Closed')).toEqual(['Boss', 'Clerk', 'Close', 'Closed', 'Approved'].map((id) => `es/S/${id}`).sort());
-        expect(kept('n:e:Approved')).toEqual(['Approve', 'Approved', 'Closed', 'Opened', 'P2'].map((id) => `es/S/${id}`).sort());
+        // an event: the command causing it with its actor's copy beside it, the policy reacting (at Design Level the time
+        // order is not drawn: the placement shows it)
+        expect(kept('n:e:Closed')).toEqual(['Boss', 'Clerk', 'Close', 'Closed'].map((id) => `es/S/${id}`).sort());
+        expect(kept('n:e:Approved')).toEqual(['Approve', 'Approved', 'P2'].map((id) => `es/S/${id}`).sort());
         // one copy of the actor: every copy, and the commands each stands beside
         expect(kept('n:n:Clerk@Open')).toEqual(['Clerk', 'Close', 'Open'].map((id) => `es/S/${id}`).sort());
         expect(focusedItems(items, new Set(['n:n:Clerk@Open']))!.has('n:n:Clerk@Close')).toBe(true);
         // the edges kept are those joining the kept notes to the selection
         const edges = [...focusedItems(items, new Set(['n:e:Closed']))!].filter((id) => id.startsWith('e:'));
         expect(edges.every((id) => items.some((i) => i.id === id && i.type === 'edge'))).toBe(true);
-        expect(edges.length).toBe(4);
+        expect(edges.length).toBe(3);
         // nothing selected, or an edge: nothing is dimmed
         expect(focusedItems(items, new Set())).toBeUndefined();
         const edge = items.find((s) => s.type === 'edge')!;
@@ -323,12 +324,12 @@ describe('the focus of a selected note in a view of stages (the grid) and a time
     const noteOf = (list: readonly SceneItem[], local: string): string => list.find((i) => i.type === 'node' && i.elementId === `es/S/${local}`)!.id;
     const es = (...ids: string[]): string[] => ids.map((id) => `es/S/${id}`).sort();
 
-    test('Design Level of the stages: the neighbours in time (the exception included), the cause with its actor, the reactions, the hotspot', async () => {
+    test('Design Level of the stages: the exception branching off, the cause with its actor, the reactions, the hotspot', async () => {
         const list = await items('design-level|');
         expect(list.find((i) => i.type === 'group' && i.id.startsWith('n:st:'))).toBeDefined();
-        expect(focusElements(list, [noteOf(list, 'B')])).toEqual(es('A', 'B', 'C', 'X', 'DoB', 'Clerk', 'P', 'H'));
-        // in a group: through the group's time order
-        expect(focusElements(list, [noteOf(list, 'G1')])).toEqual(es('D', 'G1'));
+        expect(focusElements(list, [noteOf(list, 'B')])).toEqual(es('B', 'X', 'DoB', 'Clerk', 'P', 'H'));
+        // in a group: no time order at Design Level, its own note only
+        expect(focusElements(list, [noteOf(list, 'G1')])).toEqual(es('G1'));
         // a container is never dimmed, so never listed
         expect([...focusedItems(list, new Set([noteOf(list, 'G1')]))!].some((id) => list.find((i) => i.id === id)?.type === 'group')).toBe(false);
     });
@@ -336,9 +337,11 @@ describe('the focus of a selected note in a view of stages (the grid) and a time
     test('Big Picture of the stages and a timeline’s view (ELK)', async () => {
         const big = await items('big-picture|');
         expect(focusElements(big, [noteOf(big, 'B')])).toEqual(es('A', 'B', 'C', 'X', 'H'));
+        // in a group: through the group's time order
+        expect(focusElements(big, [noteOf(big, 'G1')])).toEqual(es('D', 'G1'));
         const main = await items('design-level|Main');
         // the cause of B with its actor, as on the integrated canvas
-        expect(focusElements(main, [noteOf(main, 'B')])).toEqual(es('A', 'B', 'C', 'DoB', 'Clerk', 'P', 'H'));
+        expect(focusElements(main, [noteOf(main, 'B')])).toEqual(es('B', 'DoB', 'Clerk', 'P', 'H'));
         const grouped = await items('big-picture|Main2');
         expect(focusElements(grouped, [noteOf(grouped, 'G2')])).toEqual(es('D', 'G2'));
         // the group's step selected from before it brings the group's events along

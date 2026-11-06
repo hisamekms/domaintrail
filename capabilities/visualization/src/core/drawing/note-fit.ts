@@ -14,6 +14,7 @@ export const NOTE_KINDS: ReadonlySet<string> = new Set([
     'esAggregate',
     'esReadModel',
     'esHotspot',
+    'esGap',
 ]);
 
 /** How a label is drawn in its note: its font size and line height (px), and the lines it is clamped to (none: all). */

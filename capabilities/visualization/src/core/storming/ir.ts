@@ -120,7 +120,24 @@ export interface RenderStageNode {
     stageId: string;
 }
 
-export type RenderNode = RenderEventNode | RenderGroupNode | RenderElementNode | RenderStageNode;
+/**
+ * The empty slot of a relation an open hotspot keeps undecided (ADR 0032, `openGaps`): beside a command note, where its
+ * issuer (`by`) or its handler (`handledBy`) would stand, so that a gap the validator lets pass stays visible.
+ */
+export interface RenderGapNode {
+    type: 'gap';
+    /** `n:?<missing>@<command note>` (the command note's ID without `n:`). */
+    id: string;
+    /** The command. */
+    commandId: string;
+    /** The open hotspot that asks about it. */
+    hotspotId: string;
+    missing: 'by' | 'handledBy';
+    /** The command note it stands beside, its ID without `n:`. */
+    use: string;
+}
+
+export type RenderNode = RenderEventNode | RenderGroupNode | RenderElementNode | RenderStageNode | RenderGapNode;
 
 export type RenderEdge =
     /** The drawing of a semantic edge; one semantic edge may be drawn several times when its event is. */

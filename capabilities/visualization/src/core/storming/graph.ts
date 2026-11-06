@@ -36,6 +36,12 @@ const NODE_KINDS: Record<NodeElementKind, NodeKind> = {
 };
 
 const stereotype = (ja: string, en: string): Texts => perLang({ ja: `«${ja}»`, en: `«${en}»` });
+/** What a gap's empty slot asks. */
+const GAP_LABELS: Record<'by' | 'handledBy', Texts> = {
+    by: perLang({ ja: '誰が発行する？', en: 'Who issues it?' }),
+    handledBy: perLang({ ja: '誰が処理する？', en: 'Who handles it?' }),
+};
+
 const STEREOTYPES: Record<NodeElementKind, Texts> = {
     event: stereotype('イベント', 'event'),
     command: stereotype('コマンド', 'command'),
@@ -50,6 +56,8 @@ const STEREOTYPES: Record<NodeElementKind, Texts> = {
 export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
     const declared = firstDeclarations(storming);
     const label = (id: string): Texts => named(id, declared.get(id)?.label);
+    /** Design Level: the time order is laid out but drawn only where the placement cannot show it. */
+    const design = render.options.level === 'design-level';
     const parentOf = new Map(render.nodes.flatMap((n) => (n.type === 'group' ? n.members.map((m) => [m, n.id] as const) : [])));
 
     const node = (n: RenderNode): GraphNode => {
@@ -69,6 +77,20 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
                 elementId: esElementId(storming.id, ids[0]),
                 width: 0,
                 height: 0,
+            };
+        }
+        if (n.type === 'gap') {
+            // the empty slot of an undecided issuer or handler: a dashed note asking it, the hotspot's when selected
+            return {
+                id: n.id,
+                kind: 'esGap',
+                label: GAP_LABELS[n.missing],
+                stereotype: stereotype('未決定', 'undecided'),
+                lines: [],
+                elementId: esElementId(storming.id, n.hotspotId),
+                ...(render.grid ? {} : { attachTo: `n:${n.use}` }),
+                width: STICKY_NOTE.side,
+                height: STICKY_NOTE.side,
             };
         }
         const [elementId, kind] = n.type === 'event' ? [n.eventId, 'event' as const] : [n.elementId, n.kind];
@@ -105,6 +127,8 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
     if (render.grid) {
         // a view of stages: every render node is drawn, in its cell; the edge into an exception's lane names it
         const { cells, frames, looseRow, captions } = render.grid;
+        // at Design Level the grid's columns show the time order: only a lane's branch and a `then` are drawn
+        const quiet = (e: RenderEdge): boolean => design && ((e.type === 'sequence' && !captions[e.id]) || e.type === 'stage');
         const edge = (e: RenderEdge): GraphEdge => ({
             id: e.id,
             kind: edgeKind(e),
@@ -112,6 +136,7 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
             target: e.target,
             ...(captions[e.id] && { label: timelinesOf(captions[e.id]) }),
             ...tooltip(e),
+            ...(quiet(e) && { hidden: true as const }),
         });
         return {
             id: stormingGraphId(storming.id, render.options),
@@ -121,7 +146,14 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
         };
     }
     if (render.options.timelineId !== undefined) {
-        const edge = (e: RenderEdge): GraphEdge => ({ id: e.id, kind: edgeKind(e), source: e.source, target: e.target, ...tooltip(e) });
+        const edge = (e: RenderEdge): GraphEdge => ({
+            id: e.id,
+            kind: edgeKind(e),
+            source: e.source,
+            target: e.target,
+            ...tooltip(e),
+            ...(design && e.type === 'sequence' && { hidden: true as const }),
+        });
         return attach({ id: stormingGraphId(storming.id, render.options), nodes: render.nodes.map(node), edges: render.edges.map(edge) });
     }
 
@@ -159,7 +191,14 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
     }
     for (const [id, s] of sequences) {
         const ids = [...s.timelineIds].sort();
-        edges.set(id, { id, kind: 'esSequence', source: s.source, target: s.target, ...(ids.length < every.size ? { label: timelinesOf(ids) } : {}) });
+        edges.set(id, {
+            id,
+            kind: 'esSequence',
+            source: s.source,
+            target: s.target,
+            ...(ids.length < every.size ? { label: timelinesOf(ids) } : {}),
+            ...(design && { hidden: true as const }),
+        });
     }
     return attach({ id: stormingGraphId(storming.id, render.options), nodes: [...nodes.values()], edges: [...edges.values()] });
 }
@@ -177,7 +216,7 @@ function attach(graph: Graph): Graph {
         const others = new Set(own.map((e) => (e.source === n.id ? e.target : e.source)));
         if (others.size !== 1) return n;
         const anchor = byId.get([...others][0]!);
-        const fits = n.kind === 'esHotspot' ? anchor !== undefined && anchor.kind !== 'esHotspot' : anchor?.kind === 'esCommand';
+        const fits = n.kind === 'esHotspot' ? anchor !== undefined && anchor.kind !== 'esHotspot' : anchor?.kind === 'esCommand' || anchor?.kind === 'esPolicy';
         return anchor && fits && anchor.parent === n.parent ? { ...n, attachTo: anchor.id } : n;
     });
     return { ...graph, nodes };

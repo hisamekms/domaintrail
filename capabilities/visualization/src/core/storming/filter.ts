@@ -32,6 +32,9 @@ export function filterEdges(edges: readonly SemanticEdge[], events: ReadonlySet<
         if (e.kind === 'reads') readModels.add(e.sourceId);
     }
     for (const e of edges) if (e.kind === 'readmodel-from' && events.has(e.sourceId) && readModels.has(e.targetId)) kept.add(e);
+    // the actor applying a policy kept by hand
+    const policies = new Set([...kept].filter((e) => e.kind === 'on').map((e) => e.targetId));
+    for (const e of edges) if (e.kind === 'by' && policies.has(e.targetId)) kept.add(e);
     // a hotspot on an event in view, or on an element the edges kept draw
     const drawn = new Set([...kept].flatMap((e) => [e.sourceId, e.targetId]));
     for (const e of edges) if (e.kind === 'hotspot-on' && (events.has(e.targetId) || drawn.has(e.targetId))) kept.add(e);

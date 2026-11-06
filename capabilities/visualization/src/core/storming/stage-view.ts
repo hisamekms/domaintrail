@@ -26,6 +26,7 @@ import {
     drawnInSections,
     firstDeclarations,
     isDesignLevelOnly,
+    openGaps,
     type NodeElement,
     type NodeElementKind,
     orderStages,
@@ -234,8 +235,9 @@ export function projectStageView(storming: Storming, options: ViewOptions): Rend
             (!one || drawn.some((e) => e.sourceId === n.id || e.targetId === n.id)),
     );
     // the Design Level along the grammar (`chains.ts`): copies per use and per step, the aggregate deciding
-    const chains = drawChains(elements, drawn, places);
+    const chains = drawChains(elements, drawn, places, options.level === 'design-level' ? openGaps(storming) : []);
     for (const n of chains.nodes) nodes.set(n.id, n);
+    for (const n of chains.gaps) nodes.set(n.id, n);
     for (const e of chains.edges) edges.set(e.id, e);
     maxRow = placeChains(chains, cells, frames, loose, base, maxRow);
 
@@ -344,10 +346,13 @@ function placeChains(chains: Chains, cells: Record<string, GridCell>, frames: St
         else if (e.kind === 'hotspot-on') subjectOf.set(e.source, e.target);
     }
     /** What stands at each step. */
-    const at = new Map<string, { chains: Chain[]; hotspots: string[]; policies: string[]; policyHotspots: string[]; merged: Merged[] }>();
+    const at = new Map<
+        string,
+        { chains: Chain[]; hotspots: string[]; policies: string[]; policyIssuers: string[]; policyHotspots: string[]; merged: Merged[] }
+    >();
     const stepOf = (slot: string) => {
         let s = at.get(slot);
-        if (!s) at.set(slot, (s = { chains: [], hotspots: [], policies: [], policyHotspots: [], merged: [] }));
+        if (!s) at.set(slot, (s = { chains: [], hotspots: [], policies: [], policyIssuers: [], policyHotspots: [], merged: [] }));
         return s;
     };
     /** The merged handler each command note's chain converges on (the first, by ID). */
@@ -382,6 +387,13 @@ function placeChains(chains: Chains, cells: Record<string, GridCell>, frames: St
     }
     for (const n of sorted) {
         const command = n.use !== undefined ? chainOf.get(`n:${n.use}`) : undefined;
+        // the actor applying a policy by hand: above the policy
+        const policy = n.use !== undefined && byId.get(`n:${n.use}`)?.kind === 'policy' ? `n:${n.use}` : undefined;
+        if (policy !== undefined && role.get(n.id) === 'issuer' && placed.has(policy)) {
+            stepOf(slotOf(policy)!).policyIssuers.push(n.id);
+            placed.add(n.id);
+            continue;
+        }
         if (!command || placed.has(n.id)) continue;
         const r = role.get(n.id);
         if (r === 'issuer') command.chain.issuers.push(n.id);
@@ -390,6 +402,17 @@ function placeChains(chains: Chains, cells: Record<string, GridCell>, frames: St
         else continue;
         chainOf.set(n.id, { chain: command.chain, sub: r === 'issuer' ? 'command' : r });
         placed.add(n.id);
+    }
+    // an undecided issuer or handler: its empty slot where the note would stand
+    for (const g of [...chains.gaps].sort((a, b) => compare(a.id, b.id))) {
+        const command = chainOf.get(`n:${g.use}`);
+        if (!command) {
+            loose.push(g.id);
+            continue;
+        }
+        if (g.missing === 'by') command.chain.issuers.push(g.id);
+        else command.chain.handler ??= g.id;
+        chainOf.set(g.id, { chain: command.chain, sub: g.missing === 'by' ? 'command' : 'handler' });
     }
     for (const n of sorted) {
         if (n.kind !== 'hotspot') continue;
@@ -438,7 +461,7 @@ function placeChains(chains: Chains, cells: Record<string, GridCell>, frames: St
         const height = Math.max(
             s.chains.reduce((h, c) => h + chainHeight(c), 0),
             s.hotspots.length,
-            s.policies.length + s.policyHotspots.length,
+            s.policies.length + s.policyIssuers.length + s.policyHotspots.length,
         );
         band.set(row, Math.max(band.get(row) ?? 0, height));
     }
@@ -505,7 +528,8 @@ function placeChains(chains: Chains, cells: Record<string, GridCell>, frames: St
         }
         s.hotspots.forEach((id, i) => place(id, 'event', bottom - i));
         s.policies.forEach((id, i) => place(id, 'policy', bottom - i));
-        s.policyHotspots.forEach((id, i) => place(id, 'policy', bottom - s.policies.length - i));
+        s.policyIssuers.forEach((id, i) => place(id, 'policy', bottom - s.policies.length - i));
+        s.policyHotspots.forEach((id, i) => place(id, 'policy', bottom - s.policies.length - s.policyIssuers.length - i));
     }
     return eventRow[lastLane] ?? 0;
 }

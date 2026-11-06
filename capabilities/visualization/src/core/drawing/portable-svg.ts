@@ -360,6 +360,8 @@ const DEFAULT_BOX: BoxLook = { border: '--grey', width: 1.5, radius: 8, paper: '
 
 /** A sticky note's paper, edge and text (`.dn-es*`). */
 const noteVars = (kind: string): { paper: PaletteVar; border: PaletteVar; text: PaletteVar } => {
+    // a gap's empty slot (ADR 0032): the canvas's paper, a muted dashed edge and text
+    if (kind === 'esGap') return { paper: '--node-bg', border: '--muted', text: '--muted' };
     const k = kind.slice(2).toLowerCase();
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the note kinds' variables are in PALETTE_VARS
     return { paper: `--es-${k}` as PaletteVar, border: `--es-${k}-border` as PaletteVar, text: `--es-${k}-text` as PaletteVar };
@@ -528,7 +530,7 @@ class Drawing {
             const v = p.resolution !== undefined ? RESOLVED_NOTE : noteVars(p.kind);
             border = NOTE_BORDER;
             radius = p.kind === 'esActor' ? 18 : 3;
-            const style = p.kind === 'esExternal' || removed ? dashed(border) : undefined;
+            const style = p.kind === 'esExternal' || p.kind === 'esGap' || removed ? dashed(border) : undefined;
             out.push(this.ring(x, y, p, radius));
             out.push(borderRect(x, y, p.w, p.h, radius, { fill: this.c(v.paper), stroke: this.c(v.border), width: border, dash: style }));
             out.push(this.noteHead(x, y, p, this.c(v.text)));

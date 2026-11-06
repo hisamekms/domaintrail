@@ -22,9 +22,9 @@
  *   notes. `k` counts from 1. A policy's note issues the command's note at the nearest slot after its own (every note of
  *   the command when none is after it). With a single slot, nothing is copied per step.
  */
-import type { NodeElement, NodeElementKind, SemanticEdge } from '@domaintrail/storming';
+import type { Gap, NodeElement, NodeElementKind, SemanticEdge } from '@domaintrail/storming';
 import { semanticEdgeKey } from '@domaintrail/storming';
-import type { RenderEdge, RenderElementNode } from './ir.js';
+import type { RenderEdge, RenderElementNode, RenderGapNode } from './ir.js';
 import { compare } from './trie.js';
 
 /** An event note of the view, and where it stands: its slot, and the slot's place in time (to order copies). */
@@ -41,6 +41,8 @@ export interface EventPlace {
 /** The elements of a view (not events) drawn along the grammar, their semantic edges, and the slot of each anchored note. */
 export interface Chains {
     nodes: RenderElementNode[];
+    /** The empty slots of the commands' gaps an open hotspot keeps open, beside each command note. */
+    gaps: RenderGapNode[];
     edges: RenderEdge[];
     /** The slot each note stands at, when it stands at one (a note of no event in view stands at none). */
     slots: Map<string, string>;
@@ -86,7 +88,12 @@ interface Note {
 /**
  * Draws `elements` (shown at this level, never events) with the semantic edges `drawn`, around the event notes `events`.
  */
-export function drawChains(elements: readonly ElementOfView[], drawn: readonly SemanticEdge[], events: readonly EventPlace[]): Chains {
+export function drawChains(
+    elements: readonly ElementOfView[],
+    drawn: readonly SemanticEdge[],
+    events: readonly EventPlace[],
+    openGaps: readonly Gap[] = [],
+): Chains {
     const shown = new Map(elements.map((n) => [n.id, n]));
     const eventsOf = new Map<string, EventPlace[]>();
     for (const e of events) eventsOf.set(e.eventId, [...(eventsOf.get(e.eventId) ?? []), e]);
@@ -298,7 +305,19 @@ export function drawChains(elements: readonly ElementOfView[], drawn: readonly S
             ...(keys.length > 1 && { merged: keys }),
         });
     }
-    return { nodes: [...nodes.values()], edges: [...edges.values()], slots };
+    // the empty slot of an issuer or a handler an open hotspot keeps undecided, beside each note of its command
+    const gaps: RenderGapNode[] = [];
+    for (const g of openGaps) {
+        if (g.kind !== 'command' || g.question === undefined) continue;
+        for (const missing of (['by', 'handledBy'] as const).filter((m) => g.missing.includes(m))) {
+            for (const note of notesOf(g.elementId)) {
+                const id = `n:?${missing}@${note.key}`;
+                gaps.push({ type: 'gap', id, commandId: g.elementId, hotspotId: g.question, missing, use: note.key });
+                if (note.slot !== undefined) slots.set(id, note.slot);
+            }
+        }
+    }
+    return { nodes: [...nodes.values()], edges: [...edges.values()], slots, gaps };
 }
 
 /** The notes of a command a policy's note issues: the one at the nearest slot after the policy's, else every one. */
