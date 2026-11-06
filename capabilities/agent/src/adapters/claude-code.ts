@@ -136,7 +136,9 @@ export const CONFIG_FILE_NAMES: readonly string[] = ['domaintrail.jsonc', 'domai
 
 /**
  * The files only dt writes, which the agents read (the plan's "The journey file"): the journey file, whose briefs,
- * goals and marks change only by people's explicit acts in the session.
+ * goals and marks change only by people's explicit acts in the session. dt writes it at the workspace root, and may
+ * while a run runs: the runner's scan skips it there (`scanWorkspace`'s `skipFiles`), so that those writes are not
+ * taken for the agent's.
  */
 export const DT_WRITTEN_FILE_NAMES: readonly string[] = ['domaintrail.journey.json'];
 
