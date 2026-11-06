@@ -6,7 +6,7 @@ import { localNameProblem, referencesTo, type Storming } from '@domaintrail/stor
 import { Act } from '../shared/act';
 import { TOOLTIP_ATTR } from '../tooltip';
 import { useT } from '../i18n';
-import { EDIT_FIELDS, isMac, type Sticky, type StickyField, type StickyFieldId } from './registry';
+import { isMac, type Sticky, type StickyField, type StickyFieldId } from './registry';
 
 /** Where a window is anchored: the sticky's box on the canvas (viewport pixels), and the canvas's size. */
 export interface Anchor {
@@ -215,20 +215,21 @@ export function editValues(sticky: Sticky, fields: readonly StickyField[], value
 /**
  * 編集: a window built from the fields the sticky's kind declares (`EDIT_FIELDS`): a label and a name (checked as typed;
  * a new name says what it rewrites), or a hotspot's question and resolution on several lines (Enter a new line,
- * ⌘/Ctrl+Enter saves; a resolution emptied reopens it). `focus`: the field focused first.
+ * ⌘/Ctrl+Enter saves; a resolution emptied reopens it). The action that opens it says which fields (`windowFields`).
  */
 export function EditForm(props: {
     sticky: Sticky;
     storming: Storming;
     anchor: Anchor;
-    focus?: StickyFieldId;
+    /** The fields shown: those the action edits of the kind's (`windowFields`). */
+    fields: readonly StickyField[];
     onSave: (change: EditValues) => Promise<SaveResult>;
     onClose: () => void;
 }): ReactNode {
     const { sticky, storming } = props;
     const t = useT().stickies;
     const e = t.edit;
-    const fields = EDIT_FIELDS[sticky.kind];
+    const { fields } = props;
     const [values, setValues] = useState(() => fieldValues(sticky));
     const set = (id: StickyFieldId) => (v: string) => setValues((old) => ({ ...old, [id]: v }));
     const errorId = useId();
@@ -260,10 +261,9 @@ export function EditForm(props: {
     return (
         <Popover
             anchor={props.anchor}
-            label={sticky.kind === 'hotspot' ? e.hotspotDialog : e.dialog}
+            label={fields.some((f) => f.id === 'resolution') ? t.resolve.dialog : sticky.kind === 'hotspot' ? e.hotspotDialog : e.dialog}
             onCancel={props.onClose}
             onSubmit={save}
-            {...(props.focus !== undefined && { focus: props.focus })}
         >
             {fields.map((f) =>
                 f.lines === 'one' ? (

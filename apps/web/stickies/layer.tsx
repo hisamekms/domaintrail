@@ -34,7 +34,9 @@ import {
     type Sticky,
     type StickyAction,
     type StickyActionId,
-    type StickyFieldId,
+    type StickyField,
+    STICKY_ACTIONS,
+    windowFields,
 } from './registry';
 
 /** A person's edit as the page sends it (`POST /api/session/stickies`). */
@@ -117,8 +119,14 @@ export interface StickyActions {
     readonly palette: readonly PaletteItem[];
 }
 
-/** A window open on a sticky: its edit (`focus`: the field focused first), or a new hotspot on it. */
-type Form = { readonly kind: 'edit' | 'hotspot'; readonly sticky: Sticky; readonly anchor: Anchor; readonly focus?: StickyFieldId };
+/** A window open on a sticky: an editing action's (the fields it shows), or a new hotspot on it. */
+type Form = { readonly kind: 'edit' | 'hotspot'; readonly sticky: Sticky; readonly anchor: Anchor; readonly fields?: readonly StickyField[] };
+
+/** The fields the window of an editing action shows for a sticky (from the registry). */
+const editingFields = (id: StickyActionId, sticky: Sticky): StickyField[] => {
+    const action = STICKY_ACTIONS.find((a) => a.id === id);
+    return action ? windowFields(action, sticky) : [];
+};
 
 /** Gives the canvas the keyboard focus (its own keys: Escape clears the selection), without scrolling the page. */
 export const focusCanvas = (canvas: DiagramCanvas): void => canvas.container().focus({ preventScroll: true });
@@ -200,9 +208,9 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
         [canvas],
     );
     const open = useCallback(
-        (kind: Form['kind'], sticky: Sticky | undefined, focus?: StickyFieldId) => {
+        (kind: Form['kind'], sticky: Sticky | undefined, fields?: readonly StickyField[]) => {
             const anchor = sticky && anchorOf(sticky);
-            if (sticky && anchor) setForm({ kind, sticky, anchor, ...(focus !== undefined && { focus }) });
+            if (sticky && anchor) setForm({ kind, sticky, anchor, ...(fields !== undefined && { fields }) });
         },
         [anchorOf],
     );
@@ -236,7 +244,10 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
                 case 'chat':
                     return session?.chat.add();
                 case 'edit':
-                    return open('edit', first);
+                case 'resolve':
+                    // the window of the fields this action edits (編集: a label and a name, or a hotspot's question;
+                    // 解決を書く: a hotspot's resolution)
+                    return first ? open('edit', first, editingFields(id, first)) : undefined;
                 case 'knowledge':
                     if (first) input.knowledge?.open(first.id);
                     return;
@@ -250,9 +261,6 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
                     return;
                 case 'addHotspot':
                     return open('hotspot', first);
-                case 'resolve':
-                    // the hotspot's one window, at its resolution
-                    return open('edit', first, 'resolution');
                 case 'copyLink': {
                     if (!first) return;
                     const link = elementLink(window.location.href, first.id);
@@ -309,7 +317,7 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
             if (!sticky || !session?.live) return;
             e.preventDefault();
             // after the canvas's own handling of the click
-            requestAnimationFrame(() => open('edit', sticky));
+            requestAnimationFrame(() => open('edit', sticky, editingFields('edit', sticky)));
         };
         const onContext = (e: MouseEvent): void => {
             const sticky = stickyUnder();
@@ -435,7 +443,7 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
                     sticky={form.sticky}
                     storming={formStorming}
                     anchor={form.anchor}
-                    {...(form.focus !== undefined && { focus: form.focus })}
+                    fields={form.fields ?? []}
                     onClose={closeForm}
                     onSave={(change) => {
                         const { sticky } = form;

@@ -9,7 +9,7 @@ import { analyzeStormings } from '@domaintrail/storming';
 import { MESSAGES } from '../i18n';
 import { actKinds } from '../test-helpers';
 import { EditForm } from '../stickies/forms';
-import { stickyOf } from '../stickies/registry';
+import { stickyOf, windowFields } from '../stickies/registry';
 import { ChatProvider, type ChatContextValue } from './chat-context';
 import { EditRow, EditUnit } from './edit-unit';
 import { streamItems, unreadCount } from './stream';
@@ -113,6 +113,7 @@ describe('the edit window', () => {
         if (!sticky) throw new Error('no sticky');
         const html = renderToStaticMarkup(
             <EditForm
+                fields={windowFields({ edits: ['label', 'name', 'question'] }, sticky)}
                 sticky={sticky}
                 storming={storming}
                 anchor={{ x: 0, y: 0, w: 100, h: 60, width: 800, height: 600 }}

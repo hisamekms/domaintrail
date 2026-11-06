@@ -104,7 +104,16 @@ export interface StickyAction {
     readonly shortcut?: Shortcut;
     /** Whether it applies to `sticky` here (for several, to each of them). */
     readonly applies: (sticky: Sticky, context: ActionContext) => boolean;
+    /**
+     * An action that opens the edit window: which of the kind's fields (`EDIT_FIELDS`) it shows, in the kind's order
+     * (編集: the label and the name, or a hotspot's question; 解決を書く: the resolution).
+     */
+    readonly edits?: readonly StickyFieldId[];
 }
+
+/** The fields an editing action's window shows for a sticky: those of its kind the action edits. */
+export const windowFields = (action: Pick<StickyAction, 'edits'>, sticky: Pick<Sticky, 'kind'>): StickyField[] =>
+    EDIT_FIELDS[sticky.kind].filter((f) => action.edits?.includes(f.id) === true);
 
 /** The kinds a hotspot can be put on: any sticky but a hotspot (the grammar's `hotspot { on <any sticky> }`). */
 export const HOTSPOT_TARGETS: readonly NodeElementKind[] = ['event', 'command', 'policy', 'aggregate', 'readmodel', 'actor', 'external'];
@@ -114,7 +123,16 @@ const REF_KINDS: readonly NodeElementKind[] = ['event', 'command', 'aggregate'];
 
 export const STICKY_ACTIONS: readonly StickyAction[] = [
     { id: 'chat', icon: MessageSquarePlus, group: 'frequent', frequent: true, multi: true, shortcut: { key: 'Enter' }, applies: (_, c) => c.live },
-    { id: 'edit', icon: PencilLine, group: 'frequent', frequent: true, multi: false, shortcut: { key: 'F2' }, applies: (_, c) => c.live },
+    {
+        id: 'edit',
+        icon: PencilLine,
+        group: 'frequent',
+        frequent: true,
+        multi: false,
+        shortcut: { key: 'F2' },
+        applies: (_, c) => c.live,
+        edits: ['label', 'name', 'question'],
+    },
     { id: 'knowledge', icon: Lightbulb, group: 'see', frequent: false, multi: false, applies: (s, c) => c.hasKnowledge?.(s) === true },
     {
         id: 'seeModel',
@@ -142,7 +160,15 @@ export const STICKY_ACTIONS: readonly StickyAction[] = [
         applies: (s, c) => c.live && HOTSPOT_TARGETS.includes(s.kind),
     },
     // a hotspot's own frequent action: on its toolbar beside 編集 (解決を直す once resolved)
-    { id: 'resolve', icon: CircleCheck, group: 'write', frequent: true, multi: false, applies: (s, c) => c.live && s.kind === 'hotspot' },
+    {
+        id: 'resolve',
+        icon: CircleCheck,
+        group: 'write',
+        frequent: true,
+        multi: false,
+        applies: (s, c) => c.live && s.kind === 'hotspot',
+        edits: ['resolution'],
+    },
     { id: 'copyLink', icon: Link, group: 'other', frequent: false, multi: false, shortcut: { key: 'c', mod: true, shift: true }, applies: () => true },
 ];
 

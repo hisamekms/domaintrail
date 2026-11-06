@@ -219,8 +219,8 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   and everyone's canvas shows it; if someone (or the AI) changed the sticky meanwhile, the window says what it is now.
   ホットスポットを付ける opens a window with the question only, on several lines (Enter starts a new line, ⌘Enter / Ctrl+Enter
   adds it): its name (ID) is not asked — dt writes it at once as `<Sticky>Question` and selects it, and the agent's
-  light model renames it from the question a few seconds later (knowledge or not; not when it was changed meanwhile). A hotspot's 編集 — and 解決を書く (解決を直す once resolved) on its toolbar, at the resolution — opens one window with
-  its 問い and 解決 on several lines (⌘Enter / Ctrl+Enter saves), never its name; emptying 解決 reopens it. Each edit is in AI の作業.
+  light model renames it from the question a few seconds later (knowledge or not; not when it was changed meanwhile). On a hotspot, 編集 (or a double-click, `F2`) opens its 問い alone, and 解決を書く (解決を直す once resolved) on its toolbar
+  its 解決 alone, on several lines (⌘Enter / Ctrl+Enter saves); never its name; emptying 解決 reopens it. Each edit is in AI の作業.
   **Back from a jump**: after ドメインモデルで見る (or このタイムラインで見る), the detail's back button names the sticky
   (「← 注文を受け付けた」) and returns to the storming as it was shown — the same view, level and scope, the camera, the
   sticky selected; the browser's Back does the same.

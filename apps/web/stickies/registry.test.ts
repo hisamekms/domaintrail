@@ -12,6 +12,7 @@ import {
     escapeClearsSelection,
     HOTSPOT_TARGETS,
     toolbarActions,
+    windowFields,
     shortcutText,
     STICKY_ACTIONS,
     stickyOf,
@@ -178,5 +179,15 @@ describe('the fields a person edits, by kind', () => {
         const event = sticky('OrderPlaced');
         expect(editValues(event, EDIT_FIELDS.event, { ...fieldValues(event), label: '' })).toEqual({});
         expect(editValues(event, EDIT_FIELDS.event, { ...fieldValues(event), name: 'Placed' })).toEqual({ name: 'Placed' });
+    });
+});
+
+describe("an editing action's window", () => {
+    const action = (id: string) => STICKY_ACTIONS.find((a) => a.id === id) ?? { edits: [] };
+    test("編集: a label and a name, or a hotspot's question only; 解決を書く: a hotspot's resolution only", () => {
+        expect(windowFields(action('edit'), sticky('OrderPlaced')).map((f) => f.id)).toEqual(['label', 'name']);
+        expect(windowFields(action('edit'), sticky('IssuedEvent')).map((f) => f.id)).toEqual(['question']);
+        expect(windowFields(action('resolve'), sticky('IssuedEvent')).map((f) => f.id)).toEqual(['resolution']);
+        expect(windowFields(action('copyLink'), sticky('IssuedEvent'))).toEqual([]);
     });
 });
