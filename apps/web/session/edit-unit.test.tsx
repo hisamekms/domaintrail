@@ -11,7 +11,8 @@ import { actKinds } from '../test-helpers';
 import { EditForm } from '../stickies/forms';
 import { stickyOf } from '../stickies/registry';
 import { ChatProvider, type ChatContextValue } from './chat-context';
-import { EditUnit } from './edit-unit';
+import { EditRow, EditUnit } from './edit-unit';
+import { streamItems, unreadCount } from './stream';
 import { changeUnits } from './history';
 
 const at = '2026-11-06T10:00:00.000Z';
@@ -45,8 +46,11 @@ function render(run: object, control: boolean, runs: object[] = [run]): string {
     const units = changeUnits(state as never);
     const chat = {
         tx: MESSAGES.ja.session,
-        session: { state },
+        session: { state: { ...state, session: { facilitator: 'facilitator' } } },
         control,
+        solo: false,
+        avatarOf: () => undefined,
+        onNavigate: () => {},
         nameOf: (id: string) => (id === 'bob' ? 'Bob' : id),
     } as unknown as ChatContextValue;
     return renderToStaticMarkup(
@@ -121,5 +125,78 @@ describe('the edit window', () => {
         expect(html).toContain('value="OrderConfirmed"');
         // nothing changed yet: the decision is disabled
         expect(html).toMatch(/<button disabled=""[^>]*class="act act-decide">保存/);
+    });
+});
+
+describe("a person's edit in the chat", () => {
+    function chatRow(run: object, control: boolean): string {
+        const chat = {
+            tx: MESSAGES.ja.session,
+            session: { me: { participant: { id: 'me' } }, state: { runs: [run], revisions: [], session: { facilitator: 'facilitator' } } },
+            control,
+            solo: false,
+            avatarOf: () => undefined,
+            onNavigate: () => {},
+            nameOf: (id: string) => (id === 'bob' ? 'Bob' : id),
+        } as unknown as ChatContextValue;
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- a test's run
+        return renderToStaticMarkup(
+            <ChatProvider value={chat}>
+                <EditRow run={run as never} continues={false} />
+            </ChatProvider>,
+        );
+    }
+
+    test('an activity row of the person: their avatar, 「Bobが編集しました」, the sticky as its # chip, old → new, 打ち消す for the facilitator', () => {
+        const html = chatRow(edited(), true);
+        expect(html).toContain('chat-message chat-edit');
+        expect(html).not.toContain('chat-bubble');
+        expect(html).toContain('session-avatar');
+        expect(html).toContain('Bobが編集しました');
+        expect(html).toContain('#荷物が戻った');
+        expect(html).toContain('<del>返品が届いた</del> → <span>荷物が戻った</span>');
+        expect(actKinds(html)).toEqual(['danger']);
+        expect(actKinds(chatRow(edited(), false))).toEqual([]);
+    });
+
+    test("a new hotspot and a resolution in the chat's words; a conflict with its choice", () => {
+        const hotspot = edited({
+            input: {
+                requests: [
+                    {
+                        request: 'm1',
+                        author: 'bob',
+                        targets: [],
+                        body: 'x',
+                        edit: { kind: 'HotspotAdded', storming: 'Returns', path: 'p', hotspot: 'Broken', label: '壊れていたら？', on: 'Received' },
+                    },
+                ],
+            },
+        });
+        expect(chatRow(hotspot, false)).toContain('ホットスポットを付けました: 壊れていたら？');
+        const resolved = edited({
+            input: {
+                requests: [
+                    {
+                        request: 'm1',
+                        author: 'bob',
+                        targets: [],
+                        body: 'x',
+                        edit: { kind: 'HotspotResolved', storming: 'Returns', path: 'p', hotspot: 'Broken', resolution: '返金しない' },
+                    },
+                ],
+            },
+        });
+        expect(chatRow(resolved, false)).toContain('解決を書きました: 返金しない');
+        expect(actKinds(chatRow(edited({ conflict: { run: 'run1', runLabel: '返品を受け取った', settled: false } }), false))).toEqual(['decide-sub', 'decide']);
+    });
+
+    test('in the stream where it was written, as an edit row: its message is not one, and it counts as nothing unread', () => {
+        const request = { id: 'm1', session: 's', author: 'bob', targets: [], body: 'x', sentAt: at, mentions: [], state: 'Sent', edit: wording };
+        const state = { runs: [edited()], revisions: [], requests: [request], proposals: [], slashCommands: [], records: [] };
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- a test's partial state
+        const items = streamItems(state as never);
+        expect(items.map((i) => i.kind)).toEqual(['edit']);
+        expect(unreadCount(items, '2026-11-06T09:00:00.000Z')).toBe(0);
     });
 });

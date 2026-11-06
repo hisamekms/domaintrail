@@ -66,7 +66,7 @@ import { messageMarks, updatedCards } from './cards';
 import { ChatProvider, useChat, type ChatContextValue, type Tx } from './chat-context';
 import { ChatHead, type ChatView } from './chat-head';
 import { ComposerResizer, useComposerSize } from './composer-resizer';
-import { EditUnit } from './edit-unit';
+import { EditRow, EditUnit } from './edit-unit';
 import { changeUnits, requestersOf, shownUnits, statusUnit, unfinishedCount, unitName, workGroups, type ChangeUnit, type UnitOutcome } from './history';
 import {
     addChips,
@@ -1083,6 +1083,9 @@ function streamRows(shown: Shown, tx: Tx): Row[] {
                     author: undefined,
                     render: () => <RecordRow record={item.record} hangs={look.hangsOn !== undefined} />,
                 };
+            case 'edit':
+                // the person's, continuing their messages as theirs do
+                return { key: item.key, kind: item.kind, author: item.run.queuedBy, render: (continues) => <EditRow run={item.run} continues={continues} /> };
         }
     };
     const toOf = (item: StreamItem): ReplyTo | undefined =>

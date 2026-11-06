@@ -494,7 +494,8 @@ the journeys panel; the latest card follows the journey file as it is now. A few
   the source diff is open. The dialog keeps one width and its top in place whether the source diff is open or not; its
   body scrolls under the header. The facilitator cancels a running or
   queued card with ✕, after a dialog asks.
-  A person's edit of a sticky is a row of its own there (not in the chat): 「◯◯が編集しました」, its time and what changed
+  A person's edit of a sticky is a row of its own there — and, in the chat, a compact row of that person where it
+  happened (their avatar, no bubble; the sticky as its `#` chip; never a message to the AI, nothing unread): 「◯◯が編集しました」, its time and what changed
   (ラベル: ~~旧~~ → 新; 名前 with the references it rewrote; a hotspot added; a resolution), and for the facilitator
   打ち消す, which reverts it as any card is reverted. An edit made while the AI was working and dropped by its result is
   written again after it (「AI の作業が落としたので…当て直しました」); when the AI's result gave the same sticky other

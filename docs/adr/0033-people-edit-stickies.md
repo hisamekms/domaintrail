@@ -113,8 +113,12 @@ An edit is recorded like a run's work, so that it shows and is reverted with the
 run"): a message (`Request.recordEdit`, its `edit: StickyEdit` — `Wording` with the name and label before and after
 and the references rewritten, `HotspotAdded`, `HotspotResolved` — and the page's sentence 「旧」を「新」に編集) and a
 run created in the new state `Edited` (`AgentRun.recordEdit`: never queued, never claimed), with base and result
-revisions (`RunBase`, `RunResult`), `queuedBy` the person. The message stays out of the chat; AI の作業 shows the unit as
-「◯◯が編集しました」 with its time and old → new, and 打ち消す (the facilitator's, as every revert) sends the revert request
+revisions (`RunBase`, `RunResult`), `queuedBy` the person. The message is no chat message (the AI is not asked, it counts
+as nothing unread); instead the chat shows the edit where it happened as an activity row of that person (their avatar,
+no bubble, continuing their messages as theirs do; 「◯◯が編集しました」 with the sticky's `#` chip, which selects it, and the
+change: ラベル / 名前 旧 → 新, 「ホットスポットを付けました: 〈問い〉」, 「解決を書きました」), re-applications and conflicts
+included (*Decided by the maintainer*). AI の作業 shows the unit as 「◯◯が編集しました」 with its time and old → new. Both
+offer 打ち消す (the facilitator's, as every revert) sends the revert request
 「〈何を直したか〉の変更を打ち消す」 through the queue, which the server reverts mechanically. Migration: none (runs and
 requests are JSON rows; the new event types `run.edited`, `run.edit_conflicted`).
 

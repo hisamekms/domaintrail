@@ -9805,3 +9805,24 @@ button.knowledge-extraction:disabled {
     font-size: var(--fs-small);
     color: var(--muted);
 }
+/* a person's edit of a sticky in the chat (session/edit-unit.tsx): an activity row of theirs, not a bubble — their avatar,
+   a muted line with the sticky's chip, the change under it in the body's size */
+.chat-edit-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+    color: var(--muted);
+    font-size: var(--fs-small);
+}
+.chat-edit-icon {
+    flex: none;
+}
+.chat-edit .edit-unit-body {
+    padding-left: 0;
+    margin-top: var(--space-1);
+}
+.chat-edit.reverted .edit-unit-line {
+    text-decoration: line-through;
+    color: var(--muted);
+}
