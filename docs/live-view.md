@@ -197,8 +197,8 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   AI run: only the label, and for a new name the name and every reference to it in the storming, change in the file —
   and everyone's canvas shows it; if someone (or the AI) changed the sticky meanwhile, the window says what it is now.
   ホットスポットを付ける opens a window with the question only, on several lines (Enter starts a new line, ⌘Enter / Ctrl+Enter
-  adds it): its name (ID) is not asked — the agent's light model gives one from the question (knowledge or not) (「AI が名前を付けています…」 for a few
-  seconds), else dt names it after the sticky (`<Sticky>Question`), and the new hotspot is selected. 解決を書く opens the
+  adds it): its name (ID) is not asked — dt writes it at once as `<Sticky>Question` and selects it, and the agent's
+  light model renames it from the question a few seconds later (knowledge or not; not when it was changed meanwhile). 解決を書く opens the
   same kind of window with the resolution. Each edit is in AI の作業.
   **Back from a jump**: after ドメインモデルで見る (or このタイムラインで見る), the detail's back button names the sticky
   (「← 注文を受け付けた」) and returns to the storming as it was shown — the same view, level and scope, the camera, the

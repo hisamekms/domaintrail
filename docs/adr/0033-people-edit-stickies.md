@@ -65,17 +65,22 @@ tooltips and `aria-keyshortcuts`. The edit action is called 編集 everywhere (t
 window, 「◯◯が編集しました」).
 
 **A hotspot's name is the AI's** (*Decided by the maintainer*). ホットスポットを付ける asks the question only, in a text
-area (Enter a new line, ⌘/Ctrl+Enter adds it; line breaks are written `\n` in the `.dtes` string). The server asks the
+area (Enter a new line, ⌘/Ctrl+Enter adds it; line breaks are written `\n` in the `.dtes` string). Nobody waits for the
+AI (*Decided by the maintainer*): dt writes the hotspot at once under a provisional name after its sticky
+(`<Sticky>Question`, suffixed when taken), the window closes and the new hotspot is selected. Then the server asks the
 light model for its ID — the same tool-less Claude Code light model the knowledge extraction's gate uses
 (`agent.extract.gateModel`, Haiku by default) — through the agent API's **helper stream** (`GET /agent/helpers/events`,
 `POST /agent/helpers/:job`): a `hotspotName` job with the question and the sticky's ID, label and kind, schema
 `{ name }`. The helper is not knowledge's: the server always serves the stream, and every `dt agent` (and the agent in
 `dt open`) follows it, whatever the `knowledge` config, beside the extractor role (a stream of its own, so that a
 running extraction never holds a name up). The reply is made an ID (PascalCase from its words, letters and digits, at
-most 40) and written with the first free numeric suffix when taken (`uniqueName`). With no agent connected, a failure,
-or no answer within 6 s (the job is withdrawn), dt names it after the sticky (`<Sticky>Question`, suffixed the same
-way): writing never waits longer than that. The dialog shows 「AI が名前を付けています…」 meanwhile. It is recorded as the
-person's edit, as every edit.
+most 40, the first free numeric suffix when taken) and written over the provisional one through the rename path
+(`nameHotspot`) — only while the workspace is still the edit's result (nothing else changed since) and the hotspot
+still has its provisional name and question; otherwise it is dropped. It is part of the same person's edit, not a
+record of its own: the edit's run gets `hotspotName` and its result revision becomes the renamed workspace
+(`run.hotspot_named`), so its revert takes the hotspot away whatever its name, and the chat's and AI の作業's rows show it
+by its name now; the page keeps the hotspot selected under its new name. With no agent connected, a failure, or no
+answer within 30 s (the job is withdrawn), the provisional name stays.
 
 **Links.** A link names an element in the page's fragment, `#select=es/<Storming>/<Local>`: the view state stays the
 page's (per browser, not in the URL), and the page opens the world and the storming's view that draws the element

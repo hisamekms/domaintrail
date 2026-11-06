@@ -175,6 +175,7 @@ export const EVENT_MESSAGE_TYPES = {
     RevertLeftToAgent: 'run.revert_left_to_agent',
     RunEdited: 'run.edited',
     RunEditConflicted: 'run.edit_conflicted',
+    RunHotspotNamed: 'run.hotspot_named',
     RevisionRecorded: 'revision.recorded',
     RevisionRestored: 'revision.restored',
     MarkPlaced: 'mark.placed',

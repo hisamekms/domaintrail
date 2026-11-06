@@ -135,8 +135,8 @@ export interface SessionHttpDeps {
      */
     readonly extraction?: { enabled(): boolean; setEnabled(enabled: boolean): Promise<void> };
     /**
-     * The light model's name of a hotspot a person writes (ADR 0033), within a few seconds: its raw reply, undefined when
-     * no AI answered (none connected, a failure, the time out). Absent: dt names it after its sticky.
+     * The light model's name of a hotspot a person wrote under a provisional name (ADR 0033), asked in the background:
+     * its raw reply, undefined when no AI answered (none connected, a failure, the time out). Absent: the name stays.
      */
     readonly hotspotName?: (input: {
         readonly question: string;
@@ -406,6 +406,37 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
         await deps.pump();
         deps.log(`joined: ${r.value.identified.participant.id}`);
         return { ok: true, ...r.value };
+    };
+
+    /**
+     * The light model's name of a hotspot written under a provisional name (ADR 0033), asked once the person has their
+     * hotspot: written over it as part of the same edit when it answers in time with an ID, and nothing else changed.
+     */
+    const nameLater = async (
+        run: Collaboration.AgentRunId,
+        hotspot: { readonly label: string; readonly on: string; readonly onLabel?: string; readonly onKind?: string },
+    ): Promise<void> => {
+        try {
+            const named = hotspotNameOf(
+                await deps.hotspotName?.({
+                    question: hotspot.label,
+                    on: { id: hotspot.on, kind: hotspot.onKind ?? 'event', ...(hotspot.onLabel !== undefined && { label: hotspot.onLabel }) },
+                }),
+            );
+            if (!named) return deps.log(`the hotspot of run ${run} keeps its provisional name (no name from the light model)`);
+            const done = await deps.holdWatcher(
+                () => use.nameHotspot({ session, run, name: named }),
+                (r) => r.kind === 'named',
+            );
+            deps.log(
+                done.kind === 'named'
+                    ? `the light model named the hotspot of run ${run} ${done.name}`
+                    : `the hotspot of run ${run} keeps its name (${done.why})`,
+            );
+            await deps.pump();
+        } catch (e) {
+            deps.log(`naming the hotspot of run ${run} failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
     };
 
     const routes: Route[] = [
@@ -1039,18 +1070,12 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 if (!raw) return;
                 const read = checked(res, stickyEditInput(raw));
                 if (!read) return;
-                // a new hotspot without a name: the light model names it, else dt after its sticky; a taken name gets a suffix
+                // a new hotspot without a name: written at once under dt's provisional name (after its sticky, suffixed when
+                // taken); the light model names it afterwards, in the background (below)
                 let edit: StickyEditInput;
                 if (read.kind === 'unnamedHotspot') {
-                    const named = hotspotNameOf(
-                        await deps.hotspotName?.({
-                            question: read.label,
-                            on: { id: read.on, kind: read.onKind ?? 'event', ...(read.onLabel !== undefined && { label: read.onLabel }) },
-                        }),
-                    );
-                    deps.log(named ? `the light model named a hotspot ${named}` : `a hotspot named after its sticky ${read.on}`);
                     const { onLabel: _, onKind: __, ...rest } = read;
-                    edit = { ...rest, kind: 'addHotspot', name: named ?? fallbackHotspotName(read.on), uniqueName: true };
+                    edit = { ...rest, kind: 'addHotspot', name: fallbackHotspotName(read.on), uniqueName: true };
                 } else edit = read;
                 const message = checked(res, text(raw.body, 'body', MAX_NOTE));
                 if (!message) return;
@@ -1061,6 +1086,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 );
                 if (edited.ok) deps.log(`${me.participant.id} edited ${edit.storming} (run ${edited.value.run.id})`);
                 await answer(res, edited, 201, (v) => v);
+                if (edited.ok && read.kind === 'unnamedHotspot') void nameLater(edited.value.run.id, read);
             },
         },
         {

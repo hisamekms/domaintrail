@@ -134,7 +134,7 @@ export interface SessionServerOptions extends ViewServerOptions {
     clock?: Clock;
     /** How long a claim or a heartbeat holds the agent's lease (default `AGENT_LEASE_MS`). */
     leaseMs?: number;
-    /** How long a person waits for the light model's name of their hotspot (ADR 0033; default 6 s). */
+    /** How long a person waits for the light model's name of their hotspot (ADR 0033; default 30 s). */
     hotspotNameTimeoutMs?: number;
     /** How often expired leases are applied (default 5 s). */
     expireEveryMs?: number;
@@ -319,8 +319,8 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             `A session server is already running for this workspace${running ? ` (pid ${running.pid}, ${running.url})` : ''}: stop it before starting another.`,
         );
     const leaseMs = options.leaseMs ?? AGENT_LEASE_MS;
-    /** How long a person waits for the light model's name of their hotspot before dt names it (ADR 0033). */
-    const HOTSPOT_NAME_TIMEOUT_MS = options.hotspotNameTimeoutMs ?? 6_000;
+    /** How long the light model may take to name a hotspot written under a provisional name (ADR 0033); past it, the name stays. */
+    const HOTSPOT_NAME_TIMEOUT_MS = options.hotspotNameTimeoutMs ?? 30_000;
     const sources = options.sources ?? DEFAULT_SOURCES;
     const respectGitignore = options.respectGitignore ?? true;
 

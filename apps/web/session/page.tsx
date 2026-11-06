@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { firstDeclarations } from '@domaintrail/storming';
 import { type DisplayMode, LEVEL_KINDS } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
+import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { contextNames } from '@domaintrail/modeling';
 import type { Panes } from '../app/panes';
 import type { Conversation } from '../app/shell';
@@ -69,6 +70,17 @@ export interface SessionPage {
     readonly messageOf?: KnowledgeView['messageOf'];
     /** What the stickies' actions get of the session (ADR 0033): adding to the chat, and editing; undefined outside a session. */
     readonly stickies: StickySession | undefined;
+}
+
+/** The hotspots the AI named after a person added them under a provisional name: `es/S/<provisional>` → `es/S/<name>`. */
+export function renamedHotspots(runs: SessionStateBody['runs']): Map<string, string> {
+    const out = new Map<string, string>();
+    for (const r of runs) {
+        if (r.state !== 'Edited' || r.hotspotName === undefined) continue;
+        const added = r.input.requests[0]?.edit;
+        if (added?.kind === 'HotspotAdded') out.set(`es/${added.storming}/${added.hotspot}`, `es/${added.storming}/${r.hotspotName}`);
+    }
+    return out;
 }
 
 /** A person's edit of a sticky, written by the server; a refusal is thrown as its error body (`type`, `current`, …). */
@@ -460,6 +472,7 @@ export function useSessionPage(input: {
             live,
             chat: { added: isAdded(composerValue, selectionTargets), add: () => confirm(selectionTargets) },
             edit: editSticky,
+            renamed: renamedHotspots(session.state.runs),
         },
         stormingDetail: {
             activity: (el) => elementActivity(session.state, runChanges, el),

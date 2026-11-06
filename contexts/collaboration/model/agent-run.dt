@@ -325,6 +325,8 @@ context Collaboration {
       reapplies: AgentRunId? "当て直した実行"
       /// あとの AI の作業が同じ付箋を別の文言にしていた。
       conflict: EditConflict? "AI の作業との食い違い"
+      /// 付けたホットスポットに、あとで AI（軽いモデル）が付けた名前。仮の名前から書き換えた（結果リビジョンも書き換えのあと）。
+      hotspotName: StormingLocalName? "AI が付けた名前"
 
       invariant editChanges "手直しはファイルを変える" { resultRevision != baseRevision }
       invariant editsEditRequests "手直しの記録を束ねる" { all(input.requests, r => exists(r.edit)) }
@@ -351,6 +353,14 @@ context Collaboration {
       } else InputMismatch
       requires editChanges "手直しはファイルを変える" { resultRevision != baseRevision } else ChangedMismatch
       emits RunEdited
+
+    /// 付けたホットスポットの仮の名前を、AI が付けた名前に書き換えた（ほかに何も変わっていないときだけ）。同じ手直しの記録に
+    /// 含め、結果リビジョンを書き換えのあとにする。
+    command nameHotspot(name: StormingLocalName "AI が付けた名前", renamed: RevisionId "書き換えたあとのリビジョン") "ホットスポットの名前を付ける"
+      Edited -> Edited
+      requires renamedChanges "手直しはファイルを変える" { renamed != baseRevision } else ChangedMismatch
+      changes hotspotName, resultRevision
+      emits RunHotspotNamed
 
     /// 手直しとあとの AI の作業の食い違いを記す、または人が選んだ印を付ける。
     command noteConflict(conflict: EditConflict "食い違い") "食い違いを記す"
@@ -455,6 +465,12 @@ context Collaboration {
     resultRevision: RevisionId "結果リビジョン"
     reapplies: AgentRunId? "当て直した実行"
     finishedAt: Timestamp
+  }
+
+  persistent event RunHotspotNamed "ホットスポットの名前" {
+    runId: AgentRunId
+    hotspotName: StormingLocalName "AI が付けた名前"
+    resultRevision: RevisionId "結果リビジョン"
   }
 
   persistent event RunEditConflicted "手直しの食い違い" {

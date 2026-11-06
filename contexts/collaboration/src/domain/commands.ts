@@ -278,7 +278,19 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
         const { id, session, requests, input, queuedBy, queuedAt, baseRevision, resultRevision, reapplies, finishedAt } = params;
         return ok({
             Edited: {
-                set: { id, session, input, queuedBy, queuedAt, baseRevision, resultRevision, reapplies, finishedAt, conflict: undefined },
+                set: {
+                    id,
+                    session,
+                    input,
+                    queuedBy,
+                    queuedAt,
+                    baseRevision,
+                    resultRevision,
+                    reapplies,
+                    finishedAt,
+                    conflict: undefined,
+                    hotspotName: undefined,
+                },
                 events: {
                     RunEdited: {
                         type: 'RunEdited',
@@ -294,6 +306,20 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
                 },
             },
         });
+    }),
+
+    // the AI's name of a hotspot a person added, written over its provisional one: part of the same edit (ADR 0033)
+    nameHotspot: decide<Collaboration.NameHotspotAgentRunDecision>(Collaboration.AgentRunShape, {
+        Edited: (run, params) => {
+            if (Collaboration.checkNameHotspotAgentRunRequires(run, params) === 'renamedChanges') return err({ type: 'ChangedMismatch' });
+            const { name: hotspotName, renamed: resultRevision } = params;
+            return ok({
+                Edited: {
+                    set: { hotspotName, resultRevision },
+                    events: { RunHotspotNamed: { type: 'RunHotspotNamed', runId: run.id, hotspotName, resultRevision } },
+                },
+            });
+        },
     }),
 
     // what a later run did to the same sticky, or the person's choice made (ADR 0033)

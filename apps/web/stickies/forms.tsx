@@ -3,7 +3,6 @@
 // and 解決を書く. Enter saves, Escape cancels; what the server refuses is said in the window, which stays open.
 import { useId, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { localNameProblem, referencesTo, type Storming } from '@domaintrail/storming';
-import { LoaderCircle } from 'lucide-react';
 import { Act } from '../shared/act';
 import { TOOLTIP_ATTR } from '../tooltip';
 import { useT } from '../i18n';
@@ -219,7 +218,10 @@ function* timelineNames(tl: Extract<Storming['elements'][number], { kind: 'timel
     for (const s of tl.steps) if (s.type === 'group') yield s.id;
 }
 
-/** ホットスポットを付ける: its question, on several lines (Enter a new line, ⌘/Ctrl+Enter saves); its name is the AI's, else dt's. */
+/**
+ * ホットスポットを付ける: its question, on several lines (Enter a new line, ⌘/Ctrl+Enter saves). Its name is not asked: dt
+ * writes it at once under a provisional name, and the AI renames it afterwards.
+ */
 export function HotspotForm(props: { anchor: Anchor; onSave: (question: string) => Promise<SaveResult>; onClose: () => void }): ReactNode {
     const t = useT().stickies;
     const [question, setQuestion] = useState('');
@@ -246,12 +248,6 @@ export function HotspotForm(props: { anchor: Anchor; onSave: (question: string) 
                 />
             </label>
             <div id={errorId} aria-live="polite">
-                {saving && (
-                    <p className="sticky-form-busy" role="status">
-                        <LoaderCircle size={13} className="spin" aria-hidden />
-                        {t.hotspot.naming}
-                    </p>
-                )}
                 {error !== undefined && <p className="sticky-form-error">{error}</p>}
             </div>
             <Foot save={t.hotspot.save} saving={saving} disabled={!ready} onCancel={props.onClose} saveKeys={saveKeys} />

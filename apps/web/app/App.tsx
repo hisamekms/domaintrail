@@ -216,6 +216,12 @@ export function App() {
             },
         }),
     });
+    // a hotspot the AI renamed while it was selected (ADR 0033): selected again under its name
+    const renamed = session.stickies?.renamed;
+    useEffect(() => {
+        const next = selected !== undefined ? renamed?.get(selected) : undefined;
+        if (next !== undefined && stormingExists(stormings, next) && !stormingExists(stormings, selected ?? '')) openSticky(next);
+    }, [selected, renamed, stormings, openSticky]);
     // the command palette (⌘K / Ctrl+K), shared by the features that give it items
     const mac = useMemo(isMac, []);
     const [paletteOpen, setPaletteOpen] = useState(false);

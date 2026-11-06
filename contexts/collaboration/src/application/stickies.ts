@@ -95,6 +95,17 @@ export interface StickyUseCases {
      * all of the session's), not reverted, oldest first.
      */
     peopleEditsSince(input: { readonly run: AgentRunId }): Promise<readonly PeopleEdit[]>;
+    /**
+     * The AI's name of a hotspot a person added under a provisional name (ADR 0033): written over it, its references
+     * included, as part of the same edit (its result revision becomes the renamed workspace) — only while nothing else
+     * changed since the edit (the workspace is its result) and the hotspot still has its provisional name and question;
+     * a taken name gets the first free numeric suffix. Otherwise skipped, with why.
+     */
+    nameHotspot(input: {
+        readonly session: SessionId;
+        readonly run: AgentRunId;
+        readonly name: string;
+    }): Promise<{ readonly kind: 'named'; readonly name: string } | { readonly kind: 'skipped'; readonly why: string }>;
 }
 
 const encoder = new TextEncoder();
@@ -442,6 +453,70 @@ export function createStickies(deps: CollaborationDeps): StickyUseCases {
             });
         },
 
+        async nameHotspot({ session, run, name }) {
+            const stickies = deps.stickies;
+            const skip = (why: string) => ({ kind: 'skipped' as const, why });
+            if (!stickies) return skip('no sticky editor');
+            return serial(async () => {
+                const found = await uow.transaction((stores) => {
+                    const edited = stores.runs.load(run)?.run;
+                    if (edited?.state !== 'Edited' || edited.session !== session) return undefined;
+                    return {
+                        edited,
+                        result: stores.revisions.load(edited.resultRevision),
+                        reverted: revertStatus(edited, stores.runs.listBySession(session)).kind,
+                    };
+                });
+                if (!found?.result) return skip('no such edit');
+                const { edited, result } = found;
+                const added = edited.input.requests[0]?.edit;
+                if (added?.kind !== 'HotspotAdded' || edited.hotspotName !== undefined || found.reverted !== 'none') return skip('not a hotspot to name');
+                if (name === added.hotspot) return skip('the same name');
+                const scan = await deps.workspace.read();
+                const before = await capture(deps, scan);
+                if (!before.ok) return skip('the workspace could not be read');
+                // anything changed since the edit (another edit, a run, a hand): the name is left provisional
+                if (before.value.contentHash !== result.contentHash) return skip('the workspace changed since');
+                const file = scan.files.find((f) => f.path === added.path);
+                if (!file) return skip('its file is gone');
+                const text = decoder.decode(file.bytes);
+                let planned: StickyEditPlan | undefined;
+                for (let i = 1; i <= 9 && !planned; i++) {
+                    const candidate = i === 1 ? name : `${name}${i}`;
+                    const r = stickies.plan(text, {
+                        kind: 'wording',
+                        storming: added.storming,
+                        element: added.hotspot,
+                        expected: { name: added.hotspot, label: added.label },
+                        name: candidate,
+                    });
+                    if (r.ok) planned = r.value;
+                    else if (!(r.error.type === 'InvalidName' && r.error.problem === 'duplicate')) return skip(r.error.type);
+                }
+                if (!planned) return skip('no free name');
+                const after = replaced(scan, new Map([[file.path, planned.text]]));
+                const written = await capture(deps, after);
+                if (!written.ok || !written.value.analysis.stormingsComplete) return skip('it would not parse');
+                const wrote = await deps.workspace.write(
+                    after.files.map((f) => ({ path: f.path, bytes: f.bytes })),
+                    scan.files.map((f) => ({ path: f.path, hash: f.hash })),
+                );
+                if (!wrote.ok) return skip('the workspace changed meanwhile');
+                const final = made(Collaboration.makeStormingLocalName(planned.after.name), 'name');
+                return uow.transaction((stores) => {
+                    const current = stores.runs.load(run)?.run;
+                    if (current?.state !== 'Edited') throw new Error(`The edit ${run} is gone`);
+                    const at = clock.now();
+                    const revision = recordRevision(stores, session, { kind: 'RunResult', run }, written.value, at);
+                    const named = agentRunCommands.nameHotspot(current, { name: final, renamed: revision.id });
+                    if (!named.ok) throw new Error(`Naming the hotspot of ${run} failed`);
+                    stores.runs.save(named.value.Edited.aggregate);
+                    publish(stores, session, named.value.Edited.events, at);
+                    return { kind: 'named' as const, name: final };
+                });
+            });
+        },
+
         async peopleEditsSince({ run }) {
             return uow.transaction((stores) => {
                 const started = stores.runs.load(run)?.run;
@@ -463,7 +538,14 @@ export function createStickies(deps: CollaborationDeps): StickyUseCases {
                             revertStatus(r, runs).kind === 'none',
                     )
                     .sort((a, b) => a.finishedAt.getTime() - b.finishedAt.getTime())
-                    .flatMap((r) => r.input.requests.flatMap((q) => (q.edit ? [{ by: q.author, at: r.finishedAt, edit: q.edit }] : [])));
+                    .flatMap((r) =>
+                        r.input.requests.flatMap((q) => {
+                            if (!q.edit) return [];
+                            // a hotspot the AI named afterwards: by its name now
+                            const edit = q.edit.kind === 'HotspotAdded' && r.hotspotName !== undefined ? { ...q.edit, hotspot: r.hotspotName } : q.edit;
+                            return [{ by: q.author, at: r.finishedAt, edit }];
+                        }),
+                    );
             });
         },
     };

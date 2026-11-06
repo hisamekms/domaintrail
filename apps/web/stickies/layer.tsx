@@ -73,6 +73,8 @@ export interface StickySession {
     readonly live: boolean;
     /** The chat's targets: whether the selection is added already, and adding it (the composer opens). */
     readonly chat: { readonly added: boolean; readonly add: () => void };
+    /** Hotspots the AI renamed after a person added them (ADR 0033): their provisional selection ID → their name's. */
+    readonly renamed: ReadonlyMap<string, string>;
     /** Writes an edit: resolves when written, rejects with the refusal. */
     readonly edit: (edit: StickyEditRequest, body: string) => Promise<StickyWritten>;
 }

@@ -143,6 +143,12 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
         case 'RunEdited':
             // a person's edit of a sticky (ADR 0033): its frozen input is not in the event
             return { state: at, refetch: !state.runs.some((r) => r.id === e.runId) };
+        case 'RunHotspotNamed':
+            // the AI's name of a hotspot a person added, over its provisional one (ADR 0033)
+            return {
+                state: runs((r) => (r.state === 'Edited' ? { ...r, hotspotName: e.hotspotName, resultRevision: e.resultRevision } : r), e.runId),
+                refetch: !state.runs.some((r) => r.id === e.runId) || !state.revisions.some((r) => r.id === e.resultRevision),
+            };
         case 'RunEditConflicted':
             return {
                 state: runs((r) => (r.state === 'Edited' ? { ...r, conflict: e.conflict } : r), e.runId),
