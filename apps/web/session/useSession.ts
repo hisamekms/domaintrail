@@ -3,6 +3,7 @@
 // does, so nothing here calls the session API or sends anything there.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
+    CameraBounds,
     Cursor,
     InviteStateBody,
     JoinRequestBody,
@@ -31,7 +32,7 @@ import {
 import { EMPTY_COMPOSER, type ComposerValue } from './mentions';
 import { WORKSPACE_TARGET } from './targets';
 import { hasCanvas } from './location';
-import { NO_PEERS, receivePresence, throttle, type Peers } from './presence';
+import { cameraBounds, NO_PEERS, receivePresence, sameCamera, throttle, type Peers } from './presence';
 import { adopt, disconnected, INITIAL_SESSION, receive, refetched, type SessionModel } from './state';
 import type { ModelTarget, TargetDraft } from './targets';
 
@@ -45,6 +46,11 @@ const WS_REVOKED = 4001;
 const WS_EXPIRED = 4002;
 /** At most 20 presence updates a second (the server's interval). */
 export const PRESENCE_INTERVAL_MS = 50;
+/**
+ * The camera is sent at most every 150 ms (the last one always: a pan's end): enough for a page following this one,
+ * which glides to it, and a fraction of what the cursor sends.
+ */
+export const CAMERA_INTERVAL_MS = 150;
 
 export type SessionStatus = 'live' | 'closed' | 'signed-out';
 
@@ -170,7 +176,8 @@ export function useSession(socket: ViewSocket, current: ViewPayload | null): Ses
 
 /**
  * Sends this page's presence: its location and selected target when they change (and on each new connection), its
- * cursor in page coordinates while the pointer is over a canvas (at most every 50 ms), and leaves on unload.
+ * cursor in page coordinates while the pointer is over a canvas (at most every 50 ms), what its canvas shows (the
+ * camera, at most every 150 ms, for the pages following it), and leaves on unload.
  */
 export function usePresence(
     socket: ViewSocket,
@@ -182,25 +189,60 @@ export function usePresence(
     const { send } = socket;
     const active = session !== undefined && session.status === 'live';
     const epoch = session?.epoch ?? 0;
-    const latest = useRef({ location, selectedTarget, cursor: undefined as Cursor | undefined });
+    const latest = useRef({ location, selectedTarget, cursor: undefined as Cursor | undefined, camera: undefined as CameraBounds | undefined });
     const updates = useMemo(
         () =>
             throttle<void>(PRESENCE_INTERVAL_MS, () => {
-                const { location: at, selectedTarget: target, cursor } = latest.current;
-                send({ type: 'presence.update', location: at, ...(cursor && hasCanvas(at) && { cursor }), ...(target && { selectedTarget: target }) });
+                const { location: at, selectedTarget: target, cursor, camera } = latest.current;
+                send({
+                    type: 'presence.update',
+                    location: at,
+                    ...(cursor && hasCanvas(at) && { cursor }),
+                    ...(camera && hasCanvas(at) && { camera }),
+                    ...(target && { selectedTarget: target }),
+                });
             }),
         [send],
     );
-    useEffect(() => () => updates.cancel(), [updates]);
+    // the camera has its own, slower pace; each update carries the last one it let through
+    const cameras = useMemo(
+        () =>
+            throttle<CameraBounds>(CAMERA_INTERVAL_MS, (camera) => {
+                latest.current = { ...latest.current, camera };
+                updates.push();
+            }),
+        [updates],
+    );
+    useEffect(
+        () => () => {
+            updates.cancel();
+            cameras.cancel();
+        },
+        [updates, cameras],
+    );
 
     const locationKey = JSON.stringify(location);
     const targetKey = JSON.stringify(selectedTarget ?? null);
     useEffect(() => {
-        latest.current = { ...latest.current, location, selectedTarget };
+        // another view goes with its camera at once (it was fitted as it was drawn), not the last view's
+        const camera = canvas ? cameraBounds(canvas.viewportPageBounds()) : undefined;
+        if (camera) cameras.cancel();
+        latest.current = { ...latest.current, location, selectedTarget, ...(camera && { camera }) };
         if (active) updates.push();
         // the keys stand for the location and the target
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [active, epoch, locationKey, targetKey, updates]);
+    }, [active, epoch, locationKey, targetKey, updates, cameras]);
+
+    useEffect(() => {
+        if (!active || !canvas) return;
+        let last: CameraBounds | undefined;
+        return canvas.watch(() => {
+            const camera = cameraBounds(canvas.viewportPageBounds());
+            if (!camera || sameCamera(camera, last)) return;
+            last = camera;
+            cameras.push(camera);
+        });
+    }, [active, canvas, cameras]);
 
     useEffect(() => {
         if (!active || !canvas) return;

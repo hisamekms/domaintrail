@@ -30,9 +30,11 @@ import { SessionApiError, sessionApi } from './api';
 import type { StickySession, StickyWritten } from '../stickies/layer';
 import { confirmSelection, isAdded, isConfirmKey, isTyping } from './selection';
 import type { ComposerValue } from './mentions';
-import { cursorsOn } from './presence';
+import { cursorsOn, NO_PEERS } from './presence';
+import { FollowFrame, useFollowApproved, usePersonFollow } from './follow';
+import type { ChatFollow } from './chat-context';
 import { mentionCandidates } from './mentions';
-import { sentView, type ViewScope, type ViewTarget } from './views';
+import { openViewTarget, sentView, type ViewScope, type ViewTarget } from './views';
 import {
     occurrenceNode,
     resolveTarget,
@@ -407,33 +409,24 @@ export function useSessionPage(input: {
         }),
         [input.mode, model, stormings],
     );
-    const { setStructureLevel, setStructureContexts, setHiddenContexts, setMapAll } = settings;
-    const openView = useCallback(
-        (target: ViewTarget) => {
-            switch (target.kind) {
-                case 'catalog':
-                    return setView({ kind: 'catalog' });
-                case 'contextMap':
-                    setMapAll(target.all);
-                    return setView({ kind: 'contextMap' });
-                case 'structure':
-                    setStructureLevel(target.level);
-                    setStructureContexts(target.focus ? [...target.focus.contexts] : null);
-                    if (target.focus) setHiddenContexts([...target.focus.hidden]);
-                    return setView({ kind: 'structure' });
-                case 'storming': {
-                    const { [target.stormingId]: _, ...others } = stormingChoice.timelines;
-                    setStormingChoice({
-                        ...stormingChoice,
-                        stormingId: target.stormingId,
-                        level: target.level,
-                        timelines: target.timelineId === undefined ? others : { ...others, [target.stormingId]: target.timelineId },
-                    });
-                    return setView({ kind: 'storming' });
-                }
-            }
-        },
-        [setView, setMapAll, setStructureLevel, setStructureContexts, setHiddenContexts, stormingChoice, setStormingChoice],
+    const openView = useCallback((target: ViewTarget) => openViewTarget(target, { setView, settings }), [setView, settings]);
+
+    // following (docs/live-view.md, "Following"): a participant to their view and camera, the AI from a request the
+    // reader sends or their proposal approved; the AI chosen is brought to its latest changes at once
+    const { follow } = workspace;
+    usePersonFollow(follow, session?.peers ?? NO_PEERS, location, viewScope);
+    useFollowApproved(follow, session?.state.proposals, session?.me.participant.id);
+    const followTurns = turnMarks.follow;
+    const chatFollow = useMemo(
+        (): ChatFollow => ({
+            followee: follow.followee,
+            choose: (f) => {
+                follow.choose(f);
+                if (f?.kind === 'ai') followTurns();
+            },
+            asked: follow.asked,
+        }),
+        [follow, followTurns],
     );
 
     if (!session)
@@ -466,6 +459,7 @@ export function useSessionPage(input: {
         canvasOverlay: (
             <>
                 <PeerCursors canvas={canvas} cursors={cursorsOn(session.peers, location)} />
+                <FollowFrame followee={follow.followee} faint={follow.followee?.kind === 'ai' && agentStatus(session.state.runs).kind === 'idle'} />
                 {/* on a storming, the stickies' toolbar has the 💬 among its actions (ADR 0033) */}
                 {view.kind !== 'storming' && <SelectionAction canvas={canvas} action={addAction(selectionTargets)} />}
                 {view.kind === 'storming' && <TurnMarksBar canvas={canvas} marks={turnMarks} stormings={stormings} choice={stormingChoice} />}
@@ -511,6 +505,7 @@ export function useSessionPage(input: {
                         slash={slash}
                         viewedAt={viewedAt}
                         onOpenView={openView}
+                        follow={chatFollow}
                         onNavigate={navigate}
                         onSeeChanges={turnMarks.see}
                         goTo={goTo}

@@ -32,6 +32,8 @@ type ProposalState = Collaboration.ChangeProposal['state'];
 const quoteJa = (names: readonly string[] = []): string => names.map((n) => `「${n}」`).join('');
 /** Names each in quotes, joined: “A”, “B”. */
 const quoteEn = (names: readonly string[] = []): string => names.map((n) => `“${n}”`).join(', ');
+/** A name followed by Japanese text: a space after one that ends in a Latin letter or a digit (「AI を追う」, 「佐藤を追う」). */
+const spaced = (name: string): string => (/[A-Za-z0-9]$/.test(name) ? `${name} ` : name);
 
 const ja = {
     added: DIAGRAM_TEXTS.ja.added,
@@ -628,6 +630,12 @@ const ja = {
         error: (m: string) => `エラー: ${m}`,
         participants: (n: number) => `参加者（${n}）`,
         you: '自分',
+        /** Following someone (docs/live-view.md, "Following"): the toggle's name, by whom. */
+        follow: {
+            start: (name: string) => `${spaced(name)}を追う`,
+            stop: (name: string) => `${spaced(name)}を追うのをやめる`,
+            ai: 'AI',
+        },
         roles: { facilitator: 'ファシリテーター', participant: '参加者' } as Record<Role, string>,
         // your own row ('here') shows no whereabouts
         whereabouts: { 'same-view': '同じビュー', 'another-view': '別のビュー', away: 'オフライン' } as Record<Exclude<Whereabouts, 'here'>, string>,
@@ -1859,6 +1867,11 @@ const en: Messages = {
         error: (m) => `Error: ${m}`,
         participants: (n) => `Participants (${n})`,
         you: 'you',
+        follow: {
+            start: (name) => `Follow ${name}`,
+            stop: (name) => `Stop following ${name}`,
+            ai: 'AI',
+        },
         roles: { facilitator: 'Facilitator', participant: 'Participant' },
         whereabouts: { 'same-view': 'same view', 'another-view': 'another view', away: 'offline' },
         compose: 'Write a request',

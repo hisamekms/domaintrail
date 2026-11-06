@@ -22,10 +22,11 @@ export interface ChangeMarks extends ChangedElements {
 export interface CanvasMarks {
     readonly key: string;
     /**
-     * `ifNoneVisible`: the marks of a turn that just ended; the camera moves only when none of them is in view.
-     * `always`: asked for (図で見る, ほかに n 件の変更): the camera brings them into view unless they all are.
+     * `stay`: the marks of a turn that just ended, for a reader who does not follow the AI; the camera stays (the bar
+     * tells them). `always`: asked for (図で見る, ほかに n 件の変更) or followed (the AI's turn while the reader follows
+     * it): the camera brings them into view unless they all are.
      */
-    readonly reveal: 'ifNoneVisible' | 'always';
+    readonly reveal: 'stay' | 'always';
     readonly marks: ChangeMarks;
 }
 
@@ -217,19 +218,13 @@ export type MarksMove =
     | { readonly kind: 'center'; readonly point: Point };
 
 /**
- * Where the camera goes when marks appear (`viewport`: the page the canvas shows, at `zoom`).
- *
- * - The marks of a turn that just ended (`ifNoneVisible`) move it only when none of them is in view: the reader may be
- *   reading elsewhere on purpose, and one mark in view already says that the turn changed something (the bar counts
- *   the rest and offers to go there).
- * - Marks asked for (`always`) are brought into view unless they all are.
- *
- * It then fits them all, zoomed in no further than now (nor past 100%); when that would make them too small to read,
- * it centers on the one nearest the middle of the view instead, at the zoom it has.
+ * Where the camera goes for marks to be brought into view (`viewport`: the page the canvas shows, at `zoom`): nowhere
+ * when they all are in view already. It fits them all, zoomed in no further than now (nor past 100%); when that would
+ * make them too small to read, it centers on the one nearest the middle of the view instead, at the zoom it has.
  */
-export function marksMove(rects: readonly Rect[], viewport: Rect, zoom: number, reveal: CanvasMarks['reveal']): MarksMove {
-    if (rects.length === 0) return { kind: 'stay' };
-    if (reveal === 'ifNoneVisible' ? rects.some((r) => overlaps(r, viewport)) : rects.every((r) => rectContains(viewport, r))) return { kind: 'stay' };
+export function marksMove(rects: readonly Rect[], viewport: Rect, zoom: number): MarksMove {
+    // none, or all of them in view: nothing to bring
+    if (rects.every((r) => rectContains(viewport, r))) return { kind: 'stay' };
     const bounds = unionRects(rects);
     if (!bounds) return { kind: 'stay' };
     const screen = { w: viewport.w * zoom, h: viewport.h * zoom };
@@ -238,6 +233,15 @@ export function marksMove(rects: readonly Rect[], viewport: Rect, zoom: number, 
     // fitted, they are never smaller than readable, nor than the reader already looks at them
     if (Math.min(fitZoom, maxZoom) >= Math.min(MIN_READABLE_ZOOM, zoom)) return { kind: 'fit', bounds, maxZoom };
     return { kind: 'center', point: rectCenter(nearest(rects, rectCenter(viewport))) };
+}
+
+/**
+ * Where the camera goes as marks appear: nowhere unless they are to be revealed (`always`: asked for, or the AI's turn
+ * while the reader follows it) — a turn's marks for a reader who does not follow it leave the camera where it is — nor
+ * while the reader drags or pans (`moving`); else `marksMove`.
+ */
+export function marksAppearMove(reveal: CanvasMarks['reveal'], moving: boolean, rects: readonly Rect[], viewport: Rect, zoom: number): MarksMove {
+    return reveal !== 'always' || moving ? { kind: 'stay' } : marksMove(rects, viewport, zoom);
 }
 
 const distance = (r: Rect, p: Point): number => Math.hypot(rectCenter(r).x - p.x, rectCenter(r).y - p.y);

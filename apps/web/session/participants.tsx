@@ -1,10 +1,14 @@
 // Who is in the collab (ADR 0026, Presence), the first part of the chat's collab menu (`collab-menu.tsx`): everyone
-// with where they are (this page, the same view, another view and which, offline), and a way to open the view another
-// participant is on (just the view: their camera and cursor are theirs).
+// with where they are (this page, the same view, another view and which, offline), a way to open the view another
+// participant is on (just the view: their camera and cursor are theirs), and the AI after you; each one online but you
+// with ○ / ◉ to follow them (their view and camera, or the AI's changes: one at a time, `follow.tsx`).
 import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, ChevronDown, ChevronRight, UserX } from 'lucide-react';
 import { useT } from '../i18n';
+import { AI_FOLLOWEE, isFollowing, type Followee } from '../view/follow';
+import { FollowToggle } from './follow';
 import { Avatar } from './parts';
+import { AiAvatar } from './proposal';
 import { canOpen, viewName, viewTargetOf, type ParticipantRow, type ViewScope, type ViewTarget, type ViewWords } from './views';
 
 /** The first part of a label with a hint (`詳細 — すべての項目を表示` → `詳細`). */
@@ -24,6 +28,10 @@ export function ParticipantsList(props: {
     focus: PeopleFocus | undefined;
     /** `link`, the facilitator: removes a participant who signed in with a cookie of this mode (their pages close). */
     onRemove?: (id: string) => void;
+    /** Whom the page follows, and the reader's choice of it. */
+    follow: { readonly followee: Followee | null; readonly choose: (followee: Followee | null) => void };
+    /** What the AI's row says of it: its status while it works (running and for how long…), nothing while idle. */
+    aiStatus: string;
 }) {
     const { rows, scope, focus } = props;
     const t = useT();
@@ -58,12 +66,35 @@ export function ParticipantsList(props: {
         return () => clearTimeout(timer);
     }, [focus, offlineOpen]);
 
+    const { followee, choose } = props.follow;
+    /** ○ / ◉ of following someone, at the end of their row. */
+    const toggle = (who: Followee, name: string) => {
+        const on = who.kind === 'ai' ? isFollowing(followee, 'ai') : isFollowing(followee, who);
+        return <FollowToggle followee={who} name={name} on={on} onToggle={() => choose(on ? null : who)} />;
+    };
+    const aiRow = (
+        <li key="ai" className={`chat-person chat-person-ai${isFollowing(followee, 'ai') ? ' followed' : ''}`} data-participant="AI" tabIndex={-1}>
+            <AiAvatar />
+            <span className="chat-person-main">
+                <span className="chat-person-name">{tx.follow.ai}</span>
+                {props.aiStatus && <span className="chat-person-where muted">{props.aiStatus}</span>}
+            </span>
+            {toggle(AI_FOLLOWEE, tx.follow.ai)}
+        </li>
+    );
+
     const row = (r: ParticipantRow) => {
         const target = r.location && viewTargetOf(r.location);
         const name = target && viewName(target, words, scope);
         const openable = target !== undefined && canOpen(target, scope);
         return (
-            <li key={r.id} className={`chat-person where-${r.where}`} data-participant={r.name} data-participant-id={r.id} tabIndex={-1}>
+            <li
+                key={r.id}
+                className={`chat-person where-${r.where}${isFollowing(followee, { participant: r.id }) ? ' followed' : ''}`}
+                data-participant={r.name}
+                data-participant-id={r.id}
+                tabIndex={-1}
+            >
                 <Avatar id={r.id} name={r.name} {...(r.avatarUrl && { url: r.avatarUrl })} facilitator={r.role === 'facilitator'} />
                 <span className="chat-person-main">
                     <span className="chat-person-name">
@@ -99,13 +130,17 @@ export function ParticipantsList(props: {
                         <ArrowRight size={14} aria-hidden />
                     </button>
                 )}
+                {!r.me && r.where !== 'away' && toggle({ kind: 'person', participant: r.id }, r.name)}
             </li>
         );
     };
 
     return (
         <div className="chat-people" ref={root}>
-            <ul className="chat-people-list">{online.map(row)}</ul>
+            <ul className="chat-people-list">
+                {/* you first, then the AI, then the others */}
+                {online.flatMap((r) => (r.me ? [row(r), aiRow] : [row(r)]))}
+            </ul>
             {offline.length > 0 && (
                 <>
                     <button className="chat-people-offline" aria-expanded={offlineOpen} onClick={() => setOfflineOpen(!offlineOpen)}>

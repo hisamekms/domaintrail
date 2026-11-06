@@ -5,6 +5,8 @@ import type { Me, SendRequestBody, SessionStateBody, ViewLocation } from '@domai
 import { type DisplayMode, STRUCTURE_LEVELS, type StructureLevel, VIEW_LEVELS, type ViewLevel } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { type CatalogFilter, nameIn } from '../model-utils';
+import type { View } from '../view/navigation';
+import type { ViewSettings } from '../view/settings';
 import { sameLocation } from './location';
 import { listedParticipants, type Peers, type Whereabouts } from './presence';
 import { participantNames } from './stream';
@@ -52,6 +54,46 @@ export function viewTargetOf(location: ViewLocation): ViewTarget | undefined {
         return isStructureLevel(level) ? { kind: 'structure', level } : undefined;
     }
     return undefined;
+}
+
+/** What opening a view changes: the view shown, and the settings that make it. */
+export interface ViewOpener {
+    readonly setView: (v: View) => void;
+    readonly settings: Pick<
+        ViewSettings,
+        'stormingChoice' | 'setStormingChoice' | 'setMapAll' | 'setStructureLevel' | 'setStructureContexts' | 'setHiddenContexts'
+    >;
+}
+
+/**
+ * Opens a view (as it is: not its camera) through `to` — the reader's setters (「→」 on another participant's row, the
+ * guide's places) or the bare ones (following a participant).
+ */
+export function openViewTarget(target: ViewTarget, to: ViewOpener): void {
+    const { setView, settings } = to;
+    switch (target.kind) {
+        case 'catalog':
+            return setView({ kind: 'catalog' });
+        case 'contextMap':
+            settings.setMapAll(target.all);
+            return setView({ kind: 'contextMap' });
+        case 'structure':
+            settings.setStructureLevel(target.level);
+            settings.setStructureContexts(target.focus ? [...target.focus.contexts] : null);
+            if (target.focus) settings.setHiddenContexts([...target.focus.hidden]);
+            return setView({ kind: 'structure' });
+        case 'storming': {
+            const choice = settings.stormingChoice;
+            const { [target.stormingId]: _, ...others } = choice.timelines;
+            settings.setStormingChoice({
+                ...choice,
+                stormingId: target.stormingId,
+                level: target.level,
+                timelines: target.timelineId === undefined ? others : { ...others, [target.stormingId]: target.timelineId },
+            });
+            return setView({ kind: 'storming' });
+        }
+    }
 }
 
 /** Longest catalog filter a message carries (the server's `VIEWED_AT_LIMITS.query`). */

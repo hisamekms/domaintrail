@@ -13,6 +13,7 @@ import { Act } from '../shared/act';
 import { hasMarks, marksCount, marksView, notDrawn, outOfView, stormingChangeMarks, type CanvasMarks, type ChangeMarks } from '../view/change-marks';
 import { useCanvasValue, type DiagramCanvas } from '../view/diagram';
 import { motionMs } from '../shared/motion';
+import { isFollowing, type Followee } from '../view/follow';
 import type { Workspace } from '../view/workspace';
 import { loadModelChanges } from './changes';
 
@@ -25,6 +26,11 @@ export interface MarksSubject {
     /** The card's name when asked from its card (図で見る); none for the latest turn (直前の作業). */
     readonly name?: string;
     readonly reveal: CanvasMarks['reveal'];
+    /**
+     * Who brings them into view (`always`): the reader (図で見る, ほかに n 件) or the AI the reader follows; the view is
+     * switched through the reader's settings (which stops following) or the bare ones.
+     */
+    readonly by?: 'reader' | 'follow';
     /** Counts the subjects: a subject marked anew is a new appearance (the camera may move). */
     readonly n: number;
 }
@@ -61,7 +67,13 @@ export interface TurnMarks {
     readonly clear: () => void;
     /** Shows the marked stickies the current view does not draw (another storming, timeline or level). */
     readonly elsewhere: () => void;
+    /** Brings the marks shown into view as a move of the AI followed (the reader just started following it). */
+    readonly follow: () => void;
 }
+
+/** How a turn's marks come as it ends: brought into view while the reader follows the AI, else the camera stays. */
+export const turnReveal = (followee: Followee | null): Pick<MarksSubject, 'reveal' | 'by'> =>
+    isFollowing(followee, 'ai') ? { reveal: 'always', by: 'follow' } : { reveal: 'stay' };
 
 /**
  * The page's marks of turns. `state`: the session's (none outside a session); the runs already ended when it first
@@ -71,6 +83,9 @@ export function useTurnMarks(state: SessionStateBody | undefined, workspace: Wor
     const [subject, setSubject] = useState<MarksSubject | null>(null);
     const known = useRef<Set<string> | null>(null);
     const count = useRef(0);
+    // what the page holds now, for the moment the changes come
+    const now = useRef(workspace);
+    now.current = workspace;
     const runs = state?.runs;
     useEffect(() => {
         if (!runs) return;
@@ -80,12 +95,9 @@ export function useTurnMarks(state: SessionStateBody | undefined, workspace: Wor
         }
         const latest = latestEnded(runs, known.current);
         for (const r of changingRuns(runs)) known.current.add(r.id);
-        if (latest) setSubject({ base: latest.base, result: latest.result, reveal: 'ifNoneVisible', n: ++count.current });
+        if (latest) setSubject({ base: latest.base, result: latest.result, ...turnReveal(now.current.follow.followee), n: ++count.current });
     }, [runs]);
 
-    // what the page holds now, for the moment the changes come
-    const now = useRef(workspace);
-    now.current = workspace;
     const setMarks = workspace.marks.set;
     const [marks, setLoaded] = useState<{ readonly subject: MarksSubject; readonly marks: ChangeMarks } | undefined>();
     useEffect(() => {
@@ -101,10 +113,12 @@ export function useTurnMarks(state: SessionStateBody | undefined, workspace: Wor
                 // a turn that changed no sticky leaves nothing marked (the marks are the latest turn's or none)
                 if (!hasMarks(m)) return setLoaded(undefined);
                 if (subject.reveal === 'always') {
-                    const { stormings, settings, nav } = now.current;
+                    const { stormings, settings, nav, follow } = now.current;
+                    // the AI followed switches the view with the bare setters: its move is not the reader's
+                    const to = subject.by === 'follow' ? follow.moves() : { settings, setView: nav.setView };
                     const choice = marksView(stormings, settings.stormingChoice, m);
-                    if (choice) settings.setStormingChoice(choice);
-                    if (nav.view.kind !== 'storming') nav.setView({ kind: 'storming' });
+                    if (choice) to.settings.setStormingChoice(choice);
+                    if (nav.view.kind !== 'storming') to.setView({ kind: 'storming' });
                 }
                 setLoaded({ subject, marks: m });
             },
@@ -123,19 +137,26 @@ export function useTurnMarks(state: SessionStateBody | undefined, workspace: Wor
     }, [key, setMarks]);
 
     const see = useCallback((span: { readonly base: string; readonly result: string; readonly name: string }) => {
-        setSubject({ ...span, reveal: 'always', n: ++count.current });
+        // the reader's own move: following stops
+        now.current.follow.choose(null);
+        setSubject({ ...span, reveal: 'always', by: 'reader', n: ++count.current });
     }, []);
     const clear = useCallback(() => setSubject(null), []);
     const elsewhere = useCallback(() => {
         if (!marks) return;
-        const { stormings, settings, nav } = now.current;
+        const { stormings, settings, nav, follow } = now.current;
+        // the reader's own move: following stops
+        follow.choose(null);
         const choice = marksView(stormings, settings.stormingChoice, notDrawn(stormings, settings.stormingChoice, marks.marks));
         if (choice) settings.setStormingChoice(choice);
         if (nav.view.kind !== 'storming') nav.setView({ kind: 'storming' });
         // anew, so that the camera brings them into view once their view is drawn
-        setSubject({ ...marks.subject, reveal: 'always', n: ++count.current });
+        setSubject({ ...marks.subject, reveal: 'always', by: 'reader', n: ++count.current });
     }, [marks]);
-    return { shown: canvasMarks ? { marks: canvasMarks, name: marks?.subject.name } : undefined, see, clear, elsewhere };
+    const follow = useCallback(() => {
+        if (marks) setSubject({ ...marks.subject, reveal: 'always', by: 'follow', n: ++count.current });
+    }, [marks]);
+    return { shown: canvasMarks ? { marks: canvasMarks, name: marks?.subject.name } : undefined, see, clear, elsewhere, follow };
 }
 
 /**

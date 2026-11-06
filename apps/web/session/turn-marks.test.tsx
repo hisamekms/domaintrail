@@ -6,7 +6,7 @@ import { I18nProvider } from '../i18n';
 import type { StormingChoice } from '../storming';
 import { actKinds, viewPayloads } from '../test-helpers';
 import { NO_MARKS, type ChangeMarks } from '../view/change-marks';
-import { latestEnded, TurnMarksBar, type TurnMarks } from './turn-marks';
+import { latestEnded, TurnMarksBar, turnReveal, type TurnMarks } from './turn-marks';
 
 type RunJson = SessionStateBody['runs'][number];
 
@@ -33,13 +33,25 @@ describe('the latest turn', () => {
     });
 });
 
+describe('the camera as a turn ends (docs/live-view.md, "Following")', () => {
+    test('a reader who follows the AI is brought to its changes, by the AI followed (not their own move)', () => {
+        expect(turnReveal({ kind: 'ai' })).toEqual({ reveal: 'always', by: 'follow' });
+    });
+
+    test('a reader who follows no one, or a participant, keeps the camera: the marks and the bar tell them', () => {
+        expect(turnReveal(null)).toEqual({ reveal: 'stay' });
+        expect(turnReveal({ kind: 'person', participant: 'dev:sato' })).toEqual({ reveal: 'stay' });
+    });
+});
+
 describe('the bar over the storming canvas', () => {
     const marks: ChangeMarks = { ...NO_MARKS, added: ['es/Returns/A', 'es/Returns/B'], changed: ['es/Returns/C'], removed: ['es/Returns/D'] };
     const turn = (name?: string): TurnMarks => ({
-        shown: { marks: { key: '1', reveal: 'ifNoneVisible', marks }, name },
+        shown: { marks: { key: '1', reveal: 'stay', marks }, name },
         see: () => {},
         clear: () => {},
         elsewhere: () => {},
+        follow: () => {},
     });
     const choice: StormingChoice = { stormingId: 'Returns', level: 'big-picture', timelines: {} };
     const bar = (t: TurnMarks): string =>
