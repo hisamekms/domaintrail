@@ -142,6 +142,15 @@ export function shortcutText(s: Shortcut, mac: boolean): string {
     return [...(s.mod ? ['Ctrl'] : []), ...(s.shift ? ['Shift'] : []), key].join('+');
 }
 
+/**
+ * Whether Escape clears the stickies' selection from where the focus is (the layer's fallback): only when the focus is
+ * nowhere — a window, a menu or the palette just closed, a pick of the palette moved it nowhere — with stickies
+ * selected and no window or menu open. A focused canvas clears it itself; a field, a button or the palette keeps it.
+ */
+export function escapeClearsSelection(e: { key: string; isComposing: boolean }, state: { focusNowhere: boolean; selected: number; open: boolean }): boolean {
+    return e.key === 'Escape' && !e.isComposing && state.focusNowhere && state.selected > 0 && !state.open;
+}
+
 /** Whether the page runs on a Mac (its shortcuts use ⌘). */
 export const isMac = (): boolean => typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 

@@ -2,9 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import * as path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { analyzeStormings } from '@domaintrail/storming';
-import { matchItems, type PaletteItem } from '../shared/palette';
+import { focusBack, matchItems, type PaletteItem } from '../shared/palette';
 import { elementLink, linkedElement } from './link';
-import { actionOfKey, actionsFor, HOTSPOT_TARGETS, shortcutText, STICKY_ACTIONS, stickyOf, type ActionContext } from './registry';
+import { actionOfKey, actionsFor, escapeClearsSelection, HOTSPOT_TARGETS, shortcutText, STICKY_ACTIONS, stickyOf, type ActionContext } from './registry';
 
 const SHOP = path.join(import.meta.dir, '..', '..', '..', 'examples', 'shop', 'stormings', 'order-to-cash.dtes');
 const parsed = await analyzeStormings([{ path: 'order-to-cash.dtes', text: await readFile(SHOP, 'utf8') }], undefined);
@@ -102,5 +102,27 @@ describe('the command palette', () => {
         expect(matchItems(items, 'orderplaced 注文').map((i) => i.id)).toEqual(['注文を受け付けた']);
         expect(matchItems(items, 'chat').map((i) => i.id)).toEqual(['Ｃｈａｔ']);
         expect(matchItems(items, 'なし')).toEqual([]);
+    });
+});
+
+describe('Escape after a pick (the palette, the menu, a window closed)', () => {
+    const esc = { key: 'Escape', isComposing: false };
+    test('with the focus nowhere and stickies selected, Escape clears them; never while a window or menu is open, nor elsewhere', () => {
+        expect(escapeClearsSelection(esc, { focusNowhere: true, selected: 1, open: false })).toBe(true);
+        expect(escapeClearsSelection(esc, { focusNowhere: false, selected: 1, open: false })).toBe(false);
+        expect(escapeClearsSelection(esc, { focusNowhere: true, selected: 0, open: false })).toBe(false);
+        expect(escapeClearsSelection(esc, { focusNowhere: true, selected: 1, open: true })).toBe(false);
+        expect(escapeClearsSelection({ key: 'Escape', isComposing: true }, { focusNowhere: true, selected: 1, open: false })).toBe(false);
+        expect(escapeClearsSelection({ key: 'Enter', isComposing: false }, { focusNowhere: true, selected: 1, open: false })).toBe(false);
+    });
+
+    test('the palette closed without a pick gives the focus back to what had it, if it is still there and not the page', () => {
+        const body = { id: 'body' } as unknown as Element;
+        const field = { id: 'field' } as unknown as Element;
+        const doc = (inPage: boolean) => ({ body, contains: () => inPage });
+        expect(focusBack(field, doc(true))).toBe(field);
+        expect(focusBack(field, doc(false))).toBeUndefined();
+        expect(focusBack(body, doc(true))).toBeUndefined();
+        expect(focusBack(null, doc(true))).toBeUndefined();
     });
 });

@@ -27,7 +27,7 @@ import { workspaceName } from './health';
 import { HealthButton } from './status';
 import { useViewSocket } from './useViewSocket';
 import { CommandPalette, usePaletteKey } from '../shared/palette';
-import { useStickyActions } from '../stickies/layer';
+import { focusCanvas, useStickyActions } from '../stickies/layer';
 import { linkedElement } from '../stickies/link';
 import { currentReturn, RETURN_STATE, type ReturnPoint } from '../stickies/return';
 import { isMac } from '../stickies/registry';
@@ -127,7 +127,14 @@ export function App() {
                 setView({ kind: 'storming' });
             }
             select(id, { highlight: false });
-            requestAnimationFrame(() => requestAnimationFrame(() => canvas && highlightElement(canvas, id)));
+            // selected on the canvas, which takes the focus: Escape clears the selection there
+            requestAnimationFrame(() =>
+                requestAnimationFrame(() => {
+                    if (!canvas) return;
+                    highlightElement(canvas, id);
+                    focusCanvas(canvas);
+                }),
+            );
         },
         [stormings, stormingChoice, setStormingChoice, view.kind, shown?.storming.id, canvas, select, setView],
     );

@@ -22,7 +22,18 @@ import { useCanvasValue, type DiagramCanvas } from '../view/diagram';
 import { isTyping } from '../session/selection';
 import { EditForm, HotspotForm, ResolveForm, type Anchor, type SaveResult } from './forms';
 import { elementLink } from './link';
-import { actionOfKey, actionsFor, isMac, shortcutText, stickyOf, type ActionContext, type Sticky, type StickyAction, type StickyActionId } from './registry';
+import {
+    actionOfKey,
+    actionsFor,
+    escapeClearsSelection,
+    isMac,
+    shortcutText,
+    stickyOf,
+    type ActionContext,
+    type Sticky,
+    type StickyAction,
+    type StickyActionId,
+} from './registry';
 
 /** A person's edit as the page sends it (`POST /api/session/stickies`). */
 export type StickyEditRequest =
@@ -94,6 +105,9 @@ export interface StickyActions {
 }
 
 type Form = { readonly kind: 'edit' | 'hotspot' | 'resolve'; readonly sticky: Sticky; readonly anchor: Anchor };
+
+/** Gives the canvas the keyboard focus (its own keys: Escape clears the selection), without scrolling the page. */
+export const focusCanvas = (canvas: DiagramCanvas): void => canvas.container().focus({ preventScroll: true });
 
 const BAR_HEIGHT = 32;
 const GAP = 6;
@@ -241,6 +255,14 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
             const focus = document.activeElement;
             // Enter on a focused button or link is that button's
             if (e.key === 'Enter' && focus instanceof HTMLElement && focus.closest('button, a, [role="menuitem"], [role="option"], dialog')) return;
+            // Escape with the focus nowhere (a window or a menu just closed, a pick of the palette): the selection is
+            // cleared as the canvas's own Escape does when it has the focus
+            if (canvas && escapeClearsSelection(e, { focusNowhere: focus === null || focus === document.body, selected: selected.length, open: false })) {
+                e.preventDefault();
+                canvas.selectNone();
+                focusCanvas(canvas);
+                return;
+            }
             const action = actionOfKey(e, available, mac);
             if (!action) return;
             e.preventDefault();
@@ -249,7 +271,7 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
         };
         document.addEventListener('keydown', onKey, true);
         return () => document.removeEventListener('keydown', onKey, true);
-    }, [active, form, menu, selected, available, mac, run]);
+    }, [active, form, menu, selected, available, mac, run, canvas]);
 
     // a double-click edits the sticky; a right-click opens the menu (the sticky selected first)
     useEffect(() => {
@@ -293,6 +315,12 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
     }, [follow, stormings, onOpenSticky]);
 
     /** Writes an edit, then selects `then` (a selection ID, or one made from what was written) once it is drawn. */
+    /** A window closed (saved or cancelled): the focus back on the canvas, the sticky still selected, so that Escape clears it. */
+    const closeForm = useCallback((): void => {
+        setForm(undefined);
+        if (canvas) focusCanvas(canvas);
+    }, [canvas]);
+
     const edit = async (request: StickyEditRequest, body: string, then?: string | ((written: StickyWritten) => string | undefined)): Promise<SaveResult> => {
         if (!session) return s.edit.failed('');
         try {
@@ -388,7 +416,7 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
                     sticky={form.sticky}
                     storming={formStorming}
                     anchor={form.anchor}
-                    onClose={() => setForm(undefined)}
+                    onClose={closeForm}
                     onSave={(change) => {
                         const { sticky } = form;
                         const before = sticky.label ?? sticky.local;
@@ -410,7 +438,7 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
             {form?.kind === 'hotspot' && (
                 <HotspotForm
                     anchor={form.anchor}
-                    onClose={() => setForm(undefined)}
+                    onClose={closeForm}
                     onSave={(question) =>
                         edit(
                             {
@@ -431,7 +459,7 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
                 <ResolveForm
                     anchor={form.anchor}
                     {...(resolution !== undefined && { resolution })}
-                    onClose={() => setForm(undefined)}
+                    onClose={closeForm}
                     onSave={(text) =>
                         edit(
                             { kind: 'resolveHotspot', storming: form.sticky.storming, element: form.sticky.local, resolution: text },

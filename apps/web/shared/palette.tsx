@@ -27,6 +27,14 @@ export function matchItems(items: readonly PaletteItem[], query: string): Palett
     });
 }
 
+/**
+ * Where the focus goes back when the palette closes without a pick: what had it when it opened, while it is still in
+ * the page and is not the page itself; else nowhere (the stickies' Escape then clears their selection).
+ */
+export function focusBack(before: Element | null, doc: { readonly body: unknown; contains(node: Element): boolean }): Element | undefined {
+    return before !== null && before !== doc.body && doc.contains(before) ? before : undefined;
+}
+
 /** Whether a key press opens the palette: ⌘K on a Mac, Ctrl+K elsewhere. */
 export const isPaletteKey = (e: Pick<globalThis.KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>, mac: boolean): boolean =>
     e.key.toLowerCase() === 'k' && !e.altKey && !e.shiftKey && (mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey);
@@ -63,6 +71,13 @@ export function CommandPalette({
     const [query, setQuery] = useState('');
     const [active, setActive] = useState(0);
     const dialog = useRef<HTMLDialogElement>(null);
+    // what had the focus when it opened: given it back when the palette is closed without a pick
+    const before = useRef<Element | null>(typeof document === 'undefined' ? null : document.activeElement);
+    const cancel = (): void => {
+        onClose();
+        const back = focusBack(before.current, document);
+        if (back instanceof HTMLElement) back.focus({ preventScroll: true });
+    };
     const list = useRef<HTMLUListElement>(null);
     const listId = useId();
     const shown = useMemo(() => matchItems(items, query).slice(0, SHOWN), [items, query]);
@@ -97,12 +112,13 @@ export function CommandPalette({
             className="command-palette"
             aria-label={label}
             onCancel={(e) => {
+                // Escape: closed, nothing run; the event goes no further (the canvas keeps its selection)
                 e.preventDefault();
-                onClose();
+                cancel();
             }}
             onClick={(e) => {
                 // a click on the backdrop (the dialog's own box, outside its content)
-                if (e.target === dialog.current) onClose();
+                if (e.target === dialog.current) cancel();
             }}
         >
             <div className="command-palette-box">
