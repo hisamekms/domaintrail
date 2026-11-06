@@ -1,0 +1,16 @@
+{
+  "name": "@domaintrail/knowledge",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./protocol": "./src/protocol.ts"
+  },
+  "dependencies": {
+    "@domaintrail/kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "fast-check": "4.10.2"
+  }
+}

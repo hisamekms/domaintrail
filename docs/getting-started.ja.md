@@ -103,6 +103,10 @@ Live View は保存のたびに追従します。追加・変更された要素�
   パッケージの `schema/diagnostics.schema.json`）。
 - `dt lsp` は言語サーバーです。編集のたびの `dt check` と同じ診断、定義・参照、ホバー、リネーム。Claude Code では
   プラグインを使うと、`.dt` ファイルを編集するたびに Claude が診断を受け取ります（[Claude Code](#claude-code) を参照）。
+- `dt mcp` は Claude Code にプロジェクトの **ナレッジ** を渡します。セッションで付箋ごとに話されたこと・わかったこと
+  （なぜか、どのくらいの頻度か、誰が言ったか）で、ファシリテーターがオンにするとチャットから抽出されます
+  （`dt guide knowledge`）。`claude mcp add domaintrail -- dt mcp` で登録すると、エージェントは要素を実装する前に
+  `knowledge_for_element` を呼びます（`dt guide mcp`）。
 
 ## インストールと最初のモデル
 

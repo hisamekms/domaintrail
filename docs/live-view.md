@@ -5,16 +5,16 @@ serves the page at <http://127.0.0.1:4321> (`--port`, `--host`, or `open.port` /
 and runs until Ctrl+C. [Getting started](getting-started.md#watch-it-in-the-live-view) shows what to look at first;
 this page describes every pane. How its buttons and spacing are built is in [UI rules](ui-rules.md).
 
-The app bar runs across the top; under it the screen has three columns: the left column — the navigator (the lists)
-on top and the detail of the selected item (the inspector) under it — the canvas, and, in a session, the chat at the
-right end. Panes are closed and opened with the icon buttons at their top (a closed detail leaves a narrow rail at the
-bottom of the left column, with the button that opens it). The left column's width, the chat's width and the split
-between the navigator and the detail are dragged; each edge is also a separator the keyboard moves (focused, the arrow
-keys along it step it, Shift in larger steps, Home / End go to its limits) and a double click gives its default size
-back. The split has a grip, so that it is seen at rest; the navigator and the detail each keep a little room. All of it
-is remembered per browser. A pane slides in and out as it opens and closes (its content does not reflow on the way),
-and the canvas keeps what is at its center in place whenever its size changes (a pane, the window). With the OS's
-"reduce motion" setting everything is instant.
+The app bar runs across the top; under it the screen has three columns: the left column — the navigator (the lists;
+the tree with the detail of the selected item, the inspector, under it) — the canvas, and, in a session, the chat at
+the right end. Panes are closed and opened with the icon buttons at their top. The left column's width (up to half
+the window, always leaving the canvas some room), the chat's width and the split between the tree and the detail are
+dragged; each edge is also a separator the keyboard moves (focused, the arrow keys along it step it, Shift in larger
+steps, Home / End go to its limits) and a double click gives its default size back. The split has a grip, so that it is seen at rest; the tree and the detail each keep a little
+room, and the tree folds to its head line when the split is dragged to the top (see [木](#木-tree)). All of it is
+remembered per browser. A pane slides in and out as it opens and closes (its content does not reflow on the way), and
+the canvas keeps what is at its center in place whenever its size changes (a pane, the window). With the OS's "reduce
+motion" setting everything is instant.
 
 ## App bar
 
@@ -44,9 +44,9 @@ or mark becomes a request the facilitator approves in the panel. Everything come
 
 A column of icons at its left edge, the activity bar, picks the list the navigator shows — 木 and 差分, with the
 number of changes as a badge (問題 is opened from the app bar) — and clicking the list shown collapses the column to the
-activity bar (it never disappears); the detail goes with it (it is not shown alone: to give the detail the whole
-column, drag the split up). Opening something in the detail from elsewhere (a link in the chat, a double click in the
-tree, a problem) opens the column again. At its foot:
+activity bar (it never disappears). The detail is under the tree only: 問題 and 差分 take the whole column. Opening
+something in the detail from elsewhere (a link in the chat, a double click in the tree, a problem in a file) opens the
+column again on the tree. At its foot:
 
 - **The health**: a dot, green when all is well, larger and amber or red with a word when it is not (警告: connecting,
   no sources, an older diagram shown, warnings; エラー: the model does not validate, or the server is gone). A click
@@ -67,6 +67,13 @@ them, for a storming without stages); a collapsed stage counts its timelines aft
 model tree's groups do. A click shows that view — the storming's integrated canvas, the stage or the timeline — as the
 view bar's pickers do (the two always show the same choice) and selects it for the detail. The filter at the top keeps the rows whose name or ID holds the text, with their rows above
 (a matching storming or stage keeps all its rows); what is folded is remembered per browser.
+
+The detail is under the tree, past the split. To give the detail more room, fold the tree: drag the split to the top,
+press ▾ in the tree's head line (it turns while folded), or, with the split focused, press ↑ (or Home) at the tree's
+smallest; the tree never folds by itself. Folded, the head line stays and names the world and what is selected
+(「イベントストーミング › 配達を完了した」) in place of the filter. ▾ again, ↓ on the split, or a drag down opens it at
+the height it had. It folds and unfolds in a short slide (none while dragged, or with "reduce motion"); the split's
+place and the fold are remembered per browser.
 
 ### 問題 (problems)
 
@@ -258,11 +265,11 @@ an attachment (`Content-Disposition` with the UTF-8 `filename*`), never cached; 
 sources, told in the menu. The read-only Live View (`dt open --host <address>`) serves the same path to whoever it
 serves the view, but has no menu.
 
-## Detail (the inspector, under the navigator)
+## Detail (the inspector, under the tree)
 
 The selected item — name, description, diagnostics, a back button naming the item it returns to (「〇〇 に戻る」), and
-buttons to show it in a view; with nothing selected, a line says to pick one. Its close button folds it to the rail at
-the bottom of the left column. Sub-tabs (on a second row when the column is narrow): 構造 / 状態遷移 / 振る舞い / 参照 / ソース. An event shows 永続化 / 非永続 next
+buttons to show it in a view; with nothing selected, a line says to pick one. It has no close button: fold the tree
+to give it the column. Sub-tabs (on a second row when the column is narrow): 構造 / 状態遷移 / 振る舞い / 参照 / ソース. An event shows 永続化 / 非永続 next
 to its kind, as it does in an aggregate's 発生させる Event list; persistent events have a database icon in the
 explorer.
 
@@ -316,7 +323,7 @@ With either baseline:
   transition, a description).
 
 A revision whose sources do not parse is reported in a banner, and nothing is marked then. Stormings are compared with
-neither baseline: their views are not marked.
+neither baseline: in a session their stickies are marked by turn instead (see [What a turn changed](#what-a-turn-changed)).
 
 ## Behaviour and settings
 
@@ -490,4 +497,77 @@ the journeys panel; the latest card follows the journey file as it is now. A few
   that changed files; すべて also lists the runs that changed nothing, and those declined, failed or cancelled. The
   other groups always show.
 
+### What a turn changed
+
+In a session (`dt open` and `dt collab` alike), when a run that changed the sources ends while the page is open, the
+Event Storming canvas marks the stickies it changed, with the model canvas's marks: an added sticky has the green ring
+and a 新 badge, a changed one the amber ring and 変 — with its label before the change small and struck through just
+under it, when the label changed (the whole of it in the tooltip) — and a removed one is a faded, dashed ghost with
+削除, where the page last saw it. A ghost that would cover a note (a sticky added where one was removed) is moved off it,
+to the nearest free place. A small bar at the canvas's top right says whose changes are marked and how many —
+「直前の作業：新 1 変 1 削除 1」 (a kind with none left out) — then 「ほかに n 件の変更 →」 while some of them are out of
+view or not drawn in this view (a press goes to the nearest one, and, when none is drawn here, to the view that draws
+them), and 印を消す. The bar is a group of ordinary buttons, reached with Tab.
+
+- **Which turn**: the latest run that ended having changed the sources (completed, waiting for an answer, declined or
+  reverted with changes), as the page saw it end. The marks stay until the next such run ends — whose marks replace
+  them, or clear them when it changed no sticky (only `.dt`, or only a timeline's or a group's steps) — or until the
+  reader presses 印を消す. A page opened after a run ended marks nothing until the next one: the reader did not see it
+  end, and a card's 図で見る shows it.
+- **Only the stickies**: the `.dtes` elements drawn as notes. A run that changed only `.dt` marks nothing here; the
+  model canvas keeps marking against its own baseline (前回の保存 or a git revision, see
+  [Comparing with a git revision](#comparing-with-a-git-revision)).
+- **The camera** moves for the marks only when none of them is in view as they appear: the reader may be reading
+  elsewhere on purpose, and one mark in view already says that the turn changed something (the bar counts the rest and
+  offers to go there). It then fits them all, zoomed in no further than it was (nor past 100%), or, when that would
+  make them too small to read, centers on the nearest; never while the reader drags or pans. With reduced motion it
+  jumps instead of gliding.
+- **図で見る** (the eye, under a run's text in the chat and under a card's row in AI の作業, while it changed stickies)
+  marks that run's (or that card's) changes the same way, whenever it ran, and brings them into view: the view shown if
+  it draws any of them, else the integrated canvas of the storming they are in, at a level that draws them (switching
+  from the domain model's views if needed). The bar then names it: 「作業「返品の受付」：新 1」.
+- **Per viewer**: the marks are the page's own, never sent nor shared; each page marks the turns it saw end. A removed
+  sticky is drawn only where this page saw it before (the last few versions of the stormings are kept in the page):
+  marks shown for a run that ended before the page opened count it in the bar without a ghost. A compact layout
+  (詰めて表示) draws no ghosts, as for the model's diff.
+
+The marks take a span of revisions (before and after), not a run as such, so that other changes — a person's edit of a
+sticky — can be marked the same way. Printing and exporting draw the diagram without them.
+
 The others' cursors are drawn on the same view. `dt open --host <non-loopback>` serves the same page read-only, without any of it. See [`dt guide session`](guide.md#collaboration-sessions).
+
+### Knowledge
+
+When the session's workspace has a knowledge store ([ADR 0031](adr/0031-knowledge.md), the `knowledge` section; what
+it is: [`dt guide knowledge`](guide.md#knowledge-from-the-sessions)), the page shows what the sessions found, through
+dt only (`/api/session/knowledge`):
+
+- On the canvas, a sticky with knowledge has a dot at its top right corner, and a red `!` when one of its items is in a
+  conflict; no count.
+- Selecting a sticky shows ナレッジ in its detail: its conflicts first, the two items side by side (each opens to its detail
+  there, and is not listed again below) with
+  ホットスポットにする (a message to the AI, as 聞くことをメモ sends: the facilitator's goes to the runner, a
+  participant's becomes a proposal) and 食い違いではない (the link removed from both); a conflict whose other side was
+  deleted no longer shows. Then its other items, 新しい順 or 種類の順.
+  A closed item shows its kind, its title (one line of plain text) and its labels' line (`AS-IS · 発言 · 営業 · 11/5`),
+  no text; the cards of a conflict and of a hotspot's box show their titles too. An item opens, as one outlined card:
+  its title stays where it was, the labels' line folds away as the rest unfolds (their heights move together, so
+  nothing jumps): its whole text as Markdown with the chat's rules (but its headings drawn as ordinary paragraphs,
+  the title being its heading; its `@{es:…}` references linking the stickies, each selects it; its images drawn, as
+  wide as the column at most), its labels as the ナレッジ tab's filter
+  chips (when, kind, origin, and the perspective it has; pressing one opens the tab filtered by that label alone, the
+  search and the other filters cleared), its sources as the chat's reference lines (`↩ who: quote`: a
+  message of this session by who said it, a click moves to it in the chat; another session's by its date; the whole
+  quote and its time in the tooltip), the other stickies it concerns as the chat's `#name` chips (each selects it), its
+  versions, and 直す (its title, text and labels, a new version), 画像を付ける (PNG, JPEG, GIF or WebP, at the end of its text)
+  and 消す. Deleting hides it from everyone at once; 元に戻す shows for 10 seconds. Once the store's undo window has
+  passed, its sweep removes the item for good and puts its source messages on the redaction log, which every dt of the
+  project reads (when it starts and every few minutes) to redact them in its own session database.
+- ナレッジ in the activity bar lists every item, with a search over the titles, the text and the quotes and filters by
+  AS-IS / TO-BE, kind and origin (and by a perspective, chosen from an item's chip, shown as one more chip while it
+  filters). The filters stay while the tab is closed. Opening an item rings its stickies on the canvas.
+- Whether the talk is turned into knowledge shows in the app bar, with the session's other controls: the facilitator
+  has a 💡 switch (pressed while the extraction is on, struck through while off; `POST /api/session/extraction`), the
+  others a 💡 while it is on and nothing while it is off. Every page follows a change at once (`knowledge.extraction`
+  over the WebSocket). None of it without a knowledge store.
+- The page reads the knowledge again whenever it changes: after an extraction, or anyone's change.

@@ -3,11 +3,12 @@ import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { contextNames, formatDomain } from '@domaintrail/modeling';
-import { formatStorming, isStormingFile, migrateStorming, openGaps } from '@domaintrail/storming';
+import { declarations, formatStorming, isStormingFile, migrateStorming, openGaps } from '@domaintrail/storming';
 import { generateTypeScript, policyModes, staysInside, testsWarnings } from '@domaintrail/generation';
 import { type Analysis, analyze } from '@domaintrail/analysis';
 import { compareDiagnostics, formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/kernel';
 import { JOURNEY_FILE, journeyDiagnostics, journeyNames } from '@domaintrail/collaboration';
+import { KNOWLEDGE_DIR, knowledgeDiagnostics, readKnowledgeFiles } from '@domaintrail/knowledge';
 import { checkTestsTypes, checkTsContexts, ConfigError, type ResolvedConfig } from '../config/config.js';
 import { guideTopic, parseGuide, practiceOf, quickReference } from './guide.js';
 import {
@@ -26,7 +27,17 @@ import {
 } from './ports.js';
 import { checkSvgOptions, exportSvg, SvgExportError, type SvgExportOptions } from './export-svg.js';
 import { lookup, showJson, showText } from './show.js';
-import { approveSettings, NotApproved, type StartFlags } from './trust.js';
+import {
+    approveSettings,
+    checkApproved,
+    NotApproved,
+    pinnedApproval,
+    PUBLISH_PROJECT_ENV,
+    PUBLISH_URL_ENV,
+    type SettingsApproval,
+    type StartFlags,
+} from './trust.js';
+import { PublishError } from './publish.js';
 import guide from '../../../../docs/guide.md' with { type: 'text' };
 
 export interface CliIO {
@@ -96,10 +107,39 @@ async function journeyCheck(root: string, analysis: Analysis): Promise<Analysis>
     };
 }
 
+/**
+ * The knowledge items' files (`knowledge/kn_*.md` at the root, the `files` store of ADR 0031), when there are any: K001
+ * when one does not read (an error), K002 when an item is about a sticky that no `.dtes` of the workspace has.
+ */
+async function knowledgeCheck(root: string, analysis: Analysis): Promise<Analysis> {
+    const files = await readKnowledgeFiles(path.join(root, KNOWLEDGE_DIR), root);
+    if (files.length === 0) return analysis;
+    const { stormings } = analysis;
+    const found = knowledgeDiagnostics(files, {
+        stickies: new Set(
+            stormings.stormings.flatMap((s) =>
+                declarations(s)
+                    .filter((d) => d.kind !== 'timeline' && d.kind !== 'group' && d.kind !== 'stage')
+                    .map((d) => `${s.id}.${d.id}`),
+            ),
+        ),
+        stormings: new Set(stormings.stormings.map((s) => s.id)),
+        complete: stormings.syntaxOk,
+    });
+    if (found.length === 0) return analysis;
+    return {
+        ...analysis,
+        diagnostics: [...analysis.diagnostics, ...found].sort(compareDiagnostics),
+        ok: analysis.ok && !found.some((d) => d.severity === 'error'),
+    };
+}
+
 async function runCheck(config: ResolvedConfig, io: CliIO, deps: CliDeps, report?: JsonReport): Promise<Analysis> {
     const root = config.root;
     const sources = await deps.loadWorkspace(root, config.sources, config.respectGitignore);
-    const analysis = await journeyCheck(root, await analyze(sources));
+    const checked = await journeyCheck(root, await analyze(sources));
+    // the items' files are the `files` store's: with `cloudflare` the workspace has none to check
+    const analysis = config.knowledge.store === 'files' ? await knowledgeCheck(root, checked) : checked;
     const errors = analysis.diagnostics.filter((d) => d.severity === 'error').length;
     const warnings = analysis.diagnostics.filter((d) => d.severity === 'warning').length;
     const infos = analysis.diagnostics.filter((d) => d.severity === 'info').length;
@@ -152,6 +192,7 @@ Examples:
   dt migrate dtes               rewrite .dtes files of v0.1 (\`actor\`, \`target\` in a command) to the current grammar
   dt open                       the Live View with the chat and the AI at http://127.0.0.1:4321 (runs until Ctrl+C)
   dt lsp                        language server over stdio, started by editors and AI agents
+  dt mcp                        MCP server over stdio: the project's knowledge for Claude Code (read-only)
   dt show Sales.Order           one element resolved (field sets, labels, commands, used by), instead of reading files
   dt export sources             the .dt and .dtes files and the config as <workspace>-sources.zip, to share without git
   dt export svg --storming S -o s.svg   a diagram as the Live View's 書き出し → SVG saves it, without a browser
@@ -171,6 +212,8 @@ indented \`hint:\` line when there is a suggested fix, then a summary line. With
 on stdout instead: {"diagnostics": [...], "summary": {...}}, or {"error": "..."} when the check could not run.
 Checks the Event Storming files (.dtes) too, their \`ref\`s against the .dt model; their rules start with S. An info
 (on stdout) only informs; the gaps of a storming that open hotspots keep undecided are listed before the summary.
+Checks the knowledge items' files (knowledge/kn_*.md) when there are any and the knowledge store is \`files\`; their
+rules start with K.
 Exits 0 when there are no errors, 1 on errors or when no .dt or .dtes file is found, 2 on an invalid config.
 
 Examples:
@@ -579,7 +622,7 @@ Examples:
         'host to bind (default: open.host, else 127.0.0.1; a non-loopback address serves the Live View read-only)',
     ).action(async (opts: ServeOptions) => {
         const cfg = await config();
-        await approve(cfg, opts.yes);
+        const approval = await approve(cfg, opts.yes);
         const { UnknownRevisionError } = await import('@domaintrail/visualization');
         const port = opts.port ?? cfg.open.port;
         const host = opts.host ?? cfg.open.host;
@@ -603,6 +646,7 @@ Examples:
                 base: opts.base,
                 mode: 'Solo',
                 session: openSettings(cfg, port, host),
+                knowledge: { config: cfg, approval },
                 log: io.out,
             })
             .catch((e: unknown) => {
@@ -614,7 +658,7 @@ Examples:
         io.out(`Live View: ${server.facilitatorLink ?? server.url}`);
         io.out(`  (a link for you only: opened once within 60 minutes, it signs that browser in; then ${server.url}; \`dt open link\` prints another)`);
         io.out(`Session: ${server.session} (${server.opened}, solo)`);
-        await serveWithAgent(cfg, opts, server);
+        await serveWithAgent(cfg, opts, server, approval);
     });
 
     const collab = serveOptions(
@@ -653,7 +697,7 @@ Examples:
             throw new CliError(
                 '--tunnel starts a quick tunnel for the link identity mode; with identity "access", run your own named tunnel (docs/session-access.md).',
             );
-        await approve(cfg, opts.yes, { tunnel: opts.tunnel ?? false });
+        const approval = await approve(cfg, opts.yes, { tunnel: opts.tunnel ?? false });
         const { UnknownRevisionError } = await import('@domaintrail/visualization');
         let settings = sessionSettings(cfg, cfg.collab, opts);
         let tunnel: StartedTunnel | undefined;
@@ -674,6 +718,7 @@ Examples:
                 base: opts.base,
                 mode: 'Collab',
                 session: settings,
+                knowledge: { config: cfg, approval },
                 ...(opts.tunnel && { quickTunnel: true, publicUrlAfterListen: startTunnel }),
                 log: io.out,
             })
@@ -700,7 +745,7 @@ Examples:
         }
         io.out(`Agent API: ${server.agentUrl} (another agent pairs with a code: dt collab agent-link)`);
         try {
-            await serveWithAgent(cfg, opts, server);
+            await serveWithAgent(cfg, opts, server, approval);
         } finally {
             await tunnel?.stop();
         }
@@ -836,11 +881,17 @@ Examples:
         )
         .action(async (opts: { agent: 'claude'; role?: AgentRole; once?: boolean; code: string; url?: string; yes?: boolean }) => {
             const cfg = await config();
-            await approve(cfg, opts.yes);
+            const approval = await approve(cfg, opts.yes);
             await printConfig(cfg, opts.role ? [opts.role] : AGENT_ROLES);
             const connect = { code: opts.code, ...(opts.url !== undefined && { url: opts.url }) };
             const agent = await deps
-                .startAgent({ ...agentOptions(cfg, opts.agent), connect, roles: opts.role ? [opts.role] : AGENT_ROLES, once: opts.once ?? false, log: io.out })
+                .startAgent({
+                    ...agentOptions(cfg, opts.agent, approval),
+                    connect,
+                    roles: opts.role ? [opts.role] : AGENT_ROLES,
+                    once: opts.once ?? false,
+                    log: io.out,
+                })
                 .catch((e: unknown) => {
                     if (e instanceof SessionError) throw new CliError(e.message);
                     throw e;
@@ -934,6 +985,108 @@ Examples:
         });
 
     program
+        .command('mcp')
+        .description("Start the MCP server over stdio: the project's knowledge, read-only, for Claude Code (runs until the client exits).")
+        .addHelpText(
+            'after',
+            `
+Speaks the Model Context Protocol on stdin/stdout, with three read-only tools over the knowledge store of the
+workspace (\`knowledge\` in the config; ADR 0031): knowledge_for_element (a sticky 'Storming.LocalId', or a .dt element
+'dt:Context.Aggregate.command' through the stickies that \`ref\` it), knowledge_search and knowledge_get. Started by an
+MCP client, not by hand; nothing but the protocol is written to stdout. With the \`cloudflare\` store, the
+workspace's security-relevant settings must have been approved (by \`dt open\`, \`dt collab\` or \`dt agent\` in a
+terminal): until then the tools answer that they are not. See \`dt guide mcp\`.
+
+Examples:
+  claude mcp add domaintrail -- dt mcp
+  dt -r domain mcp`,
+        )
+        .action(async () => {
+            const cfg = await config();
+            // no one to ask (stdin is the protocol's): the settings approved before, by `dt open`, `dt collab` or `dt agent`
+            const approval = await checkApproved(cfg, deps.trust);
+            await deps.startMcpServer({ config: cfg, approval, log: io.err });
+        });
+
+    program
+        .command('publish')
+        .description("Publish the stormings to the knowledge store's Worker for its read-only page (run by CI when main changes).")
+        .option('--storming <ids...>', 'only these stormings (their IDs; default: all)')
+        .option('--out <dir>', 'write the published form of each storming as <ID>.json into this directory instead, sending nothing')
+        .option('--prune', 'then remove from the Worker the published stormings the workspace no longer has')
+        .addHelpText(
+            'after',
+            `
+Lays out every storming as the Live View does (its Big Picture and its Design Level, from scratch), dates it by the
+last commit that changed its file, and sends it to the Worker of \`knowledge.store: "cloudflare"\` (PUT
+/v1/projects/<project>/published/<storming>), whose read-only page draws it with the knowledge (ADR 0031). The
+published form holds the stickies, their labels, links and places, and the commit and date: no chat, no person. A
+drawing published before is replaced; the same drawing again changes nothing. --prune then removes the published
+stormings that the workspace no longer has (removed or renamed); the knowledge about their stickies stays.
+
+It sends the writing service token of the environment (DOMAINTRAIL_KNOWLEDGE_CLIENT_ID and _SECRET) to
+knowledge.url, so the workspace's settings must be approved: as \`dt open\` approves them (asked here in a terminal),
+or, in CI, by pinning the destination outside the repository with ${PUBLISH_URL_ENV} and ${PUBLISH_PROJECT_ENV}:
+publishing then goes ahead only when the config names exactly that Worker and project. With the \`files\` store
+there is nothing to publish to; --out writes the forms to look at. See \`dt guide publish\`.
+Exits 0 when published (or written), 1 when nothing could be, 2 on an invalid config.
+
+Examples:
+  dt publish
+  dt publish --storming OrderToCash
+  dt publish --prune
+  dt publish --out published/`,
+        )
+        .action(async (opts: { storming?: string[]; out?: string; prune?: boolean }) => {
+            const cfg = await config();
+            const sending = opts.out === undefined && cfg.knowledge.store === 'cloudflare';
+            const approval = sending ? await publishApproval(cfg) : undefined;
+            const report = await deps
+                .publishStormings({
+                    config: cfg,
+                    approval,
+                    ...(opts.storming && { stormings: opts.storming }),
+                    ...(opts.out !== undefined && { out: opts.out }),
+                    ...(opts.prune && { prune: true }),
+                    log: io.err,
+                })
+                .catch((e: unknown) => {
+                    if (e instanceof PublishError) throw new CliError(e.message, e.exitCode);
+                    throw e;
+                });
+            for (const p of report.published) {
+                const drawn = p.commit ? `commit ${p.commit.slice(0, 12)}` : 'not committed';
+                if (p.file !== undefined) {
+                    const rel = path.relative(process.cwd(), p.file);
+                    io.out(`${p.storming}: written to ${rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : p.file} (${drawn})`);
+                } else io.out(`${p.storming}: ${p.changed ? 'published' : 'unchanged'} (${drawn}, drawing ${p.version})`);
+            }
+            for (const storming of report.removed ?? []) io.out(`${storming}: removed (no longer in the workspace)`);
+        });
+
+    /**
+     * The proof that `cfg`'s knowledge settings may be used to send the service token, for `dt publish`: the destination
+     * pinned by the environment (CI), else the settings approved before, else asked in a terminal (`approve`).
+     */
+    const publishApproval = async (cfg: ResolvedConfig): Promise<SettingsApproval> => {
+        let pinned: SettingsApproval | undefined;
+        try {
+            pinned = pinnedApproval(cfg, deps.env ?? process.env);
+        } catch (e) {
+            if (e instanceof NotApproved) throw new CliError(e.message);
+            throw e;
+        }
+        if (pinned) return pinned;
+        const before = await checkApproved(cfg, deps.trust);
+        if (before) return before;
+        if (!deps.confirm)
+            throw new CliError(
+                `Not published: this workspace's settings (knowledge.url among them) are not approved. Run \`dt publish\` (or \`dt open\`) in a terminal once to approve them, or, in CI, pin the destination with ${PUBLISH_URL_ENV} and ${PUBLISH_PROJECT_ENV}.`,
+            );
+        return approve(cfg, false);
+    };
+
+    program
         .command('show')
         .description('Print the resolved model of one element, state, command or context (all contexts without a name).')
         .argument('[name]', 'Sales.Order, Order, Sales, Sales.Order.confirm (a command), Sales.Order.Confirmed (a state)')
@@ -1018,7 +1171,11 @@ Examples:
         });
 
     /** The agent's settings for `dt agent` or the agent in process. */
-    const agentOptions = (cfg: ResolvedConfig, agent: 'claude'): Omit<AgentOptions, 'roles' | 'once' | 'log' | 'connect'> => {
+    const agentOptions = (
+        cfg: ResolvedConfig,
+        agent: 'claude',
+        approval: SettingsApproval | undefined,
+    ): Omit<AgentOptions, 'roles' | 'once' | 'log' | 'connect'> => {
         const configPath = program.opts<{ config?: string }>().config;
         return {
             root: cfg.root,
@@ -1030,8 +1187,10 @@ Examples:
             run: cfg.agent.run,
             answer: cfg.agent.answer,
             triage: cfg.agent.triage,
+            extract: cfg.agent.extract,
             read: cfg.agent.read,
             practice: practiceOf(parseGuide(guide)),
+            knowledge: { config: cfg, approval },
         };
     };
 
@@ -1040,7 +1199,7 @@ Examples:
      * Claude Code is not usable, says why in one line and goes on without it (an error with `--agent claude`). Then
      * serves until the session closes.
      */
-    const serveWithAgent = async (cfg: ResolvedConfig, opts: ServeOptions, server: StartedSession): Promise<void> => {
+    const serveWithAgent = async (cfg: ResolvedConfig, opts: ServeOptions, server: StartedSession, approval: SettingsApproval): Promise<void> => {
         let agent: StartedAgent | undefined;
         try {
             if (opts.agent === false) io.out('AI: not started (--no-agent); start it with `dt agent`');
@@ -1052,7 +1211,7 @@ Examples:
                 } else {
                     agent = await deps
                         .startAgent({
-                            ...agentOptions(cfg, 'claude'),
+                            ...agentOptions(cfg, 'claude', approval),
                             // the credential in memory: never on disk
                             connect: { credential: { url: server.agentUrl, token: server.agentToken, session: server.session } },
                             roles: AGENT_ROLES,
@@ -1104,9 +1263,12 @@ Examples:
         for (const line of readScopeLines(cfg, roles)) io.out(line);
     };
 
-    /** Starts only with approved security-relevant settings (`approveSettings`); refused: a one-line error. */
-    const approve = async (cfg: ResolvedConfig, yes: boolean | undefined, flags: StartFlags = {}): Promise<void> => {
-        await approveSettings(
+    /**
+     * Starts only with approved security-relevant settings (`approveSettings`); refused: a one-line error. Returns the
+     * proof of the approval, which opening the `cloudflare` knowledge store needs (`openKnowledgeStore`).
+     */
+    const approve = async (cfg: ResolvedConfig, yes: boolean | undefined, flags: StartFlags = {}): Promise<SettingsApproval> =>
+        approveSettings(
             cfg,
             { ...(deps.trust && { trust: deps.trust }), ...(deps.confirm && { confirm: (q: string) => deps.confirm!(q) }), out: io.out },
             yes ?? false,
@@ -1115,7 +1277,6 @@ Examples:
             if (e instanceof NotApproved) throw new CliError(e.message);
             throw e;
         });
-    };
 
     const config = async () => {
         const start = path.resolve(program.opts().root);
@@ -1169,9 +1330,10 @@ function openSettings(cfg: ResolvedConfig, port: number, host: string): SessionS
         identity: 'dev',
         maxParticipants: 1,
         quickReactions: cfg.collab.quickReactions,
-        agent: { port: cfg.agent.port, allowedTools: run.allowedTools, maxPreviousRunDiff: run.maxPreviousRunDiff },
+        agent: { port: cfg.agent.port, allowedTools: run.allowedTools, maxPreviousRunDiff: run.maxPreviousRunDiff, extractTimeout: cfg.agent.extract.timeout },
         classifier: cfg.classifier,
         templates: cfg.templates,
+        knowledge: cfg.knowledge,
     };
 }
 
@@ -1182,9 +1344,10 @@ function sessionSettings(cfg: ResolvedConfig, server: { port: number; host: stri
         ...cfg.collab,
         port: opts.port ?? server.port,
         host: opts.host ?? server.host,
-        agent: { port: cfg.agent.port, allowedTools: run.allowedTools, maxPreviousRunDiff: run.maxPreviousRunDiff },
+        agent: { port: cfg.agent.port, allowedTools: run.allowedTools, maxPreviousRunDiff: run.maxPreviousRunDiff, extractTimeout: cfg.agent.extract.timeout },
         classifier: cfg.classifier,
         templates: cfg.templates,
+        knowledge: cfg.knowledge,
     };
 }
 

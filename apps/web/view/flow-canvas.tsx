@@ -523,6 +523,8 @@ function createFlowCanvas(state: CanvasState, store: ReturnType<typeof useStoreA
             return itemForElement([...state.items.values()], elementId, rectCenter({ x: -x / zoom, y: -y / zoom, w: w / zoom, h: h / zoom }))?.id;
         },
 
+        elementNodes: (elementId) => [...state.items.values()].filter((i) => i.type === 'node' && !i.ghost && i.elementId === elementId).map((i) => i.id),
+
         selectedIds: () => [...state.selected],
         onlySelectedId: () => (state.selected.size === 1 ? [...state.selected][0] : undefined),
         selectionBounds,

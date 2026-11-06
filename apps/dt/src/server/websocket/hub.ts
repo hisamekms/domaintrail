@@ -4,13 +4,14 @@ import type { Duplex } from 'node:stream';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import type { ClientMessage, SessionServerMessage } from '@domaintrail/collaboration/protocol';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
+import type { KnowledgeChangedMessage, KnowledgeExtractionMessage } from '@domaintrail/knowledge/protocol';
 import { parseClientMessage } from './client-messages.js';
 
 /**
  * What the server sends over the WebSocket: the view, as `type: 'update'` (all the read-only Live View ever sends), and in a
  * session the messages of `SessionServerMessage` (`session.*`, `request.*`, `run.*`, `revision.*`, `presence.*`).
  */
-export type ServerMessage = ViewPayload | SessionServerMessage;
+export type ServerMessage = ViewPayload | SessionServerMessage | KnowledgeChangedMessage | KnowledgeExtractionMessage;
 
 /** A page connected to the hub, with what the server knows of it (`data`: its participant in a session). */
 export interface Connection<T> {

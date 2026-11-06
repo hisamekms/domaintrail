@@ -1,4 +1,4 @@
-import { Eye, PanelBottomClose, Undo2 } from 'lucide-react';
+import { Eye, Undo2 } from 'lucide-react';
 import { createContext, useContext, type ReactNode } from 'react';
 import {
     type CommandModel,
@@ -44,7 +44,8 @@ import {
 import { ownerElement } from './render';
 import { diffRows, rowClass, type RowChange } from './row-diff';
 import { SourceView, type SourceFocus } from './source';
-import { isStormingSelection, stormingSelectionName } from './storming';
+import { isStormingSelection, stormingSelectionTitle } from './storming';
+import type { StormingView } from '@domaintrail/visualization/protocol';
 import { usagesOf } from './usages';
 import { Act } from './shared/act';
 
@@ -67,6 +68,8 @@ const useBase = () => useContext(BaseContext);
 export interface InspectorProps {
     model: DomainModel | null;
     mode: DisplayMode;
+    /** The stormings, to name a storming element the back button returns to. */
+    stormings: readonly StormingView[];
     selected: string | undefined;
     diagnostics: Diagnostic[];
     diff: ModelDiff;
@@ -79,7 +82,7 @@ export interface InspectorProps {
     sourceFocus: SourceFocus | undefined;
     /** The state diagram of an aggregate (the 状態遷移 tab). */
     statesView: (aggregateId: string) => ReactNode;
-    /** The details of a storming element (`es/…`), under the back and close buttons (`history`). */
+    /** The details of a storming element (`es/…`), under the back button (`history`, when there is one). */
     stormingView: (id: string, history: ReactNode) => ReactNode;
     tab: InspectorTab;
     onTab: (tab: InspectorTab) => void;
@@ -90,7 +93,6 @@ export interface InspectorProps {
     /** The selection "back" returns to, if any. */
     backTo: string | undefined;
     onBack: () => void;
-    onClose: () => void;
     /** Placed next to the selected element's name (in a session, the 💬 that adds it as a request's target). */
     headingAction?: ReactNode;
     /** A selected context's modeling journeys, in brief (in a session). */
@@ -124,28 +126,27 @@ function revealTargets(r: Resolved): RevealTarget[] {
     return out;
 }
 
+/**
+ * A selection's name, as the back button and the folded tree's head line give it: a file's path, else the storming
+ * element's or the item's name in the display mode (its label in ラベル, its name when it has no label).
+ */
+export function selectionName(id: string, mode: DisplayMode, model: DomainModel | null, stormings: readonly StormingView[]): string {
+    return selectedFile(id) ?? (isStormingSelection(id) ? stormingSelectionTitle(stormings, id, mode) : namer(mode, model).id(id));
+}
+
 export function Inspector(props: InspectorProps) {
     const { model, selected } = props;
     const tx = useT();
-    const backName =
-        props.backTo &&
-        (selectedFile(props.backTo) ?? (isStormingSelection(props.backTo) ? stormingSelectionName(props.backTo) : namer(props.mode, model).id(props.backTo)));
-    // its own row above the kind badge: back on the left, close on the right, so the two aren't mistaken for each other
-    const history = (
+    const backName = props.backTo && selectionName(props.backTo, props.mode, model, props.stormings);
+    // its own row above the kind badge, when there is somewhere to go back to
+    const history = backName ? (
         <div className="history">
-            {backName && (
-                <button className="back-button" onClick={props.onBack} data-tooltip={tx.backTo(backName)} aria-label={tx.backTo(backName)}>
-                    <Undo2 size={14} aria-hidden />
-                    <span className="back-name">{backName}</span>
-                </button>
-            )}
-            <span className="history-actions">
-                <button className="icon-button close-button" onClick={props.onClose} data-tooltip={tx.closeInspector} aria-label={tx.closeInspector}>
-                    <PanelBottomClose size={16} aria-hidden />
-                </button>
-            </span>
+            <button className="back-button" onClick={props.onBack} data-tooltip={tx.backTo(backName)} aria-label={tx.backTo(backName)}>
+                <Undo2 size={14} aria-hidden />
+                <span className="back-name">{backName}</span>
+            </button>
         </div>
-    );
+    ) : null;
     // a file can be shown even without a model (e.g. a syntax error before the first valid parse)
     const file = selectedFile(selected);
     if (file) {
@@ -175,12 +176,7 @@ export function Inspector(props: InspectorProps) {
     // a storming is shown even without a model (a workspace of .dtes files only, or .dt files that do not parse)
     if (isStormingSelection(selected)) return <div className="inspector">{props.stormingView(selected, history)}</div>;
     // nothing to say without a model: the explorer and the view already say there is none yet
-    if (!model)
-        return (
-            <div className="inspector">
-                <div className="inspector-head">{history}</div>
-            </div>
-        );
+    if (!model) return <div className="inspector">{history && <div className="inspector-head">{history}</div>}</div>;
     const r = selected ? resolve(model, selected) : undefined;
     // a removed item is shown as it was in the baseline
     if (selected && !r && props.base && resolve(props.base, selected)) return <Inspector {...props} model={props.base} base={null} removedItem />;

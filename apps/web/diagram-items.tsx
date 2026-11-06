@@ -72,6 +72,12 @@ export function NodeContent({ p, Marks }: { p: NodeProps; Marks: MarksComponent 
             )}
             {p.compartment > 0 && <div className="dn-compartment" style={{ height: p.compartment }} />}
             {(p.badge || p.diag !== 'none') && <Marks badge={p.badge} diag={p.diag} />}
+            {/* a turn's changed sticky: its text before, small and struck through under it */}
+            {p.was !== undefined && (
+                <div className="dn-was" {...{ [TOOLTIP_ATTR]: t.turnMarks.was(p.was) }}>
+                    <del>{p.was}</del>
+                </div>
+            )}
         </>
     );
 }

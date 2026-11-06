@@ -109,6 +109,10 @@ discussed and changed, never the generated types.
 - `dt lsp` is a language server: the diagnostics of `dt check` after every edit, definitions, references, hover and
   rename. With Claude Code, a plugin makes Claude see the diagnostics after each edit of a `.dt` file (see
   [Claude Code](#claude-code)).
+- `dt mcp` gives Claude Code the project's **knowledge**: what was said and found in the sessions about each sticky —
+  why, how often, who said so — taken from the chat when the facilitator turns it on (`dt guide knowledge`). Register
+  it with `claude mcp add domaintrail -- dt mcp`; the agent calls `knowledge_for_element` before implementing an
+  element (`dt guide mcp`).
 
 ## Install and the first model
 

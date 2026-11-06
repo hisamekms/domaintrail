@@ -1,22 +1,14 @@
 import { useCallback, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { Diff, FolderTree, PanelBottomOpen, TriangleAlert, type LucideIcon } from 'lucide-react';
-// the approved logo (assets/brand, never redrawn), bundled into dist/web with a hashed name: one per theme
-import logoDark from '../../../assets/brand/logo-dark.svg';
-import logoLight from '../../../assets/brand/logo-light.svg';
+import { Diff, FolderTree, Lightbulb, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { BrandLogo } from './brand';
 import { useT } from '../i18n';
-import { readStored, Resizer, useElementHeight, writeStored } from '../shared/layout';
 import { usePaneMotion } from '../shared/motion';
 import { Tooltips } from '../tooltip';
-import { DETAIL_MIN, detailMax, detailSize, drawnDetailHeight, type LeftView, type Panes } from './panes';
+import { clampSize, readStored, Resizer, useElementHeight, writeStored } from '../shared/layout';
+import { drawnTreeHeight, LEFT_MIN, leftMax, MIN_CANVAS_WIDTH, TREE_MIN, treeMax, treeSize, useWindowWidth, type LeftView, type Panes } from './panes';
 
 /** Width of the activity bar (the collapsed left column); see styles.css. */
 const BAR_WIDTH = 44;
-/** Height of the rail a closed detail leaves at the bottom of the left column, with the button that opens it. */
-const RAIL_SIZE = 28;
-/** The left column's width, between these (and never leaving the canvas less than MIN_CANVAS_WIDTH). */
-const LEFT_MIN = 220;
-const LEFT_MAX = 560;
-const MIN_CANVAS_WIDTH = 320;
 
 /**
  * The conversation: a pillar at the right end of the page, the whole height, opened and closed by the reader (a
@@ -67,16 +59,19 @@ export interface LeftList {
     readonly count: number;
 }
 
-const LIST_ICONS: Record<LeftView, LucideIcon> = { tree: FolderTree, problems: TriangleAlert, changes: Diff };
-const LISTS: readonly LeftView[] = ['tree', 'problems', 'changes'];
-/** The lists the activity bar picks; 問題 is opened from the app bar (it concerns the whole page). */
-const RAIL_LISTS: readonly LeftView[] = ['tree', 'changes'];
+const LIST_ICONS: Record<LeftView, LucideIcon> = { tree: FolderTree, problems: TriangleAlert, changes: Diff, knowledge: Lightbulb };
+const LISTS: readonly LeftView[] = ['tree', 'problems', 'changes', 'knowledge'];
+/** The lists the activity bar picks; 問題 is opened from the app bar (it concerns the whole page); ナレッジ when there is one. */
+const RAIL_LISTS: readonly LeftView[] = ['tree', 'changes', 'knowledge'];
+
+/** The lists of the left pane: ナレッジ only in a session with a knowledge store. */
+export type LeftLists = Record<Exclude<LeftView, 'knowledge'>, LeftList> & { readonly knowledge?: LeftList | undefined };
 
 /**
  * The page's layout: the app bar across the top — the brand and the workspace's name, the world switch, a session's
  * current journey, then what concerns the whole page (問題, and a session's people, AI state and menu) — and under it three columns: the left
- * column — its activity bar, the navigator (the lists) over the detail (the inspector) with a splitter between them,
- * and the health and the settings at its foot — the canvas with its banners, and the conversation at the right end,
+ * column — its activity bar, the navigator (the lists; the tree over the detail, the inspector, with a splitter between
+ * them) and the health and the settings at its foot — the canvas with its banners, and the conversation at the right end,
  * when there is one. What goes in each place is the caller's.
  */
 export function AppShell(props: {
@@ -91,14 +86,14 @@ export function AppShell(props: {
     journeySlot?: (slot: HTMLDivElement | null) => void;
     /** The session serving the page, known from the start (the page's boot): its controls' place is kept until they arrive. */
     session?: SessionBarState | undefined;
-    lists: Record<LeftView, LeftList>;
+    lists: LeftLists;
     /** At the foot of the left column (at the bottom of its activity bar when collapsed). */
     health: ReactNode;
     settings: ReactNode;
     /** Notices over the canvas (connection lost, a model that does not parse…). */
     banners: ReactNode;
     workspace: ReactNode;
-    /** The detail of the selected item (the inspector), under the navigator. */
+    /** The detail of the selected item (the inspector), under the tree (the other lists show none). */
     inspector: ReactNode;
     /** Composition point for the conversation pillar; nothing under `dt view` (yet). */
     conversation?: Conversation;
@@ -106,19 +101,28 @@ export function AppShell(props: {
     overlays: ReactNode;
 }) {
     const { panes, conversation } = props;
-    const { explorerOpen: leftOpen, setExplorerOpen, explorerWidth, setExplorerWidth, leftView, showLeft } = panes;
-    const { inspectorOpen: detailOpen, setInspectorOpen: setDetailOpen, detailHeight, setDetailHeight } = panes;
+    const { explorerOpen: leftOpen, setExplorerOpen, setExplorerWidth, leftView, showLeft } = panes;
+    const { treeHeight, setTreeHeight, treeFolded, setTreeFolded } = panes;
     const { conversationOpen, setConversationOpen, conversationWidth, setConversationWidth } = panes;
     const t = useT();
     const conversationShown = conversation !== undefined && conversationOpen;
-    const leftWidth = leftOpen ? BAR_WIDTH + explorerWidth : BAR_WIDTH;
     const conversationSpace = conversationShown ? conversationWidth : 0;
+    // the saved width as drawn: within the room the window leaves now (the saved one is kept for a wider window)
+    const windowWidth = useWindowWidth();
+    const widest = (): number => leftMax(window.innerWidth, BAR_WIDTH, conversationSpace);
+    const explorerWidth = clampSize(panes.explorerWidth, LEFT_MIN, leftMax(windowWidth, BAR_WIDTH, conversationSpace));
+    const leftWidth = leftOpen ? BAR_WIDTH + explorerWidth : BAR_WIDTH;
+    // the tree carries the detail under it, the other lists take the whole column
+    const withDetail = leftView === 'tree';
     // the split of the left column follows its height (the window's)
     const column = useRef<HTMLElement>(null);
     const columnHeight = useElementHeight(column);
-    const detail = detailSize(detailHeight, columnHeight);
+    const tree = treeSize(treeHeight, columnHeight);
+    // folded, the navigator is its head line: a drag of the splitter starts from there
+    const navigator = useRef<HTMLDivElement>(null);
+    const navigatorHeight = useElementHeight(navigator);
     // opening and closing panes move at different paces (the motion section of styles.css); not on the first display
-    const motion = usePaneMotion([leftOpen, detailOpen, conversationShown]);
+    const motion = usePaneMotion([leftOpen, conversationShown]);
     const { sessionSlot } = props;
     const slot = useRef<HTMLDivElement | null>(null);
     const setSlot = useCallback(
@@ -134,9 +138,7 @@ export function AppShell(props: {
         <div className={`app motion-${motion}`}>
             <header className="app-bar">
                 <span className="app-bar-brand">
-                    {/* the logo for the theme (the other hidden by CSS), decorative: the text beside it names it */}
-                    <img className="brand-logo brand-logo-light" src={logoLight} alt="" />
-                    <img className="brand-logo brand-logo-dark" src={logoDark} alt="" />
+                    <BrandLogo />
                     <span className="brand">DomainTrail</span>
                     {props.workspaceName && (
                         <span className="workspace-name" data-tooltip={props.workspaceName}>
@@ -161,6 +163,7 @@ export function AppShell(props: {
                                 const Icon = LIST_ICONS[k];
                                 const active = leftOpen && leftView === k;
                                 const list = props.lists[k];
+                                if (!list) return null;
                                 return (
                                     <button
                                         key={k}
@@ -178,46 +181,40 @@ export function AppShell(props: {
                             })}
                         </div>
                         <aside className="pane left-pane" style={{ width: explorerWidth }} inert={!leftOpen} ref={column}>
-                            <div className="navigator">
+                            <div
+                                className={`navigator${withDetail ? ' with-detail' : ''}${withDetail && treeFolded ? ' folded' : ''}`}
+                                style={{ height: withDetail && !treeFolded ? drawnTreeHeight(treeHeight, columnHeight) : undefined }}
+                                ref={navigator}
+                            >
                                 {/* every list stays mounted, so that switching keeps the tree's filter and the lists' scroll */}
                                 {LISTS.map((k) => (
                                     <div key={k} className="left-content" hidden={leftView !== k}>
-                                        {props.lists[k].content}
+                                        {props.lists[k]?.content}
                                     </div>
                                 ))}
                             </div>
-                            <Resizer
-                                direction="y"
-                                size={detail}
-                                min={DETAIL_MIN}
-                                max={() => detailMax(column.current?.clientHeight ?? columnHeight)}
-                                invert
-                                open={detailOpen}
-                                collapsed={RAIL_SIZE}
-                                onResize={setDetailHeight}
-                                onOpenChange={setDetailOpen}
-                                onReset={() => setDetailHeight(null)}
-                                label={t.resizeDetail}
-                                grip
-                            />
-                            {/* the detail stays mounted while closed, so that it keeps its tab, its scroll and its diagram's camera */}
-                            <div
-                                className={`detail${detailOpen ? ' open' : ''}`}
-                                style={{ height: drawnDetailHeight(detailOpen, detailHeight, columnHeight, RAIL_SIZE) }}
-                            >
-                                <div className="rail" inert={detailOpen}>
-                                    <button
-                                        className="icon-button"
-                                        onClick={() => setDetailOpen(true)}
-                                        data-tooltip={t.openInspector}
-                                        aria-label={t.openInspector}
-                                    >
-                                        <PanelBottomOpen size={16} aria-hidden />
-                                    </button>
-                                </div>
-                                <div className="detail-inner" style={{ height: detail }} inert={!detailOpen}>
-                                    {props.inspector}
-                                </div>
+                            {withDetail && (
+                                <Resizer
+                                    direction="y"
+                                    size={tree}
+                                    min={TREE_MIN}
+                                    max={() => treeMax(column.current?.clientHeight ?? columnHeight)}
+                                    open={!treeFolded}
+                                    collapsed={navigatorHeight}
+                                    onResize={setTreeHeight}
+                                    onOpenChange={(open) => setTreeFolded(!open)}
+                                    onReset={() => {
+                                        setTreeHeight(null);
+                                        setTreeFolded(false);
+                                    }}
+                                    label={t.resizeTree}
+                                    grip
+                                    foldsAtMin
+                                />
+                            )}
+                            {/* the detail stays mounted under the other lists, so that it keeps its tab, its scroll and its diagram's camera */}
+                            <div className="detail" hidden={!withDetail}>
+                                {props.inspector}
                             </div>
                         </aside>
                     </div>
@@ -230,7 +227,7 @@ export function AppShell(props: {
                     direction="x"
                     size={explorerWidth}
                     min={LEFT_MIN}
-                    max={() => Math.min(LEFT_MAX, window.innerWidth - BAR_WIDTH - conversationSpace - MIN_CANVAS_WIDTH)}
+                    max={widest}
                     open={leftOpen}
                     collapsed={0}
                     onResize={setExplorerWidth}

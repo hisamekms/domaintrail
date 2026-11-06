@@ -5,7 +5,19 @@ import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { createClaudeCodeRunner } from './claude-code.js';
-import { agentDtArguments, checkDtOutsideWorkspace, dtShim, findProgram, inside, launcherScript, pinDt, withPathFirst, writeDtShim } from './dt-shim.js';
+import {
+    agentDtArguments,
+    checkDtOutsideWorkspace,
+    dtShim,
+    findProgram,
+    inside,
+    knowledgeMcpLauncher,
+    launcherScript,
+    pinDt,
+    withPathFirst,
+    writeDtShim,
+    writeKnowledgeMcpLauncher,
+} from './dt-shim.js';
 import { createDtTools } from './dt-tools.js';
 
 const dirs: string[] = [];
@@ -221,5 +233,40 @@ describe("the agent's dt (agent.run.dt)", () => {
         expect(ran.mode).toBe(0o700);
         expect(await gone(ran.cwd)).toBe(true);
         expect(ran.args).toEqual(['-r', root, 'check']);
+    });
+
+    test('the launcher of dt mcp: the pinned dt with -r (and -c) and mcp, from a private directory outside the workspace', async () => {
+        expect(knowledgeMcpLauncher({ runtime: '/usr/bin/node', script: "/opt/it's/dt.js" }, '/w', '/tmp/p', '/c/team.jsonc', 'darwin')).toEqual({
+            file: 'dt-mcp',
+            text: `#!/bin/sh\ncd '/tmp/p' || exit 1\nexec '/usr/bin/node' '/opt/it'\\''s/dt.js' '-r' '/w' '-c' '/c/team.jsonc' 'mcp'\n`,
+        });
+        expect(knowledgeMcpLauncher({ script: 'C:\\dt.exe' }, 'C:\\w', 'C:\\Temp\\p', undefined, 'win32')).toEqual({
+            file: 'dt-mcp.cmd',
+            text: '@echo off\r\ncd /d "C:\\Temp\\p" || exit /b 1\r\n"C:\\dt.exe" "-r" "C:\\w" "mcp"\r\n',
+        });
+        expect(() => knowledgeMcpLauncher({ script: 'C:\\dt.exe' }, 'C:\\a&b', 'C:\\p', undefined, 'win32')).toThrow('cannot hold on Windows');
+        expect(() => knowledgeMcpLauncher({ script: '/dt' }, '/w\nx', '/p')).toThrow('Not a command word');
+
+        const root = await scratch();
+        const tools = await scratch();
+        const record = path.join(tools, 'record.mjs');
+        const out = path.join(tools, 'out.json');
+        await writeFile(
+            record,
+            `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(out)}, JSON.stringify({ cwd: process.cwd(), args: process.argv.slice(2) }));\n`,
+        );
+        const launcher = await writeKnowledgeMcpLauncher(pinDt({ command: node, args: [record] }, root), root, path.join(tools, 'team.jsonc'));
+        expect(launcher.args).toEqual([]);
+        expect(path.basename(path.dirname(launcher.command))).toStartWith('domaintrail-dt-mcp-');
+        expect(inside(root, launcher.command)).toBe(false);
+        // started as Claude Code starts it: the program alone, in the workspace
+        if (process.platform !== 'win32') {
+            expect(spawnSync(launcher.command, [], { cwd: root }).status).toBe(0);
+            const ran = JSON.parse(await readFile(out, 'utf8')) as { cwd: string; args: string[] };
+            expect(realpathSync(ran.cwd)).toBe(realpathSync(path.dirname(launcher.command)));
+            expect(ran.args).toEqual(['-r', root, '-c', path.join(tools, 'team.jsonc'), 'mcp']);
+        }
+        await launcher.dispose();
+        expect(await gone(path.dirname(launcher.command))).toBe(true);
     });
 });

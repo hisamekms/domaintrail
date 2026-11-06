@@ -26,6 +26,8 @@ export interface ChatContextValue {
     /** A participant's avatar URL, when their page tells one. */
     readonly avatarOf: (id: string) => string | undefined;
     readonly onNavigate: (target: ModelTarget) => void;
+    /** Marks a unit's changes on the storming canvas and brings them into view (a card's 図で見る); absent outside the page. */
+    readonly onSeeChanges?: (span: { readonly base: string; readonly result: string; readonly name: string }) => void;
     /** Opens a view (a storming's stage, a context's structure): the guide's places. */
     readonly openView: (target: ViewTarget) => void;
     /** The facilitator, in an open session: the actions are offered. */

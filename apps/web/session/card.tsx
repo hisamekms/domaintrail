@@ -9,10 +9,11 @@
 // queued (behind how many), done, nothing left to revert, stopped or failed. What a run changed is a line of model
 // elements under its text (`ChangedElements`), shared with AI の作業.
 import { useRef, useState, type ReactNode } from 'react';
-import { Bot, Check, Circle, CircleDot, Reply, CircleX, Ellipsis, FileDiff, Hourglass, Pencil, Square, SquareCheck } from 'lucide-react';
+import { Bot, Check, Circle, CircleDot, Reply, CircleX, Ellipsis, Eye, FileDiff, Hourglass, Pencil, Square, SquareCheck } from 'lucide-react';
 import { revertableChanges, revertStatus } from '@domaintrail/collaboration';
 import type { ElementChange } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
+import { MarkdownText } from '../shared/markdown-text';
 import { useClipped } from '../view/toolbar';
 import { answerBody, type QuestionChoice } from './actions';
 import { Clamped } from './bubble';
@@ -24,7 +25,6 @@ import { useChat, type Tx } from './chat-context';
 import { assumptionDecision, questionsState, type QuestionsState } from './decisions';
 import { changedPaths, cutList, requestersOf, unitName, type ChangeUnit } from './history';
 import { isReplyable } from './replies';
-import { MarkdownText } from './markdown-text';
 import { AddReaction, ReactionRow, VoteMark } from './mark-controls';
 import { bodyText } from './mentions';
 import { useTargetNaming } from './naming';
@@ -33,6 +33,8 @@ import { runningLabel, turnState } from './status';
 import { CancelButton, RowActions, StateLabel, StatusSlot } from './status-slot';
 import { elapsed, oneLine, revisionLookup, type AgentMessage, type ReplyView, type RequestProgress } from './stream';
 import { Act } from '../shared/act';
+import { useT } from '../i18n';
+import { hasMarks, stormingChangeMarks } from '../view/change-marks';
 
 type RunJson = CardRun['run'];
 
@@ -112,6 +114,7 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                         last={i === runs.length - 1}
                         compact={compact}
                         about={about}
+                        name={title.text}
                     />
                 ))}
             </div>
@@ -232,6 +235,7 @@ function RunSection({
     last,
     compact,
     about,
+    name,
 }: {
     run: CardRun;
     display: QuoteDisplay;
@@ -239,6 +243,8 @@ function RunSection({
     last: boolean;
     compact: boolean;
     about: string;
+    /** The card's name, as the canvas's bar names the changes 図で見る shows. */
+    name: string;
 }) {
     const { tx, nameOf, control, session, jump } = useChat();
     const runs = session.state.runs;
@@ -309,7 +315,7 @@ function RunSection({
             <div className="run-agent-body">
                 <AgentBody run={run.run.id} message={run.message} />
                 {/* in AI の作業, the unit's own line above already lists what it changed */}
-                {!compact && <RunFiles run={run.run} about={about} />}
+                {!compact && <RunFiles run={run.run} about={about} name={name} />}
                 {revert.kind === 'reverted' && (
                     <DecidedLine label={tx.chat.reverted} by={revert.by.queuedBy} at={revert.by.queuedAt} run={revert.by.id} hint={tx.chat.revertedHint} />
                 )}
@@ -392,8 +398,8 @@ function AnswerLine({ run }: { run: CardRun }) {
 function AiText({ text, className, label }: { text: string; className?: string; label?: string }) {
     const { onNavigate } = useChat();
     return (
-        <div className={`chat-text chat-markdown${className ? ` ${className}` : ''}`} {...(label && { 'aria-label': label })}>
-            <MarkdownText text={text} onNavigate={onNavigate} />
+        <div className={`chat-text markdown${className ? ` ${className}` : ''}`} {...(label && { 'aria-label': label })}>
+            <MarkdownText text={text} renderText={(t) => <ReplyText text={t} onNavigate={onNavigate} />} />
         </div>
     );
 }
@@ -428,7 +434,7 @@ export function AgentBody({ run, message: m }: { run: string; message: AgentMess
                     <>
                         {changed && <AiText text={m.reply.summary} className="reply-summary" />}
                         <Clamped tx={tx} revealKey={`run:${run}`} className="reply-answer" blocks>
-                            <MarkdownText text={m.reply.answer} onNavigate={onNavigate} />
+                            <MarkdownText text={m.reply.answer} renderText={(t) => <ReplyText text={t} onNavigate={onNavigate} />} />
                         </Clamped>
                         {changed && <p className="chat-text reply-answered-changed">{tx.chat.ai.answeredChanged}</p>}
                     </>
@@ -460,7 +466,7 @@ export function AgentBody({ run, message: m }: { run: string; message: AgentMess
  * What a run changed, on a small line of their own under what the AI says (`ChangedElements`); nothing when it changed no
  * file, or while it has no result.
  */
-function RunFiles({ run, about }: { run: RunJson; about: string }) {
+function RunFiles({ run, about, name }: { run: RunJson; about: string; name: string }) {
     const { session, tx } = useChat();
     if (run.state !== 'Completed' && run.state !== 'NeedsClarification' && run.state !== 'Declined' && run.state !== 'Reverted') return null;
     const lookup = revisionLookup(session.state);
@@ -474,7 +480,7 @@ function RunFiles({ run, about }: { run: RunJson; about: string }) {
             </p>
         );
     if (paths.size === 0) return null;
-    return <ChangedElements kind="run" base={run.baseRevision} result={run.resultRevision} about={about} />;
+    return <ChangedElements kind="run" base={run.baseRevision} result={run.resultRevision} about={about} name={name} />;
 }
 
 /** The mark of a change: ＋ added, ✎ changed (as text, never the emoji), − removed. */
@@ -521,21 +527,37 @@ export function ChangeChip({ change, onPick }: { change: ElementChange; onPick?:
 
 /**
  * What a unit changed, on one small line: the first three elements as chips (`ChangeChip`), 「ほか n」 for the rest, then
- * 変更を見る, opening the changes' dialog. Under a run's text (`run`), and under a unit's heading in AI の作業 (`unit`).
- * Until the server answered, and when no element changed (a comment, the layout) or the model could not be compared,
- * 変更を見る alone.
+ * 図で見る while it changed stickies (their marks on the storming canvas, `session/turn-marks.tsx`; `name` is what the
+ * canvas's bar calls them) and 変更を見る, opening the changes' dialog. Under a run's text (`run`), and under a unit's
+ * heading in AI の作業 (`unit`). Until the server answered, and when no element changed (a comment, the layout) or the
+ * model could not be compared, 変更を見る alone.
  */
-export function ChangedElements({ kind, base, result, about }: { kind: 'run' | 'unit'; base: string; result: string; about: string }) {
-    const { tx, revisions } = useChat();
+export function ChangedElements({ kind, base, result, about, name }: { kind: 'run' | 'unit'; base: string; result: string; about: string; name: string }) {
+    const { tx, revisions, onSeeChanges } = useChat();
+    const t = useT().turnMarks;
+    const naming = useTargetNaming();
     const h = tx.chat.history;
     const changes = useModelChanges(base, result);
-    const shown = cutList(changes.kind === 'loaded' ? changes.body.changes : [], 3);
+    const listed = changes.kind === 'loaded' ? changes.body.changes : [];
+    const shown = cutList(listed, 3);
+    const marks = onSeeChanges !== undefined && hasMarks(stormingChangeMarks(listed, naming?.mode ?? 'name'));
     return (
         <p className={`changed-elements ${kind}`} aria-label={h.changedElements}>
             {shown.shown.map((c) => (
                 <ChangeChip key={changeKey(c)} change={c} />
             ))}
             {shown.more > 0 && <span className="changed-elements-more">{h.more(shown.more)}</span>}
+            {marks && (
+                <Act
+                    kind="see"
+                    className="changed-elements-on-canvas"
+                    icon={<Eye size={12} aria-hidden />}
+                    data-tooltip={t.seeHint}
+                    onClick={() => onSeeChanges({ base, result, name })}
+                >
+                    {t.see}
+                </Act>
+            )}
             <Act kind="open" className="changed-elements-see" aria-haspopup="dialog" onClick={() => revisions.showChanges({ base, result, about })}>
                 {tx.chat.showChanges}
             </Act>

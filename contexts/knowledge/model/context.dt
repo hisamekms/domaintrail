@@ -1,0 +1,110 @@
+/// セッションで話されたこと・AI が調べたことから取り出したナレッジ（ADR 0031）。ストーミングが「何が起きるか」を持ち、
+/// ナレッジは「なぜ・どれくらい・だれが言ったか・何が分かったか」を、付箋への参照と出典つきで持つ。モデルとは別に、
+/// プロジェクトごとのストアに置く。ストア（`files` か `cloudflare`）・通信・認証はこのモデルに含めない。
+context Knowledge "ナレッジ" {
+  terms {
+    extraction: "抽出"
+    source: "出典"
+  }
+
+  /// ナレッジの識別子（`kn_` と小文字の英数字）。抽出の操作を作るときに dt が決める（同じ抽出を送り直しても同じ ID）。
+  id KnowledgeItemId "ナレッジID": String { matches(value, "^kn_[0-9a-z]{8,32}$") }
+
+  /// 画像の識別子（`img_` と小文字の英数字）。本文は `![…](image:img_…)` で画像を指す。
+  primitive ImageId "画像ID": String { matches(value, "^img_[0-9a-z]{8,32}$") }
+
+  /// ナレッジとメンバーを持つ共有の単位の名前。ワークスペースは `knowledge.project` でこれを指す。API のパスに入る。
+  primitive ProjectName "プロジェクト名": String { matches(value, "^[a-z0-9][a-z0-9-]{0,62}$") }
+
+  /// ナレッジの見出し: 1行の短い文（40字まで）。Markdown ではなく、ただの文字。前後に空白を置かない。閉じたナレッジはこれだけを見せる。
+  primitive ItemTitle "見出し": String { length(value) <= 40 and matches(value, "^\S(.*\S)?$") }
+
+  /// ナレッジの本文（Markdown）。
+  primitive ItemText "本文": String { length(value) >= 1 and length(value) <= 20000 }
+
+  /// 出典のメッセージの短い引用。セッションのデータベースは1台にしか残らないので、AI の言い換えを読み手が確かめられるのはこれ。
+  primitive Quote "引用": String { length(value) >= 1 and length(value) <= 500 }
+
+  /// 立場（案件担当、営業、外注先など）。役割で書き、人の名前は書かない。
+  primitive Perspective "立場": String { length(value) >= 1 and length(value) <= 100 }
+
+  /// 抽出が操作ごとに添える理由。監査のログに残る。
+  primitive Reason "理由": String { length(value) >= 1 and length(value) <= 2000 }
+
+  /// 付箋の参照 `<Storming>.<LocalId>`。ラベルを変えても切れない。付箋があるかは `dt check` が確かめる。
+  primitive StickyRef "付箋": String { matches(value, "^[_a-zA-Z][_a-zA-Z0-9]*\.[_a-zA-Z][_a-zA-Z0-9]*$") }
+
+  /// セッションの ID（コラボレーションのセッション）。
+  primitive SessionRef "セッション": String { length(value) >= 1 and length(value) <= 100 }
+
+  /// セッションの中のメッセージの ID（人のメッセージか AI の答え）。
+  primitive MessageRef "メッセージ": String { length(value) >= 1 and length(value) <= 100 }
+
+  /// ユーザー（Access のメールアドレス）。
+  primitive UserName "ユーザー": String { length(value) >= 1 and length(value) <= 320 }
+
+  /// ナレッジの版（1 から）。
+  primitive ItemVersion "版": Int { value >= 1 }
+
+  /// セッションの中での抽出の番号（1 から）。
+  primitive ExtractionNumber "抽出の番号": Int { value >= 1 }
+
+  /// AS-IS の話か TO-BE の話か。どちらでもないときも `none` と決める。
+  enum When "いつの話" { as_is "AS-IS" to_be "TO-BE" none "なし" }
+
+  /// ナレッジの種類。決まった軸で、設定では足さない（抽出のプロンプトと絞り込みをどこでも同じにする）。
+  enum KnowledgeKind "種類" {
+    rule "ルール"
+    flow "流れ"
+    example "例"
+    term "言葉"
+    pain "困りごと"
+    want "要望"
+    decision "決定"
+  }
+
+  /// どこまで信じてよいか: ひとりが言った、居合わせた何人かが合意した、AI がコードや文書を調べた、AI の仮説（だれも言っていない）。
+  enum Origin "出どころ" { said "発言" agreed "合意" investigated "調査" inferred "推測" }
+
+  /// 4つの独立したラベル。組み合わせ（「TO-BE で見込まれる困りごと」）を書けるように、軸を分ける。
+  value Labels "ラベル" {
+    when: When "いつの話"
+    kind: KnowledgeKind "種類"
+    origin: Origin "出どころ"
+    perspective: Perspective? "立場"
+  }
+
+  /// ナレッジの中身: 見出し、本文、ラベル、どの付箋の話か。版ごとに残るのはこれ。
+  value ItemContent "中身" {
+    title: ItemTitle "見出し"
+    text: ItemText "本文"
+    labels: Labels "ラベル"
+    about: StickyRef[0..*] "付箋"
+
+    invariant distinctAbout "付箋は1回" { unique(about) }
+  }
+
+  /// ナレッジのもとになったメッセージ1つ。
+  value Source "出典" {
+    session: SessionRef "セッション"
+    message: MessageRef "メッセージ"
+    at: Timestamp "日時"
+    quote: Quote "引用"
+  }
+
+  /// セッションの何回目の抽出か。抽出の操作の冪等キーで、監査のログの「だれが」。
+  value ExtractionRef "抽出" {
+    session: SessionRef "セッション"
+    number: ExtractionNumber "番号"
+  }
+
+  /// ナレッジを変えたもの: 抽出か、人（直す・消す・元に戻す）。
+  union Actor "変えたもの" {
+    Extractor "抽出" {
+      extraction: ExtractionRef "抽出"
+    }
+    Person "人" {
+      user: UserName "ユーザー"
+    }
+  }
+}

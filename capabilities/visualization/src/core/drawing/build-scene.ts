@@ -31,8 +31,15 @@ import {
     type SceneInternal,
     type SceneNode,
 } from './scene.js';
+/** The elements marked added, changed or removed: a model's diff, or any other list of element IDs (a turn's stickies). */
+export interface ChangedElements {
+    readonly added: readonly string[];
+    readonly changed: readonly string[];
+    readonly removed: readonly string[];
+}
+
 export interface RenderOptions {
-    diff: ModelDiff;
+    diff: ModelDiff | ChangedElements;
     diagnostics: Diagnostic[];
     /** The previously shown version of the same graph; removed nodes are drawn as ghosts at their old position. */
     previous?: LaidOutGraph;

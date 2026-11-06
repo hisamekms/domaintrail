@@ -80,6 +80,11 @@ export interface Ctx {
     voteAssumption(who: Person, run: RunJson, assumption: number, alternative?: string): Promise<void>;
     /** `who` reacts with `emoji` to a message or to a run's turn. */
     react(who: Person, on: RequestJson | RunJson, emoji: string): Promise<void>;
+    /**
+     * Waits `--pause` seconds (none by default), saying so, so that a page opened meanwhile sees the next run end (the
+     * marks of what a turn changed appear only for a run that ends while the page is open).
+     */
+    pause(): Promise<void>;
     log(line: string): void;
 }
 
@@ -107,6 +112,8 @@ export interface SeedOptions {
      * two queued behind it, which the agent then runs the same way, one after the other.
      */
     readonly leaveRunning?: boolean;
+    /** Seconds `Ctx.pause` waits (none: it does not). */
+    readonly pause?: number;
     /** The built CLI (`node dist/dt.js`): the session server, and `dt fmt` / `dt check` after each run. */
     readonly dt: DtCommand;
     /** Progress of the seed. */
@@ -204,7 +211,7 @@ export async function seed(options: SeedOptions): Promise<Seeded> {
         const f = joined.facilitator;
 
         agent = await startFakeAgent({ root: dir, dt: options.dt, log: (line) => options.log(`  agent: ${line}`) });
-        const ctx = makeCtx({ root: dir, api, people: joined, agent, classifier, log: options.log });
+        const ctx = makeCtx({ root: dir, api, people: joined, agent, classifier, log: options.log, pause: options.pause ?? 0, url: server.url });
         for (const name of options.scenarios) {
             options.log(`Scenario ${name}`);
             await SCENARIOS[name](ctx);
@@ -280,6 +287,8 @@ function makeCtx(deps: {
     agent: FakeAgent;
     classifier: MockClassifier | undefined;
     log: (line: string) => void;
+    pause: number;
+    url: string;
 }): Ctx {
     const { api, people, agent } = deps;
     const f = people.facilitator;
@@ -431,6 +440,11 @@ function makeCtx(deps: {
             const target = 'body' in on ? { kind: 'Message' as const, request: on.id } : { kind: 'Turn' as const, run: on.id };
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the JSON of a mark target (the server checks it)
             await api.mark(people[who], { target, sign: { kind: 'Reaction', emoji }, placed: true } as Parameters<SessionClient['mark']>[1]);
+        },
+        async pause() {
+            if (deps.pause <= 0) return;
+            deps.log(`Pausing ${deps.pause}s before the next run: open ${deps.url} (the storming 返品) to see it end.`);
+            await sleep(deps.pause * 1000);
         },
         log: deps.log,
     };

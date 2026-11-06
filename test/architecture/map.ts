@@ -154,6 +154,15 @@ export const MAP: Record<string, Module> = {
         // the map does not carry that edge over (ADR 0027).
         upstream: ['kernel', 'modeling', 'storming'],
     },
+    knowledge: {
+        kind: 'context',
+        dir: 'contexts/knowledge',
+        sources: 'contexts/knowledge/src',
+        // the knowledge taken from sessions (ADR 0031): its items refer to stickies by `<Storming>.<LocalId>` as plain
+        // values (whether a sticky exists is `dt check`'s, which it reports with its own rule IDs: the kernel's
+        // `Diagnostic`), and to sessions and messages by their IDs, so it takes no other context
+        upstream: ['kernel'],
+    },
     analysis: {
         kind: 'capability',
         dir: 'capabilities/analysis',
@@ -181,7 +190,8 @@ export const MAP: Record<string, Module> = {
         kind: 'capability',
         dir: 'capabilities/agent',
         sources: 'capabilities/agent/src',
-        upstream: ['collaboration'],
+        // the extractor role builds its prompt from Knowledge's extraction input and checks its reply (ADR 0031)
+        upstream: ['collaboration', 'knowledge'],
     },
     workspace: {
         kind: 'platform',
@@ -208,13 +218,22 @@ export const MAP: Record<string, Module> = {
         sources: 'apps/dt/src',
         // the one binary: the CLI, the language server, the servers, and the wiring of every adapter (`main.ts`,
         // `wiring/`; presentation and composition before T8)
-        upstream: ['agent', 'analysis', 'collaboration', 'generation', 'kernel', 'modeling', 'storming', 'visualization', 'workspace'],
+        upstream: ['agent', 'analysis', 'collaboration', 'generation', 'kernel', 'knowledge', 'modeling', 'storming', 'visualization', 'workspace'],
+    },
+    'knowledge-worker': {
+        kind: 'app',
+        dir: 'apps/knowledge-worker',
+        sources: 'apps/knowledge-worker/src',
+        // the knowledge store's Worker that users deploy from the template (ADR 0031, section 5): it applies the
+        // knowledge context's decisions on D1 and R2 and serves the protocol of its `cloudflare` adapter
+        upstream: ['knowledge'],
     },
     web: {
         kind: 'app',
         dir: 'apps/web',
         sources: 'apps/web',
-        // its unit tests analyze examples/shop through the project analysis (a devDependency)
-        upstream: ['analysis', 'collaboration', 'kernel', 'modeling', 'storming', 'visualization'],
+        // its unit tests analyze examples/shop through the project analysis (a devDependency); the knowledge's values
+        // as dt serves them, decoded with the store's protocol (ADR 0031, section 10)
+        upstream: ['analysis', 'collaboration', 'kernel', 'knowledge', 'modeling', 'storming', 'visualization'],
     },
 };

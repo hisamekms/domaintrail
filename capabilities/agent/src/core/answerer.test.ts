@@ -275,6 +275,40 @@ describe('the answerer role', () => {
         await answerer.stop();
     });
 
+    test('with the knowledge tools: the answer prompt says to look up why and how, and to cite the items; the propose prompt to check them', async () => {
+        const answer = buildAnswerPrompt(job('answer', 1), 'n', { knowledge: true });
+        expect(answer).toContain('the knowledge tools (knowledge_for_element, knowledge_search, knowledge_get)');
+        expect(answer).toContain('When the message asks why something is so or how it\n  is done, look it up first');
+        expect(answer).toContain('cite\n  the IDs (`kn_…`)');
+        // a rule, before the block of data
+        expect(answer.indexOf('knowledge_for_element')).toBeLessThan(answer.indexOf('<message-n>'));
+        const propose = buildProposePrompt(job('propose', 1), 'n', { knowledge: true });
+        expect(propose).toContain('Check them for the elements the change touches');
+        expect(propose).not.toContain('kn_');
+        // without them, never named
+        for (const build of [buildAnswerPrompt, buildProposePrompt]) expect(build(job('answer', 1), 'n')).not.toContain('knowledge_');
+        // the answerer gives both of a warm process's prompts the rule; never the triage's
+        const { api, push } = fakeApi();
+        const agent = fakeAgent([
+            { structured: { kind: 'consultation', confidence: 0.9, reason: 'q' }, text: '' },
+            { text: '', structured: { kind: 'answer', answer: 'ok' } },
+            { text: '', structured: { kind: 'answer', answer: 'ok' } },
+        ]);
+        const log: string[] = [];
+        const answerer = startAnswerer(
+            { api, agent, workspace: { scan: async () => new Map() }, clock: sleep, nonce: () => 'n', log: (l) => log.push(l) },
+            { reconnect: { minMs: 10, maxMs: 10, giveUpMs: 1_000 }, knowledge: true },
+        );
+        push({ kind: 'job', job: job('triage', 1) });
+        push({ kind: 'job', job: job('answer', 2) });
+        push({ kind: 'job', job: job('answer', 3) });
+        await waitFor(() => agent.turns.length === 3);
+        expect(agent.turns[0].turn.prompt).not.toContain('knowledge_');
+        expect(agent.turns[1].turn.prompt).toContain('knowledge_for_element');
+        expect(agent.turns[2].turn.continuedPrompt).toContain('knowledge_for_element');
+        await answerer.stop();
+    });
+
     test('a withdrawn job is stopped and not answered; one past its timeout is reported as failed; a restore resets the agent', async () => {
         const { api, push, results } = fakeApi();
         const hang = (turn: AnswerTurn): Promise<AnswerTurnResult> =>

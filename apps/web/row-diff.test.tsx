@@ -47,6 +47,7 @@ function inspect(after: DomainModel, before: DomainModel | null, selected: strin
     const props: InspectorProps = {
         model: after,
         mode: 'name',
+        stormings: [],
         selected,
         diagnostics: [],
         diff: diff ?? { added: [], changed: [], removed: [] },
@@ -62,7 +63,6 @@ function inspect(after: DomainModel, before: DomainModel | null, selected: strin
         onFocusContext: () => {},
         backTo: undefined,
         onBack: () => {},
-        onClose: () => {},
     };
     return renderToStaticMarkup(<Inspector {...props} />);
 }

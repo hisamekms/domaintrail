@@ -123,6 +123,9 @@ export function cliDeps(): CliDeps {
         pruneState: (options) => pruneStateDirs(options),
         // loads the language server only when `dt lsp` starts it
         startLanguageServer: (options) => startLanguageServer(options, languageServerFiles),
+        startMcpServer: async (options) => (await import('./mcp/start.js')).startMcpServer(options, { loadWorkspace }),
+        // loads the layout engine only when `dt publish` lays the stormings out
+        publishStormings: async (options) => (await import('./wiring/publish.js')).publishStormings(options),
     };
 }
 

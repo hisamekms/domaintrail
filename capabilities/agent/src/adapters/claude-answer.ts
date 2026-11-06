@@ -1,6 +1,6 @@
 // The Claude Code adapter of the answerer role (ADR 0030, decision 6; the plan's "Stage 3", "Stage 4" and "Two roles"):
 // two kinds of turns, each in processes of their own, both through the `claude` the user signed in to (no second
-// credential), with the user's settings only and no MCP server, as the runs:
+// credential), with the user's settings only and no MCP server but `dt mcp`, as the runs:
 //
 // - stage 3 (`triage`): the light model (`--model`, default `haiku`), **no tools at all** (`--tools ""`), stage 3's JSON
 //   schema; a fresh `claude -p` per turn by default, or one warm process (`triageWarm`; plan Q12);
@@ -15,14 +15,16 @@
 //
 // The working directory (`root`) is the answerer's view of the workspace (`workspace-view.ts`: the files git does not
 // ignore, without `.domaintrail/` and `.git/`), brought up to date before each turn (`prepare`); what it reads outside
-// the workspace (`agent.read.paths`) are views of their own, added to its working directories (`extraRead`). A warm process that misbehaves falls back to a fresh process for the turn, and for good after repeated failures, as
+// the workspace (`agent.read.paths`) are views of their own, added to its working directories (`extraRead`). With a
+// usable knowledge store, answers and proposals also get the three read-only tools of `dt mcp` (`knowledge`, ADR 0031):
+// the process's one MCP server, its tools allowed by name; the triage, the interviews and the commands never. A warm process that misbehaves falls back to a fresh process for the turn, and for good after repeated failures, as
 // the runner does (`warm-claude.ts`). The model that answered is read from the process's `init` event. Neither a prompt
 // nor the agent's output is logged.
 import { spawn } from 'node:child_process';
 import { answererJsonSchema, commandJsonSchema, type CommandReplyShape, interviewerJsonSchema, triageJsonSchema } from '@domaintrail/collaboration';
 import type { AnswerAgent, AnswerTurn, AnswerTurnResult } from '../core/ports.js';
 import { type ClaudeResult, createStreamReader } from './claude-stream.js';
-import { type AgentCommand, CLAUDE, claudeArguments, type ExtraRead, KILL_GRACE_MS, killTree } from './claude-code.js';
+import { type AgentCommand, CLAUDE, claudeArguments, type ExtraRead, KILL_GRACE_MS, killTree, type KnowledgeMcp } from './claude-code.js';
 import { DEFAULT_ANSWER_RESTART_AFTER, DEFAULT_TRIAGE_MODEL } from './config.js';
 import { createWarmClaude, type WarmClaude, type WarmClaudeOptions } from './warm-claude.js';
 
@@ -37,6 +39,8 @@ export interface ClaudeAnswererOptions extends Pick<
     readonly root: string;
     /** The views of what it may read outside the workspace (`--add-dir`), for answers, proposals and interviews. */
     readonly extraRead?: ExtraRead;
+    /** The knowledge tools of `dt mcp` for answers and proposals (none: no MCP server). */
+    readonly knowledge?: KnowledgeMcp;
     /** Called before each turn: brings the view up to date. A failure fails the turn. */
     readonly prepare?: () => Promise<void>;
     /** The program (default `claude` on the PATH); the tests start a fake agent. */
@@ -66,9 +70,10 @@ interface ReadingTurnOptions {
     readonly effort?: string;
     readonly streamInput?: boolean;
     readonly extraRead?: ExtraRead;
+    readonly knowledge?: KnowledgeMcp;
 }
 
-/** The arguments of an answer or proposal turn: the reading tools only, the answerer's schema. */
+/** The arguments of an answer or proposal turn: the reading tools only (and the knowledge tools, when given), the answerer's schema. */
 export function answererArguments(options: ReadingTurnOptions = {}): string[] {
     return claudeArguments(ANSWERER_TOOLS, undefined, { ...options, schema: answererJsonSchema() });
 }
@@ -159,6 +164,8 @@ export function createClaudeAnswerer(options: ClaudeAnswererOptions): AnswerAgen
         ...(answer.effort !== undefined && { effort: answer.effort }),
         ...(options.extraRead && { extraRead: options.extraRead }),
     };
+    // answers and proposals only: the knowledge tools of `dt mcp`
+    const answerOnly = { ...answerFlags, ...(options.knowledge && { knowledge: options.knowledge }) };
     const triageModel = triage.model ?? DEFAULT_TRIAGE_MODEL;
     const shared = {
         root: options.root,
@@ -253,8 +260,8 @@ export function createClaudeAnswerer(options: ClaudeAnswererOptions): AnswerAgen
             return prepared(() => warmTurn(warmTriage, triageArguments({ model: triageModel, streamInput: true }), turn, triageModel));
         },
         answer(turn) {
-            if (!warmAnswerer) return prepared(() => cold(answererArguments(answerFlags), turn, answer.model));
-            return prepared(() => warmTurn(warmAnswerer, answererArguments({ ...answerFlags, streamInput: true }), turn, answer.model));
+            if (!warmAnswerer) return prepared(() => cold(answererArguments(answerOnly), turn, answer.model));
+            return prepared(() => warmTurn(warmAnswerer, answererArguments({ ...answerOnly, streamInput: true }), turn, answer.model));
         },
         interview(turn) {
             if (!warmInterviewer) return prepared(() => cold(interviewerArguments(answerFlags), turn, answer.model));

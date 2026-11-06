@@ -40,10 +40,12 @@ import {
     type NamingContext,
     type TargetDraft,
 } from './targets';
-import { agentStatus, latestAt, streamItems, unreadCount, unreadMentions } from './stream';
+import { agentStatus, latestAt, participantNames, speakerName, streamItems, unreadCount, unreadMentions } from './stream';
+import type { KnowledgeView } from '../knowledge/useKnowledge';
 import { defaultDraftStorage, useComposerDraft, usePresence, useSession } from './useSession';
 import { journeyOverview, journeysOfContext, journeysOfStorming, pageGuideWorkspace } from './journey-view';
 import { JourneyDetail } from './journey-detail';
+import { TurnMarksBar, useTurnMarks } from './turn-marks';
 
 export interface SessionPage {
     /** The session's chat for `AppShell`'s `conversation`, for everyone; undefined outside a session. */
@@ -62,6 +64,8 @@ export interface SessionPage {
     readonly aiReady: boolean;
     /** A selected context's modeling journeys, in brief (the detail). */
     readonly contextJourneys?: (context: string) => ReactNode;
+    /** A knowledge item's source when the session holds its message: its author as the chat names them, and going to it. */
+    readonly messageOf?: KnowledgeView['messageOf'];
 }
 
 export function useSessionPage(input: {
@@ -125,7 +129,7 @@ export function useSessionPage(input: {
     // aggregate whose state diagram the inspector shows
     const resolvedSelection = model && nav.selected ? resolve(model, nav.selected) : undefined;
     const statesOf =
-        panes.explorerOpen && panes.inspectorOpen && panes.inspectorTab === 'states' && resolvedSelection
+        panes.explorerOpen && panes.leftView === 'tree' && panes.inspectorTab === 'states' && resolvedSelection
             ? resolvedSelection.kind === 'element'
                 ? resolvedSelection.el.kind === 'aggregate'
                     ? resolvedSelection.el.id
@@ -254,6 +258,8 @@ export function useSessionPage(input: {
     // the detail of a storming element: what the session did about it, the way to it in the chat and AI の作業, and the
     // beginnings of messages about it
     const runChanges = useRunChanges(session?.state);
+    // what a turn changed, marked on the storming canvas: the latest turn's as it ends, a card's on 図で見る
+    const turnMarks = useTurnMarks(session?.state, workspace, input.mode);
     const [goTo, setGoTo] = useState<ChatGoTo | undefined>();
     const go = useCallback(
         (kind: ChatGoTo['kind'], id: string): void => {
@@ -409,7 +415,17 @@ export function useSessionPage(input: {
             aiReady: false,
         };
     const facilitator = session.me.participant.role === 'facilitator';
+    const names = participantNames(session.state, session.peers, session.me);
     return {
+        messageOf: (sessionId, message) => {
+            const request = sessionId === session.state.session.id ? session.state.requests.find((r) => r.id === message) : undefined;
+            return (
+                request && {
+                    who: speakerName(request.author, session.me.participant.id, (id) => names.get(id) ?? id, t.session.chat.you),
+                    open: () => go('message', message),
+                }
+            );
+        },
         baselineLocked: !facilitator,
         ended,
         // the empty view points to its world's `/…:start` (anyone may start it)
@@ -418,6 +434,7 @@ export function useSessionPage(input: {
             <>
                 <PeerCursors canvas={canvas} cursors={cursorsOn(session.peers, location)} />
                 <SelectionAction canvas={canvas} action={addAction(selectionTargets)} />
+                {view.kind === 'storming' && <TurnMarksBar canvas={canvas} marks={turnMarks} stormings={stormings} choice={stormingChoice} />}
             </>
         ),
         inspectorAction: inspectorAdd && <AddButton action={inspectorAdd} />,
@@ -455,6 +472,7 @@ export function useSessionPage(input: {
                         viewedAt={viewedAt}
                         onOpenView={openView}
                         onNavigate={navigate}
+                        onSeeChanges={turnMarks.see}
                         goTo={goTo}
                         onOpen={() => setConversationOpen(true)}
                         onClose={() => setConversationOpen(false)}

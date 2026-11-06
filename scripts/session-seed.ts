@@ -20,6 +20,7 @@ const USAGE = `Usage: bun run session:seed [options]
   --no-classifier      leave the message classifier off (no 依頼 / 会話 tags)
   --leave-queued       leave one run queued at the end, for the next subscriber
   --leave-running      leave one run running (the seed's agent holds it) and two queued behind it
+  --pause <seconds>    wait that long before the last run of the marks scenario (open the page meanwhile)
   --exit               stop the session server once seeded instead of leaving it running`;
 
 async function main(): Promise<number> {
@@ -33,6 +34,7 @@ async function main(): Promise<number> {
             'no-classifier': { type: 'boolean' },
             'leave-queued': { type: 'boolean' },
             'leave-running': { type: 'boolean' },
+            pause: { type: 'string' },
             exit: { type: 'boolean' },
             help: { type: 'boolean', short: 'h' },
         },
@@ -45,6 +47,8 @@ async function main(): Promise<number> {
     const scenarios = scenariosOf(values.scenario ?? ['all']);
     const port = Number(values.port ?? 4321);
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`Not a port: ${values.port}`);
+    const pause = Number(values.pause ?? 0);
+    if (!Number.isFinite(pause) || pause < 0) throw new Error(`Not a number of seconds: ${values.pause}`);
     const cli = path.join(ROOT, 'dist', 'dt.js');
     if (!existsSync(cli) || !existsSync(path.join(ROOT, 'dist', 'web'))) throw new Error('dist/ is not built: run `bun run build` first.');
 
@@ -57,6 +61,7 @@ async function main(): Promise<number> {
         classifier: !values['no-classifier'],
         leaveQueued: values['leave-queued'] ?? false,
         leaveRunning: values['leave-running'] ?? false,
+        pause,
         dt: { command: 'node', args: [cli] },
         log: (line) => console.log(`[seed] ${line}`),
         serverLog: (line) => console.log(`[dt] ${line}`),

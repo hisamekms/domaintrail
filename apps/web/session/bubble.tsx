@@ -58,7 +58,7 @@ export function Bubble(props: {
  */
 export function clampedClass(input: { readonly blocks: boolean; readonly className?: string; readonly open: boolean; readonly cut: boolean }): string {
     const { blocks, className, open, cut } = input;
-    return `chat-text${blocks ? ' chat-markdown' : ''}${className ? ` ${className}` : ''}${open ? '' : ' clamped'}${cut && !open ? ' cut' : ''}`;
+    return `chat-text${blocks ? ' markdown' : ''}${className ? ` ${className}` : ''}${open ? '' : ' clamped'}${cut && !open ? ' cut' : ''}`;
 }
 
 /**

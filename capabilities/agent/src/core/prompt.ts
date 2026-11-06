@@ -384,7 +384,17 @@ export interface PromptContext {
     readonly practice?: Practice;
     /** The journeys when the run starts: with a current one, the run keeps within it (rules 20, 21); none: as without. */
     readonly journeys?: AgentJourneysBody;
+    /** The agent has the knowledge tools of `dt mcp` (ADR 0031): the prompt says when to use them; none: it never names them. */
+    readonly knowledge?: boolean;
 }
+
+/** What the runner is told of the knowledge tools, when it has them: check before changing, cite what the change rests on. */
+const KNOWLEDGE_SECTION = `Knowledge: the tools knowledge_for_element, knowledge_search and knowledge_get read what the project learned in its
+sessions about stickies and model elements (why, rules, examples, decisions). Before changing an element, call
+knowledge_for_element with it (\`Storming.LocalId\` or \`dt:Context.Aggregate.command\`). Where your change rests on an
+item or departs from one, cite its ID (\`kn_…\`) in the summary or the request's note.
+
+`;
 
 /** The changed paths as the prompt shows them: at most `MAX_CHANGED_SHOWN`, then how many more (read the files then). */
 function changedList(paths: readonly string[]): readonly string[] | { readonly files: readonly string[]; readonly andMore: number } {
@@ -548,7 +558,7 @@ Rules:
    \`label\` gives (\`how\` shows old → new), never its identifier (references use it); keep its \`///\`, and when
    \`how\` gives a detail the old label carried, add that detail to its \`///\` as a line of its own.${journeys ? JOURNEY_RULES : ''}
 
-${practiceSection(practice)}${replyDescription()}
+${context.knowledge ? KNOWLEDGE_SECTION : ''}${practiceSection(practice)}${replyDescription()}
 
 <requests-${nonce}>
 ${blockJson(data)}

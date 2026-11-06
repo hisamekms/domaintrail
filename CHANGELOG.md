@@ -9,6 +9,48 @@ code).
 **After upgrading domaintrail**, read the **Upgrading** section of every version between the one you had and the new
 one, oldest first, and follow its steps. This file is in the package: `node_modules/domaintrail/CHANGELOG.md`.
 
+## [0.8.0] - 2026-11-05
+
+### Added
+
+- **Knowledge from the sessions** (`dt guide knowledge`, ADR 0031): what is said and found in a session — why, how
+  often, who said so, what the AI found — kept item by item apart from the `.dtes` and `.dt` files, tied to the
+  stickies it is about. An item has a title (one short line), a Markdown text (with images), labels (`when` AS-IS / TO-BE, `kind`,
+  `origin` 発言 / 合意 / 調査 / 推測, an optional `perspective`), the stickies it is `about`, its sources with a short
+  quote of each message, versions, and the items it conflicts with.
+  - **Extraction in the session**: a third role of the AI, the extractor (`agent.extract`: `model`, `gateModel`,
+    `timeout`, `effort`; no tools), turns the talk into items soon after it: after 30 seconds of quiet following a
+    person's message, after each answer of the AI and at the end, at most once a minute. Three stages keep the stronger
+    model for when there is something to extract: surely-nothing messages stop it without any model, then a light model
+    (Haiku by default) decides whether there is a finding. New items and new sources apply at once; updates and
+    conflicts are held until confirmed by the next extraction or by quiet, and dropped at the end. Each extraction's
+    stages and costs are recorded. Off unless `knowledge.extraction.enabled`; the facilitator switches it for the
+    session with the 💡 in the Live View's app bar.
+  - **Two stores** (config section `knowledge`: `store`, `project`, `url`, `extraction`): `files` (the default), one
+    Markdown file per item in the workspace's `knowledge/`, kept in git; and `cloudflare`, a Worker you deploy from
+    the template shipped in the package (`dist/knowledge-worker/`: D1, R2 and Cloudflare Access; its README is the
+    deploy and upgrade runbook), for projects where personal data may be spoken. dt sends the Access service token
+    from `DOMAINTRAIL_KNOWLEDGE_CLIENT_ID` and `DOMAINTRAIL_KNOWLEDGE_CLIENT_SECRET`; `knowledge.url` and
+    `knowledge.project` are security-relevant settings you approve. `dt check` reports an item file that does not
+    read (K001) and an item about a sticky no storming has (K002, warning).
+  - **In the Live View** (`docs/live-view.md`): a dot on each sticky with knowledge and a mark for a conflict; a
+    sticky's items in its detail, newest first or by kind, each closed to its title and labels and opening to its text,
+    its labels as the ナレッジ tab's filter chips (a press shows the tab filtered by it), quotes, other stickies, versions
+    and images; the ナレッジ tab with search and filters; 直す, 画像を付ける and 消す; a conflict side by side with
+    ホットスポットにする and 食い違いではない.
+  - **Deleting**: an item is hidden from everyone at once, with 元に戻す for 10 seconds; the store's sweep then removes
+    every version and image and puts the source messages on the project's redaction log, which every dt of the project
+    follows to redact them in its own session database. With `files`, the item stays in git's history.
+  - **`dt mcp`** (`dt guide mcp`): an MCP server over stdio for Claude Code, read-only: `knowledge_for_element` (a
+    sticky, or a `.dt` element through the stickies that `ref` it), `knowledge_search` and `knowledge_get`.
+  - **`dt publish`** (`dt guide publish`): each storming's published form (stickies, links and layout, with the commit
+    and date of the drawing) to the `cloudflare` Worker, run by CI when `main` changes, the destination pinned with
+    `DOMAINTRAIL_PUBLISH_URL` and `DOMAINTRAIL_PUBLISH_PROJECT`; `--prune` removes the stormings the workspace no
+    longer has, `--out` writes the forms as files. The Worker serves a **read-only page** behind the same Access: the
+    canvas of a published storming with the knowledge, the ナレッジ list, the items about stickies missing from the
+    drawing, and correcting and deleting as in a session.
+- `dt guide` topic `knowledge` (with `mcp` and `publish`).
+
 ## [0.7.0] - 2026-11-04
 
 ### Added
@@ -498,6 +540,7 @@ The first published version.
 - The Live View (`dt view`): the context map, the structure diagram (three levels), the catalog, the state diagram,
   the inspector with the source, problems and changes, updated on every save; in Japanese or English, light or dark.
 
+[0.8.0]: https://github.com/hisamekms/domaintrail/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/hisamekms/domaintrail/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/hisamekms/domaintrail/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/hisamekms/domaintrail/compare/v0.4.0...v0.5.0

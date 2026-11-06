@@ -59,6 +59,9 @@ context Collaboration {
     viewedAt: ViewedAt? "送ったときのビュー"
     /// 聞き取りを確定したあとの dt のお知らせ（AI の名で書く）なら、その道のりと次の一手のボタン。ほかのメッセージにはない。
     journeyNote: JourneyNote? "旅程のお知らせ"
+    /// 墨消ししたなら、その日時。本文は決まった文（`REDACTED_BODY`）に置き換わり、行（だれが・いつ・何についての
+    /// メッセージか）は残る。ナレッジを消すと、その出典のメッセージが墨消しになる（ADR 0031 の 7）。
+    redactedAt: Timestamp? "墨消し日時"
 
     invariant atMostTwentyTargets "対象は20件まで" { count(targets) <= 20 }
     invariant distinctTargets "同じ対象は1回" { unique(targets, t => t.target) }
@@ -102,6 +105,14 @@ context Collaboration {
     create command answer(id: RequestId, session: ActiveSession, answers: RequestId? "答えるメッセージ", body: Text, sentAt: Timestamp, journeyNote: JourneyNote?) "AI が答える"
       -> Sent
       emits RequestSent
+
+    /// 本文を墨消しする: 個人のデータを消すため（消したナレッジの出典だったメッセージ、ADR 0031 の 7）。本文を決まった文に
+    /// 置き換え、ほかは残す。もう墨消ししたメッセージは変えない（日時もそのまま）。
+    command redact(body: Text "置き換える本文", at: Timestamp) "墨消しする"
+      Sent -> Sent
+      Dismissed -> Dismissed
+      changes body, redactedAt
+      emits RequestRedacted
   }
 
   persistent event RequestSent "依頼送信" {
@@ -118,6 +129,13 @@ context Collaboration {
     viewedAt: ViewedAt? "送ったときのビュー"
     /// 聞き取りを確定したあとの dt のお知らせなら、その道のりと次の一手のボタン。
     journeyNote: JourneyNote? "旅程のお知らせ"
+  }
+
+  /// 本文を墨消しした。ページには状態を送り直して伝える（アウトボックスには残さない: 残せば本文の代わりに墨消しの記録が
+  /// 増えるだけで、送ったときの `RequestSent` はアウトボックスの中で墨消しする）。
+  event RequestRedacted "墨消し" {
+    requestId: RequestId
+    redactedAt: Timestamp
   }
 
   /// 以前のセッションのアウトボックスに残る見送り。いまは発行しないが、読み直し（再生）のために残す。

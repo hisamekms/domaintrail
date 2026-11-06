@@ -10,8 +10,8 @@ const panes = {
     explorerOpen: true,
     explorerWidth: 280,
     leftView: 'problems',
-    inspectorOpen: true,
-    detailHeight: 300,
+    treeHeight: 300,
+    treeFolded: false,
     conversationOpen: false,
     conversationWidth: 380,
 } as unknown as Panes;
@@ -63,28 +63,71 @@ describe('the app bar', () => {
     });
 });
 
-describe('the left column', () => {
-    const left = html.slice(html.indexOf('<div class="left open"'), html.indexOf('<div class="main">'));
+/** The page with the left column on `leftView`, the tree folded or not. */
+const shellWith = (over: Partial<Panes>): string =>
+    renderToStaticMarkup(
+        <I18nProvider lang="ja">
+            <AppShell
+                // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- what the shell reads of the panes
+                panes={{ ...panes, ...over } as Panes}
+                workspaceName="shop"
+                world={null}
+                sessionSlot={() => {}}
+                lists={{
+                    tree: { count: 0, content: <div className="tree-slot" /> },
+                    problems: { count: 0, content: null },
+                    changes: { count: 0, content: null },
+                }}
+                health={null}
+                settings={null}
+                banners={null}
+                workspace={null}
+                inspector={<div className="inspector-slot" />}
+                overlays={null}
+            />
+        </I18nProvider>,
+    );
+const leftOf = (page: string): string => page.slice(page.indexOf('<div class="left open"'), page.indexOf('<div class="main">'));
 
-    // not laid out here: the column is not measured, so the detail has no height yet (the first frame takes the measured one)
-    test('the navigator on top, then the splitter, then the detail (the inspector), its height left to the measure', () => {
-        const order = ['class="navigator"', 'class="resizer resizer-y resizer-grip"', 'class="detail open"><div class="rail"', 'inspector-slot'].map((c) =>
-            left.indexOf(c),
-        );
+describe('the left column', () => {
+    const left = leftOf(shellWith({ leftView: 'tree' }));
+
+    // not laid out here: the column is not measured, so the tree has no height yet (the first frame takes the measured one)
+    test('the tree on top, then the splitter, then the detail (the inspector), its height left to the measure', () => {
+        const order = [
+            '<div class="navigator with-detail">',
+            'tree-slot',
+            'class="resizer resizer-y resizer-grip"',
+            '<div class="detail">',
+            'inspector-slot',
+        ].map((c) => left.indexOf(c));
         expect(order.every((at) => at >= 0)).toBe(true);
         expect([...order].sort((a, b) => a - b)).toEqual(order);
-        // the canvas column holds no inspector any more
-        expect(html.slice(html.indexOf('<div class="main">'))).not.toContain('inspector-slot');
+        // the canvas column holds no inspector
+        expect(shellWith({ leftView: 'tree' }).slice(shellWith({ leftView: 'tree' }).indexOf('<div class="main">'))).not.toContain('inspector-slot');
     });
 
-    test('the splitter is a focusable horizontal separator with its value', () => {
+    test('the splitter is a focusable horizontal separator with the tree’s height as its value', () => {
         const splitter = /<div class="resizer resizer-y resizer-grip"[^>]*>/.exec(left)?.[0] ?? '';
         expect(splitter).toContain('role="separator"');
         expect(splitter).toContain('tabindex="0"');
         expect(splitter).toContain('aria-orientation="horizontal"');
-        expect(splitter).toContain('aria-valuenow="140"');
-        expect(splitter).toContain('aria-valuemin="140"');
-        expect(splitter).toContain('aria-label="詳細の高さ');
+        expect(splitter).toContain('aria-valuenow="96"');
+        expect(splitter).toContain('aria-valuemin="96"');
+        expect(splitter).toContain('aria-label="ツリーと詳細の仕切り');
+    });
+
+    test('folded, the tree is its head line (no height of its own) and the separator says it is at none', () => {
+        const folded = leftOf(shellWith({ leftView: 'tree', treeFolded: true }));
+        expect(folded).toContain('<div class="navigator with-detail folded">');
+        expect(/<div class="resizer resizer-y resizer-grip"[^>]*>/.exec(folded)?.[0]).toContain('aria-valuenow="0"');
+    });
+
+    test('the other lists take the whole column: no splitter, the detail kept mounted but hidden', () => {
+        const problems = leftOf(html);
+        expect(problems).toContain('<div class="navigator">');
+        expect(problems).not.toContain('resizer-y');
+        expect(problems).toContain('<div class="detail" hidden=""><div class="inspector-slot">');
     });
 
     test("the column's own edge is a vertical separator after it", () => {

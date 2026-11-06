@@ -58,6 +58,7 @@ function fakeCanvas(items: Record<string, Rect & { elementId: string }>, viewpor
         item: (id) => (items[id] ? { id, type: 'node', elementId: items[id].elementId, ghost: false, kind: 'entity' } : undefined),
         itemBounds: (id) => items[id],
         findElement: (elementId) => Object.keys(items).find((id) => items[id].elementId === elementId),
+        elementNodes: (elementId) => Object.keys(items).filter((id) => items[id].elementId === elementId),
         selectedIds: () => [],
         onlySelectedId: () => undefined,
         selectionBounds: () => undefined,

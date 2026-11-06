@@ -93,6 +93,8 @@ export interface DiagramCanvas {
      * the first item that stands for it.
      */
     findElement(elementId: string): SceneId | undefined;
+    /** Every node drawing a model element (a storming's element drawn once per use has several), not the ghosts. */
+    elementNodes(elementId: string): readonly SceneId[];
 
     selectedIds(): readonly SceneId[];
     /** The selected item when exactly one is selected. */

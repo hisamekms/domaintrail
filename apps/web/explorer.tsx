@@ -8,6 +8,7 @@ import { usePersistentState } from './shared/layout';
 import { useT } from './i18n';
 import { KIND_ORDER, fileSelection, nameIn, orderedContexts, type Select } from './model-utils';
 import { ownerElement } from './render';
+import { FoldButton, FoldedLabel, type TreeFold } from './tree-fold';
 
 export interface ExplorerProps {
     model: DomainModel | null;
@@ -21,6 +22,8 @@ export interface ExplorerProps {
     /** Double-click: show the item in the view that suits it best. */
     onOpen: (id: string) => void;
     onClose: () => void;
+    /** The tree's fold over the detail: its button in the head line, which names the selection while folded. */
+    fold?: TreeFold;
 }
 
 type Mark = { severity?: 'error' | 'warning'; change?: 'added' | 'changed' };
@@ -153,46 +156,52 @@ export function Explorer(props: ExplorerProps) {
     return (
         <div className="explorer">
             <div className="explorer-head">
-                <div className="explorer-filter">
-                    <Search size={14} aria-hidden />
-                    <input
-                        value={query}
-                        placeholder={t.filter}
-                        aria-label={t.filter}
-                        onChange={(e) => setQuery(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Escape') setQuery('');
-                        }}
-                    />
-                    {query && (
-                        <button className="icon-button" onClick={() => setQuery('')} data-tooltip={t.clearFilter} aria-label={t.clearFilter}>
-                            <X size={14} aria-hidden />
+                <FoldedLabel fold={props.fold} />
+                {!props.fold?.folded && (
+                    <>
+                        <div className="explorer-filter">
+                            <Search size={14} aria-hidden />
+                            <input
+                                value={query}
+                                placeholder={t.filter}
+                                aria-label={t.filter}
+                                onChange={(e) => setQuery(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Escape') setQuery('');
+                                }}
+                            />
+                            {query && (
+                                <button className="icon-button" onClick={() => setQuery('')} data-tooltip={t.clearFilter} aria-label={t.clearFilter}>
+                                    <X size={14} aria-hidden />
+                                </button>
+                            )}
+                        </div>
+                        <button
+                            className="icon-button"
+                            aria-pressed={onlyProblems}
+                            onClick={() => setOnlyProblems(!onlyProblems)}
+                            data-tooltip={t.onlyProblems}
+                            aria-label={t.onlyProblems}
+                        >
+                            <TriangleAlert size={15} aria-hidden />
                         </button>
-                    )}
-                </div>
-                <button
-                    className="icon-button"
-                    aria-pressed={onlyProblems}
-                    onClick={() => setOnlyProblems(!onlyProblems)}
-                    data-tooltip={t.onlyProblems}
-                    aria-label={t.onlyProblems}
-                >
-                    <TriangleAlert size={15} aria-hidden />
-                </button>
-                <button
-                    className="icon-button"
-                    aria-pressed={onlyChanged}
-                    onClick={() => setOnlyChanged(!onlyChanged)}
-                    data-tooltip={t.onlyChanged}
-                    aria-label={t.onlyChanged}
-                >
-                    <Diff size={15} aria-hidden />
-                </button>
+                        <button
+                            className="icon-button"
+                            aria-pressed={onlyChanged}
+                            onClick={() => setOnlyChanged(!onlyChanged)}
+                            data-tooltip={t.onlyChanged}
+                            aria-label={t.onlyChanged}
+                        >
+                            <Diff size={15} aria-hidden />
+                        </button>
+                    </>
+                )}
+                <FoldButton fold={props.fold} />
                 <button className="icon-button" onClick={props.onClose} data-tooltip={t.closeExplorer} aria-label={t.closeExplorer}>
                     <PanelLeftClose size={16} aria-hidden />
                 </button>
             </div>
-            <div className="explorer-body">
+            <div className="explorer-body" inert={props.fold?.folded}>
                 <Section
                     title={t.model}
                     hits={filtering ? modelHits : undefined}

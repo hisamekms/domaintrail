@@ -13,7 +13,8 @@
 //     "die": 4,                 exits with this code at once, before any event of the turn
 //     "ask": true,              sends a control request of its own before the result
 //     "delay": 500,             works this many ms (after the assistant message) before the result
-//     "scribble": "late.txt" }  says nothing and keeps appending to this file (in its working directory) every 10 ms
+//     "scribble": "late.txt",   says nothing and keeps appending to this file (in its working directory) every 10 ms
+//     "usage": {…}, "cost": 0.1 } the result's `usage` and `total_cost_usd`
 //
 // Every turn prints `system/init`, a hook's `notification` (as a user's Stop hook does) and an assistant message
 // with a tool call, then its result.
@@ -37,7 +38,15 @@ const result = (step, isError) => {
     const reply = step.reply ?? DONE;
     return isError
         ? { type: 'result', subtype: 'error_during_execution', is_error: true, result: '' }
-        : { type: 'result', subtype: 'success', is_error: false, result: JSON.stringify(reply), structured_output: reply };
+        : {
+              type: 'result',
+              subtype: 'success',
+              is_error: false,
+              result: JSON.stringify(reply),
+              structured_output: reply,
+              ...(step.usage && { usage: step.usage }),
+              ...(step.cost !== undefined && { total_cost_usd: step.cost }),
+          };
 };
 
 if (!args.includes('--input-format')) {
