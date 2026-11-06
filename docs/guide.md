@@ -2144,7 +2144,7 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
 - `dt fmt` formats a storming: 2 spaces per level, each element, clause, timeline step (`then` included), group event
   and timeline of a stage on its own line, an element without clauses on one line, comments kept. It puts the clauses
   of a body in one order, each with its comments: `ref`, `by`, `reads`, `handledBy`, `emits`, `on`, `issues`, `from`,
-  `status`, `resolution`, `level`.
+  `status`, `resolution`, `level`; in a policy `on`, `reads`, `issues`, `by` (「〜が起きたら、〜を見て、〜を出す」).
 - Files written for v0.1 (`actor X`, `target X` in a command) are errors (S023): `dt migrate dtes` rewrites them.
 
 A storming in stages:
@@ -2257,9 +2257,9 @@ storming Dispatch "配車" {
     issues NotifyDriver
   }
   policy CallBack "失敗したら組み直す" {
-    by Dispatcher // a rule a person applies by hand: the policy issues the command, without `by` in it
     on AllocationFailed
     issues ReassignByHand
+    by Dispatcher // a rule a person applies by hand: the policy issues the command, without `by` in it
   }
 
   hotspot WhoReassigns "手配車は何が処理する？" { // not decided: asked, never guessed
@@ -3155,7 +3155,7 @@ A `.dtes` file has its own layout, in the same spirit: 2 spaces per level; every
 event on its own line; an element without clauses on one line (an empty `{}` is dropped unless it holds a comment); one
 blank line kept where the author wrote some, one between stormings; no spaces around the dots of a `ref`; a list as
 `emits A, B`. The clauses of a body go in one order, each with its comments (ADR 0032): `ref`, `by`, `reads`,
-`handledBy`, `emits`, `on`, `issues`, `from`, `status`, `resolution`, `level`.
+`handledBy`, `emits`, `on`, `issues`, `from`, `status`, `resolution`, `level`; a policy's go `on`, `reads`, `issues`, `by`.
 
 <!-- topic: export -->
 ## Sharing the sources and the diagrams

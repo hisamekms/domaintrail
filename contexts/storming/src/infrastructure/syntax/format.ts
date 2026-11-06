@@ -18,7 +18,8 @@ export class FormatError extends Error {}
  * - No space around the dots of a `ref` path, nor around the hyphens of a `level` (`level big-picture`).
  * - Clauses go in one canonical order (ADR 0032), each with its comments (those on lines of their own above it and the
  *   one after it on its line): `ref`, then the relations `by`, `reads`, `handledBy`, `emits`, `on`, `issues`, `from`,
- *   then `status`, `resolution` and `level`; clauses of one kind keep their order. Repeated relations of one keyword
+ *   then `status`, `resolution` and `level`; in a policy, `on`, `reads`, `issues`, `by` (§9); clauses of one kind keep
+ *   their order. Repeated relations of one keyword
  *   are one clause (`by A` and `by B` → `by A, B`, unless a comment is on one of them; `handledBy` and a hotspot's `on`,
  *   which take one, aside), with a
  *   space after each comma and none before it.
@@ -95,7 +96,7 @@ const commentsOf = (text: string): Comment[] =>
     }));
 
 /** The rank of a clause in the canonical order of a body (ADR 0032); `actor` and `target` (S023) where `by` and `handledBy` go. */
-const CLAUSE_RANK: Record<string, number> = {
+const CLAUSE_RANK: Readonly<Record<string, number>> = {
     ref: 0,
     by: 1,
     actor: 1,
@@ -110,8 +111,16 @@ const CLAUSE_RANK: Record<string, number> = {
     resolution: 9,
     level: 10,
 };
-const rankOf = (c: ast.EsClause): number =>
-    CLAUSE_RANK[
+/**
+ * The ranks of a kind whose relations go in another order (ADR 0032 §9): a policy reads「〜が起きたら、〜を見て、〜を出す」,
+ * `on`, `reads`, `issues`, then the `by` of a person applying it by hand (the clauses a policy does not take keep
+ * their place).
+ */
+const KIND_RANK: Readonly<Record<string, Readonly<Record<string, number>>>> = {
+    EsPolicy: { ...CLAUSE_RANK, on: 5, reads: 5.5, issues: 6, by: 6.5, actor: 6.5 },
+};
+const rankOf = (el: ast.EsNode, c: ast.EsClause): number =>
+    (KIND_RANK[el.$type] ?? CLAUSE_RANK)[
         ast.isEsRelationClause(c)
             ? c.keyword
             : ast.isEsRefClause(c)
@@ -134,7 +143,7 @@ function inCanonicalOrder(text: string, file: ast.EsFile, comments: readonly Com
     for (const storming of file.stormings) {
         for (const el of storming.elements) {
             if (!ast.isEsNode(el) || el.clauses.length < 2) continue;
-            const ranks = el.clauses.map(rankOf);
+            const ranks = el.clauses.map((c) => rankOf(el, c));
             const open = el.$cstNode && CstUtils.streamCst(el.$cstNode).find((n) => isLeafCstNode(n) && n.text === '{' && n.astNode === el);
             if (!open) continue;
             type Chunk = { text: string; rank: number; lineComment: boolean; clause: ast.EsClause; start: number; end: number; i: number };
