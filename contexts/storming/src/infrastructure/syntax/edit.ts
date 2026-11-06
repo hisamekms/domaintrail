@@ -175,6 +175,12 @@ export function stickyWording(text: string, stormingId: string, element: string)
     return decl && wordingOf(decl);
 }
 
+/** Every ID a storming declares in a file's text (one namespace across kinds); undefined when it is not there. */
+export function stormingNames(text: string, stormingId: string): string[] | undefined {
+    const found = located(text, stormingId);
+    return 'type' in found ? undefined : found.declarations.map((d) => d.name);
+}
+
 /** Plans a person's edit of a sticky in the text of the `.dtes` file holding its storming. */
 export function planStickyEdit(text: string, input: StickyEditInput): StickyEditResult {
     const found = located(text, input.storming);

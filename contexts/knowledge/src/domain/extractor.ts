@@ -122,7 +122,14 @@ export interface HotspotNameInput {
     readonly question: string;
     /** The sticky it is on: its ID, label and kind. */
     readonly on: { readonly id: string; readonly label?: string; readonly kind: string };
+    /** The IDs the storming declares already (every kind; at most `HOTSPOT_TAKEN_MAX`): the name must be none of them. */
+    readonly taken?: readonly string[];
+    /** The name an earlier answer gave that is taken: asked again, naming it. */
+    readonly clash?: string;
 }
+
+/** The most IDs of the storming a hotspot's name job lists. */
+export const HOTSPOT_TAKEN_MAX = 300;
 
 /** The most characters of a hotspot's name the light model may give (the server shortens and checks it again). */
 export const HOTSPOT_NAME_MAX = 40;

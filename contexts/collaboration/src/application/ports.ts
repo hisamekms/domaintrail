@@ -411,6 +411,8 @@ export interface StickyEditor {
     ): { readonly ok: true; readonly value: StickyEditPlan } | { readonly ok: false; readonly error: StickyEditProblem };
     /** What a declaration is called in a file's text now; undefined when it is not there (or the file does not parse). */
     wording(text: string, storming: string, element: string): StickyWording | undefined;
+    /** Every ID a storming declares in a file's text; undefined when the file has no such storming (or does not parse). */
+    names(text: string, storming: string): string[] | undefined;
 }
 
 /** Everything the use cases need. */

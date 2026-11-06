@@ -86,7 +86,9 @@ async function session(hotspotNameTimeoutMs?: number) {
 }
 
 /** The extractor role with a fake agent whose light model answers a hotspot's name with `name` (after `delayMs`). */
-function extractor(server: Awaited<ReturnType<typeof session>>['server'], name: string, prompts: string[], delayMs = 0) {
+function extractor(server: Awaited<ReturnType<typeof session>>['server'], names: string | readonly string[], prompts: string[], delayMs = 0) {
+    // one answer per question, the last one again after them
+    const answers = typeof names === 'string' ? [names] : names;
     const x = startExtractor({
         api: helperStream(createHttpAgentApi({ url: server.agentUrl, token: server.agentToken })),
         agent: {
@@ -94,6 +96,7 @@ function extractor(server: Awaited<ReturnType<typeof session>>['server'], name: 
             extract: () => Promise.reject(new Error('never asked')),
             async hotspotName(turn: ExtractTurn) {
                 prompts.push(turn.prompt);
+                const name = answers[Math.min(prompts.length - 1, answers.length - 1)];
                 await new Promise((resolve, reject) => {
                     const timer = setTimeout(resolve, delayMs);
                     turn.signal.addEventListener('abort', () => {
@@ -185,5 +188,31 @@ describe("a hotspot's name (ADR 0033)", () => {
         expect(text).toContain('hotspot ReturnRequestedQuestion "同じ返品が二度来たら？"');
         expect(text).not.toContain('DoubleReturns');
         expect((await s.runs()).some((r) => r.hotspotName !== undefined)).toBe(false);
+    });
+
+    test("told the storming's IDs; a taken answer is asked again, naming the clash, and the second answer used", async () => {
+        const s = await session();
+        const prompts: string[] = [];
+        extractor(s.server, ['ReturnRequested', 'DuplicateReturns'], prompts);
+        await connected(s.server);
+        expect((await s.put('二度来たら？')).hotspot).toBe('ReturnRequestedQuestion');
+        await until('the AI name', async () => (await s.file()).includes('hotspot DuplicateReturns '));
+        expect(prompts).toHaveLength(2);
+        expect(prompts[0]).toContain('"taken": [');
+        expect(prompts[0]).toContain('"ReturnRequested"');
+        expect(prompts[0]).not.toContain('"ReturnRequestedQuestion"');
+        expect(prompts[0]).not.toContain('"clash"');
+        expect(prompts[1]).toContain('"clash": "ReturnRequested"');
+        expect(await s.file()).not.toContain('ReturnRequested2');
+    });
+
+    test('still taken after asking again: only then the numeric suffix', async () => {
+        const s = await session();
+        const prompts: string[] = [];
+        extractor(s.server, ['ReturnRequested', 'ReturnRequested'], prompts);
+        await connected(s.server);
+        expect((await s.put('二度来たら？')).hotspot).toBe('ReturnRequestedQuestion');
+        await until('the suffixed name', async () => (await s.file()).includes('hotspot ReturnRequested2 '));
+        expect(prompts).toHaveLength(2);
     });
 });

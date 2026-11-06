@@ -35,6 +35,7 @@ import {
     type StickyEditInput,
 } from '@domaintrail/collaboration';
 import type { AgentPresence, Me, MessageTemplateBody, ModelChangesBody, Role, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import { HOTSPOT_TAKEN_MAX } from '@domaintrail/knowledge';
 import type { AccessPolicy, Authorization } from '../http/access.js';
 import { BodyError, mediaType, readJson, readText, sendError, sendJson } from '../http/json.js';
 import type { SessionSurface } from '../http/server.js';
@@ -141,6 +142,8 @@ export interface SessionHttpDeps {
     readonly hotspotName?: (input: {
         readonly question: string;
         readonly on: { readonly id: string; readonly label?: string; readonly kind: string };
+        readonly taken?: readonly string[];
+        readonly clash?: string;
     }) => Promise<unknown>;
     readonly log: (line: string) => void;
 }
@@ -414,15 +417,24 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
      */
     const nameLater = async (
         run: Collaboration.AgentRunId,
-        hotspot: { readonly label: string; readonly on: string; readonly onLabel?: string; readonly onKind?: string },
+        hotspot: { readonly storming: string; readonly label: string; readonly on: string; readonly onLabel?: string; readonly onKind?: string },
+        provisional: string,
     ): Promise<void> => {
         try {
-            const named = hotspotNameOf(
-                await deps.hotspotName?.({
-                    question: hotspot.label,
-                    on: { id: hotspot.on, kind: hotspot.onKind ?? 'event', ...(hotspot.onLabel !== undefined && { label: hotspot.onLabel }) },
-                }),
-            );
+            // the storming's IDs, for the light model to avoid (its own provisional name is free to take over)
+            const taken = new Set((await use.stormingNames({ storming: hotspot.storming })).filter((n) => n !== provisional));
+            const ask = async (clash?: string): Promise<string | undefined> =>
+                hotspotNameOf(
+                    await deps.hotspotName?.({
+                        question: hotspot.label,
+                        on: { id: hotspot.on, kind: hotspot.onKind ?? 'event', ...(hotspot.onLabel !== undefined && { label: hotspot.onLabel }) },
+                        taken: [...taken].slice(0, HOTSPOT_TAKEN_MAX),
+                        ...(clash !== undefined && { clash }),
+                    }),
+                );
+            const first = await ask();
+            // a taken name: asked once more, naming it; only then the planner's numeric suffix
+            const named = first !== undefined && taken.has(first) ? ((await ask(first)) ?? first) : first;
             if (!named) return deps.log(`the hotspot of run ${run} keeps its provisional name (no name from the light model)`);
             const done = await deps.holdWatcher(
                 () => use.nameHotspot({ session, run, name: named }),
@@ -1086,7 +1098,10 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 );
                 if (edited.ok) deps.log(`${me.participant.id} edited ${edit.storming} (run ${edited.value.run.id})`);
                 await answer(res, edited, 201, (v) => v);
-                if (edited.ok && read.kind === 'unnamedHotspot') void nameLater(edited.value.run.id, read);
+                if (edited.ok && read.kind === 'unnamedHotspot') {
+                    const added = edited.value.request.edit;
+                    if (added?.kind === 'HotspotAdded') void nameLater(edited.value.run.id, read, added.hotspot);
+                }
             },
         },
         {

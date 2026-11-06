@@ -101,6 +101,8 @@ export interface StickyUseCases {
      * changed since the edit (the workspace is its result) and the hotspot still has its provisional name and question;
      * a taken name gets the first free numeric suffix. Otherwise skipped, with why.
      */
+    /** The IDs a storming declares now (every kind), for the light model to avoid; none when it is not found. */
+    stormingNames(input: { readonly storming: string }): Promise<readonly string[]>;
     nameHotspot(input: {
         readonly session: SessionId;
         readonly run: AgentRunId;
@@ -451,6 +453,18 @@ export function createStickies(deps: CollaborationDeps): StickyUseCases {
                 publish(stores, session, noted.value.Edited.events, clock.now());
                 return ok(noted.value.Edited.aggregate);
             });
+        },
+
+        async stormingNames({ storming }) {
+            const stickies = deps.stickies;
+            if (!stickies) return [];
+            const scan = await deps.workspace.read();
+            for (const f of scan.files) {
+                if (!isStorming(f.path)) continue;
+                const names = stickies.names(decoder.decode(f.bytes), storming);
+                if (names) return names;
+            }
+            return [];
         },
 
         async nameHotspot({ session, run, name }) {

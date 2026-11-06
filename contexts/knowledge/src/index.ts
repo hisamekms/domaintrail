@@ -37,6 +37,7 @@ export {
     type ExtractionJobBody,
     type ExtractionResultBody,
     HOTSPOT_NAME_MAX,
+    HOTSPOT_TAKEN_MAX,
     hotspotNameJsonSchema,
     type HotspotNameInput,
     type ExtractionUsage,

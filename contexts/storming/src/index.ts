@@ -80,6 +80,7 @@ export {
     planStickyEdit,
     quoteLabel,
     stickyWording,
+    stormingNames,
     type StickyEditInput,
     type StickyEditPlan,
     type StickyEditProblem,

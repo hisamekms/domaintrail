@@ -5,7 +5,7 @@
 import type { ModelValidator, SourceFormatter, StickyEditor } from '@domaintrail/collaboration';
 import { analyze } from '@domaintrail/analysis';
 import { formatDomain } from '@domaintrail/modeling';
-import { formatStorming, isStormingFile, planStickyEdit, stickyWording } from '@domaintrail/storming';
+import { formatStorming, isStormingFile, planStickyEdit, stickyWording, stormingNames } from '@domaintrail/storming';
 
 export function createModelValidator(): ModelValidator {
     return {
@@ -23,5 +23,5 @@ export function createSourceFormatter(): SourceFormatter {
 
 /** People's edits of the stickies, planned on the parsed `.dtes` (only the tokens concerned change). */
 export function createStickyEditor(): StickyEditor {
-    return { plan: planStickyEdit, wording: stickyWording };
+    return { plan: planStickyEdit, wording: stickyWording, names: stormingNames };
 }

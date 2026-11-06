@@ -74,7 +74,10 @@ light model for its ID — the same tool-less Claude Code light model the knowle
 `{ name }`. The helper is not knowledge's: the server always serves the stream, and every `dt agent` (and the agent in
 `dt open`) follows it, whatever the `knowledge` config, beside the extractor role (a stream of its own, so that a
 running extraction never holds a name up). The reply is made an ID (PascalCase from its words, letters and digits, at
-most 40, the first free numeric suffix when taken) and written over the provisional one through the rename path
+most 40). The job also lists the IDs the storming declares (every kind, at most 300) and says to give none of them —
+other words for the question's point, a closing word such as `Question` or `Open` only if nothing else fits, never a
+number; an answer that is still taken is asked once more, naming the clash, and only then given the first free
+numeric suffix and written over the provisional one through the rename path
 (`nameHotspot`) — only while the workspace is still the edit's result (nothing else changed since) and the hotspot
 still has its provisional name and question; otherwise it is dropped. It is part of the same person's edit, not a
 record of its own: the edit's run gets `hotspotName` and its result revision becomes the renamed workspace
