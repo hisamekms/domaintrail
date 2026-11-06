@@ -20,9 +20,10 @@ describe("the view toolbar's 絞り込み button", () => {
         expect(activeFilterCount({ view: 'catalog', contexts: [], kinds: ['events'] })).toBe(2);
     });
 
-    test('the storming: one when its exceptions are hidden', () => {
-        expect(activeFilterCount({ view: 'storming', exceptions: true })).toBe(0);
-        expect(activeFilterCount({ view: 'storming', exceptions: false })).toBe(1);
+    test('the storming: one for each kind it hides (its exceptions, its resolved hotspots)', () => {
+        expect(activeFilterCount({ view: 'storming', hidden: 0 })).toBe(0);
+        expect(activeFilterCount({ view: 'storming', hidden: 1 })).toBe(1);
+        expect(activeFilterCount({ view: 'storming', hidden: 2 })).toBe(2);
     });
 });
 

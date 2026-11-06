@@ -531,6 +531,12 @@ Examples:
                 'hide',
             ]),
         )
+        .addOption(
+            new Option('--resolved-hotspots <resolvedHotspots>', 'with --storming: draw its resolved hotspots (default) or not, in any view').choices([
+                'show',
+                'hide',
+            ]),
+        )
         .option('--model', 'the domain model: its Structure View or Context Map')
         .addOption(new Option('--view <view>', 'with --model: the Structure View (default) or the Context Map').choices(['structure', 'map']))
         .option('--context <names...>', 'with --model: the bounded contexts to focus the Structure View on, their dependencies as stubs')
@@ -558,6 +564,7 @@ Examples:
   dt export svg --storming OrderToCash -o order-to-cash.svg
   dt export svg --storming OrderToCash --timeline PaymentRetry --level design --legend -o retry.svg
   dt export svg --storming OrderToCash --exceptions hide --theme dark --lang en --heading -o dark.svg
+  dt export svg --storming OrderToCash --level design --resolved-hotspots hide -o open-questions.svg
   dt export svg --model --view map --all --heading -o map.svg
   dt export svg --model --context Sales Billing --level aggregates -o - > sales.svg`,
         )

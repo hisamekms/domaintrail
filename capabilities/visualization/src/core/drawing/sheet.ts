@@ -2,7 +2,7 @@
 // Live View's toolbar shows them) and the name of its file. Pure: the caller describes what the diagram shows
 // (`SheetSubject`), and these say it.
 import { shownLabel, type DisplayMode, type StructureLevel } from '../graph/ir.js';
-import type { ViewLevel, ViewOptions } from '../storming/ir.js';
+import { hides, type ViewLevel, type ViewOptions } from '../storming/ir.js';
 import type { DiagramTexts } from './texts.js';
 
 /**
@@ -152,6 +152,6 @@ export function stormingSheetSubject(storming: StormingOutline, options: ViewOpt
         storming: { id: storming.id, label: storming.label },
         scope,
         level: options.level,
-        exceptions: exceptions && !timeline ? options.hideExceptions !== true : undefined,
+        exceptions: exceptions && !timeline ? !hides(options, 'exceptions') : undefined,
     };
 }

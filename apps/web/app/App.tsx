@@ -12,7 +12,7 @@ import { changeCount, ChangesList, problemCounts, ProblemsList } from '../lists'
 import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from '../model-utils';
 import { StatesCanvas } from '../states-canvas';
 import { useSessionPage } from '../session/page';
-import { type StormingChoice, chooseScope, StormingDetails, stormingExists } from '../storming';
+import { type StormingChoice, chooseScope, isStormingSelection, revealIn, StormingDetails, stormingExists } from '../storming';
 import { StormingNavigator } from '../storming-navigator';
 import { NameSwitch } from '../view/toolbar';
 import { ViewWorkspace, useViewWorkspace } from '../view/workspace';
@@ -100,9 +100,11 @@ export function App() {
         storming: view.kind === 'storming' ? shown?.storming.id : undefined,
         stormings,
         mode,
-        // a sticky opened from a knowledge item (or a hotspot) is shown in the detail, under the tree
+        // a sticky opened from a knowledge item (or a hotspot) is shown in the detail, under the tree; on the storming
+        // canvas, shown first when the 絞り込み hides it
         select: (id) => {
-            select(id);
+            if (view.kind === 'storming' && isStormingSelection(id)) openSticky(id);
+            else select(id);
             showInspector();
         },
         showList: () => showLeft('knowledge'),
@@ -110,7 +112,8 @@ export function App() {
 
     /**
      * Shows a sticky: its storming's integrated canvas (the view shown kept when it draws it), at a level that draws
-     * it, and selects it there (the palette, a link, a sticky renamed).
+     * it, with what the 絞り込み hides of it shown (`revealIn`), and selects it there (the palette, a link, the knowledge,
+     * a link of the detail, a sticky renamed).
      */
     const { stormingChoice, setStormingChoice } = settings;
     const { canvas } = workspace;
@@ -122,11 +125,11 @@ export function App() {
             const kind = firstDeclarations(storming.storming).get(local)?.kind;
             const drawn = LEVEL_KINDS[stormingChoice.level].some((k) => k === kind);
             const inView = view.kind === 'storming' && shown?.storming.id === stormingId && drawn && canvas?.findElement(id) !== undefined;
-            if (!inView) {
-                const { [stormingId]: _, ...others } = stormingChoice.timelines;
-                setStormingChoice({ ...stormingChoice, stormingId, level: drawn ? stormingChoice.level : 'design-level', timelines: others });
-                setView({ kind: 'storming' });
-            }
+            const { [stormingId]: _, ...others } = stormingChoice.timelines;
+            const there = inView ? stormingChoice : { ...stormingChoice, stormingId, level: drawn ? stormingChoice.level : 'design-level', timelines: others };
+            const next = revealIn(stormings, there, id);
+            if (next !== stormingChoice) setStormingChoice(next);
+            if (view.kind !== 'storming') setView({ kind: 'storming' });
             select(id, { highlight: false });
             // selected on the canvas, which takes the focus: Escape clears the selection there
             requestAnimationFrame(() =>
@@ -444,7 +447,12 @@ export function App() {
                                     session={session.stormingDetail}
                                     knowledge={knowledge.available ? (sticky) => <StormingKnowledgeSlot sticky={sticky} /> : undefined}
                                     copies={view.kind === 'storming' ? (elementId) => <CopySteps canvas={workspace.canvas} elementId={elementId} /> : undefined}
-                                    onSelect={(x) => select(x)}
+                                    // a sticky of the storming shown: shown first when the 絞り込み hides it
+                                    onSelect={(x) =>
+                                        view.kind === 'storming' && isStormingSelection(x) && shown && x.startsWith(`es/${shown.storming.id}/`)
+                                            ? openSticky(x)
+                                            : select(x)
+                                    }
                                     onShowScope={(stormingId, scope, then) => {
                                         settings.setStormingChoice(chooseScope(settings.stormingChoice, stormingId, scope));
                                         setView({ kind: 'storming' });

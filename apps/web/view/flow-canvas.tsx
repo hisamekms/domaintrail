@@ -6,7 +6,19 @@
 // The scene, the selection and the hover are kept here, so that the port answers at once (React Flow learns of them
 // when it renders); the camera is React Flow's viewport, converted to the port's camera by `viewport.ts`, which also
 // keeps the zoom steps, fits and wheel zoom the Live View had with tldraw.
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from 'react';
+import {
+    createContext,
+    memo,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    useSyncExternalStore,
+    type KeyboardEvent,
+    type ReactNode,
+} from 'react';
 import {
     Handle,
     Position,
@@ -26,6 +38,7 @@ import {
 } from '@xyflow/react';
 import {
     EdgeContent,
+    type SettledState,
     edgeClassName,
     EdgeMarks,
     edgeOutlinePath,
@@ -87,7 +100,10 @@ type BoxItem = SceneNode | SceneGroup | SceneInternal;
  * `same`: a note of the element of a selected note (an element drawn more than once), not itself selected; `copy`: its
  * place among the element's notes (the selected one's too), drawn as a 「k/n」 badge.
  */
-type ItemNode = Node<{ item: BoxItem; same?: true; copy?: CopyIndex }, 'domain-node' | 'domain-group' | 'domain-internal'>;
+type ItemNode = Node<{ item: BoxItem; same?: true; copy?: CopyIndex; chosen?: readonly SceneId[] }, 'domain-node' | 'domain-group' | 'domain-internal'>;
+
+/** Selects a hidden resolved hotspot from its sticky's check (`additive`: with Shift, added to or taken from the selection). */
+const PickSettled = createContext<((item: SceneId, additive: boolean) => void) | undefined>(undefined);
 type AnchorNode = Node<Record<string, never>, 'domain-anchor'>;
 type FlowNode = ItemNode | AnchorNode;
 /** `hot`: a line joined to a selected storming note, drawn thicker in the accent colour. */
@@ -149,13 +165,16 @@ function MarkedOutline({ p }: { p: SceneNode['props'] }): ReactNode {
 
 function DomainNode({ data, selected }: NodeProps<ItemNode>): ReactNode {
     const { item } = data;
+    const pick = useContext(PickSettled);
+    // the check of the hidden resolved hotspots on it: which are selected, and how to select one
+    const settled = useMemo((): SettledState => ({ chosen: new Set(data.chosen), ...(pick && { pick }) }), [data.chosen, pick]);
     if (item.type !== 'node') return null;
     const p = item.props;
     const marked = p.kind !== 'initial' && (p.badge !== '' || p.diag !== 'none');
     return (
         <>
             <div className={nodeClassName(p, selected, data.same === true)} style={nodeStyle(p)}>
-                <NodeContent p={p} Marks={ZoomedMarks} />
+                <NodeContent p={p} Marks={ZoomedMarks} settled={settled} copy={data.copy && `${data.copy.k}/${data.copy.n}`} />
                 {data.copy && (
                     <span className="dn-copy" aria-hidden>
                         {data.copy.k}/{data.copy.n}
@@ -317,9 +336,12 @@ interface ItemLook {
     selected: boolean;
     copy: CopyIndex | undefined;
     hot: boolean;
+    /** The hidden resolved hotspots behind its check that are selected. */
+    chosen: readonly SceneId[];
 }
 
-const sameLook = (a: ItemLook, b: ItemLook): boolean => a.selected === b.selected && a.hot === b.hot && a.copy?.k === b.copy?.k && a.copy?.n === b.copy?.n;
+const sameLook = (a: ItemLook, b: ItemLook): boolean =>
+    a.selected === b.selected && a.hot === b.hot && a.copy?.k === b.copy?.k && a.copy?.n === b.copy?.n && a.chosen.join() === b.chosen.join();
 
 /** React Flow's nodes and edges for the state, reusing those of unchanged items (so that React Flow redraws only what changed). */
 function useFlowElements(state: CanvasState): { nodes: FlowNode[]; edges: ItemEdge[] } {
@@ -336,7 +358,13 @@ function useFlowElements(state: CanvasState): { nodes: FlowNode[]; edges: ItemEd
         const copies = copyIndices(state.items.values(), state.selected);
         const hot = joinedEdges(state.items.values(), state.selected);
         const reuse = (item: SceneItem, build: (look: ItemLook) => FlowNode | ItemEdge): FlowNode | ItemEdge => {
-            const look = { selected: state.selected.has(item.id), copy: copies.get(item.id), hot: hot.has(item.id) };
+            const settled = item.type === 'node' ? (item.props.settled ?? []) : [];
+            const look = {
+                selected: state.selected.has(item.id),
+                copy: copies.get(item.id),
+                hot: hot.has(item.id),
+                chosen: settled.map((s) => s.item).filter((id) => state.selected.has(id)),
+            };
             const old = previous.get(item.id);
             const element = old && old.item === item && sameLook(old.look, look) ? old.element : build(look);
             next.set(item.id, { item, look, element });
@@ -351,7 +379,8 @@ function useFlowElements(state: CanvasState): { nodes: FlowNode[]; edges: ItemEd
                     anchors.add(item[end]);
                     nodes.push(toAnchor(item, end));
                 }
-            } else {
+            } else if (item.type !== 'node' || item.on === undefined) {
+                // (a hidden resolved hotspot is not drawn: its sticky's check stands for it)
                 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- built as a node below
                 nodes.push(reuse(item, (look) => toNode(item, look)) as FlowNode);
             }
@@ -361,7 +390,7 @@ function useFlowElements(state: CanvasState): { nodes: FlowNode[]; edges: ItemEd
     }, [state, rendered]);
 }
 
-function toNode(item: BoxItem, { selected, copy }: ItemLook): ItemNode {
+function toNode(item: BoxItem, { selected, copy, chosen }: ItemLook): ItemNode {
     const ghost = item.ghost === true;
     const same = copy !== undefined && !selected;
     return {
@@ -370,7 +399,7 @@ function toNode(item: BoxItem, { selected, copy }: ItemLook): ItemNode {
         position: { x: item.x, y: item.y },
         width: item.props.w,
         height: item.props.h,
-        data: { item, ...(same && { same: true as const }), ...(copy && { copy }) },
+        data: { item, ...(same && { same: true as const }), ...(copy && { copy }), ...(chosen.length && { chosen }) },
         selected,
         selectable: !ghost,
         draggable: false,
@@ -602,6 +631,16 @@ function Flow({ onMount }: { onMount: (canvas: DiagramCanvas) => void }): ReactN
     latest.current = onMount;
     const { nodes, edges } = useFlowElements(state);
     const theme = useSyncExternalStore(state.subscribeRender, () => state.theme);
+    const pick = useCallback(
+        (item: SceneId, additive: boolean) => {
+            if (!additive) return state.setSelected([item]);
+            const next = new Set(state.selected);
+            if (next.has(item)) next.delete(item);
+            else next.add(item);
+            state.setSelected(next);
+        },
+        [state],
+    );
 
     // every change of React Flow's state (the viewport, its size, a pan) may change what the port answers; after a
     // selection box, React Flow would put a draggable rectangle over the selection, which would take the next clicks
@@ -726,52 +765,54 @@ function Flow({ onMount }: { onMount: (canvas: DiagramCanvas) => void }): ReactN
 
     return (
         <div className="diagram-canvas" ref={container} tabIndex={-1} onKeyDown={onKeyDown}>
-            <ReactFlow<FlowNode, ItemEdge>
-                nodes={nodes}
-                edges={edges}
-                nodeTypes={NODE_TYPES}
-                edgeTypes={EDGE_TYPES}
-                // no "React Flow" link in the corner (ADR 0029, Attribution)
-                proOptions={{ hideAttribution: true }}
-                onInit={onInit}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onNodeClick={click}
-                onEdgeClick={click}
-                onNodeMouseEnter={hover}
-                onNodeMouseLeave={leave}
-                onEdgeMouseEnter={hover}
-                onEdgeMouseLeave={leave}
-                onMoveStart={moveStart}
-                onMoveEnd={moveEnd}
-                colorMode={theme}
-                // read-only: nothing moves, connects or goes away
-                nodesDraggable={false}
-                nodesConnectable={false}
-                nodesFocusable={false}
-                edgesFocusable={false}
-                edgesReconnectable={false}
-                deleteKeyCode={null}
-                // a click selects, Shift adds; Shift + drag draws a selection box; any other drag pans
-                elementsSelectable
-                multiSelectionKeyCode="Shift"
-                selectionKeyCode="Shift"
-                selectionMode={SelectionMode.Partial}
-                panOnDrag
-                noPanClassName="diagram-nopan"
-                // the wheel pans as much as it scrolls; Ctrl / ⌘ + wheel zooms (above)
-                panOnScroll
-                panOnScrollSpeed={1}
-                zoomOnScroll={false}
-                zoomActivationKeyCode={null}
-                zoomOnDoubleClick={false}
-                minZoom={MIN_ZOOM}
-                maxZoom={MAX_ZOOM}
-                zIndexMode="manual"
-                elevateNodesOnSelect={false}
-                elevateEdgesOnSelect={false}
-                onlyRenderVisibleElements
-            />
+            <PickSettled.Provider value={pick}>
+                <ReactFlow<FlowNode, ItemEdge>
+                    nodes={nodes}
+                    edges={edges}
+                    nodeTypes={NODE_TYPES}
+                    edgeTypes={EDGE_TYPES}
+                    // no "React Flow" link in the corner (ADR 0029, Attribution)
+                    proOptions={{ hideAttribution: true }}
+                    onInit={onInit}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onNodeClick={click}
+                    onEdgeClick={click}
+                    onNodeMouseEnter={hover}
+                    onNodeMouseLeave={leave}
+                    onEdgeMouseEnter={hover}
+                    onEdgeMouseLeave={leave}
+                    onMoveStart={moveStart}
+                    onMoveEnd={moveEnd}
+                    colorMode={theme}
+                    // read-only: nothing moves, connects or goes away
+                    nodesDraggable={false}
+                    nodesConnectable={false}
+                    nodesFocusable={false}
+                    edgesFocusable={false}
+                    edgesReconnectable={false}
+                    deleteKeyCode={null}
+                    // a click selects, Shift adds; Shift + drag draws a selection box; any other drag pans
+                    elementsSelectable
+                    multiSelectionKeyCode="Shift"
+                    selectionKeyCode="Shift"
+                    selectionMode={SelectionMode.Partial}
+                    panOnDrag
+                    noPanClassName="diagram-nopan"
+                    // the wheel pans as much as it scrolls; Ctrl / ⌘ + wheel zooms (above)
+                    panOnScroll
+                    panOnScrollSpeed={1}
+                    zoomOnScroll={false}
+                    zoomActivationKeyCode={null}
+                    zoomOnDoubleClick={false}
+                    minZoom={MIN_ZOOM}
+                    maxZoom={MAX_ZOOM}
+                    zIndexMode="manual"
+                    elevateNodesOnSelect={false}
+                    elevateEdgesOnSelect={false}
+                    onlyRenderVisibleElements
+                />
+            </PickSettled.Provider>
         </div>
     );
 }

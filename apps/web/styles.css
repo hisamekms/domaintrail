@@ -917,6 +917,13 @@ code.block {
     padding: 0;
     list-style: none;
 }
+/* a resolved hotspot in a sticky's list of its hotspots: its check */
+.es-hotspot-resolved {
+    display: inline-flex;
+    vertical-align: -2px;
+    margin-left: var(--space-1);
+    color: var(--es-resolved-mark);
+}
 .es-list li {
     padding: 2px 0;
 }
@@ -1362,6 +1369,18 @@ a.field-origin {
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
+}
+/* the check of the resolved hotspots hidden on a sticky (ADR 0032 §10): theirs to hover and select, left of the
+   sticky's 「k/n」 when it has one (`settledMarkRight`) */
+.dn-settled-mark {
+    pointer-events: all;
+    cursor: pointer;
+    z-index: 2;
+}
+.dn-settled-chosen {
+    outline: 2px solid var(--selected-ring);
+    outline-offset: 1px;
+    border-radius: 50%;
 }
 .dn-esActor {
     border-color: var(--es-actor-border);

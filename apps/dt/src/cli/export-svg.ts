@@ -6,6 +6,8 @@
 import {
     buildScene,
     exportBounds,
+    hideInDrawing,
+    laidOutHidden,
     legendContent,
     legendKindNames,
     DIAGRAM_TEXTS,
@@ -20,6 +22,7 @@ import {
     tokenColour,
     type DiagramTheme,
     type DisplayMode,
+    type Hideable,
     type LaidOutGraph,
     type Lang,
     type LegendView,
@@ -39,6 +42,8 @@ export interface SvgExportOptions {
     /** The storming's level (`big-picture`, `design`) or the Structure View's (`detail`, `overview`, `aggregates`). */
     level?: string | undefined;
     exceptions?: 'show' | 'hide' | undefined;
+    /** The resolved hotspots: drawn (default) or not, as the 絞り込み's 「解決済みを表示」 (in any view of a storming). */
+    resolvedHotspots?: 'show' | 'hide' | undefined;
     model?: boolean | undefined;
     view?: 'map' | 'structure' | undefined;
     /** The Structure View's focused contexts. */
@@ -92,8 +97,8 @@ export function checkSvgOptions(o: SvgExportOptions): void {
             usage(`Unknown level '${o.level}' of a storming. Choose: ${Object.keys(STORMING_LEVELS).join(', ')}`);
         return;
     }
-    if (o.stage !== undefined || o.timeline !== undefined || o.exceptions !== undefined)
-        usage('--stage, --timeline and --exceptions are options of --storming.');
+    if (o.stage !== undefined || o.timeline !== undefined || o.exceptions !== undefined || o.resolvedHotspots !== undefined)
+        usage('--stage, --timeline, --exceptions and --resolved-hotspots are options of --storming.');
     const view = o.view ?? 'structure';
     if (view === 'map' && (o.context !== undefined || o.level !== undefined)) usage('--context and --level are options of --view structure.');
     if (view === 'structure' && o.all) usage('--all is an option of --view map.');
@@ -114,13 +119,18 @@ function stormingDiagram(stormings: readonly StormingView[], o: SvgExportOptions
         throw new SvgExportError(`Unknown timeline '${o.timeline}' of ${storming.id}. Timelines: ${listed(storming.timelines.map((t) => t.id))}`, 1);
     }
     const level = STORMING_LEVELS[o.level ?? 'big-picture']!;
-    // the exceptions are left out of the integrated canvas and a stage only, and only when the storming has some
-    const hide = o.exceptions === 'hide' && storming.timelines.some((t) => t.exception) ? { hideExceptions: true as const } : {};
+    // what is hidden, as the 絞り込み hides it (`HIDDEN_BY`): the exceptions by the integrated canvas's or a stage's layout
+    // without them (only when the storming has some), the resolved hotspots by leaving them out of the drawing
+    const hidden = new Set<Hideable>([
+        ...(o.exceptions === 'hide' ? (['exceptions'] as const) : []),
+        ...(o.resolvedHotspots === 'hide' ? (['resolvedHotspots'] as const) : []),
+    ]);
+    const hide = laidOutHidden(storming.timelines.some((t) => t.exception) ? hidden : []);
     const options =
         o.timeline !== undefined ? { level, timelineId: o.timeline } : o.stage !== undefined ? { level, stageId: o.stage, ...hide } : { level, ...hide };
     const view = storming.views[stormingViewKey(options)];
     if (!view) throw new SvgExportError(`${storming.id} has no such view.`, 1);
-    return { graph: view.graph, subject: stormingSheetSubject(storming, options), legend: 'storming' };
+    return { graph: hideInDrawing(view.graph, hidden), subject: stormingSheetSubject(storming, options), legend: 'storming' };
 }
 
 /** The domain model's view the options name. */

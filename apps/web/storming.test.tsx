@@ -3,13 +3,17 @@ import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createViewService, ElkLayoutEngine, type ViewService } from '@domaintrail/visualization';
+import { createViewService, ElkLayoutEngine, hideInDrawing, type Hideable, type ViewService } from '@domaintrail/visualization';
 import { I18nProvider, MESSAGES } from './i18n';
 import type { Diagnostic } from '@domaintrail/kernel';
 import type { ElementActivity } from './session/element-activity';
 import {
     clearStormingFilter,
+    hideableIn,
+    revealIn,
+    shownHidden,
     shownStorming,
+    stormingGraph,
     stageChoice,
     StormingDetails,
     StormingFilter,
@@ -207,7 +211,7 @@ describe('a storming with stages', () => {
         stormingId: undefined,
         level: 'big-picture',
         timelines: scope ? { ConvenienceStoreIssuance: scope } : {},
-        exceptions: false,
+        hidden: ['exceptions'],
     });
 
     test('a stage is chosen as `@<stage ID>` in the timeline picker; an unknown one is the integrated canvas', async () => {
@@ -221,8 +225,11 @@ describe('a storming with stages', () => {
     test('「例外を表示」 off hides the exceptions of the integrated canvas and a stage, never of a timeline’s view', async () => {
         const staged = (await viewService(await STAGED).refresh()).stormings;
         const plain = (await viewService().refresh()).stormings;
-        expect(shownStorming(staged, off())?.options).toEqual({ level: 'big-picture', hideExceptions: true });
-        expect(shownStorming(staged, off(stageChoice('Issuance')))?.options).toEqual({ level: 'big-picture', stageId: 'Issuance', hideExceptions: true });
+        expect(shownStorming(staged, off())?.options).toEqual({ level: 'big-picture', hidden: ['exceptions'] });
+        expect(shownStorming(staged, off(stageChoice('Issuance')))?.options).toEqual({ level: 'big-picture', stageId: 'Issuance', hidden: ['exceptions'] });
+        // as an earlier version kept it
+        const { hidden: _, ...legacy } = { ...off(), exceptions: false };
+        expect(shownStorming(staged, legacy)?.options).toEqual({ level: 'big-picture', hidden: ['exceptions'] });
         expect(shownStorming(staged, off('PinLockedBranch'))?.options).toEqual({ level: 'big-picture', timelineId: 'PinLockedBranch' });
         expect(shownStorming(plain, off())?.options).toEqual({ level: 'big-picture' });
     });
@@ -236,8 +243,9 @@ describe('a storming with stages', () => {
         expect(render(<StormingToolbar stormings={staged} choice={off()} mode="label" onChange={() => {}} />)).not.toContain('例外を表示');
         expect(filter(staged, off())).toContain('aria-label="絞り込み（1 件適用中）"');
         expect(filter(staged, off())).toContain('<span class="filter-count">1</span>');
-        expect(filter(staged, { ...off(), exceptions: true })).toContain('aria-label="絞り込み"');
-        expect(filter(staged, { ...off(), exceptions: true })).not.toContain('filter-count');
+        expect(filter(staged, clearStormingFilter(off()))).toContain('aria-label="絞り込み"');
+        expect(filter(staged, clearStormingFilter(off()))).not.toContain('filter-count');
+        expect(filter(staged, off())).not.toContain('解決済みを表示');
         expect(filter(staged, off('PinLockedBranch'))).toBe('');
         expect(filter(plain, off())).toBe('');
         expect(shownStorming(staged, clearStormingFilter(off()))?.options).toEqual({ level: 'big-picture' });
@@ -287,6 +295,80 @@ describe('a storming with stages', () => {
         );
         expect(exception).toContain('aria-label="Returns to"');
         expect(exception).toContain('aria-label="Show this timeline"');
+    });
+});
+
+describe('what the 絞り込み hides, and moving to what it hides', () => {
+    const TEXT = `storming R "R" {
+  event Placed "注文された"
+  event Paid "支払われた"
+  event Failed "支払いに失敗した"
+  hotspot Currency "通貨は？" { on Paid status resolved resolution "円だけ" }
+  hotspot Retry "再試行は？" { on Failed }
+  hotspot Notice "失敗の知らせ方は？" { on Failed status resolved resolution "メールで" }
+  hotspot Closing "締めは？" { status resolved resolution "毎月末" }
+  timeline Main "通常" { Placed Paid }
+  exception Failure "失敗" { Placed Failed }
+}`;
+    const choice = (hidden?: Hideable[], timeline?: string): StormingChoice => ({
+        stormingId: 'R',
+        level: 'big-picture',
+        timelines: timeline ? { R: timeline } : {},
+        ...(hidden && { hidden }),
+    });
+    const render = (node: ReactNode): string => renderToStaticMarkup(<I18nProvider lang="ja">{node}</I18nProvider>);
+
+    test('「解決済みを表示」 is in the 絞り込み of every view of a storming with a resolved hotspot, each kind hidden counting one', async () => {
+        const { stormings } = await viewService(TEXT).refresh();
+        const filter = (c: StormingChoice): string => render(<StormingFilter stormings={stormings} choice={c} onChange={() => {}} />);
+        const r = stormings.find((x) => x.id === 'R')!;
+        expect(hideableIn(r, {})).toEqual(['exceptions', 'resolvedHotspots']);
+        expect(filter(choice())).toContain('aria-label="絞り込み"');
+        expect(filter(choice())).not.toContain('filter-count');
+        expect(filter(choice(['resolvedHotspots']))).toContain('<span class="filter-count">1</span>');
+        expect(filter(choice(['exceptions', 'resolvedHotspots']))).toContain('<span class="filter-count">2</span>');
+        // a timeline's view: its exceptions are what it shows; the resolved hotspots can still be hidden
+        expect(hideableIn(r, { timelineId: 'Failure' })).toEqual(['resolvedHotspots']);
+        expect(filter(choice(['exceptions', 'resolvedHotspots'], 'Failure'))).toContain('<span class="filter-count">1</span>');
+        expect(shownHidden(stormings, choice(['exceptions', 'resolvedHotspots'], 'Failure'))).toEqual(new Set(['resolvedHotspots']));
+        // without a resolved hotspot, no 「解決済みを表示」 (nor a 絞り込み, without exceptions either)
+        const plain = (await viewService().refresh()).stormings[0]!;
+        expect(hideableIn(plain, {})).toEqual([]);
+    });
+
+    test('hiding the resolved hotspots is the page’s own: the same view, the same layout, and nothing moves', async () => {
+        const { stormings } = await viewService(TEXT).refresh();
+        expect(shownStorming(stormings, choice(['resolvedHotspots']))?.options).toEqual({ level: 'big-picture' });
+        expect(shownStorming(stormings, choice(['exceptions', 'resolvedHotspots']))?.options).toEqual({ level: 'big-picture', hidden: ['exceptions'] });
+        const graph = stormingGraph(stormings, choice())!.graph;
+        expect(stormingGraph(stormings, choice(['resolvedHotspots']))!.graph).toBe(graph);
+        const drawn = hideInDrawing(graph, shownHidden(stormings, choice(['resolvedHotspots'])));
+        const node = (local: string) => drawn.nodes.find((n) => n.elementId === `es/R/${local}`);
+        // folded: not drawn, its place left empty, its sticky's check standing for it (none for one on nothing)
+        const id = (local: string) => graph.nodes.find((n) => n.elementId === `es/R/${local}`)!.id;
+        expect(node('Currency')?.folded).toEqual([id('Paid')]);
+        expect(node('Closing')?.folded).toEqual([]);
+        expect(node('Retry')?.folded).toBeUndefined();
+        expect(drawn.edges.some((e) => e.source === id('Currency'))).toBe(false);
+        expect(drawn.nodeLayout).toBe(graph.nodeLayout);
+    });
+
+    test('moving to a hidden sticky shows what hides it first, whatever the kind: one kind when it is enough, else all', async () => {
+        const { stormings } = await viewService(TEXT).refresh();
+        const both = choice(['exceptions', 'resolvedHotspots']);
+        const reveal = (id: string): StormingChoice => revealIn(stormings, both, `es/R/${id}`);
+        expect(reveal('Placed')).toBe(both);
+        // an exception's event, an open hotspot on it: the exceptions shown again
+        expect(reveal('Failed').hidden).toEqual(['resolvedHotspots']);
+        expect(reveal('Retry').hidden).toEqual(['resolvedHotspots']);
+        // a resolved hotspot on a sticky drawn, or on none: the resolved hotspots shown again
+        expect(reveal('Currency').hidden).toEqual(['exceptions']);
+        expect(reveal('Closing').hidden).toEqual(['exceptions']);
+        // a resolved hotspot on an exception's event: both
+        expect(reveal('Notice').hidden).toBeUndefined();
+        // an earlier version's choice too
+        const { hidden: _, ...legacy } = { ...choice(), exceptions: false };
+        expect(revealIn(stormings, legacy, 'es/R/Failed')).toEqual(choice());
     });
 });
 

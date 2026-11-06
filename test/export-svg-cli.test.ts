@@ -162,6 +162,24 @@ describe('dt export svg: an Event Storming', () => {
     });
 });
 
+describe('dt export svg: the resolved hotspots', () => {
+    test('drawn (default), or not drawn as the 絞り込み hides them (--resolved-hotspots hide), every other note where it was, in any view', async () => {
+        const copy = await tempCopyOfExamples();
+        dirs.push(copy);
+        // examples/shop's order-to-cash: MixedCurrencies, resolved, on ItemAdded
+        const shown = await svg(copy, '--storming', 'OrderToCash', '--level', 'design');
+        expect(shown).toContain('>明細の通貨が');
+        const hidden = await svg(copy, '--storming', 'OrderToCash', '--level', 'design', '--resolved-hotspots', 'hide');
+        expect(hidden).not.toContain('>明細の通貨が');
+        expect(hidden).toContain('>支払の失敗を');
+        const notes = (s: string): string[] => [...s.matchAll(/<rect x="[\d.]+" y="[\d.]+" width="148.5" height="148.5"/g)].map((m) => m[0]);
+        expect(notes(hidden).every((r) => notes(shown).includes(r))).toBe(true);
+        expect(notes(shown).length - notes(hidden).length).toBe(1);
+        const timeline = await svg(copy, '--storming', 'OrderToCash', '--timeline', 'Normal', '--level', 'design', '--resolved-hotspots', 'hide');
+        expect(timeline).not.toContain('>明細の通貨が');
+    });
+});
+
 describe('dt export svg: the domain model', () => {
     test('the Context Map, the Structure View and one context focused', async () => {
         const copy = await tempCopyOfExamples();
@@ -204,7 +222,8 @@ describe('dt export svg: errors', () => {
             [['--storming', 'S', '--stage', 'A', '--timeline', 'B'], 'Give --stage or --timeline, not both.'],
             [['--storming', 'S', '--timeline', 'B', '--exceptions', 'hide'], '--exceptions applies to the whole storming or a stage, not to one timeline.'],
             [['--storming', 'S', '--level', 'detail'], "Unknown level 'detail' of a storming. Choose: big-picture, design"],
-            [['--model', '--stage', 'A'], '--stage, --timeline and --exceptions are options of --storming.'],
+            [['--model', '--stage', 'A'], '--stage, --timeline, --exceptions and --resolved-hotspots are options of --storming.'],
+            [['--model', '--resolved-hotspots', 'hide'], '--stage, --timeline, --exceptions and --resolved-hotspots are options of --storming.'],
             [['--model', '--view', 'map', '--context', 'Sales'], '--context and --level are options of --view structure.'],
         ];
         for (const [args, message] of cases) {

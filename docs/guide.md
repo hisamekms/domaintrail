@@ -3250,13 +3250,15 @@ dt export svg --storming ConvenienceStoreIssuance -o all.svg
 dt export svg --storming ConvenienceStoreIssuance --stage Issuance --level design --legend -o issuance.svg
 dt export svg --storming ConvenienceStoreIssuance --timeline PinForgottenBranch --theme dark --lang en -o pin.svg
 dt export svg --storming ConvenienceStoreIssuance --exceptions hide --heading -o main-flows.svg
+dt export svg --storming OrderToCash --level design --resolved-hotspots hide -o open-questions.svg
 dt export svg --model --view map --all -o map.svg
 dt export svg --model --context Sales Billing --level aggregates -o - > sales.svg
 ```
 
 - **An Event Storming:** `--storming <ID>`, the whole storming by default, or `--stage <ID>` (its main flows and its
   exceptions) or `--timeline <ID>`; `--level big-picture` (default) or `design`; `--exceptions hide` leaves the
-  exceptions out of the whole storming or a stage (「例外を表示」 off).
+  exceptions out of the whole storming or a stage (「例外を表示」 off); `--resolved-hotspots hide` leaves the resolved
+  hotspots out of any view (「解決済みを表示」 off: their notes and lines are not drawn, their stickies keep a ✓, nothing moves).
 - **The domain model:** `--model`, the Structure View by default (`--level detail`, `overview` or `aggregates`;
   `--context <names…>` focuses it on some bounded contexts, their dependencies as stubs) or `--view map`, the Context
   Map (`--all` with the shared and external contexts).

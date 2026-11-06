@@ -203,7 +203,12 @@ export function PrintSheet(props: { graph: LaidOutGraph; current: ViewPayload; m
             <svg className="print-sheet-svg" viewBox={`${box.x} ${box.y} ${box.w} ${box.h}`} preserveAspectRatio="xMidYMid meet">
                 <foreignObject x={box.x} y={box.y} width={box.w} height={box.h}>
                     <div className="print-sheet-boxes" style={{ width: box.w, height: box.h }}>
-                        {items.map((item) => (item.type === 'edge' ? null : <SheetBox key={item.id} item={item} origin={box} />))}
+                        {/* a hidden resolved hotspot is not drawn: its sticky's check stands for it */}
+                        {items.map((item) =>
+                            item.type === 'edge' || (item.type === 'node' && item.on !== undefined) ? null : (
+                                <SheetBox key={item.id} item={item} origin={box} />
+                            ),
+                        )}
                     </div>
                 </foreignObject>
                 {items.map((item) =>

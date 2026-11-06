@@ -122,6 +122,11 @@ export interface GraphNode {
     status?: 'resolved';
     /** A resolved hotspot's `resolution`: what was agreed. */
     resolution?: string;
+    /**
+     * A resolved hotspot the reader hides (the 絞り込み's 「解決済みを表示」 off, `hideInDrawing`): not drawn, its place
+     * left empty; the notes it is `on` (their IDs) show a resolved hotspot's check for it. Absent in a graph as laid out.
+     */
+    folded?: string[];
     width: number;
     height: number;
 }

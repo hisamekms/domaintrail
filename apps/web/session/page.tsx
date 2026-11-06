@@ -11,7 +11,7 @@ import type { Conversation } from '../app/shell';
 import type { ViewSocket } from '../app/useViewSocket';
 import { useT } from '../i18n';
 import { contextLabels, resolve } from '../model-utils';
-import { stormingGraph, type StormingChoice, type StormingDetailSession } from '../storming';
+import { revealIn, stormingGraph, type StormingChoice, type StormingDetailSession } from '../storming';
 import { graphNodeOf, nodeItemId } from '../scene';
 import { highlightElement, showItem } from '../view/canvas';
 import { useCanvasValue } from '../view/diagram';
@@ -178,7 +178,7 @@ export function useSessionPage(input: {
         ...(shownOptions && {
             storming: {
                 ...(shownOptions.stageId !== undefined && { stageId: shownOptions.stageId }),
-                ...(shownOptions.hideExceptions && { hideExceptions: true }),
+                ...(shownOptions.hidden && { hidden: shownOptions.hidden }),
             },
         }),
         ...(view.kind === 'catalog' && { catalog: workspace.catalog.filter }),
@@ -366,11 +366,11 @@ export function useSessionPage(input: {
                     select(id, { highlight: false });
                     return;
                 }
-                // the integrated canvas, at a level that draws the element
+                // the integrated canvas, at a level that draws the element, with what the 絞り込み hides of it shown
                 const kind = firstDeclarations(storming.storming).get(target.local)?.kind;
                 const drawn = LEVEL_KINDS[stormingChoice.level].some((k) => k === kind);
                 const level = drawn ? stormingChoice.level : 'design-level';
-                setStormingChoice({ ...stormingChoice, stormingId: target.storming, level, timelines: others });
+                setStormingChoice(revealIn(stormings, { ...stormingChoice, stormingId: target.storming, level, timelines: others }, id));
                 setView({ kind: 'storming' });
                 select(id, { highlight: false });
                 requestAnimationFrame(() => requestAnimationFrame(() => canvas && highlightElement(canvas, id)));

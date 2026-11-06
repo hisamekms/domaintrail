@@ -17,7 +17,7 @@
  * At Big Picture the events marked `level design` are left out as if their steps were not written; a timeline whose
  * branch point is hidden branches off from the nearest visible step before it (or starts the section), and a `then` to
  * a hidden step returns to the nearest visible step after it (or before it). Without the exceptions
- * (`hideExceptions`), the exceptions are not drawn, nor the events only they have, nor the elements of the Design Level
+ * (`ViewOptions.hidden`), the exceptions are not drawn, nor the events only they have, nor the elements of the Design Level
  * that relate only to those events (`ofExceptionsOnly`), nor the hotspots on those events.
  */
 import {
@@ -42,7 +42,18 @@ import {
     timelineOccurrences,
     trunk,
 } from '@domaintrail/storming';
-import { LEVEL_KINDS, stepKey, type GridCell, type RenderEdge, type RenderGraph, type RenderNode, type StageGrid, type Step, type ViewOptions } from './ir.js';
+import {
+    hides,
+    LEVEL_KINDS,
+    stepKey,
+    type GridCell,
+    type RenderEdge,
+    type RenderGraph,
+    type RenderNode,
+    type StageGrid,
+    type Step,
+    type ViewOptions,
+} from './ir.js';
 import { filterEdges } from './filter.js';
 import { compare, compareOccurrences } from './trie.js';
 import { drawChains, hotspotsOnDesignLevel, usersOf, type Chains, type EventPlace } from './chains.js';
@@ -94,7 +105,7 @@ export function projectStageView(storming: Storming, options: ViewOptions): Rend
     const shown = one ? [one] : sections(storming, order);
     const byId = firstDeclarations(storming);
     const isException = new Map(stormingTimelines(storming).map((t) => [t.id, !!t.exception]));
-    const withoutExceptions = options.hideExceptions === true;
+    const withoutExceptions = hides(options, 'exceptions');
     // the events of exceptions only: not drawn without the exceptions
     const inMain = new Set(stormingTimelines(storming).flatMap((t) => (t.exception ? [] : timelineOccurrences(t).map((o) => o.eventId))));
     const exceptionOnly = new Set(
@@ -256,7 +267,7 @@ export function projectStageView(storming: Storming, options: ViewOptions): Rend
         options: {
             level: options.level,
             ...(one && { stageId: one.id }),
-            ...(withoutExceptions && { hideExceptions: true as const }),
+            ...(withoutExceptions && { hidden: ['exceptions' as const] }),
         },
         nodes: [...nodes.values()].sort((a, b) => compare(a.id, b.id)),
         edges: [...edges.values()].sort((a, b) => compare(a.id, b.id)),

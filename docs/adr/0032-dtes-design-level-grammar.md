@@ -261,6 +261,33 @@ the main author, the rule has to be plain and a violation an error at once, as S
   indentation, with the comments on its lines; when the policy already reads that read model, it only removes it from
   the command. A policy that issues several commands keeps its commands' `reads` where they are, listed with it.
 
+### 10. 「解決済みを表示」, and what a reader hides as one set (2026-11-06)
+
+*Decided by the maintainer*, after asking for 「解決済みを表示」 in the storming's 絞り込み (a band of hotspots across a
+sticky's top was tried in a preview and dropped: hotspots stay as §8 draws them):
+
+1. **Hiding the resolved hotspots moves nothing.** A resolved hotspot stays in the layout (in ELK stacked above its
+   sticky, in the grid in its cell) whatever is shown. 「解決済みを表示」 off, its note and its 問い line are only left out
+   of the drawing, their place left empty: the layout is not made again. A hotspot on nothing drawn is hidden the same
+   way.
+2. **The stickies keep a check.** Each sticky a hidden hotspot is `on` (each copy of it, as drawn per step) shows a
+   resolved hotspot's check in its corner (§3.5's `RESOLVED_MARK`; left of its 「k/n」 when its copies are numbered),
+   also when open hotspots on it are still drawn. Hovering tells what was agreed (「解決済み: …」); pressing it selects
+   the hotspot (the one on that copy), whose detail tells the question and the agreement. No new words. A sticky's
+   detail lists every hotspot on it, open and resolved, whatever is hidden.
+3. **What a reader hides is one set** (`Hideable`, `HIDDEN_BY` in `core/storming/ir.ts`): `exceptions` and
+   `resolvedHotspots`, each with how it is hidden. `layout`: the view is laid out without it — another graph, keyed by
+   `ViewOptions.hidden` (`-exceptions`, as before), laid out by the server. `drawing`: the same layout is drawn without
+   it (`hideInDrawing`): in the page alone, and the same way by `dt export svg --resolved-hotspots hide` (beside
+   `--exceptions hide`). A new kind is one more entry; only a `layout` one adds graphs to lay out, so the views do not
+   double with each switch. The page keeps the set per reader (`StormingChoice.hidden`; an earlier `exceptions: false`
+   is read as the exceptions hidden): a facilitator hiding them changes nothing for the others. Each kind hidden counts
+   as one in the 絞り込み's count.
+4. **Moving to a hidden element shows what hides it first**, whatever the kind (`revealIn`, `apps/web/storming.tsx`):
+   the palette and `#select=` links, the knowledge's links, the detail's links, a chat's reference and a turn's marks
+   (`marksView`) choose the view, then show again the kinds that hide the element — one kind when that is enough, else
+   all of them — then select it. The rule is written once, for every kind; the exceptions go through it too.
+
 ## Alternatives
 
 - **An arrow chain** (`UnassignedRequests -> Batch -> BuildAllocation -> CarAllocationPlan -> CarAllocated`): rejected

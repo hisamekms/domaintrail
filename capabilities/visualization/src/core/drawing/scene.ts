@@ -33,10 +33,24 @@ export interface NodeProps {
     /** A resolved hotspot (`.dtes` §3.5): what was agreed, empty when not written. Absent while open and on other nodes. */
     resolution?: string;
     /**
+     * The resolved hotspots on a sticky that the reader hides (`GraphNode.folded`): the sticky shows a resolved hotspot's
+     * check in its corner for them. Absent without any.
+     */
+    settled?: SettledHotspot[];
+    /**
      * A changed note's label before the change, drawn small and struck through under it (the Live View's marks of a
      * turn's changes); absent elsewhere. The portable SVG does not draw it.
      */
     was?: string;
+}
+
+/** A hidden resolved hotspot behind a sticky's check: its item (selecting the check selects it), question and agreement. */
+export interface SettledHotspot {
+    /** The hotspot's own item (`SceneNode.on`). */
+    item: SceneId;
+    label: string;
+    /** What was agreed, empty when not written. */
+    resolution: string;
 }
 
 /** What a container shows: a bounded context, an aggregate boundary, a storming group. */
@@ -106,6 +120,11 @@ export interface SceneNode extends ItemBase {
     readonly graphNode?: string;
     /** The container it is drawn in, when the graph nests it (a storming group's events): the container's item. */
     readonly parent?: SceneId;
+    /**
+     * A resolved hotspot the reader hides (`GraphNode.folded`): not drawn, the item of the sticky whose check stands for
+     * it (the first it is `on`); it stands at that check, so that selecting the check selects it.
+     */
+    readonly on?: SceneId;
     readonly props: NodeProps;
 }
 

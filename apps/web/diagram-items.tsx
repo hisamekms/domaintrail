@@ -14,7 +14,7 @@ import {
     TRANSITION_SUB_LINE_HEIGHT,
     TRANSITION_SUB_SIZE,
 } from '@domaintrail/visualization';
-import type { DiagMark, EdgeProps, GroupProps, InternalProps, NodeProps, Point } from './scene';
+import type { DiagMark, EdgeProps, GroupProps, InternalProps, NodeProps, Point, SceneId, SettledHotspot } from './scene';
 import { fitKey, fitLabel, fontLoadCount, NOTE_KINDS, rememberedFit, rememberFit, subscribeFonts, type LabelFit } from './note-fit';
 import { useT } from './i18n';
 import { TOOLTIP_ATTR } from './tooltip';
@@ -38,8 +38,28 @@ export const nodeStyle = boxStyle;
 /** The change badge and the diagnostic mark on a node's edge, drawn by `EdgeMarks` (or a canvas's wrapper of it). */
 export type MarksComponent = ComponentType<{ badge: string; diag: DiagMark }>;
 
+/**
+ * The check of the hidden resolved hotspots on a sticky, on the canvas (absent: as printed, not to press): which of them
+ * are selected, and `pick` selecting one (`additive`: with Shift, added to the selection).
+ */
+export interface SettledState {
+    readonly chosen: ReadonlySet<SceneId>;
+    readonly pick?: (item: SceneId, additive: boolean) => void;
+}
+
 /** A model element (aggregate root, entity, value object, state): its heading, rows, compartment and marks. */
-export function NodeContent({ p, Marks }: { p: NodeProps; Marks: MarksComponent }): ReactNode {
+export function NodeContent({
+    p,
+    Marks,
+    settled: settledState,
+    copy,
+}: {
+    p: NodeProps;
+    Marks: MarksComponent;
+    settled?: SettledState;
+    /** The sticky's 「k/n」, when its copies are numbered: its check goes left of it. */
+    copy?: string | undefined;
+}): ReactNode {
     const t = useT();
     if (p.kind === 'initial') return <div className="dn-initial">{p.label}</div>;
     // a resolved hotspot tells what was agreed on hover
@@ -51,6 +71,7 @@ export function NodeContent({ p, Marks }: { p: NodeProps; Marks: MarksComponent 
                 {NOTE_KINDS.has(p.kind) ? <NoteLabel p={p} extra={settled} /> : <div className="dn-label">{p.label}</div>}
             </div>
             {settled !== undefined && <ResolvedMark />}
+            {p.settled && <SettledMark rows={p.settled} state={settledState} copy={copy} />}
             {p.rows.length > 0 && (
                 <div className="dn-body">
                     {p.rows.map((r, i) =>
@@ -152,6 +173,43 @@ function ResolvedMark(): ReactNode {
     const { radius: r } = RESOLVED_MARK;
     return (
         <svg className="dn-resolved-mark" width={2 * r} height={2 * r} viewBox={`0 0 ${2 * r} ${2 * r}`} aria-hidden>
+            <circle cx={r} cy={r} r={r} className="dn-resolved-disc" />
+            <path d={checkPath(r, r, r)} className="dn-resolved-check" />
+        </svg>
+    );
+}
+
+/** Where a sticky's check goes beside its 「k/n」 (on the top edge, `.dn-copy`): left of it, so that the two do not overlap. */
+export const settledMarkRight = (copy: string | undefined): number | undefined => (copy === undefined ? undefined : 14 + Math.ceil(copy.length * 6.5 + 10) + 4);
+
+/**
+ * The resolved hotspots on a sticky that the reader hides (ADR 0032 §10): a resolved hotspot's check in its corner
+ * (left of its 「k/n」), telling on hover what was agreed and selecting the first of them on a click (not the sticky).
+ */
+function SettledMark({ rows, state, copy }: { rows: readonly SettledHotspot[]; state: SettledState | undefined; copy: string | undefined }): ReactNode {
+    const t = useT();
+    const { radius: r } = RESOLVED_MARK;
+    const right = settledMarkRight(copy);
+    const chosen = rows.some((row) => state?.chosen.has(row.item));
+    const pick = state?.pick;
+    return (
+        <svg
+            className={`dn-resolved-mark dn-settled-mark${chosen ? ' dn-settled-chosen' : ''}`}
+            width={2 * r}
+            height={2 * r}
+            viewBox={`0 0 ${2 * r} ${2 * r}`}
+            style={right === undefined ? undefined : { right }}
+            {...{ [TOOLTIP_ATTR]: rows.map((row) => t.resolvedHotspotTip(row.resolution)).join('\n') }}
+            {...(pick && {
+                role: 'button',
+                'aria-label': rows.map((row) => row.label).join(' / '),
+                onClick: (e: { stopPropagation: () => void; shiftKey: boolean }) => {
+                    // the hotspot, not the sticky under it (React Flow selects on the node's click)
+                    e.stopPropagation();
+                    pick(rows[0]!.item, e.shiftKey);
+                },
+            })}
+        >
             <circle cx={r} cy={r} r={r} className="dn-resolved-disc" />
             <path d={checkPath(r, r, r)} className="dn-resolved-check" />
         </svg>

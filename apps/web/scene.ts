@@ -29,6 +29,7 @@ export {
     type SceneItem,
     type SceneItemType,
     type SceneNode,
+    type SettledHotspot,
 } from '@domaintrail/visualization';
 
 /**
@@ -62,7 +63,8 @@ export interface CopyIndex {
  * all its notes, numbered 「k/n」, when one is selected. Elements drawn once are left out; so are ghosts.
  */
 export function copyIndices(items: Iterable<SceneItem>, selected: ReadonlySet<SceneId>): Map<SceneId, CopyIndex> {
-    const nodes = [...items].filter((s): s is SceneNode => s.type === 'node' && !s.ghost);
+    // a hidden resolved hotspot (behind its sticky's check) is not a note
+    const nodes = [...items].filter((s): s is SceneNode => s.type === 'node' && !s.ghost && s.on === undefined);
     const elements = new Set(nodes.filter((s) => selected.has(s.id)).map((s) => s.elementId));
     const out = new Map<SceneId, CopyIndex>();
     for (const element of elements) {

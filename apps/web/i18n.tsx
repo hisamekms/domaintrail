@@ -166,6 +166,8 @@ const ja = {
     exceptionTimeline: DIAGRAM_TEXTS.ja.exceptionTimeline,
     /** The storming's 絞り込み of the exceptions (on the integrated canvas and a stage). */
     showExceptions: '例外を表示',
+    /** The storming's 絞り込み of the resolved hotspots (hidden, a sticky keeps a check for them). */
+    showResolvedHotspots: '解決済みを表示',
     staleStorming: (file: string) => `${file} に構文エラーがあるため、最後に解析できた内容を表示しています`,
 
     // the toolbar's 絞り込み (what each view hides)
@@ -1438,6 +1440,7 @@ const en: Messages = {
     stageTimeline: DIAGRAM_TEXTS.en.stageTimeline,
     exceptionTimeline: DIAGRAM_TEXTS.en.exceptionTimeline,
     showExceptions: 'Show exceptions',
+    showResolvedHotspots: 'Show resolved',
     staleStorming: (file) => `${file} has syntax errors: showing what it was when it last parsed`,
 
     filters: {

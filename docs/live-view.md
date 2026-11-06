@@ -191,6 +191,13 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   above the row of their event, an exception's above its lane. The タイムライン
   picker then also lists each stage (「…（例外を含む）」), and the 絞り込み has 「例外を表示」 (on by default,
   remembered per browser; off counts as one narrowing) to draw the integrated canvas and the stages without their exceptions.
+  A storming with a resolved hotspot also has 「解決済みを表示」 in its 絞り込み, in every view (on by default, remembered
+  per browser — a facilitator hiding them changes nothing for the others; off counts as one narrowing): off, the
+  resolved hotspots and their lines are not drawn, their places left empty (nothing moves: the page hides them in the
+  drawing alone, where 「例外を表示」 draws another layout; ADR 0032 §10), and each sticky they are on keeps a green ✓ in
+  its corner (left of its 「k/n」), which tells what was agreed on hover and selects the hotspot. Going to an element the
+  絞り込み hides — a link, the palette, the knowledge, the detail, a chat's reference, a turn's marks — shows what hides
+  it first, then selects it.
   **Acting on a sticky** ([ADR 0033](adr/0033-people-edit-stickies.md)): every action comes from one list, so the
   same ones are in four places. Selecting stickies shows a small toolbar above them (below them when there is no room;
   never on hover, hidden while the canvas moves): the frequent actions as icons — チャットに追加 (💬, a muted ✓ once
@@ -346,8 +353,9 @@ explorer.
   that message on one line), AI の作業 (`Bot`: how many runs its messages target or its changes touched, a link to
   the latest in AI の作業) and このセッションで追加 / 変更 (`CirclePlus` / `PencilLine`: the first message of the run
   that added it, else of the latest that changed it, a link to the run's card); its `.dt` counterpart (`Blocks`: an
-  event's, command's or aggregate's `ref`, a link while the model has it), and a resolved hotspot's conclusion
-  (`CircleCheck`). Last, the actions, brand-coloured icons on a pale wash: AI に聞く (filled), 問いを足す (an event),
+  event's, command's or aggregate's `ref`, a link while the model has it), the hotspots on a sticky
+  (`MessageCircleQuestionMark`: each a link, a resolved one with its ✓; open and resolved, whatever the 絞り込み hides),
+  and a resolved hotspot's conclusion (`CircleCheck`). Last, the actions, brand-coloured icons on a pale wash: AI に聞く (filled), 問いを足す (an event),
   解決を伝える (an open hotspot). Each action, and 🔧, only puts the beginning of a message in the composer with the
   element as its `#` target (「#暗証番号を忘れた について、」), opens the chat and puts the caret there: the person
   writes the rest and sends it. Outside a session, or once it ended, there are no actions. Its file and line, the DSL's
