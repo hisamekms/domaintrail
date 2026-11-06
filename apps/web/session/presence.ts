@@ -1,7 +1,8 @@
 // The others' presence as the page holds it (ADR 0026, Presence): ephemeral, one entry per page of a participant
 // (`connection`), replaced by each update and dropped when the page leaves. Cursors are drawn only for a page whose
-// location equals this page's; the others are listed as on another view. Presence never starts anything.
-import type { Cursor, Presence, SessionServerMessage, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
+// location equals this page's; the others are listed as on another view. Presence never starts anything (following
+// someone is the reader's choice: `follow.ts`).
+import type { CameraBounds, Cursor, Presence, SessionServerMessage, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
 import { hasCanvas, sameLocation } from './location';
 
 /** The others' pages by connection. */
@@ -112,6 +113,19 @@ export function throttle<T>(interval: number, send: (value: T) => void, now: () 
         },
     };
 }
+
+/**
+ * What a canvas shows, as a page sends it (`Presence.camera`): rounded to a tenth of a page unit; none for a canvas not
+ * laid out (no size).
+ */
+export function cameraBounds(viewport: { readonly x: number; readonly y: number; readonly w: number; readonly h: number }): CameraBounds | undefined {
+    const round = (n: number): number => Math.round(n * 10) / 10;
+    const c = { x: round(viewport.x), y: round(viewport.y), w: round(viewport.w), h: round(viewport.h) };
+    return [c.x, c.y, c.w, c.h].every(Number.isFinite) && c.w > 0 && c.h > 0 ? c : undefined;
+}
+
+export const sameCamera = (a: CameraBounds | undefined, b: CameraBounds | undefined): boolean =>
+    a === b || (!!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h);
 
 /** A participant as the panel lists them. */
 export interface ListedParticipant {

@@ -13,6 +13,7 @@ import { viewPayloads } from '../test-helpers';
 import {
     ghostGraph,
     markedRects,
+    marksAppearMove,
     marksMove,
     marksView,
     notDrawn,
@@ -172,25 +173,28 @@ describe('the camera when marks appear', () => {
     const inView: Rect = { x: 100, y: 100, w: 120, h: 80 };
     const right: Rect = { x: 1400, y: 100, w: 120, h: 80 };
 
-    test("a turn's marks move it only when none is in view: one in view already tells that something changed", () => {
-        expect(marksMove([inView, right], view, 1, 'ifNoneVisible')).toEqual({ kind: 'stay' });
-        expect(marksMove([right], view, 1, 'ifNoneVisible')).toEqual({ kind: 'fit', bounds: right, maxZoom: 1 });
-        expect(marksMove([], view, 1, 'ifNoneVisible')).toEqual({ kind: 'stay' });
+    test("a turn's marks leave the camera where it is unless the reader follows the AI (or asked for them)", () => {
+        expect(marksAppearMove('stay', false, [right], view, 1)).toEqual({ kind: 'stay' });
+        expect(marksAppearMove('always', false, [right], view, 1)).toEqual({ kind: 'fit', bounds: right, maxZoom: 1 });
+        // not while the reader drags or pans
+        expect(marksAppearMove('always', true, [right], view, 1)).toEqual({ kind: 'stay' });
     });
 
-    test('marks asked for are brought into view unless all of them are', () => {
-        expect(marksMove([inView], view, 1, 'always')).toEqual({ kind: 'stay' });
-        expect(marksMove([inView, right], view, 1, 'always')).toEqual({ kind: 'fit', bounds: { x: 100, y: 100, w: 1420, h: 80 }, maxZoom: 1 });
+    test('marks are brought into view unless all of them are', () => {
+        expect(marksMove([inView], view, 1)).toEqual({ kind: 'stay' });
+        expect(marksMove([], view, 1)).toEqual({ kind: 'stay' });
+        expect(marksMove([right], view, 1)).toEqual({ kind: 'fit', bounds: right, maxZoom: 1 });
+        expect(marksMove([inView, right], view, 1)).toEqual({ kind: 'fit', bounds: { x: 100, y: 100, w: 1420, h: 80 }, maxZoom: 1 });
     });
 
     test('never zoomed in further than the reader was, nor past 100%', () => {
-        expect(marksMove([right], { ...view, w: 500, h: 300 }, 2, 'always')).toMatchObject({ kind: 'fit', maxZoom: 1 });
-        expect(marksMove([{ ...right, x: 2500 }], { x: 0, y: 0, w: 2000, h: 1200 }, 0.5, 'always')).toMatchObject({ kind: 'fit', maxZoom: 0.5 });
+        expect(marksMove([right], { ...view, w: 500, h: 300 }, 2)).toMatchObject({ kind: 'fit', maxZoom: 1 });
+        expect(marksMove([{ ...right, x: 2500 }], { x: 0, y: 0, w: 2000, h: 1200 }, 0.5)).toMatchObject({ kind: 'fit', maxZoom: 0.5 });
     });
 
     test('marks too far apart to read once fitted: centered on the nearest, the zoom kept', () => {
         const far: Rect = { x: 9000, y: 100, w: 120, h: 80 };
-        expect(marksMove([far, right], view, 1, 'ifNoneVisible')).toEqual({ kind: 'center', point: { x: 1460, y: 140 } });
+        expect(marksMove([far, right], view, 1)).toEqual({ kind: 'center', point: { x: 1460, y: 140 } });
     });
 
     test('ほかに n 件: the marked elements none of whose notes is in view, and the nearest of them', () => {

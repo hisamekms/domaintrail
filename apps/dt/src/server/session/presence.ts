@@ -1,4 +1,4 @@
-// Presence (ADR 0026): where each page of a session looks, its cursor and its selection. Ephemeral: kept in memory
+// Presence (ADR 0026): where each page of a session looks, its cursor, its camera and its selection. Ephemeral: kept in memory
 // while the page is connected, never stored. Updates of one participant are sent on at most every 50 ms (~20 Hz,
 // counted over all their pages); a faster update replaces the one waiting, so the last position always arrives.
 import type { ClientMessage, Presence, PublicParticipant } from '@domaintrail/collaboration/protocol';
@@ -65,6 +65,7 @@ export function createPresenceRelay(hub: Pick<WebSocketHub<SessionConnection>, '
                 participant: publicParticipant(connection.data),
                 location: message.location,
                 ...(message.cursor && { cursor: message.cursor }),
+                ...(message.camera && { camera: message.camera }),
                 ...(message.selectedTarget && { selectedTarget: message.selectedTarget }),
             };
             const participant = connection.data.participant.id;

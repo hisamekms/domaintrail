@@ -22,6 +22,8 @@ import { collabMenuItems, collabSummary, hasUnfinished, hoursMinutes, inviteLink
 import { unitName, type ChangeUnit } from './history';
 import { restorePoints, type RestorePointEntry } from './timeline';
 import { Avatar, failure } from './parts';
+import { followStyle } from './follow';
+import { isFollowing, type Followee } from '../view/follow';
 import { ParticipantsList, type PeopleFocus } from './participants';
 import type { SessionData } from './useSession';
 import { participantRows, type ViewScope, type ViewTarget } from './views';
@@ -41,6 +43,10 @@ export function openPeople(participantId?: string): void {
     window.dispatchEvent(new CustomEvent<string | undefined>(OPEN_PEOPLE, { detail: participantId }));
 }
 
+/** The rows with the participant the page follows first (the people button shows the first few). */
+export const followedFirst = <R extends { readonly id: string }>(rows: readonly R[], followee: Followee | null): R[] =>
+    followee?.kind === 'person' ? [...rows.filter((r) => r.id === followee.participant), ...rows.filter((r) => r.id !== followee.participant)] : [...rows];
+
 /** The focusable controls of the popover, in order, for the arrow keys. */
 const focusables = (root: HTMLElement): HTMLElement[] => [...root.querySelectorAll<HTMLElement>('button:not(:disabled), li[tabindex]')];
 
@@ -55,9 +61,11 @@ export function CollabMenu(props: {
     live: boolean;
     onOpenView: (target: ViewTarget) => void;
     onLeave: () => void;
+    /** What the AI's row says of it (its status while it works). */
+    aiStatus: string;
 }) {
     const { session, live } = props;
-    const { tx, revisions } = useChat();
+    const { tx, revisions, follow } = useChat();
     const [open, setOpen] = useState(false);
     const [focus, setFocus] = useState<PeopleFocus | undefined>();
     const [note, setNote] = useState<string | undefined>();
@@ -187,11 +195,21 @@ export function CollabMenu(props: {
                 ) : (
                     <>
                         <span className="chat-avatars">
-                            {rows.slice(0, AVATARS).map((r) => (
-                                <span key={r.id} className={`chat-avatar${r.where === 'away' ? ' away' : ''}`}>
-                                    <Avatar id={r.id} name={r.name} {...(r.avatarUrl && { url: r.avatarUrl })} facilitator={r.role === 'facilitator'} />
-                                </span>
-                            ))}
+                            {/* whom the page follows first, with a ring in their color */}
+                            {followedFirst(rows, follow.followee)
+                                .slice(0, AVATARS)
+                                .map((r) => {
+                                    const followed = isFollowing(follow.followee, { participant: r.id });
+                                    return (
+                                        <span
+                                            key={r.id}
+                                            className={`chat-avatar${r.where === 'away' ? ' away' : ''}${followed ? ' followed' : ''}`}
+                                            {...(followed && { style: followStyle({ kind: 'person', participant: r.id }) })}
+                                        >
+                                            <Avatar id={r.id} name={r.name} {...(r.avatarUrl && { url: r.avatarUrl })} facilitator={r.role === 'facilitator'} />
+                                        </span>
+                                    );
+                                })}
                         </span>
                         <span className="chat-online">{tx.chat.onlineCount(online, rows.length)}</span>
                         <ChevronDown size={13} aria-hidden className="collab-menu-chevron" />
@@ -210,6 +228,8 @@ export function CollabMenu(props: {
                                 rows={rows}
                                 scope={props.scope}
                                 focus={focus}
+                                follow={follow}
+                                aiStatus={props.aiStatus}
                                 {...(link &&
                                     live &&
                                     session.me.participant.role === 'facilitator' && {

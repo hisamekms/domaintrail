@@ -12,11 +12,21 @@ import type { RevisionTools } from './revisions';
 import type { ModelTarget } from './targets';
 import type { SessionData } from './useSession';
 import type { ViewTarget } from './views';
+import type { Followee } from '../view/follow';
 import type { JourneyAct, GuideWorkspace } from '@domaintrail/collaboration';
 import type { JourneyBody } from '@domaintrail/collaboration/protocol';
 import type { JourneyOverview } from './journey-view';
 
 export type Tx = Messages['session'];
+
+/** Whom the page follows (docs/live-view.md, "Following"), as the chat shows and changes it. */
+export interface ChatFollow {
+    readonly followee: Followee | null;
+    /** The reader's choice: someone (the AI followed is brought to its latest changes), or no one. */
+    readonly choose: (followee: Followee | null) => void;
+    /** The reader sent a request to the AI: the page follows it. */
+    readonly asked: () => void;
+}
 
 export interface ChatContextValue {
     readonly session: SessionData;
@@ -28,6 +38,7 @@ export interface ChatContextValue {
     readonly onNavigate: (target: ModelTarget) => void;
     /** Marks a unit's changes on the storming canvas and brings them into view (a card's 図で見る); absent outside the page. */
     readonly onSeeChanges?: (span: { readonly base: string; readonly result: string; readonly name: string }) => void;
+    readonly follow: ChatFollow;
     /** Opens a view (a storming's stage, a context's structure): the guide's places. */
     readonly openView: (target: ViewTarget) => void;
     /** The facilitator, in an open session: the actions are offered. */

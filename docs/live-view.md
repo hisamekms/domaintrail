@@ -406,10 +406,11 @@ See [ADR 0001](adr/0001-mvp-implementation-decisions.md) for the design decision
 
 Under `dt collab` (and `dt open`, for one person) the session's chat is a pillar at the right end of the page, the whole height,
 the same for everyone and open when the page joins. Its head holds its two views and ✕ to close it. The app bar's right
-end shows the collab menu (the avatars and the participants online ▾: who is where, the invite link,
+end shows the collab menu (the avatars and the participants online ▾: who is where — you, then the AI, then the others,
+each one but you with ○ / ◉ to follow them (see [Following](#following)) —, the invite link,
 ソース一式をダウンロード, 退出, and the facilitator's actions; see [`dt guide session`](guide.md#collaboration-sessions); in
 Solo a plain ⋯) and the agent's status at a glance (running and for how long, waiting for an answer, or queued; nothing
-when idle). A click on the status (AI の作業を見る) opens the chat on AI の作業 and the card it stands for — the running one,
+when idle), with ○ / ◉ on its left to follow the AI. A click on the status (AI の作業を見る) opens the chat on AI の作業 and the card it stands for — the running one,
 else the next to run, else the one waiting longest for an answer — scrolled to and marked for a moment, besides those
 already open; the chat keeps its scroll, so チャット brings the reader back where they were. While the chat is closed, a round 💬 button at the bottom right of the
 canvas opens it again, marked with a spinner while the agent runs, `?` while it waits for an answer, and the number of
@@ -577,11 +578,12 @@ them), and 印を消す. The bar is a group of ordinary buttons, reached with Ta
 - **Only the stickies**: the `.dtes` elements drawn as notes. A run that changed only `.dt` marks nothing here; the
   model canvas keeps marking against its own baseline (前回の保存 or a git revision, see
   [Comparing with a git revision](#comparing-with-a-git-revision)).
-- **The camera** moves for the marks only when none of them is in view as they appear: the reader may be reading
-  elsewhere on purpose, and one mark in view already says that the turn changed something (the bar counts the rest and
-  offers to go there). It then fits them all, zoomed in no further than it was (nor past 100%), or, when that would
-  make them too small to read, centers on the nearest; never while the reader drags or pans. With reduced motion it
-  jumps instead of gliding.
+- **The camera** moves for a turn's marks only while the reader follows the AI (see [Following](#following)): then
+  they are brought into view as they appear — in the view that draws them, switched to if needed, as 図で見る does —
+  unless they all are in view already. A reader who does not follow it keeps the camera where it is: the marks and the
+  bar (「ほかに n 件の変更 →」) tell them, and the bar's → is their own move (it does not start following). The camera
+  fits the marks, zoomed in no further than it was (nor past 100%), or, when that would make them too small to read,
+  centers on the nearest; never while the reader drags or pans. With reduced motion it jumps instead of gliding.
 - **図で見る** (the eye, under a run's text in the chat and under a card's row in AI の作業, while it changed stickies)
   marks that run's (or that card's) changes the same way, whenever it ran, and brings them into view: the view shown if
   it draws any of them, else the integrated canvas of the storming they are in, at a level that draws them (switching
@@ -595,6 +597,38 @@ The marks take a span of revisions (before and after), not a run as such, so tha
 sticky — can be marked the same way. Printing and exporting draw the diagram without them.
 
 The others' cursors are drawn on the same view. `dt open --host <non-loopback>` serves the same page read-only, without any of it. See [`dt guide session`](guide.md#collaboration-sessions).
+
+### Following
+
+The camera moves only for the reader and for whom the reader follows: the AI (its changes) or another participant (their
+view and camera). Nothing else moves it — not a turn that ends, not someone else's request.
+
+- **Whom**: one at a time. The AI is followed from the small round toggle left of its status in the app bar (◉ while
+  followed, ○ else; named for what a press does, 「AI を追う」 / 「AI を追うのをやめる」) or from its row in the
+  participants (after you); a participant from their row (「佐藤を追う」). Following someone stops following anyone else.
+  Under `dt open` there are no participants: only the AI's toggle.
+- **Starting**: the reader's choice, and a request the reader sends to the AI — a message with `@AI`, a reply to the AI
+  or to an AI turn, the facilitator's AI に送る, an answer or a pick in a card, and every message under `dt open` — which
+  follows the AI on the sender's page only. A participant whose change proposal is approved follows the AI as it runs,
+  on their page. Someone else's request starts nothing.
+- **The AI followed**: as a turn ends, its changes are brought into view (see [What a turn changed](#what-a-turn-changed));
+  choosing to follow it brings its latest changes into view at once. While it does not work, the toggle shows only while
+  it is followed, faint (a press stops following); never while no agent is connected.
+- **A participant followed**: the page opens the view they are on (the storming, level and timeline, the domain model's
+  view, 詰めて表示) and fits what their canvas shows to its own, gliding as they pan and zoom (their presence's
+  `camera`, sent a few times a second: [ADR 0026](adr/0026-collaboration-sessions.md#appendix-following-someone-amendment)).
+  While they are where no canvas is (the catalog, a view still loading) or on a view this page cannot open, the page
+  stays and keeps following; it catches up once they are back. The detail's pillar is not followed. When they leave
+  the session, the following stops.
+- **Stopping**: any move of the reader's own stops following at once, without asking: a pan or zoom (drag, wheel, pinch,
+  the keys, the canvas's buttons), a selection (a click on the canvas, in the tree or the navigator, a link), switching
+  what is shown (the world, the storming, the level, the timeline, the domain model's views, the filters, 詰めて表示, a
+  participant's 「→」, 図で見る, 「ほかに n 件の変更 →」) — and the toggle again. The followee's own moves of the camera
+  and the view are not the reader's and stop nothing.
+- **How it shows**: a thin frame round the canvas in the followee's color (the AI's, or the participant's cursor color),
+  faint while the AI followed is idle; the participant followed comes first among the avatars of the people button,
+  with a ring in their color, and their row is marked.
+- **Per viewer**: whom a page follows is its own, never sent; a reload forgets it.
 
 ### Knowledge
 

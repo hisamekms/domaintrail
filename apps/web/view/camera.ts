@@ -6,7 +6,7 @@ import { MESSAGES } from '../i18n';
 import { buildScene } from '../render';
 import { motionMs } from '../shared/motion';
 import { cameraMove, fitAll, fitReadable } from './canvas';
-import { ghostGraph, markedRects, marksMove, sceneWithMarks, type CanvasMarks } from './change-marks';
+import { ghostGraph, markedRects, marksAppearMove, sceneWithMarks, type CanvasMarks } from './change-marks';
 import { canvasShows } from './empty';
 import type { Camera, DiagramCanvas } from './diagram';
 import type { ViewGraph } from './graph';
@@ -21,8 +21,9 @@ import type { ViewSettings } from './settings';
  * baseline's normal layout had them).
  *
  * On a storming view, `marks` (a turn's changes) are drawn too: their rings and badges, and the ghosts of the stickies
- * removed where the page last saw them (`snapshots`; not in a compact layout). Marks appearing anew (a new key) move the
- * camera by `marksMove`, once their view is drawn.
+ * removed where the page last saw them (`snapshots`; not in a compact layout). Marks appearing anew (a new key) to be
+ * revealed (`always`: asked for, or the AI's turn while the reader follows it) move the camera by `marksMove`, once
+ * their view is drawn; the others leave it where it is (docs/live-view.md, "Following").
  */
 export function useViewCamera(
     canvas: DiagramCanvas | null,
@@ -80,9 +81,13 @@ export function useViewCamera(
         if (marked && marked.key !== marksDrawn.current) {
             marksDrawn.current = marked.key;
             // not while the reader drags or pans: the bar still offers to go there
-            const to = canvas.isMoving()
-                ? { kind: 'stay' as const }
-                : marksMove([...markedRects(scene, marked.marks).values()].flat(), canvas.viewportPageBounds(), canvas.getZoom(), marked.reveal);
+            const to = marksAppearMove(
+                marked.reveal,
+                canvas.isMoving(),
+                [...markedRects(scene, marked.marks).values()].flat(),
+                canvas.viewportPageBounds(),
+                canvas.getZoom(),
+            );
             const animate = motionMs('--motion-medium') > 0;
             if (to.kind === 'fit') canvas.fitBounds(to.bounds, { maxZoom: to.maxZoom, animate });
             else if (to.kind === 'center') canvas.centerOn(to.point, { animate });

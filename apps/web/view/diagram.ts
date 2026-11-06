@@ -61,6 +61,8 @@ export interface CanvasLine {
  * - **Pointer**: over an item that can be clicked (not a ghost) the pointer cursor shows.
  * - **Changes**: every getter may be read inside `watch`, which runs its effect again when what it read changes
  *   (`useCanvasValue` is its React hook).
+ * - **The user's hand**: `onUserInput` tells when the user takes the canvas with its own gestures (a press, the wheel, a
+ *   pinch, a key): the camera's moves asked through the port (a fit, a center) are not the user's.
  */
 export interface DiagramCanvas {
     show(scene: Scene): void;
@@ -128,6 +130,11 @@ export interface DiagramCanvas {
 
     /** Runs `effect` now and again whenever what it read from the canvas changes; returns the stop. */
     watch(effect: () => void): () => void;
+    /**
+     * Calls `listener` whenever the user takes the canvas with its own gestures — a press on it (a pan, a click, a
+     * selection box), the wheel (a pan, a zoom), a pinch, one of its keys — before what it does; returns the stop.
+     */
+    onUserInput(listener: () => void): () => void;
 }
 
 /** Whether two values are the same, or plain objects with the same values (one level deep). */

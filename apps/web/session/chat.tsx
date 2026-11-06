@@ -38,7 +38,7 @@ import { useDismiss } from '../shared/layout';
 import { motionMs, useGrow, useSwap } from '../shared/motion';
 import { useLang, useT } from '../i18n';
 import { ExtractionSwitch } from '../knowledge/panel';
-import { useChatActions, type QuestionChoice } from './actions';
+import { useChatActions, type ChatActions, type QuestionChoice } from './actions';
 import { ActivityLine } from './activity';
 import {
     AI_PARTICIPANT,
@@ -63,7 +63,7 @@ import { MarkdownText } from '../shared/markdown-text';
 import { ChangedElements, ReplyButton, RunCard, useUnitAbout } from './card';
 import { AddReaction, ReactionRow, useMarking } from './mark-controls';
 import { messageMarks, updatedCards } from './cards';
-import { ChatProvider, useChat, type ChatContextValue, type Tx } from './chat-context';
+import { ChatProvider, useChat, type ChatContextValue, type ChatFollow, type Tx } from './chat-context';
 import { ChatHead, type ChatView } from './chat-head';
 import { ComposerResizer, useComposerSize } from './composer-resizer';
 import { EditRow, EditUnit } from './edit-unit';
@@ -150,6 +150,8 @@ import { journeyOverview } from './journey-view';
 import { latestGuide } from './guide-view';
 import { Act } from '../shared/act';
 import { RecordRow } from './record-row';
+import { aiToggle, FollowToggle } from './follow';
+import { AI_FOLLOWEE, isFollowing } from '../view/follow';
 
 type RequestJson = SessionData['state']['requests'][number];
 /** A unit to open and reveal in AI の作業 (the header status clicked); `n` tells a click on the same unit again apart. */
@@ -233,6 +235,8 @@ export function SessionChat(props: {
     location: ViewLocation;
     /** Opens the view another participant is on. */
     onOpenView: (target: ViewTarget) => void;
+    /** Whom the page follows, and the ways to change it. */
+    follow: ChatFollow;
     /** What view names are made of, and which views this page can open. */
     viewScope: ViewScope;
     /** What is open and selected, for what `/` lists. */
@@ -329,7 +333,22 @@ export function SessionChat(props: {
     const unfinished = unfinishedCount(units);
     const running = state.runs.some((r) => r.state === 'Running');
     const now = useNow(running);
-    const actions = useChatActions();
+    // what the reader asks of the AI (AI に送る, an answer, a pick) makes the page follow it, as a request sent does
+    const bareActions = useChatActions();
+    const { asked } = props.follow;
+    const following =
+        <A extends unknown[]>(f: (...args: A) => Promise<boolean>) =>
+        async (...args: A): Promise<boolean> => {
+            const ok = await f(...args);
+            if (ok) asked();
+            return ok;
+        };
+    const actions: ChatActions = {
+        ...bareActions,
+        address: following((requests: readonly string[]) => bareActions.address(requests)),
+        answer: following((...args: Parameters<ChatActions['answer']>) => bareActions.answer(...args)),
+        pick: following((...args: Parameters<ChatActions['pick']>) => bareActions.pick(...args)),
+    };
     const marking = useMarking(session);
     // a revert just asked: its message, gone to once the stream has it and its card below it (the server's events may
     // come after its answer)
@@ -575,6 +594,7 @@ export function SessionChat(props: {
         onNavigate: props.onNavigate,
         ...(props.onSeeChanges && { onSeeChanges: props.onSeeChanges }),
         openView: props.onOpenView,
+        follow: props.follow,
         control,
         solo,
         triages,
@@ -690,6 +710,7 @@ function SessionBar(props: {
     tx: Tx;
 }) {
     const { session, status, tx } = props;
+    const { follow } = useChat();
     const solo = isSolo(session.state);
     const label =
         status.kind === 'running' ? tx.chat.status.running(elapsed(status.since, props.now)) : status.kind === 'idle' ? '' : tx.chat.status[status.kind];
@@ -706,6 +727,7 @@ function SessionBar(props: {
             live={props.live}
             onOpenView={props.onOpenView}
             onLeave={props.onLeave}
+            aiStatus={label}
         />
     );
     // `session-chat`: the chat's own look for its buttons and the menu's popover, here outside the chat's pillar
@@ -713,6 +735,16 @@ function SessionBar(props: {
         <div className="session-chat session-bar">
             {!solo && menu}
             <ExtractionSwitch facilitator={session.me.participant.role === 'facilitator'} live={props.live} />
+            {/* following the AI (◉ / ○): while it works; idle, only while followed, faint */}
+            {aiToggle(status, presence, follow.followee) !== 'none' && (
+                <FollowToggle
+                    followee={AI_FOLLOWEE}
+                    name={tx.follow.ai}
+                    on={isFollowing(follow.followee, 'ai')}
+                    faint={aiToggle(status, presence, follow.followee) === 'faint'}
+                    onToggle={() => follow.choose(isFollowing(follow.followee, 'ai') ? null : AI_FOLLOWEE)}
+                />
+            )}
             {/* idle says nothing: only running, a question or a queued run shows; a click opens it in AI の作業 */}
             <span className="chat-status-slot" aria-live="polite">
                 {presence.kind === 'missing' && (
@@ -1842,7 +1874,7 @@ function Composer(props: {
     tx: Tx;
 }) {
     const { session, composer, tx, reply, onReplyDone, outgoing, viewedAt } = props;
-    const personName = useChat().nameOf;
+    const { nameOf: personName, follow } = useChat();
     const replyingTo =
         reply?.kind === 'Message'
             ? tx.chat.replies.replyingToMessage(speakerName(reply.author, session.me.participant.id, personName, tx.chat.you))
@@ -2021,8 +2053,11 @@ function Composer(props: {
             void composer.clear();
             setChipsExpanded(false);
         }
+        // a message that reaches the AI makes the page follow it (docs/live-view.md, "Following")
+        const toAi = isSolo(session.state) || willAddress(session.state, value.people, reply) || running?.startedBy === session.me.participant.id;
         try {
             const sent = await sessionApi.sendRequest(body);
+            if (toAi) follow.asked();
             if (local) outgoing?.settle(local, sent.request.id);
             else await composer.clear();
             onReplyDone();

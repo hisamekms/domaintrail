@@ -251,7 +251,19 @@ class CanvasState {
 
     private renders = new Set<() => void>();
     private effects = new Set<() => void>();
+    private inputs = new Set<() => void>();
     private queued = false;
+
+    /** For `onUserInput`. */
+    onUserInput(listener: () => void): () => void {
+        this.inputs.add(listener);
+        return () => this.inputs.delete(listener);
+    }
+
+    /** The user takes the canvas with its own gestures (before what they do). */
+    userInput(): void {
+        for (const l of Array.from(this.inputs)) l();
+    }
 
     /** For `useSyncExternalStore`. */
     subscribeRender = (listener: () => void): (() => void) => {
@@ -537,20 +549,34 @@ function createFlowCanvas(state: CanvasState, store: ReturnType<typeof useStoreA
         },
         container: () => container,
         watch: (effect) => state.watch(effect),
+        onUserInput: (listener) => state.onUserInput(listener),
     };
 }
 
-/** The keys of a canvas that has the focus (tldraw's own, kept): Escape clears the selection; the others move the camera. */
-function canvasKey(canvas: DiagramCanvas, e: KeyboardEvent): boolean {
+/**
+ * The keys of a canvas that has the focus (tldraw's own, kept): Escape clears the selection; the others move the camera.
+ * `taken` is called before a key acts (the user's own gesture).
+ */
+function canvasKey(canvas: DiagramCanvas, e: KeyboardEvent, taken: () => void): boolean {
     if (e.ctrlKey || e.metaKey || e.altKey || e.nativeEvent.isComposing) return false;
     const animate = { animate: true };
-    if (e.key === 'Escape') canvas.selectNone();
-    else if (e.shiftKey && e.code === 'Digit1') canvas.fitContent(animate);
-    else if (e.shiftKey && e.code === 'Digit2') canvas.fitSelection(animate);
-    else if (e.shiftKey && e.code === 'Digit0') canvas.resetZoom(animate);
-    else if (e.key === '+' || e.key === '=') canvas.zoomIn(animate);
-    else if (e.key === '-' || e.key === '_') canvas.zoomOut(animate);
-    else return false;
+    const act: (() => void) | undefined =
+        e.key === 'Escape'
+            ? () => canvas.selectNone()
+            : e.shiftKey && e.code === 'Digit1'
+              ? () => canvas.fitContent(animate)
+              : e.shiftKey && e.code === 'Digit2'
+                ? () => canvas.fitSelection(animate)
+                : e.shiftKey && e.code === 'Digit0'
+                  ? () => canvas.resetZoom(animate)
+                  : e.key === '+' || e.key === '='
+                    ? () => canvas.zoomIn(animate)
+                    : e.key === '-' || e.key === '_'
+                      ? () => canvas.zoomOut(animate)
+                      : undefined;
+    if (!act) return false;
+    taken();
+    act();
     return true;
 }
 
@@ -599,6 +625,7 @@ function Flow({ onMount }: { onMount: (canvas: DiagramCanvas) => void }): ReactN
         };
         const down = (e: PointerEvent): void => {
             move(e);
+            state.userInput();
             state.set('pointing', true);
             // the canvas takes the focus, as tldraw's did (its keys; the page's keys skip the inspector's diagram then)
             el.focus({ preventScroll: true });
@@ -607,6 +634,8 @@ function Flow({ onMount }: { onMount: (canvas: DiagramCanvas) => void }): ReactN
         // Ctrl / ⌘ + wheel (and a trackpad's pinch) zoom around the pointer as they did with tldraw; React Flow pans
         // on the other wheel events
         const wheel = (e: WheelEvent): void => {
+            // any wheel is the user's: a pan, a zoom, a pinch
+            state.userInput();
             if (!e.ctrlKey && !e.metaKey) return;
             e.preventDefault();
             e.stopPropagation();
@@ -679,15 +708,21 @@ function Flow({ onMount }: { onMount: (canvas: DiagramCanvas) => void }): ReactN
     const moveStart = useCallback(
         (event: MouseEvent | TouchEvent | null) => {
             // the user takes the camera: an animation under way stops
-            if (event) state.animatingUntil = 0;
+            if (event) {
+                state.animatingUntil = 0;
+                state.userInput();
+            }
             state.set('moving', true);
         },
         [state],
     );
     const moveEnd = useCallback(() => state.set('moving', false), [state]);
-    const onKeyDown = useCallback((e: KeyboardEvent<HTMLDivElement>) => {
-        if (canvas.current && canvasKey(canvas.current, e)) e.preventDefault();
-    }, []);
+    const onKeyDown = useCallback(
+        (e: KeyboardEvent<HTMLDivElement>) => {
+            if (canvas.current && canvasKey(canvas.current, e, () => state.userInput())) e.preventDefault();
+        },
+        [state],
+    );
 
     return (
         <div className="diagram-canvas" ref={container} tabIndex={-1} onKeyDown={onKeyDown}>
