@@ -9,7 +9,7 @@ code).
 **After upgrading domaintrail**, read the **Upgrading** section of every version between the one you had and the new
 one, oldest first, and follow its steps. This file is in the package: `node_modules/domaintrail/CHANGELOG.md`.
 
-## [0.8.0] - 2026-11-05
+## [0.8.0] - 2026-11-06
 
 ### Added
 
@@ -49,7 +49,162 @@ one, oldest first, and follow its steps. This file is in the package: `node_modu
     longer has, `--out` writes the forms as files. The Worker serves a **read-only page** behind the same Access: the
     canvas of a published storming with the knowledge, the ナレッジ list, the items about stickies missing from the
     drawing, and correcting and deleting as in a session.
+- **People edit the stickies in place** (ADR 0033, `docs/live-view.md`), without an AI run: one set of actions on the
+  selected sticky, in its toolbar, its … / right-click menu, keys (Enter, F2, Esc, ⌘⇧C) and the ⌘K palette —
+  チャットに追加, 編集, ナレッジを見る, ドメインモデルで見る, このタイムラインで見る, ホットスポットを付ける, 解決を書く / 解決を直す and
+  リンクをコピー (a `#select=` link). 編集 changes a sticky's label and name (with every reference to it, all relations
+  included) or a hotspot's question; 解決を書く writes a hotspot's resolution (emptying it reopens the hotspot); a new
+  hotspot is written at once and named in the background by the light model. dt rewrites only the tokens concerned in
+  the `.dtes`. Any participant may edit. Each edit is a person's revision: listed in AI の作業 and in the chat,
+  revertible, and marked on the canvas. An edit made during a run is applied again if the run dropped it; when the run
+  reworded the same text, people choose AI の文言のまま or 人の文言にする. The AI is given the people's edits and keeps
+  their wording. The detail's back button and the browser's Back return from ドメインモデルで見る and このタイムラインで見る.
+- **What a run changed, on the Event Storming canvas** (`docs/live-view.md`): after a run that changed the stormings,
+  the stickies it added or changed get the rings 新 / 変 (a changed one with its former label struck through) and the
+  removed ones a dashed ghost marked 削除, until the next such run or 印を消す. A bar counts them and leads to those out
+  of view (ほかに n 件の変更 →); 図で見る on a run's changes (in the chat and in AI の作業) shows that run's marks. Marks
+  are per viewer.
+- **`.dtes`**: `readmodel R { from <event> }` (the events a read model is fed from), `event E { from <external> }` (an
+  event that arrives from outside, without a command of ours), a hotspot `on` any sticky (not only events), a policy
+  `by` an actor (a rule a person applies by hand), and a command `handledBy` an external system (see Changed).
+- **`dt migrate dtes`** (`--dry-run`, or the files to migrate): rewrites `.dtes` files of 0.7.0 to the new relations,
+  then lists what it could not rewrite and the errors `dt check` still reports (see Upgrading).
+- **Rules for the Design Level** (`dt guide storming-rules`), errors with a fix in their hint: S023 (`actor` / `target`
+  of 0.7.0), S024 (a command without its issuer, `handledBy` or `emits`), S025 (`by` on a command a policy issues),
+  S026 (a relation written twice), S027 (an actor, external system, aggregate or read model no relation names), S028
+  (an event both emitted and `from` an external system). S024, S027 and S008 are off for an element while an open
+  hotspot is `on` it; `dt check` lists those elements, and the Live View draws the missing issuer or handler as a dashed
+  note 誰が処理する？. S029 points at an event nothing produces.
+- **Infos**: a third severity besides errors and warnings (S029), which changes no exit code; `info` in the JSON of
+  `dt check --format json` with `summary.infos`, and Information in the language server.
+- **`dt check` warns** about a `union` none of whose variants has a field (M026: write an `enum`) and a field or
+  parameter named `…Id` / `…Ids` typed `String`, `UUID` or the ID type's base while the ID type or the aggregate exists
+  (M027: type it with the ID type, or `references`).
+- `dt guide` topics `dsl-quick` and `dtes-quick`: the syntax of `.dt` and of `.dtes` on one screen, each a checked
+  example, also given to the AI when it works on those files.
 - `dt guide` topic `knowledge` (with `mcp` and `publish`).
+
+### Changed
+
+- **The `.dtes` relations follow Event Storming's grammar** (ADR 0032; see Upgrading): a command holds its whole row,
+  `by` (who issues it: an actor or an external system), `reads` (the read model the issuer looks at), `handledBy` (who
+  handles it and produces its events: an aggregate or an external system, exactly one) and `emits`. `by` replaces
+  `actor`, and `handledBy` replaces `target`. `by`, `handledBy` and `from` are keywords and no longer valid IDs. A
+  syntax error suggests the keyword meant (`handledby` → `handledBy`). S003 and S006 hint at the relation meant (`by`
+  an aggregate → `handledBy` it, `reads` an event → a read model `from` it, …).
+- **`dt fmt` orders a body's clauses** (`ref`, `by`, `reads`, `handledBy`, `emits`, `on`, `issues`, `from`, `status`,
+  `resolution`, `level`, each with its comments) and merges a relation written in several clauses into one list
+  (`emits A` + `emits B` → `emits A, B`) unless a comment is on one of them.
+- **The Design Level is drawn as the grammar reads** (`docs/live-view.md`), in both layouts: read model → issuer →
+  command → handler → event → policy → command, the actor beside its command, one handler note where commands handled by
+  the same element lead to one event. The lines have three looks — 流れ (a solid arrow), 時間 (a dashed arrow) and 問い
+  (a hotspot's line, without a head). At Design Level, the time order is shown by the placement, with lines only for an
+  exception's branch and `then`.
+- **Selection and lines on the Event Storming canvas** (`docs/live-view.md`): selecting a sticky no longer dims
+  the others. The copies of the same sticky are numbered 「k/n」, one out of view is pointed at by an arrow at the
+  canvas's edge (pressing it moves there), and the detail steps through them (「同じ付箋 n 件 ‹ k/n ›」). Hovering or
+  pressing a line shows its two ends (each in its kind's colour, with its label; pressing one moves there) and what the
+  relation means in plain words, in place of the line's former tooltip. An open hotspot's undecided slot is joined to
+  its command by a 問い line.
+- **The AI** follows the DSL's idioms (a closed set of values is an `enum`; another aggregate is referred to by its ID
+  type; each aggregate and entity has an ID type of its own), and never guesses a `.dtes` relation nobody gave: it
+  asks with a hotspot on the element.
+- **The Live View's left column** (`docs/live-view.md`): the tree with the detail under it, a splitter between them.
+  The reader folds the tree (▾ in its head line, dragging the splitter to the top, or ↑ / ↓ on it), which shows what is
+  selected while folded; never automatically, and kept like the other sizes. 問題 and 差分 show no detail. The detail
+  no longer closes (its close button and rail are gone). The column widens to half the window (it stopped at 560px).
+- The AI's texts on a run card (its answer, summaries, and a question asked without choices) are shown as Markdown,
+  like the answerer's messages.
+- The chat's notice of an update out of sight (「…」が更新されました, AI が回答しました) has a × that closes it without
+  jumping.
+
+### Removed
+
+- The `.dtes` relations `actor` and `target` in a body: errors (S023), rewritten by `dt migrate dtes`.
+
+### Fixed
+
+- The detail's back button names a storming element by its label when labels are shown (it showed the ID).
+
+### Upgrading
+
+`.dtes` files of 0.7.0 with commands no longer check: migrate them, then decide what `dt check` asks. Commit first, so
+that each step is a diff to review.
+
+1. **Rewrite the relations:**
+
+   ```sh
+   dt migrate dtes --dry-run   # lists what would be rewritten and what is left
+   dt migrate dtes             # rewrites in place; exits 1 if something could not be rewritten
+   ```
+
+   In every command it changes the keyword only, keeping comments and layout:
+
+   ```dtes
+   // before (0.7.0)
+   command ConfirmOrder "注文を確定する" {
+     actor Customer
+     target Order
+     emits OrderConfirmed
+   }
+   // after (0.8.0)
+   command ConfirmOrder "注文を確定する" {
+     by Customer
+     handledBy Order
+     emits OrderConfirmed
+   }
+   ```
+
+   What it lists as not rewritten: `actor` / `target` in another element than a command (move the relation into the
+   command it belongs to, or remove it), and a file that does not parse, usually because an element is named `by`,
+   `handledBy` or `from` (rename it and its references, then run it again).
+2. **Run `dt check` and decide what is left.** These are design decisions, not rewrites. Write what is known; **what
+   nobody has decided is never guessed** — do not invent an actor, an aggregate or an event to silence an error: put an
+   open hotspot on the element, asking it.
+   - S024, a command without `handledBy` (the most common after the migration), without an issuer or without `emits`:
+
+     ```dtes
+     // before: S024
+     command ConfirmOrder {
+       by Customer
+       emits OrderConfirmed
+     }
+     // after, when the handler is known
+     command ConfirmOrder {
+       by Customer
+       handledBy Order
+       emits OrderConfirmed
+     }
+     // after, when it is not (the hotspot the error's hint gives): S024 is off while it is open
+     hotspot ConfirmOrderOpen "誰が処理する？" {
+       on ConfirmOrder
+     }
+     ```
+
+     A command a policy `issues` needs no `by`.
+   - S025: remove `by` from a command a policy issues; a person who also issues it by hand is another command `by`
+     that person (or the policy is `by` that person).
+   - S026: remove the repeated relation. S027: name the element in the relation where it takes part, remove it, or put
+     a hotspot on it. S028: an event that comes `from` an external system is not also emitted by a command (write
+     `handledBy` the external system in that command, or make two events).
+   - S003 / S006: follow the hint (`by` an aggregate → `handledBy`; `reads` an event → a `readmodel { from … }`).
+   - S029 is an info: no change is needed. `dt check` exits 0 when only warnings and infos are left.
+3. **Run `dt fmt`** once and commit it apart: it reorders the clauses and merges repeated relations.
+4. **Readers of `dt check --format json`** accept the severity `info` and `summary.infos`.
+5. **`.dt` models** may get the warnings M026 and M027:
+
+   ```dt
+   // before: M026, M027
+   union Status { Draft {} Sent {} }
+   customerId: String
+   // after (as the warnings' hints say)
+   enum Status { Draft Sent }
+   references customer: CustomerId -> Customer
+   ```
+
+6. **Regenerate** with `dt generate ts`: the generated contract tests fail to load with another minor version.
+7. **Config**: nothing to change. The sections `knowledge` and `agent.extract` are new; extraction of knowledge is off
+   until `knowledge.extraction.enabled` is set (or the facilitator turns it on with 💡 for a session).
 
 ## [0.7.0] - 2026-11-04
 
