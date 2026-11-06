@@ -12,7 +12,7 @@ import { changeCount, ChangesList, problemCounts, ProblemsList } from '../lists'
 import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from '../model-utils';
 import { StatesCanvas } from '../states-canvas';
 import { useSessionPage } from '../session/page';
-import { chooseScope, StormingDetails, stormingExists } from '../storming';
+import { type StormingChoice, chooseScope, StormingDetails, stormingExists } from '../storming';
 import { StormingNavigator } from '../storming-navigator';
 import { NameSwitch } from '../view/toolbar';
 import { ViewWorkspace, useViewWorkspace } from '../view/workspace';
@@ -29,6 +29,7 @@ import { useViewSocket } from './useViewSocket';
 import { CommandPalette, usePaletteKey } from '../shared/palette';
 import { useStickyActions } from '../stickies/layer';
 import { linkedElement } from '../stickies/link';
+import { currentReturn, RETURN_STATE, type ReturnPoint } from '../stickies/return';
 import { isMac } from '../stickies/registry';
 import { highlightElement } from '../view/canvas';
 import { KnowledgeList, KnowledgeMarks, KnowledgeNotice, StickyKnowledge } from '../knowledge/panel';
@@ -131,6 +132,51 @@ export function App() {
         [stormings, stormingChoice, setStormingChoice, view.kind, shown?.storming.id, canvas, select, setView],
     );
 
+    // the way back from ドメインモデルで見る and このタイムラインで見る (ADR 0033): a return point per jump, with a browser
+    // history entry of its own, so that the detail's ← and the browser's Back both return to the storming as it was shown
+    const [returns, setReturns] = useState<ReturnPoint<StormingChoice>[]>([]);
+    const leave = useCallback(
+        (from: string, to: string): void => {
+            const point: ReturnPoint<StormingChoice> = { from, to, view, choice: stormingChoice, ...(canvas && { camera: canvas.getCamera() }) };
+            setReturns((r) => [...r, point]);
+            window.history.pushState({ [RETURN_STATE]: true }, '');
+        },
+        [view, stormingChoice, canvas],
+    );
+    const comeBack = useCallback(
+        (point: ReturnPoint<StormingChoice>): void => {
+            setReturns((r) => r.slice(0, -1));
+            setStormingChoice(point.choice);
+            setView(point.view);
+            select(point.from, { highlight: false });
+            // once the view is drawn again (it is fitted when shown): the camera it had, and the sticky selected there
+            setTimeout(() => {
+                if (!canvas) return;
+                if (point.camera) canvas.setCamera(point.camera);
+                const item = canvas.findElement(point.from);
+                if (item) canvas.select([item]);
+            }, 200);
+        },
+        [setStormingChoice, setView, select, canvas],
+    );
+    const returnPoint = currentReturn(returns, selected);
+    useEffect(() => {
+        const onPop = (): void => {
+            const point = returns.at(-1);
+            if (point) comeBack(point);
+        };
+        window.addEventListener('popstate', onPop);
+        return () => window.removeEventListener('popstate', onPop);
+    }, [returns, comeBack]);
+    /** The detail's ←: back across the jump through the browser's history (one entry each), else the selection's. */
+    const back = (): void => {
+        if (!returnPoint) return goBack();
+        const state: unknown = window.history.state;
+        const ours = typeof state === 'object' && state !== null && RETURN_STATE in state;
+        if (ours) window.history.back();
+        else comeBack(returnPoint);
+    };
+
     // the stickies' actions (ADR 0033): the toolbar, the menu, the keys and the windows over a storming, the palette's items
     const stickyActions = useStickyActions({
         canvas,
@@ -140,8 +186,12 @@ export function App() {
         active: view.kind === 'storming',
         ...(shown?.options.timelineId !== undefined && { timelineShown: shown.options.timelineId }),
         session: session.stickies,
-        onSeeModel: openBest,
+        onSeeModel: (dtId, from) => {
+            leave(from, dtId);
+            openBest(dtId);
+        },
         onSeeTimeline: (stormingId, timeline, then) => {
+            leave(then, then);
             setStormingChoice(chooseScope(stormingChoice, stormingId, timeline));
             setView({ kind: 'storming' });
             requestAnimationFrame(() => requestAnimationFrame(() => select(then)));
@@ -403,8 +453,8 @@ export function App() {
                                 settings.setStructureContexts([ctx]);
                                 setView({ kind: 'structure' });
                             }}
-                            backTo={backTo}
-                            onBack={goBack}
+                            backTo={returnPoint?.from ?? backTo}
+                            onBack={back}
                         />
                     }
                     overlays={
