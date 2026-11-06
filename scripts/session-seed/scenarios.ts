@@ -5,7 +5,7 @@
 import type { Ctx, RunJson } from './seed.js';
 import { editFile, writeSource } from './workspace.js';
 
-export const SCENARIO_NAMES = ['chat', 'runs', 'questions', 'assumptions', 'replies', 'reactions', 'references', 'revert'] as const;
+export const SCENARIO_NAMES = ['chat', 'runs', 'questions', 'assumptions', 'replies', 'reactions', 'references', 'revert', 'marks'] as const;
 export type ScenarioName = (typeof SCENARIO_NAMES)[number];
 
 /** A text longer than the stream shows at once (clamped, with "more"). */
@@ -817,7 +817,56 @@ const revert = async (s: Ctx): Promise<void> => {
     });
 };
 
-export const SCENARIOS: Record<ScenarioName, (s: Ctx) => Promise<void>> = { chat, runs, questions, assumptions, replies, reactions, references, revert };
+/**
+ * What a turn changed, on the storming canvas (`stormings/returns.dtes`): a turn adding a sticky, then — after
+ * `--pause`, so that a page opened meanwhile sees it end and marks it — one adding a sticky, relabelling one and
+ * removing one. Each card's 図で見る marks its own changes.
+ */
+const marks = async (s: Ctx): Promise<void> => {
+    const file = 'stormings/returns.dtes';
+    const accepted = await s.say('tanaka', '#返品が依頼された[1] のあとに、返品を受け付けたことを表すイベントを足してください', {
+        targets: [s.es('Returns', 'ReturnRequested', '返品が依頼された')],
+        reads: 'request',
+    });
+    await s.apply([accepted], {
+        kind: 'reply',
+        edit: async (root) => {
+            await editFile(root, file, /^( {2}event ReturnRequested .*\n)/m, '$1  event ReturnAccepted "返品を受け付けた"\n');
+            await editFile(root, file, /^( {4}ReturnRequested\n)/m, '$1    ReturnAccepted\n');
+        },
+        reply: {
+            outcome: 'done',
+            title: '返品の受付',
+            summary: '@{es:Returns/ReturnRequested} のあとに @{es:Returns/ReturnAccepted} を足しました。',
+            requests: [{ request: 1, status: 'done' }],
+        },
+    });
+    const review = await s.say(
+        'sato',
+        '#商品を検品した[1] は「検品を終えた」と呼んでいます。#商品を廃棄した[2] はしないので消して、代わりに交換を提案するイベントを足してください',
+        {
+            targets: [s.es('Returns', 'ItemInspected', '商品を検品した'), s.es('Returns', 'ItemDisposed', '商品を廃棄した')],
+            reads: 'request',
+        },
+    );
+    await s.pause();
+    await s.apply([review], {
+        kind: 'reply',
+        edit: async (root) => {
+            await editFile(root, file, /"商品を検品した"/, '"検品を終えた"');
+            await editFile(root, file, /^ {2}event ItemDisposed .*\n/m, '  event ExchangeOffered "交換を提案した"\n');
+            await editFile(root, file, /^( {6})ItemDisposed\n/m, '$1ExchangeOffered\n');
+        },
+        reply: {
+            outcome: 'done',
+            title: '検品と廃棄の見直し',
+            summary: '@{es:Returns/ItemInspected} の名前を「検品を終えた」にし、廃棄のイベントを消して @{es:Returns/ExchangeOffered} を足しました。',
+            requests: [{ request: 1, status: 'done' }],
+        },
+    });
+};
+
+export const SCENARIOS: Record<ScenarioName, (s: Ctx) => Promise<void>> = { chat, runs, questions, assumptions, replies, reactions, references, revert, marks };
 
 const isScenario = (name: string): name is ScenarioName => (SCENARIO_NAMES as readonly string[]).includes(name);
 

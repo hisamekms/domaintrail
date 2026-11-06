@@ -19,7 +19,7 @@ bun run session:seed --scenario chat,replies --dir /tmp/dt-seed-2 --reset
 
 | Option | |
 | --- | --- |
-| `--scenario <names>` | `chat`, `runs`, `questions`, `assumptions`, `replies`, `reactions`, `references`, `revert`, or `all` (default); repeatable or a comma list. `all` plays them in that order into one timeline. |
+| `--scenario <names>` | `chat`, `runs`, `questions`, `assumptions`, `replies`, `reactions`, `references`, `revert`, `marks`, or `all` (default); repeatable or a comma list. `all` plays them in that order into one timeline. |
 | `--dir <dir>` | The scratch workspace it makes (default `$TMPDIR/dt-session-seed`). A directory that is not empty is refused. |
 | `--reset` | Wipes `--dir` first, when an earlier seed made it (it has a `.dt-session-seed` file) and no session server runs on it. |
 | `--workspace <dir>` | The workspace copied (default `examples/shop`; the scenarios name its elements). |
@@ -27,6 +27,7 @@ bun run session:seed --scenario chat,replies --dir /tmp/dt-seed-2 --reset
 | `--no-classifier` | Leaves the message classifier off: every message has the AI に送る button. |
 | `--leave-queued` | Leaves one run queued at the end; the next subscriber takes it. |
 | `--leave-running` | Leaves one run running at the end, held by the seed's agent, and two queued behind it (AI の作業's 実行中 and 待ち). Not with `--leave-queued`. |
+| `--pause <seconds>` | Waits that long before the last run of `marks` (it says so, with the URL), so that a page opened meanwhile sees the run end and marks what it changed. |
 | `--exit` | Stops the session server once seeded instead of leaving it running. |
 
 The seed copies the workspace (without `.domaintrail/` and `generated/`), commits it to a git repository of its own
@@ -88,6 +89,12 @@ card gives a title of its own that the card does not take.
   lines a unit added first to make its revert conflict (it then waits for an agent, 実行待ち with why in the tooltip on its state: stop it, or run
   a subscriber). With `--leave-running`, a revert asked now waits behind the running run (実行待ち, 前に n 件), and the server reverts
   it once the runs ahead of it end.
+
+- `marks` (in `stormings/returns.dtes`): what a turn changed, on the storming canvas. A turn adds 返品を受け付けた, then
+  a second one adds 交換を提案した, renames 商品を検品した to 検品を終えた and removes 商品を廃棄した. The marks appear only
+  for a run that ends while the page is open: with `--pause 30`, open the Live View on 返品 while the seed waits, and the
+  second turn's marks (新, 変 with the old label, the 削除 ghost) appear as it ends. Either card's 図で見る marks its own
+  changes at any time (a ghost only where the page saw the sticky before it was removed).
 
 Not produced by default: a run left **running** and runs **queued**. `--leave-running` leaves both: once the scenarios
 are done, 田中's message runs and the seed's agent keeps working on it (holding its lease) while the seed runs — telling
