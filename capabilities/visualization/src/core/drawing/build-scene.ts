@@ -128,6 +128,7 @@ export function buildScene(graph: LaidOutGraph, opts: RenderOptions): Scene {
     const resolved = new Set(graph.nodes.filter((n) => n.status === 'resolved').map((n) => n.id));
     const edges: SceneEdge[] = [];
     for (const e of graph.edges) {
+        if (e.hidden) continue;
         const owner = storming ? (elementOf.get(e.source) ?? e.source) : edgeOwner(e, structure);
         // an element's error is told by its mark and text (issue #33 §5); its lines keep their kind's colour
         const item = edgeItem(graph, e, opts, owner, toneOf(change(owner)));
@@ -241,7 +242,8 @@ function edgeItem(graph: LaidOutGraph, e: GraphEdge, v: Variant, owner: string, 
 function diagnosticsByElement(diags: Diagnostic[], structure: boolean): Map<string, DiagMark> {
     const out = new Map<string, DiagMark>();
     for (const d of diags) {
-        if (!d.elementId) continue;
+        // an info only informs: no mark on the note
+        if (!d.elementId || d.severity === 'info') continue;
         const ids = structure ? [ownerElement(d.elementId)] : [d.elementId, ownerElement(d.elementId)];
         for (const id of ids) {
             if (out.get(id) !== 'error') out.set(id, d.severity === 'error' ? 'error' : 'warning');

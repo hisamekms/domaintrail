@@ -23,7 +23,7 @@ function ListHead({ title, children, onClose }: { title: ReactNode; children?: R
 /** How many errors and warnings there are (the badges of the activity bar). */
 export function problemCounts(diagnostics: readonly Diagnostic[]): { errors: number; warnings: number } {
     const errors = diagnostics.filter((d) => d.severity === 'error').length;
-    return { errors, warnings: diagnostics.length - errors };
+    return { errors, warnings: diagnostics.filter((d) => d.severity === 'warning').length };
 }
 
 /** How many items were added, changed or removed since the baseline. */
@@ -48,7 +48,7 @@ export function ProblemsList({ items, onLocate, onClose }: { items: readonly Dia
                             <li key={i}>
                                 <button className={`problem problem-${d.severity}`} onClick={() => onLocate(d)}>
                                     <span className="problem-icon" aria-label={t.severity[d.severity]}>
-                                        {d.severity === 'error' ? '✕' : '!'}
+                                        {d.severity === 'error' ? '✕' : d.severity === 'info' ? 'i' : '!'}
                                     </span>
                                     <span className="problem-main">
                                         <span className="problem-msg">{d.message}</span>

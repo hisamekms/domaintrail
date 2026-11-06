@@ -167,7 +167,10 @@ async function checkOutput(root: string, file: string): Promise<string[]> {
 }
 
 const asCheckLines = (d: PublishedDiagnostics['diagnostics']): string[] =>
-    d.map((x) => `${x.range.start.line + 1}:${x.range.start.character + 1} ${x.severity === 1 ? 'error' : 'warning'} ${x.code} ${x.message}`);
+    d.map(
+        (x) =>
+            `${x.range.start.line + 1}:${x.range.start.character + 1} ${x.severity === 1 ? 'error' : x.severity === 2 ? 'warning' : 'info'} ${x.code} ${x.message}`,
+    );
 
 describe('dt lsp', () => {
     test('answers initialize with the features it offers', async () => {
@@ -578,7 +581,7 @@ describe('dt lsp with .dtes files', () => {
     test('publishes the diagnostics of dt check for .dtes files, S rules and the .dt refs included', async () => {
         const client = await start({ 'common.dt': COMMON, 'sales.dt': SALES, 'checkout.dtes': STORMING.replace('emits OrderPlaced', 'emits Order') });
         const diagnostics = await client.until('checkout.dtes', (d) => d.length > 0);
-        expect(diagnostics.map((d) => d.code)).toEqual(['S003', 'S010']);
+        expect(diagnostics.map((d) => d.code).filter((c) => c !== 'S029')).toEqual(['S003', 'S010']);
         expect(asCheckLines(diagnostics)).toEqual(await checkOutput(client.root, 'checkout.dtes'));
         expect(await client.until('sales.dt', () => true)).toEqual([]);
 
