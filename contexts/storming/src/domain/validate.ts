@@ -49,7 +49,7 @@ const kindList = (kinds: readonly ElementKind[]): string => kinds.map((k) => art
 const line = (range: SourceRange): number => range.start.line;
 
 /**
- * The checks of a `.dtes` storming that need no `.dt` model (spec §11, ADR 0024: S001–S009 and S014–S028), on the storming
+ * The checks of a `.dtes` storming that need no `.dt` model (spec §11, ADR 0024: S001–S009 and S014–S031), on the storming
  * IR only:
  *   - S001: a local ID declared twice in a storming (across kinds, timelines and groups included), a storming ID twice
  *   - S002: a relation target or timeline step that names no declaration of its storming
@@ -79,8 +79,10 @@ const line = (range: SourceRange): number => range.start.line;
  *   - S027: an actor, external system, aggregate or read model that no relation names, unless an open hotspot is `on` it
  *   - S028: an event both emitted by a command and arriving `from` an external system
  *   - S029 (info): at Design Level (a command or policy in the storming), an event no command emits and from no external
+ *   - S030: `reads` on a command a policy issues (without `by`): whoever decides has the `reads`, here the policy (ADR 0032 §9)
+ *   - S031: a policy that issues more than one command: one policy per command, each with its own `reads` (ADR 0032 §9)
  * Not diagnosed (spec §11): timeline order against causality, Big Picture completeness (unreferenced events, events in
- * no timeline, read models without `from`) and the optional Info rule on policies with several `on` and `issues`.
+ * no timeline, read models without `from`). A policy with several `issues` is S031 (ADR 0032 §9), not an Info.
  */
 export function validateStormings(stormings: readonly Storming[]): Diagnostic[] {
     const out: Diagnostic[] = [];
@@ -529,6 +531,28 @@ function validateStorming(storming: Storming): Diagnostic[] {
                 );
             }
         }
+        // S030: the policy decides, so what is looked at to decide is the policy's `reads` (with `by`, S025 comes first)
+        if (policies.length && !has(el, 'by')) {
+            for (const c of el.clauses) {
+                if (c.type !== 'relation' || c.keyword !== 'reads') continue;
+                const named = policies.map((p) => `'${p}'`);
+                out.push(
+                    esDiagnostic(
+                        'error',
+                        'S030',
+                        `Command '${el.id}' is issued by ${policies.length > 1 ? `the policies ${listed(named)}` : `policy ${named[0]}`} and has \`reads ${c.target}\`; the policy decides, so what is looked at to decide is the policy's \`reads\`.`,
+                        c.targetRange,
+                        {
+                            hint:
+                                policies.length > 1
+                                    ? `move it: write \`reads ${c.target}\` in the policy that looks at it (${listed(named, 'or')}) and remove it here`
+                                    : `move it: write \`reads ${c.target}\` in policy '${policies[0]}' and remove it here (\`dt migrate dtes\` moves it)`,
+                            elementId: elementId(el.id),
+                        },
+                    ),
+                );
+            }
+        }
         const gap = unasked(el);
         if (!gap) return;
         const missing = (['by', 'handledBy', 'emits'] as const).filter((m) => gap.missing.includes(m)).map((m) => MISSING[m]);
@@ -593,7 +617,7 @@ function validateStorming(storming: Storming): Diagnostic[] {
             actor: `\`by ${el.id}\` in the command it issues (or the policy it applies)`,
             external: `\`by ${el.id}\` in the command it issues, \`handledBy ${el.id}\` in the command it handles, or \`from ${el.id}\` in the event it sends`,
             aggregate: `\`handledBy ${el.id}\` in the command it handles`,
-            readmodel: `\`reads ${el.id}\` in the command whose issuer looks at it, or \`from <event>\` for what it shows`,
+            readmodel: `\`reads ${el.id}\` in the command whose issuer looks at it (or in the policy that looks at it), or \`from <event>\` for what it shows`,
         };
         out.push(
             esDiagnostic(
@@ -628,6 +652,19 @@ function validateStorming(storming: Storming): Diagnostic[] {
     }
 
     function checkPolicy(el: NodeElement): void {
+        // S031: one command per policy, so that its `reads` is what it looks at for that command
+        const issued: string[] = [];
+        for (const c of el.clauses) {
+            if (c.type !== 'relation' || c.keyword !== 'issues' || byId.get(c.target)?.kind !== 'command' || issued.includes(c.target)) continue;
+            issued.push(c.target);
+            if (issued.length < 2) continue;
+            out.push(
+                esDiagnostic('error', 'S031', `Policy '${el.id}' issues '${issued[0]}' and also '${c.target}'; a policy issues one command.`, c.targetRange, {
+                    hint: `split it: one policy per command, each \`on\` the same events and with the \`reads\` it looks at for that command, e.g. \`policy <Id> { on … issues ${c.target} }\`, and remove '${c.target}' here`,
+                    elementId: elementId(el.id),
+                }),
+            );
+        }
         const gap = unasked(el);
         const missing = (['on', 'issues'] as const).filter((k) => gap?.missing.includes(k));
         if (!missing.length) return;
@@ -689,8 +726,9 @@ function validateStorming(storming: Storming): Diagnostic[] {
 const has = (el: NodeElement, keyword: RelationKeyword): boolean =>
     el.clauses.some((c) => c.type === 'relation' && (isRemovedKeyword(c.keyword) ? REMOVED_KEYWORDS[c.keyword] : c.keyword) === keyword);
 
-/** `a`, `a and b`, `a, b and c`. */
-const listed = (items: readonly string[]): string => (items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
+/** `a`, `a and b`, `a, b and c` (or `or`). */
+const listed = (items: readonly string[], conjunction = 'and'): string =>
+    items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} ${conjunction} ${items.at(-1)}`;
 
 /** What S024 says of each relation a command lacks. */
 const MISSING = {
@@ -720,12 +758,10 @@ function misplacedHint(kind: NodeElementKind, keyword: RelationKeyword, target: 
     if (kind === 'policy') {
         if (keyword === 'emits') return `remove it: a policy emits nothing; the command it issues does (\`emits ${target}\` in that command)`;
         if (keyword === 'handledBy') return `remove it: write \`handledBy ${target}\` in the command the policy \`issues\``;
-        if (keyword === 'reads')
-            return `remove it: a policy reacts to events (\`on\`); a read model is read by the issuer of a command (\`reads ${target}\` in it)`;
     }
     if (kind === 'event')
         return `remove it: an event is emitted by a command (\`emits\` in it), or arrives \`from\` an external system; a read model is fed \`from\` it`;
-    if (kind === 'readmodel') return `remove it: a read model is fed \`from\` events; the command that uses it \`reads\` it`;
+    if (kind === 'readmodel') return `remove it: a read model is fed \`from\` events; the command or policy that uses it \`reads\` it`;
     if (kind === 'hotspot') return `remove it: a hotspot is \`on\` one sticky`;
     if (kind === 'actor' || kind === 'external' || kind === 'aggregate') {
         return `remove it: write the relation in the command instead (${kind === 'aggregate' ? `the command it handles has \`handledBy\` and its \`emits\`` : `the command it issues has \`by\` and its \`reads\``})`;
@@ -780,6 +816,12 @@ function kindHint(owner: NodeElement, keyword: RelationKeyword, target: AnyDecla
         if (keyword === 'issues' && target.kind === 'event')
             return `a policy issues commands; an event is emitted by the command it issues (\`emits ${t}\` in that command)`;
         if (keyword === 'issues' && target.kind === 'policy') return `a policy never issues a policy: issue a command whose event policy '${t}' is \`on\``;
+        if (keyword === 'reads' && target.kind === 'event')
+            return `a policy reads a read model, not an event: declare \`readmodel <Id> { from ${t} }\` and write \`reads <Id>\` (what it reacts to is \`on ${t}\`)`;
+        if (keyword === 'reads' && target.kind === 'aggregate')
+            return `an aggregate is not read: what the policy looks at to decide is a read model (\`readmodel <Id> { from <its events> }\`)`;
+        if (keyword === 'reads' && (target.kind === 'actor' || target.kind === 'external'))
+            return `who applies a policy by hand is \`by ${t}\`; \`reads\` names the read model it looks at`;
     }
     if (owner.kind === 'readmodel' && target.kind === 'external')
         return `data from an external system arrives as an event: declare \`event <Id> { from ${t} }\` and write \`from <Id>\``;

@@ -204,6 +204,41 @@ describe('formatStorming', () => {
         expect(formatStorming(out)).toBe(out);
     });
 
+    test("a policy's clauses go `on`, `reads`, `issues`, `by` (ADR 0032 §9); a command's stay as they are", () => {
+        const text = lines(
+            'storming S {',
+            '  policy P {',
+            '    by Clerk // by hand',
+            '    issues C',
+            '    // what it looks at',
+            '    reads R',
+            '    on E',
+            '    reads Q',
+            '  }',
+            '  command C { reads R by X handledBy G emits E }',
+            '}',
+        );
+        const out = lines(
+            'storming S {',
+            '  policy P {',
+            '    on E',
+            '    // what it looks at',
+            '    reads R, Q',
+            '    issues C',
+            '    by Clerk // by hand',
+            '  }',
+            '  command C {',
+            '    by X',
+            '    reads R',
+            '    handledBy G',
+            '    emits E',
+            '  }',
+            '}',
+        );
+        expect(formatStorming(text)).toBe(out);
+        expect(formatStorming(out)).toBe(out);
+    });
+
     test('repeated relations of one keyword are one list, unless a comment is on one of them', () => {
         expect(formatStorming('storming S { command C { by A by B emits E reads R emits F } }')).toBe(
             lines('storming S {', '  command C {', '    by A, B', '    reads R', '    emits E, F', '  }', '}'),

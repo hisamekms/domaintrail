@@ -189,7 +189,7 @@ Examples:
   dt check                      validate every .dt and .dtes file below the current directory
   dt -r domain generate ts      check, then write TypeScript (by default into domain/generated/domain)
   dt fmt                        rewrite every .dt and .dtes file in the canonical layout (run it after editing)
-  dt migrate dtes               rewrite .dtes files of v0.1 (\`actor\`, \`target\` in a command) to the current grammar
+  dt migrate dtes               rewrite .dtes files of earlier versions (v0.1's \`actor\`/\`target\`, a policy's command's \`reads\`) to the current grammar
   dt open                       the Live View with the chat and the AI at http://127.0.0.1:4321 (runs until Ctrl+C)
   dt lsp                        language server over stdio, started by editors and AI agents
   dt mcp                        MCP server over stdio: the project's knowledge for Claude Code (read-only)
@@ -405,7 +405,9 @@ Examples:
     const migrating = program.command('migrate').description('Rewrite source files written for an earlier version of a DSL to the current one.');
     migrating
         .command('dtes')
-        .description('Rewrite the relation keywords of .dtes v0.1 in place: `actor X` → `by X`, `target X` → `handledBy X` in a command.')
+        .description(
+            'Rewrite .dtes files of earlier versions in place: `actor X` → `by X`, `target X` → `handledBy X` in a command (v0.1); the `reads` of a command a policy issues into that policy (0.8).',
+        )
         .argument('[files...]', 'files to migrate, relative to the current directory (default: the .dtes sources of the workspace)')
         .option('--dry-run', 'write nothing; list what would be rewritten and what is left')
         .addHelpText(
@@ -413,12 +415,15 @@ Examples:
             `
 ADR 0032 made the relations of a command Event Storming's grammar: who issues it is \`by\` (was \`actor\`), who
 handles it is \`handledBy\` (was \`target\`, now an aggregate or an external system). This rewrites those two keywords
-in commands and changes nothing else, comments and layout included. It lists, without rewriting them, \`actor\` and
-\`target\` in other kinds of elements, and files that do not parse (an ID that is now a keyword: \`by\`,
-\`handledBy\`, \`from\`). Then it lists the errors \`dt check\` reports on the migrated files: those are decisions
-(a command without \`handledBy\`, an unused aggregate, …), to make or to mark with a hotspot, never to guess.
-Exits 0 when every removed keyword was rewritten (errors may remain), 1 when one is left or no .dtes file is found, 2 on
-an invalid config.
+in commands. Since §9, \`reads\` is on the row of whoever decides: the \`reads\` of a command a policy issues (without
+\`by\`) moves into that policy, after its \`on\`, with its comments. Nothing else changes, comments and layout
+included, and a second run changes nothing. It lists, without rewriting them, \`actor\` and \`target\` in other kinds
+of elements; the \`reads\` of a command several policies issue (which of them looks at it is a decision); a policy
+that issues several commands (to split by hand, S031); and files that do not parse (an ID that is now a keyword:
+\`by\`, \`handledBy\`, \`from\`). Then it lists the errors \`dt check\` reports on the migrated files: those are
+decisions (a command without \`handledBy\`, an unused aggregate, …), to make or to mark with a hotspot, never to guess.
+Exits 0 when everything was rewritten (errors may remain), 1 when something is left or no .dtes file is found, 2 on an
+invalid config.
 
 Examples:
   dt migrate dtes
@@ -435,6 +440,7 @@ Examples:
             if (!entries.length) throw new CliError(noSourcesMessage(cfg));
             const chosen = new Set(entries.map((e) => e.file));
             let rewritten = 0;
+            let moved = 0;
             let left = 0;
             let changed = 0;
             const migrated = new Map<string, string>();
@@ -442,15 +448,19 @@ Examples:
                 const m = migrateStorming(await readFile(e.file, 'utf8'));
                 for (const r of m.rewrites)
                     io.out(`${e.path}:${r.line}:${r.column} - ${r.from} ${r.targets.join(', ')} → ${r.to} ${r.targets.join(', ')} (command ${r.element})`);
+                for (const r of m.moves) io.out(`${e.path}:${r.line}:${r.column} - reads ${r.targets.join(', ')}: command ${r.command} → policy ${r.policy}`);
                 for (const l of m.left) io.err(`${e.path}:${l.line}:${l.column} - not rewritten: ${l.message}`);
                 rewritten += m.rewrites.length;
+                moved += m.moves.length;
                 left += m.left.length;
-                if (!m.rewrites.length) continue;
+                if (!m.rewrites.length && !m.moves.length) continue;
                 changed++;
                 migrated.set(e.file, m.text);
                 if (!opts.dryRun) await writeFile(e.file, m.text);
             }
-            io.out(`${entries.length} file(s): ${rewritten} keyword(s) ${opts.dryRun ? 'to rewrite' : 'rewritten'} in ${changed} file(s), ${left} left.`);
+            io.out(
+                `${entries.length} file(s): ${rewritten} keyword(s) ${opts.dryRun ? 'to rewrite' : 'rewritten'} and ${moved} \`reads\` ${opts.dryRun ? 'to move' : 'moved'} in ${changed} file(s), ${left} left.`,
+            );
             // what the current rules say of the migrated files, read with the rest of the workspace
             const sources = await Promise.all(
                 [...new Set([...all.map((e) => e.file), ...chosen])].map(async (file) => ({

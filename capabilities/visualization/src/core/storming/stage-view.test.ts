@@ -373,10 +373,9 @@ describe('Design Level elements in a view of stages', () => {
 
     test('an actor, read model or aggregate used by several commands: a note beside each command note, its edge to the next cell', async () => {
         const s = await parse(
-            text.replace(
-                '  command Retry {\n    emits Retried\n  }',
-                '  readmodel Cart\n  command Retry {\n    reads Cart\n    handledBy Order\n    emits Retried\n  }',
-            ),
+            text
+                .replace('  command Retry {\n    emits Retried\n  }', '  readmodel Cart\n  command Retry {\n    handledBy Order\n    emits Retried\n  }')
+                .replace('    on Failed\n    issues Retry', '    on Failed\n    reads Cart\n    issues Retry'),
         );
         const render = projectView(s, DL);
         const cells = render.grid!.cells;
@@ -390,8 +389,10 @@ describe('Design Level elements in a view of stages', () => {
             expect(cells[`n:Order@${key}`]).toEqual({ col: c.col + 1, row: c.row });
         }
         expect(cells['n:Customer@Retry']).toBeUndefined();
-        // the read model on the command's left, on its row (a policy's command reads it itself)
-        expect(cells['n:Cart@Retry']).toEqual({ col: cells['n:Retry']!.col - 1, row: cells['n:Retry']!.row });
+        // the read model the policy looks at: just before the policy, on its row (ADR 0032 §9), and none by the command
+        expect(cells['n:Cart@RetryFailed']).toEqual({ col: cells['n:RetryFailed']!.col - 1, row: cells['n:RetryFailed']!.row });
+        expect(cells['n:Cart@Retry']).toBeUndefined();
+        expect(render.edges.find((e) => e.type === 'semantic' && e.kind === 'reads')).toMatchObject({ source: 'n:Cart@RetryFailed', target: 'n:RetryFailed' });
         expect(cells['n:Customer']).toBeUndefined();
         const g = laidOut(render, s);
         // every edge between a copy and its command joins neighbouring cells
@@ -798,8 +799,8 @@ describe('without the exceptions at Design Level: the elements of the events onl
         '  aggregate MyNumberCard "マイナンバーカード"',
         '  command EnterPin "暗証番号を入力する" {\n    by Resident\n    handledBy MyNumberCard\n    emits PinEntered\n    emits PinLocked\n  }',
         '  command ForgetPin "暗証番号を思い出せない" {\n    by Resident\n    handledBy MyNumberCard\n    emits PinForgotten\n  }',
-        '  command ResetPin "暗証番号を再設定する" {\n    reads LockedCards\n    handledBy MyNumberCard\n    emits PinResetAtCityOffice\n  }',
-        '  policy GuidePinReset "再設定を案内する" {\n    on PinLocked\n    issues ResetPin\n  }',
+        '  command ResetPin "暗証番号を再設定する" {\n    handledBy MyNumberCard\n    emits PinResetAtCityOffice\n  }',
+        '  policy GuidePinReset "再設定を案内する" {\n    on PinLocked\n    reads LockedCards\n    issues ResetPin\n  }',
         '  stage Preparation',
     ].join('\n');
     const storming = async (): Promise<Storming> => parse((await read('convenience-store-stages.dtes')).replace('  stage Preparation', extra));
@@ -810,7 +811,7 @@ describe('without the exceptions at Design Level: the elements of the events onl
         'n:MyNumberCard@ForgetPin',
         'n:GuidePinReset',
         'n:ResetPin',
-        'n:LockedCards@ResetPin',
+        'n:LockedCards@GuidePinReset',
         'n:MyNumberCard@ResetPin',
     ];
     const ids = (render: RenderGraph): string[] => render.nodes.map((n) => n.id);
@@ -859,15 +860,14 @@ describe('without the exceptions at Design Level: the elements of the events onl
   command Fix {
     emits X
   }
-  command Notify {
-    reads Inbox
-  }
+  command Notify
   policy OnA {
     on A
     issues Fix
   }
   policy OnX {
     on X
+    reads Inbox
     issues Notify
   }
   timeline Main {
@@ -891,7 +891,7 @@ describe('without the exceptions at Design Level: the elements of the events onl
             ids(projectView(s, DL))
                 .filter((id) => id.startsWith('n:'))
                 .sort(),
-        ).toEqual(['n:Board', 'n:Fix', 'n:Inbox@Notify', 'n:Notify', 'n:OnA', 'n:OnX']);
+        ).toEqual(['n:Board', 'n:Fix', 'n:Inbox@OnX', 'n:Notify', 'n:OnA', 'n:OnX']);
     });
 });
 

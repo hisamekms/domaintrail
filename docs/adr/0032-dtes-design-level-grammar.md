@@ -204,6 +204,63 @@ the DSL's keywords (`GraphEdge.tooltip`, e.g. 「配車を組む は 配車組 �
 shows it at the line's middle and keeps the two stickies in full view while the rest dims. Issuers and hotspots stay
 near their sticky (stacked above it in ELK, in their cells in the grid), joined by their line.
 
+### 9. `reads` is on the row of whoever decides (2026-11-06)
+
+*Decided by the maintainer*, after a report that a policy's read model was drawn read model → command: §1 made `reads`
+the command's, so a command a policy issues (no `by`) "read" its read model itself, which no wall shows. With an AI as
+the main author, the rule has to be plain and a violation an error at once, as S023–S028 are:
+
+1. **`reads` is written on the row of whoever decides.** A command issued by a person or an external system keeps its
+   `by` and `reads` (§1). A command a policy issues is decided by the policy, so the policy has the `reads`:
+
+   ```dtes
+   policy AutoReassign "欠員が出たら組み直す" {
+     on DriverCancelled
+     reads AvailableDrivers
+     issues ReassignDriver
+   }
+   ```
+
+   A policy with `by` (a rule a person applies by hand, §7) has the `reads` too: what that person looks at.
+2. **A command a policy issues takes no `reads` (an error).** The `reads` of a command without `by` that a policy
+   `issues` is an error; its hint says to move it to the `reads` of the policy that issues it, by name.
+3. **A policy issues one command (an error).** `issues` naming two or more commands is an error; the hint says to split
+   the policy, one per command. It is Event Storming's usual shape, and it keeps a policy's `reads` from mixing what it
+   looks at for different commands. One command issued by several policies stays valid: each has its own `reads`.
+4. **A policy's `reads` names read models only**, as a command's does (S003): `reads` an event gets the hint to declare
+   a `readmodel { from … }`. S027 counts a policy's `reads` as a use of the read model.
+5. **`dt fmt`'s order is per kind.** A policy's clauses go `on`, `reads`, `issues`, `by` (read aloud: when this happens,
+   looking at that, issue this); a command's stay as in §4.
+6. **Drawing.** A policy's `reads` is read model → the policy's note (with copies per step, the note of the same step),
+   in ELK and in the grid. There is no read model → command line any more: a command without `by` cannot have `reads`.
+   In the grid a policy's read models stand just before it, as a command's stand before the command.
+7. **The lines' words** (`Messages.lines`, `apps/web/i18n.tsx`). Read model → whoever decides (an actor, an external
+   system, a policy) is one sentence, 「「{B}」は「{A}」を見て判断する」 (“{B}” looks at “{A}” to decide): the colour box of
+   the kind in front of each name tells which kind decides. The relation read model → command (`readsWhen`) is gone.
+8. **`dt migrate dtes` covers the files of 0.8 too.** Besides §5's rewrites, it moves the `reads` of a command a policy
+   issues (without `by`) into that policy's `reads` when exactly one policy issues it, keeping its comments and the
+   layout, as §5's rewrites do. When several policies issue the command, it does not copy the `reads` to each: it lists
+   the command as a decision to make. A policy issuing several commands is listed as well, unchanged (no name for the
+   policies it splits into can be made up). A second run changes nothing.
+9. The AI-facing texts follow: `dt guide dtes-quick` and `storming-rules`, the agent's prompt, `docs/live-view.md`'s
+   lines and the examples (each passes `dt check`).
+10. The two errors are **S030** (`reads` on a command a policy issues) and **S031** (a policy issuing more than one
+    command), reported as the others are (the LSP's diagnostics, `dt check --format json`).
+
+*Decided here*, while implementing it:
+
+- S030 is reported per read model, at its name. A command a policy issues *and* `by` someone is S025, not also S030:
+  removing `by` comes first. With several policies issuing the command, the hint names them all, to pick the one that
+  looks at it.
+- S031 is reported at each command named after the first (a command named twice is S026, not S031).
+- The semantic graph's `reads` edge now also runs read model → policy. The drawing leaves out a command's `reads` with
+  no issuer to go to (in an invalid file, the read model is drawn without that line).
+- In the grid a policy's read models have a sub-column of their own between the event and the policy; a policy takes as
+  many rows as it has read models, the first on its own row and the others above it.
+- The migration puts the moved clause after the policy's `on` clauses (where `dt fmt` puts it), in the policy's
+  indentation, with the comments on its lines; when the policy already reads that read model, it only removes it from
+  the command. A policy that issues several commands keeps its commands' `reads` where they are, listed with it.
+
 ## Alternatives
 
 - **An arrow chain** (`UnassignedRequests -> Batch -> BuildAllocation -> CarAllocationPlan -> CarAllocated`): rejected
@@ -229,4 +286,6 @@ near their sticky (stacked above it in ELK, in their cells in the grid), joined 
 - The grammar now has the words `by`, `handledBy` and `from` as keywords: an element named so must be renamed (the
   migration lists such files).
 - The tree-sitter grammar and the Zed extension cover `.dt` only; nothing to change there.
-- The rule IDs go up to S028; the guide's rules table and its one-problem examples cover each.
+- The rule IDs go up to S031 (§7, §9); the guide's rules table and its one-problem examples cover each.
+- §9 makes the `.dtes` of 0.8 with a `reads` on a policy's command invalid until migrated (`dt migrate dtes` moves it
+  when one policy issues the command); a policy issuing several commands has to be split by hand.

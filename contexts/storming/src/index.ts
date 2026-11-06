@@ -87,7 +87,14 @@ export {
     type StickyEditResult,
     type StickyWording,
 } from './infrastructure/syntax/edit.js';
-export { migrateStorming, type MigrationLeft, type MigrationPlace, type MigrationRewrite, type StormingMigration } from './infrastructure/syntax/migrate.js';
+export {
+    migrateStorming,
+    type MigrationLeft,
+    type MigrationMove,
+    type MigrationPlace,
+    type MigrationRewrite,
+    type StormingMigration,
+} from './infrastructure/syntax/migrate.js';
 
 // ---- the syntax, for the language server -----------------------------------------------------------------------
 export * as stormingAst from './infrastructure/syntax/generated/ast.js';

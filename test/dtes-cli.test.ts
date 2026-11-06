@@ -142,6 +142,41 @@ describe('dt check', () => {
         for (const d of report.diagnostics) expect(d.code).toMatch(pattern);
     });
 
+    test('--format json: a command a policy issues with `reads` (S030), a policy issuing two commands (S031)', async () => {
+        const dir = await workspace({
+            'flow.dtes': `storming Allocation {
+  event Cutoff
+  event Allocated
+  event Notified
+  readmodel Requests
+  aggregate Plan
+  external Messenger
+  command Allocate {
+    reads Requests
+    handledBy Plan
+    emits Allocated
+  }
+  command Notify {
+    handledBy Messenger
+    emits Notified
+  }
+  policy AtCutoff {
+    on Cutoff
+    issues Allocate, Notify
+  }
+}
+`,
+        });
+        const r = await run('-r', dir, 'check', '--format', 'json');
+        expect(r.code).toBe(1);
+        const report = JSON.parse(r.out.join('\n')) as { diagnostics: { line: number; code: string; severity: string; hint?: string }[] };
+        expect(report.diagnostics.filter((d) => d.severity !== 'info').map((d) => `${d.line} ${d.severity} ${d.code}`)).toEqual([
+            '9 error S030',
+            '19 error S031',
+        ]);
+        expect(report.diagnostics[0]!.hint).toBe("move it: write `reads Requests` in policy 'AtCutoff' and remove it here (`dt migrate dtes` moves it)");
+    });
+
     test('finds .dtes files by the sources and .gitignore, like .dt files', async () => {
         const dir = await workspace({
             '.gitignore': 'drafts/\n',

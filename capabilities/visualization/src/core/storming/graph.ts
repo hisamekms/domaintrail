@@ -153,7 +153,7 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
             case 'by':
                 return relation(kindOfNode(e.target) === 'policy' ? 'follows' : 'issues');
             case 'reads':
-                return relation(kindOfNode(e.target) === 'command' ? 'readsWhen' : 'looksAt');
+                return relation('looksAt');
             case 'handledBy':
                 return relation('handles');
             case 'emits':

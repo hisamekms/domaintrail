@@ -166,7 +166,8 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   (`handledBy`: an aggregate or external system, from which the command's events come) → event → policy → the command it
   issues; commands converging on one event note through the same handler share one handler note before it (hovering
   its arrow names them); a command a policy
-  issues has no issuer, and its read model goes to the command; an event that arrives `from`
+  issues has no issuer: the policy decides, and the read model it looks at goes to the policy (ADR 0032 §9), standing just
+  before it; an event that arrives `from`
   an external system has that system before it; a hotspot is stuck on top of the sticky it is `on` (an event, a
   command, a policy, …), never a step of the flow, and at Big Picture only one on an event is drawn. Where an event is
   drawn at several steps, the command before it, its copies and the policy after it are drawn at each step (ADR 0024,
@@ -251,8 +252,7 @@ the target's):
 | line                                         | words                                                         |
 | -------------------------------------------- | ------------------------------------------------------------- |
 | actor / external system → command            | 「{A}」が「{B}」                                              |
-| read model → actor / external system         | 「{B}」は「{A}」を見て判断する                                |
-| read model → command (no issuer)             | 「{B}」ときに「{A}」を見る                                    |
+| read model → actor / external system / policy | 「{B}」は「{A}」を見て判断する (whoever decides: the colour box tells the kind) |
 | command → aggregate / external system        | 「{A}」を「{B}」が受けて処理する                              |
 | aggregate / external system → event          | 「{A}」が処理して「{B}」 (a merged handler: …（「C1」「C2」から）) |
 | event → policy                               | 「{A}」をきっかけにポリシー「{B}」が働く                      |
