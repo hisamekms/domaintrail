@@ -37,6 +37,7 @@ import {
     type ExtractConfig,
     type Extractor,
     dtCommandOf,
+    DT_WRITTEN_FILE_NAMES,
     pinDt,
     type PinnedDt,
     type DiagnosticsScope,
@@ -363,9 +364,14 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             runner,
             tools: createDtTools({ dt: dtCommandOf(dt), root, configPath: options.configPath, log }),
             workspace: {
-                // the runner's scan: the workspace but the directories only dt writes, and the configuration files
-                // beside a -c file outside it (any case)
-                scan: async () => new Map([...(await scanWorkspace(root, { skip: dtWrittenDirs })), ...(await configGuardScan(options.configPath, root))]),
+                // the runner's scan: the workspace but the directories and files only dt writes (people's acts on the
+                // journeys write the journey file at the root while a run runs), and the configuration files beside a
+                // -c file outside it (any case)
+                scan: async () =>
+                    new Map([
+                        ...(await scanWorkspace(root, { skip: dtWrittenDirs, skipFiles: DT_WRITTEN_FILE_NAMES })),
+                        ...(await configGuardScan(options.configPath, root)),
+                    ]),
                 sources: async () => new Set(await findDomainFiles(root, sourceSelection(sources, respectGitignore))),
             },
             clock: systemClock,

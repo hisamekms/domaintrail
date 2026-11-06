@@ -763,6 +763,37 @@ describe('the pipeline', () => {
         expect(invocation.args).toEqual(expect.arrayContaining(['Edit(./knowledge)', 'Edit(./knowledge/**)']));
     });
 
+    integration(
+        'the journey file written by dt while a run runs (the facilitator unmarks a step): the run completes, and the next run is claimed',
+        async () => {
+            const ctx = await setup();
+            const file = path.join(ctx.root, 'domaintrail.journey.json');
+            const flag = path.join(await scratch('domaintrail-flag-'), 'go');
+            const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
+            const { log } = await subscribe(ctx, await ctx.plan([{ waitForFile: flag, edits: ADD_RETURN_CANCELLED }, {}]));
+            await until(ctx, run, ['Running']);
+            await waitFor('the agent', async () => (await ctx.invocations())[0]);
+
+            // the facilitator's act on the journeys while the agent runs: dt writes the journey file at once
+            const before = await readFile(file, 'utf8');
+            const marked = await api(ctx.server, ctx.ada, 'journey/acts', { act: { kind: 'mark', journey: 'order-to-cash', step: 'review', done: false } });
+            expect(marked.status).toBe(200);
+            expect(await readFile(file, 'utf8')).not.toBe(before);
+            await writeFile(flag, '');
+
+            expect((await until(ctx, run, ['Completed', 'Failed'])).state).toBe('Completed');
+            expect(log.some((l) => l.includes('changed files other than .dt/.dtes sources'))).toBe(false);
+            expect(await readFile(path.join(ctx.root, RETURNS), 'utf8')).toContain('event ReturnCancelled');
+            // the subscriber goes on: the next run is claimed and run
+            const next = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Next.')]);
+            expect((await until(ctx, next, ['Completed', 'Failed'])).state).toBe('Completed');
+            expect(log.some((l) => l.includes('not claiming further runs'))).toBe(false);
+            // the agent may read the journey file, never edit it
+            const [invocation] = await ctx.invocations();
+            expect(invocation.args).toEqual(expect.arrayContaining(['Edit(./domaintrail.journey.json)', 'Edit(**/domaintrail.journey.json)']));
+        },
+    );
+
     integration('an agent that writes a configuration file in any case beside a -c file outside the workspace: its run fails', async () => {
         const ctx = await setup();
         const conf = await scratch('domaintrail-conf-');
