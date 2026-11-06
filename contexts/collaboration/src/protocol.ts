@@ -136,12 +136,27 @@ export interface Cursor {
     readonly y: number;
 }
 
-/** One page's presence: ephemeral, never stored. `connection` tells two pages of one participant apart. */
+/**
+ * The part of the page a canvas shows, in page coordinates (`x`, `y` its top-left corner, `w`, `h` its size): another
+ * page following this one fits it to its own canvas, whatever their sizes.
+ */
+export interface CameraBounds {
+    readonly x: number;
+    readonly y: number;
+    readonly w: number;
+    readonly h: number;
+}
+
+/**
+ * One page's presence: ephemeral, never stored. `connection` tells two pages of one participant apart. `camera`: what
+ * its canvas shows while its location has one (absent from a page before it).
+ */
 export interface Presence {
     readonly connection: string;
     readonly participant: PublicParticipant;
     readonly location: ViewLocation;
     readonly cursor?: Cursor;
+    readonly camera?: CameraBounds;
     readonly selectedTarget?: Json<Collaboration.ModelTarget>;
 }
 
@@ -151,6 +166,7 @@ export type ClientMessage =
           readonly type: 'presence.update';
           readonly location: ViewLocation;
           readonly cursor?: Cursor;
+          readonly camera?: CameraBounds;
           readonly selectedTarget?: Json<Collaboration.ModelTarget>;
       }
     | { readonly type: 'presence.leave' };

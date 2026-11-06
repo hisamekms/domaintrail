@@ -485,14 +485,17 @@ describe('a session in dev mode', () => {
             a.ws.send('not json');
             a.ws.send(JSON.stringify({ type: 'presence.update', location: { kind: 'dt' } }));
             a.ws.send(JSON.stringify({ type: 'session.close' }));
-            for (let i = 1; i <= 10; i++) a.ws.send(JSON.stringify({ type: 'presence.update', location, cursor: { x: i, y: i } }));
+            for (let i = 1; i <= 10; i++)
+                a.ws.send(JSON.stringify({ type: 'presence.update', location, cursor: { x: i, y: i }, camera: { x: i, y: 0, w: 800, h: 600 } }));
             await Bun.sleep(300);
             const updates = b.received.filter((m) => m.type === 'presence.update') as unknown as {
-                presence: { cursor: { x: number }; participant: { name: string } };
+                presence: { cursor: { x: number }; camera: { x: number; y: number; w: number; h: number }; participant: { name: string } };
             }[];
             expect(updates.length).toBeGreaterThanOrEqual(1);
             expect(updates.length).toBeLessThanOrEqual(3);
             expect(updates.at(-1)!.presence.cursor.x).toBe(10);
+            // the camera too, for a page following Ada's (ADR 0026, "Following someone")
+            expect(updates.at(-1)!.presence.camera).toEqual({ x: 10, y: 0, w: 800, h: 600 });
             expect(updates[0].presence.participant).toEqual(expect.objectContaining({ name: 'Ada', role: 'facilitator' }));
             expect(JSON.stringify(updates)).not.toContain('email');
             expect(a.received.filter((m) => m.type === 'presence.update')).toEqual([]);
