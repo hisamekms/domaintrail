@@ -148,7 +148,7 @@ export function Catalog(props: CatalogProps & { filter: CatalogFilter }) {
     const shared = new Set<string>(sharedContexts(model));
     const severity = new Map<string, 'error' | 'warning'>();
     for (const d of props.diagnostics) {
-        if (!d.elementId) continue;
+        if (!d.elementId || d.severity === 'info') continue;
         const id = ownerElement(d.elementId);
         if (severity.get(id) !== 'error') severity.set(id, d.severity);
     }

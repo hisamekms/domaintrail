@@ -3,8 +3,9 @@ import type { SemanticEdge } from '@domaintrail/storming';
 /**
  * The semantic edges of a timeline filter (§9.3), and of a stage's view: each 1-hop path Event → Policy → Command → Event
  * whose two events are in view (`events`), each command that emits an event in view (its cause, without the policy that
- * issues it unless that is such a path), the actors, read models and target of those commands, and the hotspots on an
- * event in view. No path is followed further, so a cycle is no different from any other path (R10, R16).
+ * issues it unless that is such a path), the issuers, read models and handler of those commands, the events in view
+ * that feed those read models, the external systems the events in view come from, and the hotspots on an event in view
+ * or on an element kept. No path is followed further, so a cycle is no different from any other path (R10, R16).
  */
 export function filterEdges(edges: readonly SemanticEdge[], events: ReadonlySet<string>): SemanticEdge[] {
     const from = (id: string, kind: SemanticEdge['kind']): SemanticEdge[] => edges.filter((e) => e.sourceId === id && e.kind === kind);
@@ -19,13 +20,23 @@ export function filterEdges(edges: readonly SemanticEdge[], events: ReadonlySet<
     }
     // the cause of an event in view: each command that emits it (those of the paths above among them)
     for (const e of edges) if (e.kind === 'emits' && events.has(e.targetId)) commands.add(e.sourceId);
+    const readModels = new Set<string>();
     for (const e of edges) {
         const keep =
             (e.kind === 'emits' && events.has(e.targetId)) ||
-            ((e.kind === 'actor' || e.kind === 'reads') && commands.has(e.targetId)) ||
-            (e.kind === 'target' && commands.has(e.sourceId)) ||
-            (e.kind === 'hotspot-on' && events.has(e.targetId));
-        if (keep) kept.add(e);
+            ((e.kind === 'by' || e.kind === 'reads') && commands.has(e.targetId)) ||
+            (e.kind === 'handledBy' && commands.has(e.sourceId)) ||
+            (e.kind === 'event-from' && events.has(e.targetId));
+        if (!keep) continue;
+        kept.add(e);
+        if (e.kind === 'reads') readModels.add(e.sourceId);
     }
+    for (const e of edges) if (e.kind === 'readmodel-from' && events.has(e.sourceId) && readModels.has(e.targetId)) kept.add(e);
+    // the actor applying a policy kept by hand
+    const policies = new Set([...kept].filter((e) => e.kind === 'on').map((e) => e.targetId));
+    for (const e of edges) if (e.kind === 'by' && policies.has(e.targetId)) kept.add(e);
+    // a hotspot on an event in view, or on an element the edges kept draw
+    const drawn = new Set([...kept].flatMap((e) => [e.sourceId, e.targetId]));
+    for (const e of edges) if (e.kind === 'hotspot-on' && (events.has(e.targetId) || drawn.has(e.targetId))) kept.add(e);
     return edges.filter((e) => kept.has(e));
 }

@@ -4,7 +4,7 @@
  * mismatches that are provable (S012, S013). It reads the storming IR and the model, and never changes either file.
  *
  * Missing `ref`s are never diagnosed (§2, ES07), nor are policies whose `on` and `issues` span contexts (ES09).
- * Clauses the validator rejects (a `ref` where none is allowed, a second `ref` or `target`, a relation to the wrong kind)
+ * Clauses the validator rejects (a `ref` where none is allowed, a second `ref` or `handledBy`, a relation to the wrong kind)
  * are left to it: the contract warnings only use what is valid.
  */
 import type { Diagnostic } from '@domaintrail/kernel';
@@ -139,8 +139,8 @@ export function linkStormings(stormings: readonly Storming[], model: DomainModel
             const elementId = esElementId(storming.id, el.id);
             const ref = refClauses(el)[0];
 
-            // S012: the `ref` names a command of another aggregate than the `ref` of the (single, valid) target.
-            const targets = relations(el, 'target');
+            // S012: the `ref` names a command of another aggregate than the `ref` of the (single, valid) handler.
+            const targets = relations(el, 'handledBy');
             const target = targets.length === 1 ? byId.get(targets[0].target) : undefined;
             const targetAggregate = target?.kind === 'aggregate' ? resolved.get(target.id) : undefined;
             if (targetAggregate && targetAggregate !== aggregateId) {
@@ -148,9 +148,9 @@ export function linkStormings(stormings: readonly Storming[], model: DomainModel
                     esDiagnostic(
                         'warning',
                         'S012',
-                        `The command ref '${ref.path}' is a command of '${aggregateId}', but its target '${target!.id}' refers to '${targetAggregate}'.`,
+                        `The command ref '${ref.path}' is a command of '${aggregateId}', but the aggregate it is handled by, '${target!.id}', refers to '${targetAggregate}'.`,
                         ref.range,
-                        { hint: `correct the ref of '${el.id}' or of '${target!.id}', or the target`, elementId },
+                        { hint: `correct the ref of '${el.id}' or of '${target!.id}', or its \`handledBy\``, elementId },
                     ),
                 );
             }

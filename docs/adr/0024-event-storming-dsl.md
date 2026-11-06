@@ -3,7 +3,10 @@
 - Status: accepted. Three choices the spec leaves open were decided by the maintainer: storming IDs unique in the
   workspace, the hotspots of a timeline filter, and the default `sources` (marked *Decided by the maintainer*).
   Amended 2026-11-03: events at Design Level only (`level design`, below); stages and exceptions; actors, read models
-  and aggregates drawn once per use; the cause of an event in a timeline's or a stage's view.
+  and aggregates drawn once per use; the cause of an event in a timeline's or a stage's view. Amended 2026-11-05:
+  Event Storming's grammar at Design Level (the drawing). Amended 2026-11-06 by [ADR 0032](0032-dtes-design-level-grammar.md):
+  the relations themselves are the grammar (`by`, `reads`, `handledBy`, `emits`, `on`, `issues`, `from`), `actor` and
+  `target` are errors (S023), incomplete designs are errors unless an open hotspot asks about them (S024–S028).
 - Date: 2026-10-31
 - Spec: [docs/dtes-v0.1.md](../dtes-v0.1.md). Its semantics, the sections marked 確定 in particular, are the reference.
   This ADR fixes only how they are implemented, plus the details the spec leaves to "実装調査" (§13, §14).
@@ -246,7 +249,8 @@ These are pure functions of the storming IR (T5), with the types in `src/dtes/ir
 - `renderToGraph(render, storming)` (T7, `src/dtes/view/graph.ts`) converts a `RenderGraph` into the existing `Graph`
   IR. Its node kinds are `esEvent`, `esCommand`, `esPolicy`, `esActor`, `esExternal`, `esAggregate`, `esReadModel`,
   `esHotspot` and `esGroup` (a container whose children are its event nodes). Its edge kinds are `esCausal` (solid,
-  directed), `esRelated` (dotted), `esHotspot` (dotted, undirected: a hotspot's `on`) and `esSequence` (dashed). Notes
+  directed), `esRelated` (dotted), `esHotspot` (dotted, undirected: a hotspot's `on`) and `esSequence` (dashed)
+  (amended 2026-11-05: `target` is `esCausal`, `esRelated` is undirected; see the last amendment). Notes
   are squares of one size (`STICKY_NOTE`) whose label wraps and shrinks to fit, cut short with «…» below a floor. These kinds are added to `NodeKind`/`EdgeKind` in
   `src/graph/ir.ts`. The label is the element's label, its ID in name mode, and both in both mode. The stereotype is
   the kind. The `.dt` `ref` and the occurrences with their timelines go to the inspector (§6, §8.4).
@@ -282,6 +286,8 @@ Design Level only. R14 now reads "an event without `level design` never disappea
   otherwise, that `design` is the only level (with `did you mean`). An invalid `level` hides nothing.
 - **Formatter**: no space around the hyphens of a value. It never reorders clauses; the canonical place of
   `level design` is the last clause, after `ref`, which the guide, the examples and the agent's rules follow.
+  (Superseded by [ADR 0032](0032-dtes-design-level-grammar.md): `dt fmt` now puts the clauses in one canonical order,
+  `level` last, and merges repeated relations of one keyword into one list.)
 - **Projection**: at Big Picture, `projectView` builds the prefix trie with the hidden events left out, as
   `buildTrie` already does for steps naming no event. So the order edges join the neighbours of a hidden event, a
   group of hidden events only has no step, a group keeps its visible events (its step key is theirs), and timelines that
@@ -348,7 +354,9 @@ attach an exception that does not share the whole prefix, and its left-to-right 
   side in time order, the trunks on row 0 through every stage, every other timeline on a *lane* below its branch step,
   lanes packed into rows (first fit, one free column between lanes; the other main flows before the exceptions; from
   the top of the tree down). Design Level elements stand above the event they belong to (hotspot nearest, then command,
-  policy, aggregate, read model, actor, external), the rest below every section. ELK's layered algorithm was tried on
+  policy, aggregate, read model, actor, external), the rest below every section. *Amended 2026-11-05*: each step is a
+  group of sub-columns and the elements stand in a band above their event's lane, read left to right; see "Event
+  Storming's grammar" below. ELK's layered algorithm was tried on
   paper and rejected: it keeps the order along edges, but neither one straight row through every frame nor lanes inside
   frames, and its partitioning does not cross hierarchy levels. `layoutGrid` (`core/graph/grid.ts`) turns cells into
   coordinates and routes every edge through the gutters between cells, so that no route crosses a note (tested): into
@@ -375,7 +383,9 @@ note beside each command of the view that uses it: a render node `n:<element>@<c
 element's ID (`core/storming/uses.ts`); an element no command of the view uses is the one note `n:<element>` as
 before. Only the drawing changes: the `.dtes`, the semantic graph and the edges' semantic keys do not, and each use's
 edge joins the copy and its command only. The ELK drawings place a copy beside its command through that edge (the
-issuer and the read model on its left, the aggregate on its right); the grid stacks it in its command's column. The
+issuer and the read model on its left, the aggregate on its right); the grid stacks it in its command's column.
+*Amended 2026-11-05*: the copy of an aggregate also carries the command's `emits`, the issuer is stuck on top of its
+command, and the grid places copies in the sub-columns of their step; see "Event Storming's grammar" below. The
 Live View resolves everything by element (selection, inspector, change marks, references, presence): selecting one
 note marks the element's other notes (`dn-same`, a fainter dashed ring), and a jump to the element picks the note
 nearest the middle of the view, else the first in reading order (`itemForElement`).
@@ -391,6 +401,61 @@ emitted event, as on the integrated canvas). An `emits` to an event out of view 
 issues such a command is drawn only on a 1-hop path within the view: nothing is followed back from a command, so R16
 (no multi-hop chain) holds. Big Picture draws no command and is unchanged; Design Level does not depend on `level
 design` marks. Spec §9.3 and R16.
+
+## Amendment (2026-11-05): Event Storming's grammar at Design Level
+
+The Design Level drawing did not read as Event Storming does (Brandolini): `emits` was drawn command → event with the
+aggregate a dead end beside the command; the stages' grid stacked every element above an event's column (the aggregate
+above its command, a policy above its own trigger, a lane's elements over the trunk's column, a command emitting
+several events once at the leftmost one); a repeated event fanned one command out to every occurrence; a hotspot took a
+layer of its own before its event in ELK; actors were separate notes with arrows; and the legend called the aggregate a
+non-causal relation while arrowheads sat on relations that "are not causes or time". Now the drawing follows the
+standard grammar, read left to right: **read model + actor → command → aggregate → event → policy → command …**. Only
+the drawing changes: the `.dtes`, its relations and the semantic graph do not (§9.1 keeps `Command → Event`).
+
+- **Chains** (`core/storming/chains.ts`, shared by `render.ts` and `stage-view.ts`, replacing `uses.ts`): a command with
+  a `target` (at most one, S004) goes to its aggregate's copy beside it, drawn `esCausal` (`target` is causal in
+  `isCausal`), and each `emits` of the command is drawn from that copy to the event, with the `emits` edge's semantic
+  key (`emits:C->E@n:G@C->…`); a command without `target` keeps command → event. The projection tells, for each event
+  note, its *slot* (its step: a trie node in a timeline's view, a step node in the grid; one slot for the whole
+  integrated ELK canvas, which draws each event once) and its place in time. A command whose events stand at several
+  slots gets a note per slot (`n:C#k`, k from 1 in time order) with its own copies (`n:G@C#k`); a policy on events at
+  several slots a note after each (`n:P#k`, its `on` from the event of its slot, its `issues` to the command's note at
+  the nearest later slot, every note when none is later); a hotspot on an event drawn at several slots a note on each
+  (`n:H#k`). This is the drawing-only split of §7.3/§10.2; with one slot nothing is copied, so plain stormings keep
+  their IDs. `RenderElementNode.use` is now the command note's ID without `n:` (`C` or `C#2`).
+- **The grid** (`placeChains` in `stage-view.ts`): each step's column becomes up to five sub-columns, left to right
+  read model, command, aggregate, event, policy (only those some step of the column uses; the event's always), and
+  above each lane's row a band as tall as the tallest stack of its steps. A step's chains (one per command note
+  emitting its events: read model, command, aggregate on one row, the command's actors above it in its sub-column)
+  are bottom-aligned in the band of the event's own lane, an exception's above the exception; its hotspots above the
+  event (nearest first) and its policies on its right. So the aggregate is always between its command and the event
+  and the policy between its trigger and the next step's command, every lane's elements belong to its events, and the
+  events keep their time order left to right on unchanged rows of lanes. Alternatives considered: one row per chain
+  with the event in it would put the commands on the timeline's straight line (the time order would have to bend
+  around them); stacking the chain vertically (as before) is what broke the reading. `layoutGrid` gained a straight
+  route for any edge along a row with no note between its ends (the time order across a step's empty sub-columns,
+  read model → command), and a stacked note joins a note of its column through the left gutter into the target's side
+  near its end (clear of the edges at the side's middle). `GRID_VERSION` is 2.
+- **ELK** (plain stormings and timeline views, direction RIGHT): the chain makes the layers (read model, command,
+  aggregate, event, policy). A note *stuck* on another (`GraphNode.attachTo`, set by `renderToGraph`: a hotspot whose
+  only edges go to one event, an actor's or external system's copy on its command, same container) is laid out with
+  it as one block, stacked above it, the block's edges in and out through fixed ports at the node's middle; its edge
+  is drawn straight down into the node (or down its left side when another stuck note is below it). So a hotspot never
+  takes a layer before its event, and the actor sits on its command's top-left. The engine's version is 12.
+- **Not done**: the actor is not smaller than the other notes: every note is the same square (§9.4, `STICKY_NOTE`), so
+  it is stuck on top of the command, aligned left, at full size.
+- **Edges and legend**: `esRelated` (`actor`, `reads`) and `esHotspot` have no arrowhead (`isUndirectedEdge`; canvas,
+  legend, portable SVG), so that 「矢印は因果と時間の向き」 holds; the legend calls the causal row 「型レベルの因果（コマンド
+  → 集約 → イベント → ポリシー → コマンド…）」 and the related row 「コマンドのアクター・リードモデル（向きを持たない）」.
+- **Focus** (`apps/web/scene.ts`): an event caused through an aggregate brings the commands that go to that aggregate
+  (with their actors and read models); a selected command brings the events its aggregate emits.
+- **Still needing a DSL change** (separate decision): the aggregate emitting events itself (today `emits` belongs to the
+  command), an external system receiving a command or producing events, event → read model → actor (a read model fed
+  by events), and hotspots on any sticky (today `on` an event only). Decided by [ADR 0032](0032-dtes-design-level-grammar.md)
+  (2026-11-06): `handledBy` (an aggregate or external system, from which the drawing starts `emits`), an event `from` an
+  external system, a read model `from` events drawn to the issuer that `reads` it, and a hotspot `on` any sticky; this
+  amendment's `actor` and `target` read `by` and `handledBy` there.
 
 ## Task interfaces
 

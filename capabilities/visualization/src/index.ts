@@ -7,6 +7,7 @@ export {
     DISPLAY_MODES,
     INTERNAL_PADDING,
     internalRowHeight,
+    isUndirectedEdge,
     LAYOUT_SPACINGS,
     STRUCTURE_LEVELS,
     TRANSITION_LABELS,

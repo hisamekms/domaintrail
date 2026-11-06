@@ -359,7 +359,7 @@ const ja = {
     // the problems and changes lists
     problems: '問題',
     changes: '差分',
-    severity: { error: 'エラー', warning: '警告' },
+    severity: { error: 'エラー', warning: '警告', info: '情報' },
     noProblems: '問題はありません。',
     noChanges: '直前の正常モデルからの変更はありません。',
     noChangesSince: (ref: string) => `${ref} からの変更はありません。`,
@@ -1480,7 +1480,7 @@ const en: Messages = {
 
     problems: 'Problems',
     changes: 'Changes',
-    severity: { error: 'Error', warning: 'Warning' },
+    severity: { error: 'Error', warning: 'Warning', info: 'Info' },
     noProblems: 'No problems.',
     noChanges: 'No changes since the last valid model.',
     noChangesSince: (ref) => `No changes since ${ref}.`,

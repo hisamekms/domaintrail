@@ -764,7 +764,14 @@ const revert = async (s: Ctx): Promise<void> => {
     });
     await s.apply([favorites], {
         kind: 'reply',
-        edit: (root) => editFile(root, file, /^( {2}readmodel OrderTotal .*\n)/m, '$1  readmodel Favorites "お気に入り"\n'),
+        // not used by a command yet: a hotspot on it says so (an unused read model alone is S027)
+        edit: (root) =>
+            editFile(
+                root,
+                file,
+                /^( {2}readmodel Cart .*\n)/m,
+                '$1  readmodel Favorites "お気に入り"\n  hotspot FavoritesUse "どのコマンドで見る？" {\n    on Favorites\n  }\n',
+            ),
         reply: {
             outcome: 'done',
             title: 'お気に入りの読みモデル',

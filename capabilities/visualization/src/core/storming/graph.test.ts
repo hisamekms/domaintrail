@@ -13,8 +13,9 @@ const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', '..', '..',
 
 async function parse(text: string): Promise<Storming> {
     const { stormings, diagnostics } = (await analyze([{ path: 'es.dtes', text }])).stormings;
-    // without a .dt model its refs name nothing (S010–S013); the storming itself parses and validates clean
-    expect(diagnostics.filter((d) => !['S010', 'S011', 'S012', 'S013'].includes(d.code))).toEqual([]);
+    // without a .dt model its refs name nothing (S010–S013); the storming itself parses and validates clean, but for an
+    // incomplete design (S024, S027), which is drawn as written
+    expect(diagnostics.filter((d) => d.severity !== 'info' && !['S010', 'S011', 'S012', 'S013', 'S024', 'S027'].includes(d.code))).toEqual([]);
     return stormings[0];
 }
 
@@ -39,7 +40,10 @@ describe('an Event Storming view as a graph', () => {
 
         const kinds = Object.fromEntries(graph.edges.map((e) => [e.id, e.kind]));
         expect(kinds['on:ShipmentCancelled->CleanupAfterCancel@t:e:ShipmentCancelled->n:CleanupAfterCancel']).toBe('esCausal');
-        expect(kinds[`emits:ReleaseSlot->SlotReleased@n:ReleaseSlot->${group}/SlotReleased`]).toBe('esCausal');
+        // command → aggregate → event: the aggregate decides and emits the command's events
+        expect(kinds['handledBy:ReleaseSlot->ShipmentSlot@n:ReleaseSlot->n:ShipmentSlot@ReleaseSlot']).toBe('esCausal');
+        expect(kinds[`emits:ReleaseSlot->SlotReleased@n:ShipmentSlot@ReleaseSlot->${group}/SlotReleased`]).toBe('esCausal');
+        expect(Object.keys(kinds).filter((id) => id.startsWith('emits:ReleaseSlot->') && id.includes('@n:ReleaseSlot->'))).toEqual([]);
         expect(kinds[`s:t:e:ShipmentCancelled->${group}`]).toBe('esSequence');
         // nothing is added: one graph edge per render edge, and no sequence edge inside the group (R04)
         expect(graph.edges).toHaveLength(projectView(storming, options).edges.length);
@@ -70,8 +74,8 @@ describe('an Event Storming view as a graph', () => {
         const edge = (id: string) => graph.edges.find((e) => e.id === id);
         expect(edge('on:ShipmentCancelled->CleanupAfterCancel@e:ShipmentCancelled->n:CleanupAfterCancel')?.kind).toBe('esCausal');
         expect(edge('issues:CleanupAfterCancel->ReleaseBike@n:CleanupAfterCancel->n:ReleaseBike')?.kind).toBe('esCausal');
-        expect(edge('target:ReleaseSlot->ShipmentSlot@n:ReleaseSlot->n:ShipmentSlot@ReleaseSlot')?.kind).toBe('esRelated');
-        expect(edge('actor:Customer->CancelShipment@n:Customer@CancelShipment->n:CancelShipment')?.kind).toBe('esRelated');
+        expect(edge('handledBy:ReleaseSlot->ShipmentSlot@n:ReleaseSlot->n:ShipmentSlot@ReleaseSlot')?.kind).toBe('esCausal');
+        expect(edge('by:Customer->CancelShipment@n:Customer@CancelShipment->n:CancelShipment')?.kind).toBe('esRelated');
         expect(edge('hotspot-on:Compensation->ReleaseFailed@n:Compensation->e:ReleaseFailed')?.kind).toBe('esHotspot');
         // a step into a group is a time order to each of its events; each names the one timeline it is in
         for (const target of ['e:BikeReleased', 'e:SlotReleased']) {
@@ -221,16 +225,17 @@ describe('layout of an Event Storming view', () => {
         }
     });
 
-    test('draws an element used by several commands beside each of them: the actor on the left, the aggregate on the right, short edges', async () => {
+    test('draws the grammar left to right: read model → actor → command → aggregate → event; short edges', async () => {
         const storming = await parse(`storming S {
   event Opened event Approved event Shipped event Closed
   actor Clerk
   readmodel Board
   aggregate Ticket
-  command Open { actor Clerk reads Board target Ticket emits Opened }
+  command Open { by Clerk reads Board handledBy Ticket emits Opened }
   command Approve { emits Approved }
   command Ship { emits Shipped }
-  command Close { actor Clerk reads Board target Ticket emits Closed }
+  command Close { reads Board handledBy Ticket emits Closed }
+  command Note { by Clerk handledBy Ticket emits Approved }
   policy P1 { on Opened issues Approve }
   policy P2 { on Approved issues Ship }
   policy P3 { on Shipped issues Close }
@@ -241,20 +246,91 @@ describe('layout of an Event Storming view', () => {
             expectReadable(laid);
             const box = (id: string): NodeLayout => laid.nodeLayout[id]!;
             const centre = (id: string): number => box(id).x + box(id).width / 2;
-            // a timeline draws the cause of its events too: Open, which no policy issues
-            for (const command of ['Open', 'Close']) {
-                const c = `n:${command}`;
-                expect(centre(`n:Clerk@${command}`)).toBeLessThan(centre(c));
-                expect(centre(`n:Board@${command}`)).toBeLessThan(centre(c));
-                expect(centre(`n:Ticket@${command}`)).toBeGreaterThan(centre(c));
-                // each copy's edge is short: no longer than a few notes, though the two commands lie far apart
-                for (const copy of ['Clerk', 'Board', 'Ticket']) {
-                    const points = laid.edgeLayout[laid.edges.find((e) => [e.source, e.target].includes(`n:${copy}@${command}`))!.id]!.points;
-                    const length = points.slice(1).reduce((sum, p, i) => sum + Math.abs(p.x - points[i]!.x) + Math.abs(p.y - points[i]!.y), 0);
-                    expect(length).toBeLessThan(3 * STICKY_NOTE.side);
+            const eventOf = (event: string): string => laid.nodes.find((n) => n.kind === 'esEvent' && n.elementId.endsWith(`/${event}`))!.id;
+            // Open: the read model is what its actor looks at, so it reads read model → actor → command → aggregate → event
+            expect(centre('n:Board@Open')).toBeLessThan(centre('n:Clerk@Open'));
+            expect(centre('n:Clerk@Open')).toBeLessThan(centre('n:Open'));
+            expect(centre('n:Ticket@Open')).toBeGreaterThan(centre('n:Open'));
+            expect(centre('n:Ticket@Open')).toBeLessThan(centre(eventOf('Opened')));
+            // Close, which a policy issues: the read model goes to the command itself
+            expect(centre('n:Board@Close')).toBeLessThan(centre('n:Close'));
+            expect(centre('n:Ticket@Close')).toBeLessThan(centre(eventOf('Closed')));
+            // Note: an actor that nothing leads to is stuck on top of its command
+            if (options.timelineId === undefined) {
+                expect(laid.nodes.find((n) => n.id === 'n:Clerk@Note')?.attachTo).toBe('n:Note');
+                expect(box('n:Clerk@Note').x).toBe(box('n:Note').x);
+                expect(box('n:Clerk@Note').y + box('n:Clerk@Note').height).toBeLessThan(box('n:Note').y);
+            }
+            // each copy's edges are short: no longer than a few notes, though the two commands lie far apart
+            for (const [command, copies] of [
+                ['Open', ['Clerk', 'Board', 'Ticket']],
+                ['Close', ['Board', 'Ticket']],
+            ] as const) {
+                for (const copy of copies) {
+                    for (const edge of laid.edges.filter((e) => [e.source, e.target].includes(`n:${copy}@${command}`))) {
+                        const points = laid.edgeLayout[edge.id]!.points;
+                        const length = points.slice(1).reduce((sum, p, i) => sum + Math.abs(p.x - points[i]!.x) + Math.abs(p.y - points[i]!.y), 0);
+                        expect(length).toBeLessThan(3 * STICKY_NOTE.side);
+                    }
                 }
             }
             if (options.timelineId === undefined) expect(centre('n:Close') - centre('n:Open')).toBeGreaterThan(6 * STICKY_NOTE.side);
+        }
+    });
+
+    test('a handler shared by converging commands: one note naming its commands, one emits whose tooltip names them', async () => {
+        const storming = await parse(`storming S {
+  event Requested "受け付けた"
+  actor Clerk
+  aggregate Request "依頼"
+  command Receive "受注する" { by Clerk handledBy Request emits Requested }
+  command Create "登録する" { by Clerk handledBy Request emits Requested }
+  timeline T { Requested }
+}`);
+        for (const options of [{ level: 'design-level' }, { level: 'design-level', timelineId: 'T' }] satisfies ViewOptions[]) {
+            const graph = graphOf(storming, options);
+            const handlers = graph.nodes.filter((n) => n.kind === 'esAggregate');
+            expect(handlers).toHaveLength(1);
+            expect(handlers[0]!.commands).toEqual(['es/S/Create', 'es/S/Receive']);
+            const emits = graph.edges.filter(
+                (e) => e.source === handlers[0]!.id && e.kind === 'esCausal' && !graph.nodes.some((n) => n.id === e.target && n.kind !== 'esEvent'),
+            );
+            expect(emits).toHaveLength(1);
+            expect(emits[0]!.tooltip?.ja.label).toBe('登録する・受注する は 依頼 が処理し、受け付けた が起きる');
+            expect(emits[0]!.tooltip?.en.name).toBe('Request handles Create, Receive, and Requested happens');
+            // every line says what it means, in plain words
+            const handled = graph.edges.find((e) => e.target === handlers[0]!.id && e.source === 'n:Create')!;
+            expect(handled.tooltip?.ja.label).toBe('登録する は 依頼 が処理する');
+            expect(graph.edges.find((e) => e.target === 'n:Create')!.tooltip?.ja.label).toBe('Clerk が 登録する を出す');
+            expect(
+                graph.edges
+                    .filter((e) => e.target === handlers[0]!.id)
+                    .map((e) => e.source)
+                    .sort(),
+            ).toEqual(['n:Create', 'n:Receive']);
+            const laid = await engine.layout(graph);
+            expectReadable(laid);
+        }
+    });
+
+    test('sticks a hotspot on its event: above it, not a step of the flow', async () => {
+        const storming = await parse(`storming S {
+  event A event B
+  hotspot H1 { on B }
+  hotspot H2 { on B }
+  timeline T { A B }
+}`);
+        for (const options of [{ level: 'big-picture' }, { level: 'big-picture', timelineId: 'T' }] satisfies ViewOptions[]) {
+            const laid = await engine.layout(graphOf(storming, options));
+            expectReadable(laid);
+            const id = (name: string): string => laid.nodes.find((n) => n.elementId.endsWith(`/${name}`))!.id;
+            const box = (name: string): NodeLayout => laid.nodeLayout[id(name)]!;
+            for (const h of ['H1', 'H2']) {
+                expect(box(h).x).toBe(box('B').x);
+                expect(box(h).y + box(h).height).toBeLessThan(box('B').y);
+            }
+            // B is the step right after A: no layer of hotspots between them
+            expect(box('B').x - (box('A').x + box('A').width)).toBeLessThan(STICKY_NOTE.side);
         }
     });
 

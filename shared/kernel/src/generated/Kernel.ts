@@ -6,7 +6,7 @@ import { sameOptional } from './_runtime.js';
  * How bad a diagnostic is.
  * @see shared/kernel/model/kernel.dt:6
  */
-export type Severity = 'error' | 'warning';
+export type Severity = 'error' | 'warning' | 'info';
 
 /**
  * A place in a source.

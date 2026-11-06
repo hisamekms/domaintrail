@@ -16,11 +16,17 @@ afterEach(async () => {
 });
 
 const STAGES = await readFile(path.join(import.meta.dir, 'fixtures', 'stages', 'convenience-store-stages.dtes'), 'utf8');
-/** A few notes of Design Level in the stage Issuance: an actor, a command and a policy. */
+/** A few notes of Design Level in the stage Issuance: an actor, an external system handling commands, two commands and a policy. */
 const NOTES = `
   actor Resident "住民"
+  external MultiCopier "マルチコピー機"
+  command PayFee "手数料を払う" {
+    by Resident
+    handledBy MultiCopier
+    emits FeePaid
+  }
   command IssueCertificate "証明書を発行する" {
-    actor Resident
+    handledBy MultiCopier
     emits CertificateIssuedAtMultiCopier
   }
   policy IssueAfterPayment "手数料が払われたら発行する" {
@@ -91,9 +97,10 @@ describe('dt export svg: an Event Storming', () => {
         expect(lines[0]).toBe(
             'convenience-store › イベントストーミング › 住民票などのコンビニ交付（ビッグピクチャ） › コンビニでの発行 · ビッグピクチャー · 例外を含む',
         );
-        // the exceptions' captions and their own arrows
+        // the exceptions' captions; their arrows in the one colour of every line (ADR 0032: no red for exceptions)
         expect(lines).toContain('暗証番号を忘れた');
-        expect(stage).toContain('id="dt-arrow-es-exception"');
+        expect(stage).not.toContain('dt-arrow-es-exception');
+        expect(lines).toEqual(expect.arrayContaining(['問い（ホットスポットとその対象）']));
         expect(lines).toContain('凡例');
         expect(lines).not.toContain('依頼・準備');
         expect(outline(stage)).toMatchSnapshot();
@@ -123,9 +130,11 @@ describe('dt export svg: an Event Storming', () => {
     test('Design Level draws the commands, the policies and the actors; names by ID with --names name', async () => {
         const root = await convenienceStore();
         const design = await svg(root, '--storming', 'ConvenienceStoreIssuance', '--stage', 'Issuance', '--level', 'design');
-        expect(stereotypes(design)).toMatchObject({ '«コマンド»': 1, '«ポリシー»': 1, '«アクター»': 1 });
+        expect(stereotypes(design)).toMatchObject({ '«コマンド»': 2, '«ポリシー»': 1, '«アクター»': 1, '«外部システム»': 2 });
         const named = await svg(root, '--storming', 'ConvenienceStoreIssuance', '--stage', 'Issuance', '--level', 'design', '--names', 'name');
-        expect(texts(named).join('')).toContain('«コマンド»IssueCertificate«アクター»Resident');
+        expect(texts(named).join('')).toContain('«コマンド»PayFee«アクター»Resident');
+        expect(texts(named).join('')).toContain('«コマンド»IssueCertificate');
+        expect(texts(named).join('')).not.toContain('✕');
     });
 
     test('dark: on the dark canvas, in the dark theme’s colours', async () => {

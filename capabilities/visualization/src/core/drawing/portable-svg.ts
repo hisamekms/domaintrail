@@ -5,7 +5,7 @@
 // text is laid out line by line in the given font stacks and wrapped, shrunk and cut short with «…» as the canvas does
 // (`note-fit.ts`), measured by the caller (a canvas's `measureText` in the page; a table of the fonts' widths in
 // `dt export svg`, `text-measure.ts`; a fixed measure in tests).
-import { TRANSITION_LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, TRANSITION_SUB_SIZE } from '../graph/ir.js';
+import { isUndirectedEdge, TRANSITION_LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, TRANSITION_SUB_SIZE } from '../graph/ir.js';
 import type { LegendContent } from './legend.js';
 import { BADGE, badgeWidth, checkPath, DIAG_RADIUS, RESOLVED_MARK } from './marks.js';
 import { fitLabel, NOTE_KINDS, type LabelFit } from './note-fit.js';
@@ -360,6 +360,8 @@ const DEFAULT_BOX: BoxLook = { border: '--grey', width: 1.5, radius: 8, paper: '
 
 /** A sticky note's paper, edge and text (`.dn-es*`). */
 const noteVars = (kind: string): { paper: PaletteVar; border: PaletteVar; text: PaletteVar } => {
+    // a gap's empty slot (ADR 0032): the canvas's paper, a muted dashed edge and text
+    if (kind === 'esGap') return { paper: '--node-bg', border: '--muted', text: '--muted' };
     const k = kind.slice(2).toLowerCase();
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the note kinds' variables are in PALETTE_VARS
     return { paper: `--es-${k}` as PaletteVar, border: `--es-${k}-border` as PaletteVar, text: `--es-${k}-text` as PaletteVar };
@@ -399,12 +401,13 @@ const EDGE_LOOKS: Record<string, EdgeLook> = {
     references: { stroke: '--model-aggregate', width: 1.4, dash: '6 4', head: '--model-aggregate', label: '--model-aggregate' },
     dependsOn: { stroke: '--model-ink', width: 2, head: '--model-ink', label: '--model-ink', bold: true },
     transition: { stroke: '--model-command', width: 1.6, head: '--model-command', label: '--model-edge-label' },
-    esCausal: { stroke: '--model-edge', width: 1.6, head: '--model-edge', label: '--model-edge-label' },
-    esSequence: { stroke: '--es-sequence', width: 1.8, dash: '7 5', head: '--es-sequence', label: '--es-sequence-text', bold: true },
-    esException: { stroke: '--es-exception', width: 1.6, dash: '7 5', head: '--es-exception', label: '--es-exception-text', bold: true },
-    esRejoin: { stroke: '--es-sequence', width: 1.6, dash: '2 4', head: '--es-sequence', label: '--model-edge-label' },
-    esRelated: { stroke: '--model-edge-quiet', width: 1.1, dash: '1.5 3', head: '--model-edge-quiet', label: '--model-edge-label' },
-    esHotspot: { stroke: '--model-edge-quiet', width: 1.1, dash: '1.5 3', head: '--model-edge-quiet', label: '--model-edge-label' },
+    esCausal: { stroke: '--model-edge', width: 1.4, head: '--model-edge', label: '--model-edge-label' },
+    esSequence: { stroke: '--model-edge', width: 1.4, dash: '6 5', head: '--model-edge', label: '--model-edge-label', bold: true },
+    esException: { stroke: '--model-edge', width: 1.4, dash: '6 5', head: '--model-edge', label: '--model-edge-label', bold: true },
+    esRejoin: { stroke: '--model-edge', width: 1.4, dash: '6 5', head: '--model-edge', label: '--model-edge-label' },
+    esRelated: { stroke: '--model-edge', width: 1.4, head: '--model-edge', label: '--model-edge-label' },
+    esFeeds: { stroke: '--model-edge', width: 1.4, head: '--model-edge', label: '--model-edge-label' },
+    esHotspot: { stroke: '--model-edge-quiet', width: 1.2, head: '--model-edge-quiet', label: '--model-edge-label' },
 };
 const DEFAULT_EDGE: EdgeLook = { stroke: '--model-edge', width: 1.4, head: '--model-edge', label: '--model-edge-label' };
 
@@ -527,7 +530,7 @@ class Drawing {
             const v = p.resolution !== undefined ? RESOLVED_NOTE : noteVars(p.kind);
             border = NOTE_BORDER;
             radius = p.kind === 'esActor' ? 18 : 3;
-            const style = p.kind === 'esExternal' || removed ? dashed(border) : undefined;
+            const style = p.kind === 'esExternal' || p.kind === 'esGap' || removed ? dashed(border) : undefined;
             out.push(this.ring(x, y, p, radius));
             out.push(borderRect(x, y, p.w, p.h, radius, { fill: this.c(v.paper), stroke: this.c(v.border), width: border, dash: style }));
             out.push(this.noteHead(x, y, p, this.c(v.text)));
@@ -822,7 +825,7 @@ class Drawing {
                 ...paint('stroke', this.c(look.stroke)),
                 'stroke-width': look.width,
                 'stroke-dasharray': look.dash,
-                'marker-end': p.kind === 'esHotspot' ? undefined : this.markers.arrow(look.head),
+                'marker-end': isUndirectedEdge(p.kind) ? undefined : this.markers.arrow(look.head),
                 'marker-start': p.kind === 'owns' ? this.markers.diamond() : undefined,
             }),
         ];
@@ -955,7 +958,7 @@ class Drawing {
                     ...paint('fill', this.c('--model-ink')),
                 }),
             );
-        if (kind !== 'esHotspot')
+        if (!isUndirectedEdge(kind))
             out.push(
                 tag('path', {
                     d: `M${num(x + 54)},${num(y + 7)} L${num(x + 41)},${num(y + 0.5)} L${num(x + 41)},${num(y + 13.5)} Z`,

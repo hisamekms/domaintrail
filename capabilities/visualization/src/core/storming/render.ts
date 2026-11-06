@@ -6,14 +6,14 @@
  * At Big Picture, the events marked `level design` are left out as if their timeline steps were not written: the trie is
  * built over the visible steps only, so the order edges join the neighbours of a hidden event, a group of hidden events
  * only disappears, and timelines that differ only in hidden events share their prefix (§8 on the visible sequence).
- * Hotspots stay, without their `on` edge to a hidden event.
+ * Hotspots stay, without their `on` edge to a hidden event; a hotspot on a sticky of Design Level (a command, …) does not.
  */
 import {
     buildSemanticGraph,
     isDesignLevelOnly,
+    openGaps,
     type NodeElement,
     type NodeElementKind,
-    semanticEdgeKey,
     type SemanticEdge,
     type Storming,
     stormingTimelines,
@@ -23,7 +23,7 @@ import { LEVEL_KINDS, type RenderEdge, type RenderEventNode, type RenderGraph, t
 import { buildTrie, compare, memberId, type TrieNode } from './trie.js';
 import { filterEdges } from './filter.js';
 import { hasStages, projectStageView } from './stage-view.js';
-import { useEnds, useNodeId, usesOf } from './uses.js';
+import { drawChains, hotspotsOnDesignLevel, type EventPlace } from './chains.js';
 
 export function projectView(storming: Storming, options: ViewOptions): RenderGraph {
     // a storming with stages: its integrated canvas and its stages are views of stages (a timeline's view is as ever)
@@ -40,17 +40,31 @@ export function projectView(storming: Storming, options: ViewOptions): RenderGra
     const edges = new Map<string, RenderEdge>();
     /** The render nodes of each event in this view. */
     const eventNodes = new Map<string, string[]>();
-    const addEvent = (node: RenderEventNode): void => {
+    /**
+     * Where each event note stands, for the copies of the elements drawn along the grammar (`chains.ts`): a timeline's
+     * view at its step (its place on the path), the integrated canvas, which draws each event as one note, at one slot.
+     */
+    const places: EventPlace[] = [];
+    const addEvent = (node: RenderEventNode, slot: string = '', position: number = 0): void => {
         nodes.set(node.id, node);
         eventNodes.set(node.eventId, [...(eventNodes.get(node.eventId) ?? []), node.id]);
+        // the integrated canvas draws each event as one note (`graph.ts`): a handler merged before it is merged once
+        places.push({
+            id: node.id,
+            eventId: node.eventId,
+            slot: timelineId === undefined ? '' : slot,
+            position,
+            ...(timelineId === undefined && { drawnAs: `e:${node.eventId}` }),
+        });
     };
-    const addStep = (node: TrieNode): void => {
+    const addStep = (node: TrieNode, position: number = 0): void => {
         const occurrencesOf = (eventId: string) => (node.occurrences.get(eventId) ?? []).filter((o) => timelineId === undefined || o.timelineId === timelineId);
         if (node.step.type === 'event') {
-            addEvent({ type: 'event', id: node.id, eventId: node.step.eventId, occurrences: occurrencesOf(node.step.eventId) });
+            addEvent({ type: 'event', id: node.id, eventId: node.step.eventId, occurrences: occurrencesOf(node.step.eventId) }, node.id, position);
             return;
         }
-        for (const eventId of node.step.eventIds) addEvent({ type: 'event', id: memberId(node, eventId), eventId, occurrences: occurrencesOf(eventId) });
+        for (const eventId of node.step.eventIds)
+            addEvent({ type: 'event', id: memberId(node, eventId), eventId, occurrences: occurrencesOf(eventId) }, node.id, position);
         nodes.set(node.id, {
             type: 'group',
             id: node.id,
@@ -78,36 +92,27 @@ export function projectView(storming: Storming, options: ViewOptions): RenderGra
         drawn = semantic.edges;
     } else {
         const path = trie.paths.get(timelineId) ?? [];
-        for (const node of path) addStep(node);
+        path.forEach((node, i) => addStep(node, i));
         addSequence(timelineId, path);
         // the timeline's events, hidden ones included: a hotspot on one is still shown (its edge has nothing to end at)
         const events = timelineOccurrences(timelines.find((t) => t.id === timelineId)!).map((o) => o.eventId);
         drawn = filterEdges(semantic.edges, new Set(events.filter((id) => kinds.get(id) === 'event')));
     }
 
+    // at Big Picture, a hotspot on a sticky of Design Level goes with it
+    const designOnly = options.level === 'big-picture' ? hotspotsOnDesignLevel(semantic.edges, kinds) : new Set<string>();
     const elements = semantic.nodes.filter(
         (n): n is NodeElement & { kind: Exclude<NodeElementKind, 'event'> } =>
-            n.kind !== 'event' && shown.has(n.kind) && (timelineId === undefined || drawn.some((e) => e.sourceId === n.id || e.targetId === n.id)),
+            n.kind !== 'event' &&
+            shown.has(n.kind) &&
+            !designOnly.has(n.id) &&
+            (timelineId === undefined || drawn.some((e) => e.sourceId === n.id || e.targetId === n.id)),
     );
-    // an actor, external system, read model or aggregate beside each command that uses it; once when none does
-    const commands = new Set(elements.filter((n) => n.kind === 'command').map((n) => n.id));
-    const uses = usesOf(drawn, (id) => commands.has(id));
-    for (const n of elements) {
-        const users = uses.get(n.id);
-        if (!users) nodes.set(`n:${n.id}`, { type: 'element', id: `n:${n.id}`, elementId: n.id, kind: n.kind });
-        for (const use of users ?? []) nodes.set(useNodeId(n.id, use), { type: 'element', id: useNodeId(n.id, use), elementId: n.id, kind: n.kind, use });
-    }
-    const renderNodesOf = (id: string): string[] => (kinds.get(id) === 'event' ? (eventNodes.get(id) ?? []) : nodes.has(`n:${id}`) ? [`n:${id}`] : []);
-    const ends = (e: SemanticEdge, end: 'sourceId' | 'targetId'): string[] => useEnds(e, end, (id) => nodes.has(id), renderNodesOf);
-    for (const e of drawn) {
-        const key = semanticEdgeKey(e);
-        for (const source of ends(e, 'sourceId')) {
-            for (const target of ends(e, 'targetId')) {
-                const id = `${key}@${source}->${target}`;
-                edges.set(id, { type: 'semantic', id, kind: e.kind, source, target, semantic: key });
-            }
-        }
-    }
+    // the Design Level along the grammar: copies per use (and, in a timeline's view, per step), the handler deciding
+    const chains = drawChains(elements, drawn, places, options.level === 'design-level' ? openGaps(storming) : []);
+    for (const n of chains.nodes) nodes.set(n.id, n);
+    for (const n of chains.gaps) nodes.set(n.id, n);
+    for (const e of chains.edges) edges.set(e.id, e);
     for (const edge of edges.values()) if (edge.type === 'sequence') edge.timelineIds.sort(compare);
 
     return {

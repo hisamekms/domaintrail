@@ -1,14 +1,14 @@
 // The meaning of a storming: its semantic graph (spec §9.1) and the occurrences of events in timelines (spec §7.2); how
 // the Live View draws them is visualization's (domain/storming/project.test.ts).
 import { describe, expect, test } from 'bun:test';
-import type { Clause, NodeElement, NodeElementKind, RelationKeyword, SourceRange, Storming, StormingElement, Timeline } from './ir.js';
+import type { Clause, NodeElement, NodeElementKind, RelationKeyword, RemovedKeyword, SourceRange, Storming, StormingElement, Timeline } from './ir.js';
 import { buildSemanticGraph, semanticEdgeKey, timelineOccurrences } from './semantic.js';
 
 // ---- IR built by hand (the parser is not needed) ----
 
 const range: SourceRange = { file: 'test.dtes', start: { line: 1, column: 1 }, end: { line: 1, column: 1 } };
 
-const el = (kind: NodeElementKind, id: string, ...relations: [RelationKeyword, string][]): NodeElement => ({
+const el = (kind: NodeElementKind, id: string, ...relations: [RelationKeyword | RemovedKeyword, string][]): NodeElement => ({
     kind,
     id,
     range,
@@ -46,30 +46,39 @@ describe('semantic graph (spec §9.1)', () => {
         for (const e of buildSemanticGraph(s).edges) expect([kinds.get(e.sourceId), kinds.get(e.targetId)]).not.toEqual(['event', 'command']);
     });
 
-    test('§9.1: relations are directed actor/read model → command, every other one from its owner', () => {
+    test('ADR 0032: relations are directed as Event Storming reads them', () => {
         const s = storming(
-            ...events('E'),
+            ...events('E', 'F'),
+            el('event', 'P', ['from', 'X']),
             el('actor', 'A'),
             el('external', 'X'),
-            el('readmodel', 'R'),
+            el('readmodel', 'R', ['from', 'F']),
             el('aggregate', 'G'),
-            el('command', 'C', ['actor', 'A'], ['actor', 'X'], ['reads', 'R'], ['target', 'G'], ['emits', 'E']),
+            el('command', 'C', ['by', 'A'], ['by', 'X'], ['reads', 'R'], ['handledBy', 'G'], ['emits', 'E']),
+            el('command', 'D', ['by', 'A'], ['handledBy', 'X'], ['emits', 'F']),
             el('hotspot', 'H', ['on', 'E']),
+            el('hotspot', 'I', ['on', 'C']),
         );
         expect(buildSemanticGraph(s).edges).toEqual([
-            { sourceId: 'A', targetId: 'C', kind: 'actor' },
-            { sourceId: 'X', targetId: 'C', kind: 'actor' },
+            { sourceId: 'X', targetId: 'P', kind: 'event-from' },
+            { sourceId: 'F', targetId: 'R', kind: 'readmodel-from' },
+            { sourceId: 'A', targetId: 'C', kind: 'by' },
+            { sourceId: 'X', targetId: 'C', kind: 'by' },
             { sourceId: 'R', targetId: 'C', kind: 'reads' },
-            { sourceId: 'C', targetId: 'G', kind: 'target' },
+            { sourceId: 'C', targetId: 'G', kind: 'handledBy' },
             { sourceId: 'C', targetId: 'E', kind: 'emits' },
+            { sourceId: 'A', targetId: 'D', kind: 'by' },
+            { sourceId: 'D', targetId: 'X', kind: 'handledBy' },
+            { sourceId: 'D', targetId: 'F', kind: 'emits' },
             { sourceId: 'H', targetId: 'E', kind: 'hotspot-on' },
+            { sourceId: 'I', targetId: 'C', kind: 'hotspot-on' },
         ]);
     });
 
     test('invalid relations, duplicate IDs and timelines are left out, nothing is inferred', () => {
         const s = storming(
             ...events('E'),
-            el('command', 'C', ['target', 'E'], ['emits', 'Missing'], ['issues', 'C'], ['emits', 'E'], ['emits', 'E']),
+            el('command', 'C', ['handledBy', 'E'], ['actor', 'E'], ['emits', 'Missing'], ['issues', 'C'], ['emits', 'E'], ['emits', 'E']),
             el('aggregate', 'E'),
             el('policy', 'P', ['on', 'T']),
             tl('T', 'E'),

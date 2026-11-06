@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { contextNames, formatDomain } from '@domaintrail/modeling';
-import { declarations, formatStorming, isStormingFile } from '@domaintrail/storming';
+import { declarations, formatStorming, isStormingFile, migrateStorming, openGaps } from '@domaintrail/storming';
 import { generateTypeScript, policyModes, staysInside, testsWarnings } from '@domaintrail/generation';
 import { type Analysis, analyze } from '@domaintrail/analysis';
 import { compareDiagnostics, formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/kernel';
@@ -71,7 +71,7 @@ const formatOption = () => new Option('--format <format>', 'output format').choi
 /** What `--format json` prints: one JSON document on stdout (see schema/diagnostics.schema.json). */
 interface JsonReport {
     diagnostics?: JsonDiagnostic[];
-    summary?: { files: number; errors: number; warnings: number };
+    summary?: { files: number; errors: number; warnings: number; infos?: number };
     /** Output directories written by `generate ts`, relative to the working directory. */
     written?: string[];
     /** `generate ts`: advice about the project (what text mode prints after `hint: `). */
@@ -141,18 +141,22 @@ async function runCheck(config: ResolvedConfig, io: CliIO, deps: CliDeps, report
     // the items' files are the `files` store's: with `cloudflare` the workspace has none to check
     const analysis = config.knowledge.store === 'files' ? await knowledgeCheck(root, checked) : checked;
     const errors = analysis.diagnostics.filter((d) => d.severity === 'error').length;
-    const warnings = analysis.diagnostics.length - errors;
+    const warnings = analysis.diagnostics.filter((d) => d.severity === 'warning').length;
+    const infos = analysis.diagnostics.filter((d) => d.severity === 'info').length;
     const noFiles = noSourcesMessage(config);
     if (report) {
         report.diagnostics = analysis.diagnostics.map(jsonDiagnostic);
-        report.summary = { files: sources.length, errors, warnings };
+        report.summary = { files: sources.length, errors, warnings, ...(infos > 0 && { infos }) };
         if (sources.length === 0) report.error = noFiles;
         return analysis;
     }
     for (const d of analysis.diagnostics) {
         for (const line of formatDiagnostic(d).split('\n')) (d.severity === 'error' ? io.err : io.out)(line);
     }
-    const summary = `${sources.length} file(s) checked: ${errors} error(s), ${warnings} warning(s).`;
+    // the gaps an open hotspot keeps open (ADR 0032): not errors, but not to be forgotten
+    const gaps = analysis.stormings.stormings.flatMap((s) => openGaps(s).map((g) => `${s.id}/${g.elementId}`));
+    if (gaps.length) io.out(`${gaps.length} element(s) incomplete under open hotspots: ${gaps.join(', ')}.`);
+    const summary = `${sources.length} file(s) checked: ${errors} error(s), ${warnings} warning(s)${infos ? `, ${infos} info(s)` : ''}.`;
     if (sources.length === 0) io.err(noFiles);
     else (errors ? io.err : io.out)(summary);
     return analysis;
@@ -185,6 +189,7 @@ Examples:
   dt check                      validate every .dt and .dtes file below the current directory
   dt -r domain generate ts      check, then write TypeScript (by default into domain/generated/domain)
   dt fmt                        rewrite every .dt and .dtes file in the canonical layout (run it after editing)
+  dt migrate dtes               rewrite .dtes files of v0.1 (\`actor\`, \`target\` in a command) to the current grammar
   dt open                       the Live View with the chat and the AI at http://127.0.0.1:4321 (runs until Ctrl+C)
   dt lsp                        language server over stdio, started by editors and AI agents
   dt mcp                        MCP server over stdio: the project's knowledge for Claude Code (read-only)
@@ -205,7 +210,8 @@ of topics to read with \`dt guide <topic>\` (e.g. \`dt guide requires\`) when yo
 Prints \`file:line:col - error CODE: message\` per problem (errors on stderr, warnings on stdout), followed by an
 indented \`hint:\` line when there is a suggested fix, then a summary line. With --format json, prints one JSON document
 on stdout instead: {"diagnostics": [...], "summary": {...}}, or {"error": "..."} when the check could not run.
-Checks the Event Storming files (.dtes) too, their \`ref\`s against the .dt model; their rules start with S.
+Checks the Event Storming files (.dtes) too, their \`ref\`s against the .dt model; their rules start with S. An info
+(on stdout) only informs; the gaps of a storming that open hotspots keep undecided are listed before the summary.
 Checks the knowledge items' files (knowledge/kn_*.md) when there are any and the knowledge store is \`files\`; their
 rules start with K.
 Exits 0 when there are no errors, 1 on errors or when no .dt or .dtes file is found, 2 on an invalid config.
@@ -394,6 +400,75 @@ Examples:
                 : `${sources.length} file(s): ${changed} formatted${skipped}.`;
             (broken.size || (opts.check && changed) ? io.err : io.out)(summary);
             exitCode = broken.size || (opts.check && changed) ? 1 : 0;
+        });
+
+    const migrating = program.command('migrate').description('Rewrite source files written for an earlier version of a DSL to the current one.');
+    migrating
+        .command('dtes')
+        .description('Rewrite the relation keywords of .dtes v0.1 in place: `actor X` → `by X`, `target X` → `handledBy X` in a command.')
+        .argument('[files...]', 'files to migrate, relative to the current directory (default: the .dtes sources of the workspace)')
+        .option('--dry-run', 'write nothing; list what would be rewritten and what is left')
+        .addHelpText(
+            'after',
+            `
+ADR 0032 made the relations of a command Event Storming's grammar: who issues it is \`by\` (was \`actor\`), who
+handles it is \`handledBy\` (was \`target\`, now an aggregate or an external system). This rewrites those two keywords
+in commands and changes nothing else, comments and layout included. It lists, without rewriting them, \`actor\` and
+\`target\` in other kinds of elements, and files that do not parse (an ID that is now a keyword: \`by\`,
+\`handledBy\`, \`from\`). Then it lists the errors \`dt check\` reports on the migrated files: those are decisions
+(a command without \`handledBy\`, an unused aggregate, …), to make or to mark with a hotspot, never to guess.
+Exits 0 when every removed keyword was rewritten (errors may remain), 1 when one is left or no .dtes file is found, 2 on
+an invalid config.
+
+Examples:
+  dt migrate dtes
+  dt migrate dtes --dry-run
+  dt migrate dtes stormings/checkout.dtes
+  dt -r domain migrate dtes`,
+        )
+        .action(async (files: string[], opts: { dryRun?: boolean }) => {
+            const cfg = await config();
+            const all = (await deps.findDomainFiles(cfg.root, cfg.sources, cfg.respectGitignore)).map((f) => ({ path: f, file: path.join(cfg.root, f) }));
+            const entries = files.length
+                ? files.map((f) => ({ path: path.relative(cfg.root, path.resolve(f)), file: path.resolve(f) }))
+                : all.filter((e) => isStormingFile(e.path));
+            if (!entries.length) throw new CliError(noSourcesMessage(cfg));
+            const chosen = new Set(entries.map((e) => e.file));
+            let rewritten = 0;
+            let left = 0;
+            let changed = 0;
+            const migrated = new Map<string, string>();
+            for (const e of entries) {
+                const m = migrateStorming(await readFile(e.file, 'utf8'));
+                for (const r of m.rewrites)
+                    io.out(`${e.path}:${r.line}:${r.column} - ${r.from} ${r.targets.join(', ')} → ${r.to} ${r.targets.join(', ')} (command ${r.element})`);
+                for (const l of m.left) io.err(`${e.path}:${l.line}:${l.column} - not rewritten: ${l.message}`);
+                rewritten += m.rewrites.length;
+                left += m.left.length;
+                if (!m.rewrites.length) continue;
+                changed++;
+                migrated.set(e.file, m.text);
+                if (!opts.dryRun) await writeFile(e.file, m.text);
+            }
+            io.out(`${entries.length} file(s): ${rewritten} keyword(s) ${opts.dryRun ? 'to rewrite' : 'rewritten'} in ${changed} file(s), ${left} left.`);
+            // what the current rules say of the migrated files, read with the rest of the workspace
+            const sources = await Promise.all(
+                [...new Set([...all.map((e) => e.file), ...chosen])].map(async (file) => ({
+                    path: path.relative(cfg.root, file),
+                    text: migrated.get(file) ?? (await readFile(file, 'utf8')),
+                })),
+            );
+            const remaining = (await analyze(sources)).diagnostics.filter(
+                (d) => d.severity === 'error' && isStormingFile(d.file) && chosen.has(path.join(cfg.root, d.file)),
+            );
+            if (remaining.length) {
+                const byCode = new Map<string, number>();
+                for (const d of remaining) byCode.set(d.code, (byCode.get(d.code) ?? 0) + 1);
+                io.err(
+                    `${remaining.length} error(s) remain for \`dt check\` to show (${[...byCode].map(([c, n]) => `${c} ×${n}`).join(', ')}): decide them, or mark what is not decided with a hotspot \`on\` the element (\`dt guide dtes-quick\`).`,
+                );
+            }
+            exitCode = left ? 1 : 0;
         });
 
     const exporting = program.command('export').description('Export the model: its sources as one ZIP archive, or a diagram as an SVG file.');

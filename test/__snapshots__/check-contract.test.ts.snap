@@ -134,6 +134,7 @@ exports[`dt check dtes only: text 1`] = `
     "err: delivery-cancellation.dtes:19:5 - error S010: The aggregate ref 'Fleet.BikeAssignment' names nothing in the .dt model.",
     "err: delivery-cancellation.dtes:24:5 - error S010: The command ref 'Delivery.Shipment.cancel' names nothing in the .dt model.",
     "err: delivery-cancellation.dtes:31:5 - error S010: The command ref 'Fleet.BikeAssignment.release' names nothing in the .dt model.",
+    "out: 1 element(s) incomplete under open hotspots: DeliveryCancellation/ReceivePaymentNotice.",
     "err: 1 file(s) checked: 6 error(s), 0 warning(s).",
   ],
 }
@@ -249,13 +250,20 @@ exports[`dt check broken refs: text 1`] = `
 {
   "code": 1,
   "lines": [
+    "out: delivery.dtes:3:9 - info S029: Event 'ShipmentDelivered' has no source at Design Level: no command emits it, and it comes \`from\` no external system.",
+    "out:   hint: write \`emits ShipmentDelivered\` in the command that produces it, \`from <external>\` if it arrives from outside, or a time event and a policy for a schedule; nothing is needed while the storming is at Big Picture there",
+    "out: delivery.dtes:4:9 - info S029: Event 'Lost' has no source at Design Level: no command emits it, and it comes \`from\` no external system.",
+    "out:   hint: write \`emits Lost\` in the command that produces it, \`from <external>\` if it arrives from outside, or a time event and a policy for a schedule; nothing is needed while the storming is at Big Picture there",
     "err: delivery.dtes:4:16 - error S011: The event ref 'Delivery.Shipment' names an aggregate, not an event.",
+    "out: delivery.dtes:5:9 - info S029: Event 'Gone' has no source at Design Level: no command emits it, and it comes \`from\` no external system.",
+    "out:   hint: write \`emits Gone\` in the command that produces it, \`from <external>\` if it arrives from outside, or a time event and a policy for a schedule; nothing is needed while the storming is at Big Picture there",
     "err: delivery.dtes:5:16 - error S010: The event ref 'ShipmentGone' is not fully qualified: write 'Context.Event'.",
-    "out: delivery.dtes:8:5 - warning S012: The command ref 'Delivery.Courier.assign' is a command of 'Delivery.Courier', but its target 'Shipment' refers to 'Delivery.Shipment'.",
-    "out:   hint: correct the ref of 'Cancel' or of 'Shipment', or the target",
-    "out: delivery.dtes:14:5 - warning S013: 'Deliver' emits 'ShipmentCancelled', which refers to 'Delivery.ShipmentCancelled', but the .dt command 'Delivery.Shipment.deliver' never emits it: a .dt command emits only the events of its emits.",
+    "out: delivery.dtes:9:5 - warning S012: The command ref 'Delivery.Courier.assign' is a command of 'Delivery.Courier', but the aggregate it is handled by, 'Shipment', refers to 'Delivery.Shipment'.",
+    "out:   hint: correct the ref of 'Cancel' or of 'Shipment', or its \`handledBy\`",
+    "out: delivery.dtes:18:5 - warning S013: 'Deliver' emits 'ShipmentCancelled', which refers to 'Delivery.ShipmentCancelled', but the .dt command 'Delivery.Shipment.deliver' never emits it: a .dt command emits only the events of its emits.",
     "out:   hint: add 'Delivery.ShipmentCancelled' to the emits of 'Delivery.Shipment.deliver' (or, for a failure, an error of it), or correct the ref of 'Deliver' or 'ShipmentCancelled'",
-    "err: 2 file(s) checked: 2 error(s), 2 warning(s).",
+    "out: 1 element(s) incomplete under open hotspots: Delivery/Cancel.",
+    "err: 2 file(s) checked: 2 error(s), 2 warning(s), 3 info(s).",
   ],
 }
 `;
@@ -269,6 +277,28 @@ exports[`dt check broken refs: json 1`] = `
   "diagnostics": [
     {
       "file": "delivery.dtes",
+      "line": 3,
+      "column": 9,
+      "endLine": 3,
+      "endColumn": 26,
+      "severity": "info",
+      "code": "S029",
+      "message": "Event 'ShipmentDelivered' has no source at Design Level: no command emits it, and it comes \`from\` no external system.",
+      "hint": "write \`emits ShipmentDelivered\` in the command that produces it, \`from <external>\` if it arrives from outside, or a time event and a policy for a schedule; nothing is needed while the storming is at Big Picture there"
+    },
+    {
+      "file": "delivery.dtes",
+      "line": 4,
+      "column": 9,
+      "endLine": 4,
+      "endColumn": 13,
+      "severity": "info",
+      "code": "S029",
+      "message": "Event 'Lost' has no source at Design Level: no command emits it, and it comes \`from\` no external system.",
+      "hint": "write \`emits Lost\` in the command that produces it, \`from <external>\` if it arrives from outside, or a time event and a policy for a schedule; nothing is needed while the storming is at Big Picture there"
+    },
+    {
+      "file": "delivery.dtes",
       "line": 4,
       "column": 16,
       "endLine": 4,
@@ -276,6 +306,17 @@ exports[`dt check broken refs: json 1`] = `
       "severity": "error",
       "code": "S011",
       "message": "The event ref 'Delivery.Shipment' names an aggregate, not an event."
+    },
+    {
+      "file": "delivery.dtes",
+      "line": 5,
+      "column": 9,
+      "endLine": 5,
+      "endColumn": 13,
+      "severity": "info",
+      "code": "S029",
+      "message": "Event 'Gone' has no source at Design Level: no command emits it, and it comes \`from\` no external system.",
+      "hint": "write \`emits Gone\` in the command that produces it, \`from <external>\` if it arrives from outside, or a time event and a policy for a schedule; nothing is needed while the storming is at Big Picture there"
     },
     {
       "file": "delivery.dtes",
@@ -289,20 +330,20 @@ exports[`dt check broken refs: json 1`] = `
     },
     {
       "file": "delivery.dtes",
-      "line": 8,
+      "line": 9,
       "column": 5,
-      "endLine": 8,
+      "endLine": 9,
       "endColumn": 32,
       "severity": "warning",
       "code": "S012",
-      "message": "The command ref 'Delivery.Courier.assign' is a command of 'Delivery.Courier', but its target 'Shipment' refers to 'Delivery.Shipment'.",
-      "hint": "correct the ref of 'Cancel' or of 'Shipment', or the target"
+      "message": "The command ref 'Delivery.Courier.assign' is a command of 'Delivery.Courier', but the aggregate it is handled by, 'Shipment', refers to 'Delivery.Shipment'.",
+      "hint": "correct the ref of 'Cancel' or of 'Shipment', or its \`handledBy\`"
     },
     {
       "file": "delivery.dtes",
-      "line": 14,
+      "line": 18,
       "column": 5,
-      "endLine": 14,
+      "endLine": 18,
       "endColumn": 28,
       "severity": "warning",
       "code": "S013",
@@ -313,7 +354,8 @@ exports[`dt check broken refs: json 1`] = `
   "summary": {
     "files": 2,
     "errors": 2,
-    "warnings": 2
+    "warnings": 2,
+    "infos": 3
   }
 }"
 ,

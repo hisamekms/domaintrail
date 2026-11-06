@@ -74,7 +74,7 @@ export function Explorer(props: ExplorerProps) {
     const marks = new Map<string, Mark>();
     const mark = (id: string, m: Mark) => marks.set(id, { ...marks.get(id), ...m });
     for (const d of props.diagnostics) {
-        if (!d.elementId) continue;
+        if (!d.elementId || d.severity === 'info') continue;
         for (const id of new Set([d.elementId, ownerElement(d.elementId)])) {
             if (marks.get(id)?.severity !== 'error') mark(id, { severity: d.severity });
         }

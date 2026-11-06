@@ -1,0 +1,15 @@
+// what dt migrate dtes cannot rewrite: `target` outside a command
+storming Odd {
+  event Done
+  actor Clerk
+  aggregate Desk
+  policy Misplaced {
+    target Desk // no relation of a policy means this
+    on Done
+  }
+  command Close {
+    actor Clerk /* the issuer */
+    target Desk
+    emits Done
+  }
+}

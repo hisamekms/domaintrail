@@ -26,7 +26,7 @@ const DT = `context Delivery {
 }
 `;
 
-/** A storming with one problem of each `.dt` rule: S011 (line 4), S010 (5), S012 (8), S013 (14). */
+/** A storming with one problem of each `.dt` rule: S011 (line 4), S010 (5), S012 (8), S013 (15). */
 const FLOW = `storming Delivery "配送" {
   event ShipmentCancelled "配送キャンセル" { ref Delivery.ShipmentCancelled }
   event ShipmentDelivered { ref Delivery.ShipmentDelivered }
@@ -35,22 +35,27 @@ const FLOW = `storming Delivery "配送" {
   aggregate Shipment { ref Delivery.Shipment }
   command Cancel {
     ref Delivery.Courier.assign
-    target Shipment
+    handledBy Shipment
   }
   command Deliver {
     ref Delivery.Shipment.deliver
-    target Shipment
+    handledBy Shipment
+    by Courier
     emits ShipmentCancelled
   }
+  actor Courier
+  hotspot CancelOpen "誰が取り消す？" { on Cancel }
 }
 `;
 
 const VALID = `storming Delivery {
   event ShipmentCancelled { ref Delivery.ShipmentCancelled }
   aggregate Shipment { ref Delivery.Shipment }
+  actor Courier
   command Cancel {
     ref Delivery.Shipment.cancel
-    target Shipment
+    by Courier
+    handledBy Shipment
     emits ShipmentCancelled
   }
   timeline Main { ShipmentCancelled }
@@ -91,15 +96,29 @@ describe('dt check', () => {
         const r = await run('-r', dir, 'check');
         expect(r.code).toBe(1);
         expect(r.err).toContain("flow.dtes:5:16 - error S010: The event ref 'ShipmentGone' is not fully qualified: write 'Context.Event'.");
-        expect(r.out.some((l) => l.startsWith('flow.dtes:14:5 - warning S013: '))).toBe(true);
-        expect(r.err.at(-1)).toBe('2 file(s) checked: 2 error(s), 2 warning(s).');
+        expect(r.out.some((l) => l.startsWith('flow.dtes:15:5 - warning S013: '))).toBe(true);
+        expect(r.err.at(-1)).toBe('2 file(s) checked: 2 error(s), 2 warning(s), 3 info(s).');
+    });
+
+    test('lists the gaps open hotspots keep open, and counts infos apart; neither changes the exit code', async () => {
+        const dir = await workspace({
+            'flow.dtes':
+                'storming Delivery {\n  event Asked\n  event Done\n  command Cancel {\n    emits Done\n  }\n  hotspot Who "誰が？" {\n    on Cancel\n  }\n}\n',
+        });
+        const r = await run('-r', dir, 'check');
+        expect(r.code).toBe(0);
+        expect(r.out).toContain('1 element(s) incomplete under open hotspots: Delivery/Cancel.');
+        expect(r.out.some((l) => l.startsWith('flow.dtes:2:9 - info S029: '))).toBe(true);
+        expect(r.out.at(-1)).toBe('1 file(s) checked: 0 error(s), 0 warning(s), 1 info(s).');
+        const json = await run('-r', dir, 'check', '--format', 'json');
+        expect((JSON.parse(json.out.join('\n')) as { summary: object }).summary).toEqual({ files: 1, errors: 0, warnings: 0, infos: 1 });
     });
 
     test('exits 0 on warnings only, and on a workspace of .dtes files only', async () => {
         const warnings = await workspace({ 'domain.dt': DT, 'flow.dtes': FLOW.replace(/  event (Lost|Gone) .*\n/g, '') });
         const r = await run('-r', warnings, 'check');
         expect(r.code).toBe(0);
-        expect(r.out.at(-1)).toBe('2 file(s) checked: 0 error(s), 2 warning(s).');
+        expect(r.out.at(-1)).toBe('2 file(s) checked: 0 error(s), 2 warning(s), 1 info(s).');
 
         const only = await workspace({ 'flow.dtes': 'storming Delivery {\n  event ShipmentCancelled\n}\n' });
         expect((await run('-r', only, 'check')).out).toEqual(['1 file(s) checked: 0 error(s), 0 warning(s).']);
@@ -110,14 +129,14 @@ describe('dt check', () => {
         const r = await run('-r', dir, 'check', '--format', 'json');
         expect(r.code).toBe(1);
         const report = JSON.parse(r.out.join('\n')) as { diagnostics: { file: string; line: number; code: string }[]; summary: object };
-        expect(report.diagnostics.map((d) => `${d.file}:${d.line} ${d.code}`)).toEqual([
+        expect(report.diagnostics.filter((d) => d.code !== 'S029').map((d) => `${d.file}:${d.line} ${d.code}`)).toEqual([
             'domain.dt:16 M007',
             'flow.dtes:4 S011',
             'flow.dtes:5 S010',
             'flow.dtes:8 S012',
-            'flow.dtes:14 S013',
+            'flow.dtes:15 S013',
         ]);
-        expect(report.summary).toEqual({ files: 2, errors: 3, warnings: 2 });
+        expect(report.summary).toEqual({ files: 2, errors: 3, warnings: 2, infos: 3 });
         const schema = JSON.parse(await readFile(path.join(import.meta.dir, '..', 'schema', 'diagnostics.schema.json'), 'utf8'));
         const pattern = new RegExp(schema.definitions.diagnostic.properties.code.pattern);
         for (const d of report.diagnostics) expect(d.code).toMatch(pattern);
@@ -189,7 +208,7 @@ describe('dt generate ts', () => {
         const r = await run('-r', dir, 'generate', 'ts', '--format', 'json');
         expect(r.code).toBe(0);
         const report = JSON.parse(r.out.join('\n')) as { diagnostics: { code: string }[]; written: string[] };
-        expect(report.diagnostics.map((d) => d.code)).toEqual(['S011', 'S010', 'S012', 'S013']);
+        expect(report.diagnostics.filter((d) => d.code !== 'S029').map((d) => d.code)).toEqual(['S011', 'S010', 'S012', 'S013']);
         expect(report.written).toHaveLength(1);
     });
 

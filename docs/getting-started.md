@@ -659,16 +659,15 @@ storming RoomBooking "会議室予約" {
 
   command Request "申し込む" {
     ref Booking.Reservation.request
-    actor Member
-    target Reservation
+    by Member
+    handledBy Reservation
     emits ReservationRequested
   }
   command Confirm "確定する" {
     ref Booking.Reservation.confirm
     reads RoomCapacity
-    target Reservation
-    emits ReservationConfirmed
-    emits ReservationDeclined
+    handledBy Reservation
+    emits ReservationConfirmed, ReservationDeclined
   }
 
   timeline Confirmed "確定" {
@@ -681,13 +680,13 @@ storming RoomBooking "会議室予約" {
   }
 
   hotspot WhoConfirms "誰が確定する？ 申込みのときに自動で？" {
-    on ReservationConfirmed
+    on Confirm
   }
 }
 ```
 
-The storming says that confirming may decline a reservation, which the model does not have yet; the hotspot asks who
-confirms. `dt fmt` and `dt check` take the `.dtes` files with the `.dt` files, and the Live View shows a storming at Big
+The storming says that confirming may decline a reservation, which the model does not have yet; the hotspot on the command
+asks who confirms it, so that no one fills in an actor by guessing (`dt guide dtes-quick`). `dt fmt` and `dt check` take the `.dtes` files with the `.dt` files, and the Live View shows a storming at Big
 Picture (the events) or Design Level, as a whole or one timeline at a time.
 
 ### The complete picture

@@ -1,8 +1,8 @@
-// The Event Storming DSL `.dtes` (docs/dtes-v0.1.md, ADR 0024). Every rule and type starts with `Es`, so the AST types
-// generated next to the `.dt` ones never collide. The grammar is permissive where the validator gives better messages:
-// every element may have a body and every body takes every clause; which clauses an element may have, how many, and the
-// kinds of their targets are rules S003–S009 and S016 (domain/validate.ts), not syntax errors; so are the number and
-// targets of a stage's `after` and a timeline's `then` (S002–S004, S017–S021).
+// The Event Storming DSL `.dtes` (docs/dtes-v0.1.md, ADR 0024, ADR 0032). Every rule and type starts with `Es`, so the
+// AST types generated next to the `.dt` ones never collide. The grammar is permissive where the validator gives better
+// messages: every element may have a body and every body takes every clause; which clauses an element may have, how
+// many, and the kinds of their targets are rules S003–S009, S016 and S023–S028 (domain/validate.ts), not syntax errors;
+// so are the number and targets of a stage's `after` and a timeline's `then` (S002–S004, S017–S021).
 grammar EventStorming
 
 entry EsFile:
@@ -56,12 +56,17 @@ EsClause:
 EsRefClause:
     'ref' path=EsPath;
 
-// A reference to a declaration of the same storming, whatever its kind (a wrong kind is S003).
+// References to declarations of the same storming, whatever their kind (a wrong kind is S003): `emits A, B` is
+// `emits A` and `emits B`. The relations are Event Storming's design-level grammar (ADR 0032): a command is issued `by`
+// an actor or external system, who `reads` a read model to decide it; it is `handledBy` an aggregate or external
+// system, which `emits` its events; a policy is `on` events and `issues` commands; a read model is fed `from` events,
+// an event arrives `from` an external system; a hotspot is `on` any sticky. `actor` and `target`, the relations of
+// v0.1, are parsed only to be reported with their replacement (S023).
 EsRelationClause:
-    keyword=EsRelationKeyword target=[EsDeclaration:ID];
+    keyword=EsRelationKeyword targets+=[EsDeclaration:ID] (',' targets+=[EsDeclaration:ID])*;
 
 EsRelationKeyword returns string:
-    'actor' | 'reads' | 'target' | 'emits' | 'on' | 'issues';
+    'by' | 'reads' | 'handledBy' | 'emits' | 'on' | 'issues' | 'from' | 'actor' | 'target';
 
 // Any word: only `open` and `resolved` are valid (S009).
 EsStatusClause:
@@ -111,8 +116,8 @@ EsPath returns string:
 
 EsName returns string:
     ID | 'storming' | 'event' | 'actor' | 'external' | 'command' | 'policy' | 'aggregate' | 'readmodel' | 'hotspot' |
-    'timeline' | 'group' | 'ref' | 'reads' | 'target' | 'emits' | 'on' | 'issues' | 'status' | 'resolution' | 'level' |
-    'stage' | 'after' | 'then' | 'exception';
+    'timeline' | 'group' | 'ref' | 'by' | 'reads' | 'handledBy' | 'target' | 'emits' | 'on' | 'issues' | 'from' |
+    'status' | 'resolution' | 'level' | 'stage' | 'after' | 'then' | 'exception';
 
 // The terminals of Modeling's grammar (contexts/modeling/src/infrastructure/syntax/domain.langium), copied verbatim
 // (test/grammars.test.ts keeps them equal); INT and DECIMAL are unused.

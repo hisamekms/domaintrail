@@ -28,7 +28,21 @@ import {
 import type { SourceFile } from '@domaintrail/kernel';
 import { compareDiagnostics, type Diagnostic } from '@domaintrail/kernel';
 import { docComment } from './doc-comment.js';
-import type { Clause, EventStepRef, Group, NodeElement, NodeElementKind, SourceRange, Stage, Storming, Timeline } from '../../domain/ir.js';
+import {
+    RELATION_KEYWORDS,
+    REMOVED_KEYWORDS,
+    type Clause,
+    type EventStepRef,
+    type Group,
+    type NodeElement,
+    type NodeElementKind,
+    type RelationKeyword,
+    type RemovedKeyword,
+    type SourceRange,
+    type Stage,
+    type Storming,
+    type Timeline,
+} from '../../domain/ir.js';
 import { createStormingServices } from './module.js';
 
 /**
@@ -98,20 +112,22 @@ export function toStormingIr(file: EsFile, path: string): Storming[] {
         };
     };
 
-    const clause = (c: EsClause): Clause => {
-        if (isEsRefClause(c)) return { type: 'ref', path: c.path, segments: c.path.split('.'), range: range(c.$cstNode) };
+    /** One clause per target: `emits A, B` is `emits A` and `emits B`, each with the range of the whole clause. */
+    const clauses = (c: EsClause): Clause[] => {
+        if (isEsRefClause(c)) return [{ type: 'ref', path: c.path, segments: c.path.split('.'), range: range(c.$cstNode) }];
         if (isEsRelationClause(c)) {
-            return {
+            const targetNodes = c.$cstNode ? GrammarUtils.findNodesForProperty(c.$cstNode, 'targets') : [];
+            return c.targets.map((t, i) => ({
                 type: 'relation',
-                keyword: c.keyword,
-                target: c.target.$refText,
+                keyword: relationKeyword(c.keyword),
+                target: t.$refText,
                 range: range(c.$cstNode),
-                targetRange: propertyRange(c, 'target'),
-            };
+                targetRange: range(targetNodes[i] ?? c.$cstNode),
+            }));
         }
-        if (isEsStatusClause(c)) return { type: 'status', value: c.value, range: range(c.$cstNode) };
-        if (isEsLevelClause(c)) return { type: 'level', value: c.value, range: range(c.$cstNode) };
-        return { type: 'resolution', text: c.text, range: range(c.$cstNode) };
+        if (isEsStatusClause(c)) return [{ type: 'status', value: c.value, range: range(c.$cstNode) }];
+        if (isEsLevelClause(c)) return [{ type: 'level', value: c.value, range: range(c.$cstNode) }];
+        return [{ type: 'resolution', text: c.text, range: range(c.$cstNode) }];
     };
     const step = (s: EsEventStep): EventStepRef => ({ eventId: s.event.$refText, range: range(s.$cstNode) });
     const group = (g: EsGroup): Group => ({ ...declaration(g), kind: 'group', events: g.events.map(step) });
@@ -128,12 +144,21 @@ export function toStormingIr(file: EsFile, path: string): Storming[] {
         afters: s.afters.map((a) => ({ stageId: a.stage.$refText, range: propertyRange(a, 'stage') })),
         timelines: s.timelines.map(timeline),
     });
-    const node = (n: EsNode): NodeElement => ({ ...declaration(n), kind: nodeKind(n), clauses: n.clauses.map(clause) });
+    const node = (n: EsNode): NodeElement => ({ ...declaration(n), kind: nodeKind(n), clauses: n.clauses.flatMap(clauses) });
 
     return file.stormings.map((s: EsStorming) => ({
         ...declaration(s),
         elements: s.elements.map((el) => (isEsTimeline(el) ? timeline(el) : isEsStage(el) ? stage(el) : node(el))),
     }));
+}
+
+const KEYWORDS: ReadonlySet<string> = new Set([...RELATION_KEYWORDS, ...Object.keys(REMOVED_KEYWORDS)]);
+const isKeyword = (keyword: string): keyword is RelationKeyword | RemovedKeyword => KEYWORDS.has(keyword);
+
+/** A relation keyword as the grammar has it (`EsRelationKeyword`). */
+function relationKeyword(keyword: string): RelationKeyword | RemovedKeyword {
+    if (!isKeyword(keyword)) throw new Error(`internal error: unknown relation keyword '${keyword}'`);
+    return keyword;
 }
 
 function nodeKind(n: EsNode): NodeElementKind {

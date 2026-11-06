@@ -83,6 +83,8 @@ export interface EdgeProps {
     tone: EdgeTone;
     /** A resolved hotspot's `on`: drawn quieter, as its note is. */
     resolved?: true;
+    /** What the line means in plain words, shown on hover (a storming's line). */
+    tooltip?: string;
 }
 
 /** What every item has: a stable ID (unchanged items keep their identity and selection), its origin and its element. */

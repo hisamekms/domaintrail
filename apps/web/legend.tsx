@@ -1,6 +1,6 @@
 import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { legendContent, legendKindNames, type LegendView } from '@domaintrail/visualization';
+import { isUndirectedEdge, legendContent, legendKindNames, type LegendView } from '@domaintrail/visualization';
 import { checkPath, RESOLVED_MARK } from './diagram-items';
 import { useT } from './i18n';
 
@@ -52,7 +52,7 @@ export function LegendBody({ view }: { view: LegendView }): ReactNode {
                     <svg width="56" height="14" className={`de de-${r.kind}`} aria-hidden>
                         <path d="M4,7 L42,7" className="de-line" />
                         {r.kind === 'owns' && <path d="M2,7 L9,3.5 L16,7 L9,10.5 Z" className="de-head de-diamond" />}
-                        {r.kind !== 'esHotspot' && <path d="M54,7 L41,0.5 L41,13.5 Z" className="de-head" />}
+                        {!isUndirectedEdge(r.kind) && <path d="M54,7 L41,0.5 L41,13.5 Z" className="de-head" />}
                     </svg>
                     <span>{r.text}</span>
                 </div>

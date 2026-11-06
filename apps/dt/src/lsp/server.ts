@@ -340,7 +340,7 @@ export function toLspDiagnostic(d: Diagnostic): LspDiagnostic {
             start: { line: d.start.line - 1, character: d.start.column - 1 },
             end: { line: d.end.line - 1, character: d.end.column - 1 },
         },
-        severity: d.severity === 'error' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
+        severity: d.severity === 'error' ? DiagnosticSeverity.Error : d.severity === 'warning' ? DiagnosticSeverity.Warning : DiagnosticSeverity.Information,
         code: d.code,
         source: 'dt',
         message: d.hint ? `${d.message}\nhint: ${d.hint}` : d.message,
