@@ -57,6 +57,24 @@ describe('element changes', () => {
         ]);
     });
 
+    test('a changed element whose label changed tells the one it had; one that reads the same tells none', async () => {
+        const before = await check({
+            'sales.dt': dt(order('    note: String\n')),
+            'returns.dtes': 'storming Returns {\n  event Requested "返品依頼"\n  event Received "届いた"\n  timeline Flow {\n    Requested\n  }\n}\n',
+        });
+        const after = await check({
+            'sales.dt': dt('  aggregate Order "受注" {\n    id: OrderId\n  }\n'),
+            'returns.dtes':
+                'storming Returns {\n  event Requested "返品を依頼された"\n  event Received\n  timeline Flow {\n    Requested\n    Received\n  }\n}\n',
+        });
+        const was = (c: ElementChange): string => `${c.name}: ${c.was ? `${c.was.name} "${c.was.label ?? ''}"` : '-'}`;
+        expect(
+            elementChanges(before, after)
+                .changes.filter((c) => c.change === 'changed')
+                .map(was),
+        ).toEqual(['Order: Order "注文"', 'Requested: Requested "返品依頼"', 'Received: Received "届いた"', 'Flow: -']);
+    });
+
     test('a side that does not parse: no changes of its DSL, and the list is incomplete', async () => {
         const good = await check({ 'sales.dt': dt(order('')), 'returns.dtes': 'storming Returns {\n  event Requested\n}\n' });
         const broken = await check({ 'sales.dt': 'context Sales {', 'returns.dtes': 'storming Returns {\n  event Requested\n  event Received\n}\n' });

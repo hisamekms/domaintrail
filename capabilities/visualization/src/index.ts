@@ -63,7 +63,7 @@ export {
     type SceneItemType,
     type SceneNode,
 } from './core/drawing/scene.js';
-export { buildScene, ownerElement, type RenderOptions } from './core/drawing/build-scene.js';
+export { buildScene, ownerElement, type ChangedElements, type RenderOptions } from './core/drawing/build-scene.js';
 export { exportBounds, graphBounds } from './core/drawing/bounds.js';
 export { BADGE, badgeWidth, checkPath, DIAG_RADIUS, RESOLVED_MARK } from './core/drawing/marks.js';
 export { fitLabel, fontSizes, NOTE_KINDS, type LabelFit } from './core/drawing/note-fit.js';

@@ -207,6 +207,21 @@ const ja = {
     stageAfter: 'この前の段階',
     showStage: 'この段階を表示',
     /** The detail of a storming element (docs/plans/layout.md, step 5): its rows' names (tooltips) and its actions. */
+    /** The marks of a turn's changes on the storming canvas (docs/live-view.md, "What a turn changed"). */
+    turnMarks: {
+        /** The badges on the stickies: shorter than the model canvas's 追加 / 変更, a sticky being small. */
+        badges: { added: '新', changed: '変', removed: '削除' },
+        latest: '直前の作業',
+        run: (name: string) => `作業「${name}」`,
+        counts: { added: (n: number) => `新 ${n}`, changed: (n: number) => `変 ${n}`, removed: (n: number) => `削除 ${n}` },
+        label: '作業で変わった付箋の印',
+        more: (n: number) => `ほかに ${n} 件の変更 →`,
+        moreHint: '図のいま見えていないところにある変更へ移る',
+        clear: '印を消す',
+        see: '図で見る',
+        seeHint: 'この作業で変わった付箋に、イベントストーミングの図で印を付けて見る',
+        was: (text: string) => `変更前: ${text}`,
+    },
     knowledge: {
         title: 'ナレッジ',
         kinds: { rule: 'ルール', flow: '流れ', example: '例', term: '言葉', pain: '困りごと', want: '要望', decision: '決定' },
@@ -1321,6 +1336,19 @@ const en: Messages = {
     stageExceptions: 'Exceptions',
     stageAfter: 'Comes after',
     showStage: 'Show this stage',
+    turnMarks: {
+        badges: { added: 'New', changed: 'Edited', removed: 'Removed' },
+        latest: 'Last turn',
+        run: (name: string) => `“${name}”`,
+        counts: { added: (n: number) => `${n} new`, changed: (n: number) => `${n} edited`, removed: (n: number) => `${n} removed` },
+        label: 'Marks of the stickies a turn changed',
+        more: (n: number) => `${n} more ${n === 1 ? 'change' : 'changes'} →`,
+        moreHint: 'Go to the changes out of view',
+        clear: 'Clear marks',
+        see: 'See on the diagram',
+        seeHint: 'Mark the stickies this work changed on the Event Storming diagram',
+        was: (text: string) => `Before: ${text}`,
+    },
     knowledge: {
         title: 'Knowledge',
         kinds: { rule: 'Rule', flow: 'Flow', example: 'Example', term: 'Term', pain: 'Pain', want: 'Want', decision: 'Decision' },
