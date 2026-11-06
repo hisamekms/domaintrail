@@ -80,7 +80,7 @@ import { processAlive } from './process.js';
 import { answererExtraViews, runnerReadScope } from './read-scope.js';
 import type { ResolvedConfig } from '../config/config.js';
 import type { SettingsApproval } from '../cli/trust.js';
-import { knowledgeForAgents } from './knowledge.js';
+import { dtWrittenKnowledgeDir, knowledgeForAgents } from './knowledge.js';
 
 export type { SubscriberEnd };
 
@@ -321,6 +321,9 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     }
 
     const runTargets = readOf('run');
+    // the `files` knowledge store's directory: only dt writes it (an extraction may while a run runs), never the agent
+    const knowledgeDir = options.knowledge && dtWrittenKnowledgeDir(options.knowledge.config, root);
+    const dtWrittenDirs = knowledgeDir ? [knowledgeDir] : [];
     // the agent's dt, taken once now (never read again from the config file, which is in the workspace)
     let dt: PinnedDt;
     let runner: AgentRunner;
@@ -336,6 +339,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             readScope: () => runnerReadScope(() => runnerDeniedPaths(root), runTargets),
             // a -c file and its local override, never edited (the default names are denied at any depth already)
             ...(options.configPath && { configFiles: configFileRules(options.configPath, root) }),
+            ...(dtWrittenDirs.length > 0 && { dtWrittenDirs }),
             ...(knowledgeMcp && { knowledge: knowledgeMcp }),
             ...((run?.model ?? user.model) !== undefined && { model: run?.model ?? user.model }),
             ...((run?.effort ?? user.effort) !== undefined && { effort: run?.effort ?? user.effort }),
@@ -359,8 +363,9 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             runner,
             tools: createDtTools({ dt: dtCommandOf(dt), root, configPath: options.configPath, log }),
             workspace: {
-                // the runner's scan: the workspace, and the configuration files beside a -c file outside it (any case)
-                scan: async () => new Map([...(await scan()), ...(await configGuardScan(options.configPath, root))]),
+                // the runner's scan: the workspace but the directories only dt writes, and the configuration files
+                // beside a -c file outside it (any case)
+                scan: async () => new Map([...(await scanWorkspace(root, { skip: dtWrittenDirs })), ...(await configGuardScan(options.configPath, root))]),
                 sources: async () => new Set(await findDomainFiles(root, sourceSelection(sources, respectGitignore))),
             },
             clock: systemClock,

@@ -45,6 +45,12 @@ export interface ClaudeRunOptions {
      * name refuses the run.
      */
     readonly configFiles?: readonly string[];
+    /**
+     * Directories of the working directory (relative, `/`-separated) only dt writes, which the agent may read but never
+     * edit, in any case: the `files` knowledge store's `knowledge/` (ADR 0031: the agents read knowledge through dt). One
+     * no rule can name refuses the run.
+     */
+    readonly dtWrittenDirs?: readonly string[];
     /** The knowledge tools of `dt mcp` (none: no MCP server at all). */
     readonly knowledge?: KnowledgeMcp;
 }
@@ -298,6 +304,10 @@ export function claudeArguments(allowedTools: readonly string[], requests?: numb
             const r = path.isAbsolute(f) ? absoluteRule(f) : relativeRule(f);
             return [`Edit(${r})`, `Edit(${caseless(r)})`];
         }),
+        ...(options.dtWrittenDirs ?? []).flatMap((d) => {
+            const r = relativeRule(d);
+            return [`Edit(${r})`, `Edit(${r}/**)`, `Edit(${caseless(r)})`, `Edit(${caseless(r)}/**)`];
+        }),
         ...deniedRules(options.deniedPaths ?? []),
         ...(extra?.denied ?? []),
         ...(allowed.length ? ['--allowedTools', ...allowed] : []),
@@ -324,6 +334,8 @@ export interface ClaudeCodeOptions {
     readonly effort?: string;
     /** Configuration files the agent never edits (a `-c` file and its local override; see `ClaudeRunOptions`). */
     readonly configFiles?: readonly string[];
+    /** Directories only dt writes, never edited (see `ClaudeRunOptions`). */
+    readonly dtWrittenDirs?: readonly string[];
     /** The knowledge tools of `dt mcp`, when the workspace has a usable store (see `KnowledgeMcp`). */
     readonly knowledge?: KnowledgeMcp;
 }
@@ -395,6 +407,7 @@ export async function createClaudeCodeRunner(options: ClaudeCodeOptions): Promis
                         deniedPaths,
                         ...(extra && { extraRead: extra }),
                         ...(options.configFiles && { configFiles: options.configFiles }),
+                        ...(options.dtWrittenDirs && { dtWrittenDirs: options.dtWrittenDirs }),
                         ...(options.knowledge && { knowledge: options.knowledge }),
                     }),
                 ];

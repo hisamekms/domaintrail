@@ -252,6 +252,18 @@ describe('the arguments of claude for what it reads outside its working director
             ...extraReadRules(extra).denied,
         ]);
         expect(args.slice(args.indexOf('--allowedTools') + 1)).toEqual(['Edit(./**)', 'Bash(dt fmt:*)', 'Read(//home/me/glossary.md)']);
+        // the directories only dt writes (the files knowledge store's): never edited, in any case; read as any other
+        const knowledge = claudeArguments(['Read', 'Edit'], 1, { dtWrittenDirs: ['knowledge'] });
+        const deniedKnowledge = knowledge.slice(knowledge.indexOf('--disallowedTools') + 1, knowledge.indexOf('--allowedTools'));
+        expect(deniedKnowledge).toEqual([
+            ...READ_DENIED,
+            ...CONFIG_EDIT_DENIED,
+            'Edit(./knowledge)',
+            'Edit(./knowledge/**)',
+            'Edit(./[kK][nN][oO][wW][lL][eE][dD][gG][eE])',
+            'Edit(./[kK][nN][oO][wW][lL][eE][dD][gG][eE]/**)',
+        ]);
+        expect(() => claudeArguments(['Read'], 1, { dtWrittenDirs: ['../knowledge'] })).toThrow(UnexpressiblePath);
         // without: no flag of it
         const none = claudeArguments(['Read'], 1, {});
         expect(none).not.toContain('--add-dir');

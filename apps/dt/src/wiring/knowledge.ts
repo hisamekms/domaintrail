@@ -167,6 +167,19 @@ export function knowledgeForAgents(
     return refused === undefined ? { usable: true } : { usable: false, reason: refused };
 }
 
+/**
+ * The `files` store's directory (`<root>/knowledge`) relative to the workspace `root` the runner works in (`/`-separated),
+ * when the store is `files` and its directory is below `root`; else none. Only dt writes it — the session's extractions,
+ * people's corrections and deletions, the sweep — and that may be while a run runs: the runner's scan skips it, so that
+ * those writes are not taken for the agent's, and the agent may never edit it (ADR 0031: the agents read knowledge
+ * through dt).
+ */
+export function dtWrittenKnowledgeDir(cfg: ResolvedConfig, root: string): string | undefined {
+    if (cfg.knowledge.store !== 'files') return undefined;
+    const rel = path.relative(path.resolve(root), path.resolve(cfg.root, KNOWLEDGE_DIR));
+    return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel.split(path.sep).join('/') : undefined;
+}
+
 const isDirectory = (p: string): boolean => {
     try {
         return statSync(p).isDirectory();
