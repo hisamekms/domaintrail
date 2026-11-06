@@ -18,6 +18,7 @@ import { useCenterOnResize } from './center';
 import { CanvasControls, EdgeHint } from './canvas-controls';
 import { emptyLine, isEmptyView } from './empty';
 import { FlowCanvas } from './flow-canvas';
+import { LinePopover, OffscreenPointers } from './lines';
 import { fitAll } from './canvas';
 import type { DiagramCanvas } from './diagram';
 import { activeFilterCount } from './filters';
@@ -198,6 +199,12 @@ export function ViewWorkspace(props: {
                     <PrintSheet graph={graph} current={current} mode={mode} heading={heading} legend={exportOptions.legend ? legendView : null} />
                 )}
                 <EdgeHint canvas={canvas} view={legendView} />
+                {view.kind === 'storming' && (
+                    <>
+                        <LinePopover canvas={canvas} />
+                        <OffscreenPointers canvas={canvas} />
+                    </>
+                )}
                 {nothing ? (
                     <div className="empty">{emptyLine(t, view.kind, props.aiReady === true)}</div>
                 ) : (

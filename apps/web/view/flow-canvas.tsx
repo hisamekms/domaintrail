@@ -8,7 +8,6 @@
 // keeps the zoom steps, fits and wheel zoom the Live View had with tldraw.
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from 'react';
 import {
-    EdgeLabelRenderer,
     Handle,
     Position,
     ReactFlow,
@@ -44,12 +43,15 @@ import {
     roundRectPath,
 } from '../diagram-items';
 import {
+    copyIndices,
     itemForElement,
+    joinedEdges,
     rectCenter,
     rectContains,
     unionRects,
     type DiagMark,
     type Point,
+    type CopyIndex,
     type Rect,
     type Scene,
     type SceneEdge,
@@ -58,8 +60,6 @@ import {
     type SceneInternal,
     type SceneItem,
     type SceneNode,
-    focusedItems,
-    sameElementNodes,
     sceneItems,
 } from '../scene';
 import type { Theme } from '../theme';
@@ -83,11 +83,15 @@ import {
 
 /** A scene item drawn as a React Flow node (everything but edges), or an anchor for an edge whose end is not drawn. */
 type BoxItem = SceneNode | SceneGroup | SceneInternal;
-/** `same`: a note of the element of a selected note (an element drawn more than once), not itself selected. */
-type ItemNode = Node<{ item: BoxItem; same?: true }, 'domain-node' | 'domain-group' | 'domain-internal'>;
+/**
+ * `same`: a note of the element of a selected note (an element drawn more than once), not itself selected; `copy`: its
+ * place among the element's notes (the selected one's too), drawn as a 「k/n」 badge.
+ */
+type ItemNode = Node<{ item: BoxItem; same?: true; copy?: CopyIndex }, 'domain-node' | 'domain-group' | 'domain-internal'>;
 type AnchorNode = Node<Record<string, never>, 'domain-anchor'>;
 type FlowNode = ItemNode | AnchorNode;
-type ItemEdge = Edge<{ item: SceneEdge }, 'domain-edge'>;
+/** `hot`: a line joined to a selected storming note, drawn thicker in the accent colour. */
+type ItemEdge = Edge<{ item: SceneEdge; hot?: true }, 'domain-edge'>;
 
 /** The node type of each kind of item (not React Flow's own `default`, `group`..., which its stylesheet draws). */
 const NODE_TYPE = { node: 'domain-node', group: 'domain-group', internal: 'domain-internal' } as const;
@@ -152,6 +156,11 @@ function DomainNode({ data, selected }: NodeProps<ItemNode>): ReactNode {
         <>
             <div className={nodeClassName(p, selected, data.same === true)} style={nodeStyle(p)}>
                 <NodeContent p={p} Marks={ZoomedMarks} />
+                {data.copy && (
+                    <span className="dn-copy" aria-hidden>
+                        {data.copy.k}/{data.copy.n}
+                    </span>
+                )}
             </div>
             {marked ? <MarkedOutline p={p} /> : <Outline w={p.w} h={p.h} d={nodeOutlinePath(p, 1)} />}
             <Handles />
@@ -194,29 +203,15 @@ function Anchor(): ReactNode {
 }
 
 /** An edge drawn exactly along the route computed by the layout engine, at the item's origin (React Flow's own edges re-route). */
-function DomainEdge({ data, selected }: EdgeProps<ItemEdge>): ReactNode {
+function DomainEdge({ data }: EdgeProps<ItemEdge>): ReactNode {
     if (!data) return null;
     const { item } = data;
     if (item.props.points.length < 2) return null;
-    // a selected storming line says what it means, in plain words, at its middle (ADR 0032)
-    const explanation = selected && item.props.tooltip;
-    const mid = item.props.points[Math.floor(item.props.points.length / 2)]!;
-    const prev = item.props.points[Math.floor(item.props.points.length / 2) - 1] ?? mid;
-    const at = { x: item.x + (mid.x + prev.x) / 2, y: item.y + (mid.y + prev.y) / 2 };
     return (
-        <>
-            <g className={edgeClassName(item.props)} transform={`translate(${item.x},${item.y})`}>
-                <EdgeContent p={item.props} />
-                <path className="diagram-outline-line" d={edgeOutlinePath(item.props.points)} />
-            </g>
-            {explanation && (
-                <EdgeLabelRenderer>
-                    <div className="de-explain" role="status" style={{ transform: `translate(-50%, calc(-100% - 8px)) translate(${at.x}px, ${at.y}px)` }}>
-                        {explanation}
-                    </div>
-                </EdgeLabelRenderer>
-            )}
-        </>
+        <g className={`${edgeClassName(item.props)}${data.hot ? ' de-hot' : ''}`} transform={`translate(${item.x},${item.y})`}>
+            <EdgeContent p={item.props} />
+            <path className="diagram-outline-line" d={edgeOutlinePath(item.props.points)} />
+        </g>
     );
 }
 
@@ -302,14 +297,17 @@ class CanvasState {
     }
 }
 
-/** How an item is drawn besides itself: selected, another note of a selected element, dimmed outside the focus. */
+/**
+ * How an item is drawn besides itself: selected; a note of a selected element (`copy`: its 「k/n」, when the element
+ * has several notes); a line joined to a selected note (`hot`). Nothing else changes around a selection.
+ */
 interface ItemLook {
     selected: boolean;
-    same: boolean;
-    dim: boolean;
+    copy: CopyIndex | undefined;
+    hot: boolean;
 }
 
-const sameLook = (a: ItemLook, b: ItemLook): boolean => a.selected === b.selected && a.same === b.same && a.dim === b.dim;
+const sameLook = (a: ItemLook, b: ItemLook): boolean => a.selected === b.selected && a.hot === b.hot && a.copy?.k === b.copy?.k && a.copy?.n === b.copy?.n;
 
 /** React Flow's nodes and edges for the state, reusing those of unchanged items (so that React Flow redraws only what changed). */
 function useFlowElements(state: CanvasState): { nodes: FlowNode[]; edges: ItemEdge[] } {
@@ -322,11 +320,11 @@ function useFlowElements(state: CanvasState): { nodes: FlowNode[]; edges: ItemEd
         const nodes: FlowNode[] = [];
         const edges: ItemEdge[] = [];
         const anchors = new Set<SceneId>();
-        const same = sameElementNodes(state.items.values(), state.selected);
-        // a storming note selected: what is joined to it stays, the rest is dimmed (containers never are)
-        const focus = focusedItems(state.items.values(), state.selected);
+        // a storming note selected: its element's notes numbered, the lines joined to it in the accent colour
+        const copies = copyIndices(state.items.values(), state.selected);
+        const hot = joinedEdges(state.items.values(), state.selected);
         const reuse = (item: SceneItem, build: (look: ItemLook) => FlowNode | ItemEdge): FlowNode | ItemEdge => {
-            const look = { selected: state.selected.has(item.id), same: same.has(item.id), dim: !!focus && item.type !== 'group' && !focus.has(item.id) };
+            const look = { selected: state.selected.has(item.id), copy: copies.get(item.id), hot: hot.has(item.id) };
             const old = previous.get(item.id);
             const element = old && old.item === item && sameLook(old.look, look) ? old.element : build(look);
             next.set(item.id, { item, look, element });
@@ -351,20 +349,16 @@ function useFlowElements(state: CanvasState): { nodes: FlowNode[]; edges: ItemEd
     }, [state, rendered]);
 }
 
-/** React Flow's classes of an item's wrapper: a ghost's, and the dimming outside the focus. */
-const wrapperClass = (ghost: boolean, dim: boolean): string | undefined =>
-    [ghost ? 'diagram-ghost' : '', dim ? 'diagram-dim' : ''].filter(Boolean).join(' ') || undefined;
-
-function toNode(item: BoxItem, { selected, same, dim }: ItemLook): ItemNode {
+function toNode(item: BoxItem, { selected, copy }: ItemLook): ItemNode {
     const ghost = item.ghost === true;
-    const className = wrapperClass(ghost, dim);
+    const same = copy !== undefined && !selected;
     return {
         id: item.id,
         type: NODE_TYPE[item.type],
         position: { x: item.x, y: item.y },
         width: item.props.w,
         height: item.props.h,
-        data: same ? { item, same } : { item },
+        data: { item, ...(same && { same: true as const }), ...(copy && { copy }) },
         selected,
         selectable: !ghost,
         draggable: false,
@@ -373,23 +367,22 @@ function toNode(item: BoxItem, { selected, same, dim }: ItemLook): ItemNode {
         focusable: false,
         zIndex: layerOf(item),
         handles: HANDLES,
-        ...(className && { className }),
+        ...(ghost && { className: 'diagram-ghost' }),
     };
 }
 
-function toEdge(item: SceneEdge, { selected, dim }: ItemLook): ItemEdge {
+function toEdge(item: SceneEdge, { selected, hot }: ItemLook): ItemEdge {
     return {
         id: item.id,
         type: 'domain-edge',
         source: item.source,
         target: item.target,
-        data: { item },
+        data: hot ? { item, hot } : { item },
         selected,
         deletable: false,
         focusable: false,
         reconnectable: false,
         zIndex: LAYER.edge,
-        ...(dim && { className: 'diagram-dim' }),
     };
 }
 
@@ -511,9 +504,12 @@ function createFlowCanvas(state: CanvasState, store: ReturnType<typeof useStoreA
         item: (id): CanvasItem | undefined => {
             const item = state.items.get(id);
             if (!item) return undefined;
-            const kind = item.type === 'internal' ? '' : item.props.kind;
-            const explanation = item.type === 'edge' ? item.props.tooltip : undefined;
-            return { id, type: item.type, elementId: item.elementId, ghost: item.ghost === true, kind, ...(explanation && { explanation }) };
+            const base = { id, type: item.type, elementId: item.elementId, ghost: item.ghost === true };
+            if (item.type === 'internal') return { ...base, kind: '' };
+            if (item.type !== 'edge') return { ...base, kind: item.props.kind, label: item.props.label };
+            const { relation, resolved } = item.props;
+            const line = relation && { relation, source: item.source, target: item.target, ...(resolved && { resolved }) };
+            return { ...base, kind: item.props.kind, ...(line && { line }) };
         },
         itemBounds,
         // of an element drawn more than once, the note nearest the middle of what the canvas shows

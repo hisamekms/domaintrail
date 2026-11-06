@@ -1,6 +1,6 @@
 // What the detail of a storming element shows besides the canvas (docs/plans/layout.md, step 5), without React: the
 // places of an event outside the view shown, what Design Level would show of it at Big Picture, and its problems in
-// plain words. The connections the canvas draws are not repeated here (the canvas keeps them in full view, `focusedItems`).
+// plain words. The connections the canvas draws are not repeated here (the canvas draws the lines joined to the selection thicker, `joinedEdges`).
 import type { Diagnostic } from '@domaintrail/kernel';
 import { buildSemanticGraph, type NodeElementKind, stormingStages, stormingTimelines, timelineOccurrences, type Storming } from '@domaintrail/storming';
 import type { RenderGraph } from '@domaintrail/visualization';

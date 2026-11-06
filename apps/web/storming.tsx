@@ -289,7 +289,7 @@ function Action({ icon: Icon, label, primary, onClick }: { icon: LucideIcon; lab
  * not show — its problems on top, its description, the places outside the view, what Big Picture hides, the talk about
  * it, the AI's runs and the change of this session, its `.dt` counterpart, a resolved hotspot's conclusion — each row
  * only when it has something, then the actions that begin a message about it. A stage, a timeline and a group show
- * their flows. The connections it has are what the canvas keeps in full view around the selection.
+ * their flows. The connections it has are the lines the canvas draws thicker around the selection.
  */
 export function StormingDetails({
     stormings,
@@ -306,6 +306,7 @@ export function StormingDetails({
     onShowScope,
     onLevel,
     knowledge,
+    copies,
 }: {
     stormings: readonly StormingView[];
     selected: string;
@@ -328,6 +329,8 @@ export function StormingDetails({
     onLevel?: (level: ViewLevel) => void;
     /** The knowledge about a sticky (`<Storming>.<Local>`), in a session with a knowledge store. */
     knowledge?: ((sticky: string) => ReactNode) | undefined;
+    /** The steps through the copies of a sticky drawn more than once on the canvas (「同じ付箋 n 件 ◀ k/n ▶」). */
+    copies?: ((elementId: string) => ReactNode) | undefined;
 }): ReactNode {
     const t = useT();
     const d = t.esDetail;
@@ -370,6 +373,7 @@ export function StormingDetails({
                     {headingAction}
                 </div>
                 {mode === 'both' && shownLabel(item.label) && <div className="canonical-name">{item.id}</div>}
+                {isNote && copies?.(selected)}
             </div>
             <div className="inspector-body es-detail">
                 {problems.map((p, i) => (

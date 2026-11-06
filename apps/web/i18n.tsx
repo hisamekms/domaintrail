@@ -28,6 +28,11 @@ type TriageStage = Collaboration.TriageStage;
 type TriageVerdict = Collaboration.TriageVerdict;
 type ProposalState = Collaboration.ChangeProposal['state'];
 
+/** Names each in 「」, one after another: 「A」「B」. */
+const quoteJa = (names: readonly string[] = []): string => names.map((n) => `「${n}」`).join('');
+/** Names each in quotes, joined: “A”, “B”. */
+const quoteEn = (names: readonly string[] = []): string => names.map((n) => `“${n}”`).join(', ');
+
 const ja = {
     added: DIAGRAM_TEXTS.ja.added,
     changed: DIAGRAM_TEXTS.ja.changed,
@@ -311,6 +316,45 @@ const ja = {
         see: '図で見る',
         seeHint: 'この作業で変わった付箋に、イベントストーミングの図で印を付けて見る',
         was: (text: string) => `変更前: ${text}`,
+    },
+    /**
+     * The lines of the Event Storming canvas and its selection (docs/live-view.md, "Selection and lines"): what a line
+     * means in plain words (`relations`: `a` is its source's label, `b` its target's, `names` the other names it is said
+     * with), the pointers at the canvas's edge to stickies out of view, and the steps through an element's copies.
+     */
+    lines: {
+        relations: {
+            issues: (a: string, b: string) => `「${a}」が「${b}」`,
+            follows: (a: string, b: string) => `「${a}」がポリシー「${b}」に従って動く`,
+            looksAt: (a: string, b: string) => `「${b}」は「${a}」を見て判断する`,
+            readsWhen: (a: string, b: string) => `「${b}」ときに「${a}」を見る`,
+            handles: (a: string, b: string) => `「${a}」を「${b}」が受けて処理する`,
+            decides: (a: string, b: string, names?: readonly string[]) => `「${a}」が処理して「${b}」${names?.length ? `（${quoteJa(names)}から）` : ''}`,
+            results: (a: string, b: string) => `「${a}」の結果「${b}」`,
+            triggers: (a: string, b: string) => `「${a}」をきっかけにポリシー「${b}」が働く`,
+            policyIssues: (a: string, b: string) => `ポリシー「${a}」により「${b}」`,
+            updates: (a: string, b: string) => `「${a}」で「${b}」が更新される`,
+            arrives: (a: string, b: string) => `「${a}」から「${b}」が届く`,
+            branches: (_a: string, _b: string, names?: readonly string[]) => `例外${quoteJa(names)}へ分かれる`,
+            returns: (_a: string, _b: string, names?: readonly string[]) => `例外${quoteJa(names)}から戻る`,
+            order: (a: string, b: string, names?: readonly string[]) => `${names?.length ? `${quoteJa(names)}で` : ''}「${a}」のあとに「${b}」`,
+            question: (_a: string, b: string) => `「${b}」への問い`,
+            undecidedIssuer: (_a: string, b: string) => `「${b}」を誰が行うかはまだ決まっていない`,
+            undecidedHandler: (_a: string, b: string) => `「${b}」を誰が処理するかはまだ決まっていない`,
+        },
+        /** The kind of an end that is not an element's (an open hotspot's empty slot). */
+        undecided: '未決定',
+        /** A resolved hotspot's line: the check beside its text, named for screen readers only. */
+        resolved: '解決済み',
+        /** A pressed line's end: moves the camera to it and selects it. */
+        goTo: (kind: string, label: string) => `${kind} ${label} へ移る`,
+        /** The pointer at the canvas's edge: the stickies out of view on that side (`names` joined by `and`). */
+        offscreen: (names: string) => `${names} へ移る`,
+        and: '、',
+        /** In the detail: the element's copies, and the steps through them. */
+        copies: (n: number) => `同じ付箋 ${n} 件`,
+        previousCopy: '前の写しへ',
+        nextCopy: '次の写しへ',
     },
     knowledge: {
         title: 'ナレッジ',
@@ -1529,6 +1573,35 @@ const en: Messages = {
         see: 'See on the diagram',
         seeHint: 'Mark the stickies this work changed on the Event Storming diagram',
         was: (text: string) => `Before: ${text}`,
+    },
+    lines: {
+        relations: {
+            issues: (a: string, b: string) => `“${a}” issues “${b}”`,
+            follows: (a: string, b: string) => `“${a}” acts by the policy “${b}”`,
+            looksAt: (a: string, b: string) => `“${b}” looks at “${a}” to decide`,
+            readsWhen: (a: string, b: string) => `“${b}” looks at “${a}”`,
+            handles: (a: string, b: string) => `“${b}” takes “${a}” and handles it`,
+            decides: (a: string, b: string, names?: readonly string[]) => `“${a}” handles it: “${b}”${names?.length ? ` (from ${quoteEn(names)})` : ''}`,
+            results: (a: string, b: string) => `“${a}” results in “${b}”`,
+            triggers: (a: string, b: string) => `“${a}” sets off the policy “${b}”`,
+            policyIssues: (a: string, b: string) => `The policy “${a}” leads to “${b}”`,
+            updates: (a: string, b: string) => `“${a}” updates “${b}”`,
+            arrives: (a: string, b: string) => `“${b}” arrives from “${a}”`,
+            branches: (_a: string, _b: string, names?: readonly string[]) => `The exception ${quoteEn(names)} branches off`,
+            returns: (_a: string, _b: string, names?: readonly string[]) => `Back from the exception ${quoteEn(names)}`,
+            order: (a: string, b: string, names?: readonly string[]) => `${names?.length ? `In ${quoteEn(names)}, ` : ''}“${b}” comes after “${a}”`,
+            question: (_a: string, b: string) => `A question about “${b}”`,
+            undecidedIssuer: (_a: string, b: string) => `Who does “${b}” is not decided yet`,
+            undecidedHandler: (_a: string, b: string) => `Who handles “${b}” is not decided yet`,
+        },
+        undecided: 'Undecided',
+        resolved: 'Resolved',
+        goTo: (kind: string, label: string) => `Go to the ${kind.toLowerCase()} ${label}`,
+        offscreen: (names: string) => `Go to ${names}`,
+        and: ', ',
+        copies: (n: number) => `${n} copies of this sticky`,
+        previousCopy: 'Previous copy',
+        nextCopy: 'Next copy',
     },
     knowledge: {
         title: 'Knowledge',

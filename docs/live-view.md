@@ -109,7 +109,8 @@ named in its tooltip) open the legend upward, and « at the right end collapses 
 », which brings it back (the legend's panel is hidden while collapsed and keeps its own open or closed state). `U` does the same as « and », and the choice is remembered per browser. The legend starts hidden, and each view
 remembers its own: opening it on the context map leaves it closed on the structure (its levels and focus share one),
 the 状態遷移 diagram and the Event Storming. Hovering an
-edge (its line or arrowhead) tells what it means, in the legend's words for that view (「参照（ID で別の集約へ）」…).
+edge (its line or arrowhead) tells what it means, in the legend's words for that view (「参照（ID で別の集約へ）」…); a
+storming's line says its two ends and its relation instead (see Selection and lines below).
 The keys do nothing while typing. The inspector's 状態遷移 diagram has the same controls, without 詰めて表示, and
 with its own 書き出し (the download arrow: PNG and SVG, opening upward).
 
@@ -159,13 +160,12 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   command, command → handler, handler → event, event → policy, policy → command, an event feeding a read model, an
   external system → its event, a policy's actor); **時間**, a dashed arrow in the same colour, for the time order where
   the placement cannot show it; **問い**, a thin quiet line without a head, from a hotspot to its sticky (quieter still
-  when resolved). Exceptions are not told by a line colour. Hovering or selecting a line says what it means in plain
-  words, without the DSL's keywords (「配車を組む は 配車組 が処理する」「例外 自動配車の失敗 はここから分かれる」), and
-  selecting it keeps its two stickies in full view and dims the rest. Relations are possibilities, not "happened". Design Level follows Event Storming's grammar, left to right (ADR 0032): read model → issuer
+  when resolved), and from an undecided slot to its command. Exceptions are not told by a line colour. Hovering or
+  pressing a line says what it means (see Selection and lines below). Relations are possibilities, not "happened". Design Level follows Event Storming's grammar, left to right (ADR 0032): read model → issuer
   (`by`: an actor or external system, stuck on top of its command when no read model leads to it) → command → handler
   (`handledBy`: an aggregate or external system, from which the command's events come) → event → policy → the command it
   issues; commands converging on one event note through the same handler share one handler note before it (hovering
-  its arrow names them; selecting it keeps them all, selecting one command only its own path); a command a policy
+  its arrow names them); a command a policy
   issues has no issuer, and its read model goes to the command; an event that arrives `from`
   an external system has that system before it; a hotspot is stuck on top of the sticky it is `on` (an event, a
   command, a policy, …), never a step of the flow, and at Big Picture only one on an event is drawn. Where an event is
@@ -190,16 +190,6 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   above the row of their event, an exception's above its lane. The タイムライン
   picker then also lists each stage (「…（例外を含む）」), and the 絞り込み has 「例外を表示」 (on by default,
   remembered per browser; off counts as one narrowing) to draw the integrated canvas and the stages without their exceptions.
-  Selecting a note keeps it and what it is joined to in full view and dims the rest (a short fade; none with reduced
-  motion): the steps before and after it in the timelines shown (an exception's first step and its `then` included),
-  the command that causes an event (through its handler, an aggregate or external system) with its issuer, the read
-  model the issuer looks at and the handler, the policies that react to it and its hotspots, and the edges between
-  them; a command, policy or actor selected keeps the notes its edges join, a command also the events its handler
-  emits. An element drawn once per use (an actor beside each command) counts as one: selecting one of its notes
-  keeps every copy. An event in a group is joined through its group's time order, and a group joined to the selection
-  keeps its events; the stages' and groups' frames are never dimmed. Clicking the empty canvas (or `Escape`) clears the
-  selection and brings everything back. Both drawings do it, the integrated canvas and a timeline laid out by ELK and
-  the stages' grid.
   **Acting on a sticky** ([ADR 0033](adr/0033-people-edit-stickies.md)): every action comes from one list, so the
   same ones are in four places. Selecting stickies shows a small toolbar above them (below them when there is no room;
   never on hover, hidden while the canvas moves): the frequent actions as icons — チャットに追加 (💬, a muted ✓ once
@@ -240,6 +230,46 @@ indigo ring outside the node; a change from the baseline is a green (added) or y
 badge, and a removed element a faded, dashed ghost with its name struck through and a 削除 badge; a diagnostic is a ✕
 or ! mark on the node's corner, with its text in the inspector and the problems list (a state view's transitions keep
 their command's blue). The others' cursors and names have a light halo, so that they read over any sticky note.
+
+### Selection and lines (Event Storming)
+
+Selecting a sticky never dims the others. The selected note keeps its solid indigo ring; when its element is drawn
+more than once (an actor beside each command it issues, the same aggregate before several events, a command at
+several steps), every other note of it gets the dashed ring, and all of them a badge 「k/n」 on their top edge (the
+selected one filled), numbered in reading order (left to right, then top to bottom). The lines joined to the selected
+note are drawn thicker in the indigo of the selection; nothing else changes. A copy out of view gets a pointer at the
+canvas's edge on its side — 「→ 2」「← 1」 (↑ and ↓ above and below), the arrow then how many are there, named in its
+tooltip — and pressing it moves the camera to the nearest of them. The detail then has 「同じ付箋 3 件 ‹ 2/3 ›」: the
+arrows step through the copies in reading order, selecting each and moving the camera to it.
+
+Hovering a line shows two lines: its two ends in the line's direction, each a small box of its sticky's paper colour
+(an actor's rounded, an external system's and an undecided slot's dashed; no kind words) and its label —
+「■ 配車係 → ■ 配車を組む」 — then what the relation means in plain words, never the DSL's keywords
+(`Messages.lines.relations` in `apps/web/i18n.tsx`, the one place of these texts; `{A}` is the source's label, `{B}`
+the target's):
+
+| line                                         | words                                                         |
+| -------------------------------------------- | ------------------------------------------------------------- |
+| actor / external system → command            | 「{A}」が「{B}」                                              |
+| read model → actor / external system         | 「{B}」は「{A}」を見て判断する                                |
+| read model → command (no issuer)             | 「{B}」ときに「{A}」を見る                                    |
+| command → aggregate / external system        | 「{A}」を「{B}」が受けて処理する                              |
+| aggregate / external system → event          | 「{A}」が処理して「{B}」 (a merged handler: …（「C1」「C2」から）) |
+| event → policy                               | 「{A}」をきっかけにポリシー「{B}」が働く                      |
+| policy → command                             | ポリシー「{A}」により「{B}」                                  |
+| actor → policy (`by`)                        | 「{A}」がポリシー「{B}」に従って動く                          |
+| event → read model                           | 「{A}」で「{B}」が更新される                                  |
+| external system → event                      | 「{A}」から「{B}」が届く                                      |
+| time: into an exception                      | 例外「{例外名}」へ分かれる                                    |
+| time: an exception's `then`                  | 例外「{例外名}」から戻る                                      |
+| time: the order (Big Picture)                | 「{タイムライン名}」で「{A}」のあとに「{B}」 (no name when in every timeline) |
+| question: hotspot → sticky                   | 「{B}」への問い (a resolved hotspot's with a green check)     |
+| question: undecided slot → command           | 「{B}」を誰が行うか / 誰が処理するかはまだ決まっていない      |
+
+Pressing a line selects it and opens a small popover by where it was pressed, with the same two lines; its two ends
+are buttons (named for screen readers with the kind, 「コマンド 配車を組む へ移る」) that move the camera to that
+sticky and select it. An end out of view gets the same pointer at the canvas's edge as a copy. `Escape` (or a click
+on the empty canvas) closes it. The camera's moves follow the OS's reduce motion (instant then).
 
 ## Printing and exporting
 
@@ -304,7 +334,7 @@ explorer.
   its states and commands; it pans and zooms like the main canvas and shows the selected state or command.
 - **振る舞い**: what a command takes, requires, changes, emits and returns, and the policies that trigger it.
 - **A storming's element** (selected in the Event Storming view) is read next to the canvas: it shows only what the
-  canvas does not, and its connections are what the canvas keeps in full view. Its kind, a grey microscope badge for
+  canvas does not, and its connections are the lines the canvas draws thicker. Its kind, a grey microscope badge for
   an event shown at Design Level only, its name with the 💬 that targets it in the chat, and its `///` description in
   full. Then rows, each named by a grey icon (its name in the tooltip and `aria-label`), each only when it has
   something: its problems on top (a soft warning: the checker's message in plain words — 「戻り先が本流にない」 —

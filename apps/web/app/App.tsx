@@ -34,6 +34,7 @@ import { isMac } from '../stickies/registry';
 import { highlightElement } from '../view/canvas';
 import { KnowledgeList, KnowledgeMarks, KnowledgeNotice, StickyKnowledge } from '../knowledge/panel';
 import { KnowledgeContext, useKnowledge } from '../knowledge/useKnowledge';
+import { CopySteps } from '../view/lines';
 
 const WORLD_ICONS: Record<World, LucideIcon> = { model: Blocks, storming: StickyNote };
 
@@ -442,6 +443,7 @@ export function App() {
                                     headingAction={session.inspectorAction}
                                     session={session.stormingDetail}
                                     knowledge={knowledge.available ? (sticky) => <StormingKnowledgeSlot sticky={sticky} /> : undefined}
+                                    copies={view.kind === 'storming' ? (elementId) => <CopySteps canvas={workspace.canvas} elementId={elementId} /> : undefined}
                                     onSelect={(x) => select(x)}
                                     onShowScope={(stormingId, scope, then) => {
                                         settings.setStormingChoice(chooseScope(settings.stormingChoice, stormingId, scope));

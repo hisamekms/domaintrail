@@ -4,7 +4,7 @@ import type { ModelDiff } from '@domaintrail/modeling';
 import type { LaidOutGraph } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { buildScene, type RenderOptions } from './render';
-import { focusedItems, graphNodeOf, itemForElement, sameElementNodes, sceneItems, type Scene, type SceneItem } from './scene';
+import { copyIndices, graphNodeOf, itemForElement, joinedEdges, readingOrder, sceneItems, type Scene } from './scene';
 import { viewPayloads } from './test-helpers';
 
 const file = (body: string) => ({ path: 'a.dt', text: `context A {\n${body}\n}\n` });
@@ -224,34 +224,38 @@ describe('an element of a storming drawn once per use (Design Level)', () => {
         expect(itemForElement(items, 'es/S/Clerk')?.id).toBe(first.id);
     });
 
-    test('selecting one note marks the element’s other notes, not the note itself nor other elements', async () => {
+    test('selecting one note numbers every note of its element in reading order, not other elements', async () => {
         const items = sceneItems(await scene());
-        expect([...sameElementNodes(items, new Set(['n:n:Clerk@Open']))]).toEqual(['n:n:Clerk@Close']);
-        expect([...sameElementNodes(items, new Set(['n:n:Clerk@Open', 'n:n:Clerk@Close']))]).toEqual([]);
-        expect([...sameElementNodes(items, new Set(['n:n:Open']))]).toEqual([]);
-        // an edge selected marks nothing
+        const copies = (...selected: string[]) => Object.fromEntries(copyIndices(items, new Set(selected)));
+        // left to right: the actor beside Open, then the one beside Close
+        expect(copies('n:n:Clerk@Close')).toEqual({ 'n:n:Clerk@Open': { k: 1, n: 2 }, 'n:n:Clerk@Close': { k: 2, n: 2 } });
+        expect(copies('n:n:Clerk@Open', 'n:n:Clerk@Close')).toEqual(copies('n:n:Clerk@Open'));
+        // an element drawn once: no number
+        expect(copies('n:n:Open')).toEqual({});
+        // an edge selected numbers nothing
         const edge = items.find((s) => s.type === 'edge' && s.elementId === 'es/S/Clerk')!;
-        expect([...sameElementNodes(items, new Set([edge.id]))]).toEqual([]);
+        expect(copies(edge.id)).toEqual({});
     });
 
-    test('selecting a note keeps what is joined to it in full view: a copy stands for its element', async () => {
+    test('reading order: left to right, then top to bottom', () => {
+        const at = (x: number, y: number) => ({ x, y });
+        expect([at(5, 0), at(0, 9), at(0, 1)].sort(readingOrder)).toEqual([at(0, 1), at(0, 9), at(5, 0)]);
+    });
+
+    test('selecting a note marks the lines joined to it, and nothing else; a selected line marks none', async () => {
         const items = sceneItems(await scene());
-        const kept = (...selected: string[]): string[] => focusElements(items, selected);
-        // an event: the command causing it with its actor's copy beside it, the policy reacting (at Design Level the time
-        // order is not drawn: the placement shows it)
-        expect(kept('n:e:Closed')).toEqual(['Boss', 'Clerk', 'Close', 'Closed'].map((id) => `es/S/${id}`).sort());
-        expect(kept('n:e:Approved')).toEqual(['Approve', 'Approved', 'P2'].map((id) => `es/S/${id}`).sort());
-        // one copy of the actor: every copy, and the commands each stands beside
-        expect(kept('n:n:Clerk@Open')).toEqual(['Clerk', 'Close', 'Open'].map((id) => `es/S/${id}`).sort());
-        expect(focusedItems(items, new Set(['n:n:Clerk@Open']))!.has('n:n:Clerk@Close')).toBe(true);
-        // the edges kept are those joining the kept notes to the selection
-        const edges = [...focusedItems(items, new Set(['n:e:Closed']))!].filter((id) => id.startsWith('e:'));
-        expect(edges.every((id) => items.some((i) => i.id === id && i.type === 'edge'))).toBe(true);
-        expect(edges.length).toBe(3);
-        // nothing selected: nothing is dimmed; a line selected keeps itself and its two ends (ADR 0032)
-        expect(focusedItems(items, new Set())).toBeUndefined();
-        const edge = items.find((s) => s.type === 'edge' && s.id === 'e:by:Boss->Close@n:Boss@Close->n:Close')!;
-        expect([...focusedItems(items, new Set([edge.id]))!].sort()).toEqual([edge.id, 'n:n:Boss@Close', 'n:n:Close'].sort());
+        const joined = (...selected: string[]): string[] => [...joinedEdges(items, new Set(selected))].sort();
+        const edgesAt = (id: string): string[] =>
+            items
+                .filter((i) => i.type === 'edge' && (i.source === id || i.target === id))
+                .map((i) => i.id)
+                .sort();
+        expect(joined('n:n:Close')).toEqual(edgesAt('n:n:Close'));
+        expect(joined('n:n:Close').length).toBeGreaterThan(1);
+        // a copy: its own lines, not its other copies'
+        expect(joined('n:n:Clerk@Open')).toEqual(edgesAt('n:n:Clerk@Open'));
+        expect(joined()).toEqual([]);
+        expect(joined(joined('n:n:Close')[0]!)).toEqual([]);
     });
 });
 
@@ -284,73 +288,8 @@ describe('a resolved hotspot in a storming’s scene', () => {
     });
 });
 
-/** The elements of the items that stay in full view while `selected` items are (sorted, each once). */
-function focusElements(items: readonly SceneItem[], selected: readonly string[]): string[] {
-    const kept = focusedItems(items, new Set(selected)) ?? new Set<string>();
-    return [...new Set(items.filter((i) => i.type === 'node' && kept.has(i.id)).map((i) => i.elementId))].sort();
-}
-
-describe('the focus of a selected note in a view of stages (the grid) and a timeline’s view', () => {
-    const payload = async (): Promise<ViewPayload> =>
-        (
-            await viewPayloads([
-                {
-                    path: 'es.dtes',
-                    text: `storming S {
-  event A event B event C event D event X
-  event G1 event G2
-  actor Clerk
-  command DoB { by Clerk emits B }
-  command DoC { emits C }
-  policy P { on B issues DoC }
-  hotspot H { on B }
-  stage One {
-    timeline Main { A B C }
-    exception Oops { B X then C }
-  }
-  stage Two after One {
-    timeline Main2 { D group Gr { G1 G2 } }
-  }
-}
-`,
-                },
-            ])
-        )[0]!;
-    const items = async (view: string): Promise<SceneItem[]> => {
-        const p = await payload();
-        expect(p.stormings[0]!.views[view]).toBeDefined();
-        return sceneItems(buildScene(p.stormings[0]!.views[view]!.graph, optionsOf(p)));
-    };
-    const noteOf = (list: readonly SceneItem[], local: string): string => list.find((i) => i.type === 'node' && i.elementId === `es/S/${local}`)!.id;
-    const es = (...ids: string[]): string[] => ids.map((id) => `es/S/${id}`).sort();
-
-    test('Design Level of the stages: the exception branching off, the cause with its actor, the reactions, the hotspot', async () => {
-        const list = await items('design-level|');
-        expect(list.find((i) => i.type === 'group' && i.id.startsWith('n:st:'))).toBeDefined();
-        expect(focusElements(list, [noteOf(list, 'B')])).toEqual(es('B', 'X', 'DoB', 'Clerk', 'P', 'H'));
-        // in a group: no time order at Design Level, its own note only
-        expect(focusElements(list, [noteOf(list, 'G1')])).toEqual(es('G1'));
-        // a container is never dimmed, so never listed
-        expect([...focusedItems(list, new Set([noteOf(list, 'G1')]))!].some((id) => list.find((i) => i.id === id)?.type === 'group')).toBe(false);
-    });
-
-    test('Big Picture of the stages and a timeline’s view (ELK)', async () => {
-        const big = await items('big-picture|');
-        expect(focusElements(big, [noteOf(big, 'B')])).toEqual(es('A', 'B', 'C', 'X', 'H'));
-        // in a group: through the group's time order
-        expect(focusElements(big, [noteOf(big, 'G1')])).toEqual(es('D', 'G1'));
-        const main = await items('design-level|Main');
-        // the cause of B with its actor, as on the integrated canvas
-        expect(focusElements(main, [noteOf(main, 'B')])).toEqual(es('B', 'DoB', 'Clerk', 'P', 'H'));
-        const grouped = await items('big-picture|Main2');
-        expect(focusElements(grouped, [noteOf(grouped, 'G2')])).toEqual(es('D', 'G2'));
-        // the group's step selected from before it brings the group's events along
-        expect(focusElements(grouped, [noteOf(grouped, 'D')])).toEqual(es('D', 'G1', 'G2'));
-    });
-});
-
 describe('a handler shared by the commands converging on one event (ADR 0032)', () => {
-    test('selecting it keeps all its commands; selecting one command keeps only its path through it; its emits has a tooltip', async () => {
+    test('its emits names the commands it stands for', async () => {
         const [payload] = await viewPayloads([
             {
                 path: 'es.dtes',
@@ -367,13 +306,8 @@ describe('a handler shared by the commands converging on one event (ADR 0032)', 
             },
         ]);
         const scene = buildScene(payload!.stormings[0]!.views['design-level|']!.graph, optionsOf(payload!));
-        const items = sceneItems(scene);
-        const handler = items.find((i) => i.type === 'node' && i.elementId === 'es/S/Request')!;
-        expect(focusElements(items, [handler.id])).toEqual(['Clerk', 'Create', 'Receive', 'Request', 'Requested', 'Shop'].map((id) => `es/S/${id}`));
-        expect(focusElements(items, ['n:n:Create'])).toEqual(['Clerk', 'Create', 'Request', 'Requested'].map((id) => `es/S/${id}`));
+        const handler = scene.nodes.find((i) => i.elementId === 'es/S/Request')!;
         const emits = scene.edges.find((e) => e.source === handler.id)!;
-        expect(emits.props.tooltip).toBe('Request handles Create, Receive, and Requested happens');
-        // a line selected keeps its two ends only
-        expect(focusElements(items, [emits.id])).toEqual(['Request', 'Requested'].map((id) => `es/S/${id}`));
+        expect(emits.props.relation).toEqual({ kind: 'decides', names: ['Create', 'Receive'] });
     });
 });

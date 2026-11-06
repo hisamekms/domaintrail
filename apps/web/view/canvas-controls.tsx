@@ -6,6 +6,7 @@ import { useDismiss } from '../shared/layout';
 import { canvasShortcut, formatZoom, takesText, useCanvasControls, type CanvasShortcut } from './controls';
 import { useCanvasValue, type DiagramCanvas } from './diagram';
 import { ExportMenu, type ExportControl } from './export-menu';
+import { LineTip } from './lines';
 
 const ANIMATE = { animate: true };
 
@@ -175,8 +176,9 @@ function useCanvasKeys(active: boolean, run: (action: CanvasShortcut) => void): 
 const HINT_DELAY_MS = 300;
 
 /**
- * What the edge under the pointer means, as the legend of the view says it, next to the pointer (the canvas tells the
- * item under it: DOM hover may not reach the items). Hidden while the pointer is pressed (a pan, a click).
+ * What the edge under the pointer means, next to the pointer (the canvas tells the item under it: DOM hover may not
+ * reach the items): a storming's line, its two ends and its relation in plain words (`LineTip`); another edge, what
+ * the legend of the view says of its kind. Hidden while the pointer is pressed (a pan, a click).
  */
 export function EdgeHint({ canvas, view }: { canvas: DiagramCanvas | null; view: LegendView | null }) {
     const t = useT();
@@ -188,11 +190,13 @@ export function EdgeHint({ canvas, view }: { canvas: DiagramCanvas | null; view:
             const id = c.hoveredId();
             const item = id ? c.item(id) : undefined;
             if (item?.type !== 'edge') return null;
-            // a storming's line says what it means; other edges, what their kind means
-            const text = item.explanation ?? rows.find((r) => r.kind === item.kind)?.text;
-            if (!text) return null;
             const p = c.pointer();
-            return { id: item.id, text, x: p.x, y: p.y };
+            // a storming's line says its ends and what it means (none while it is pressed: its popover does);
+            // other edges, what their kind means
+            if (item.line) return c.onlySelectedId() === item.id ? null : { id: item.id, text: '', line: true, x: p.x, y: p.y };
+            const text = rows.find((r) => r.kind === item.kind)?.text;
+            if (!text) return null;
+            return { id: item.id, text, line: false, x: p.x, y: p.y };
         },
         [rows.map((r) => r.text).join('\n')],
     );
@@ -205,9 +209,14 @@ export function EdgeHint({ canvas, view }: { canvas: DiagramCanvas | null; view:
     }, [hintId]);
     if (!hint || shownId !== hint.id) return null;
     const box = canvas?.viewportScreenBounds();
+    const line = hint.line && canvas ? canvas.item(hint.id)?.line : undefined;
     return (
-        <div className="edge-hint" role="tooltip" style={{ left: hint.x + (box?.x ?? 0) + 14, top: hint.y + (box?.y ?? 0) + 18 }}>
-            {hint.text}
+        <div
+            className={`edge-hint${line ? ' edge-hint-line' : ''}`}
+            role="tooltip"
+            style={{ left: hint.x + (box?.x ?? 0) + 14, top: hint.y + (box?.y ?? 0) + 18 }}
+        >
+            {line && canvas ? <LineTip canvas={canvas} line={line} /> : hint.text}
         </div>
     );
 }

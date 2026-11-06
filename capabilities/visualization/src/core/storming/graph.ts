@@ -4,7 +4,18 @@
  * ID, and every render edge one graph edge. The integrated view merges the render nodes of each event into one note.
  */
 import { named } from '../graph/build.js';
-import { mapTexts, perLang, type EdgeKind, type Graph, type GraphEdge, type GraphNode, type NodeKind, type Texts } from '../graph/ir.js';
+import {
+    mapTexts,
+    perLang,
+    type EdgeKind,
+    type EdgeRelation,
+    type Graph,
+    type GraphEdge,
+    type GraphNode,
+    type LineRelation,
+    type NodeKind,
+    type Texts,
+} from '../graph/ir.js';
 import { esElementId, firstDeclarations, STICKY_NOTE, type AnyDeclaration, type NodeElementKind, type Storming } from '@domaintrail/storming';
 import { isCausal, type RenderEdge, type RenderGraph, type RenderNode, type ViewOptions } from './ir.js';
 
@@ -112,96 +123,73 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
             height: STICKY_NOTE.side,
         };
     };
-    /** The name of the sticky a render node draws (an event, an element, a gap's command, a group). */
     const byRender = new Map(render.nodes.map((n) => [n.id, n]));
-    const nameOf = (id: string): Texts => {
-        const n = byRender.get(id);
-        if (!n) return named(id, undefined);
-        if (n.type === 'event') return label(n.eventId);
-        if (n.type === 'element') return label(n.elementId);
-        if (n.type === 'gap') return label(n.commandId);
-        if (n.type === 'group') return label(n.groups[0]?.groupId ?? n.id);
-        return label(n.stageId);
-    };
-    /** A sentence in plain words for each language and display mode, the stickies by their names (`name(id)`). */
-    const say = (f: (name: (id: string) => string, lang: 'ja' | 'en') => string): Texts =>
-        mapTexts(nameOf(''), (_, lang, mode) => f((id) => nameOf(id)[lang][mode], lang));
     const commandOfKey = (key: string): string => key.slice(key.indexOf(':') + 1, key.indexOf('->'));
+    /** The timelines of a view of one timeline (its time order names it), or none. */
+    const viewTimeline = render.options.timelineId;
+    /** Every timeline whose time order the view draws: an order in all of them names none. */
+    const everyTimeline = new Set(render.edges.flatMap((e) => (e.type === 'sequence' ? e.timelineIds : [])));
     /**
-     * What a line means, shown when it is hovered or selected (ADR 0032): plain words, never the DSL's keywords, e.g.
-     * 「配車を組む は 配車組 が処理する」.
+     * What a line means (ADR 0032): its relation, which the Live View says in plain words with the labels of its two
+     * ends, e.g. 「「配車を組む」を「配車組」が受けて処理する」.
      */
-    const explain = (e: RenderEdge, lanes: Record<string, string[]> = {}): { tooltip?: Texts } => {
+    const explain = (e: RenderEdge, captions: Record<string, string[]> = {}): { relation?: EdgeRelation } => {
         const kindOfNode = (id: string): string | undefined => {
             const n = byRender.get(id);
             return n?.type === 'element' ? n.kind : n?.type;
         };
-        const ja =
-            (s: string, t: string): ((name: (id: string) => string, lang: 'ja' | 'en') => string) =>
-            (name, lang) =>
-                (lang === 'ja' ? s : t).replaceAll('{S}', name(e.source)).replaceAll('{T}', name(e.target));
-        if (e.type === 'rejoin') return { tooltip: say(ja('元の流れの {T} へ戻る', 'Returns to {T} of the main flow')) };
-        if (e.type === 'stage') return { tooltip: say(ja('{S} のあと、次の段階へ', 'After {S}, the next stage')) };
+        const relation = (kind: LineRelation, names?: readonly string[]): { relation: EdgeRelation } => ({
+            relation: { kind, ...(names?.length && { names: names.map(label) }) },
+        });
+        if (e.type === 'rejoin') return relation('returns', e.timelineIds);
+        if (e.type === 'stage') return relation('order');
         if (e.type === 'sequence') {
-            const lane = lanes[e.id];
-            if (lane?.length) {
-                const names = lane.map(label);
-                return {
-                    tooltip: mapTexts(names[0]!, (_, lang, mode) => {
-                        const n = names.map((t) => t[lang][mode]).join(' / ');
-                        return lang === 'ja'
-                            ? `${e.exception ? '例外 ' : ''}${n} はここから分かれる`
-                            : `${e.exception ? 'The exception ' : ''}${n} branches off here`;
-                    }),
-                };
-            }
-            return { tooltip: say(ja('{S} のあとに {T}', '{T} comes after {S}')) };
+            const lane = captions[e.id];
+            if (lane?.length) return relation(e.exception ? 'branches' : 'order', lane);
+            const named = viewTimeline !== undefined || e.timelineIds.length < everyTimeline.size;
+            return relation('order', named ? e.timelineIds : []);
         }
         switch (e.kind) {
             case 'by':
-                return {
-                    tooltip: say(
-                        kindOfNode(e.target) === 'policy'
-                            ? ja('{S} が 決まり {T} を当てはめる', '{S} applies the rule {T}')
-                            : ja('{S} が {T} を出す', '{S} issues {T}'),
-                    ),
-                };
+                return relation(kindOfNode(e.target) === 'policy' ? 'follows' : 'issues');
             case 'reads':
-                return { tooltip: say(ja('{T} が {S} を見て判断する', '{T} looks at {S} to decide')) };
+                return relation(kindOfNode(e.target) === 'command' ? 'readsWhen' : 'looksAt');
             case 'handledBy':
-                return { tooltip: say(ja('{S} は {T} が処理する', '{S} is handled by {T}')) };
-            case 'emits': {
-                if (e.merged) {
-                    const commands = e.merged.map((k) => label(commandOfKey(k)));
-                    return {
-                        tooltip: mapTexts(commands[0]!, (_, lang, mode) => {
-                            const c = commands.map((t) => t[lang][mode]).join(lang === 'ja' ? '・' : ', ');
-                            const [s, t] = [nameOf(e.source)[lang][mode], nameOf(e.target)[lang][mode]];
-                            return lang === 'ja' ? `${c} は ${s} が処理し、${t} が起きる` : `${s} handles ${c}, and ${t} happens`;
-                        }),
-                    };
-                }
-                return {
-                    tooltip: say(
-                        kindOfNode(e.source) === 'command'
-                            ? ja('{S} の結果 {T} が起きる', '{S} results in {T}')
-                            : ja('{S} が処理した結果 {T} が起きる', '{S} handles it, and {T} happens'),
-                    ),
-                };
-            }
+                return relation('handles');
+            case 'emits':
+                if (kindOfNode(e.source) === 'command') return relation('results');
+                return relation('decides', e.merged?.map(commandOfKey));
             case 'on':
-                return { tooltip: say(ja('{S} に、決まり {T} が反応する', 'The rule {T} reacts to {S}')) };
+                return relation('triggers');
             case 'issues':
-                return { tooltip: say(ja('決まり {S} が {T} を出す', 'The rule {S} issues {T}')) };
+                return relation('policyIssues');
             case 'readmodel-from':
-                return { tooltip: say(ja('{S} で {T} が更新される', '{S} updates {T}')) };
+                return relation('updates');
             case 'event-from':
-                return { tooltip: say(ja('{S} から {T} が届く', '{T} arrives from {S}')) };
+                return relation('arrives');
             case 'hotspot-on':
-                return { tooltip: say(ja('{T} への問い：{S}', 'A question about {T}: {S}')) };
+                return relation('question');
         }
         return {};
     };
+    /**
+     * The line from an open hotspot's empty slot (`gap`) to its command: no time order, what is not decided yet. Not
+     * drawn in a layered layout's block (the slot is stuck on its command there), but said the same.
+     */
+    const gapEdges = (): GraphEdge[] =>
+        render.nodes.flatMap((n) =>
+            n.type === 'gap'
+                ? [
+                      {
+                          id: `gap:${n.id}`,
+                          kind: 'esHotspot' as const,
+                          source: n.id,
+                          target: `n:${n.use}`,
+                          relation: { kind: n.missing === 'by' ? ('undecidedIssuer' as const) : ('undecidedHandler' as const) },
+                      },
+                  ]
+                : [],
+        );
     const timelinesOf = (ids: readonly string[]): Texts => {
         const texts = ids.map(label);
         return mapTexts(texts[0], (_, lang, mode) => texts.map((t) => t[lang][mode]).join(' / '));
@@ -223,7 +211,7 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
         return {
             id: stormingGraphId(storming.id, render.options),
             nodes: render.nodes.map(node),
-            edges: render.edges.map(edge),
+            edges: [...render.edges.map(edge), ...gapEdges()],
             grid: { cells, frames, ...(looseRow !== undefined && { looseRow }) },
         };
     }
@@ -236,7 +224,7 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
             ...explain(e),
             ...(design && e.type === 'sequence' && { hidden: true as const }),
         });
-        return attach({ id: stormingGraphId(storming.id, render.options), nodes: render.nodes.map(node), edges: render.edges.map(edge) });
+        return attach({ id: stormingGraphId(storming.id, render.options), nodes: render.nodes.map(node), edges: [...render.edges.map(edge), ...gapEdges()] });
     }
 
     // The integrated view draws each event once, without the groups: a step shared or not, an event is one note, and the
@@ -279,10 +267,11 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
             source: s.source,
             target: s.target,
             ...(ids.length < every.size ? { label: timelinesOf(ids) } : {}),
+            relation: { kind: 'order', ...(ids.length < every.size && { names: ids.map(label) }) },
             ...(design && { hidden: true as const }),
         });
     }
-    return attach({ id: stormingGraphId(storming.id, render.options), nodes: [...nodes.values()], edges: [...edges.values()] });
+    return attach({ id: stormingGraphId(storming.id, render.options), nodes: [...nodes.values()], edges: [...edges.values(), ...gapEdges()] });
 }
 
 /**

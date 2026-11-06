@@ -1,6 +1,7 @@
 // The diagram as the canvas draws it, independent of the canvas library (docs/plans/react-flow.md): every item at its
 // place on the page with what it shows. `build-scene.ts` builds a scene from a laid-out graph; the Live View's canvas
 // draws it, and so does the portable SVG (`portable-svg.ts`). Pure data: no React, no canvas library.
+import type { LineRelation } from '../graph/ir.js';
 
 export type ChangeMark = 'none' | 'added' | 'changed' | 'removed';
 export type DiagMark = 'none' | 'warning' | 'error';
@@ -83,8 +84,8 @@ export interface EdgeProps {
     tone: EdgeTone;
     /** A resolved hotspot's `on`: drawn quieter, as its note is. */
     resolved?: true;
-    /** What the line means in plain words, shown on hover (a storming's line). */
-    tooltip?: string;
+    /** What a storming's line means (`GraphEdge.relation`), its names in the display mode; the Live View words it. */
+    relation?: { kind: LineRelation; names: string[] };
 }
 
 /** What every item has: a stable ID (unchanged items keep their identity and selection), its origin and its element. */

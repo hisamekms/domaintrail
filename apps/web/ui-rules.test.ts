@@ -298,6 +298,14 @@ const RAW_BUTTONS: Readonly<Record<string, { readonly count: number; readonly re
         count: 2,
         reason: "the view's chrome (the toolbar, the canvas controls, the app bar): labels collapse to icons by container queries; view settings, not session actions",
     },
+    'view/lines.tsx line-end-button': {
+        count: 1,
+        reason: 'an end of a pressed storming line (its colour box and label) that goes to its sticky: a reference in running text (a quote, a time, a chip of an element) that jumps to its source: its look is the text it stands for',
+    },
+    'view/lines.tsx offscreen-pointer': {
+        count: 1,
+        reason: "the pointer at the canvas's edge to stickies out of view (「→ n」): the view's chrome (the toolbar, the canvas controls, the app bar), floating on the canvas: moves the camera, changes nothing",
+    },
     'view/toolbar.tsx toolbar-button': {
         count: 2,
         reason: "the view's chrome (the toolbar, the canvas controls, the app bar): labels collapse to icons by container queries; view settings, not session actions",

@@ -278,7 +278,7 @@ describe('layout of an Event Storming view', () => {
         }
     });
 
-    test('a handler shared by converging commands: one note naming its commands, one emits whose tooltip names them', async () => {
+    test('a handler shared by converging commands: one note naming its commands, one emits whose relation names them', async () => {
         const storming = await parse(`storming S {
   event Requested "受け付けた"
   actor Clerk
@@ -296,12 +296,12 @@ describe('layout of an Event Storming view', () => {
                 (e) => e.source === handlers[0]!.id && e.kind === 'esCausal' && !graph.nodes.some((n) => n.id === e.target && n.kind !== 'esEvent'),
             );
             expect(emits).toHaveLength(1);
-            expect(emits[0]!.tooltip?.ja.label).toBe('登録する・受注する は 依頼 が処理し、受け付けた が起きる');
-            expect(emits[0]!.tooltip?.en.name).toBe('Request handles Create, Receive, and Requested happens');
-            // every line says what it means, in plain words
+            expect(emits[0]!.relation?.kind).toBe('decides');
+            expect(emits[0]!.relation?.names?.map((n) => n.ja.label)).toEqual(['登録する', '受注する']);
+            // every line says what it means: its relation, worded by the Live View
             const handled = graph.edges.find((e) => e.target === handlers[0]!.id && e.source === 'n:Create')!;
-            expect(handled.tooltip?.ja.label).toBe('登録する は 依頼 が処理する');
-            expect(graph.edges.find((e) => e.target === 'n:Create')!.tooltip?.ja.label).toBe('Clerk が 登録する を出す');
+            expect(handled.relation).toEqual({ kind: 'handles' });
+            expect(graph.edges.find((e) => e.target === 'n:Create')!.relation).toEqual({ kind: 'issues' });
             expect(
                 graph.edges
                     .filter((e) => e.target === handlers[0]!.id)

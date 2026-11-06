@@ -18,6 +18,7 @@ import { ActionMenu, type MenuItem } from '../shared/menu';
 import type { PaletteItem } from '../shared/palette';
 import { dtTarget } from '../storming';
 import { TOOLTIP_ATTR } from '../tooltip';
+import { unionRects } from '../scene';
 import { useCanvasValue, type DiagramCanvas } from '../view/diagram';
 import { isTyping } from '../session/selection';
 import { EditForm, HotspotForm, type Anchor, type SaveResult } from './forms';
@@ -131,6 +132,9 @@ const editingFields = (id: StickyActionId, sticky: Sticky): StickyField[] => {
 /** Gives the canvas the keyboard focus (its own keys: Escape clears the selection), without scrolling the page. */
 export const focusCanvas = (canvas: DiagramCanvas): void => canvas.container().focus({ preventScroll: true });
 
+/** The selected items the toolbar acts on: the stickies, not the lines. */
+const stickyItems = (canvas: DiagramCanvas): string[] => canvas.selectedIds().filter((id) => canvas.item(id)?.type !== 'edge');
+
 const BAR_HEIGHT = 32;
 const GAP = 6;
 
@@ -158,18 +162,20 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
         statusTimer.current = setTimeout(() => setStatus(undefined), 1800);
     }, []);
 
-    // the stickies selected on the canvas, and where the toolbar goes
+    // the stickies selected on the canvas (not the lines: a pressed line has its own popover, `view/lines.tsx`), and
+    // where the toolbar goes
     const selectedKey = useCanvasValue(
         canvas,
-        (c) => (c ? [...new Set(c.selectedIds().flatMap((id) => c.item(id)?.elementId ?? []))].filter((e) => e.startsWith('es/')).join('\n') : ''),
+        (c) => (c ? [...new Set(stickyItems(c).flatMap((id) => c.item(id)?.elementId ?? []))].filter((e) => e.startsWith('es/')).join('\n') : ''),
         [],
     );
     const selected = useMemo(() => (selectedKey ? selectedKey.split('\n').flatMap((id) => stickyOf(stormings, id) ?? []) : []), [selectedKey, stormings]);
     const at = useCanvasValue(
         canvas,
         (c) => {
-            if (!c || c.isMoving() || c.selectedIds().length === 0) return undefined;
-            const b = c.selectionBounds();
+            const items = c ? stickyItems(c) : [];
+            if (!c || c.isMoving() || items.length === 0) return undefined;
+            const b = unionRects(items.flatMap((id) => c.itemBounds(id) ?? []));
             if (!b) return undefined;
             const top = c.pageToViewport({ x: b.x, y: b.y });
             const bottom = c.pageToViewport({ x: b.x, y: b.y + b.h });
