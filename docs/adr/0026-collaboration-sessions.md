@@ -1380,3 +1380,38 @@ the repository, was read by every tool that walks the workspace, and had to be k
   this repository's `.gitignore` and lint configuration (older checkouts). dt no longer writes a `.gitignore` anywhere.
 - **Tests.** `test/preload.ts` gives every test process its own `XDG_*` and `DOMAINTRAIL_STATE_DIR` (and a test that
   starts `dt` with `Bun.spawn` passes `process.env`: Bun gives a child the environment the process started with).
+
+## Appendix: following someone (amendment)
+
+*Decided by the maintainer* (2026-11-06), from the approved preview 「追う」: the camera jumped to the AI's changes
+whenever none of a turn's marks was in view, so a participant reading elsewhere lost their place to someone else's
+request, and nobody could watch where another participant was looking. The rule is now: **the camera moves only for the
+reader and for whom the reader follows.**
+
+- **Whom.** The AI or one participant, one at a time, per page (never sent nor shared; a reload forgets it). A small
+  round toggle (◉ / ○) left of the AI's status in the app bar follows the AI — shown while it works, and while it is
+  idle only when followed (faint); not while no agent is connected —, and each row of the participants (the AI's after
+  yours) has one; under `dt open` only the app bar's.
+- **Starting.** The reader's choice; a request the reader sends to the AI (`@AI`, a reply to the AI or to an AI turn,
+  the facilitator's AI に送る, an answer or a pick, every message under `dt open`) follows the AI on the sender's page
+  only; a participant's change proposal approved follows it on that participant's page. Another's request starts
+  nothing.
+- **Stopping.** Any move of the reader's own, at once and without asking — a pan or zoom (drag, wheel, pinch, keys,
+  buttons), a selection, switching what is shown — and the participant followed leaving the session. The reader's own
+  moves are told from a followee's in one place: the workspace hands the page's controls a canvas, a navigation and
+  settings that stop following before each move (`apps/web/view/follow.ts`), and the canvas's own gestures are reported
+  by the port (`DiagramCanvas.onUserInput`); the followee's moves and the page's own (a view drawn, a resize) use the
+  bare ones.
+- **The AI followed** is brought to a turn's changes as it ends (the view switched as 図で見る does); a reader who does
+  not follow it keeps the camera, told by the marks and the bar.
+- **A participant followed**: the page opens the view of their location (`viewTargetOf`, and 詰めて表示 from its
+  `layoutKey`) and, once both locations are equal, fits their camera. Where they are has no canvas or is a view this
+  page cannot open (`canOpen`): the page stays and keeps following. The detail's pillar is not followed.
+- **The camera in presence.** `Presence` and `presence.update` gain an optional `camera: { x, y, w, h }`: the part of
+  the page the canvas shows, in page coordinates, sent only while the location has a canvas. A rectangle rather than a
+  camera (x, y, zoom), because the pages' canvases differ in size: the follower fits it to its own. A page sends it at
+  most every 150 ms (`CAMERA_INTERVAL_MS`), the last one always (a pan's end), rounded to a tenth of a unit, and with a
+  new location at once; it rides the presence updates (≤ 20 Hz per participant, the server's interval unchanged). The
+  server takes it only as four finite numbers, the corner within ±10⁷ and the size above 0 and at most 10⁷, with no
+  other key; a message with anything else is dropped whole, as for the cursor. A page before it sends none and gets it
+  ignored: following such a page opens its view and leaves the camera.
