@@ -32,6 +32,7 @@ import {
     PROPOSAL_LIMITS,
     readProposalText,
     type SessionState,
+    type StickyEditInput,
 } from '@domaintrail/collaboration';
 import type { AgentPresence, Me, MessageTemplateBody, ModelChangesBody, Role, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import type { AccessPolicy, Authorization } from '../http/access.js';
@@ -55,6 +56,8 @@ import {
     mentionIds,
     modelTarget,
     replyTarget,
+    fallbackHotspotName,
+    hotspotNameOf,
     requestTargets,
     stickyEditInput,
     text,
@@ -131,6 +134,14 @@ export interface SessionHttpDeps {
      * keeps no knowledge, `/api/session/extraction` is 404).
      */
     readonly extraction?: { enabled(): boolean; setEnabled(enabled: boolean): Promise<void> };
+    /**
+     * The light model's name of a hotspot a person writes (ADR 0033), within a few seconds: its raw reply, undefined when
+     * no AI answered (none connected, a failure, the time out). Absent: dt names it after its sticky.
+     */
+    readonly hotspotName?: (input: {
+        readonly question: string;
+        readonly on: { readonly id: string; readonly label?: string; readonly kind: string };
+    }) => Promise<unknown>;
     readonly log: (line: string) => void;
 }
 
@@ -1012,10 +1023,35 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             handle: async ({ req, res, auth }) => {
                 // a person's edit of a sticky (ADR 0033): anyone's, written by dt itself (no AI run), behind the watcher's
                 // hold; refused with what the sticky is now when the page saw it otherwise
-                const raw = await input(req, res, ['kind', 'storming', 'element', 'expected', 'label', 'name', 'on', 'resolution', 'body']);
+                const raw = await input(req, res, [
+                    'kind',
+                    'storming',
+                    'element',
+                    'expected',
+                    'label',
+                    'name',
+                    'on',
+                    'onLabel',
+                    'onKind',
+                    'resolution',
+                    'body',
+                ]);
                 if (!raw) return;
-                const edit = checked(res, stickyEditInput(raw));
-                if (!edit) return;
+                const read = checked(res, stickyEditInput(raw));
+                if (!read) return;
+                // a new hotspot without a name: the light model names it, else dt after its sticky; a taken name gets a suffix
+                let edit: StickyEditInput;
+                if (read.kind === 'unnamedHotspot') {
+                    const named = hotspotNameOf(
+                        await deps.hotspotName?.({
+                            question: read.label,
+                            on: { id: read.on, kind: read.onKind ?? 'event', ...(read.onLabel !== undefined && { label: read.onLabel }) },
+                        }),
+                    );
+                    deps.log(named ? `the light model named a hotspot ${named}` : `a hotspot named after its sticky ${read.on}`);
+                    const { onLabel: _, onKind: __, ...rest } = read;
+                    edit = { ...rest, kind: 'addHotspot', name: named ?? fallbackHotspotName(read.on), uniqueName: true };
+                } else edit = read;
                 const message = checked(res, text(raw.body, 'body', MAX_NOTE));
                 if (!message) return;
                 const me = who(auth);

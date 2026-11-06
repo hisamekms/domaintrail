@@ -9787,3 +9787,21 @@ button.knowledge-extraction:disabled {
     text-decoration: line-through;
     color: var(--muted);
 }
+.sticky-form-field textarea {
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--border-strong);
+    border-radius: 5px;
+    background: var(--panel);
+    font: inherit;
+    font-size: var(--fs-body);
+    color: var(--text);
+    resize: vertical;
+}
+.sticky-form-busy {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin: 0;
+    font-size: var(--fs-small);
+    color: var(--muted);
+}

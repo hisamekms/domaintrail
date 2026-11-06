@@ -369,7 +369,15 @@ export type StickyEditInput =
           readonly label?: string;
           readonly name?: string;
       }
-    | { readonly kind: 'addHotspot'; readonly storming: string; readonly on: string; readonly name: string; readonly label: string }
+    | {
+          readonly kind: 'addHotspot';
+          readonly storming: string;
+          readonly on: string;
+          readonly name: string;
+          readonly label: string;
+          /** A taken name gets the first free numeric suffix instead of being refused (a name the AI or dt gave). */
+          readonly uniqueName?: boolean;
+      }
     | { readonly kind: 'resolveHotspot'; readonly storming: string; readonly element: string; readonly resolution: string };
 
 /** Why an edit of a sticky is not made (see Storming's `StickyEditProblem`). */

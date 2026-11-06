@@ -144,6 +144,18 @@ describe('hotspots (ADR 0033)', () => {
         });
     });
 
+    test('a question on several lines is written on one, its line breaks escaped, and reads back; a taken name gets a suffix when asked', async () => {
+        const source = 'storming S "s" {\n  event A "a"\n  hotspot Q "q?" {\n    on A\n  }\n}\n';
+        const after = planned(source, { kind: 'addHotspot', storming: 'S', on: 'A', name: 'Q', label: '一行目\n二行目', uniqueName: true });
+        expect(after).toContain('  hotspot Q2 "一行目\\n二行目" {\n    on A\n  }\n');
+        const parsed = await parseStormings([{ path: 'a.dtes', text: after }]);
+        expect(parsed.stormings[0].elements.find((e) => e.id === 'Q2')?.label).toBe('一行目\n二行目');
+        expect(planStickyEdit(source, { kind: 'addHotspot', storming: 'S', on: 'A', name: 'Q', label: 'x' })).toEqual({
+            ok: false,
+            error: { type: 'InvalidName', problem: 'duplicate' },
+        });
+    });
+
     test('an empty storming gets its first hotspot inside its braces', () => {
         const source = 'storming S "s" {\n  event A "a"\n}\n';
         expect(planned(source, { kind: 'addHotspot', storming: 'S', on: 'A', name: 'Q', label: 'q?' })).toBe(

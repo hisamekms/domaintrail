@@ -188,7 +188,12 @@ export function createHttpAgentApi(options: HttpAgentApiOptions): AgentApi & Ext
                 }
                 switch (e.event) {
                     case EXTRACTION_EVENT_TYPES.job:
-                        if (!isObject(data) || typeof data.job !== 'string' || !Array.isArray(data.messages))
+                        // an extraction or the light model's question (their talk), or a hotspot's name (its question, ADR 0033)
+                        if (
+                            !isObject(data) ||
+                            typeof data.job !== 'string' ||
+                            !(Array.isArray(data.messages) || (data.stage === 'hotspotName' && typeof data.question === 'string'))
+                        )
                             throw new Error('An extraction job without its ID');
                         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- a job as the server encodes it (ExtractionJobBody), checked for its ID above
                         yield { kind: 'job', job: data as unknown as ExtractionJobBody };

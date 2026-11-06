@@ -53,6 +53,28 @@ The `see` actions have the `see` look (the eye) and name their place in the tool
 を見る」, in the display mode). ナレッジを見る opens the sticky's knowledge in the detail, under the tree; it is offered only
 where the session keeps knowledge and the sticky has some (its dot on the canvas).
 
+**Back from a jump** (*Decided by the maintainer*, after trying it). ドメインモデルで見る moves to the other world and
+このタイムラインで見る to another view: each leaves a return point (the sticky, the view, the storming's scope and level,
+the camera; `apps/web/stickies/return.ts`) and a browser history entry. While the page still shows where it went, the
+detail's back button names the sticky and returns to it — the view, the scope and the level as they were, the camera
+set back, the sticky selected — and the browser's Back does the same (the page kept no view state in the browser's
+history before; these entries are the only ones it pushes).
+
+**The windows** show no key hints (cut by the maintainer: the UX works without them); the keys are in the buttons'
+tooltips and `aria-keyshortcuts`. The edit action is called 編集 everywhere (the toolbar, the menu, the palette, the
+window, 「◯◯が編集しました」).
+
+**A hotspot's name is the AI's** (*Decided by the maintainer*). ホットスポットを付ける asks the question only, in a text
+area (Enter a new line, ⌘/Ctrl+Enter adds it; line breaks are written `\n` in the `.dtes` string). The server asks the
+light model for its ID — the same tool-less Claude Code light model the knowledge extraction's gate uses
+(`agent.extract.gateModel`, Haiku by default), through the extractor role of the agent API (a `hotspotName` job beside
+`gate` and `extract`, with the question and the sticky's ID, label and kind; schema `{ name }`). The reply is made an
+ID (PascalCase from its words, letters and digits, at most 40) and written with the first free numeric suffix when
+taken (`uniqueName`). With no extractor connected (no knowledge store, or none running, or busy with an extraction), a
+failure, or no answer within 6 s (the job is withdrawn), dt names it after the sticky (`<Sticky>Question`, suffixed the
+same way): writing never waits longer than that. The dialog shows 「AI が名前を付けています…」 meanwhile. It is
+recorded as the person's edit, as every edit.
+
 **Links.** A link names an element in the page's fragment, `#select=es/<Storming>/<Local>`: the view state stays the
 page's (per browser, not in the URL), and the page opens the world and the storming's view that draws the element
 (its integrated canvas, at a level that draws it), selects it and drops the fragment. A fragment never reaches the
@@ -122,6 +144,9 @@ the prompt shows them in `changedSinceYourLastRun.editedByPeople` for an agent t
   result kept it (the run's revert is the facilitator's, who sees the edit in AI の作業).
 - The comparison after a run reads labels and names only: a run that renamed the sticky to a third name, or removed it,
   is left alone.
+- A hotspot's name is asked of the extractor role, which takes one job at a time: while it extracts, the hotspot gets
+  dt's name. An extractor older than the `hotspotName` job breaks its stream on one (it reconnects; the hotspot gets
+  dt's name).
 - Only the wording of a sticky, a hotspot and its resolution are written by hand; placing stickies and the other clauses
   stay the AI's (`docs/plans/listening.md` §2).
 

@@ -188,6 +188,8 @@ export interface ExtractTurn extends AnswerTurn {
 export interface ExtractAgent {
     extract(turn: ExtractTurn): Promise<AnswerTurnResult>;
     gate(turn: ExtractTurn): Promise<AnswerTurnResult>;
+    /** The light model names a hotspot a person writes (ADR 0033); absent: such jobs fail (the server then names it). */
+    hotspotName?(turn: ExtractTurn): Promise<AnswerTurnResult>;
     /** Ends what it keeps; resolves once it is gone. */
     close?(): Promise<void>;
 }

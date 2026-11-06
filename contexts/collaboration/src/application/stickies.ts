@@ -161,7 +161,7 @@ function stickyEdit(input: StickyEditInput, path: string, plan: StickyEditPlan):
                 references: made(Collaboration.makeTally(plan.references), 'count'),
             };
         case 'addHotspot':
-            return { kind: 'HotspotAdded', storming, path: file, hotspot: local(input.name), label: text(input.label), on: local(input.on) };
+            return { kind: 'HotspotAdded', storming, path: file, hotspot: local(plan.after.name), label: text(input.label), on: local(input.on) };
         case 'resolveHotspot':
             return { kind: 'HotspotResolved', storming, path: file, hotspot: local(input.element), resolution: text(input.resolution) };
     }

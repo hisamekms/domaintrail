@@ -69,6 +69,7 @@ export { estimatedLabelLines, labelOverflowsNote, LINES_AT_FLOOR, STICKY_NOTE } 
 export { analyzeStormings } from './application/analyze.js';
 export { formatStorming } from './infrastructure/syntax/format.js';
 export {
+    MAX_HOTSPOT_QUESTION,
     MAX_RESOLUTION,
     MAX_STICKY_LABEL,
     planStickyEdit,

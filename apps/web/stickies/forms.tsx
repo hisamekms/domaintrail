@@ -3,10 +3,11 @@
 // and 解決を書く. Enter saves, Escape cancels; what the server refuses is said in the window, which stays open.
 import { useId, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { localNameProblem, referencesTo, type Storming } from '@domaintrail/storming';
+import { LoaderCircle } from 'lucide-react';
 import { Act } from '../shared/act';
 import { TOOLTIP_ATTR } from '../tooltip';
 import { useT } from '../i18n';
-import type { Sticky } from './registry';
+import { isMac, type Sticky } from './registry';
 
 /** Where a window is anchored: the sticky's box on the canvas (viewport pixels), and the canvas's size. */
 export interface Anchor {
@@ -44,7 +45,7 @@ function Popover({
         const h = ref.current?.offsetHeight ?? 0;
         const below = anchor.y + anchor.h + GAP;
         setTop(below + h <= anchor.height ? below : Math.max(GAP, anchor.y - h - GAP));
-        const first = ref.current?.querySelector('input');
+        const first = ref.current?.querySelector<HTMLInputElement | HTMLTextAreaElement>('input, textarea');
         first?.focus();
         first?.select();
     }, [anchor.y, anchor.h, anchor.height]);
@@ -218,40 +219,42 @@ function* timelineNames(tl: Extract<Storming['elements'][number], { kind: 'timel
     for (const s of tl.steps) if (s.type === 'group') yield s.id;
 }
 
-/** A free name for a new hotspot on `on`: `<On>Question`, then `<On>Question2`, … */
-export function hotspotName(storming: Storming, on: string): string {
-    const taken = new Set(declarationNames(storming));
-    const base = `${on}Question`;
-    if (!taken.has(base)) return base;
-    for (let i = 2; ; i++) if (!taken.has(`${base}${i}`)) return `${base}${i}`;
-}
-
-/** ホットスポットを付ける: its question and a free name. */
-export function HotspotForm(props: {
-    on: Sticky;
-    storming: Storming;
-    anchor: Anchor;
-    onSave: (hotspot: { label: string; name: string }) => Promise<SaveResult>;
-    onClose: () => void;
-}): ReactNode {
+/** ホットスポットを付ける: its question, on several lines (Enter a new line, ⌘/Ctrl+Enter saves); its name is the AI's, else dt's. */
+export function HotspotForm(props: { anchor: Anchor; onSave: (question: string) => Promise<SaveResult>; onClose: () => void }): ReactNode {
     const t = useT().stickies;
-    const [label, setLabel] = useState('');
-    const [name, setName] = useState(() => hotspotName(props.storming, props.on.local));
+    const [question, setQuestion] = useState('');
     const errorId = useId();
-    const n = name.trim();
-    const problem = localNameProblem(n, new Set(declarationNames(props.storming)));
-    const p = t.edit.problems;
-    const nameError = problem === 'format' ? p.format : problem === 'keyword' ? p.keyword(n) : problem === 'duplicate' ? p.duplicate(n) : undefined;
-    const { saving, error, run } = useSave(() => props.onSave({ label: label.trim(), name: n }), props.onClose);
-    const ready = label.trim().length > 0 && nameError === undefined;
+    const { saving, error, run } = useSave(() => props.onSave(question.trim()), props.onClose);
+    const ready = question.trim().length > 0;
+    const saveKeys = isMac() ? '⌘Enter' : 'Ctrl+Enter';
     return (
         <Popover anchor={props.anchor} label={t.hotspot.dialog} onCancel={props.onClose} onSubmit={() => ready && run()}>
-            <Field label={t.hotspot.label} value={label} onChange={setLabel} describedBy={errorId} />
-            <Field label={t.hotspot.name} value={name} onChange={setName} mono invalid={nameError !== undefined} describedBy={errorId} />
+            <label className="sticky-form-field">
+                <span>{t.hotspot.label}</span>
+                <textarea
+                    value={question}
+                    rows={3}
+                    readOnly={saving}
+                    aria-describedby={errorId}
+                    aria-keyshortcuts={isMac() ? 'Meta+Enter' : 'Control+Enter'}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key !== 'Enter' || e.nativeEvent.isComposing || !(e.metaKey || e.ctrlKey)) return;
+                        e.preventDefault();
+                        if (ready) run();
+                    }}
+                />
+            </label>
             <div id={errorId} aria-live="polite">
-                {(nameError ?? error) !== undefined && <p className="sticky-form-error">{nameError ?? error}</p>}
+                {saving && (
+                    <p className="sticky-form-busy" role="status">
+                        <LoaderCircle size={13} className="spin" aria-hidden />
+                        {t.hotspot.naming}
+                    </p>
+                )}
+                {error !== undefined && <p className="sticky-form-error">{error}</p>}
             </div>
-            <Foot save={t.hotspot.save} saving={saving} disabled={!ready} onCancel={props.onClose} />
+            <Foot save={t.hotspot.save} saving={saving} disabled={!ready} onCancel={props.onClose} saveKeys={saveKeys} />
         </Popover>
     );
 }

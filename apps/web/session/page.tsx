@@ -26,7 +26,7 @@ import { TargetNamingProvider } from './naming';
 import { viewLocation } from './location';
 import { AddButton, SelectionAction, type AddAction } from './selection-action';
 import { SessionApiError, sessionApi } from './api';
-import type { StickySession } from '../stickies/layer';
+import type { StickySession, StickyWritten } from '../stickies/layer';
 import { confirmSelection, isAdded, isConfirmKey, isTyping } from './selection';
 import type { ComposerValue } from './mentions';
 import { cursorsOn } from './presence';
@@ -72,9 +72,15 @@ export interface SessionPage {
 }
 
 /** A person's edit of a sticky, written by the server; a refusal is thrown as its error body (`type`, `current`, …). */
-async function editSticky(edit: object, body: string): Promise<void> {
+async function editSticky(edit: object, body: string): Promise<StickyWritten> {
     try {
-        await sessionApi.editSticky(edit, body);
+        const answer = await sessionApi.editSticky(edit, body);
+        // a new hotspot's name, the AI's or dt's: the page selects it once drawn
+        const request: unknown = typeof answer === 'object' && answer !== null && 'request' in answer ? answer.request : undefined;
+        const written: unknown = typeof request === 'object' && request !== null && 'edit' in request ? request.edit : undefined;
+        const hotspot =
+            typeof written === 'object' && written !== null && 'hotspot' in written && typeof written.hotspot === 'string' ? written.hotspot : undefined;
+        return hotspot === undefined ? {} : { hotspot };
     } catch (e) {
         if (e instanceof SessionApiError) throw { ...e.detail, type: e.type };
         throw e;

@@ -440,7 +440,20 @@ function stickyField(v: unknown, field: string): Result<string, InvalidInput> {
  * A person's edit of a sticky (`POST /api/session/stickies`, ADR 0033): `wording` (the label and/or the name, with what
  * the page saw in `expected`), `addHotspot` or `resolveHotspot`. What it may change is the planner's to check.
  */
-export function stickyEditInput(raw: Record<string, unknown>): Result<StickyEditInput, InvalidInput> {
+/**
+ * A hotspot whose name the person did not give (ADR 0033): the server names it (the light model, else after the sticky),
+ * with what the page told of the sticky it is on (its label and kind, for the light model only).
+ */
+export interface UnnamedHotspot {
+    readonly kind: 'unnamedHotspot';
+    readonly storming: string;
+    readonly on: string;
+    readonly label: string;
+    readonly onLabel?: string;
+    readonly onKind?: string;
+}
+
+export function stickyEditInput(raw: Record<string, unknown>): Result<StickyEditInput | UnnamedHotspot, InvalidInput> {
     const storming = stickyField(raw.storming, 'storming');
     if (!storming.ok) return storming;
     const field = (name: string): Result<string, InvalidInput> => stickyField(raw[name], name);
@@ -476,10 +489,28 @@ export function stickyEditInput(raw: Record<string, unknown>): Result<StickyEdit
         case 'addHotspot': {
             const on = field('on');
             if (!on.ok) return on;
-            const name = field('name');
-            if (!name.ok) return name;
             const label = field('label');
             if (!label.ok) return label;
+            // no name: the server gives it
+            if (raw.name === undefined) {
+                const onLabel = optional('onLabel');
+                if (!onLabel.ok) return onLabel;
+                const onKind = optional('onKind');
+                if (!onKind.ok) return onKind;
+                return {
+                    ok: true,
+                    value: {
+                        kind: 'unnamedHotspot',
+                        storming: storming.value,
+                        on: on.value,
+                        label: label.value,
+                        ...(onLabel.value !== undefined && { onLabel: onLabel.value }),
+                        ...(onKind.value !== undefined && { onKind: onKind.value }),
+                    },
+                };
+            }
+            const name = field('name');
+            if (!name.ok) return name;
             return { ok: true, value: { kind: 'addHotspot', storming: storming.value, on: on.value, name: name.value, label: label.value } };
         }
         case 'resolveHotspot': {
@@ -493,3 +524,28 @@ export function stickyEditInput(raw: Record<string, unknown>): Result<StickyEdit
             return invalid('kind', "Expected 'wording', 'addHotspot' or 'resolveHotspot'.");
     }
 }
+
+/** The most characters of a hotspot's name, the light model's or dt's. */
+const MAX_HOTSPOT_NAME = 40;
+
+/**
+ * A hotspot's name from what the light model gave (ADR 0033): its letters and digits only, PascalCase from its words
+ * (`refund after shipping` → `RefundAfterShipping`), starting with a letter, at most 40 characters; undefined when
+ * nothing usable is left. Whether it is free is the planner's (a suffix when taken).
+ */
+export function hotspotNameOf(raw: unknown): string | undefined {
+    if (typeof raw !== 'string') return undefined;
+    const words = raw
+        .normalize('NFKC')
+        .split(/[^A-Za-z0-9]+/)
+        .filter(Boolean);
+    const joined = words
+        .map((w) => w[0].toUpperCase() + w.slice(1))
+        .join('')
+        .replace(/^[0-9]+/, '');
+    const name = (joined.charAt(0).toUpperCase() + joined.slice(1)).slice(0, MAX_HOTSPOT_NAME);
+    return /^[A-Z][A-Za-z0-9]+$/.test(name) ? name : undefined;
+}
+
+/** The name dt gives a hotspot when the light model gives none: after the sticky it is on, `<Sticky>Question`. */
+export const fallbackHotspotName = (on: string): string => `${on}Question`.slice(0, 60);

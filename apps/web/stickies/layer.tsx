@@ -34,13 +34,26 @@ export type StickyEditRequest =
           readonly label?: string;
           readonly name?: string;
       }
-    | { readonly kind: 'addHotspot'; readonly storming: string; readonly on: string; readonly name: string; readonly label: string }
+    /** A new hotspot: its name is not asked, the AI (else dt) gives it; the sticky's label and kind are for the AI. */
+    | {
+          readonly kind: 'addHotspot';
+          readonly storming: string;
+          readonly on: string;
+          readonly label: string;
+          readonly onLabel?: string;
+          readonly onKind?: string;
+      }
     | { readonly kind: 'resolveHotspot'; readonly storming: string; readonly element: string; readonly resolution: string };
 
 /** Why the server refused an edit, as the window says it. */
 export interface EditRefusal {
     readonly type: string;
     readonly current?: { readonly name: string; readonly label?: string };
+}
+
+/** What an edit wrote, as far as the page needs it: a new hotspot's name. */
+export interface StickyWritten {
+    readonly hotspot?: string;
 }
 
 /** What the session gives the actions: none outside a session (`dt view`), where only seeing and copying are offered. */
@@ -50,7 +63,7 @@ export interface StickySession {
     /** The chat's targets: whether the selection is added already, and adding it (the composer opens). */
     readonly chat: { readonly added: boolean; readonly add: () => void };
     /** Writes an edit: resolves when written, rejects with the refusal. */
-    readonly edit: (edit: StickyEditRequest, body: string) => Promise<void>;
+    readonly edit: (edit: StickyEditRequest, body: string) => Promise<StickyWritten>;
 }
 
 export interface StickyActionsInput {
@@ -63,8 +76,8 @@ export interface StickyActionsInput {
     /** The timeline the view shows, if it shows one. */
     readonly timelineShown?: string;
     readonly session: StickySession | undefined;
-    /** Shows a `.dt` element in the domain model (the view that suits it). */
-    readonly onSeeModel: (dtId: string) => void;
+    /** Shows a `.dt` element in the domain model (the view that suits it), from the sticky `from`. */
+    readonly onSeeModel: (dtId: string, from: string) => void;
     /** Shows a timeline of a storming, then selects `then` in it. */
     readonly onSeeTimeline: (storming: string, timeline: string, then: string) => void;
     /** Shows a sticky: its storming's view that draws it, selected. */
@@ -196,7 +209,7 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
                     return;
                 case 'seeModel': {
                     const dt = first?.ref !== undefined ? dtTarget(model, first.kind, first.ref) : undefined;
-                    if (dt) input.onSeeModel(dt);
+                    if (dt && first) input.onSeeModel(dt, first.id);
                     return;
                 }
                 case 'seeTimeline':
@@ -279,12 +292,14 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
         onOpenSticky(follow);
     }, [follow, stormings, onOpenSticky]);
 
-    const edit = async (request: StickyEditRequest, body: string, then?: string): Promise<SaveResult> => {
+    /** Writes an edit, then selects `then` (a selection ID, or one made from what was written) once it is drawn. */
+    const edit = async (request: StickyEditRequest, body: string, then?: string | ((written: StickyWritten) => string | undefined)): Promise<SaveResult> => {
         if (!session) return s.edit.failed('');
         try {
-            await session.edit(request, body);
+            const written = await session.edit(request, body);
             say(s.saved);
-            if (then) setFollow(then);
+            const next = typeof then === 'function' ? then(written) : then;
+            if (next) setFollow(next);
             return undefined;
         } catch (e) {
             return errorText(t, e);
@@ -392,17 +407,22 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
                     }}
                 />
             )}
-            {form?.kind === 'hotspot' && formStorming && (
+            {form?.kind === 'hotspot' && (
                 <HotspotForm
-                    on={form.sticky}
-                    storming={formStorming}
                     anchor={form.anchor}
                     onClose={() => setForm(undefined)}
-                    onSave={({ label: question, name }) =>
+                    onSave={(question) =>
                         edit(
-                            { kind: 'addHotspot', storming: form.sticky.storming, on: form.sticky.local, name, label: question },
+                            {
+                                kind: 'addHotspot',
+                                storming: form.sticky.storming,
+                                on: form.sticky.local,
+                                label: question,
+                                onKind: form.sticky.kind,
+                                ...(form.sticky.label !== undefined && { onLabel: form.sticky.label }),
+                            },
                             s.hotspot.body(form.sticky.label ?? form.sticky.local, question),
-                            `es/${form.sticky.storming}/${name}`,
+                            (written) => written.hotspot && `es/${form.sticky.storming}/${written.hotspot}`,
                         )
                     }
                 />

@@ -192,11 +192,17 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   the selection, then every sticky by name (its kind, storming and ID matched too).
   **Editing a sticky** (in a session; anyone may): a double-click, `F2` or ✎ opens a small window under it with its
   ラベル (selected) and 名前 (its ID). A name is checked as typed (the `.dtes` ID's form, not a keyword, not taken in the
-  storming); a new one says 「参照 n 件も書き換えます（.dtes n）」. Enter saves, Escape cancels. dt writes it at once — no
+  storming); a new one says 「参照 n 件も書き換えます（.dtes n）」. Enter saves, Escape cancels (the windows show no key hints;
+  the buttons' tooltips name the keys). dt writes it at once — no
   AI run: only the label, and for a new name the name and every reference to it in the storming, change in the file —
   and everyone's canvas shows it; if someone (or the AI) changed the sticky meanwhile, the window says what it is now.
-  ホットスポットを付ける and 解決を書く open the same kind of window (the question and a free name; the resolution). Each edit
-  is in AI の作業.
+  ホットスポットを付ける opens a window with the question only, on several lines (Enter starts a new line, ⌘Enter / Ctrl+Enter
+  adds it): its name (ID) is not asked — the light model gives one from the question (「AI が名前を付けています…」 for a few
+  seconds), else dt names it after the sticky (`<Sticky>Question`), and the new hotspot is selected. 解決を書く opens the
+  same kind of window with the resolution. Each edit is in AI の作業.
+  **Back from a jump**: after ドメインモデルで見る (or このタイムラインで見る), the detail's back button names the sticky
+  (「← 注文を受け付けた」) and returns to the storming as it was shown — the same view, level and scope, the camera, the
+  sticky selected; the browser's Back does the same.
 
 The modeling views (Context Map, Structure, Catalog, the inspector, the explorer) use the same hues for the same
 concepts, on smaller areas: the cards are neutral, and the kind is on their edge, their stereotype («集約ルート») and

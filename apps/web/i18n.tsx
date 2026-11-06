@@ -249,8 +249,8 @@ const ja = {
         hotspot: {
             dialog: 'ホットスポットを付ける',
             label: '問い',
-            name: '名前',
             save: '付ける',
+            naming: 'AI が名前を付けています…',
             body: (on: string, label: string) => `「${on}」にホットスポット「${label}」を付ける`,
         },
         resolve: {
@@ -1447,8 +1447,8 @@ const en: Messages = {
         hotspot: {
             dialog: 'Add a hotspot',
             label: 'Question',
-            name: 'Name',
             save: 'Add',
+            naming: 'The AI is naming it…',
             body: (on, label) => `Add the hotspot "${label}" on "${on}"`,
         },
         resolve: {

@@ -134,6 +134,8 @@ export interface SessionServerOptions extends ViewServerOptions {
     clock?: Clock;
     /** How long a claim or a heartbeat holds the agent's lease (default `AGENT_LEASE_MS`). */
     leaseMs?: number;
+    /** How long a person waits for the light model's name of their hotspot (ADR 0033; default 6 s). */
+    hotspotNameTimeoutMs?: number;
     /** How often expired leases are applied (default 5 s). */
     expireEveryMs?: number;
     /** A classifier instead of the configured one (tests). */
@@ -317,6 +319,8 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             `A session server is already running for this workspace${running ? ` (pid ${running.pid}, ${running.url})` : ''}: stop it before starting another.`,
         );
     const leaseMs = options.leaseMs ?? AGENT_LEASE_MS;
+    /** How long a person waits for the light model's name of their hotspot before dt names it (ADR 0033). */
+    const HOTSPOT_NAME_TIMEOUT_MS = options.hotspotNameTimeoutMs ?? 6_000;
     const sources = options.sources ?? DEFAULT_SOURCES;
     const respectGitignore = options.respectGitignore ?? true;
 
@@ -797,6 +801,15 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             triaged: () => stage.kick(),
             agentPresence,
             retryAnswer: (request) => agent.answers.retry(request),
+            // the light model names a hotspot a person writes (ADR 0033), through the extractor role; none: dt names it
+            ...(extractions && {
+                hotspotName: async (input: Parameters<typeof extractions.hotspotName>[0]): Promise<unknown> => {
+                    const answer = await extractions.hotspotName(input, HOTSPOT_NAME_TIMEOUT_MS);
+                    if (answer.kind !== 'done' || answer.result.error !== undefined) return undefined;
+                    const reply = answer.result.reply;
+                    return typeof reply === 'object' && reply !== null && 'name' in reply ? reply.name : undefined;
+                },
+            }),
             knownViewNames: () => knownViewNames(view.state),
             guideWorkspace: guideWorkspaceNow,
             journeys,

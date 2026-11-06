@@ -46,7 +46,19 @@ export type StickyEditInput =
           readonly name?: string;
       }
     /** A new open hotspot on an event, in the canonical place (after the storming's last hotspot, else last). */
-    | { readonly kind: 'addHotspot'; readonly storming: string; readonly on: string; readonly name: string; readonly label: string }
+    /**
+     * A new open hotspot on an event, in the canonical place (after the storming's last hotspot, else last); its question
+     * may hold line breaks (written as `\n`). `uniqueName`: a name already taken gets the first free numeric suffix
+     * (`Name2`, `Name3`, …) instead of being refused.
+     */
+    | {
+          readonly kind: 'addHotspot';
+          readonly storming: string;
+          readonly on: string;
+          readonly name: string;
+          readonly label: string;
+          readonly uniqueName?: boolean;
+      }
     /** A hotspot resolved: `status resolved` and its `resolution`. */
     | { readonly kind: 'resolveHotspot'; readonly storming: string; readonly element: string; readonly resolution: string };
 
@@ -89,8 +101,15 @@ function parse(text: string): EsFile | undefined {
     return parsed.lexerErrors.length || parsed.parserErrors.length ? undefined : parsed.value;
 }
 
-/** A label as written in a `.dtes` string: quotes and backslashes escaped. */
-export const quoteLabel = (label: string): string => `"${label.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+/** A label as written in a `.dtes` string: quotes, backslashes and line breaks escaped. */
+export const quoteLabel = (label: string): string =>
+    `"${label
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/\r\n|\r|\n/g, '\\n')}"`;
+
+/** The longest question of a hotspot a person writes (several lines). */
+export const MAX_HOTSPOT_QUESTION = 1000;
 
 const validText = (text: string, max: number): boolean => text.trim().length > 0 && text.length <= max && !/[\r\n]/.test(text);
 
@@ -136,6 +155,11 @@ function located(text: string, stormingId: string): { storming: EsStorming; decl
     const storming = file.stormings.find((s) => s.name === stormingId);
     if (!storming) return { type: 'StormingNotFound' };
     return { storming, declarations: stormingDeclarations(storming) };
+}
+
+/** `name` with the first numeric suffix that no declaration has (`Name2`, `Name3`, …). */
+function freeName(name: string, taken: ReadonlySet<string>): string {
+    for (let i = 2; ; i++) if (!taken.has(`${name}${i}`)) return `${name}${i}`;
 }
 
 const wordingOf = (d: EsDeclaration): StickyWording => ({ name: d.name, ...(d.label !== undefined && { label: d.label }) });
@@ -209,13 +233,13 @@ function plan(text: string, storming: EsStorming, declarations: readonly EsDecla
             const on = declarations.find((d) => d.name === input.on);
             if (!on) return fail({ type: 'NotFound' });
             if (!isEsEvent(on)) return fail({ type: 'WrongKind' });
-            if (!validText(input.label, MAX_STICKY_LABEL)) return fail({ type: 'InvalidLabel' });
+            if (input.label.trim().length === 0 || input.label.length > MAX_HOTSPOT_QUESTION) return fail({ type: 'InvalidLabel' });
             const problem = localNameProblem(input.name, taken);
-            if (problem) return fail({ type: 'InvalidName', problem });
+            if (problem && !(problem === 'duplicate' && input.uniqueName)) return fail({ type: 'InvalidName', problem });
+            const name = problem ? freeName(input.name, taken) : input.name;
             // after the storming's last hotspot, else after its last element; indented as that element
             const anchor = storming.elements.filter(isEsHotspot).at(-1) ?? storming.elements.at(-1);
-            const declaration = (indent: string): string =>
-                `${indent}hotspot ${input.name} ${quoteLabel(input.label)} {\n${indent}  on ${input.on}\n${indent}}`;
+            const declaration = (indent: string): string => `${indent}hotspot ${name} ${quoteLabel(input.label)} {\n${indent}  on ${input.on}\n${indent}}`;
             let edited: string;
             if (anchor?.$cstNode) {
                 const indent = indentAt(text, anchor.$cstNode.offset);
@@ -229,7 +253,7 @@ function plan(text: string, storming: EsStorming, declarations: readonly EsDecla
                 const head = text.slice(0, close).trimEnd();
                 edited = `${head}\n${declaration(`${outer}  `)}\n${outer}${text.slice(close)}`;
             }
-            return { ok: true, value: { text: edited, after: { name: input.name, label: input.label }, references: 0 } };
+            return { ok: true, value: { text: edited, after: { name, label: input.label }, references: 0 } };
         }
         case 'resolveHotspot': {
             const decl = declarations.find((d) => d.name === input.element);
