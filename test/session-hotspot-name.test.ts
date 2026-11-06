@@ -1,6 +1,7 @@
 /**
  * A hotspot a person writes on a sticky is named by the light model (ADR 0033): over a real session server (dev
- * identity) with a knowledge store, the extractor role connected through the agent API with a fake agent. Its name is
+ * identity) without any knowledge configured, the helper (the light model's small jobs, on a stream of the agent API of
+ * their own) connected with a fake agent. Its name is
  * made an ID (PascalCase, letters and digits) and suffixed when taken; with no extractor connected, or one that does
  * not answer in time, dt names it after the sticky, and writing never waits longer than that.
  */
@@ -8,9 +9,8 @@ import { afterAll, afterEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { createHttpAgentApi, DEFAULT_AGENT_TOOLS, type ExtractTurn, startExtractor } from '@domaintrail/agent';
+import { createHttpAgentApi, DEFAULT_AGENT_TOOLS, type ExtractTurn, helperStream, startExtractor } from '@domaintrail/agent';
 import { type SessionSettings, startSessionServer } from '@domaintrail/dt';
-import { Knowledge, type KnowledgeStore } from '@domaintrail/knowledge';
 
 const dirs: string[] = [];
 const cleanups: (() => Promise<unknown>)[] = [];
@@ -21,9 +21,6 @@ afterAll(async () => {
     for (const dir of dirs) await rm(dir, { recursive: true, force: true });
 });
 
-const project = Knowledge.makeProjectName('returns');
-if (!project.ok) throw new Error('not a project name');
-
 const config: SessionSettings = {
     port: 0,
     host: '127.0.0.1',
@@ -32,37 +29,7 @@ const config: SessionSettings = {
     maxParticipants: 50,
     quickReactions: ['👍'],
     classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.9 },
-    knowledge: {
-        store: 'files',
-        project: project.value,
-        projectFrom: 'config',
-        extraction: { enabled: false, quietSeconds: 0.2, minIntervalSeconds: 0, contextMinutes: 10, gateContextMinutes: 3, settleSeconds: 120 },
-    },
 };
-
-/** A knowledge store with nothing in it: the session keeps knowledge, so the extractor role connects. */
-function emptyStore(): KnowledgeStore {
-    const unused = (): never => {
-        throw new Error('not used here');
-    };
-    return {
-        about: async () => [],
-        search: async () => ({ items: [] }),
-        applyExtraction: unused,
-        counts: async () => [],
-        get: unused,
-        correct: unused,
-        unlinkConflict: unused,
-        handOverToHotspot: unused,
-        delete: unused,
-        deleteSession: unused,
-        restore: unused,
-        redactions: async () => [],
-        audit: unused,
-        putImage: unused,
-        getImage: unused,
-    } as unknown as KnowledgeStore;
-}
 
 const RETURNS = 'storming Returns "返品" {\n  event ReturnRequested "返品が依頼された"\n}\n';
 const json = { 'content-type': 'application/json' };
@@ -76,7 +43,6 @@ async function session(hotspotNameTimeoutMs?: number) {
         root,
         debounceMs: 30,
         session: config,
-        knowledgeStore: emptyStore(),
         ...(hotspotNameTimeoutMs !== undefined && { hotspotNameTimeoutMs }),
     });
     cleanups.push(() => server.stop());
@@ -109,7 +75,7 @@ async function session(hotspotNameTimeoutMs?: number) {
 /** The extractor role with a fake agent whose light model answers a hotspot's name with `name` (after `delayMs`). */
 function extractor(server: Awaited<ReturnType<typeof session>>['server'], name: string, prompts: string[], delayMs = 0) {
     const x = startExtractor({
-        api: createHttpAgentApi({ url: server.agentUrl, token: server.agentToken }),
+        api: helperStream(createHttpAgentApi({ url: server.agentUrl, token: server.agentToken })),
         agent: {
             gate: () => Promise.reject(new Error('never asked')),
             extract: () => Promise.reject(new Error('never asked')),
@@ -142,6 +108,9 @@ const connected = async (server: Awaited<ReturnType<typeof session>>['server']):
 describe("a hotspot's name (ADR 0033)", () => {
     test('the light model names it from the question and the sticky; made an ID, suffixed when taken; a question on several lines', async () => {
         const s = await session();
+        // the session keeps no knowledge: its extraction stream is not there, the helpers' is
+        const off = await fetch(`${s.server.agentUrl}agent/extractions/events`, { headers: { authorization: `Bearer ${s.server.agentToken}` } });
+        expect(off.status).toBe(404);
         const prompts: string[] = [];
         extractor(s.server, 'Double returns!', prompts);
         await connected(s.server);

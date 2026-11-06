@@ -58,6 +58,8 @@ import {
     ignoredEntries,
     readTargets,
     type WorkspaceView,
+    helperStream,
+    type HelperApi,
 } from '@domaintrail/agent';
 import { type AgentCredential, readServerAddress } from '@domaintrail/collaboration';
 import { analyze, DEFAULT_SOURCES, sourceSelection } from '@domaintrail/analysis';
@@ -265,7 +267,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             : undefined;
     // the views go with the answerer
     void answerer?.done.then(() => Promise.all([view?.dispose(), extraViews?.dispose()]));
-    const extractor = roles.has('answer')
+    const knowledgeExtractor = roles.has('answer')
         ? await startKnowledgeExtractor({
               api,
               ...((options.extract?.model ?? answerConfig.model ?? user.model) !== undefined && {
@@ -281,6 +283,16 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
               log,
           })
         : undefined;
+    // the light model's small jobs (a hotspot's name, ADR 0033) with whichever role this agent takes, whatever the
+    // knowledge config: a stream of their own, so that an extraction never holds them up
+    const helper = await startHelper({
+        api,
+        gateModel: options.extract?.gateModel ?? triageConfig.model,
+        ...((options.answerCommand ?? options.agentCommand) && { command: options.answerCommand ?? options.agentCommand }),
+        ...(options.reconnect && { reconnect: options.reconnect }),
+        log,
+    });
+    const extractor = bothExtractors(knowledgeExtractor, helper);
     /**
      * The read-only roles' end: the answerer stops; the extractor, when the session closed, is let finish the last
      * extraction (the server tells it when it is done), at most its timeout and a little more.
@@ -471,6 +483,45 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | undefined>
             resolve(v);
         });
     });
+}
+
+/** The knowledge's extractor and the helper as one: ends as the first (else the helper) does; stopping stops both. */
+function bothExtractors(knowledge: Extractor | undefined, helper: Extractor): Extractor {
+    return {
+        done: knowledge?.done ?? helper.done,
+        async stop() {
+            const [why] = await Promise.all([knowledge?.stop() ?? helper.stop(), helper.stop()]);
+            return why;
+        },
+    };
+}
+
+/**
+ * The light model's helper (ADR 0033): the tool-less light model of the extraction's gate (`agent.extract.gateModel`),
+ * a fresh process per job in an empty directory of its own, following the agent API's helper stream (a hotspot's name).
+ * A server without that stream answers 404: the helper then ends (`off`), and the server names hotspots itself.
+ */
+async function startHelper(options: {
+    api: HelperApi;
+    gateModel: string;
+    command?: AgentCommand;
+    reconnect?: { minMs: number; maxMs: number; giveUpMs: number };
+    log: (line: string) => void;
+}): Promise<Extractor> {
+    const dir = await mkdtemp(path.join(tmpdir(), 'dt-helper-'));
+    const helper = startExtractor(
+        {
+            api: helperStream(options.api),
+            agent: createClaudeExtractor({ root: dir, gateModel: options.gateModel, ...(options.command && { command: options.command }) }),
+            clock: systemClock,
+            nonce: randomNonce,
+            // a server without helper jobs is said once, as "no knowledge" would be: the helper's own words
+            log: (line) => options.log(line.replace('extractor: the session keeps no knowledge; not extracting', 'helper: the server has no helper jobs')),
+        },
+        { ...(options.reconnect && { reconnect: options.reconnect }) },
+    );
+    void helper.done.then(() => rm(dir, { recursive: true, force: true })).catch(() => undefined);
+    return helper;
 }
 
 /**

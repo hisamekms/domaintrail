@@ -24,6 +24,8 @@ export {
     type AnswerTurnResult,
     type ExtractAgent,
     type ExtractionApi,
+    helperStream,
+    type HelperApi,
     type ExtractionStreamItem,
     ReadScopeTooLarge,
     type StreamItem,

@@ -82,6 +82,12 @@ export interface AgentApiDeps {
     readonly afterRun?: (run: Collaboration.AgentRunId) => Promise<void>;
     /** The extractor role's entry point (absent: the session keeps no knowledge, and the entry point answers 404). */
     readonly extractions?: ExtractionDispatcher;
+    /**
+     * The light model's small jobs that are not knowledge's — a hotspot's name (ADR 0033) — on a stream of their own
+     * (`/agent/helpers/events`, `POST /agent/helpers/:job`), served whatever the knowledge config, so that a running
+     * extraction never holds them up. Absent: answered 404.
+     */
+    readonly helpers?: ExtractionDispatcher;
 }
 
 export interface AgentApi {
@@ -447,6 +453,25 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         if (path === '/agent/extractions/events' && req.method === 'GET') {
             if (!deps.extractions) return sendError(res, 404, 'KnowledgeOff', 'The session keeps no knowledge.');
             return deps.extractions.events(req, res);
+        }
+        if (path === '/agent/helpers/events' && req.method === 'GET') {
+            if (!deps.helpers) return sendError(res, 404, 'NotFound', 'No helper jobs here.');
+            return deps.helpers.events(req, res);
+        }
+        const helper = /^\/agent\/helpers\/([^/]+)$/.exec(path);
+        if (helper && helper[1] !== 'events') {
+            if (!deps.helpers) return sendError(res, 404, 'NotFound', 'No helper jobs here.');
+            if (req.method !== 'POST') return sendError(res, 405, 'MethodNotAllowed', 'Use POST.');
+            const id = uuid(helper[1], 'job');
+            if (!id.ok) return sendError(res, 400, 'InvalidInput', id.error.message, { field: 'job' });
+            let raw: unknown;
+            try {
+                raw = await readJson(req, MAX_AGENT_BODY);
+            } catch (e) {
+                if (!(e instanceof BodyError)) throw e;
+                return sendError(res, e.status, e.type, e.message);
+            }
+            return deps.helpers.result(res, id.value, raw);
         }
         const extraction = /^\/agent\/extractions\/([^/]+)$/.exec(path);
         if (extraction && extraction[1] !== 'events') {

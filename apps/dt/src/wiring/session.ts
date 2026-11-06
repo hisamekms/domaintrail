@@ -488,6 +488,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 await knowledge.end(extractTimeoutMs + 15_000).catch((e: unknown) => log(`knowledge: ${e instanceof Error ? e.message : String(e)}`));
             }
             extractions?.close(true);
+            helpers.close(true);
             resolveClosed();
         };
 
@@ -596,6 +597,8 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                   log,
               })
             : undefined;
+        // the light model's small jobs, whatever the knowledge config: a hotspot's name (ADR 0033), on a stream of their own
+        const helpers = createExtractionDispatcher({ timeoutMs: HOTSPOT_NAME_TIMEOUT_MS, maxStreams: MAX_AGENT_STREAMS, token: agentToken, log });
         const relay = createEventRelay({
             collaboration,
             session,
@@ -667,6 +670,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             log,
             pair: (code) => access.redeemAgentCode({ session, code }),
             ...(extractions && { extractions }),
+            helpers,
             journeys: async () => {
                 const file = journeys.file();
                 if (!file) return undefined;
@@ -802,14 +806,12 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             agentPresence,
             retryAnswer: (request) => agent.answers.retry(request),
             // the light model names a hotspot a person writes (ADR 0033), through the extractor role; none: dt names it
-            ...(extractions && {
-                hotspotName: async (input: Parameters<typeof extractions.hotspotName>[0]): Promise<unknown> => {
-                    const answer = await extractions.hotspotName(input, HOTSPOT_NAME_TIMEOUT_MS);
-                    if (answer.kind !== 'done' || answer.result.error !== undefined) return undefined;
-                    const reply = answer.result.reply;
-                    return typeof reply === 'object' && reply !== null && 'name' in reply ? reply.name : undefined;
-                },
-            }),
+            hotspotName: async (input: Parameters<typeof helpers.hotspotName>[0]): Promise<unknown> => {
+                const answer = await helpers.hotspotName(input, HOTSPOT_NAME_TIMEOUT_MS);
+                if (answer.kind !== 'done' || answer.result.error !== undefined) return undefined;
+                const reply = answer.result.reply;
+                return typeof reply === 'object' && reply !== null && 'name' in reply ? reply.name : undefined;
+            },
             knownViewNames: () => knownViewNames(view.state),
             guideWorkspace: guideWorkspaceNow,
             journeys,
@@ -916,6 +918,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                     presence.dispose();
                     knowledge?.stop();
                     extractions?.close(false);
+                    helpers.close(false);
                     agent.close();
                     await stage.settled();
                     await watch?.stop();

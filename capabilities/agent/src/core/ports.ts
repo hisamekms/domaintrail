@@ -122,6 +122,18 @@ export interface ExtractionApi {
     extractionResult(job: string, result: ExtractionResultBody): Promise<ApiResult<unknown>>;
 }
 
+/** The light model's small jobs (a hotspot's name, ADR 0033): the extraction's stream and results on a path of their own. */
+export interface HelperApi {
+    helperEvents(signal: AbortSignal): AsyncIterable<ExtractionStreamItem>;
+    helperResult(job: string, result: ExtractionResultBody): Promise<ApiResult<unknown>>;
+}
+
+/** The helpers' stream as the extractor's loop takes it (`startExtractor` follows either). */
+export const helperStream = (api: HelperApi): ExtractionApi => ({
+    extractionEvents: (signal) => api.helperEvents(signal),
+    extractionResult: (job, result) => api.helperResult(job, result),
+});
+
 /** What the extractor role's stream carries. */
 export type ExtractionStreamItem =
     | { readonly kind: 'open' }

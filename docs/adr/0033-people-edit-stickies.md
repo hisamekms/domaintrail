@@ -67,13 +67,15 @@ window, 「◯◯が編集しました」).
 **A hotspot's name is the AI's** (*Decided by the maintainer*). ホットスポットを付ける asks the question only, in a text
 area (Enter a new line, ⌘/Ctrl+Enter adds it; line breaks are written `\n` in the `.dtes` string). The server asks the
 light model for its ID — the same tool-less Claude Code light model the knowledge extraction's gate uses
-(`agent.extract.gateModel`, Haiku by default), through the extractor role of the agent API (a `hotspotName` job beside
-`gate` and `extract`, with the question and the sticky's ID, label and kind; schema `{ name }`). The reply is made an
-ID (PascalCase from its words, letters and digits, at most 40) and written with the first free numeric suffix when
-taken (`uniqueName`). With no extractor connected (no knowledge store, or none running, or busy with an extraction), a
-failure, or no answer within 6 s (the job is withdrawn), dt names it after the sticky (`<Sticky>Question`, suffixed the
-same way): writing never waits longer than that. The dialog shows 「AI が名前を付けています…」 meanwhile. It is
-recorded as the person's edit, as every edit.
+(`agent.extract.gateModel`, Haiku by default) — through the agent API's **helper stream** (`GET /agent/helpers/events`,
+`POST /agent/helpers/:job`): a `hotspotName` job with the question and the sticky's ID, label and kind, schema
+`{ name }`. The helper is not knowledge's: the server always serves the stream, and every `dt agent` (and the agent in
+`dt open`) follows it, whatever the `knowledge` config, beside the extractor role (a stream of its own, so that a
+running extraction never holds a name up). The reply is made an ID (PascalCase from its words, letters and digits, at
+most 40) and written with the first free numeric suffix when taken (`uniqueName`). With no agent connected, a failure,
+or no answer within 6 s (the job is withdrawn), dt names it after the sticky (`<Sticky>Question`, suffixed the same
+way): writing never waits longer than that. The dialog shows 「AI が名前を付けています…」 meanwhile. It is recorded as the
+person's edit, as every edit.
 
 **Links.** A link names an element in the page's fragment, `#select=es/<Storming>/<Local>`: the view state stays the
 page's (per browser, not in the URL), and the page opens the world and the storming's view that draws the element
@@ -144,9 +146,7 @@ the prompt shows them in `changedSinceYourLastRun.editedByPeople` for an agent t
   result kept it (the run's revert is the facilitator's, who sees the edit in AI の作業).
 - The comparison after a run reads labels and names only: a run that renamed the sticky to a third name, or removed it,
   is left alone.
-- A hotspot's name is asked of the extractor role, which takes one job at a time: while it extracts, the hotspot gets
-  dt's name. An extractor older than the `hotspotName` job breaks its stream on one (it reconnects; the hotspot gets
-  dt's name).
+- The helper takes one job at a time: of two hotspots added at the same moment, the second gets dt's name at once. An agent older than the helper stream does not follow it: dt names the hotspots.
 - Only the wording of a sticky, a hotspot and its resolution are written by hand; placing stickies and the other clauses
   stay the AI's (`docs/plans/listening.md` §2).
 
