@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { analyzeStormings } from '@domaintrail/storming';
 import { focusBack, matchItems, type PaletteItem } from '../shared/palette';
+import { outsidePressCancels } from './forms';
 import { elementLink, linkedElement } from './link';
 import {
     actionOfKey,
@@ -141,5 +142,13 @@ describe('Escape after a pick (the palette, the menu, a window closed)', () => {
         expect(focusBack(field, doc(false))).toBeUndefined();
         expect(focusBack(body, doc(true))).toBeUndefined();
         expect(focusBack(null, doc(true))).toBeUndefined();
+    });
+});
+
+describe('a press outside a sticky window', () => {
+    test('cancels it, as Escape does; not a press inside (a text selection dragged out starts inside), nor while composing', () => {
+        expect(outsidePressCancels({ inside: false, composing: false })).toBe(true);
+        expect(outsidePressCancels({ inside: true, composing: false })).toBe(false);
+        expect(outsidePressCancels({ inside: false, composing: true })).toBe(false);
     });
 });

@@ -1,7 +1,7 @@
 // The small windows anchored to a sticky (ADR 0033): 編集 (its label, selected, and its name; a new name says how many
 // references it rewrites, and a bad or taken one is an error at once), ホットスポットを付ける (the question, and a free name)
 // and 解決を書く. Enter saves, Escape cancels; what the server refuses is said in the window, which stays open.
-import { useId, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { localNameProblem, referencesTo, type Storming } from '@domaintrail/storming';
 import { Act } from '../shared/act';
 import { TOOLTIP_ATTR } from '../tooltip';
@@ -23,6 +23,14 @@ export type SaveResult = undefined | string;
 
 const WIDTH = 320;
 const GAP = 8;
+
+/**
+ * Whether a press closes a window anchored to a sticky (cancelled, nothing written): one that starts outside it, unless
+ * the IME is composing. A drag that starts inside (selecting text) and ends outside starts no press outside.
+ */
+export function outsidePressCancels(press: { readonly inside: boolean; readonly composing: boolean }): boolean {
+    return !press.inside && !press.composing;
+}
 
 /** A form anchored under the sticky (above it when there is no room below), kept inside the canvas. */
 function Popover({
@@ -49,8 +57,18 @@ function Popover({
         first?.select();
     }, [anchor.y, anchor.h, anchor.height]);
     const left = Math.max(GAP, Math.min(anchor.x, anchor.width - WIDTH - GAP));
+    // a press outside cancels, as Escape does (a press on another sticky then selects it); never while composing
+    const composing = useRef(false);
+    useEffect(() => {
+        const onDown = (e: PointerEvent): void => {
+            const inside = e.target instanceof Node && ref.current !== null && ref.current.contains(e.target);
+            if (outsidePressCancels({ inside, composing: composing.current })) onCancel();
+        };
+        document.addEventListener('pointerdown', onDown, true);
+        return () => document.removeEventListener('pointerdown', onDown, true);
+    }, [onCancel]);
     const onKeyDown = (e: KeyboardEvent<HTMLFormElement>): void => {
-        if (e.key === 'Escape') {
+        if (e.key === 'Escape' && !e.nativeEvent.isComposing) {
             e.preventDefault();
             e.stopPropagation();
             onCancel();
@@ -64,6 +82,8 @@ function Popover({
             aria-label={label}
             style={{ left, top, width: WIDTH }}
             onKeyDown={onKeyDown}
+            onCompositionStart={() => (composing.current = true)}
+            onCompositionEnd={() => (composing.current = false)}
             // the canvas never sees a press in it (no pan, no selection)
             onPointerDown={(e) => e.stopPropagation()}
             onSubmit={(e: FormEvent) => {
