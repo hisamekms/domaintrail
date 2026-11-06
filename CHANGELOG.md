@@ -9,6 +9,15 @@ code).
 **After upgrading domaintrail**, read the **Upgrading** section of every version between the one you had and the new
 one, oldest first, and follow its steps. This file is in the package: `node_modules/domaintrail/CHANGELOG.md`.
 
+## [0.8.1] - 2026-11-06
+
+### Fixed
+
+- A run no longer fails as an agent error, with the subscriber claiming no further run until restarted, when the
+  `files` knowledge store writes `knowledge/` while the run runs (an extraction, people's corrections and deletions, the
+  sweep). The run's check of the files the agent changed skips that directory, and the agent may not edit it: the agents
+  read knowledge through dt.
+
 ## [0.8.0] - 2026-11-06
 
 ### Added
@@ -695,6 +704,7 @@ The first published version.
 - The Live View (`dt view`): the context map, the structure diagram (three levels), the catalog, the state diagram,
   the inspector with the source, problems and changes, updated on every save; in Japanese or English, light or dark.
 
+[0.8.1]: https://github.com/hisamekms/domaintrail/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/hisamekms/domaintrail/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/hisamekms/domaintrail/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/hisamekms/domaintrail/compare/v0.5.0...v0.6.0
