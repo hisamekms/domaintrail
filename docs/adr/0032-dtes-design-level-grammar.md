@@ -3,8 +3,9 @@
 - Status: accepted (2026-11-06). The decisions marked *Decided by the maintainer* were his; the others were taken while
   implementing them (marked *Decided here*).
 - Date: 2026-11-06
-- Amends: [ADR 0024](0024-event-storming-dsl.md) (its relations, rules and Design Level drawing) and the spec
-  [docs/dtes-v0.1.md](../dtes-v0.1.md) (§3.2, §3.8, §4, §9.1, §9.4, §11).
+- Amends: [ADR 0024](0024-event-storming-dsl.md) (its relations, rules and Design Level drawing, and its "the formatter
+  never reorders clauses") and the spec [docs/dtes-v0.1.md](../dtes-v0.1.md) (§3.2, §3.3, §3.6 on `dt fmt`, §3.8, §4,
+  §5.2 on a command without `emits`, §9.1, §9.4, §11).
 - Code: `contexts/storming` (grammar, IR, validator, formatter, `migrateStorming`), `capabilities/visualization`
   (`core/storming/chains.ts`, `filter.ts`, `stage-view.ts`), `apps/dt` (`dt migrate dtes`), the guide (`dt guide
   dtes-quick`, `storming-rules`) and the agent's prompts.
@@ -92,8 +93,9 @@ something not modeled yet; Big Picture completeness stays undiagnosed), a hotspo
 command (S024), policy (S008) or unused element (S027) is an error **unless an open hotspot is `on` it**. The hotspot
 is the grammar-natural way to say "not decided yet": it is what people put on the wall for an open question. While it
 is open (no `status resolved`), that element's incompleteness errors are off; resolving it turns them on again until
-the relation is written. Every such error's hint says "don't guess" and gives the hotspot to write. Big Picture
-(events, timelines, hotspots on events) is unaffected: no command, no error.
+the relation is written. Every such error's hint says "don't guess" and gives the hotspot to write. A storming with no
+command and no policy is at Big Picture: none of S024, S027 or S029 applies there (a storming with only events, actors
+and read models has no gap).
 
 A hotspot turns off *all* the incompleteness errors of its element, not one missing relation: its question is free
 text, which the checker does not read (spec §11), so it cannot tell which relation it asks about. The prompt asks the
@@ -153,6 +155,38 @@ remain (commands without `handledBy`), and no S025, S027 or S028.
 - **Big Picture**: a hotspot on a sticky of Design Level (a command, a policy, …) is not drawn there.
 - **Focus** (`apps/web/scene.ts`): the handler may be an external system; a cause's issuer brings the read model it
   looks at.
+
+### 7. After the review (2026-11-06)
+
+*Approved by the maintainer* after an independent review:
+
+- **Gaps only at Design Level, and what takes part.** S027 runs only when the storming has a command or a policy. An
+  element's own relations count as taking part: a read model fed `from` events and read by nobody (one people only
+  look at) is valid.
+- **The hotspot S024 suggests** asks everything that is missing (「誰が発行し、誰が処理する？結果は？」) under an ID no
+  declaration has (`<Command>Open`, else `<Command>Open2`, …), so that following the hint never makes an S001.
+- **A hotspot asks about its first `on` only** (the one that is an edge; a second is S004).
+- **Silenced gaps stay visible** (`designGaps` / `openGaps` in `contexts/storming`): `dt check` prints
+  「n element(s) incomplete under open hotspots: …」 before its summary, and the Live View draws, beside each note of
+  the command, the empty slot of an undecided issuer or handler (`RenderGapNode`, a dashed note 「誰が処理する？」 whose
+  selection selects the hotspot).
+- **A policy may be `by` an actor** (a rule a person applies by hand), drawn as a command's issuer is, above the policy.
+  A command a policy issues still has no `by` (S025).
+- **From outside, and on a schedule**: `event E { from Ext }` when we only record a fact the outside system decided; a
+  command `by Ext` when our aggregate decides something on what it sends. A schedule is a time event and a policy `on`
+  it, not an external "batch". The examples follow it.
+- **S029 (info)**: at Design Level, an event no command emits and that comes `from` no external system — except an
+  event a policy reacts to, which is a trigger (a time event). `Severity` gains `info` (the kernel's model, the JSON
+  schema's `severity` and its `summary.infos`, the LSP's Information); an info changes no exit code and marks no note.
+- **`dt fmt` merges** repeated relations of one keyword into one list (`by A` + `by B` → `by A, B`) unless a comment
+  is on one of them; `handledBy` and a hotspot's `on`, which take one, are left for S004.
+- **Near misses of keywords** (`handledby`, `readModel`, `emit`) get a `did you mean` in the syntax error.
+- **The merged handler** (§6) is part of the rendering decision: commands converging on one event note through the
+  same handler share one handler note before it.
+- **No event → event lines at Design Level** (*Decided by the maintainer*): there the placement shows the time order
+  (the steps left to right), so the time order is laid out but not drawn (`GraphEdge.hidden`), except where the
+  placement cannot show it: the edge into a lane that branches off (an exception's branch) and a `then`. Big Picture
+  keeps its time order lines.
 
 ## Alternatives
 

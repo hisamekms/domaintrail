@@ -172,6 +172,9 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   A storming with stages or exceptions (`stage`, `exception`) is drawn in time order: the stages as labelled frames
   left to right, the trunk of the main flows one straight row through them, every other timeline on a row below the
   step it branches off at (the exceptions' dashed arrows a quieter red, a dotted arrow back for `then`). At Design
+  Level no line joins two events in time order where the placement shows it (left to right): only an exception's branch
+  and its `then` are drawn; Big Picture keeps the time order lines. An undecided issuer or handler (an open hotspot on
+  the command asks it) is an empty dashed note 「誰が処理する？」 where it would stand. At Design
   Level each step is a group of columns (read models on the row of the issuer looking at them, commands with their
   issuers on top, handlers, the event, policies; a hotspot above the sticky it is on) and the elements stand in a band
   above the row of their event, an exception's above its lane. The タイムライン

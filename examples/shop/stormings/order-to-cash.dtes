@@ -74,8 +74,7 @@ storming OrderToCash "注文から入金まで" {
     ref Billing.Invoice.pay
     by PaymentService
     handledBy Invoice
-    emits InvoicePaid
-    emits PaymentFailed
+    emits InvoicePaid, PaymentFailed
   }
 
   // From Sales to Billing, as the .dt policy Billing.BillConfirmedOrder

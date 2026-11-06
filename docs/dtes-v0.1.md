@@ -47,7 +47,7 @@
 | `event` | 業務上起こった出来事の型（過去形の事実） | `timeline` から参照される。`level design` で Design Level のみに表示（§3.6） |
 | `actor` | Command を発行し得る人・役割 | 複数の Command から参照可 |
 | `external` | Command を発行し、処理し、Event を送り得る外部システム | `by`・`handledBy`・Event の `from` の参照先 |
-| `command` | 実行を試みる業務上の操作 | 処理するもの（`handledBy`）は最大1つ |
+| `command` | 実行を試みる業務上の操作 | 処理するもの（`handledBy`）はちょうど1つ（未決定なら未解決の Hotspot で問う） |
 | `policy` | Event に反応して Command を発行し得る業務ルール | **BC 横断可** |
 | `aggregate` | Command を処理する整合性境界の候補 | `.dt` Aggregate に任意で `ref` |
 | `readmodel` | 発行者が Command を決めるために見る情報 | DB アクセス仕様ではない。`from` で反映元の Event |
@@ -68,6 +68,7 @@
 | Policy | `on E` | Event | **1..N** | いずれかの Event を契機に Policy が評価され得る（OR） |
 | Policy | `issues C` | Command | **1..N** | 発行し得る Command。順序/必須性/全部実行を保証しない |
 | Event / Aggregate / Command | `ref ...` | `.dt` | **0..1** | 型の合う `.dt` シンボルへの明示対応。他の要素では禁止 |
+| Policy | `by A` | Actor | 0..N | 人が手で適用するルールのとき、その人（ADR 0032） |
 | Read Model | `from E` | Event | 0..N | 反映元の Event |
 | Event | `from X` | External System | 0..N | Command を経ずに外部システムから届く Event |
 | Hotspot | `on X` | Hotspot 以外の付箋 | 0..1 | 関連する付箋。因果ではない |
@@ -81,11 +82,11 @@
 
 ### 3.3 `reads` の明確化【確定】
 
-`reads DeliveryDetails` は「この Command を行う判断に DeliveryDetails の情報が利用される」を意味し、データベースクエリ、Actor が読む UI の実装、Command Handler が読む依存関係を特定しない。複数可。Read Model に `.dt` で対応する型がないことはエラーにしない。
+`reads DeliveryDetails` は「この Command を発行する人・システムが判断に DeliveryDetails の情報を使う」を意味し、`by` が複数あるときは、その全員の付箋へ描く（ADR 0032）。データベースクエリ、Actor が読む UI の実装、Command Handler が読む依存関係を特定しない。複数可。Read Model に `.dt` で対応する型がないことはエラーにしない。
 
 ### 3.8 未決定の関係【確定（2026-11-06 追加、ADR 0032）】
 
-Design Level の不完全さ（発行者・処理するもの・結果のない Command、`on` か `issues` のない Policy、どの関係からも名指されない Actor / External / Aggregate / Read Model）はエラーにする（S024、S008、S027）。ただし、分からない関係を**推測で埋めてはならない**。未決定であることは、その要素に `on` する未解決の Hotspot で書く。Hotspot が未解決（`status resolved` でない）の間、その要素の不完全さのエラーは出ない。解決したら関係を書く。
+Design Level の不完全さ（発行者・処理するもの・結果のない Command、`on` か `issues` のない Policy、どの関係からも名指されない Actor / External / Aggregate / Read Model）はエラーにする（S024、S008、S027）。ただし、分からない関係を**推測で埋めてはならない**。未決定であることは、その要素に `on` する未解決の Hotspot で書く。Hotspot が未解決（`status resolved` でない）の間、その要素の不完全さのエラーは出ない。解決したら関係を書く。Hotspot が問うのはその最初の `on` の要素だけ。問いのまま残っている不完全さは隠さない：`dt check` が一覧を出し、Live View は欠けた発行者・処理するものの位置に破線の空の付箋を描く。Command も Policy もない storming（Big Picture）には不完全さはない。外から届くものは、外のシステムが決めた事実を記録するだけなら `event E { from Ext }`、届いたものについて我々の集約が判断するなら `by Ext` の Command。定期的な処理は時刻の Event と、それに `on` する Policy で書く。
 
 ```text
 command ReassignByHand "手で配車し直す" {
@@ -118,7 +119,7 @@ hotspot WhoReassigns "手配車は何が処理する？" {
 
 - Event は本体に `level design` を書くと **Design Level のみ**に表示される。仕組み側の細かい出来事（引当・与信・内部の失敗や再試行など）を、Big Picture の業務の流れから外すためのもの。
 - 書かなければ両方の抽象度に表示する（従来どおり）。`level big-picture` は書かない（Error）。値は `design` のみ。
-- `level` を書けるのは Event だけ（他の要素は Error）。1つの Event に2つ以上は Error。`ref` との順序は自由で、正規の位置は本体の最後（`ref` の後）。`dt fmt` は句の順序を変えない。
+- `level` を書けるのは Event だけ（他の要素は Error）。1つの Event に2つ以上は Error。`ref` との順序は自由で、正規の位置は本体の最後（`ref` の後）。`dt fmt` は句を正規の順に並べる（ADR 0032：`ref`・`by`・`reads`・`handledBy`・`emits`・`on`・`issues`・`from`・`status`・`resolution`・`level`。同じキーワードの関係は1つの一覧にまとめる）。
 - Big Picture に「昇格」させるときは `level design` を消す。`.dtes` の意味（timeline の順序、関係、`ref`）は変わらず、表示だけが変わる（§6）。
 
 ### 3.7 段階・本流・例外・合流【確定（2026-11-03 追加）】
@@ -255,7 +256,7 @@ event BikeLocked "車両がロックされた" {
 | 構文、重複 ID、参照先型の誤り、存在しない `ref` | Error | 形式的に確定できる |
 | Command `ref` と `handledBy` の Aggregate の `ref` の不整合 | Warning | 探索中の仮説を許容 |
 | 両側で `ref` 解決済みの Command `emits` と `.dt` emitted Event の矛盾 | Warning | `.dtes` は発生可能性の部分記述。誤検知を避け、証明できる不一致のみ |
-| `.dtes` の Command に `emits` がない | 診断なし | 未確定でよい |
+| `.dtes` の Command に `emits` がない | Error（S024。未解決の Hotspot が `on` していれば問いとして許す。ADR 0032） | 推測で埋めない |
 | `.dtes` の Read Model に `.dt` 対応がない | 診断なし | 設計段階でよい |
 | `.dt` の State / Command / Event が `.dtes` に欠落 | 診断なし | `.dtes` は網羅的でない |
 | Policy の BC 横断 | 診断なし | 許可済み |
@@ -296,9 +297,9 @@ type ViewOptions = {
 - Big Picture に戻しても、Design Level で追加・分割した Event 定義は消さない。
 - 名前付き timeline の選択に応じて、その timeline の EventOccurrence と関連要素を抽出。
 - 統合キャンバスでは timeline に属さない Event や孤立した要素も表示。
-- **使われるごとに描く要素**【確定（2026-11-03 追加）】: Design Level では Actor / External System（Command の実行者）、Read Model（Command の `reads`）、Aggregate（Command の `target`）を、そのビューで使う Command ごとに1枚ずつ、その Command の隣に描く（線は付箋と Command の間の短い1本。Aggregate からは、その Command の Event への `emits` も出る）。どの Command にも使われないものは従来どおり1枚。表示上の分割で、`.dtes` も意味的なグラフも変わらない。
+- **使われるごとに描く要素**【確定（2026-11-03 追加）】: Design Level では Actor / External System（Command の発行者、`by`）、Read Model（Command の `reads`）、処理するもの（Command の `handledBy`）を、そのビューで使う Command ごとに1枚ずつ、その Command の隣に描く（線は付箋と Command の間の短い1本。Aggregate からは、その Command の Event への `emits` も出る）。どの Command にも使われないものは従来どおり1枚。表示上の分割で、`.dtes` も意味的なグラフも変わらない。
 - **関係の描き方（ADR 0032）**【確定（2026-11-06 改訂）】: 前後の2項目の `actor` は `by`（発行者：Actor か External System）、`target` は `handledBy`（処理するもの：Aggregate か External System）に読み替える。Read Model の付箋はその Command の発行者の付箋へつなぐ（発行者のいない Policy の Command では Command へ）ので、Read Model に導かれる発行者は Command の上に貼らず、Read Model → 発行者 → Command と並ぶ。`handledBy` が External System のときも同じく処理するものの付箋から `emits` を描く。Read Model の `from` は Event → Read Model の点線の矢印、Event の `from` は External System の付箋（その Event の付箋ごとに1枚）→ Event の因果の線。Hotspot はどの付箋にも `on` でき、その付箋（の各コピー）の上に貼る。Big Picture では、Design Level の付箋に `on` する Hotspot は描かない。同じ Event の付箋に至る複数の Command が同じもの（同じ Aggregate、または同じ External System）に処理されるとき、処理するものはその Event の付箋の前に1枚だけ描き（各 Command → その1枚、その1枚 → Event は1本。その線は元の Command の `emits` すべてを表し、ホバーで Command を示す）、Event の付箋をまたいでは合わせない（別ステップの同じ Event には別々に描く）。処理するものが違えば合わせず、発行者は Command ごと。Command は共有しない Event のために自分の処理するものも持つ。グリッドでは合流する Command を隣り合わせ、その行の中央に置く。
-- **Event Storming の文法で描く**【確定（2026-11-05 追加）】: Design Level は一般的な Event Storming の読み方で左→右に描く。Read Model と Actor（Command の左上に貼る）→ Command → Aggregate → Event → Policy → Command …。`target` のある Command は Aggregate を経て Event に至る（Command → Aggregate、Aggregate → Event。`emits` の意味的エッジのキーは変えない）。`target` のない Command は従来どおり Command → Event。Hotspot は `on` の付箋に貼る注記で、流れの1ステップにはしない（その Event の上に置く）。1つのビューで Event が複数のステップに描かれるとき（timeline のビューで繰り返す Event、段階・例外のある storming）は、その Event を `emits` する Command（とその Actor・Read Model・Aggregate）、その Event に `on` する Policy、その Event への Hotspot を、ステップごとに1枚ずつ描く（ID `n:<要素>#<k>`。§7.3・§10.2 の表示上の分割）。Policy の付箋は、自分のステップの次にある Command の付箋へ `issues` を描く（後ろに無ければすべてへ）。統合キャンバス（段階・例外のない storming）は Event を1枚に描くので、この分割はしない。どの付箋を選んでも同じ要素を選び（インスペクタは1つ）、同じ要素のほかの付箋を控えめに示す。変更マーク・参照・在席表示は要素に付くので全部の付箋に出る。チャットやカタログから要素へ飛ぶときは、画面の中央に最も近い付箋を選ぶ。
+- **Event Storming の文法で描く**【確定（2026-11-05 追加）】: Design Level は一般的な Event Storming の読み方で左→右に描く。Read Model → 発行者 → Command → 処理するもの → Event → Policy → Command …。`handledBy` のある Command は処理するものを経て Event に至る（Command → 処理するもの、処理するもの → Event。`emits` の意味的エッジのキーは変えない）。`handledBy` のない Command は Command → Event。Hotspot は `on` の付箋に貼る注記で、流れの1ステップにはしない（その Event の上に置く）。1つのビューで Event が複数のステップに描かれるとき（timeline のビューで繰り返す Event、段階・例外のある storming）は、その Event を `emits` する Command（とその Actor・Read Model・Aggregate）、その Event に `on` する Policy、その Event への Hotspot を、ステップごとに1枚ずつ描く（ID `n:<要素>#<k>`。§7.3・§10.2 の表示上の分割）。Policy の付箋は、自分のステップの次にある Command の付箋へ `issues` を描く（後ろに無ければすべてへ）。統合キャンバス（段階・例外のない storming）は Event を1枚に描くので、この分割はしない。どの付箋を選んでも同じ要素を選び（インスペクタは1つ）、同じ要素のほかの付箋を控えめに示す。変更マーク・参照・在席表示は要素に付くので全部の付箋に出る。チャットやカタログから要素へ飛ぶときは、画面の中央に最も近い付箋を選ぶ。
 - 複数 timeline フィルタ／抽象度切替は `.dtes` を変更しない。
 - **段階・例外のある storming**（§3.7）: 統合キャンバスは区画を時間順に左→右へ並べ、段階をラベル付きの枠で描く（§8.6）。**段階ビュー**（その段階の本流と例外を同じ描き方で統合）を段階ごとに選べる。名前付き timeline のビューは従来どおり。
 - **例外の表示切替**（「例外を表示」）: 統合キャンバスと段階ビューで、例外を描かないこともできる。そのとき例外のステップ、例外にしか現れない Event、それらだけに付いた Hotspot、例外の `then` を描かない。デザインレベルでは、例外にしか現れない Event だけに関わる要素（それだけを emits する Command、それだけに `on` する Policy とそれが issues する Command、それらの Command の横の Actor・外部システム・Read Model・集約のコピー）も描かない。例外そのものの timeline ビューには影響しない。表示状態は閲覧者ごとの UI 状態で、`.dtes` を変更しない。
@@ -405,7 +406,7 @@ Render Graph（§7.3、本節 8.1〜8.4）は prefix trie のまま変えない�
 段階または `exception` のある storming（§3.7）の統合キャンバスと段階ビューは、prefix trie の代わりに区画ごとの木で描く。
 
 - 区画の木: 幹を先頭から、ほかの timeline を分岐点のノードから挿入する。分岐点の先頭ステップは分岐点のノードを共有し（§8 の prefix 共有と同じ扱い）、その後も同じように続く timeline はステップを共有する。分岐後の共通 suffix は共有しない（§8.1）。
-- 配置（**時間順が左→右**）: 1ステップ1列（Design Level では列の組。下記）。区画を時間順に横に並べ、幹の Event は全段階を通る1本の行。ほかの timeline は分岐ステップの下の **レーン** に右へ流れる（重ならないレーンは同じ行を共有し、別の本流を例外より上に置く）。例外は段階の枠の中に収める。Design Level では Event Storming の文法（§6）どおり、各ステップを左から Read Model・Command（その Actor を上に貼る）・Aggregate・Event（その Hotspot を上に貼る）・Policy の列に分け（そのステップの列で使うものだけ）、要素はその Event のレーンの行の上の帯に置く（例外の Event の要素は例外のレーンの上）。Command・Aggregate・Read Model は1行に並び、複数の Command は帯の中で縦に積む。どこにも属さないものは区画の下に置く（2026-11-05 改訂）。
+- 配置（**時間順が左→右**）: 1ステップ1列（Design Level では列の組。下記）。区画を時間順に横に並べ、幹の Event は全段階を通る1本の行。ほかの timeline は分岐ステップの下の **レーン** に右へ流れる（重ならないレーンは同じ行を共有し、別の本流を例外より上に置く）。例外は段階の枠の中に収める。Design Level では Event Storming の文法（§6）どおり、各ステップを左から Read Model・Command（その発行者を上に置く）・処理するもの・Event（その Hotspot を上に置く）・Policy の列に分け（そのステップの列で使うものだけ）、要素はその Event のレーンの行の上の帯に置く（例外の Event の要素は例外のレーンの上）。Command・Aggregate・Read Model は1行に並び、複数の Command は帯の中で縦に積む。どこにも属さないものは区画の下に置く（2026-11-05 改訂）。
 - 線: 段階の `after` は前の幹の最後から次の幹の最初へ。例外だけの時間順は例外の線（控えめな赤系の破線）で描く。`then` は最後のステップの下から戻り先の下へ入る点線。どの線も付箋と交差しない（列・行の間を通す）。レーンの最初の線にその timeline のラベルを添える。
 - 座標は DSL に保存しない。同じ `.dtes`・同じビューなら同じ配置（canonical）。
 
@@ -441,8 +442,8 @@ ADR 0032 で、関係は Event Storming のデザインレベルの文法その�
 - **個別 timeline**: 選択 timeline の Occurrence を基点とし、**両端の Event が選択 timeline に出現する** `Event → Policy → Command → Event` の1ホップ候補経路だけを抽出する（Policy と Command をそれぞれ1つ経由）。
 - **境界**: 選択 timeline に登場しない Event へ無制限にたどらない。Policy の他の `issues` を自動的にすべて表示する必要はない。
 - **安全性**: 選択 timeline 内で因果経路が**実際に起きた**と確定的に描かない。因果エッジは「型レベルの可能な関連」として表示する。
-- **確定**: 選択 timeline 上の Event を両端とする `Event → Policy → Command → Event` **1ホップ連鎖**に限定する。対象 Command の `actor/reads/target` と両端 Event に `on` で結びつく Hotspot を付加する。片端が timeline 外なら経路を投影しない。孤立した timeline Event は常に表示。多段経路は v0.1 で自動展開しない。
-- **Event の原因**【確定（2026-11-03 追加）】: 選択 timeline の Event を `emits` する Command は、Policy に発行されていなくても、その Event の原因として描く（統合キャンバスで同じ Event に描くものと同じ）。その Command の `actor/reads/target` を付加し（Actor・Read Model・Aggregate は §6 の使われるごとに描く）、`emits` は timeline の Event へのものだけを描く。その Command を発行する Policy は、上の1ホップ連鎖に当たるときだけ描く（Command からさかのぼらない）。段階ビューも同じ規則で、その段階の Event を対象にする。Big Picture では Command を描かないので変わらない。
+- **確定**: 選択 timeline 上の Event を両端とする `Event → Policy → Command → Event` **1ホップ連鎖**に限定する。対象 Command の `by/reads/handledBy` と両端 Event に `on` で結びつく Hotspot を付加する。片端が timeline 外なら経路を投影しない。孤立した timeline Event は常に表示。多段経路は v0.1 で自動展開しない。
+- **Event の原因**【確定（2026-11-03 追加）】: 選択 timeline の Event を `emits` する Command は、Policy に発行されていなくても、その Event の原因として描く（統合キャンバスで同じ Event に描くものと同じ）。その Command の `by/reads/handledBy` を付加し（発行者・Read Model・処理するものは §6 の使われるごとに描く）、`emits` は timeline の Event へのものだけを描く。その Command を発行する Policy は、上の1ホップ連鎖に当たるときだけ描く（Command からさかのぼらない）。段階ビューも同じ規則で、その段階の Event を対象にする。Big Picture では Command を描かないので変わらない。
 - `emits` で選択 Event に結びつく Command は型レベルの原因として描くが、対応する `Event → Policy → Command` が存在しなければ、Policy を補ってシナリオ上で発火したと推定しない。統合ビューでは型レベルの全関係を表示できる。
 
 ### 9.4 視覚表現
@@ -454,6 +455,8 @@ ADR 0032 で、関係は Event Storming のデザインレベルの文法その�
 | 非因果関連（`by`・`reads`） | 点線・細線、**方向なし**（矢印は因果と時間の向きだけ） |
 | Read Model への反映（Read Model の `from`） | 点線・細線＋方向（Event → Read Model） |
 | Hotspot の `on` | 点線・細線、**方向なし**（因果でも時間順でもない） |
+
+Design Level では Event 同士の時間順の線を描かない（配置が左→右で示す。ADR 0032）。描くのは配置で示せないものだけ：例外のレーンへの分岐と `then` の戻り。Big Picture は時間順の線を描く。
 
 付箋はすべて同じ大きさの正方形で描き、ラベルは折り返す（収まらないときは文字を小さくし、下限の大きさでも収まらないときは収まる行までで「…」で切る。全文はホバーとインスペクタで見られる）。付箋の色は Event Storming の慣習に従って種類を表す：イベント付箋はオレンジ、Command 青、Policy 紫、Aggregate 黄、Read Model 緑、Hotspot ピンク（Actor・External System などの割り当ては `docs/live-view.md`）。色は Live View の表示の約束で、`.dtes` の構文や意味論には含めない。種類は付箋のステレオタイプ（«イベント»）と凡例でも示し、色だけに頼らない。視認性・アクセシビリティを確保すること。
 
@@ -509,6 +512,7 @@ ADR 0032 で、関係は Event Storming のデザインレベルの文法その�
 | Graph | Policy→Command→Event→Policy の型レベル循環 | Warning（無限ループ断定禁止） |
 | Policy | 2つ以上の `on` と2つ以上の `issues` | Info（任意、直積意味ではない旨をレビュー） |
 | Timeline | 因果が示唆する順序と逆に見える | **原則診断しない**（Occurrence 対応未確定） |
+| Source | Design Level で、どの Command も `emits` せず、`from` もなく、Policy の契機（時刻の Event）でもない Event（S029） | Info |
 | Completeness | 未参照 Event、timeline の部分性、Event の再登場、`from` のない Read Model（Big Picture の完全性） | 診断なし |
 
 静的 checker は自然言語の Hotspot resolution を理解したと**主張しない**。AI によるドメインレビューは別レイヤー（不足、例外、責務、実装との差異を指摘する非決定的な支援）として扱う。
@@ -553,7 +557,7 @@ ADR 0032 で、関係は Event Storming のデザインレベルの文法その�
 - [ ] R13: `.dt ref` を修正しても Semantic ID は変わらない。
 - [ ] R14: Big Picture で Command/Policy を隠しても、`level design` のない Event は消えない。
 - [ ] R15: 全体ビューに timeline 未所属の Event が現れる。
-- [ ] R16: timeline のフィルタは1ホップの Event→Policy→Command→Event のみ（両端が対象 timeline）投影し、多段連鎖は自動展開しない。Design Level では timeline の Event を `emits` する Command（とその `actor/reads/target`）も描く。timeline ビュー・例外のビュー・段階ビューで同じ。
+- [ ] R16: timeline のフィルタは1ホップの Event→Policy→Command→Event のみ（両端が対象 timeline）投影し、多段連鎖は自動展開しない。Design Level では timeline の Event を `emits` する Command（とその `by/reads/handledBy`）も描く。timeline ビュー・例外のビュー・段階ビューで同じ。
 - [ ] R17: Big Picture と Design Level のどちらでも同一 `.dtes` を使い、`external` は Design Level に表示する。
 - [ ] R18: `level design` の Event は Big Picture で非表示、Design Level で表示。timeline の順序エッジは前後をつなぎ、全要素が非表示の group は描かず、共通 prefix 統合は表示される列で行う。Hotspot は残り、非表示の Event への `on` は描かない。
 - [ ] R19: 段階のある統合キャンバスで、幹の付箋の x 座標は全段階を通して狭義単調増加し、y は同じ。段階の枠は重ならない。

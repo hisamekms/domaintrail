@@ -286,6 +286,8 @@ Design Level only. R14 now reads "an event without `level design` never disappea
   otherwise, that `design` is the only level (with `did you mean`). An invalid `level` hides nothing.
 - **Formatter**: no space around the hyphens of a value. It never reorders clauses; the canonical place of
   `level design` is the last clause, after `ref`, which the guide, the examples and the agent's rules follow.
+  (Superseded by [ADR 0032](0032-dtes-design-level-grammar.md): `dt fmt` now puts the clauses in one canonical order,
+  `level` last, and merges repeated relations of one keyword into one list.)
 - **Projection**: at Big Picture, `projectView` builds the prefix trie with the hidden events left out, as
   `buildTrie` already does for steps naming no event. So the order edges join the neighbours of a hidden event, a
   group of hidden events only has no step, a group keeps its visible events (its step key is theirs), and timelines that

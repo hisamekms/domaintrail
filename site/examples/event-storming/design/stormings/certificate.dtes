@@ -41,8 +41,7 @@ storming CertificateIssuance "住民票のコンビニ交付" {
   command VerifyPin "暗証番号を照合する" {
     by Applicant
     handledBy CardCheck
-    emits PinEntered
-    emits PinLocked
+    emits PinEntered, PinLocked
   }
   command SelectOptions "種類と部数を選ぶ" {
     by Applicant

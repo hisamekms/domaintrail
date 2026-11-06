@@ -30,8 +30,7 @@ storming DeliveryCancellation "配送キャンセル" {
   command ReleaseBike "車両割当解除" {
     ref Fleet.BikeAssignment.release
     target BikeAssignment
-    emits BikeReleased
-    emits ReleaseFailed
+    emits BikeReleased, ReleaseFailed
   }
   command ReceivePaymentNotice "決済通知受領" {
     actor PaymentGateway
@@ -43,8 +42,7 @@ storming DeliveryCancellation "配送キャンセル" {
 
   policy CleanupAfterCancel "キャンセル後処理" {
     on ShipmentCancelled
-    issues ReleaseBike
-    issues ReleaseSlot
+    issues ReleaseBike, ReleaseSlot
   }
 
   timeline Normal "通常キャンセル" {
