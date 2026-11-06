@@ -45,7 +45,7 @@ it, so an action added there shows everywhere at once:
 | ナレッジを見る | a sticky with knowledge (ADR 0031), in a session with a knowledge store | no | no | | a store |
 | ドメインモデルで見る | event, command, aggregate with a `ref` the model has | no | no | | |
 | このタイムラインで見る | an event in a timeline the view does not show | no | no | | |
-| ホットスポットを付ける | event (`HOTSPOT_TARGETS`, the grammar's rule; widened there) | no | no | | a live session |
+| ホットスポットを付ける | any sticky but a hotspot (`HOTSPOT_TARGETS`, the grammar's `hotspot { on <any sticky> }` since ADR 0032) | no | no | | a live session |
 | 解決を書く (解決を直す once resolved, opened with its resolution) | hotspot | no | yes, a hotspot's (`frequent` may depend on the sticky) | | a live session |
 | リンクをコピー | all | no | no | ⌘⇧C | |
 
@@ -82,6 +82,10 @@ record of its own: the edit's run gets `hotspotName` and its result revision bec
 by its name now; the page keeps the hotspot selected under its new name. With no agent connected, a failure, or no
 answer within 30 s (the job is withdrawn), the provisional name stays.
 
+**Turn marks** (#63). A person's edit is a turn like a run's: its base → result revision feeds the storming canvas's
+marks of the latest change (`changingRuns` takes `Edited` runs), so the stickies it added or changed are marked as
+a run's are.
+
 **Links.** A link names an element in the page's fragment, `#select=es/<Storming>/<Local>`: the view state stays the
 page's (per browser, not in the URL), and the page opens the world and the storming's view that draws the element
 (its integrated canvas, at a level that draws it), selects it and drops the fragment. A fragment never reaches the
@@ -92,7 +96,8 @@ server.
 - **Planned on the AST** (`contexts/storming/src/infrastructure/syntax/edit.ts`, `planStickyEdit`): the storming and
   the declaration are found by their IDs in the parsed file; only the ranges of the tokens concerned are replaced or
   text inserted next to them — the label string, the declaration's name and every reference to it in the storming
-  (relation clauses, the steps of timelines and groups, an exception's `then`, a stage's `after`; the IR's
+  (the relation clauses — `by`, `reads`, `handledBy`, `emits`, `on`, `issues`, `from`, each name of a comma list, a
+  hotspot's `on` any sticky —, the steps of timelines and groups, an exception's `then`, a stage's `after`; the IR's
   `referencesTo` finds the same places, and the page counts them with it). No `dt fmt` of the file: the rest stays byte
   for byte. A new hotspot goes after the storming's last hotspot (else after its last element), in the canonical
   layout (`hotspot <Name> "<question>" { on <Event> }`); resolving writes `status resolved` and `resolution "…"` where

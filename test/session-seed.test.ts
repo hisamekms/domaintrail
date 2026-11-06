@@ -29,7 +29,7 @@ const freePort = (): Promise<number> =>
 describe('the session seed', () => {
     test('scenario names: a comma list, repeated, and all', () => {
         expect(scenariosOf(['chat,runs', 'chat'])).toEqual(['chat', 'runs']);
-        expect(scenariosOf(['all'])).toHaveLength(8);
+        expect(scenariosOf(['all'])).toHaveLength(9);
         expect(() => scenariosOf(['nope'])).toThrow('Unknown scenario nope');
     });
 

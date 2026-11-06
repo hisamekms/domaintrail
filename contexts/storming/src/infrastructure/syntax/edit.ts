@@ -5,7 +5,7 @@
 import { AstUtils, GrammarUtils, type AstNode, type CstNode, type Reference } from 'langium';
 import {
     isEsAfterClause,
-    isEsEvent,
+    isEsNode,
     isEsEventStep,
     isEsHotspot,
     isEsRejoin,
@@ -142,7 +142,7 @@ function referencesIn(storming: EsStorming, name: string): CstNode[] {
         if (ref.$refText === name && ref.$refNode) out.push(ref.$refNode);
     };
     for (const node of AstUtils.streamAst(storming)) {
-        if (isEsRelationClause(node)) add(node.target);
+        if (isEsRelationClause(node)) for (const target of node.targets) add(target);
         else if (isEsEventStep(node) || isEsRejoin(node)) add(node.event);
         else if (isEsAfterClause(node)) add(node.stage);
     }
@@ -232,7 +232,8 @@ function plan(text: string, storming: EsStorming, declarations: readonly EsDecla
         case 'addHotspot': {
             const on = declarations.find((d) => d.name === input.on);
             if (!on) return fail({ type: 'NotFound' });
-            if (!isEsEvent(on)) return fail({ type: 'WrongKind' });
+            // on any sticky but a hotspot (the grammar's `hotspot { on <any sticky> }`)
+            if (!isEsNode(on) || isEsHotspot(on)) return fail({ type: 'WrongKind' });
             if (input.label.trim().length === 0 || input.label.length > MAX_HOTSPOT_QUESTION) return fail({ type: 'InvalidLabel' });
             const problem = localNameProblem(input.name, taken);
             if (problem && !(problem === 'duplicate' && input.uniqueName)) return fail({ type: 'InvalidName', problem });

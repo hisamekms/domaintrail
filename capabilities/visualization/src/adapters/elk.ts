@@ -11,6 +11,7 @@ import {
     transitionText,
     type Graph,
     type GraphEdge,
+    type GraphNode,
     type LaidOutGraph,
     type LayoutSpacing,
     type NodeLayout,
@@ -95,6 +96,11 @@ const EDGE_OPTIONS: Partial<Record<GraphEdge['kind'], Record<string, string>>> =
     esSequence: { 'elk.layered.priority.direction': '10' },
 };
 
+/** The gap between a note stuck on another one (`GraphNode.attachTo`) and that one, by spacing. */
+const ATTACH_GAP: Record<LayoutSpacing, number> = { normal: 24, compact: 12 };
+/** How far left of a block a stuck note's edge goes down when another stuck note is under it. */
+const ATTACH_SIDE = 12;
+
 /** An edge's label box; a transition's is sized for the texts the graph shows (a second, smaller line for its events). */
 function labelOf(e: GraphEdge, label: Texts, graph: Graph, scale: number): { text: string; width: number; height: number } {
     const text: { main: Texts; sub?: Texts } = e.kind === 'transition' ? transitionText(label, e.events, graph.transitionLabels ?? 'both') : { main: label };
@@ -105,7 +111,7 @@ function labelOf(e: GraphEdge, label: Texts, graph: Graph, scale: number): { tex
 
 export class ElkLayoutEngine implements LayoutEngine {
     readonly name = 'elk';
-    readonly version = 11;
+    readonly version = 12;
     private readonly elk = new ELK({ workerFactory: createWorker });
 
     /** Stops the layout worker so the process can exit (the in-process fake Worker has nothing to stop). */
@@ -124,7 +130,23 @@ export class ElkLayoutEngine implements LayoutEngine {
         // ELK applies the minimum size of a container transposed in a vertical layout
         const minimum = (w: number, h: number): string => (direction === 'DOWN' || direction === 'UP' ? `(${h},${w})` : `(${w},${h})`);
 
+        // the notes stuck on another one (a hotspot on its event, an actor on its command): one block with it, above it,
+        // so that they never take a step of the flow; the block's edges go in and out at the height of that node's middle
+        const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+        const stuck = new Map<string, GraphNode[]>();
         for (const n of graph.nodes) {
+            const anchor = n.attachTo !== undefined ? byId.get(n.attachTo) : undefined;
+            if (!anchor || anchor.attachTo !== undefined || containers.has(n.id) || containers.has(anchor.id) || anchor.parent !== n.parent) continue;
+            stuck.set(anchor.id, [...(stuck.get(anchor.id) ?? []), n]);
+        }
+        const isStuck = new Set([...stuck.values()].flat().map((n) => n.id));
+        const gap = ATTACH_GAP[spacing];
+        /** The height above a node that its stuck notes take. */
+        const above = (id: string): number => (stuck.get(id) ?? []).reduce((h, n) => h + n.height + gap, 0);
+        const portOf = (id: string, side: 'in' | 'out'): string => (stuck.has(id) ? `${id}::${side}` : id);
+
+        for (const n of graph.nodes) {
+            if (isStuck.has(n.id)) continue;
             const node: ElkNode = { id: n.id, children: [] };
             if (containers.has(n.id)) {
                 // a context's description is drawn under its label
@@ -138,8 +160,20 @@ export class ElkLayoutEngine implements LayoutEngine {
                 node.width = n.width;
                 node.height = n.height;
             }
+            const notes = stuck.get(n.id);
+            if (notes) {
+                const top = above(n.id);
+                node.width = Math.max(n.width, ...notes.map((m) => m.width));
+                node.height = n.height + top;
+                const middle = top + n.height / 2;
+                node.ports = [
+                    { id: portOf(n.id, 'in'), x: 0, y: middle, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'WEST' } },
+                    { id: portOf(n.id, 'out'), x: node.width, y: middle, width: 0, height: 0, layoutOptions: { 'elk.port.side': 'EAST' } },
+                ];
+                node.layoutOptions = { ...node.layoutOptions, 'elk.portConstraints': 'FIXED_POS' };
+            }
             const at = options.positions?.[n.id];
-            if (at) node.layoutOptions = { ...node.layoutOptions, 'elk.position': `(${at.x},${at.y})` };
+            if (at) node.layoutOptions = { ...node.layoutOptions, 'elk.position': `(${at.x},${at.y - above(n.id)})` };
             elkNodes.set(n.id, node);
             const parent = n.parent && graph.nodes.some((p) => p.id === n.parent) ? n.parent : ROOT;
             children.set(parent, [...(children.get(parent) ?? []), node]);
@@ -152,8 +186,8 @@ export class ElkLayoutEngine implements LayoutEngine {
             .filter((e) => elkNodes.has(e.source) && elkNodes.has(e.target))
             .map((e) => ({
                 id: e.id,
-                sources: [e.source],
-                targets: [e.target],
+                sources: [portOf(e.source, 'out')],
+                targets: [portOf(e.target, 'in')],
                 labels: e.label ? [labelOf(e, e.label, graph, scale)] : [],
                 ...(EDGE_OPTIONS[e.kind] && { layoutOptions: EDGE_OPTIONS[e.kind] }),
             }));
@@ -184,6 +218,40 @@ export class ElkLayoutEngine implements LayoutEngine {
             }
         };
         walk(result, { x: 0, y: 0 });
+        // a block: its node under its stuck notes, the notes stacked above it
+        const stuckEdges: LaidOutGraph['edgeLayout'] = {};
+        for (const [id, notes] of stuck) {
+            const block = nodeLayout[id];
+            if (!block) continue;
+            const anchor = byId.get(id)!;
+            let y = block.y;
+            const placed = notes.map((n) => {
+                const layout = { x: block.x, y, width: n.width, height: n.height };
+                nodeLayout[n.id] = layout;
+                y += n.height + gap;
+                return layout;
+            });
+            nodeLayout[id] = { x: block.x, y, width: anchor.width, height: anchor.height };
+            for (const e of graph.edges) {
+                const i = notes.findIndex((n) => n.id === e.source || n.id === e.target);
+                if (i < 0 || (e.source !== id && e.target !== id)) continue;
+                const note = placed[i]!;
+                // the lowest note straight down into the node; the others down its left side, into its top corner
+                const path =
+                    i === notes.length - 1
+                        ? [
+                              { x: note.x + note.width / 2, y: note.y + note.height },
+                              { x: note.x + note.width / 2, y },
+                          ]
+                        : [
+                              { x: note.x, y: note.y + note.height / 2 },
+                              { x: note.x - ATTACH_SIDE, y: note.y + note.height / 2 },
+                              { x: note.x - ATTACH_SIDE, y: y + ATTACH_SIDE },
+                              { x: block.x, y: y + ATTACH_SIDE },
+                          ];
+                stuckEdges[e.id] = { points: e.source === id ? path.reverse() : path };
+            }
+        }
 
         const edgeLayout: LaidOutGraph['edgeLayout'] = {};
         const collect = (node: ElkNode): void => {
@@ -201,6 +269,7 @@ export class ElkLayoutEngine implements LayoutEngine {
             for (const c of node.children ?? []) collect(c);
         };
         collect(result);
+        Object.assign(edgeLayout, stuckEdges);
 
         return { ...graph, nodeLayout, edgeLayout, signature: graphSignature(graph), ...(spacing === 'compact' && { spacing }) };
     }

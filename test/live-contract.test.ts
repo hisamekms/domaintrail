@@ -90,7 +90,13 @@ describe('the Live View server', () => {
 
     test('pushes an update after a .dtes file is saved', async () => {
         const file = path.join(dir, 'stormings', 'order-to-cash.dtes');
-        await writeFile(file, (await readFile(file, 'utf8')).replace('  actor Customer "顧客"', '  actor Customer "顧客"\n  actor Clerk "店員"'));
+        await writeFile(
+            file,
+            (await readFile(file, 'utf8')).replace(
+                '  actor Customer "顧客"',
+                '  actor Customer "顧客"\n  actor Clerk "店員"\n  hotspot ClerkRole "店員は何をする？" {\n    on Clerk\n  }',
+            ),
+        );
         const p = await nextUpdate((u) => u.stormings.some((s) => s.storming.elements.some((e) => e.id === 'Clerk')));
         expect(p.status).toBe('ok');
     });

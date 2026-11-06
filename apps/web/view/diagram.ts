@@ -30,6 +30,8 @@ export interface CanvasItem {
     readonly ghost: boolean;
     /** The node's, group's or edge's kind (`owns`, `references`, `esEvent`...); empty for internal transitions. */
     readonly kind: string;
+    /** An edge's own explanation (a storming's line says what it means, ADR 0032), shown in place of its kind's. */
+    readonly explanation?: string;
 }
 
 /**

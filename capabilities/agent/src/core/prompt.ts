@@ -117,12 +117,14 @@ function languagesOf(input: Json<Collaboration.RunInput>): Languages {
 
 /**
  * The ways of working with the two DSLs, as DomainTrail's guide gives them (its `storming-practice` and
- * `modeling-practice` topics, and the `.dt` syntax by example, `dsl-quick`): the app reads them from the guide it
- * embeds, so that the prompts and `dt guide` say the same.
+ * `modeling-practice` topics, and the syntax of each on one screen, `dtes-quick` and `dsl-quick`): the app reads them
+ * from the guide it embeds, so that the prompts and `dt guide` say the same.
  */
 export interface Practice {
     /** How to run a storming in `.dtes` files. */
     readonly storming: string;
+    /** The `.dtes` syntax by example (ADR 0032), for a prompt that reads or writes `.dtes` files; none: left out. */
+    readonly stormingSyntax?: string;
     /** How to grow the `.dt` model. */
     readonly modeling: string;
     /** The `.dt` syntax by example, for a prompt that reads or writes `.dt` files; none: left out. */
@@ -130,13 +132,14 @@ export interface Practice {
 }
 
 /**
- * The ways of working for the DSLs a request is about, the storming's first, the `.dt` syntax after the modeling's
- * (unless `syntax` is false: a prompt that writes no `.dt`); none without `practice`.
+ * The ways of working for the DSLs a request is about, the storming's first, each language's syntax after its way of
+ * working (unless `syntax` is false: a prompt that writes no file); none without `practice`.
  */
 export function practiceFor(practice: Practice | undefined, languages: Languages, syntax = true): string[] {
     if (!practice) return [];
+    const storming = [practice.storming, ...(syntax && practice.stormingSyntax !== undefined ? [practice.stormingSyntax] : [])];
     const modeling = [practice.modeling, ...(syntax && practice.modelingSyntax !== undefined ? [practice.modelingSyntax] : [])];
-    return [...(languages.dtes ? [practice.storming] : []), ...(languages.dt ? modeling : [])];
+    return [...(languages.dtes ? storming : []), ...(languages.dt ? modeling : [])];
 }
 
 /** JSON that cannot close the block it is in: `<` and `>` are escaped (JSON reads them back unchanged). */
@@ -514,6 +517,12 @@ Rules:
 2. Edit only \`.dt\` and \`.dtes\` source files of this workspace. Create, change or delete no other file.
 3. A \`.dtes\` storming stays exploratory: open hotspots and events without a model counterpart are fine. Keep its
    labels short (\`dt check\` warns, S015). Never copy or sync \`.dtes\` content into \`.dt\` files by yourself.
+   Write its relations in Event Storming's grammar (\`dt guide dtes-quick\`): a command is issued \`by\` an actor or
+   external system (or a policy \`issues\` it), \`reads\` read models, is \`handledBy\` an aggregate or external
+   system and \`emits\` events. Never fill a relation you do not know by guessing (who issues or handles a command, what
+   a policy reacts to, where an element is used): put a \`hotspot\` \`on\` that element asking it — an open hotspot
+   turns its incompleteness errors (S024, S008, S027) off; inventing an actor, aggregate or event to silence them is
+   wrong.
    People also write the stickies' wording themselves, on the canvas: \`editedByPeople\` (or
    \`changedSinceYourLastRun.editedByPeople\`), when present, lists the labels and names they set by hand, the hotspots
    they added and resolved, old → new. Keep people's wording: never set such a label or name back to its old value, nor

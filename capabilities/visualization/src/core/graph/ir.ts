@@ -25,6 +25,7 @@ export type NodeKind =
     | 'esExternal'
     | 'esAggregate'
     | 'esReadModel'
+    | 'esGap'
     | 'esHotspot'
     /** A group step of a timeline: a container of its event notes, without an order among them. */
     | 'esGroup'
@@ -32,9 +33,11 @@ export type NodeKind =
     | 'esStage';
 
 /**
- * `dependsOn`: a context dependency that borrows types, not only IDs (Context Map). Event Storming: `esCausal` (a policy's
- * `on`, `issues`, `emits`), `esRelated` (`actor`, `reads`, `target`), `esHotspot` (a hotspot's `on`, undirected), `esSequence` (timeline order,
- * and a stage's `after`) `esException` (the time order of exceptions only) and `esRejoin` (an exception's `then`, back to a main flow).
+ * `dependsOn`: a context dependency that borrows types, not only IDs (Context Map). Event Storming (ADR 0032):
+ * `esCausal` (a policy's `on`, `issues`, a command's `handledBy` and `emits`, from its handler when it has one, an event
+ * `from` an external system), `esRelated` (`by`, `reads`, undirected), `esFeeds` (an event feeding a read model, a read
+ * model's `from`), `esHotspot` (a hotspot's `on`, undirected), `esSequence` (timeline order, and a stage's `after`)
+ * `esException` (the time order of exceptions only) and `esRejoin` (an exception's `then`, back to a main flow).
  */
 export type EdgeKind =
     | 'owns'
@@ -44,10 +47,17 @@ export type EdgeKind =
     | 'dependsOn'
     | 'esCausal'
     | 'esRelated'
+    | 'esFeeds'
     | 'esHotspot'
     | 'esSequence'
     | 'esException'
     | 'esRejoin';
+
+/**
+ * The edges drawn without an arrowhead: in Event Storming, arrows point along the flow and time, so only a hotspot's
+ * line to its subject (a question, not a step) has none.
+ */
+export const isUndirectedEdge = (kind: string): boolean => kind === 'esHotspot';
 
 /** How names are shown in the Live View: the label (the string after a declaration's name), the name, or both. */
 export type DisplayMode = 'label' | 'name' | 'both';
@@ -93,6 +103,17 @@ export interface GraphNode {
     lines: GraphLine[];
     /** Containing node, if nested. */
     parent?: string;
+    /**
+     * A note stuck on another node, above it (an Event Storming hotspot on its event, an actor on its command): a layered
+     * layout lays them out as one block, so that it is not a step of the flow (`adapters/elk.ts`). Its only edges are to
+     * that node.
+     */
+    attachTo?: string;
+    /**
+     * An Event Storming handler drawn once for several commands converging on one event (ADR 0032): their element IDs,
+     * so that a change to any of them marks this note.
+     */
+    commands?: string[];
     /** Commands that leave a state as it is, listed in a compartment at the bottom of its box (UML internal transitions). */
     internal?: InternalTransition[];
     /** Model element shown in the Detail Panel when the node is selected. */
@@ -125,6 +146,13 @@ export interface GraphEdge {
     label?: Texts;
     /** Events a transition raises, shown with or instead of its command (see `TransitionLabels`). */
     events?: Texts;
+    /** What the line means in plain words, shown on hover and selection (an Event Storming line, ADR 0032). */
+    tooltip?: Texts;
+    /**
+     * Laid out but not drawn: at Event Storming's Design Level, the time order the placement already shows (the steps
+     * left to right), so that only the lines the placement cannot show are drawn (an exception's branch, a `then`).
+     */
+    hidden?: true;
 }
 
 /** A command that leaves a state as it is, drawn as a row in the state's box instead of a loop. */
@@ -253,7 +281,12 @@ export const CONTAINER_PADDING = { top: 46, left: 20, bottom: 20, right: 20 };
 
 export function graphSignature(g: Graph): string {
     // a hotspot's status too: the page finds the compact layouts it keeps by signature, with the nodes they came with
-    const nodes = g.nodes.map((n) => `${n.id}|${n.parent ?? ''}|${n.width}x${n.height}|${maxUnits(n.label)}${n.status ? `|${n.status}` : ''}`).sort();
+    const nodes = g.nodes
+        .map(
+            (n) =>
+                `${n.id}|${n.parent ?? ''}|${n.attachTo ? `^${n.attachTo}|` : ''}${n.width}x${n.height}|${maxUnits(n.label)}${n.status ? `|${n.status}` : ''}`,
+        )
+        .sort();
     const edges = g.edges.map((e) => `${e.id}|${e.source}|${e.target}|${e.label ? maxUnits(e.label) : ''}|${e.events ? maxUnits(e.events) : ''}`).sort();
     const grid = g.grid ? `#grid${GRID_VERSION}:${JSON.stringify([byKey(g.grid.cells), byKey(g.grid.frames), g.grid.looseRow])}` : '';
     return `${nodes.join(';')}#${edges.join(';')}${grid}`;
@@ -263,4 +296,4 @@ export function graphSignature(g: Graph): string {
 const byKey = <T>(r: Record<string, T>): [string, T][] => Object.entries(r).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 
 /** Bump when `layoutGrid` places or routes differently, so that the grid layouts kept from a previous run are redone. */
-export const GRID_VERSION = 1;
+export const GRID_VERSION = 2;

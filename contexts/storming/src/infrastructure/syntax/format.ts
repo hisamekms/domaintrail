@@ -16,8 +16,12 @@ export class FormatError extends Error {}
  *   timeline (its `then` included) and every event of a group on its own line; a stage's `after` stays on its line. Up to one blank line the author wrote between them is kept, none after `{` or before `}`.
  * - An element without clauses is one line (`event SlotReleased "配送枠が解放された"`); with clauses, its body is a block.
  * - No space around the dots of a `ref` path, nor around the hyphens of a `level` (`level big-picture`).
- * - Clauses keep the order they are written in. The canonical place of `level design` is the last clause of an event,
- *   after its `ref` (as the guide and the agent write it), but the formatter never moves a clause or its comments.
+ * - Clauses go in one canonical order (ADR 0032), each with its comments (those on lines of their own above it and the
+ *   one after it on its line): `ref`, then the relations `by`, `reads`, `handledBy`, `emits`, `on`, `issues`, `from`,
+ *   then `status`, `resolution` and `level`; clauses of one kind keep their order. Repeated relations of one keyword
+ *   are one clause (`by A` and `by B` → `by A, B`, unless a comment is on one of them; `handledBy` and a hotspot's `on`,
+ *   which take one, aside), with a
+ *   space after each comma and none before it.
  * - A comment on the line of a token stays there, one space after it; other comments stay on their own line.
  */
 
@@ -50,7 +54,7 @@ interface Comment {
 }
 
 const JOINERS = new Set(['.', '-']);
-const inlineSep = (a: Token, b: Token): 'none' | 'space' => (JOINERS.has(a.text) || JOINERS.has(b.text) ? 'none' : 'space');
+const inlineSep = (a: Token, b: Token): 'none' | 'space' => (JOINERS.has(a.text) || JOINERS.has(b.text) || b.text === ',' ? 'none' : 'space');
 
 const leavesOf = (cst: CstNode): LeafCstNode[] =>
     CstUtils.streamCst(cst)
@@ -64,17 +68,15 @@ let services: ReturnType<typeof createStormingServices>['EventStorming'] | undef
  * and other validation errors do not matter). The result is checked to have the same tokens and comments as the input
  * (up to the dropped `{}`); a mismatch is an internal error.
  */
-export function formatStorming(text: string): string {
+export function formatStorming(input: string): string {
     services ??= createStormingServices().EventStorming;
-    const parsed = services.parser.LangiumParser.parse<ast.EsFile>(text);
-    if (parsed.lexerErrors.length || parsed.parserErrors.length) {
-        throw new FormatError(parsed.lexerErrors[0]?.message ?? parsed.parserErrors[0].message);
+    const first = services.parser.LangiumParser.parse<ast.EsFile>(input);
+    if (first.lexerErrors.length || first.parserErrors.length) {
+        throw new FormatError(first.lexerErrors[0]?.message ?? first.parserErrors[0].message);
     }
-    const comments: Comment[] = services.parser.Lexer.tokenize(text).hidden.map((t) => ({
-        text: t.image,
-        offset: t.startOffset,
-        end: t.startOffset + t.image.length,
-    }));
+    const text = inCanonicalOrder(input, first.value, commentsOf(input));
+    const parsed = text === input ? first : services.parser.LangiumParser.parse<ast.EsFile>(text);
+    const comments = commentsOf(text);
     const tokens: Token[] = parsed.value.$cstNode
         ? leavesOf(parsed.value.$cstNode).map((leaf) => ({ text: leaf.text, offset: leaf.offset, end: leaf.end, leaf }))
         : [];
@@ -83,6 +85,112 @@ export function formatStorming(text: string): string {
     const out = layout.print();
     verify(text, out, tokens, comments, layout);
     return out;
+}
+
+const commentsOf = (text: string): Comment[] =>
+    services!.parser.Lexer.tokenize(text).hidden.map((t) => ({
+        text: t.image,
+        offset: t.startOffset,
+        end: t.startOffset + t.image.length,
+    }));
+
+/** The rank of a clause in the canonical order of a body (ADR 0032); `actor` and `target` (S023) where `by` and `handledBy` go. */
+const CLAUSE_RANK: Record<string, number> = {
+    ref: 0,
+    by: 1,
+    actor: 1,
+    reads: 2,
+    handledBy: 3,
+    target: 3,
+    emits: 4,
+    on: 5,
+    issues: 6,
+    from: 7,
+    status: 8,
+    resolution: 9,
+    level: 10,
+};
+const rankOf = (c: ast.EsClause): number =>
+    CLAUSE_RANK[
+        ast.isEsRelationClause(c)
+            ? c.keyword
+            : ast.isEsRefClause(c)
+              ? 'ref'
+              : ast.isEsStatusClause(c)
+                ? 'status'
+                : ast.isEsLevelClause(c)
+                  ? 'level'
+                  : 'resolution'
+    ]!;
+
+/**
+ * The text with the clauses of every body in the canonical order (`CLAUSE_RANK`, stable). Each clause moves with its
+ * comments: those between it and the clause before it, and one that starts on its line after it. A clause moved after
+ * a line comment starts a line of its own.
+ */
+function inCanonicalOrder(text: string, file: ast.EsFile, comments: readonly Comment[]): string {
+    const edits: { from: number; to: number; text: string }[] = [];
+    const hasComment = (from: number, to: number): boolean => comments.some((k) => k.offset >= from && k.offset < to);
+    for (const storming of file.stormings) {
+        for (const el of storming.elements) {
+            if (!ast.isEsNode(el) || el.clauses.length < 2) continue;
+            const ranks = el.clauses.map(rankOf);
+            const open = el.$cstNode && CstUtils.streamCst(el.$cstNode).find((n) => isLeafCstNode(n) && n.text === '{' && n.astNode === el);
+            if (!open) continue;
+            type Chunk = { text: string; rank: number; lineComment: boolean; clause: ast.EsClause; start: number; end: number; i: number };
+            const chunks: Chunk[] = [];
+            let start = open.end;
+            for (const [i, c] of el.clauses.entries()) {
+                let end = c.$cstNode!.end;
+                let lineComment = false;
+                // the comment after the clause on its line
+                const after = comments.find((k) => k.offset >= end);
+                if (after && /^[ \t]*$/.test(text.slice(end, after.offset))) {
+                    end = after.end;
+                    lineComment = after.text.startsWith('//');
+                }
+                chunks.push({ text: text.slice(start, end), rank: ranks[i]!, lineComment, clause: c, start, end, i });
+                start = end;
+            }
+            const sorted = [...chunks].sort((a, b) => a.rank - b.rank || a.i - b.i);
+            // one keyword, one clause: `by A` and `by B` (each without a comment) are written `by A, B` (a second
+            // `handledBy` or hotspot `on` is S004: left as it is)
+            const keywordOf = (c: ast.EsClause): string | undefined => (ast.isEsRelationClause(c) ? c.keyword : undefined);
+            const merged: Chunk[] = [];
+            for (const c of sorted) {
+                const last = merged.at(-1);
+                const keyword = keywordOf(c.clause);
+                const mergeable =
+                    last &&
+                    keyword !== undefined &&
+                    !ast.isEsHotspot(el) &&
+                    keyword !== 'handledBy' &&
+                    keywordOf(last.clause) === keyword &&
+                    !last.lineComment &&
+                    last.end === last.clause.$cstNode!.end &&
+                    !hasComment(c.start, c.end);
+                if (!mergeable) {
+                    merged.push({ ...c });
+                    continue;
+                }
+                const cst = c.clause.$cstNode!;
+                const keywordLeaf = CstUtils.streamCst(cst).find((n) => isLeafCstNode(n) && n.text === keyword)!;
+                last.text += `, ${text.slice(keywordLeaf.end, cst.end).trim()}`;
+            }
+            if (merged.length === chunks.length && merged.every((c, k) => c.i === k)) continue;
+            let out = '';
+            merged.forEach((c, k) => {
+                const prev = merged[k - 1];
+                out += prev?.lineComment && !/^[ \t]*(\r?\n)/.test(c.text) ? `\n${c.text}` : c.text;
+            });
+            const last = merged.at(-1)!;
+            if (last.lineComment && !/^[ \t]*\r?\n/.test(text.slice(start))) out += '\n';
+            edits.push({ from: open.end, to: start, text: out });
+        }
+    }
+    let result = text;
+    for (const e of edits.sort((a, b) => b.from - a.from)) result = result.slice(0, e.from) + e.text + result.slice(e.to);
+    return result;
 }
 
 /** The input's tokens without the dropped ones, and its comments, must be exactly those of the output. */

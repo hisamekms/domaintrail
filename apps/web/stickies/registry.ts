@@ -71,11 +71,8 @@ export interface StickyAction {
     readonly applies: (sticky: Sticky, context: ActionContext) => boolean;
 }
 
-/**
- * The kinds a hotspot can be put on: the `.dtes` grammar takes a hotspot's `on` to an event only (docs/dtes-v0.1.md §3.2).
- * Widened here when the grammar widens.
- */
-export const HOTSPOT_TARGETS: readonly NodeElementKind[] = ['event'];
+/** The kinds a hotspot can be put on: any sticky but a hotspot (the grammar's `hotspot { on <any sticky> }`). */
+export const HOTSPOT_TARGETS: readonly NodeElementKind[] = ['event', 'command', 'policy', 'aggregate', 'readmodel', 'actor', 'external'];
 
 /** The kinds whose `ref` names a `.dt` element (docs/dtes-v0.1.md §5.1). */
 const REF_KINDS: readonly NodeElementKind[] = ['event', 'command', 'aggregate'];

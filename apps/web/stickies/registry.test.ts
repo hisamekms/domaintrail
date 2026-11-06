@@ -34,9 +34,9 @@ describe("the stickies' actions (ADR 0033): one list, by kind", () => {
         // an event without a ref
         expect(ids('ItemAdded')).toEqual(['chat', 'edit', 'seeTimeline', 'addHotspot', 'copyLink']);
         // a command with a ref; an actor; a policy
-        expect(ids('PlaceOrder')).toEqual(['chat', 'edit', 'seeModel', 'copyLink']);
-        expect(ids('Customer')).toEqual(['chat', 'edit', 'copyLink']);
-        expect(ids('BillConfirmedOrder')).toEqual(['chat', 'edit', 'copyLink']);
+        expect(ids('PlaceOrder')).toEqual(['chat', 'edit', 'seeModel', 'addHotspot', 'copyLink']);
+        expect(ids('Customer')).toEqual(['chat', 'edit', 'addHotspot', 'copyLink']);
+        expect(ids('BillConfirmedOrder')).toEqual(['chat', 'edit', 'addHotspot', 'copyLink']);
         // a hotspot: its resolution
         expect(ids('IssuedEvent')).toEqual(['chat', 'edit', 'resolve', 'copyLink']);
     });
@@ -57,8 +57,9 @@ describe("the stickies' actions (ADR 0033): one list, by kind", () => {
         expect(ids('OrderPlaced')).not.toContain('knowledge');
     });
 
-    test("a hotspot goes on an event only: the grammar's rule, kept in one place", () => {
-        expect(HOTSPOT_TARGETS).toEqual(['event']);
+    test("a hotspot goes on any sticky but a hotspot: the grammar's rule, kept in one place", () => {
+        expect(HOTSPOT_TARGETS).not.toContain('hotspot');
+        expect(HOTSPOT_TARGETS).toContain('command');
         expect(STICKY_ACTIONS.map((a) => a.id)).toEqual(['chat', 'edit', 'knowledge', 'seeModel', 'seeTimeline', 'addHotspot', 'resolve', 'copyLink']);
         // the toolbar: チャットに追加 · 編集, and for a hotspot 解決を書く too
         const bar = (local: string): string[] => toolbarActions(actionsFor([sticky(local)], live), [sticky(local)]).map((x) => x.id);

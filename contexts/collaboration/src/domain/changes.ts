@@ -17,6 +17,8 @@ export interface ChangedName {
 /** An element of the model that a unit added, changed or removed. */
 export type ElementChange = ChangedName & {
     readonly change: ElementChangeKind;
+    /** A changed element's name and label before, when they read differently now (a sticky renamed, a label rewritten). */
+    readonly was?: ChangedName;
     /** What it is in: the aggregate of a state or a command, the storming of a storming's element; none for a `.dt` element. */
     readonly owner?: ChangedName;
 } & (
@@ -46,6 +48,10 @@ const ORDER: Record<ElementChangeKind, number> = { added: 0, changed: 1, removed
 const named = (x: { readonly name: string; readonly label?: string }): ChangedName =>
     x.label === undefined ? { name: x.name } : { name: x.name, label: x.label };
 
+/** `{ was }` when the name or the label before differs from the one now; nothing when they read the same. */
+const wasOf = (before: ChangedName, now: ChangedName): { was?: ChangedName } =>
+    before.name === now.name && before.label === now.label ? {} : { was: named(before) };
+
 /** An item of a `.dt` model by its stable ID: an element, or a state or command with its aggregate. */
 function dtItem(model: DomainModel, id: ElementId): Omit<Extract<ElementChange, { language: 'Dt' }>, 'change'> | undefined {
     const el = elementOf(model, id);
@@ -66,9 +72,10 @@ const ownPart = (el: ElementModel): string => JSON.stringify({ ...el, location: 
 function dtChanges(before: DomainModel, after: DomainModel): ElementChange[] {
     const diff = diffModels(before, after);
     const out: ElementChange[] = [];
-    const push = (model: DomainModel, change: ElementChangeKind, id: ElementId): void => {
+    const push = (model: DomainModel, change: ElementChangeKind, id: ElementId, was?: DomainModel): void => {
         const item = dtItem(model, id);
-        if (item) out.push({ ...item, change });
+        const before = was && dtItem(was, id);
+        if (item) out.push({ ...item, change, ...(before && wasOf(before, item)) });
     };
     for (const id of diff.added) push(after, 'added', id);
     for (const id of diff.changed) {
@@ -76,7 +83,7 @@ function dtChanges(before: DomainModel, after: DomainModel): ElementChange[] {
         const is = elementOf(after, id);
         // its states or commands are listed themselves
         if (was?.kind === 'aggregate' && is?.kind === 'aggregate' && ownPart(was) === ownPart(is)) continue;
-        push(after, 'changed', id);
+        push(after, 'changed', id, before);
     }
     for (const id of diff.removed) push(before, 'removed', id);
     return out;
@@ -99,10 +106,13 @@ function fingerprint(d: AnyDeclaration): string {
     return JSON.stringify(withoutRanges({ ...d, steps }));
 }
 
+/** A declaration's ID and label, as a changed name. */
+const declarationName = (d: AnyDeclaration): ChangedName => (d.label === undefined ? { name: d.id } : { name: d.id, label: d.label });
+
 /** The `.dtes` changes: each storming's declarations by local ID (a storming added or removed: all of its declarations). */
 function stormingChanges(before: readonly Storming[], after: readonly Storming[]): ElementChange[] {
     const out: ElementChange[] = [];
-    const item = (s: Storming, d: AnyDeclaration, change: ElementChangeKind): ElementChange => ({
+    const item = (s: Storming, d: AnyDeclaration, change: ElementChangeKind, was?: AnyDeclaration): ElementChange => ({
         language: 'Dtes',
         storming: s.id,
         local: d.id,
@@ -110,6 +120,7 @@ function stormingChanges(before: readonly Storming[], after: readonly Storming[]
         change,
         name: d.id,
         ...(d.label !== undefined && { label: d.label }),
+        ...(was && wasOf(declarationName(was), declarationName(d))),
         owner: { name: s.id, ...(s.label !== undefined && { label: s.label }) },
     });
     const was = new Map(before.map((s) => [s.id, s]));
@@ -120,7 +131,7 @@ function stormingChanges(before: readonly Storming[], after: readonly Storming[]
         for (const d of firstDeclarations(s).values()) {
             const o = oldDeclarations.get(d.id);
             if (!o) out.push(item(s, d, 'added'));
-            else if (fingerprint(o) !== fingerprint(d)) out.push(item(s, d, 'changed'));
+            else if (fingerprint(o) !== fingerprint(d)) out.push(item(s, d, 'changed', o));
         }
     }
     for (const s of before) {

@@ -12,8 +12,11 @@ export {
     DESIGN_LEVEL,
     esElementId,
     isDesignLevelOnly,
+    isRemovedKeyword,
     nodeElements,
+    RELATION_KEYWORDS,
     RELATION_RULES,
+    REMOVED_KEYWORDS,
     type AnyDeclaration,
     type Clause,
     type ElementKind as StormingElementKind,
@@ -22,6 +25,7 @@ export {
     type NodeElement,
     type NodeElementKind,
     type RelationKeyword,
+    type RemovedKeyword,
     type SourceRange,
     type Stage,
     type StageRef,
@@ -62,10 +66,11 @@ export {
 } from './domain/stages.js';
 export { localNameProblem, referencesTo, STORMING_KEYWORDS, type LocalNameProblem, type ReferenceSite, type StormingReference } from './domain/references.js';
 export type { StormingRuleId } from './domain/rule-ids.js';
+export { designGaps, hasDesignLevel, openGaps, openQuestions, type Gap, type Missing } from './domain/gaps.js';
 export { isStormingFile } from './domain/files.js';
 export { estimatedLabelLines, labelOverflowsNote, LINES_AT_FLOOR, STICKY_NOTE } from './domain/sticky-note.js';
 
-// ---- use cases: Storming's analysis of the `.dtes` sources against the typed model; formatting -----------------
+// ---- use cases: Storming's analysis of the `.dtes` sources against the typed model; formatting; migrating v0.1 ------
 export { analyzeStormings } from './application/analyze.js';
 export { formatStorming } from './infrastructure/syntax/format.js';
 export {
@@ -81,6 +86,7 @@ export {
     type StickyEditResult,
     type StickyWording,
 } from './infrastructure/syntax/edit.js';
+export { migrateStorming, type MigrationLeft, type MigrationPlace, type MigrationRewrite, type StormingMigration } from './infrastructure/syntax/migrate.js';
 
 // ---- the syntax, for the language server -----------------------------------------------------------------------
 export * as stormingAst from './infrastructure/syntax/generated/ast.js';

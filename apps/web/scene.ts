@@ -62,22 +62,28 @@ const isStormingNote = (item: SceneItem): item is SceneNode => item.type === 'no
 
 /**
  * What stays in full view while storming notes are selected (docs/plans/layout.md, step 5): the notes of the selected
- * elements (every copy of an element drawn once per use), the notes joined to them by an edge (the previous and next
- * steps, the command that causes an event and the policies reacting to it, its hotspots; for a command its actor, read
- * model, aggregate and events), and those edges. A command that causes a selected event brings its actor or external
- * system, its read model and its aggregate along. A selected event in a group is joined through its group (the time
- * order runs to and from the group), and a group joined to it brings its events. Containers are never dimmed, so they
- * are not listed. `undefined` when no storming note is selected: nothing is dimmed.
+ * elements (every copy of an element drawn once per use or per step), the notes joined to them by an edge (the previous
+ * and next steps, what causes an event and the policies reacting to it, its hotspots; for a command its issuer, read
+ * model and handler), and those edges. The drawing follows Event Storming's grammar (ADR 0032), read model → issuer →
+ * command → handler (an aggregate or external system) → event: an event caused through a handler brings the commands
+ * that go to that handler along, and a command brings the events its handler emits. A command that causes a selected
+ * event brings its actor or external system and the read model it looks at along. A selected event in a group is joined through its group (the time order runs to and from the group), and
+ * a group joined to it brings its events. Containers are never dimmed, so they are not listed. `undefined` when no
+ * storming note is selected: nothing is dimmed.
  */
 export function focusedItems(items: Iterable<SceneItem>, selected: ReadonlySet<SceneId>): Set<SceneId> | undefined {
     const all = [...items];
     const seeds = all.filter((s) => selected.has(s.id) && isStormingNote(s));
-    if (seeds.length === 0) return undefined;
+    if (seeds.length === 0) return focusedLines(all, selected);
     const elements = new Set(seeds.map((s) => s.elementId));
     const notes = all.filter(isStormingNote);
     const edges = all.filter((s): s is SceneEdge => s.type === 'edge' && !s.ghost);
     const byId = new Map(all.map((s) => [s.id, s]));
     const members = (group: SceneId): SceneId[] => notes.filter((n) => n.parent === group).map((n) => n.id);
+    const kindOf = (id: SceneId): string | undefined => {
+        const item = byId.get(id);
+        return item?.type === 'node' ? item.props.kind : undefined;
+    };
     const kept = new Set<SceneId>();
     /** Keeps a note, or a group's events (the group itself is never dimmed). */
     const keep = (id: SceneId): void => {
@@ -89,23 +95,71 @@ export function focusedItems(items: Iterable<SceneItem>, selected: ReadonlySet<S
     const ends = new Set(own.flatMap((n) => (n.parent === undefined ? [n.id] : [n.id, n.parent])));
     for (const n of own) kept.add(n.id);
     const causes: SceneId[] = [];
+    /** The handlers (an aggregate or external system) that decide a selected event (their commands are its cause). */
+    const deciding: SceneId[] = [];
+    /** The handlers a selected command goes to (their events are its). */
+    const decided: SceneId[] = [];
+    const isHandler = (id: SceneId): boolean => kindOf(id) === 'esAggregate' || kindOf(id) === 'esExternal';
     for (const e of edges) {
         const [from, to] = [ends.has(e.source), ends.has(e.target)];
         if (!from && !to) continue;
         kept.add(e.id);
         const other = from ? e.target : e.source;
         keep(other);
-        // a command whose solid edge leads into a selected note: what causes it
-        const source = byId.get(e.source);
-        if (to && e.props.kind === 'esCausal' && source?.type === 'node' && source.props.kind === 'esCommand') causes.push(source.id);
+        if (e.props.kind !== 'esCausal') continue;
+        // a command (or a handler) whose solid edge leads into a selected note: what causes it
+        if (to && kindOf(e.source) === 'esCommand') causes.push(e.source);
+        if (to && isHandler(e.source) && kindOf(e.target) !== 'esCommand') deciding.push(e.source);
+        if (from && kindOf(e.source) === 'esCommand' && isHandler(e.target)) decided.push(e.target);
     }
-    // the cause's actor or external system, read model and aggregate (the dotted relations of the command)
+    for (const e of edges) {
+        if (e.props.kind !== 'esCausal') continue;
+        // the command going to a handler that decides a selected event
+        if (deciding.includes(e.target) && kindOf(e.source) === 'esCommand') {
+            kept.add(e.id);
+            keep(e.source);
+            causes.push(e.source);
+        }
+        // the events emitted by the handler of a selected command
+        if (decided.includes(e.source)) {
+            kept.add(e.id);
+            keep(e.target);
+        }
+    }
+    // the cause's actor or external system and read model (the dotted relations of the command), and the read model its
+    // issuer looks at
+    const issuers: SceneId[] = [];
     for (const e of edges) {
         if (e.props.kind !== 'esRelated') continue;
         const at = causes.includes(e.source) ? e.target : causes.includes(e.target) ? e.source : undefined;
         if (at === undefined) continue;
         kept.add(e.id);
         keep(at);
+        issuers.push(at);
+    }
+    for (const e of edges) {
+        if (e.props.kind !== 'esRelated' || !issuers.includes(e.target) || kindOf(e.source) !== 'esReadModel') continue;
+        kept.add(e.id);
+        keep(e.source);
+    }
+    return kept;
+}
+
+/**
+ * What stays in full view while storming lines are selected (ADR 0032): the lines and the stickies at their two ends (a
+ * group's events for a group); `undefined` when no storming line is selected.
+ */
+function focusedLines(all: readonly SceneItem[], selected: ReadonlySet<SceneId>): Set<SceneId> | undefined {
+    const lines = all.filter((s): s is SceneEdge => s.type === 'edge' && !s.ghost && selected.has(s.id) && s.props.kind.startsWith('es'));
+    if (!lines.length) return undefined;
+    const kept = new Set<SceneId>();
+    for (const l of lines) {
+        kept.add(l.id);
+        for (const end of [l.source, l.target]) {
+            const item = all.find((s) => s.id === end);
+            if (item?.type === 'group') for (const m of all) if (m.type === 'node' && m.parent === end) kept.add(m.id);
+            if (item?.type === 'node') kept.add(end);
+        }
     }
     return kept;
 }

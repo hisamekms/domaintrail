@@ -8,6 +8,7 @@ import {
     badgeWidth,
     checkPath,
     DIAG_RADIUS,
+    isUndirectedEdge,
     RESOLVED_MARK,
     TRANSITION_LINE_HEIGHT,
     TRANSITION_SUB_LINE_HEIGHT,
@@ -71,6 +72,12 @@ export function NodeContent({ p, Marks }: { p: NodeProps; Marks: MarksComponent 
             )}
             {p.compartment > 0 && <div className="dn-compartment" style={{ height: p.compartment }} />}
             {(p.badge || p.diag !== 'none') && <Marks badge={p.badge} diag={p.diag} />}
+            {/* a turn's changed sticky: its text before, small and struck through under it */}
+            {p.was !== undefined && (
+                <div className="dn-was" {...{ [TOOLTIP_ATTR]: t.turnMarks.was(p.was) }}>
+                    <del>{p.was}</del>
+                </div>
+            )}
         </>
     );
 }
@@ -204,7 +211,7 @@ export function EdgeContent({ p }: { p: EdgeProps }): ReactNode {
             <path d={d} className="de-line" />
             {kind === 'owns' ? <path d={diamond(s0, s1)} className="de-head de-diamond" /> : null}
             {/* every edge points from the dependent to its dependency */}
-            {kind === 'esHotspot' ? null : <path d={arrowHead(a, b)} className="de-head" />}
+            {isUndirectedEdge(kind) ? null : <path d={arrowHead(a, b)} className="de-head" />}
             {label && lw > 0 && <EdgeLabel {...{ label, sub, faded, lx, ly, lw, lh, scale }} />}
         </>
     );

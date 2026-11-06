@@ -98,6 +98,62 @@ describe("a sticky's label and name (ADR 0033)", () => {
         expect(referencesTo(parsed.stormings[0], 'First')).toHaveLength(1);
     });
 
+    test("a rename reaches the design level's relations: by, handledBy, from, comma lists, and a hotspot on any sticky", async () => {
+        const source = [
+            'storming S "s" {',
+            '  event A "a"',
+            '  event B "b" {',
+            '    from Pay',
+            '  }',
+            '  external Pay "決済"',
+            '  actor Clerk "係"',
+            '  aggregate Order "注文"',
+            '  readmodel List "一覧" {',
+            '    from A, B',
+            '  }',
+            '  command Do "する" {',
+            '    by Clerk, Pay',
+            '    reads List',
+            '    handledBy Order',
+            '    emits A, B',
+            '  }',
+            '  policy P "方針" {',
+            '    by Clerk',
+            '    on A',
+            '    issues Do',
+            '  }',
+            '  hotspot Q "誰が？" {',
+            '    on Order',
+            '  }',
+            '}',
+            '',
+        ].join('\n');
+        const renamed = (element: string, label: string, name: string): string =>
+            planned(source, { kind: 'wording', storming: 'S', element, expected: { name: element, label }, name });
+        expect(renamed('Order', '注文', 'Shipment')).toContain('    handledBy Shipment\n');
+        expect(renamed('Order', '注文', 'Shipment')).toContain('  hotspot Q "誰が？" {\n    on Shipment\n');
+        expect(renamed('Pay', '決済', 'Gateway')).toContain('    by Clerk, Gateway\n');
+        expect(renamed('Pay', '決済', 'Gateway')).toContain('    from Gateway\n');
+        expect(renamed('Clerk', '係', 'Staff')).toContain('    by Staff, Pay\n');
+        expect(renamed('Clerk', '係', 'Staff')).toContain('  policy P "方針" {\n    by Staff\n');
+        const b = renamed('B', 'b', 'Bx');
+        expect(b).toContain('    from A, Bx\n');
+        expect(b).toContain('    emits A, Bx\n');
+        // the AST and the IR count the same places
+        const before = (await parseStormings([{ path: 'a.dtes', text: source }])).stormings[0];
+        for (const [element, label] of [
+            ['Order', '注文'],
+            ['Pay', '決済'],
+            ['Clerk', '係'],
+            ['B', 'b'],
+            ['A', 'a'],
+        ] as const) {
+            const r = planStickyEdit(source, { kind: 'wording', storming: 'S', element, expected: { name: element, label }, name: `${element}Z` });
+            if (!r.ok) throw new Error(r.error.type);
+            expect(r.value.references).toBe(referencesTo(before, element).length);
+        }
+    });
+
     test('a label on a sticky without one is added after its name', () => {
         const source = 'storming S {\n  event A\n}\n';
         expect(planned(source, { kind: 'wording', storming: 'S', element: 'A', expected: { name: 'A' }, label: 'えー' })).toBe(
@@ -133,8 +189,11 @@ describe('hotspots (ADR 0033)', () => {
         expect(parsed.syntaxOk).toBe(true);
     });
 
-    test('a hotspot goes on an event only, under a free name', () => {
-        expect(planStickyEdit(text, { kind: 'addHotspot', storming: 'OrderToCash', on: 'PlaceOrder', name: 'Q', label: 'q' })).toEqual({
+    test('a hotspot goes on any sticky but a hotspot, under a free name', () => {
+        expect(planned(text, { kind: 'addHotspot', storming: 'OrderToCash', on: 'PlaceOrder', name: 'Q', label: 'q' })).toContain(
+            '  hotspot Q "q" {\n    on PlaceOrder\n  }\n',
+        );
+        expect(planStickyEdit(text, { kind: 'addHotspot', storming: 'OrderToCash', on: 'IssuedEvent', name: 'Q', label: 'q' })).toEqual({
             ok: false,
             error: { type: 'WrongKind' },
         });

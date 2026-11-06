@@ -40,9 +40,6 @@ export interface DiagramTexts {
         transition: string;
         esCausal: string;
         esSequence: string;
-        esException: string;
-        esRejoin: string;
-        esRelated: string;
         esHotspot: string;
     };
     stormingArrowNote: string;
@@ -87,14 +84,11 @@ const ja: DiagramTexts = {
         aggregateReferences: '参照（ID で別の集約へ。エンティティや値オブジェクトを経由するものも含む）',
         aggregateValue: '別の集約を値として持つ',
         transition: 'コマンドによる遷移（⇒ 発生させるドメインイベント）',
-        esCausal: '型レベルの因果（起こりうる関係。実際に起きたとは限らない）',
-        esSequence: 'タイムラインの時間順',
-        esException: '例外の時間順',
-        esRejoin: '例外から本流へ戻る',
-        esRelated: '関連（アクター・リードモデル・対象の集約）',
-        esHotspot: 'ホットスポットの対象（向きを持たない）',
+        esCausal: '流れ（付箋どうしのつながり。線を選ぶと意味が出る）',
+        esSequence: '時間の順（置き方で読めないところだけ：例外の分かれ目と元の流れへの戻り）',
+        esHotspot: '問い（ホットスポットとその対象）',
     },
-    stormingArrowNote: '矢印は因果と時間の向き',
+    stormingArrowNote: '矢印は流れと時間の向き',
     stubNote: '点線枠の小さな箱は別の BC の要素（スタブ）',
     aggregateStubNote: '点線枠の小さな箱は別の BC の集約（スタブ）',
     arrowNote: '矢印の先が依存先',
@@ -147,14 +141,11 @@ const en: DiagramTexts = {
         aggregateReferences: 'References (by ID, another aggregate, also through entities and value objects)',
         aggregateValue: 'Holds another aggregate as a value',
         transition: 'Transition by a command (⇒ events it raises)',
-        esCausal: 'Type-level cause (a possibility, not something that happened)',
-        esSequence: 'Time order of a timeline',
-        esException: 'Time order of an exception',
-        esRejoin: 'An exception returning to the main flow (then)',
-        esRelated: 'Related (actor, read model, target aggregate)',
-        esHotspot: 'A hotspot’s subject (no direction)',
+        esCausal: 'Flow (how the stickies connect; select a line for what it means)',
+        esSequence: 'Time order (only where the placement cannot show it: an exception branching off, and returning)',
+        esHotspot: 'Question (a hotspot and what it is about)',
     },
-    stormingArrowNote: 'Arrows point along causes and time',
+    stormingArrowNote: 'Arrows point along the flow and time',
     stubNote: 'Small dashed boxes are elements of other BCs (stubs)',
     aggregateStubNote: 'Small dashed boxes are aggregates of other BCs (stubs)',
     arrowNote: 'Arrows point at the dependency',

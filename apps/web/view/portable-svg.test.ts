@@ -50,13 +50,13 @@ const NOTES = `
   readmodel FeeTable "手数料の一覧"
   aggregate Certificate "証明書"
   command IssueCertificate "証明書を発行する（マルチコピー機で、暗証番号を入力してから、内容と部数と手数料を確かめたうえで）" {
-    actor Resident
+    by Resident
     reads FeeTable
-    target Certificate
+    handledBy Certificate
     emits CertificateIssuedAtMultiCopier
   }
   command CreateCertificateData "証明書データを作る" {
-    actor MunicipalSystem
+    by MunicipalSystem
     emits CertificateDataCreated
   }
   policy IssueAfterPayment "手数料が払われたら発行する" {

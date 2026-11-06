@@ -154,9 +154,23 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   and read models). The choices are
   remembered per browser and never change the `.dtes` file. The integrated canvas draws each event once (no group
   frames), and a dashed arrow between two events names the timelines it belongs to when not all of them do; one
-  timeline draws each occurrence, and a group is a frame around its events. Solid arrows are type-level causes
-  (possible, not "happened"), dashed orange arrows the order of a timeline (the event's orange, not a warning),
-  dotted lines the other relations (without an arrowhead for a hotspot's event). The notes take the convention's
+  timeline draws each occurrence, and a group is a frame around its events. The lines have three looks (ADR 0032):
+  **流れ**, a thin solid arrow in one colour, for every relation between stickies (read model → issuer, issuer →
+  command, command → handler, handler → event, event → policy, policy → command, an event feeding a read model, an
+  external system → its event, a policy's actor); **時間**, a dashed arrow in the same colour, for the time order where
+  the placement cannot show it; **問い**, a thin quiet line without a head, from a hotspot to its sticky (quieter still
+  when resolved). Exceptions are not told by a line colour. Hovering or selecting a line says what it means in plain
+  words, without the DSL's keywords (「配車を組む は 配車組 が処理する」「例外 自動配車の失敗 はここから分かれる」), and
+  selecting it keeps its two stickies in full view and dims the rest. Relations are possibilities, not "happened". Design Level follows Event Storming's grammar, left to right (ADR 0032): read model → issuer
+  (`by`: an actor or external system, stuck on top of its command when no read model leads to it) → command → handler
+  (`handledBy`: an aggregate or external system, from which the command's events come) → event → policy → the command it
+  issues; commands converging on one event note through the same handler share one handler note before it (hovering
+  its arrow names them; selecting it keeps them all, selecting one command only its own path); a command a policy
+  issues has no issuer, and its read model goes to the command; an event that arrives `from`
+  an external system has that system before it; a hotspot is stuck on top of the sticky it is `on` (an event, a
+  command, a policy, …), never a step of the flow, and at Big Picture only one on an event is drawn. Where an event is
+  drawn at several steps, the command before it, its copies and the policy after it are drawn at each step (ADR 0024,
+  amendment of 2026-11-05). The notes take the convention's
   colours, and the legend shows each kind with its colour and name: event orange, command blue, policy purple,
   aggregate yellow, read model green, hotspot pink, actor pale yellow (rounded), external system lilac (dashed edge),
   and a group a dashed frame tinted with the event's orange. A resolved hotspot (`status resolved`) is a paler,
@@ -167,14 +181,21 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   muted deep paper of the same hue, a coloured edge and pale text. A storming whose file stops parsing stays as it last parsed, with a banner.
   A storming with stages or exceptions (`stage`, `exception`) is drawn in time order: the stages as labelled frames
   left to right, the trunk of the main flows one straight row through them, every other timeline on a row below the
-  step it branches off at (the exceptions' dashed arrows a quieter red, a dotted arrow back for `then`). The タイムライン
+  step it branches off at (a dashed arrow into the lane, another back for `then`). At Design
+  Level no line joins two events in time order where the placement shows it (left to right): only an exception's branch
+  and its `then` are drawn; Big Picture keeps the time order lines. An undecided issuer or handler (an open hotspot on
+  the command asks it) is an empty dashed note 「誰が処理する？」 where it would stand. At Design
+  Level each step is a group of columns (read models on the row of the issuer looking at them, commands with their
+  issuers on top, handlers, the event, policies; a hotspot above the sticky it is on) and the elements stand in a band
+  above the row of their event, an exception's above its lane. The タイムライン
   picker then also lists each stage (「…（例外を含む）」), and the 絞り込み has 「例外を表示」 (on by default,
   remembered per browser; off counts as one narrowing) to draw the integrated canvas and the stages without their exceptions.
   Selecting a note keeps it and what it is joined to in full view and dims the rest (a short fade; none with reduced
   motion): the steps before and after it in the timelines shown (an exception's first step and its `then` included),
-  the command that causes an event with its actor or external system, read model and aggregate, the policies that
-  react to it and its hotspots, and the edges between them; a command, policy or actor selected keeps the notes its
-  edges join. An element drawn once per use (an actor beside each command) counts as one: selecting one of its notes
+  the command that causes an event (through its handler, an aggregate or external system) with its issuer, the read
+  model the issuer looks at and the handler, the policies that react to it and its hotspots, and the edges between
+  them; a command, policy or actor selected keeps the notes its edges join, a command also the events its handler
+  emits. An element drawn once per use (an actor beside each command) counts as one: selecting one of its notes
   keeps every copy. An event in a group is joined through its group's time order, and a group joined to the selection
   keeps its events; the stages' and groups' frames are never dimmed. Clicking the empty canvas (or `Escape`) clears the
   selection and brings everything back. Both drawings do it, the integrated canvas and a timeline laid out by ELK and
@@ -186,7 +207,7 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   right-click on a sticky open the menu of every action that applies to it, by group with their keys: よく使う
   (チャットに追加 `Enter`, 編集 `F2`), 見る (ナレッジを見る for a sticky with knowledge, opening it in the detail; ドメインモデルで見る for an event, a command or an aggregate whose
   `ref` the model has, its tooltip naming the element 「ドメインモデルの 注文 › 確定する を見る」; このタイムラインで見る for an
-  event, opening a timeline it is in), 書く (ホットスポットを付ける on an event; 解決を書く on a hotspot) and そのほか (リンクをコピー
+  event, opening a timeline it is in), 書く (ホットスポットを付ける on any sticky but a hotspot; 解決を書く on a hotspot) and そのほか (リンクをコピー
   `⌘⇧C`, a link that opens the Live View with that sticky selected). The arrow keys move in the menu, Escape closes
   it. Outside a session only seeing and copying are offered. `⌘K` (Ctrl+K) opens the command palette: the actions on
   the selection, then every sticky by name (its kind, storming and ID matched too).
@@ -326,7 +347,7 @@ With either baseline:
   transition, a description).
 
 A revision whose sources do not parse is reported in a banner, and nothing is marked then. Stormings are compared with
-neither baseline: their views are not marked.
+neither baseline: in a session their stickies are marked by turn instead (see [What a turn changed](#what-a-turn-changed)).
 
 ## Behaviour and settings
 
@@ -505,6 +526,43 @@ the journeys panel; the latest card follows the journey file as it is now. A few
   chat, the choices shared with the chat's card — and チャットで見る scrolls the chat to it. By default 終わったもの lists the cards
   that changed files; すべて also lists the runs that changed nothing, and those declined, failed or cancelled. The
   other groups always show.
+
+### What a turn changed
+
+In a session (`dt open` and `dt collab` alike), when a run that changed the sources ends while the page is open, the
+Event Storming canvas marks the stickies it changed, with the model canvas's marks: an added sticky has the green ring
+and a 新 badge, a changed one the amber ring and 変 — with its label before the change small and struck through just
+under it, when the label changed (the whole of it in the tooltip) — and a removed one is a faded, dashed ghost with
+削除, where the page last saw it. A ghost that would cover a note (a sticky added where one was removed) is moved off it,
+to the nearest free place. A small bar at the canvas's top right says whose changes are marked and how many —
+「直前の作業：新 1 変 1 削除 1」 (a kind with none left out) — then 「ほかに n 件の変更 →」 while some of them are out of
+view or not drawn in this view (a press goes to the nearest one, and, when none is drawn here, to the view that draws
+them), and 印を消す. The bar is a group of ordinary buttons, reached with Tab.
+
+- **Which turn**: the latest run that ended having changed the sources (completed, waiting for an answer, declined or
+  reverted with changes), as the page saw it end. The marks stay until the next such run ends — whose marks replace
+  them, or clear them when it changed no sticky (only `.dt`, or only a timeline's or a group's steps) — or until the
+  reader presses 印を消す. A page opened after a run ended marks nothing until the next one: the reader did not see it
+  end, and a card's 図で見る shows it.
+- **Only the stickies**: the `.dtes` elements drawn as notes. A run that changed only `.dt` marks nothing here; the
+  model canvas keeps marking against its own baseline (前回の保存 or a git revision, see
+  [Comparing with a git revision](#comparing-with-a-git-revision)).
+- **The camera** moves for the marks only when none of them is in view as they appear: the reader may be reading
+  elsewhere on purpose, and one mark in view already says that the turn changed something (the bar counts the rest and
+  offers to go there). It then fits them all, zoomed in no further than it was (nor past 100%), or, when that would
+  make them too small to read, centers on the nearest; never while the reader drags or pans. With reduced motion it
+  jumps instead of gliding.
+- **図で見る** (the eye, under a run's text in the chat and under a card's row in AI の作業, while it changed stickies)
+  marks that run's (or that card's) changes the same way, whenever it ran, and brings them into view: the view shown if
+  it draws any of them, else the integrated canvas of the storming they are in, at a level that draws them (switching
+  from the domain model's views if needed). The bar then names it: 「作業「返品の受付」：新 1」.
+- **Per viewer**: the marks are the page's own, never sent nor shared; each page marks the turns it saw end. A removed
+  sticky is drawn only where this page saw it before (the last few versions of the stormings are kept in the page):
+  marks shown for a run that ended before the page opened count it in the bar without a ghost. A compact layout
+  (詰めて表示) draws no ghosts, as for the model's diff.
+
+The marks take a span of revisions (before and after), not a run as such, so that other changes — a person's edit of a
+sticky — can be marked the same way. Printing and exporting draw the diagram without them.
 
 The others' cursors are drawn on the same view. `dt open --host <non-loopback>` serves the same page read-only, without any of it. See [`dt guide session`](guide.md#collaboration-sessions).
 

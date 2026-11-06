@@ -227,6 +227,8 @@ export function SessionChat(props: {
     focusPending: boolean;
     onFocused: () => void;
     onNavigate: (target: ModelTarget) => void;
+    /** Marks a unit's changes on the storming canvas and brings them into view (a card's 図で見る). */
+    onSeeChanges?: (span: { readonly base: string; readonly result: string; readonly name: string }) => void;
     /** This page's location (to tell who is on the same view). */
     location: ViewLocation;
     /** Opens the view another participant is on. */
@@ -571,6 +573,7 @@ export function SessionChat(props: {
         nameOf,
         avatarOf,
         onNavigate: props.onNavigate,
+        ...(props.onSeeChanges && { onSeeChanges: props.onSeeChanges }),
         openView: props.onOpenView,
         control,
         solo,
@@ -1717,7 +1720,7 @@ function HistoryUnit({ unit, mark, open, onToggle }: { unit: ChangeUnit; mark: R
                         if (!(e.target instanceof Element && e.target.closest('button'))) onToggle();
                     }}
                 >
-                    <ChangedElements kind="unit" base={span.base} result={span.result} about={about} />
+                    <ChangedElements kind="unit" base={span.base} result={span.result} about={about} name={name.text} />
                 </div>
             )}
             {/* the body unfolds like the tree's branches (a grid row from 0fr to 1fr) */}

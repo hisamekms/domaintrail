@@ -8,7 +8,7 @@ import { allTimelines, nodeElements, type SourceRange, type Storming } from './i
 
 /** Where a reference to a declaration is written, by the clause or step that writes it. */
 export type ReferenceSite =
-    /** `emits X`, `on X`, `issues X`, `actor X`, `reads X`, `target X` in an element's body. */
+    /** `by X`, `reads X`, `handledBy X`, `emits X`, `on X`, `issues X`, `from X` in an element's body (each of a comma list). */
     | 'relation'
     /** An event step of a timeline, or an event of a group. */
     | 'step'
@@ -57,7 +57,10 @@ export const STORMING_KEYWORDS: ReadonlySet<string> = new Set([
     'timeline',
     'group',
     'ref',
+    'by',
     'reads',
+    'handledBy',
+    'from',
     'target',
     'emits',
     'on',

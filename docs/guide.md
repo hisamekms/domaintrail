@@ -93,6 +93,7 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 
 - `dt guide [topic]` — this reference, one section, or `--all`.
 - `dt fmt` — format the `.dt` and `.dtes` files in place (`--check` for CI).
+- `dt migrate dtes` — rewrite `.dtes` files of v0.1 (`actor`, `target` in a command → `by`, `handledBy`).
 - `dt check` — check the model and its stormings (`.dtes`); exit 0 when there are no errors (`--format json` for JSON).
 - `dt generate ts` — check, then write the TypeScript (and the contract tests, if configured).
 - `dt show <name>` — one element, command or state resolved, with who uses it; read it instead of the `.dt` files.
@@ -133,7 +134,7 @@ Storming](#event-storming-dtes)). They are not generated: `dt generate ts` write
 How to work, beyond the rules of the languages: `dt guide storming-practice` for running a storming (Big Picture, then
 Design Level) and `dt guide modeling-practice` for growing the `.dt` model (terms, aggregates by their invariants,
 the DSL's types rather than strings, commands as contracts, small steps); `dt guide dsl-quick` shows the `.dt` syntax
-in one example.
+in one example, `dt guide dtes-quick` the `.dtes` syntax.
 
 `dt --help` and `dt <command> --help` list the options with examples.
 
@@ -1947,7 +1948,9 @@ neither hand-written files nor generated files you edited — and generation sto
 
 `.dtes` files hold **stormings**: Event Storming as text, next to the `.dt` files of the same workspace. A storming is
 exploration, not a contract: which events happen and in which partial orders, then — at Design Level — who issues which
-command on which aggregate, from which information, and which policy reacts to which event. Nothing is generated from
+command, looking at which information, which aggregate or external system handles it and emits its events, and which
+policy reacts to which event. The relations are Event Storming's grammar itself (ADR 0032): a command's body is its whole
+row, read model → issuer → command → handler → events. Nothing is generated from
 it, and no tool changes a `.dt` file because of it, or a `.dtes` file because of the model.
 
 - **From a storming to a model (UC1).** Write events, timelines and hotspots only (Big Picture), and ask about what is
@@ -1986,12 +1989,15 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
   }
   event PaymentFailed "支払に失敗した"
   event PaymentAuthorized "与信が通った" {
+    from PaymentService // a fact the payment service decided: we only record it
     level design // a detail of the mechanism: shown at Design Level only
   }
 
   actor Customer "顧客"
-  external PaymentService "決済サービス" // an external system that issues a command, not one that is called
-  readmodel OrderTotal "注文金額"
+  external PaymentService "決済サービス" // issues a command (by), handles one (handledBy) or sends an event (from)
+  readmodel OrderTotal "注文金額" {
+    from OrderConfirmed // the events it is fed from
+  }
 
   aggregate Order "注文" {
     ref Sales.Order
@@ -2000,24 +2006,37 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
     ref Billing.Invoice
   }
 
+  command PlaceOrder "注文する" {
+    by Customer
+    handledBy Order
+    emits OrderPlaced
+  }
+  command CancelOrder "注文を取り消す" {
+    by Customer
+    handledBy Order
+    emits OrderCancelled
+  }
   command ConfirmOrder "注文を確定する" {
     ref Sales.Order.confirm // Context.Aggregate.command
-    actor Customer
-    target Order // at most one
-    emits OrderConfirmed
+    by Customer // who issues it: an actor or an external system
+    handledBy Order // who handles it: exactly one aggregate or external system (or an open hotspot asking)
+    emits OrderConfirmed // what comes of it, produced by its handler
   }
-  command IssueInvoice "請求書を発行する" {
+  command IssueInvoice "請求書を発行する" { // issued by the policy below: no `by`
     ref Billing.Invoice.issue
-    reads OrderTotal
-    target Invoice
+    reads OrderTotal // what its issuer looks at to decide
+    handledBy Invoice
     emits InvoiceIssued
   }
-  command RecordPayment "入金を記録する" {
+  command RecordPayment "入金を記録する" { // on what the payment service sends, our invoice decides
     ref Billing.Invoice.pay
-    actor PaymentService
-    target Invoice
-    emits InvoicePaid // possible outcomes: neither all of them nor exclusive
-    emits PaymentFailed
+    by PaymentService
+    handledBy Invoice
+    emits InvoicePaid, PaymentFailed // possible outcomes: neither all of them nor exclusive
+  }
+  command RefundOrder "返金する" {
+    by Customer
+    emits RefundRequested
   }
 
   policy BillConfirmedOrder "確定した注文に請求する" { // from Sales to Billing: a policy may cross contexts
@@ -2052,6 +2071,9 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
   hotspot RetryLimit "支払は何回まで再試行する？" {
     on PaymentFailed
   }
+  hotspot WhoRefunds "返金は誰が処理する？" { // not decided: asked, never guessed (S024 is off while it is open)
+    on RefundOrder
+  }
   hotspot IssuedEvent "請求書の発行をイベントにする？" {
     on InvoiceIssued
     status resolved
@@ -2062,14 +2084,14 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
 
 | Element | What it is | Its clauses |
 |---|---|---|
-| `event` | something that happened in the business, a fact in the past tense | `ref Context.Event`, `level design` |
+| `event` | something that happened in the business, a fact in the past tense | `ref Context.Event`, `from <external>`, `level design` |
 | `actor` | a person or role that may issue commands | none |
-| `external` | an external system that may issue commands | none |
-| `command` | an operation someone attempts | `ref Context.Aggregate.command`, `actor`, `reads`, `target` (at most one), `emits` |
-| `policy` | a business rule: when one of its events happens, it may issue its commands | `on` and `issues`, one or more each |
-| `aggregate` | a candidate consistency boundary that commands work on | `ref Context.Aggregate` |
-| `readmodel` | information that a command is decided on | none |
-| `hotspot` | a question or an important point, open or resolved | `on` (one event at most), `status`, `resolution` |
+| `external` | an external system that may issue commands, handle them, or send events | none |
+| `command` | an operation someone attempts | `ref Context.Aggregate.command`, `by`, `reads`, `handledBy` (exactly one, or an open hotspot), `emits` |
+| `policy` | a business rule: when one of its events happens, it may issue its commands | `on` and `issues`, one or more each; `by <actor>` when a person applies it |
+| `aggregate` | a candidate consistency boundary that handles commands | `ref Context.Aggregate` |
+| `readmodel` | information that an issuer looks at to decide a command | `from <event>` |
+| `hotspot` | a question or an important point, open or resolved | `on` (one sticky at most), `status`, `resolution` |
 | `timeline` | a partial time order of events | event IDs and groups |
 | `group` | events of one step of a timeline, without an order among them | event IDs, each once |
 | `exception` | an exception from the main flows: a timeline that branches off one | event IDs and groups, then `then <Event>` (optional) |
@@ -2078,7 +2100,20 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
 - `kind ID "label"`, with a `{ … }` body for clauses, one per line. `///` lines above a declaration are its
   description. The IDs of a storming are one namespace across kinds, timelines and groups included; a clause or a
   timeline names an element of the same storming by its ID (never one of another storming).
-- **Relations are possibilities**, never execution: several `actor`s are alternatives; `emits` lists outcomes that may
+- **The relations are Event Storming's grammar** (ADR 0032), and the only keywords: a command is issued `by` an actor
+  or external system (several are alternatives), who `reads` read models to decide it; it is `handledBy` an aggregate
+  or an external system, which `emits` its events; a policy is `on` events and `issues` commands (a command a policy
+  issues has no `by`: the policy is its issuer, S025); a read model is fed `from` events; an event that arrives
+  without a command of ours comes `from` an external system; a hotspot is `on` any sticky. A list is one clause,
+  `emits A, B`. Only a policy connects two commands. A command is a whole row: without its issuer, `handledBy` or
+  `emits` it is an error (S024), and so is an actor, external system, aggregate or read model that no relation names
+  (S027) — unless an open hotspot is `on` it. **Never fill a relation by guessing**: what is not decided is a hotspot
+  `on` the element, asking it. `dt guide dtes-quick` is the syntax on one screen.
+- **From outside, and on a schedule.** `event E { from Ext }` when we only record a fact the outside system decided; a
+  command `by Ext` when our aggregate decides something on what it sends. A schedule is a time event
+  (「毎晩2時になった」) and a policy `on` it, not an external system called "batch". A policy may be `by` an actor: a
+  rule a person applies by hand.
+- **Relations are possibilities**, never execution: several `by`s are alternatives; `emits` lists outcomes that may
   happen, neither required, exclusive nor complete; a policy is evaluated when any of its `on` events happens and may
   issue its commands, with no order and no guarantee that all run. A policy with several `on` and several `issues` does
   not mean that every event starts every command: when the conditions differ, split it into policies. A policy needs no
@@ -2104,11 +2139,13 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
   not that the `.dt` model has it. Keep the resolved hotspots that matter (an exception, a boundary, an invariant) and
   delete the trivial ones: git keeps the history.
 - Not in the DSL: positions and layout, conditions, guards, compensation, ordering or transactions. Not diagnosed:
-  completeness (events in no timeline or not referenced, commands without `emits`, elements without `ref`), timeline
-  order against the causal relations, and policies across contexts.
+  Big Picture completeness (events in no timeline or not referenced, read models without `from`, elements without
+  `ref`), timeline order against the causal relations, and policies across contexts.
 - `dt fmt` formats a storming: 2 spaces per level, each element, clause, timeline step (`then` included), group event
-  and timeline of a stage on its own line, an element without clauses on one line, comments kept. It never reorders
-  clauses.
+  and timeline of a stage on its own line, an element without clauses on one line, comments kept. It puts the clauses
+  of a body in one order, each with its comments: `ref`, `by`, `reads`, `handledBy`, `emits`, `on`, `issues`, `from`,
+  `status`, `resolution`, `level`.
+- Files written for v0.1 (`actor X`, `target X` in a command) are errors (S023): `dt migrate dtes` rewrites them.
 
 A storming in stages:
 
@@ -2166,6 +2203,109 @@ storming CertificateIssuance "住民票のコンビニ交付" {
 }
 ```
 
+<!-- topic: dtes-quick -->
+### The `.dtes` syntax on one screen
+
+A storming's relations are Event Storming's grammar (ADR 0032): each command's body is its whole row, read model →
+issuer → command → handler → events. Write in this style, clauses in this order (`dt fmt` keeps it).
+
+```dtes
+// stormings/dispatch.dtes
+storming Dispatch "配車" {
+  event RequestReceived "依頼を受け付けた" {
+    from OrderSystem // a fact the outside system decided: we only record it
+  }
+  event NightlyCutoff "毎晩2時になった" // a time event: a schedule is an event and a policy, not an external "batch"
+  event CarAllocated "配車を組んだ"
+  event AllocationFailed "配車できなかった"
+  event DriverNotified "ドライバーに知らせた"
+  event RequestCancelled "依頼が取り消された"
+
+  actor Dispatcher "配車担当"
+  external OrderSystem "受注システム"
+  external Messenger "通知サービス"
+  readmodel UnassignedRequests "未割当の依頼" {
+    from RequestReceived // the events it is fed from
+  }
+  aggregate AllocationPlan "配車計画"
+
+  command BuildAllocation "配車を組む" { // issued by a policy: no `by`
+    reads UnassignedRequests // what is looked at to decide
+    handledBy AllocationPlan // who handles it: an aggregate or an external system, exactly one
+    emits CarAllocated, AllocationFailed // its outcomes, produced by the handler
+  }
+  command NotifyDriver "ドライバーに知らせる" {
+    handledBy Messenger
+    emits DriverNotified
+  }
+  command CancelRequest "依頼を取り消す" {
+    by OrderSystem // who issues it: an actor, or an external system when our aggregate decides on what it sends
+    handledBy AllocationPlan
+    emits RequestCancelled
+  }
+  command ReassignByHand "手で配車し直す" {
+    reads UnassignedRequests
+    emits CarAllocated
+  }
+
+  policy AllocateAtCutoff "2時になったら配車する" { // the only link from an event to a command
+    on NightlyCutoff
+    issues BuildAllocation
+  }
+  policy NotifyWhenAllocated "配車したら知らせる" {
+    on CarAllocated
+    issues NotifyDriver
+  }
+  policy CallBack "失敗したら組み直す" {
+    by Dispatcher // a rule a person applies by hand: the policy issues the command, without `by` in it
+    on AllocationFailed
+    issues ReassignByHand
+  }
+
+  hotspot WhoReassigns "手配車は何が処理する？" { // not decided: asked, never guessed
+    on ReassignByHand
+  }
+
+  timeline Normal "通常" {
+    RequestReceived
+    NightlyCutoff
+    CarAllocated
+    DriverNotified
+  }
+}
+```
+
+| In | Relation | Names | Means |
+|---|---|---|---|
+| `command` | `by` | actor, external | who issues it (none when a policy `issues` it) |
+| `command` | `reads` | read model | what the issuer looks at to decide |
+| `command` | `handledBy` | aggregate, external | who handles it and produces its events (exactly one, or an open hotspot) |
+| `command` | `emits` | event | its possible outcomes |
+| `policy` | `on` / `issues` | event / command | when the event happens, it issues the command |
+| `policy` | `by` | actor | the person who applies the rule by hand (optional) |
+| `readmodel` | `from` | event | the events it is fed from (optional) |
+| `event` | `from` | external | it arrives from outside, without a command |
+| `hotspot` | `on` | any sticky | the question is about it (one) |
+
+- Only these keywords; a list is one clause, `emits A, B` (`dt fmt` merges `by A` and `by B` into `by A, B`).
+  `actor` and `target` inside a body are v0.1 (S023): `dt migrate dtes` rewrites them.
+- **From outside.** `event E { from Ext }` when we only record a fact the outside system decided (an order arrived, a
+  payment was authorised); a command `by Ext` when, on what it sends, our aggregate decides something (accepts or
+  rejects it).
+- **On a schedule.** A time event (「毎晩2時になった」) and a policy `on` it, not an external system called "batch".
+- Errors, each with a fix in its hint: a target of the wrong kind (S003: `by` an aggregate is `handledBy` it, `reads`
+  an event is a read model fed `from` it, `emits` a command is a policy between them); a relation the element does not
+  take (S006: a command never `issues`); a second `handledBy` (S004); a command without its issuer, `handledBy` or
+  `emits` (S024); `by` on a command a policy issues (S025); a relation twice (S026); an actor, external system,
+  aggregate or read model that takes part in no relation, at Design Level (S027); an event both emitted and `from` an
+  external system (S028). An info (S029) points at an event nothing produces at Design Level (a time event a policy
+  reacts to aside).
+- **Not decided yet? Never guess.** Do not invent an actor, an aggregate or an event to make S024, S027 or S008 go
+  away: put a `hotspot` `on` the command, policy or element, asking what is missing. While it is open, that element's
+  incompleteness is not an error, but `dt check` lists it and the Live View draws its empty slot dashed; when it is
+  resolved, write the relation.
+- Big Picture (events, timelines, hotspots on events, and no command or policy) needs none of this.
+
 <!-- topic: storming-refs -->
 ### References to the model (`ref`)
 
@@ -2184,14 +2324,14 @@ relation). It is always fully qualified, and never resolved by a simple name or 
 - S010 / S011 report a `ref` that is not fully qualified, names nothing or names another kind. When the `.dt` files do
   not parse, the `ref`s are not checked.
 - **Contract warnings**, only for what is provable: S012 when a command's `ref` is a command of another aggregate than
-  the `ref` of its `target`; S013 when a command `emits` an event whose `ref` the `.dt` command never emits (a `.dt`
+  the `ref` of the aggregate it is `handledBy`; S013 when a command `emits` an event whose `ref` the `.dt` command never emits (a `.dt`
   command emits exactly the events of its `emits`, and none on an error). An event that the `.dt` command emits but the
   storming does not list, an `emits` of an event without `ref`, and a different multiplicity are not diagnosed.
 - No tool rewrites either side: after a change of the model, the broken `ref`s are reported and fixed by hand (the
   language server goes to the `.dt` declaration of each part of a `ref`).
 
 **From a storming to `.dt`.** An event becomes an event of the context that owns it, an aggregate an aggregate, a
-command a command of its target's aggregate (lower camel case: `ConfirmOrder` → `Order.confirm`), with its `emits`
+command a command of the aggregate it is `handledBy` (lower camel case: `ConfirmOrder` → `Order.confirm`), with its `emits`
 decided as a contract (exact, unlike the storming's). A storming's policy becomes, where it is a reaction the business
 relies on, one `.dt` policy per event and command, `policy P when Event -> Aggregate.command` in the context of the
 command ([Reactions to events](#reactions-to-events-policies)): deciding which pairs those are is modeling, not an
@@ -2207,27 +2347,46 @@ A storming is viewed along two independent axes, neither of which changes the `.
   external systems, commands, policies, aggregates, read models and the relations, and the events marked
   `level design`. Big Picture hides the details of the same file; it is not an earlier version, and every event
   without `level design` is there. A timeline's order there skips the hidden events (their neighbours are joined),
-  a group of hidden events only is not drawn, timelines that differ only in hidden events share their start, and a
-  hotspot on a hidden event is shown without its line.
+  a group of hidden events only is not drawn, timelines that differ only in hidden events share their start, a
+  hotspot on a hidden event is shown without its line, and a hotspot on a sticky of Design Level (a command, a policy,
+  …) is not shown.
 - **Scope.** The *integrated canvas* shows every timeline, the events in no timeline and every element. A storming
   with stages also has a view of each *stage* (its main flows and exceptions, drawn as on the integrated canvas). *One timeline*
   shows its events, plus each one-hop path event → policy → command → event whose two events are both in that timeline,
-  the commands that emit one of its events (their cause, as on the integrated canvas), the actors, read models and
-  target of those commands, and the hotspots on its events. A stage's view picks them the same way over the stage's
+  the commands that emit one of its events (their cause, as on the integrated canvas), the issuers, read models and
+  handlers of those commands, the events of the view that feed those read models, the external systems its events come
+  from, and the hotspots on its events and on those elements. A stage's view picks them the same way over the stage's
   events. Longer chains are not followed (a command's policy is shown only on such a path), and a hotspot without `on`
   is shown on the integrated canvas only.
 
 The integrated canvas draws each event once, without group frames: the time order is one dashed arrow per pair of
 consecutive events, naming the timelines it belongs to when not all of them do, and an event that repeats loops back
 to its note. One timeline draws each occurrence of an event, and a group as a frame. Drawing an event once does not
-make two occurrences the same happening, so read a path along one timeline's name. Solid arrows are type-level causal
-relations (`on`, `issues`, `emits`: possible, not "happened"), dotted lines the other relations (`actor`, `reads`,
-`target`; a hotspot's `on` without an arrowhead), dashed arrows the order of a timeline.
+make two occurrences the same happening, so read a path along one timeline's name. The lines have three looks: a thin
+solid arrow (流れ) for every relation between stickies, a dashed arrow (時間) for the time order where the placement
+cannot show it, and a quiet line without a head (問い) from a hotspot to its sticky. Relations are possibilities, not
+"happened". Hovering or selecting a line says what it means in plain words (「配車を組む は 配車組 が処理する」), and
+selecting it keeps its two stickies in full view.
+Design Level reads left to right as Event Storming does (ADR 0032): read model → issuer (an actor or external system,
+stuck on top of its command when no read model leads to it) → command → handler (an aggregate or external system) →
+event → policy → the command it issues → … The read model goes to the issuer that looks at it; a command a policy
+issues has no issuer, and its read model goes to the command. A command goes to its handler, which decides and emits
+the command's events, so the `emits` arrows start at the handler; a command without `handledBy` emits them itself.
+At Design Level no line joins two events in time order where the placement shows it (the steps left to right): only an
+exception's branch and its `then` are drawn (Big Picture draws the time order). An issuer or handler an open hotspot
+leaves undecided is an empty dashed note where it would stand («未決定» 誰が処理する？), so a silenced gap stays in view;
+`dt check` lists them too. An
+event that arrives `from` an external system has that system before it. A hotspot is stuck on top of the sticky it is
+`on` (an event, a command, a policy, …), not a step of the flow.
 A hotspot with `status resolved` is drawn paler, with a green check in its corner and a fainter `on` (hovering it shows
 its `resolution`), so the open ones stand out; to settle one, ask the AI in the chat.
-At Design Level an actor or external system, a read model and an aggregate are drawn next to each command that uses
-them, one note per command, so their lines stay short (one that no command uses is drawn once); selecting any of these
-notes selects the element and marks its other notes with a fainter dashed ring.
+At Design Level an issuer, a read model and a handler are drawn next to each command that uses them, one note per
+command — except that commands converging on the same event note through the same handler share one handler note
+before it (its arrow to the event stands for all their `emits`; hovering it names them), and an external system an event comes from next to each note of that event, so their lines stay short (one
+that nothing uses is drawn once). Where one view draws an event at several steps (a timeline's view, a stage, a
+storming with stages), a command is drawn before each step of its events, with its own issuer, read model and handler,
+a policy after each step of the events it is `on`, and a hotspot on each note of its sticky, so every chain reads left to right into its own event. Selecting any of these notes
+selects the element and marks its other notes with a fainter dashed ring.
 Every note is a square of the same size: a long label is drawn smaller, and one too long even then is cut short with
 «…» (hovering it shows the whole label; S015 warns about it), so keep labels short (about 12 Japanese characters).
 The layout is automatic, left to right; positions are kept in the workspace's cache directory, outside the workspace
@@ -2240,16 +2399,19 @@ its view bar's subject (a breadcrumb at the left) and the level next to them; se
 デザインレベルのみ for an event marked `level design`).
 Selecting notes shows a toolbar above them, and 「…」 or a right-click the menu of every action on them: add them to the
 chat (`Enter`), edit the label and the name (`F2`, or a double-click), see the `.dt` element of a `ref` or a timeline
-the event is in, put a hotspot on an event (its question only: the AI names it, else dt after the event), write a hotspot's resolution, copy a link to the note (`⌘⇧C`); `⌘K` finds
+the event is in, put a hotspot on any sticky but a hotspot (its question only: written at once, the AI names it afterwards), write a hotspot's resolution, copy a link to the note (`⌘⇧C`); `⌘K` finds
 actions and notes by name. Editing is in a session only (below). After a jump to the domain model or another
 timeline, the detail's back button (and the browser's Back) returns to the storming as it was shown.
 
 A storming with stages or exceptions is drawn in time order instead: the stages left to right, each a labelled frame,
 one column per step, the trunks as one straight row through every frame (the `after` arrow joins one trunk's end to
 the next one's start). Every other timeline hangs below the step it branches off at, on a row of its own flowing right
-and named by its label: the other main flows first, then the exceptions, whose dashed arrows are a quieter red. The
-step an exception branches off at is one note for both; a dotted arrow goes from an exception's last step back to the
-step of its `then`. Elements of Design Level stand above the event they belong to. The timeline picker lists the
+and named by its label: the other main flows first, then the exceptions. The step an exception branches off at is one
+note for both; a dashed arrow goes from an exception's last step back to the step of its `then`. At Design Level each step is a group of columns — read models (on the row of the issuer that looks
+at them), commands (their issuers on top, a hotspot on the command above them), handlers (aggregates and external
+systems, and the external system an event comes from), the event (its hotspots on top), policies (their hotspots on
+top) — and the elements stand in a band above the row of the event
+they belong to, an exception's on its own lane: the chain reads left to right into each event. The timeline picker lists the
 stages (「コンビニでの発行（例外を含む）」) between すべて（統合） and the timelines; clicking a stage's frame selects
 it (its main flows, its exceptions and 「この段階を表示」). 「例外を表示」 in the view bar's 絞り込み (a storming with
 exceptions only) hides the exceptions of the integrated canvas and of a stage: their steps, the events only they have, the
@@ -2258,9 +2420,10 @@ hotspots on those events and their `then` arrows; an exception's own view is unc
 <!-- topic: storming-rules -->
 ### Diagnostics of a storming
 
-S001–S009 and S014–S022 need only the storming, S010–S013 check its `ref`s against the model. Each example below is a whole
+S001–S009 and S014–S028 need only the storming, S010–S013 check its `ref`s against the model. Each example below is a whole
 file with that one problem. Syntax errors are `SYNTAX`: an unknown keyword or clause, a `ref` or clause in a timeline or
-group, a declaration outside a storming or inside a body, a nested group, an empty group, a keyword used as an ID.
+group, a declaration outside a storming or inside a body, a nested group, an empty group, a keyword used as an ID
+(`by`, `handledBy` and `from` included), a list with a comma too many (`emits A,`).
 
 **S001**: two declarations with one ID, of any kinds; also two stormings with one ID in the workspace. Rename one, and
 the references to it.
@@ -2269,7 +2432,7 @@ the references to it.
 // S001
 storming Checkout {
   event OrderPlaced
-  command OrderPlaced
+  hotspot OrderPlaced
 }
 ```
 
@@ -2280,21 +2443,32 @@ gives the closest one).
 // S002
 storming Checkout {
   event OrderConfirmed
+  actor Customer
+  aggregate Order
   command ConfirmOrder {
+    by Customer
+    handledBy Order
     emits OrderConfirmd
   }
 }
 ```
 
-**S003**: a reference to a declaration of the wrong kind: `target` names an aggregate, `reads` a read model, `actor` an
-actor or external, `emits`, `on` and timeline steps an event, `issues` a command. A command is never a step: put its
+**S003**: a reference to a declaration of the wrong kind: `by` names an actor or external, `reads` a read model,
+`handledBy` an aggregate or external, `emits`, a policy's `on` and timeline steps an event, `issues` a command, a read
+model's `from` an event, an event's `from` an external, a hotspot's `on` any sticky but a hotspot. The hint names the
+relation that says what was meant: `by` an aggregate is `handledBy` it, `reads` an event is a read model fed `from` it,
+`emits` a command is a policy between them (only a policy connects commands). A command is never a step: put its
 events in the timeline.
 
 ```dtes
 // S003
 storming Checkout {
   event OrderConfirmed
+  actor Customer
+  aggregate Order
   command ConfirmOrder {
+    by Customer
+    handledBy Order
     emits OrderConfirmed
   }
   timeline Main {
@@ -2304,17 +2478,21 @@ storming Checkout {
 }
 ```
 
-**S004**: more than one `target`, `ref`, hotspot `on`, `status`, `resolution` or `level`. Keep one; a command with two main
-aggregates is two commands, or a hotspot.
+**S004**: more than one `handledBy`, `ref`, hotspot `on`, `status`, `resolution` or `level`. Keep one; a command with two
+handlers is two commands, or a hotspot.
 
 ```dtes
 // S004
 storming Checkout {
+  event OrderConfirmed
+  actor Customer
   aggregate Order
   aggregate Invoice
   command ConfirmOrder {
-    target Order
-    target Invoice
+    by Customer
+    handledBy Order
+    handledBy Invoice
+    emits OrderConfirmed
   }
 }
 ```
@@ -2326,7 +2504,12 @@ correspond to `.dt` symbols.
 // S005
 storming Checkout {
   event OrderConfirmed
-  command IssueInvoice
+  event InvoiceIssued
+  aggregate Invoice
+  command IssueInvoice {
+    handledBy Invoice
+    emits InvoiceIssued
+  }
   policy BillConfirmedOrder {
     ref Billing.BillConfirmedOrder
     on OrderConfirmed
@@ -2335,9 +2518,10 @@ storming Checkout {
 }
 ```
 
-**S006**: a clause the element does not take: relations belong to commands (`actor`, `reads`, `target`, `emits`),
-policies (`on`, `issues`) and hotspots (`on`), `status` and `resolution` to hotspots, `level` to events. Move it to the element it
-belongs to (an event's outcome is the command's `emits`).
+**S006**: a clause the element does not take: relations belong to commands (`by`, `reads`, `handledBy`, `emits`),
+policies (`on`, `issues`), read models and events (`from`) and hotspots (`on`), `status` and `resolution` to hotspots,
+`level` to events. Move it to the element it belongs to (an event's outcome is the command's `emits`); a command's
+`issues` is a policy between two commands.
 
 ```dtes
 // S006
@@ -2364,7 +2548,8 @@ storming Checkout {
 }
 ```
 
-**S008**: a policy without `on` or without `issues`. Add the missing one; while it is unknown, write a hotspot instead.
+**S008**: a policy without `on` or without `issues`. Add the missing one when it is decided; while it is unknown, do not
+guess one: put an open hotspot `on` the policy, which asks the question and turns S008 off.
 
 ```dtes
 // S008
@@ -2412,18 +2597,22 @@ storming Checkout {
 }
 ```
 
-**S012** (warning): a command's `ref` is a command of another aggregate than its `target`'s `ref`. Correct one of the
-`ref`s or the `target`.
+**S012** (warning): a command's `ref` is a command of another aggregate than the `ref` of the aggregate it is
+`handledBy`. Correct one of the `ref`s or the `handledBy`.
 
 ```dtes
 // S012
 storming Checkout {
+  event OrderConfirmed
+  actor Customer
   aggregate Invoice {
     ref Billing.Invoice
   }
   command ConfirmOrder {
     ref Sales.Order.confirm
-    target Invoice
+    by Customer
+    handledBy Invoice
+    emits OrderConfirmed
   }
 }
 ```
@@ -2437,8 +2626,14 @@ storming Checkout {
   event OrderCancelled {
     ref Sales.OrderCancelled
   }
+  actor Customer
+  aggregate Order {
+    ref Sales.Order
+  }
   command ConfirmOrder {
     ref Sales.Order.confirm
+    by Customer
+    handledBy Order
     emits OrderCancelled
   }
 }
@@ -2452,7 +2647,9 @@ relations along it, or record the stop condition in a hotspot.
 // S014
 storming Checkout {
   event PaymentFailed
+  aggregate Payment
   command RetryPayment {
+    handledBy Payment
     emits PaymentFailed
   }
   policy RetryFailedPayment {
@@ -2591,6 +2788,140 @@ storming Errands {
 }
 ```
 
+**S023**: `actor` or `target` in a body: the relations of v0.1, replaced by `by` (who issues a command) and `handledBy`
+(who handles it, an aggregate or an external system). `dt migrate dtes` rewrites them in every command; elsewhere,
+move the relation into the command it belongs to.
+
+```dtes
+// S023
+storming Checkout {
+  event OrderConfirmed
+  actor Customer
+  aggregate Order
+  command ConfirmOrder {
+    actor Customer
+    handledBy Order
+    emits OrderConfirmed
+  }
+}
+```
+
+**S024**: a command that does not say who issues it (`by`, or a policy that `issues` it), who handles it (`handledBy`)
+or what comes of it (`emits`): at Design Level a command is a whole row, read model → issuer → command → handler →
+event. Add what is decided. What is not decided is never guessed: put an open hotspot `on` the command, asking it
+(`hotspot WhoHandles "誰が処理する？" { on ConfirmOrder }`); while it is open, S024 is off for that command. Resolving the
+hotspot turns it on again, until the relation is written.
+
+```dtes
+// S024
+storming Checkout {
+  event OrderConfirmed
+  actor Customer
+  command ConfirmOrder {
+    by Customer
+    emits OrderConfirmed
+  }
+}
+```
+
+**S025**: a command a policy `issues` that also has `by`. The policy is its issuer; a person who also issues it by hand
+is another command, `by` that person.
+
+```dtes
+// S025
+storming Checkout {
+  event OrderConfirmed
+  event InvoiceIssued
+  actor Clerk
+  aggregate Invoice
+  command IssueInvoice {
+    by Clerk
+    handledBy Invoice
+    emits InvoiceIssued
+  }
+  policy BillConfirmedOrder {
+    on OrderConfirmed
+    issues IssueInvoice
+  }
+}
+```
+
+**S026**: one relation written twice in an element (`emits A` twice, or `emits A, A`). Remove the second.
+
+```dtes
+// S026
+storming Checkout {
+  event OrderConfirmed
+  actor Customer
+  aggregate Order
+  command ConfirmOrder {
+    by Customer
+    handledBy Order
+    emits OrderConfirmed, OrderConfirmed
+  }
+}
+```
+
+**S027**: at Design Level (the storming has a command or a policy), an actor, external system, aggregate or read model
+that takes part in no relation: no relation names it, and it has none of its own (a read model fed `from` events that
+people only look at takes part). Name it where it takes part (`by`, `handledBy`, `reads`, an event's `from`), or remove
+it; while that is not known, an open hotspot `on` it asks where it is used and turns S027 off.
+
+```dtes
+// S027
+storming Checkout {
+  event OrderConfirmed
+  actor Customer
+  aggregate Order
+  aggregate Invoice
+  command ConfirmOrder {
+    by Customer
+    handledBy Order
+    emits OrderConfirmed
+  }
+}
+```
+
+**S028**: an event that a command `emits` and that also arrives `from` an external system. An event comes from one
+place: if the external system handles that command, write `handledBy` it in the command; if they are two happenings,
+declare two events.
+
+```dtes
+// S028
+storming Checkout {
+  event PaymentConfirmed {
+    from PaymentService
+  }
+  external PaymentService
+  aggregate Payment
+  command ConfirmPayment {
+    by PaymentService
+    handledBy Payment
+    emits PaymentConfirmed
+  }
+}
+```
+
+**S029** (info): at Design Level (the storming has a command or a policy), an event that no command emits and that
+comes `from` no external system. Nothing to fix while that part of the storming is at Big Picture; otherwise write the
+command that `emits` it, `from` the external system it arrives from, or — for a schedule — leave it a time event that
+a policy reacts to (those are not reported).
+
+```dtes
+// S029
+storming Checkout {
+  event OrderPlaced
+  event OrderConfirmed
+  actor Customer
+  aggregate Order
+  command ConfirmOrder {
+    by Customer
+    handledBy Order
+    emits OrderConfirmed
+  }
+}
+```
+
 <!-- topic: storming-practice -->
 ### Event Storming with DomainTrail
 
@@ -2623,10 +2954,13 @@ what the files show at once, then has the AI coach you: why the step you are at 
 the command that does a step, the places to look at and the questions to ask the people.
 
 **Design Level next**, once the flow is agreed (the brief says how far to go):
-- For each event, what caused it: a `command` (and the `actor` or `external` system that issues it), or a `policy`
-  reacting to an earlier event (「〜したら〜する」).
-- What a command needs to decide: the `readmodel` it `reads`, and the `aggregate` it `target`s, which decides and
-  emits the events.
+- Write each command as its whole row (`dt guide dtes-quick`): who issues it, `by` an `actor` or `external` system —
+  or the `policy` that `issues` it, reacting to an earlier event (「〜したら〜する」), and then no `by`; the
+  `readmodel` the issuer `reads` to decide; what handles it, `handledBy` an `aggregate` or an `external` system; and
+  what it `emits`. An event that arrives from outside without a command of ours is `from` the external system.
+- **Never fill a relation by guessing.** When nobody knows who issues or handles a command, or what a policy reacts to,
+  do not invent an actor or an aggregate to silence the error: put a `hotspot` `on` that command or policy, asking it.
+  The open hotspot is the honest result, and it turns the incompleteness error (S024, S008, S027) off.
 - Fine-grained events found here (reservations, authorisations, internal failures, retries) get `level design`, so
   that Big Picture keeps the flow people agreed on. An event the people want to see at Big Picture loses it.
 - Keep hotspots for what is still open; set `status resolved` with its `resolution "…"` only when the people settle
@@ -2682,16 +3016,16 @@ storming](#diagnostics-of-a-storming).
 | L003 | (warning) different things in one scope share a Japanese name |
 | S001 | `.dtes`: the IDs of a storming's declarations are unique across kinds (groups and timelines included), and storming IDs are unique in the workspace |
 | S002 | `.dtes`: a relation target or timeline step names a declaration of its storming |
-| S003 | `.dtes`: a reference names a declaration of the right kind (`target` an aggregate, `reads` a read model, `actor` an actor or external, `emits` / `on` and timeline steps an event, `issues` a command) |
-| S004 | `.dtes`: at most one `target`, `ref`, hotspot `on`, `status`, `resolution` and `level` per element |
+| S003 | `.dtes`: a reference names a declaration of the right kind (`by` an actor or external, `reads` a read model, `handledBy` an aggregate or external, `emits` / a policy's `on` and timeline steps an event, `issues` a command, a read model's `from` an event, an event's `from` an external, a hotspot's `on` a sticky) |
+| S004 | `.dtes`: at most one `handledBy`, `ref`, hotspot `on`, `status`, `resolution` and `level` per element |
 | S005 | `.dtes`: only events, aggregates and commands have a `ref` |
-| S006 | `.dtes`: an element has only the clauses of its kind: relations in commands, policies and hotspots, `status` / `resolution` in hotspots, `level` in events |
+| S006 | `.dtes`: an element has only the clauses of its kind: relations in commands, policies, read models and events (`from`) and hotspots, `status` / `resolution` in hotspots, `level` in events; a command never `issues` |
 | S007 | `.dtes`: an event appears at most once in a group |
-| S008 | `.dtes`: a policy has at least one `on` and one `issues` |
+| S008 | `.dtes`: a policy has at least one `on` and one `issues`, unless an open hotspot is `on` it |
 | S009 | `.dtes`: a hotspot's `status` is `open` or `resolved`; `resolved` needs a `resolution`, `open` has none |
 | S010 | `.dtes`: a `ref` is fully qualified (`Context.Event`, `Context.Aggregate`, `Context.Aggregate.command`) and resolves in the `.dt` model |
 | S011 | `.dtes`: a `ref` names a `.dt` symbol of its element's kind (a command `ref`, a command the aggregate has) |
-| S012 | (warning) `.dtes`: a command's `ref` is a command of the aggregate that its `target`'s `ref` names |
+| S012 | (warning) `.dtes`: a command's `ref` is a command of the aggregate that the `ref` of its `handledBy` names |
 | S013 | (warning) `.dtes`: a command `emits` no event whose `ref` its `.dt` command never emits (`.dt` `emits` is exhaustive) |
 | S014 | (warning) `.dtes`: a type-level cycle policy → command → event → policy (possible, not an infinite loop) |
 | S015 | (warning) `.dtes`: a label fits its sticky note (one too long even at the smallest font is cut short with «…») |
@@ -2702,6 +3036,13 @@ storming](#diagnostics-of-a-storming).
 | S020 | `.dtes`: in a storming with stages, every timeline and exception is in a stage |
 | S021 | (warning) `.dtes`: only the first stage comes after no stage |
 | S022 | (warning) `.dtes`: a stage has a main flow (a `timeline`) |
+| S023 | `.dtes`: no `actor` or `target` in a body (v0.1): a command's issuer is `by`, its handler `handledBy` (`dt migrate dtes`) |
+| S024 | `.dtes`: a command has its issuer (`by`, or a policy that `issues` it), `handledBy` and `emits`, unless an open hotspot is `on` it |
+| S025 | `.dtes`: a command a policy `issues` has no `by` |
+| S026 | `.dtes`: a relation is written once in an element |
+| S027 | `.dtes`: every actor, external system, aggregate and read model is named by a relation, unless an open hotspot is `on` it |
+| S028 | `.dtes`: an event is emitted by a command or arrives `from` an external system, not both |
+| S029 | (info) `.dtes`: at Design Level, an event has a source: a command emits it, it comes `from` an external system, or a policy reacts to it as a time event |
 | J001 | `domaintrail.journey.json` reads against its schema (`schema/journey.schema.json`): JSON, the keys and enums it allows, the goals and marks of each pattern, unique journey IDs |
 | J002 | (warning) a journey names a storming that does not exist (an ES journey's key, a `FromStorming` journey's `from.stormings`) |
 | J003 | (warning) a journey names a context that does not exist (a `OneContext` journey's `from.context`) |
@@ -2812,7 +3153,9 @@ own. The layout:
 
 A `.dtes` file has its own layout, in the same spirit: 2 spaces per level; every element, clause, timeline step and group
 event on its own line; an element without clauses on one line (an empty `{}` is dropped unless it holds a comment); one
-blank line kept where the author wrote some, one between stormings; no spaces around the dots of a `ref`.
+blank line kept where the author wrote some, one between stormings; no spaces around the dots of a `ref`; a list as
+`emits A, B`. The clauses of a body go in one order, each with its comments (ADR 0032): `ref`, `by`, `reads`,
+`handledBy`, `emits`, `on`, `issues`, `from`, `status`, `resolution`, `level`.
 
 <!-- topic: export -->
 ## Sharing the sources and the diagrams
@@ -3830,9 +4173,9 @@ around it (its ⋯ → 変更を見る).
   since the workspace now differs from the last revision).
 
 **People's edits of the stickies** ([ADR 0033](adr/0033-people-edit-stickies.md)). Anyone in the session can change a
-sticky's label and name, put a hotspot on an event and write a hotspot's resolution on the canvas; dt writes it into
+sticky's label and name, put a hotspot on any sticky and write a hotspot's resolution on the canvas; dt writes it into
 the `.dtes` at once, without an AI run, changing only the label string, or for a new name the declaration's name and
-every reference to it in the storming (relations, timelines and groups, an exception's `then`, a stage's `after`) —
+every reference to it in the storming (relations — `by`, `reads`, `handledBy`, `emits`, `on`, `issues`, `from` —, timelines and groups, an exception's `then`, a stage's `after`) —
 the rest of the file stays as it was (no `dt fmt`). An edit is refused, with nothing written, when the sticky is no
 longer as the page showed it, when the name is not an ID of `.dtes` or is taken in the storming, or when the file would
 not parse. Each edit is a unit of work with its revisions before and after: it shows in AI の作業 as 「◯◯が編集しました」
@@ -3851,8 +4194,10 @@ only (any other tool is refused without asking, and no MCP server is loaded). Th
 the `.dt` and `.dtes` sources, keep a storming exploratory, and change no `.dt` when the requests are only about
 stormings, and lets it answer instead (status `answered`) a request that turns out to be a question. It also gives the
 ways of working of the languages the requests are about, as `dt guide storming-practice` and `dt guide
-modeling-practice` print them (both for a request about the whole workspace), with the `.dt` syntax by example of `dt
-guide dsl-quick` after the modeling's; the answerer's prompts give them too (its interviews without the syntax).
+modeling-practice` print them (both for a request about the whole workspace), with the syntax by example of `dt guide
+dtes-quick` after the storming's and of `dt guide dsl-quick` after the modeling's; the answerer's prompts give them too
+(its interviews without the syntax). Its rules say to write a storming's relations in Event Storming's grammar and to
+mark a relation nobody knows with a hotspot on the element, never to fill it by guessing.
 Then `dt fmt` and `dt check` run when the run changed files (else both are skipped), and the server records the
 result.
 

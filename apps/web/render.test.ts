@@ -172,14 +172,15 @@ describe('an element of a storming drawn once per use (Design Level)', () => {
     const dtes = (clerk: string, boss: string): { path: string; text: string } => ({
         path: 'es.dtes',
         text: `storming S {
-  event Opened event Approved event Closed
+  event Opened event Approved event Closed event Archived
   actor Clerk ${clerk}
   ${boss}
-  command Open { actor Clerk emits Opened }
+  command Open { by Clerk emits Opened }
   command Approve { emits Approved }
-  command Close { actor Clerk ${boss ? 'actor Boss ' : ''}emits Closed }
+  command Close { by Clerk ${boss ? 'by Boss ' : ''}emits Closed }
+  command Archive { emits Archived }
   policy P1 { on Opened issues Approve }
-  policy P2 { on Approved issues Close }
+  policy P2 { on Approved issues Archive }
   timeline T { Opened Approved Closed }
 }
 `,
@@ -201,7 +202,7 @@ describe('an element of a storming drawn once per use (Design Level)', () => {
         // removed since the previous graph: a ghost where each of its notes was
         const before = await graph();
         const without = dtes('', 'actor Boss');
-        const [after] = await viewPayloads([{ ...without, text: without.text.replace(/ {2}actor Clerk \n/, '').replaceAll('actor Clerk ', '') }]);
+        const [after] = await viewPayloads([{ ...without, text: without.text.replace(/ {2}actor Clerk \n/, '').replaceAll('by Clerk ', '') }]);
         const ghosts = buildScene(after!.stormings[0]!.views['design-level|']!.graph, {
             diff: { added: [], changed: [], removed: ids('es/S/Clerk') },
             diagnostics: [],
@@ -236,20 +237,21 @@ describe('an element of a storming drawn once per use (Design Level)', () => {
     test('selecting a note keeps what is joined to it in full view: a copy stands for its element', async () => {
         const items = sceneItems(await scene());
         const kept = (...selected: string[]): string[] => focusElements(items, selected);
-        // an event: the steps before and after, the command causing it with its actor's copy beside it, the policy reacting
-        expect(kept('n:e:Closed')).toEqual(['Boss', 'Clerk', 'Close', 'Closed', 'Approved'].map((id) => `es/S/${id}`).sort());
-        expect(kept('n:e:Approved')).toEqual(['Approve', 'Approved', 'Closed', 'Opened', 'P2'].map((id) => `es/S/${id}`).sort());
+        // an event: the command causing it with its actor's copy beside it, the policy reacting (at Design Level the time
+        // order is not drawn: the placement shows it)
+        expect(kept('n:e:Closed')).toEqual(['Boss', 'Clerk', 'Close', 'Closed'].map((id) => `es/S/${id}`).sort());
+        expect(kept('n:e:Approved')).toEqual(['Approve', 'Approved', 'P2'].map((id) => `es/S/${id}`).sort());
         // one copy of the actor: every copy, and the commands each stands beside
         expect(kept('n:n:Clerk@Open')).toEqual(['Clerk', 'Close', 'Open'].map((id) => `es/S/${id}`).sort());
         expect(focusedItems(items, new Set(['n:n:Clerk@Open']))!.has('n:n:Clerk@Close')).toBe(true);
         // the edges kept are those joining the kept notes to the selection
         const edges = [...focusedItems(items, new Set(['n:e:Closed']))!].filter((id) => id.startsWith('e:'));
         expect(edges.every((id) => items.some((i) => i.id === id && i.type === 'edge'))).toBe(true);
-        expect(edges.length).toBe(4);
-        // nothing selected, or an edge: nothing is dimmed
+        expect(edges.length).toBe(3);
+        // nothing selected: nothing is dimmed; a line selected keeps itself and its two ends (ADR 0032)
         expect(focusedItems(items, new Set())).toBeUndefined();
-        const edge = items.find((s) => s.type === 'edge')!;
-        expect(focusedItems(items, new Set([edge.id]))).toBeUndefined();
+        const edge = items.find((s) => s.type === 'edge' && s.id === 'e:by:Boss->Close@n:Boss@Close->n:Close')!;
+        expect([...focusedItems(items, new Set([edge.id]))!].sort()).toEqual([edge.id, 'n:n:Boss@Close', 'n:n:Close'].sort());
     });
 });
 
@@ -298,7 +300,7 @@ describe('the focus of a selected note in a view of stages (the grid) and a time
   event A event B event C event D event X
   event G1 event G2
   actor Clerk
-  command DoB { actor Clerk emits B }
+  command DoB { by Clerk emits B }
   command DoC { emits C }
   policy P { on B issues DoC }
   hotspot H { on B }
@@ -322,12 +324,12 @@ describe('the focus of a selected note in a view of stages (the grid) and a time
     const noteOf = (list: readonly SceneItem[], local: string): string => list.find((i) => i.type === 'node' && i.elementId === `es/S/${local}`)!.id;
     const es = (...ids: string[]): string[] => ids.map((id) => `es/S/${id}`).sort();
 
-    test('Design Level of the stages: the neighbours in time (the exception included), the cause with its actor, the reactions, the hotspot', async () => {
+    test('Design Level of the stages: the exception branching off, the cause with its actor, the reactions, the hotspot', async () => {
         const list = await items('design-level|');
         expect(list.find((i) => i.type === 'group' && i.id.startsWith('n:st:'))).toBeDefined();
-        expect(focusElements(list, [noteOf(list, 'B')])).toEqual(es('A', 'B', 'C', 'X', 'DoB', 'Clerk', 'P', 'H'));
-        // in a group: through the group's time order
-        expect(focusElements(list, [noteOf(list, 'G1')])).toEqual(es('D', 'G1'));
+        expect(focusElements(list, [noteOf(list, 'B')])).toEqual(es('B', 'X', 'DoB', 'Clerk', 'P', 'H'));
+        // in a group: no time order at Design Level, its own note only
+        expect(focusElements(list, [noteOf(list, 'G1')])).toEqual(es('G1'));
         // a container is never dimmed, so never listed
         expect([...focusedItems(list, new Set([noteOf(list, 'G1')]))!].some((id) => list.find((i) => i.id === id)?.type === 'group')).toBe(false);
     });
@@ -335,12 +337,43 @@ describe('the focus of a selected note in a view of stages (the grid) and a time
     test('Big Picture of the stages and a timeline’s view (ELK)', async () => {
         const big = await items('big-picture|');
         expect(focusElements(big, [noteOf(big, 'B')])).toEqual(es('A', 'B', 'C', 'X', 'H'));
+        // in a group: through the group's time order
+        expect(focusElements(big, [noteOf(big, 'G1')])).toEqual(es('D', 'G1'));
         const main = await items('design-level|Main');
         // the cause of B with its actor, as on the integrated canvas
-        expect(focusElements(main, [noteOf(main, 'B')])).toEqual(es('A', 'B', 'C', 'DoB', 'Clerk', 'P', 'H'));
+        expect(focusElements(main, [noteOf(main, 'B')])).toEqual(es('B', 'DoB', 'Clerk', 'P', 'H'));
         const grouped = await items('big-picture|Main2');
         expect(focusElements(grouped, [noteOf(grouped, 'G2')])).toEqual(es('D', 'G2'));
         // the group's step selected from before it brings the group's events along
         expect(focusElements(grouped, [noteOf(grouped, 'D')])).toEqual(es('D', 'G1', 'G2'));
+    });
+});
+
+describe('a handler shared by the commands converging on one event (ADR 0032)', () => {
+    test('selecting it keeps all its commands; selecting one command keeps only its path through it; its emits has a tooltip', async () => {
+        const [payload] = await viewPayloads([
+            {
+                path: 'es.dtes',
+                text: `storming S {
+  event Requested
+  actor Clerk
+  actor Shop
+  aggregate Request
+  command Receive { by Shop handledBy Request emits Requested }
+  command Create { by Clerk handledBy Request emits Requested }
+  timeline T { Requested }
+}
+`,
+            },
+        ]);
+        const scene = buildScene(payload!.stormings[0]!.views['design-level|']!.graph, optionsOf(payload!));
+        const items = sceneItems(scene);
+        const handler = items.find((i) => i.type === 'node' && i.elementId === 'es/S/Request')!;
+        expect(focusElements(items, [handler.id])).toEqual(['Clerk', 'Create', 'Receive', 'Request', 'Requested', 'Shop'].map((id) => `es/S/${id}`));
+        expect(focusElements(items, ['n:n:Create'])).toEqual(['Clerk', 'Create', 'Request', 'Requested'].map((id) => `es/S/${id}`));
+        const emits = scene.edges.find((e) => e.source === handler.id)!;
+        expect(emits.props.tooltip).toBe('Request handles Create, Receive, and Requested happens');
+        // a line selected keeps its two ends only
+        expect(focusElements(items, [emits.id])).toEqual(['Request', 'Requested'].map((id) => `es/S/${id}`));
     });
 });

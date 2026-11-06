@@ -31,6 +31,11 @@ export interface NodeProps {
     diag: DiagMark;
     /** A resolved hotspot (`.dtes` §3.5): what was agreed, empty when not written. Absent while open and on other nodes. */
     resolution?: string;
+    /**
+     * A changed note's label before the change, drawn small and struck through under it (the Live View's marks of a
+     * turn's changes); absent elsewhere. The portable SVG does not draw it.
+     */
+    was?: string;
 }
 
 /** What a container shows: a bounded context, an aggregate boundary, a storming group. */
@@ -78,6 +83,8 @@ export interface EdgeProps {
     tone: EdgeTone;
     /** A resolved hotspot's `on`: drawn quieter, as its note is. */
     resolved?: true;
+    /** What the line means in plain words, shown on hover (a storming's line). */
+    tooltip?: string;
 }
 
 /** What every item has: a stable ID (unchanged items keep their identity and selection), its origin and its element. */

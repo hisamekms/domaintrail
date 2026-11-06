@@ -9,8 +9,13 @@ import type { EventOccurrence, NodeElementKind, SemanticEdgeKind, TimelineStep }
 
 // ---- Semantic edges as drawn (spec §9.4) ----
 
-/** How a semantic edge is drawn (spec §9.4): solid causal, dotted related. */
-export const isCausal = (kind: SemanticEdgeKind): boolean => kind === 'on' || kind === 'issues' || kind === 'emits';
+/**
+ * How a semantic edge is drawn (spec §9.4): solid causal, dotted related. A command's `handledBy` is drawn as a cause:
+ * the command goes to its handler, which decides and emits the events (Event Storming's grammar, `chains.ts`); so is an
+ * event arriving `from` an external system.
+ */
+export const isCausal = (kind: SemanticEdgeKind): boolean =>
+    kind === 'on' || kind === 'issues' || kind === 'emits' || kind === 'handledBy' || kind === 'event-from';
 
 // ---- Timeline steps compared (spec §7.2, §8.3) ----
 
@@ -82,17 +87,29 @@ export interface RenderGroupNode {
 }
 
 /**
- * Any other element, drawn once per view; an actor, external system, read model or aggregate once per command of the
- * view that uses it (`uses.ts`), beside that command.
+ * Any other element, drawn along Event Storming's grammar (`chains.ts`): once per view; an issuer, read model or
+ * handler once per command note that uses it, beside it, an external system once per note of an event that comes from
+ * it; a command, policy or hotspot once per step of its events when those are at several steps (a hotspot on another
+ * sticky once per note of it).
  */
 export interface RenderElementNode {
     type: 'element';
-    /** `n:<local ID>`, or `n:<local ID>@<command ID>` for a copy beside a command. */
+    /**
+     * `n:<local ID>`; `n:<local ID>#<k>` for the k-th note of a command, policy or hotspot drawn per step;
+     * `n:<local ID>@<note>` for a copy beside a command's note (`<note>`: its ID without `n:`) or an event's note (its
+     * ID).
+     */
     id: string;
     elementId: string;
     kind: Exclude<NodeElementKind, 'event'>;
-    /** The command a copy stands beside. */
+    /** The note a copy stands beside: a command note's ID without `n:` (`C` or `C#2`), or an event note's ID. */
     use?: string;
+    /**
+     * A handler drawn once for the chains that converge on one event note (`n:<handler>@*<event note>`, `chains.ts`):
+     * the command notes it stands for, their IDs without `n:`, sorted. A change to the `handledBy` of any of them is
+     * a change of this note.
+     */
+    commands?: string[];
 }
 
 /** A stage, drawn as a frame around its main flow and its exceptions (views of a storming with stages, spec §3.7). */
@@ -103,11 +120,38 @@ export interface RenderStageNode {
     stageId: string;
 }
 
-export type RenderNode = RenderEventNode | RenderGroupNode | RenderElementNode | RenderStageNode;
+/**
+ * The empty slot of a relation an open hotspot keeps undecided (ADR 0032, `openGaps`): beside a command note, where its
+ * issuer (`by`) or its handler (`handledBy`) would stand, so that a gap the validator lets pass stays visible.
+ */
+export interface RenderGapNode {
+    type: 'gap';
+    /** `n:?<missing>@<command note>` (the command note's ID without `n:`). */
+    id: string;
+    /** The command. */
+    commandId: string;
+    /** The open hotspot that asks about it. */
+    hotspotId: string;
+    missing: 'by' | 'handledBy';
+    /** The command note it stands beside, its ID without `n:`. */
+    use: string;
+}
+
+export type RenderNode = RenderEventNode | RenderGroupNode | RenderElementNode | RenderStageNode | RenderGapNode;
 
 export type RenderEdge =
     /** The drawing of a semantic edge; one semantic edge may be drawn several times when its event is. */
-    | { type: 'semantic'; id: string; kind: SemanticEdgeKind; source: string; target: string; semantic: string }
+    | {
+          type: 'semantic';
+          id: string;
+          kind: SemanticEdgeKind;
+          source: string;
+          target: string;
+          /** The semantic edge it draws (the first of `merged`). */
+          semantic: string;
+          /** An `emits` from a merged handler: the semantic edges of every command's `emits` it stands for, sorted. */
+          merged?: string[];
+      }
     /**
      * Time order between consecutive steps of timelines (from or to a group node, never inside it); `exception` when
      * every one of them is an exception (a view of sections only).
@@ -125,9 +169,11 @@ export interface GridCell {
 }
 
 /**
- * Where a view of stages puts its nodes (spec §3.7, §10): every column is a step later than the one on its left, the
- * main flows run along row 0 through every stage, an exception hangs below the step it branches off from, and the
- * other elements stand above the event they belong to (negative rows). The layout turns cells into coordinates.
+ * Where a view of stages puts its nodes (spec §3.7, §10): each step is a group of columns, later steps to the right; in
+ * it, left to right, the read models, commands, aggregates, the event and the policies (Event Storming's grammar). The
+ * main flows' events run along one row through every stage, an exception's on a lane below the step it branches off
+ * from; the other elements stand in a band above the events of their lane, in the columns of the step they belong to.
+ * The layout turns cells into coordinates.
  */
 export interface StageGrid {
     /** The cell of each event, group and element node (a group's members are inside it). */

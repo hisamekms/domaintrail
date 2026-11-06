@@ -3,7 +3,7 @@
 /// these types; other packages' generated code imports it from `@domaintrail/kernel` (ADR 0028).
 shared context Kernel {
   /// How bad a diagnostic is.
-  enum Severity { error warning }
+  enum Severity { error warning info }
 
   /// A place in a source.
   value Position {

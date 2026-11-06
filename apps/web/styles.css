@@ -1369,6 +1369,12 @@ a.field-origin {
     color: var(--es-actor-text);
     border-radius: 18px;
 }
+.dn-esGap {
+    border: 1.5px dashed var(--muted);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 3px;
+}
 .dn-esExternal {
     border-color: var(--es-external-border);
     background: var(--es-external);
@@ -1383,7 +1389,8 @@ a.field-origin {
 .dn-esExternal .dn-head,
 .dn-esAggregate .dn-head,
 .dn-esReadModel .dn-head,
-.dn-esHotspot .dn-head {
+.dn-esHotspot .dn-head,
+.dn-esGap .dn-head {
     border-bottom: none;
     display: flex;
     flex-direction: column;
@@ -1400,7 +1407,8 @@ a.field-origin {
 .dn-esExternal .dn-stereo,
 .dn-esAggregate .dn-stereo,
 .dn-esReadModel .dn-stereo,
-.dn-esHotspot .dn-stereo {
+.dn-esHotspot .dn-stereo,
+.dn-esGap .dn-stereo {
     color: inherit;
 }
 /* a label too long for its note even at the floor size: the lines that fit, the last ending with «…» */
@@ -1423,6 +1431,26 @@ a.field-origin {
 }
 .dn-change-removed .dn-label {
     text-decoration: line-through;
+}
+/* a turn's changed sticky (docs/live-view.md, "What a turn changed"): the text it had, small and struck through, just
+   under the note, outside it so that the label keeps its fit */
+.dn-was {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: var(--space-1);
+    font-family: var(--sans);
+    font-size: calc(12px * var(--s, 1));
+    line-height: 1.3;
+    color: var(--muted);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.dn-was del {
+    text-decoration-color: var(--changed);
 }
 /* the local selection (issue #33 §5): an indigo ring outside the node and the change's 3px ring, so that it never
    recolours the kind's edge or paper */
@@ -1598,51 +1626,54 @@ a.field-origin {
 .de-transition .de-head {
     fill: var(--model-command);
 }
-.de-esCausal .de-line {
-    stroke-width: 1.6;
-}
-.de-esSequence .de-line {
-    stroke: var(--es-sequence);
-    stroke-width: 1.8;
-    stroke-dasharray: 7 5;
-}
-.de-esSequence .de-head {
-    fill: var(--es-sequence);
-}
-.de-esSequence .de-label {
-    fill: var(--es-sequence-text);
-    font-weight: 600;
-}
-/* the time order of exceptions only: the timeline's dashes, in the hotspot's red (an exception, not an error) */
-.de-esException .de-line {
-    stroke: var(--es-exception);
-    stroke-width: 1.6;
-    stroke-dasharray: 7 5;
-}
-.de-esException .de-head {
-    fill: var(--es-exception);
-}
-.de-esException .de-label {
-    fill: var(--es-exception-text);
-    font-weight: 600;
-}
-/* an exception's `then`: back to the main flow, in the timeline's hue, dotted to tell it from the time order */
-.de-esRejoin .de-line {
-    stroke: var(--es-sequence);
-    stroke-width: 1.6;
-    stroke-dasharray: 2 4;
-}
-.de-esRejoin .de-head {
-    fill: var(--es-sequence);
-}
+/* a storming's edges in three looks (ADR 0032): every relation between stickies a flow (thin, solid, a head), the time
+   order dashed (only where the placement cannot show it at Design Level), a hotspot's subject a quiet line, no head */
+.de-esCausal .de-line,
 .de-esRelated .de-line,
+.de-esFeeds .de-line {
+    stroke: var(--model-edge);
+    stroke-width: 1.4;
+}
+.de-esSequence .de-line,
+.de-esException .de-line,
+.de-esRejoin .de-line {
+    stroke: var(--model-edge);
+    stroke-width: 1.4;
+    stroke-dasharray: 6 5;
+}
+.de-esCausal .de-head,
+.de-esRelated .de-head,
+.de-esFeeds .de-head,
+.de-esSequence .de-head,
+.de-esException .de-head,
+.de-esRejoin .de-head {
+    fill: var(--model-edge);
+}
+.de-esSequence .de-label,
+.de-esException .de-label {
+    fill: var(--model-edge-label);
+    font-weight: 600;
+}
 .de-esHotspot .de-line {
     stroke: var(--model-edge-quiet);
-    stroke-width: 1.1;
-    stroke-dasharray: 1.5 3;
+    stroke-width: 1.2;
 }
-.de-esRelated .de-head {
-    fill: var(--model-edge-quiet);
+/* above the notes: a selected line's explanation is never under a sticky */
+.react-flow__edgelabel-renderer:has(.de-explain) {
+    z-index: 1001;
+}
+.de-explain {
+    position: absolute;
+    pointer-events: none;
+    max-width: 280px;
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font: 13px var(--sans);
+    box-shadow: 0 2px 6px var(--shadow);
+    white-space: normal;
 }
 .de-esHotspot.de-resolved .de-line {
     stroke: var(--es-hotspot-resolved-edge);
@@ -7454,6 +7485,45 @@ button.add-to-request.added:hover {
 /* ---------- the canvas's bottom-left controls (apps/web/view/canvas-controls.tsx) ---------- */
 
 /* the legend opens upward from the bar; the canvas stays draggable around them */
+/* what a turn changed (docs/live-view.md, "What a turn changed"): a small bar over the storming canvas's top right,
+   naming whose changes are marked and counting them in the marks' colours, with ほかに n 件の変更 and 印を消す */
+.turn-marks-bar {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    z-index: 6;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    max-width: calc(100% - var(--space-4));
+    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+    font-size: 0.8125rem;
+    background: var(--legend-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px var(--shadow);
+}
+.turn-marks-what {
+    color: var(--muted);
+}
+.turn-marks-counts {
+    display: inline-flex;
+    gap: var(--space-2);
+}
+.turn-marks-counts b {
+    font-weight: 600;
+}
+.turn-marks-added {
+    color: var(--added);
+}
+.turn-marks-changed {
+    color: var(--changed);
+}
+.turn-marks-removed {
+    color: var(--removed);
+}
 .canvas-controls {
     position: absolute;
     left: 12px;
