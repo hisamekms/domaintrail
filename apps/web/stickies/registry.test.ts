@@ -4,7 +4,17 @@ import { readFile } from 'node:fs/promises';
 import { analyzeStormings } from '@domaintrail/storming';
 import { focusBack, matchItems, type PaletteItem } from '../shared/palette';
 import { elementLink, linkedElement } from './link';
-import { actionOfKey, actionsFor, escapeClearsSelection, HOTSPOT_TARGETS, shortcutText, STICKY_ACTIONS, stickyOf, type ActionContext } from './registry';
+import {
+    actionOfKey,
+    actionsFor,
+    escapeClearsSelection,
+    HOTSPOT_TARGETS,
+    toolbarActions,
+    shortcutText,
+    STICKY_ACTIONS,
+    stickyOf,
+    type ActionContext,
+} from './registry';
 
 const SHOP = path.join(import.meta.dir, '..', '..', '..', 'examples', 'shop', 'stormings', 'order-to-cash.dtes');
 const parsed = await analyzeStormings([{ path: 'order-to-cash.dtes', text: await readFile(SHOP, 'utf8') }], undefined);
@@ -50,7 +60,13 @@ describe("the stickies' actions (ADR 0033): one list, by kind", () => {
     test("a hotspot goes on an event only: the grammar's rule, kept in one place", () => {
         expect(HOTSPOT_TARGETS).toEqual(['event']);
         expect(STICKY_ACTIONS.map((a) => a.id)).toEqual(['chat', 'edit', 'knowledge', 'seeModel', 'seeTimeline', 'addHotspot', 'resolve', 'copyLink']);
-        expect(STICKY_ACTIONS.filter((a) => a.frequent).map((a) => a.id)).toEqual(['chat', 'edit']);
+        // the toolbar: チャットに追加 · 編集, and for a hotspot 解決を書く too
+        const bar = (local: string): string[] => toolbarActions(actionsFor([sticky(local)], live), [sticky(local)]).map((x) => x.id);
+        expect(bar('OrderPlaced')).toEqual(['chat', 'edit']);
+        expect(bar('IssuedEvent')).toEqual(['chat', 'edit', 'resolve']);
+        expect(
+            toolbarActions(actionsFor([sticky('OrderPlaced'), sticky('IssuedEvent')], live), [sticky('OrderPlaced'), sticky('IssuedEvent')]).map((x) => x.id),
+        ).toEqual(['chat']);
     });
 
     test('a sticky is what a selection ID names: its kind, its ref, its timelines; a timeline is none', () => {

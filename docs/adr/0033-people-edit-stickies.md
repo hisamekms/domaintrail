@@ -46,7 +46,7 @@ it, so an action added there shows everywhere at once:
 | ドメインモデルで見る | event, command, aggregate with a `ref` the model has | no | no | | |
 | このタイムラインで見る | an event in a timeline the view does not show | no | no | | |
 | ホットスポットを付ける | event (`HOTSPOT_TARGETS`, the grammar's rule; widened there) | no | no | | a live session |
-| 解決を書く | hotspot | no | no | | a live session |
+| 解決を書く (解決を直す once resolved, opened with its resolution) | hotspot | no | yes, a hotspot's (`frequent` may depend on the sticky) | | a live session |
 | リンクをコピー | all | no | no | ⌘⇧C | |
 
 The `see` actions have the `see` look (the eye) and name their place in the tooltip (「ドメインモデルの 注文 › 確定する

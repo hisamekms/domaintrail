@@ -224,22 +224,59 @@ function* timelineNames(tl: Extract<Storming['elements'][number], { kind: 'timel
  */
 export function HotspotForm(props: { anchor: Anchor; onSave: (question: string) => Promise<SaveResult>; onClose: () => void }): ReactNode {
     const t = useT().stickies;
-    const [question, setQuestion] = useState('');
-    const errorId = useId();
-    const { saving, error, run } = useSave(() => props.onSave(question.trim()), props.onClose);
-    const ready = question.trim().length > 0;
-    const saveKeys = isMac() ? '⌘Enter' : 'Ctrl+Enter';
     return (
-        <Popover anchor={props.anchor} label={t.hotspot.dialog} onCancel={props.onClose} onSubmit={() => ready && run()}>
+        <TextForm label={t.hotspot.dialog} field={t.hotspot.label} save={t.hotspot.save} onSave={props.onSave} onClose={props.onClose} anchor={props.anchor} />
+    );
+}
+
+/** 解決を書く, or 解決を直す for a resolved hotspot (opened with its resolution): the resolution, on several lines. */
+export function ResolveForm(props: {
+    anchor: Anchor;
+    resolution?: string;
+    onSave: (resolution: string) => Promise<SaveResult>;
+    onClose: () => void;
+}): ReactNode {
+    const t = useT().stickies;
+    const again = props.resolution !== undefined;
+    return (
+        <TextForm
+            label={again ? t.resolve.redo : t.resolve.dialog}
+            field={t.resolve.label}
+            save={t.resolve.save}
+            {...(props.resolution !== undefined && { initial: props.resolution })}
+            onSave={props.onSave}
+            onClose={props.onClose}
+            anchor={props.anchor}
+        />
+    );
+}
+
+/** A window of one text on several lines: Enter a new line, ⌘/Ctrl+Enter saves (said in the button's tooltip only). */
+function TextForm(props: {
+    anchor: Anchor;
+    label: string;
+    field: string;
+    save: string;
+    initial?: string;
+    onSave: (text: string) => Promise<SaveResult>;
+    onClose: () => void;
+}): ReactNode {
+    const [text, setText] = useState(props.initial ?? '');
+    const errorId = useId();
+    const { saving, error, run } = useSave(() => props.onSave(text.trim()), props.onClose);
+    const ready = text.trim().length > 0 && text.trim() !== props.initial;
+    const mac = isMac();
+    return (
+        <Popover anchor={props.anchor} label={props.label} onCancel={props.onClose} onSubmit={() => ready && run()}>
             <label className="sticky-form-field">
-                <span>{t.hotspot.label}</span>
+                <span>{props.field}</span>
                 <textarea
-                    value={question}
+                    value={text}
                     rows={3}
                     readOnly={saving}
                     aria-describedby={errorId}
-                    aria-keyshortcuts={isMac() ? 'Meta+Enter' : 'Control+Enter'}
-                    onChange={(e) => setQuestion(e.target.value)}
+                    aria-keyshortcuts={mac ? 'Meta+Enter' : 'Control+Enter'}
+                    onChange={(e) => setText(e.target.value)}
                     onKeyDown={(e) => {
                         if (e.key !== 'Enter' || e.nativeEvent.isComposing || !(e.metaKey || e.ctrlKey)) return;
                         e.preventDefault();
@@ -250,30 +287,7 @@ export function HotspotForm(props: { anchor: Anchor; onSave: (question: string) 
             <div id={errorId} aria-live="polite">
                 {error !== undefined && <p className="sticky-form-error">{error}</p>}
             </div>
-            <Foot save={t.hotspot.save} saving={saving} disabled={!ready} onCancel={props.onClose} saveKeys={saveKeys} />
-        </Popover>
-    );
-}
-
-/** 解決を書く: the resolution (what was there, if it was resolved already). */
-export function ResolveForm(props: {
-    anchor: Anchor;
-    resolution?: string;
-    onSave: (resolution: string) => Promise<SaveResult>;
-    onClose: () => void;
-}): ReactNode {
-    const t = useT().stickies;
-    const [resolution, setResolution] = useState(props.resolution ?? '');
-    const errorId = useId();
-    const { saving, error, run } = useSave(() => props.onSave(resolution.trim()), props.onClose);
-    const ready = resolution.trim().length > 0 && resolution.trim() !== props.resolution;
-    return (
-        <Popover anchor={props.anchor} label={t.resolve.dialog} onCancel={props.onClose} onSubmit={() => ready && run()}>
-            <Field label={t.resolve.label} value={resolution} onChange={setResolution} describedBy={errorId} />
-            <div id={errorId} aria-live="polite">
-                {error !== undefined && <p className="sticky-form-error">{error}</p>}
-            </div>
-            <Foot save={t.resolve.save} saving={saving} disabled={!ready} onCancel={props.onClose} />
+            <Foot save={props.save} saving={saving} disabled={!ready} onCancel={props.onClose} saveKeys={mac ? '⌘Enter' : 'Ctrl+Enter'} />
         </Popover>
     );
 }

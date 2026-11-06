@@ -254,6 +254,7 @@ const ja = {
         },
         resolve: {
             dialog: '解決を書く',
+            redo: '解決を直す',
             label: '解決',
             save: '解決にする',
             body: (hotspot: string, resolution: string) => `「${hotspot}」を「${resolution}」で解決にする`,
@@ -1453,6 +1454,7 @@ const en: Messages = {
         },
         resolve: {
             dialog: 'Write the resolution',
+            redo: 'Edit the resolution',
             label: 'Resolution',
             save: 'Resolve',
             body: (hotspot, resolution) => `Resolve "${hotspot}": ${resolution}`,

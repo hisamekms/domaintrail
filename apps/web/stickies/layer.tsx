@@ -29,6 +29,7 @@ import {
     isMac,
     shortcutText,
     stickyOf,
+    toolbarActions,
     type ActionContext,
     type Sticky,
     type StickyAction,
@@ -195,7 +196,12 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
         [anchorOf],
     );
 
-    const label = (a: StickyAction): string => (a.id === 'chat' && session?.chat.added ? s.chatAdded : s.actions[a.id]);
+    const label = (a: StickyAction): string =>
+        a.id === 'chat' && session?.chat.added
+            ? s.chatAdded
+            : a.id === 'resolve' && selected.length === 1 && selected[0].resolved
+              ? s.resolve.redo
+              : s.actions[a.id];
     /** What exactly an action does, for its tooltip: where it goes. */
     const hint = (a: StickyAction, sticky: Sticky | undefined): string | undefined => {
         if (!sticky) return undefined;
@@ -350,7 +356,7 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
             };
         });
 
-    const frequent = available.filter((a) => a.frequent);
+    const frequent = toolbarActions(available, selected);
     const more = available.length > frequent.length;
     const onToolbarKey = (e: KeyboardEvent<HTMLDivElement>): void => {
         if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;

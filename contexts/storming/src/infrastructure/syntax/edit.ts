@@ -259,8 +259,8 @@ function plan(text: string, storming: EsStorming, declarations: readonly EsDecla
             const decl = declarations.find((d) => d.name === input.element);
             if (!decl) return fail({ type: 'NotFound' });
             if (!isEsHotspot(decl)) return fail({ type: 'WrongKind' });
-            if (input.resolution.trim().length === 0 || input.resolution.length > MAX_RESOLUTION || /[\r\n]/.test(input.resolution))
-                return fail({ type: 'InvalidLabel' });
+            // several lines allowed (written as `\n`)
+            if (input.resolution.trim().length === 0 || input.resolution.length > MAX_RESOLUTION) return fail({ type: 'InvalidLabel' });
             const splices = resolveSplices(text, decl, input.resolution);
             if (splices.length === 0) return fail({ type: 'NothingToChange' });
             return { ok: true, value: { text: apply(text, splices), before: wordingOf(decl), after: wordingOf(decl), references: 0 } };

@@ -62,8 +62,8 @@ export interface StickyAction {
     readonly id: StickyActionId;
     readonly icon: LucideIcon;
     readonly group: ActionGroup;
-    /** A button of the toolbar (the others are in 「…」). */
-    readonly frequent: boolean;
+    /** A button of the toolbar (the others are in 「…」): always, or for some stickies (a hotspot's 解決を書く). */
+    readonly frequent: boolean | ((sticky: Sticky) => boolean);
     /** It applies to several stickies selected at once. */
     readonly multi: boolean;
     readonly shortcut?: Shortcut;
@@ -109,7 +109,8 @@ export const STICKY_ACTIONS: readonly StickyAction[] = [
         multi: false,
         applies: (s, c) => c.live && HOTSPOT_TARGETS.includes(s.kind),
     },
-    { id: 'resolve', icon: CircleCheck, group: 'write', frequent: false, multi: false, applies: (s, c) => c.live && s.kind === 'hotspot' },
+    // a hotspot's own frequent action: on its toolbar beside 編集 (解決を直す once resolved)
+    { id: 'resolve', icon: CircleCheck, group: 'write', frequent: true, multi: false, applies: (s, c) => c.live && s.kind === 'hotspot' },
     { id: 'copyLink', icon: Link, group: 'other', frequent: false, multi: false, shortcut: { key: 'c', mod: true, shift: true }, applies: () => true },
 ];
 
@@ -118,6 +119,13 @@ export function actionsFor(stickies: readonly Sticky[], context: ActionContext, 
     if (stickies.length === 0) return [];
     return actions.filter((a) => (stickies.length === 1 || a.multi) && stickies.every((s) => a.applies(s, context)));
 }
+
+/** The actions of the toolbar among those that apply: the frequent ones, for every selected sticky. */
+export const toolbarActions = (actions: readonly StickyAction[], stickies: readonly Sticky[]): StickyAction[] =>
+    actions.filter((a) => {
+        const frequent = a.frequent;
+        return typeof frequent === 'function' ? stickies.every((s) => frequent(s)) : frequent;
+    });
 
 /** The action a key press runs among `actions`, if any. */
 export function actionOfKey(

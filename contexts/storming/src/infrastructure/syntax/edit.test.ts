@@ -177,6 +177,10 @@ describe('hotspots (ADR 0033)', () => {
         expect(planned('storming S {\n  hotspot Q "q?"\n}\n', { kind: 'resolveHotspot', storming: 'S', element: 'Q', resolution: 'r' })).toBe(
             'storming S {\n  hotspot Q "q?" {\n    status resolved\n    resolution "r"\n  }\n}\n',
         );
+        // a resolution on several lines, written as one
+        expect(planned('storming S {\n  hotspot Q "q?"\n}\n', { kind: 'resolveHotspot', storming: 'S', element: 'Q', resolution: '一\n二' })).toContain(
+            'resolution "一\\n二"',
+        );
         // not a hotspot
         expect(planStickyEdit(text, { kind: 'resolveHotspot', storming: 'OrderToCash', element: 'OrderPlaced', resolution: 'r' })).toEqual({
             ok: false,

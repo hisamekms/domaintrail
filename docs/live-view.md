@@ -198,8 +198,8 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   and everyone's canvas shows it; if someone (or the AI) changed the sticky meanwhile, the window says what it is now.
   ホットスポットを付ける opens a window with the question only, on several lines (Enter starts a new line, ⌘Enter / Ctrl+Enter
   adds it): its name (ID) is not asked — dt writes it at once as `<Sticky>Question` and selects it, and the agent's
-  light model renames it from the question a few seconds later (knowledge or not; not when it was changed meanwhile). 解決を書く opens the
-  same kind of window with the resolution. Each edit is in AI の作業.
+  light model renames it from the question a few seconds later (knowledge or not; not when it was changed meanwhile). 解決を書く (on a hotspot's toolbar beside 編集; 解決を直す once resolved, opened with its resolution) takes the resolution
+  on several lines the same way. Each edit is in AI の作業.
   **Back from a jump**: after ドメインモデルで見る (or このタイムラインで見る), the detail's back button names the sticky
   (「← 注文を受け付けた」) and returns to the storming as it was shown — the same view, level and scope, the camera, the
   sticky selected; the browser's Back does the same.
