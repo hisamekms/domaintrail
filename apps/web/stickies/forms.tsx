@@ -1,9 +1,10 @@
-// The small windows anchored to a sticky (ADR 0033): 直す (its label, selected, and its name; a new name says how many
+// The small windows anchored to a sticky (ADR 0033): 編集 (its label, selected, and its name; a new name says how many
 // references it rewrites, and a bad or taken one is an error at once), ホットスポットを付ける (the question, and a free name)
 // and 解決を書く. Enter saves, Escape cancels; what the server refuses is said in the window, which stays open.
 import { useId, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { localNameProblem, referencesTo, type Storming } from '@domaintrail/storming';
 import { Act } from '../shared/act';
+import { TOOLTIP_ATTR } from '../tooltip';
 import { useT } from '../i18n';
 import type { Sticky } from './registry';
 
@@ -105,16 +106,27 @@ function Field({
     );
 }
 
-/** The window's foot: its keys, 取消 and the decision. */
-function Foot({ save, saving, disabled, onCancel }: { save: string; saving: boolean; disabled: boolean; onCancel: () => void }): ReactNode {
+/** The window's foot: 取消 and the decision; their keys (Escape, `saveKeys`) are in their tooltips only. */
+function Foot({
+    save,
+    saving,
+    disabled,
+    onCancel,
+    saveKeys = 'Enter',
+}: {
+    save: string;
+    saving: boolean;
+    disabled: boolean;
+    onCancel: () => void;
+    saveKeys?: string;
+}): ReactNode {
     const e = useT().stickies.edit;
     return (
         <div className="sticky-form-foot">
-            <small className="muted">{e.keys}</small>
-            <Act kind="stop" onClick={onCancel}>
+            <Act kind="stop" onClick={onCancel} aria-keyshortcuts="Escape" {...{ [TOOLTIP_ATTR]: 'Esc' }}>
                 {e.cancel}
             </Act>
-            <Act kind="decide" type="submit" disabled={disabled || saving} aria-busy={saving}>
+            <Act kind="decide" type="submit" disabled={disabled || saving} aria-busy={saving} aria-keyshortcuts={saveKeys} {...{ [TOOLTIP_ATTR]: saveKeys }}>
                 {save}
             </Act>
         </div>
@@ -144,7 +156,7 @@ function useSave(save: () => Promise<SaveResult>, onDone: () => void): { saving:
     return { saving, error, run };
 }
 
-/** 直す: the label (selected first) and the name, checked as typed; a new name says what it rewrites. */
+/** 編集: the label (selected first) and the name, checked as typed; a new name says what it rewrites. */
 export function EditForm(props: {
     sticky: Sticky;
     storming: Storming;

@@ -9649,10 +9649,8 @@ button.knowledge-extraction:disabled {
 .sticky-form-foot {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: var(--gap-inside);
-}
-.sticky-form-foot small {
-    flex: 1;
 }
 .sticky-status {
     position: absolute;
