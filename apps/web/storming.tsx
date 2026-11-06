@@ -25,10 +25,23 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { commandsOf, elementOf, type DomainModel } from '@domaintrail/modeling';
-import { type AnyDeclaration, firstDeclarations, isDesignLevelOnly, type NodeElement, type Stage, type Storming, type Timeline } from '@domaintrail/storming';
+import {
+    type AnyDeclaration,
+    buildSemanticGraph,
+    firstDeclarations,
+    isDesignLevelOnly,
+    type NodeElement,
+    type Stage,
+    type Storming,
+    type Timeline,
+} from '@domaintrail/storming';
 import { type Diagnostic } from '@domaintrail/kernel';
 import {
     type DisplayMode,
+    drawsElement,
+    HIDEABLE,
+    type Hideable,
+    laidOutHidden,
     type LaidOutGraph,
     type RenderGraph,
     stormingViewKey,
@@ -52,12 +65,54 @@ export interface StormingChoice {
     level: ViewLevel;
     /** By storming ID: the selected timeline, or `@<stage ID>` for a stage (none: the integrated canvas). */
     timelines: Record<string, string>;
-    /** 「例外を表示」: false hides the exceptions on the integrated canvas and a stage (absent: shown). */
+    /**
+     * What the 絞り込み hides (its 「…を表示」 unchecked; absent: nothing), in every storming where it applies
+     * (`hideableIn`). Each kind is hidden as `HIDDEN_BY` says: the exceptions by another layout, the resolved hotspots by
+     * the drawing alone.
+     */
+    hidden?: Hideable[];
+    /** 「例外を表示」 as an earlier version kept it (false: hidden): read as `hidden`'s `exceptions` (`hiddenOf`). */
     exceptions?: boolean;
 }
 
 /** Whether a storming has exceptions (the 絞り込み's 「例外を表示」 is then shown). */
 export const hasExceptionTimelines = (storming: StormingView): boolean => storming.timelines.some((t) => t.exception);
+
+/** Whether a storming has a resolved hotspot (the 絞り込み's 「解決済みを表示」 is then shown). */
+export const hasResolvedHotspots = (storming: StormingView): boolean =>
+    [...firstDeclarations(storming.storming).values()].some((d) => d.kind === 'hotspot' && hotspotResolved(d.clauses));
+
+/** What a choice hides, wherever it applies (an earlier version's `exceptions: false` is the exceptions hidden). */
+export function hiddenOf(choice: StormingChoice): ReadonlySet<Hideable> {
+    return new Set([...(choice.hidden ?? []), ...(choice.hidden === undefined && choice.exceptions === false ? (['exceptions'] as const) : [])]);
+}
+
+/** The choice with `kind` hidden or shown again (written as `hidden`, an earlier version's `exceptions` dropped). */
+export function withHidden(choice: StormingChoice, kind: Hideable, hide: boolean): StormingChoice {
+    const all = new Set(hiddenOf(choice));
+    if (hide) all.add(kind);
+    else all.delete(kind);
+    const { exceptions: _, hidden: __, ...rest } = choice;
+    const hidden = HIDEABLE.filter((k) => all.has(k));
+    return hidden.length ? { ...rest, hidden } : rest;
+}
+
+/**
+ * What the 絞り込み can hide in a view of `storming` (`scope`: `chooseScope`'s): the exceptions on the integrated canvas
+ * and a stage of a storming with some (a timeline's view is one of them or has none); the resolved hotspots in any view
+ * of a storming with some.
+ */
+export function hideableIn(storming: StormingView, scope: { timelineId?: string | undefined }): Hideable[] {
+    return HIDEABLE.filter((k) => (k === 'exceptions' ? scope.timelineId === undefined && hasExceptionTimelines(storming) : hasResolvedHotspots(storming)));
+}
+
+/** What the view shown hides: what the choice hides, of what applies to it (`hideableIn`). */
+export function shownHidden(stormings: readonly StormingView[], choice: StormingChoice): ReadonlySet<Hideable> {
+    const shown = shownStorming(stormings, choice);
+    if (!shown) return new Set();
+    const hidden = hiddenOf(choice);
+    return new Set(hideableIn(shown.storming, shown.options).filter((k) => hidden.has(k)));
+}
 
 /** The picker's value of a stage's view (a timeline's is its ID: an ID never starts with `@`). */
 export const stageChoice = (stageId: string): string => `@${stageId}`;
@@ -86,10 +141,37 @@ export function shownStorming(stormings: readonly StormingView[], choice: Stormi
     const level = VIEW_LEVELS.includes(choice.level) ? choice.level : 'big-picture';
     const scope = choice.timelines[storming.id];
     const stage = scope?.startsWith('@') ? storming.stages?.find((st) => stageChoice(st.id) === scope) : undefined;
-    // an exception's own timeline is shown as it is; the integrated canvas and a stage, without the exceptions if asked
-    const hide = choice.exceptions === false && hasExceptionTimelines(storming) ? { hideExceptions: true as const } : {};
+    const timelineId = !stage && scope !== undefined && storming.timelines.some((t) => t.id === scope) ? scope : undefined;
+    // laid out without what is hidden by another layout (the exceptions), of what applies to the view; what the drawing
+    // hides is left out of the drawing of that layout (`hideInDrawing`, `view/graph.ts`)
+    const hidden = hiddenOf(choice);
+    const hide = laidOutHidden(hideableIn(storming, { timelineId }).filter((k) => hidden.has(k)));
     if (stage) return { storming, options: { level, stageId: stage.id, ...hide } };
-    return { storming, options: scope !== undefined && storming.timelines.some((t) => t.id === scope) ? { level, timelineId: scope } : { level, ...hide } };
+    return { storming, options: timelineId !== undefined ? { level, timelineId } : { level, ...hide } };
+}
+
+/**
+ * The choice that shows `elementId` (a storming selection) where `choice` hides it, to move to it and select it: the
+ * kinds the 絞り込み hides that hide it shown again — one kind when showing it is enough, else all of them — in the view
+ * `choice` shows (callers choose the view first: the integrated canvas, a level that draws it). One rule for every kind
+ * a reader can hide (ADR 0032 §10): whatever hides it, it is shown before it is selected (a
+ * link, the palette, a turn's marks, the knowledge, the detail). `choice` itself when the view draws it, or when no
+ * showing would.
+ */
+export function revealIn(stormings: readonly StormingView[], choice: StormingChoice, elementId: string): StormingChoice {
+    const hidden = shownHidden(stormings, choice);
+    if (hidden.size === 0) return choice;
+    const draws = (c: StormingChoice): boolean => {
+        const graph = stormingGraph(stormings, c)?.graph;
+        return graph !== undefined && drawsElement(graph, elementId, shownHidden(stormings, c));
+    };
+    if (draws(choice)) return choice;
+    for (const kind of hidden) {
+        const shown = withHidden(choice, kind, false);
+        if (draws(shown)) return shown;
+    }
+    const all = clearStormingFilter(choice);
+    return draws(all) ? all : choice;
 }
 
 /** The drawing and the render graph of the shown view. */
@@ -212,8 +294,9 @@ export function StormingToolbar({
 }
 
 /**
- * The storming's 絞り込み: 「例外を表示」, when the storming has exceptions and the view is not one timeline (whose
- * exceptions are what it shows). Hidden exceptions count as one narrowing.
+ * The storming's 絞り込み: what it can hide in the view shown (`hideableIn`) — 「例外を表示」 when the storming has
+ * exceptions and the view is not one timeline (whose exceptions are what it shows), 「解決済みを表示」 when it has a
+ * resolved hotspot. Each kind hidden counts as one narrowing.
  */
 export function StormingFilter({
     stormings,
@@ -226,22 +309,29 @@ export function StormingFilter({
 }): ReactNode {
     const t = useT();
     const shown = shownStorming(stormings, choice);
-    if (!shown || !hasExceptionTimelines(shown.storming) || shown.options.timelineId !== undefined) return null;
-    const exceptions = choice.exceptions !== false;
+    const kinds = shown ? hideableIn(shown.storming, shown.options) : [];
+    if (!kinds.length) return null;
+    const hidden = shownHidden(stormings, choice);
+    const names: Record<Hideable, string> = { exceptions: t.showExceptions, resolvedHotspots: t.showResolvedHotspots };
     return (
-        <FilterPopover count={activeFilterCount({ view: 'storming', exceptions })} onClear={() => onChange(clearStormingFilter(choice))}>
+        <FilterPopover count={activeFilterCount({ view: 'storming', hidden: hidden.size })} onClear={() => onChange(clearStormingFilter(choice))}>
             <FilterSection title={t.filters.shown}>
-                <label className="check">
-                    <input type="checkbox" checked={exceptions} onChange={(e) => onChange({ ...choice, exceptions: e.target.checked })} />
-                    {t.showExceptions}
-                </label>
+                {kinds.map((kind) => (
+                    <label key={kind} className="check">
+                        <input type="checkbox" checked={!hidden.has(kind)} onChange={(e) => onChange(withHidden(choice, kind, !e.target.checked))} />
+                        {names[kind]}
+                    </label>
+                ))}
             </FilterSection>
         </FilterPopover>
     );
 }
 
-/** The storming's 絞り込み cleared: the exceptions shown again. */
-export const clearStormingFilter = (choice: StormingChoice): StormingChoice => ({ ...choice, exceptions: true });
+/** The storming's 絞り込み cleared: everything shown again. */
+export const clearStormingFilter = (choice: StormingChoice): StormingChoice => {
+    const { exceptions: _, hidden: __, ...rest } = choice;
+    return rest;
+};
 
 /** What the detail of a storming element gets from a session (`useSessionPage`); none outside one. */
 export interface StormingDetailSession {
@@ -408,6 +498,7 @@ export function StormingDetails({
                     <ModelRow declaration={declaration} model={model} onSelect={onSelect} />
                 )}
                 {declaration?.kind === 'hotspot' && <ConclusionRow clauses={declaration.clauses} />}
+                {isNote && declaration.kind !== 'hotspot' && <HotspotsRow storming={storming} subject={declaration.id} link={link} />}
                 {declaration?.kind === 'group' && (
                     <Row icon={Layers} label={t.groupEvents}>
                         <ul className="es-list">
@@ -568,6 +659,42 @@ function ModelRow({ declaration, model, onSelect }: { declaration: NodeElement; 
                     </div>
                 );
             })}
+        </Row>
+    );
+}
+
+/**
+ * The hotspots on a sticky, open and resolved, whatever the 絞り込み hides of them (hidden on the canvas, the sticky's check stands for them):
+ * each a link to it, a resolved one's check telling what was agreed.
+ */
+function HotspotsRow({ storming, subject, link }: { storming: Storming; subject: string; link: (id: string) => ReactNode }): ReactNode {
+    const t = useT();
+    const byId = firstDeclarations(storming);
+    const on = buildSemanticGraph(storming)
+        .edges.filter((e) => e.kind === 'hotspot-on' && e.targetId === subject)
+        .flatMap((e) => {
+            const d = byId.get(e.sourceId);
+            return d?.kind === 'hotspot' ? [d] : [];
+        });
+    if (!on.length) return null;
+    return (
+        <Row icon={MessageCircleQuestionMark} label={t.esKinds.hotspot}>
+            <ul className="es-list">
+                {on.map((h) => {
+                    const resolution = hotspotResolved(h.clauses) ? (h.clauses.find((c) => c.type === 'resolution')?.text ?? '') : undefined;
+                    const tip = resolution === undefined ? undefined : t.resolvedHotspotTip(resolution);
+                    return (
+                        <li key={h.id}>
+                            {link(h.id)}
+                            {tip !== undefined && (
+                                <span className="es-hotspot-resolved" role="img" aria-label={tip} {...{ [TOOLTIP_ATTR]: tip }}>
+                                    <CircleCheck size={13} aria-hidden />
+                                </span>
+                            )}
+                        </li>
+                    );
+                })}
+            </ul>
         </Row>
     );
 }

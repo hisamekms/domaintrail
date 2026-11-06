@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Diagnostic } from '@domaintrail/kernel';
 import type { ModelDiff } from '@domaintrail/modeling';
-import type { LaidOutGraph } from '@domaintrail/visualization';
+import { hideInDrawing, RESOLVED_MARK, type LaidOutGraph } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { buildScene, type RenderOptions } from './render';
 import { copyIndices, graphNodeOf, itemForElement, joinedEdges, readingOrder, sceneItems, type Scene } from './scene';
@@ -285,6 +285,50 @@ describe('a resolved hotspot in a storming’s scene', () => {
             expect(on('Settled')).toMatchObject({ kind: 'esHotspot', resolved: true });
             expect(on('Open').resolved).toBeUndefined();
         }
+    });
+});
+
+describe('hidden resolved hotspots in a storming’s scene (ADR 0032 §10)', () => {
+    const TEXT = `storming S {
+  event Asked
+  event Placed
+  event Paid
+  command Pay { emits Placed, Paid }
+  hotspot Open { on Placed }
+  hotspot Settled { on Placed status resolved resolution "決めた" }
+  hotspot Retry { on Pay status resolved resolution "3回まで" }
+  stage St {
+    timeline Main { Asked Placed }
+    exception Failed { Asked Paid }
+  }
+}
+`;
+    test('not drawn, nor their lines; each sticky they are on keeps a check for them (every copy); nothing moves', async () => {
+        const [payload] = await viewPayloads([{ path: 'es.dtes', text: TEXT }]);
+        const graph = payload!.stormings[0]!.views['design-level|']!.graph;
+        const shown = buildScene(graph, optionsOf(payload!));
+        const hidden = buildScene(hideInDrawing(graph, new Set(['resolvedHotspots'])), optionsOf(payload!));
+        const items = (s: Scene, local: string) => s.nodes.filter((n) => n.elementId === `es/S/${local}`);
+        // the notes drawn stay where they were; the hidden ones and their lines are not drawn
+        const place = (s: Scene) => new Map(s.nodes.filter((n) => n.on === undefined).map((n) => [n.id, [n.x, n.y]]));
+        for (const [id, at] of place(hidden)) expect(place(shown).get(id)).toEqual(at);
+        expect([...place(hidden).keys()].some((id) => id.includes('Settled') || id.includes('Retry'))).toBe(false);
+        expect(hidden.edges.some((e) => ['es/S/Settled', 'es/S/Retry'].includes(e.elementId))).toBe(false);
+        expect(hidden.edges.some((e) => e.elementId === 'es/S/Open')).toBe(true);
+        // the open hotspot stays as it is beside the check of the resolved one on the same event
+        const placed = items(hidden, 'Placed')[0]!;
+        expect(placed.props.settled?.map((r) => [r.label, r.resolution])).toEqual([['Settled', '決めた']]);
+        expect(items(hidden, 'Open')[0]!.on).toBeUndefined();
+        // a command drawn once per step: a check on each copy, each standing for its own copy of the hotspot
+        const pays = items(hidden, 'Pay');
+        expect(pays.length).toBe(2);
+        for (const pay of pays) {
+            const [row] = pay.props.settled!;
+            const behind = hidden.nodes.find((n) => n.id === row!.item)!;
+            expect(behind.on).toBe(pay.id);
+            expect([behind.x, behind.y]).toEqual([pay.x + pay.props.w - RESOLVED_MARK.inset - 2 * RESOLVED_MARK.radius, pay.y + RESOLVED_MARK.inset]);
+        }
+        expect(shown.nodes.every((n) => n.props.settled === undefined && n.on === undefined)).toBe(true);
     });
 });
 

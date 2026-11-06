@@ -9,6 +9,7 @@ import {
     createViewService,
     ElkLayoutEngine,
     ellipsize,
+    hideInDrawing,
     noteText,
     PALETTE_VARS,
     portableSvg,
@@ -223,6 +224,26 @@ describe('the portable SVG', async () => {
         }).svg;
         expect(legend).toContain(`>${MESSAGES.ja.resolvedHotspot}</tspan>`);
         expect(count(legend, 'fill', '--es-resolved-mark')).toBe(1);
+    });
+});
+
+describe('hidden resolved hotspots in the portable SVG (ADR 0032 §10)', () => {
+    test('not drawn, their stickies’ check instead, every note where it was', () => {
+        // examples/shop's order-to-cash: MixedCurrencies, resolved, on ItemAdded
+        const laid = shop.stormings.find((s) => s.id === 'OrderToCash')!.views['design-level|']!.graph;
+        const hidden = scene(hideInDrawing(laid, new Set(['resolvedHotspots'])));
+        expect(hidden.nodes.find((n) => n.elementId === 'es/OrderToCash/ItemAdded')!.props.settled).toHaveLength(1);
+        const svgOf = (s: Scene): string => portableSvg({ scene: s, bounds: exportBounds(laid), palette, fonts, measure }).svg;
+        const [shownSvg, hiddenSvg] = [svgOf(scene(laid)), svgOf(hidden)];
+        const count = (svg: string, attr: string, v: keyof Palette): number => svg.split(`${attr}="${palette[v].hex}"`).length - 1;
+        expect(count(hiddenSvg, 'fill', '--es-hotspot-resolved')).toBe(0);
+        expect(count(hiddenSvg, 'stroke', '--es-hotspot-resolved-edge')).toBe(0);
+        expect(count(hiddenSvg, 'fill', '--es-resolved-mark')).toBe(1);
+        expect(hiddenSvg).not.toContain('明細の通貨が混');
+        expect(shownSvg).toContain('明細の通貨が混');
+        const notes = (svg: string): string[] => [...svg.matchAll(/<rect x="[\d.]+" y="[\d.]+" width="148.5" height="148.5"[^>]*>/g)].map((m) => m[0]);
+        expect(notes(shownSvg).filter((r) => !notes(hiddenSvg).includes(r))).toHaveLength(1);
+        expect(wellFormed(hiddenSvg)).toBe(true);
     });
 });
 

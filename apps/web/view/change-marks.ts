@@ -3,12 +3,12 @@
 // green or amber ring with a badge, a removed sticky as a dashed ghost where it was — and where the camera goes when
 // they appear. Pure: the page decides which span is marked (`session/turn-marks.tsx`), the canvas draws the scene.
 import type { ElementChange } from '@domaintrail/collaboration/protocol';
-import { LEVEL_KINDS, type DisplayMode, type LaidOutGraph } from '@domaintrail/visualization';
+import { drawsElement, LEVEL_KINDS, type DisplayMode, type LaidOutGraph } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { nameIn } from '../model-utils';
 import { buildScene, type ChangedElements, type RenderOptions } from '../render';
 import { rectCenter, rectContains, unionRects, type Point, type Rect, type Scene, type SceneItem, type SceneNode } from '../scene';
-import { stormingGraph, type StormingChoice } from '../storming';
+import { revealIn, shownHidden, stormingGraph, type StormingChoice } from '../storming';
 
 export type MarkKind = 'added' | 'changed' | 'removed';
 
@@ -254,13 +254,20 @@ export function outOfView(marked: ReadonlyMap<string, readonly Rect[]>, viewport
     return { count: out.length, next: rectCenter(nearest(out.flat(), rectCenter(viewport))) };
 }
 
-/** The marked elements a view of the stormings draws (the notes of added and changed ones; ghosts are not known there). */
+/**
+ * The marked elements a view of the stormings draws (the notes of added and changed ones, not hidden by the 絞り込み;
+ * ghosts are not known there).
+ */
 function drawnIn(stormings: readonly StormingView[], choice: StormingChoice, marks: ChangedElements): number {
     const graph = stormingGraph(stormings, choice)?.graph;
     if (!graph) return 0;
-    const ids = new Set(graph.nodes.map((n) => n.elementId));
-    return [...marks.added, ...marks.changed].filter((id) => ids.has(id)).length;
+    const hidden = shownHidden(stormings, choice);
+    return [...marks.added, ...marks.changed].filter((id) => drawsElement(graph, id, hidden)).length;
 }
+
+/** The view `choice` shows with what the 絞り込み hides of the marked stickies shown (`revealIn`, for each of them). */
+const revealMarks = (stormings: readonly StormingView[], choice: StormingChoice, marks: ChangedElements): StormingChoice =>
+    [...marks.added, ...marks.changed].reduce((c, id) => revealIn(stormings, c, id), choice);
 
 /**
  * The marks of the stickies that exist now but are not drawn in the view `choice` shows (another storming, a timeline
@@ -268,10 +275,11 @@ function drawnIn(stormings: readonly StormingView[], choice: StormingChoice, mar
  */
 export function notDrawn(stormings: readonly StormingView[], choice: StormingChoice, marks: ChangedElements): ChangedElements {
     const graph = stormingGraph(stormings, choice)?.graph;
-    const ids = new Set(graph?.nodes.map((n) => n.elementId) ?? []);
+    const hidden = shownHidden(stormings, choice);
+    const drawn = (id: string): boolean => graph !== undefined && drawsElement(graph, id, hidden);
     const exists = (id: string): boolean =>
         stormings.some((s) => s.id === stormingOf(id) && Object.values(s.views).some((v) => v.graph.nodes.some((n) => n.elementId === id)));
-    const away = (list: readonly string[]): string[] => list.filter((id) => !ids.has(id) && exists(id));
+    const away = (list: readonly string[]): string[] => list.filter((id) => !drawn(id) && exists(id));
     return { added: away(marks.added), changed: away(marks.changed), removed: [] };
 }
 
@@ -282,6 +290,9 @@ export function notDrawn(stormings: readonly StormingView[], choice: StormingCho
  */
 export function marksView(stormings: readonly StormingView[], choice: StormingChoice, marks: ChangedElements): StormingChoice | undefined {
     if (drawnIn(stormings, choice, marks) > 0) return undefined;
+    // what the 絞り込み hides of them shown, in the view shown
+    const revealed = revealMarks(stormings, choice, marks);
+    if (revealed !== choice && drawnIn(stormings, revealed, marks) > 0) return revealed;
     const order = [...new Set([...marks.added, ...marks.changed, ...marks.removed].map(stormingOf))].filter((id) => stormings.some((s) => s.id === id));
     const integrated = (storming: string, level: StormingChoice['level']): StormingChoice => {
         const { [storming]: _, ...others } = choice.timelines;
@@ -289,7 +300,7 @@ export function marksView(stormings: readonly StormingView[], choice: StormingCh
     };
     for (const storming of order) {
         for (const level of [choice.level, choice.level === 'big-picture' ? 'design-level' : 'big-picture'] as const) {
-            const c = integrated(storming, level);
+            const c = revealMarks(stormings, integrated(storming, level), marks);
             if (drawnIn(stormings, c, marks) > 0) return c;
         }
     }

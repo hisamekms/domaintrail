@@ -27,13 +27,13 @@ export type ViewFilters =
       }
     | {
           readonly view: 'storming';
-          /** The exceptions drawn (by default), on the integrated canvas and a stage. */
-          readonly exceptions: boolean;
+          /** How many kinds of thing the view hides (none by default): the exceptions, the resolved hotspots. */
+          readonly hidden: number;
       };
 
 /**
  * How many narrowings are active: one per kind of narrowing not in its default state (the contexts, the hidden stubs,
- * the kinds, the shared and external contexts, the storming's exceptions). The catalog's text filter is not counted: it
+ * the kinds, the shared and external contexts, each kind a storming hides: its exceptions, its resolved hotspots). The catalog's text filter is not counted: it
  * is shown as it is typed.
  */
 export function activeFilterCount(f: ViewFilters): number {
@@ -45,7 +45,7 @@ export function activeFilterCount(f: ViewFilters): number {
         case 'catalog':
             return (f.contexts !== null ? 1 : 0) + (f.kinds.length > 0 ? 1 : 0);
         case 'storming':
-            return f.exceptions ? 0 : 1;
+            return f.hidden;
     }
 }
 

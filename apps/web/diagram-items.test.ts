@@ -12,7 +12,10 @@ import {
     nodeClassName,
     nodeOutlinePath,
     roundRectPath,
+    type SettledState,
+    settledMarkRight,
 } from './diagram-items';
+import { I18nProvider } from './i18n';
 import type { EdgeProps, NodeProps } from './scene';
 
 /** The corners of a path's straight segments (`L x,y`). */
@@ -122,5 +125,43 @@ describe('a resolved hotspot', () => {
         const edge: EdgeProps = { points: [], kind: 'esHotspot', label: '', sub: '', faded: false, scale: 1, lx: 0, ly: 0, lw: 0, lh: 0, tone: 'normal' };
         expect(edgeClassName({ ...edge, resolved: true })).toContain(' de-resolved');
         expect(edgeClassName(edge)).not.toContain('de-resolved');
+    });
+});
+
+describe('the check of the hidden resolved hotspots on a sticky (ADR 0032 §10)', () => {
+    const event: NodeProps = {
+        w: 150,
+        h: 150,
+        kind: 'esEvent',
+        label: '配車を組んだ',
+        stereotype: '«イベント»',
+        scale: 1,
+        rows: [],
+        compartment: 0,
+        change: 'none',
+        badge: '',
+        diag: 'none',
+        settled: [{ item: 'n:H', label: '運転手は誰が選ぶ？', resolution: '配車計画が選ぶ' }],
+    };
+    const html = (p: NodeProps, settled?: SettledState, copy?: string): string =>
+        renderToStaticMarkup(
+            createElement(I18nProvider, {
+                lang: 'ja',
+                children: createElement(NodeContent, { p, Marks: () => null, ...(settled && { settled }), ...(copy && { copy }) }),
+            }),
+        );
+
+    test('in its corner, saying what was agreed; left of its 「k/n」 when it has one; marked while its hotspot is selected', () => {
+        const out = html(event);
+        expect(out).toContain('dn-resolved-mark dn-settled-mark');
+        expect(out).toContain('data-tooltip="解決済み: 配車計画が選ぶ"');
+        expect(out).not.toContain('style="right');
+        expect(html(event, undefined, '1/2')).toContain(`style="right:${settledMarkRight('1/2')}px"`);
+        expect(settledMarkRight('1/2')!).toBeGreaterThan(14 + 30);
+        const picked: string[] = [];
+        const pressable = html(event, { chosen: new Set(['n:H']), pick: (item) => picked.push(item) });
+        expect(pressable).toContain('dn-settled-chosen');
+        expect(pressable).toContain('role="button"');
+        expect(html({ ...event, settled: undefined })).not.toContain('dn-settled-mark');
     });
 });
