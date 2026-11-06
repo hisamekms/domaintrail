@@ -49,7 +49,7 @@ const kindList = (kinds: readonly ElementKind[]): string => kinds.map((k) => art
 const line = (range: SourceRange): number => range.start.line;
 
 /**
- * The checks of a `.dtes` storming that need no `.dt` model (spec §11, ADR 0024: S001–S009 and S014–S028), on the storming
+ * The checks of a `.dtes` storming that need no `.dt` model (spec §11, ADR 0024: S001–S009 and S014–S031), on the storming
  * IR only:
  *   - S001: a local ID declared twice in a storming (across kinds, timelines and groups included), a storming ID twice
  *   - S002: a relation target or timeline step that names no declaration of its storming
@@ -79,6 +79,8 @@ const line = (range: SourceRange): number => range.start.line;
  *   - S027: an actor, external system, aggregate or read model that no relation names, unless an open hotspot is `on` it
  *   - S028: an event both emitted by a command and arriving `from` an external system
  *   - S029 (info): at Design Level (a command or policy in the storming), an event no command emits and from no external
+ *   - S030: `reads` on a command a policy issues (without `by`): whoever decides has the `reads`, here the policy (ADR 0032 §9)
+ *   - S031: a policy that issues more than one command: one policy per command, each with its own `reads` (ADR 0032 §9)
  * Not diagnosed (spec §11): timeline order against causality, Big Picture completeness (unreferenced events, events in
  * no timeline, read models without `from`) and the optional Info rule on policies with several `on` and `issues`.
  */
@@ -529,6 +531,28 @@ function validateStorming(storming: Storming): Diagnostic[] {
                 );
             }
         }
+        // S030: the policy decides, so what is looked at to decide is the policy's `reads` (with `by`, S025 comes first)
+        if (policies.length && !has(el, 'by')) {
+            for (const c of el.clauses) {
+                if (c.type !== 'relation' || c.keyword !== 'reads') continue;
+                const named = policies.map((p) => `'${p}'`);
+                out.push(
+                    esDiagnostic(
+                        'error',
+                        'S030',
+                        `Command '${el.id}' is issued by ${policies.length > 1 ? `the policies ${listed(named)}` : `policy ${named[0]}`} and has \`reads ${c.target}\`; the policy decides, so what is looked at to decide is the policy's \`reads\`.`,
+                        c.targetRange,
+                        {
+                            hint:
+                                policies.length > 1
+                                    ? `move it: write \`reads ${c.target}\` in the policy that looks at it (${listed(named, 'or')}) and remove it here`
+                                    : `move it: write \`reads ${c.target}\` in policy '${policies[0]}' and remove it here (\`dt migrate dtes\` moves it)`,
+                            elementId: elementId(el.id),
+                        },
+                    ),
+                );
+            }
+        }
         const gap = unasked(el);
         if (!gap) return;
         const missing = (['by', 'handledBy', 'emits'] as const).filter((m) => gap.missing.includes(m)).map((m) => MISSING[m]);
@@ -628,6 +652,19 @@ function validateStorming(storming: Storming): Diagnostic[] {
     }
 
     function checkPolicy(el: NodeElement): void {
+        // S031: one command per policy, so that its `reads` is what it looks at for that command
+        const issued: string[] = [];
+        for (const c of el.clauses) {
+            if (c.type !== 'relation' || c.keyword !== 'issues' || byId.get(c.target)?.kind !== 'command' || issued.includes(c.target)) continue;
+            issued.push(c.target);
+            if (issued.length < 2) continue;
+            out.push(
+                esDiagnostic('error', 'S031', `Policy '${el.id}' issues '${issued[0]}' and also '${c.target}'; a policy issues one command.`, c.targetRange, {
+                    hint: `split it: one policy per command, each \`on\` the same events and with the \`reads\` it looks at for that command, e.g. \`policy <Id> { on … issues ${c.target} }\`, and remove '${c.target}' here`,
+                    elementId: elementId(el.id),
+                }),
+            );
+        }
         const gap = unasked(el);
         const missing = (['on', 'issues'] as const).filter((k) => gap?.missing.includes(k));
         if (!missing.length) return;
@@ -689,8 +726,9 @@ function validateStorming(storming: Storming): Diagnostic[] {
 const has = (el: NodeElement, keyword: RelationKeyword): boolean =>
     el.clauses.some((c) => c.type === 'relation' && (isRemovedKeyword(c.keyword) ? REMOVED_KEYWORDS[c.keyword] : c.keyword) === keyword);
 
-/** `a`, `a and b`, `a, b and c`. */
-const listed = (items: readonly string[]): string => (items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
+/** `a`, `a and b`, `a, b and c` (or `or`). */
+const listed = (items: readonly string[], conjunction = 'and'): string =>
+    items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} ${conjunction} ${items.at(-1)}`;
 
 /** What S024 says of each relation a command lacks. */
 const MISSING = {

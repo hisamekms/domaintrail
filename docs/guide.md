@@ -2022,9 +2022,8 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
     handledBy Order // who handles it: exactly one aggregate or external system (or an open hotspot asking)
     emits OrderConfirmed // what comes of it, produced by its handler
   }
-  command IssueInvoice "請求書を発行する" { // issued by the policy below: no `by`
+  command IssueInvoice "請求書を発行する" { // issued by the policy below: no `by`, no `reads`
     ref Billing.Invoice.issue
-    reads OrderTotal // what its issuer looks at to decide
     handledBy Invoice
     emits InvoiceIssued
   }
@@ -2040,8 +2039,9 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
   }
 
   policy BillConfirmedOrder "確定した注文に請求する" { // from Sales to Billing: a policy may cross contexts
-    on OrderConfirmed
-    issues IssueInvoice
+    on OrderConfirmed // when this happens,
+    reads OrderTotal // looking at this (the policy decides),
+    issues IssueInvoice // it issues this one command
   }
 
   timeline Normal "通常の注文" {
@@ -2088,9 +2088,9 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
 | `actor` | a person or role that may issue commands | none |
 | `external` | an external system that may issue commands, handle them, or send events | none |
 | `command` | an operation someone attempts | `ref Context.Aggregate.command`, `by`, `reads`, `handledBy` (exactly one, or an open hotspot), `emits` |
-| `policy` | a business rule: when one of its events happens, it may issue its commands | `on` and `issues`, one or more each; `by <actor>` when a person applies it |
+| `policy` | a business rule: when one of its events happens, it may issue its command | `on` (one or more), `reads` (what it looks at to decide), `issues` (exactly one command); `by <actor>` when a person applies it |
 | `aggregate` | a candidate consistency boundary that handles commands | `ref Context.Aggregate` |
-| `readmodel` | information that an issuer looks at to decide a command | `from <event>` |
+| `readmodel` | information that whoever decides (a command's issuer, or a policy) looks at | `from <event>` |
 | `hotspot` | a question or an important point, open or resolved | `on` (one sticky at most), `status`, `resolution` |
 | `timeline` | a partial time order of events | event IDs and groups |
 | `group` | events of one step of a timeline, without an order among them | event IDs, each once |
@@ -2102,8 +2102,9 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
   timeline names an element of the same storming by its ID (never one of another storming).
 - **The relations are Event Storming's grammar** (ADR 0032), and the only keywords: a command is issued `by` an actor
   or external system (several are alternatives), who `reads` read models to decide it; it is `handledBy` an aggregate
-  or an external system, which `emits` its events; a policy is `on` events and `issues` commands (a command a policy
-  issues has no `by`: the policy is its issuer, S025); a read model is fed `from` events; an event that arrives
+  or an external system, which `emits` its events; a policy is `on` events, `reads` read models and `issues` one
+  command (S031; a command a policy issues has no `by` and no `reads`: the policy is its issuer and decides, S025,
+  S030); a read model is fed `from` events; an event that arrives
   without a command of ours comes `from` an external system; a hotspot is `on` any sticky. A list is one clause,
   `emits A, B`. Only a policy connects two commands. A command is a whole row: without its issuer, `handledBy` or
   `emits` it is an error (S024), and so is an actor, external system, aggregate or read model that no relation names
@@ -2115,10 +2116,9 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
   rule a person applies by hand.
 - **Relations are possibilities**, never execution: several `by`s are alternatives; `emits` lists outcomes that may
   happen, neither required, exclusive nor complete; a policy is evaluated when any of its `on` events happens and may
-  issue its commands, with no order and no guarantee that all run. A policy with several `on` and several `issues` does
-  not mean that every event starts every command: when the conditions differ, split it into policies. A policy needs no
-  context of its own and may cross contexts. `reads` says that the information is used to decide the command, not who
-  reads it or how.
+  issue its command, with no guarantee that it runs. A policy issues one command (S031): several commands are several
+  policies, each with what it looks at. A policy needs no context of its own and may cross contexts. `reads` says that
+  the information is used to decide, by whoever decides (the issuer of a command, or a policy), not how it is read.
 - **Timelines** hold event IDs and groups only. A timeline is partial and proves no causality; an event may appear in
   several timelines and several times in one, each an occurrence of its own; timelines are never merged into one global
   order. A group is a set: its order and ID carry no meaning. An event in no timeline is fine.
@@ -2207,7 +2207,9 @@ storming CertificateIssuance "住民票のコンビニ交付" {
 ### The `.dtes` syntax on one screen
 
 A storming's relations are Event Storming's grammar (ADR 0032): each command's body is its whole row, read model →
-issuer → command → handler → events. Write in this style, clauses in this order (`dt fmt` keeps it).
+issuer → command → handler → events; a policy's body is its row, event → read model → policy → command. `reads` is on
+the row of whoever decides: the issuer's command, or the policy. Write in this style, clauses in this order (`dt fmt`
+keeps it).
 
 ```dtes
 // stormings/dispatch.dtes
@@ -2220,6 +2222,7 @@ storming Dispatch "配車" {
   event AllocationFailed "配車できなかった"
   event DriverNotified "ドライバーに知らせた"
   event RequestCancelled "依頼が取り消された"
+  event RequestHeld "依頼を保留した"
 
   actor Dispatcher "配車担当"
   external OrderSystem "受注システム"
@@ -2229,8 +2232,7 @@ storming Dispatch "配車" {
   }
   aggregate AllocationPlan "配車計画"
 
-  command BuildAllocation "配車を組む" { // issued by a policy: no `by`
-    reads UnassignedRequests // what is looked at to decide
+  command BuildAllocation "配車を組む" { // issued by a policy: no `by`, and no `reads` (the policy has them)
     handledBy AllocationPlan // who handles it: an aggregate or an external system, exactly one
     emits CarAllocated, AllocationFailed // its outcomes, produced by the handler
   }
@@ -2243,14 +2245,20 @@ storming Dispatch "配車" {
     handledBy AllocationPlan
     emits RequestCancelled
   }
+  command HoldRequest "依頼を保留する" {
+    by Dispatcher
+    reads UnassignedRequests // what the issuer looks at to decide
+    handledBy AllocationPlan
+    emits RequestHeld
+  }
   command ReassignByHand "手で配車し直す" {
-    reads UnassignedRequests
     emits CarAllocated
   }
 
   policy AllocateAtCutoff "2時になったら配車する" { // the only link from an event to a command
     on NightlyCutoff
-    issues BuildAllocation
+    reads UnassignedRequests // what the policy looks at to decide
+    issues BuildAllocation // one command per policy
   }
   policy NotifyWhenAllocated "配車したら知らせる" {
     on CarAllocated
@@ -2258,6 +2266,7 @@ storming Dispatch "配車" {
   }
   policy CallBack "失敗したら組み直す" {
     on AllocationFailed
+    reads UnassignedRequests // what the person applying it looks at
     issues ReassignByHand
     by Dispatcher // a rule a person applies by hand: the policy issues the command, without `by` in it
   }
@@ -2278,10 +2287,12 @@ storming Dispatch "配車" {
 | In | Relation | Names | Means |
 |---|---|---|---|
 | `command` | `by` | actor, external | who issues it (none when a policy `issues` it) |
-| `command` | `reads` | read model | what the issuer looks at to decide |
+| `command` | `reads` | read model | what the issuer looks at to decide (none when a policy `issues` it) |
 | `command` | `handledBy` | aggregate, external | who handles it and produces its events (exactly one, or an open hotspot) |
 | `command` | `emits` | event | its possible outcomes |
-| `policy` | `on` / `issues` | event / command | when the event happens, it issues the command |
+| `policy` | `on` | event | when the event happens, … |
+| `policy` | `reads` | read model | … looking at the read model, … (what the policy decides with) |
+| `policy` | `issues` | command | … it issues the command (exactly one) |
 | `policy` | `by` | actor | the person who applies the rule by hand (optional) |
 | `readmodel` | `from` | event | the events it is fed from (optional) |
 | `event` | `from` | external | it arrives from outside, without a command |
@@ -2298,7 +2309,8 @@ storming Dispatch "配車" {
   take (S006: a command never `issues`); a second `handledBy` (S004); a command without its issuer, `handledBy` or
   `emits` (S024); `by` on a command a policy issues (S025); a relation twice (S026); an actor, external system,
   aggregate or read model that takes part in no relation, at Design Level (S027); an event both emitted and `from` an
-  external system (S028). An info (S029) points at an event nothing produces at Design Level (a time event a policy
+  external system (S028); `reads` on a command a policy issues, which belongs in the policy (S030); a policy issuing
+  more than one command, to split (S031). An info (S029) points at an event nothing produces at Design Level (a time event a policy
   reacts to aside).
 - **Not decided yet? Never guess.** Do not invent an actor, an aggregate or an event to make S024, S027 or S008 go
   away: put a `hotspot` `on` the command, policy or element, asking what is missing. While it is open, that element's
@@ -2420,7 +2432,7 @@ hotspots on those events and their `then` arrows; an exception's own view is unc
 <!-- topic: storming-rules -->
 ### Diagnostics of a storming
 
-S001–S009 and S014–S028 need only the storming, S010–S013 check its `ref`s against the model. Each example below is a whole
+S001–S009 and S014–S031 need only the storming, S010–S013 check its `ref`s against the model. Each example below is a whole
 file with that one problem. Syntax errors are `SYNTAX`: an unknown keyword or clause, a `ref` or clause in a timeline or
 group, a declaration outside a storming or inside a body, a nested group, an empty group, a keyword used as an ID
 (`by`, `handledBy` and `from` included), a list with a comma too many (`emits A,`).
@@ -2922,6 +2934,56 @@ storming Checkout {
 }
 ```
 
+**S030**: `reads` on a command a policy `issues` (and that has no `by`). `reads` is written on the row of whoever
+decides (ADR 0032 §9): the policy decides, so the read model it looks at is the policy's `reads`. Move it to the
+policy that issues the command (`dt migrate dtes` moves it when exactly one policy does; when several do, write it in
+the one that looks at it).
+
+```dtes
+// S030
+storming Checkout {
+  event OrderConfirmed
+  event InvoiceIssued
+  readmodel OrderTotal
+  aggregate Invoice
+  command IssueInvoice {
+    reads OrderTotal
+    handledBy Invoice
+    emits InvoiceIssued
+  }
+  policy BillConfirmedOrder {
+    on OrderConfirmed
+    issues IssueInvoice
+  }
+}
+```
+
+**S031**: a policy that `issues` more than one command. Split it, one policy per command, each `on` the events it
+reacts to and with the `reads` it looks at for that command. Several policies may issue one command.
+
+```dtes
+// S031
+storming Checkout {
+  event OrderConfirmed
+  event InvoiceIssued
+  event StockReserved
+  aggregate Invoice
+  aggregate Stock
+  command IssueInvoice {
+    handledBy Invoice
+    emits InvoiceIssued
+  }
+  command ReserveStock {
+    handledBy Stock
+    emits StockReserved
+  }
+  policy AfterConfirmation {
+    on OrderConfirmed
+    issues IssueInvoice, ReserveStock
+  }
+}
+```
+
 <!-- topic: storming-practice -->
 ### Event Storming with DomainTrail
 
@@ -3043,6 +3105,8 @@ storming](#diagnostics-of-a-storming).
 | S027 | `.dtes`: every actor, external system, aggregate and read model is named by a relation, unless an open hotspot is `on` it |
 | S028 | `.dtes`: an event is emitted by a command or arrives `from` an external system, not both |
 | S029 | (info) `.dtes`: at Design Level, an event has a source: a command emits it, it comes `from` an external system, or a policy reacts to it as a time event |
+| S030 | `.dtes`: a command a policy `issues` has no `reads`: the policy decides, so the read model it looks at is the policy's `reads` |
+| S031 | `.dtes`: a policy `issues` one command |
 | J001 | `domaintrail.journey.json` reads against its schema (`schema/journey.schema.json`): JSON, the keys and enums it allows, the goals and marks of each pattern, unique journey IDs |
 | J002 | (warning) a journey names a storming that does not exist (an ES journey's key, a `FromStorming` journey's `from.stormings`) |
 | J003 | (warning) a journey names a context that does not exist (a `OneContext` journey's `from.context`) |

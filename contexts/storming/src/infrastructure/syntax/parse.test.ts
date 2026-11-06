@@ -73,6 +73,7 @@ describe('ES01: parsing the spec sample (docs/dtes-v0.1.md §4)', () => {
             'command ReceivePaymentNotice',
             'command ReleaseSlot',
             'policy CleanupAfterCancel',
+            'policy FreeSlotAfterCancel',
             'timeline Normal',
             'timeline Failure',
             'hotspot NoticeOutcome',
@@ -93,11 +94,7 @@ describe('ES01: parsing the spec sample (docs/dtes-v0.1.md §4)', () => {
             { emits: 'BikeReleased' },
             { emits: 'ReleaseFailed' },
         ]);
-        expect(element(s, 'CleanupAfterCancel').clauses.map(shape)).toEqual([
-            { on: 'ShipmentCancelled' },
-            { issues: 'ReleaseBike' },
-            { issues: 'ReleaseSlot' },
-        ]);
+        expect(element(s, 'CleanupAfterCancel').clauses.map(shape)).toEqual([{ on: 'ShipmentCancelled' }, { issues: 'ReleaseBike' }]);
         expect(element(s, 'Compensation')).toMatchObject({ label: '車両の解放に失敗した場合、配送キャンセルを補償する？' });
         expect(element(s, 'Compensation').clauses.map(shape)).toEqual([{ on: 'ReleaseFailed' }, { status: 'open' }]);
         expect(element(s, 'ReleaseBike').clauses[0]).toMatchObject({ type: 'ref', segments: ['Fleet', 'BikeAssignment', 'release'] });
@@ -115,7 +112,7 @@ describe('ES01: parsing the spec sample (docs/dtes-v0.1.md §4)', () => {
     test('source ranges: declarations, names, clauses, relation targets and steps (1-based, end exclusive)', async () => {
         const [s] = await parseOne(SAMPLE);
         const file = 'a.dtes';
-        expect(s.range).toEqual({ file, start: { line: 1, column: 1 }, end: { line: 68, column: 2 } });
+        expect(s.range).toEqual({ file, start: { line: 1, column: 1 }, end: { line: 72, column: 2 } });
         expect(s.nameRange).toEqual({ file, start: { line: 1, column: 10 }, end: { line: 1, column: 30 } });
         const cancel = element(s, 'CancelShipment');
         expect(cancel.range).toEqual({ file, start: { line: 23, column: 3 }, end: { line: 29, column: 4 } });
@@ -125,9 +122,9 @@ describe('ES01: parsing the spec sample (docs/dtes-v0.1.md §4)', () => {
         expect(target.type === 'relation' && target.targetRange).toEqual({ file, start: { line: 27, column: 15 }, end: { line: 27, column: 23 } });
         expect(target.range).toEqual({ file, start: { line: 27, column: 5 }, end: { line: 27, column: 23 } });
         const [first, group] = timeline(s, 'Normal').steps;
-        expect(first.range).toEqual({ file, start: { line: 49, column: 5 }, end: { line: 49, column: 22 } });
-        expect(group.type === 'group' && group.nameRange).toEqual({ file, start: { line: 50, column: 11 }, end: { line: 50, column: 25 } });
-        expect(group.type === 'group' && group.events[1].range).toEqual({ file, start: { line: 52, column: 7 }, end: { line: 52, column: 19 } });
+        expect(first.range).toEqual({ file, start: { line: 53, column: 5 }, end: { line: 53, column: 22 } });
+        expect(group.type === 'group' && group.nameRange).toEqual({ file, start: { line: 54, column: 11 }, end: { line: 54, column: 25 } });
+        expect(group.type === 'group' && group.events[1].range).toEqual({ file, start: { line: 56, column: 7 }, end: { line: 56, column: 19 } });
     });
 });
 

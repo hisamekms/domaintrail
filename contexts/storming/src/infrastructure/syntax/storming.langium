@@ -1,7 +1,7 @@
 // The Event Storming DSL `.dtes` (docs/dtes-v0.1.md, ADR 0024, ADR 0032). Every rule and type starts with `Es`, so the
 // AST types generated next to the `.dt` ones never collide. The grammar is permissive where the validator gives better
 // messages: every element may have a body and every body takes every clause; which clauses an element may have, how
-// many, and the kinds of their targets are rules S003–S009, S016 and S023–S028 (domain/validate.ts), not syntax errors;
+// many, and the kinds of their targets are rules S003–S009, S016 and S023–S031 (domain/validate.ts), not syntax errors;
 // so are the number and targets of a stage's `after` and a timeline's `then` (S002–S004, S017–S021).
 grammar EventStorming
 
@@ -59,7 +59,8 @@ EsRefClause:
 // References to declarations of the same storming, whatever their kind (a wrong kind is S003): `emits A, B` is
 // `emits A` and `emits B`. The relations are Event Storming's design-level grammar (ADR 0032): a command is issued `by`
 // an actor or external system, who `reads` a read model to decide it; it is `handledBy` an aggregate or external
-// system, which `emits` its events; a policy is `on` events and `issues` commands; a read model is fed `from` events,
+// system, which `emits` its events; a policy is `on` events, `reads` read models and `issues` one command (§9: whoever
+// decides has the `reads`); a read model is fed `from` events,
 // an event arrives `from` an external system; a hotspot is `on` any sticky. `actor` and `target`, the relations of
 // v0.1, are parsed only to be reported with their replacement (S023).
 EsRelationClause:

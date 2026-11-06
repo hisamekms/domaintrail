@@ -42,7 +42,11 @@ storming DeliveryCancellation "配送キャンセル" {
 
   policy CleanupAfterCancel "キャンセル後処理" {
     on ShipmentCancelled
-    issues ReleaseBike, ReleaseSlot
+    issues ReleaseBike
+  }
+  policy FreeSlotAfterCancel "キャンセル後に枠を空ける" {
+    on ShipmentCancelled
+    issues ReleaseSlot
   }
 
   timeline Normal "通常キャンセル" {

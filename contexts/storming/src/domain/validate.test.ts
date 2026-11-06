@@ -106,6 +106,9 @@ const cancel = (extra = '') => `storming DeliveryCancellation "配送キャン�
   policy CleanupAfterCancel "キャンセル後処理" {
     on ShipmentCancelled
     issues ReleaseBike
+  }
+  policy FreeSlotAfterCancel "キャンセル後に枠を空ける" {
+    on ShipmentCancelled
     issues ReleaseSlot
   }
   timeline Normal "通常キャンセル" {
@@ -187,7 +190,7 @@ describe('validateStormings', () => {
         ).toEqual([]);
     });
 
-    test('ES05 a policy may have several `on` and `issues`; one without either is an error', () => {
+    test('ES05 a policy may have several `on` and one `issues`; one without either is an error', () => {
         expect(
             validate(
                 cancel(`  event SlotExpired
@@ -195,7 +198,6 @@ describe('validateStormings', () => {
     on SlotExpired
     on ShipmentCancelled
     issues ReleaseBike
-    issues ReleaseSlot
   }`),
             ),
         ).toEqual([]);
@@ -745,7 +747,8 @@ describe('validateStormings', () => {
         const parts = ['storming Big {', '  aggregate G'];
         for (let i = 0; i < n; i++) {
             parts.push(`  event E${i}`, `  command C${i} {`, `    handledBy G`, `    emits E${i}`, `    emits E${(i + 1) % n}`, '  }');
-            parts.push(`  policy P${i} {`, `    on E${i}`, `    on E${(i * 7) % n}`, `    issues C${(i + 1) % n}`, `    issues C${(i * 3) % n}`, '  }');
+            parts.push(`  policy P${i} {`, `    on E${i}`, `    on E${(i * 7) % n}`, `    issues C${(i + 1) % n}`, '  }');
+            parts.push(`  policy Q${i} {`, `    on E${i}`, `    issues C${(i * 3) % n}`, '  }');
         }
         parts.push('}');
         const started = performance.now();
@@ -961,17 +964,119 @@ describe('validateStormings', () => {
         expect(summary(ds)).toEqual([{ code: 'S028', severity: 'error', line: lineOf(text, 'from PaymentGateway', lineOf(text, 'BikeReleasedOutside')) }]);
     });
 
-    test('the optional Info rule (several `on` and several `issues`) is not implemented', () => {
-        const ds = validate(
-            cancel(`  event SlotExpired
+    test('S031 a policy issues one command; several policies may issue one command', () => {
+        const text = cancel(`  event SlotExpired
+  event Notified
+  command Notify {
+    handledBy PaymentGateway
+    emits Notified
+  }
   policy Broad {
     on ShipmentCancelled
     on SlotExpired
     issues ReleaseBike
     issues ReleaseSlot
+    issues Notify
+  }`);
+        const ds = validate(text);
+        expect(summary(ds)).toEqual([
+            { code: 'S031', severity: 'error', line: lineOf(text, 'issues ReleaseSlot', lineOf(text, 'policy Broad')) },
+            { code: 'S031', severity: 'error', line: lineOf(text, 'issues Notify') },
+        ]);
+        expect(ds[0]!.message).toBe("Policy 'Broad' issues 'ReleaseBike' and also 'ReleaseSlot'; a policy issues one command.");
+        expect(ds[0]!.hint).toBe(
+            "split it: one policy per command, each `on` the same events and with the `reads` it looks at for that command, e.g. `policy <Id> { on … issues ReleaseSlot }`, and remove 'ReleaseSlot' here",
+        );
+        expect(ds[0]!.elementId).toBe('es/DeliveryCancellation/Broad');
+        // the same command twice is S026, not S031; a target of another kind is S003, not S031
+        const twice = validate(
+            cancel(`  policy Twice {
+    on ShipmentCancelled
+    issues ReleaseBike
+    issues ReleaseBike
+    issues BikeReleased
   }`),
         );
-        expect(ds).toEqual([]);
+        expect(twice.map((d) => d.code)).toEqual(['S026', 'S003']);
+        // one command issued by two policies (CleanupAfterCancel and Again), each with its own `reads`
+        expect(
+            validate(
+                cancel(`  policy Again {
+    on SlotReleased
+    reads DeliveryDetails
+    issues ReleaseBike
+  }`),
+            ),
+        ).toEqual([]);
+    });
+
+    test('S030 a command a policy issues has no `reads`: the policy has it', () => {
+        const text = cancel(`  readmodel FreeBikes
+  command Reassign {
+    reads FreeBikes
+    reads DeliveryDetails
+    handledBy BikeAssignment
+    emits BikeReleased
+  }
+  policy ReassignOnFailure {
+    on ReleaseFailed
+    issues Reassign
+  }`);
+        const ds = validate(text);
+        expect(summary(ds)).toEqual([
+            { code: 'S030', severity: 'error', line: lineOf(text, 'reads FreeBikes') },
+            { code: 'S030', severity: 'error', line: lineOf(text, 'reads DeliveryDetails', lineOf(text, 'command Reassign')) },
+        ]);
+        expect(ds[0]!.message).toBe(
+            "Command 'Reassign' is issued by policy 'ReassignOnFailure' and has `reads FreeBikes`; the policy decides, so what is looked at to decide is the policy's `reads`.",
+        );
+        expect(ds[0]!.hint).toBe("move it: write `reads FreeBikes` in policy 'ReassignOnFailure' and remove it here (`dt migrate dtes` moves it)");
+        expect(ds[0]!.elementId).toBe('es/DeliveryCancellation/Reassign');
+        // in the policy, it is valid
+        const moved = cancel(`  readmodel FreeBikes
+  command Reassign {
+    handledBy BikeAssignment
+    emits BikeReleased
+  }
+  policy ReassignOnFailure {
+    on ReleaseFailed
+    reads FreeBikes
+    issues Reassign
+  }`);
+        expect(validate(moved)).toEqual([]);
+        // several policies: the hint names each, to pick the one that looks at it
+        const two = validate(
+            cancel(`  command Reassign {
+    reads DeliveryDetails
+    handledBy BikeAssignment
+    emits BikeReleased
+  }
+  policy OnFailure {
+    on ReleaseFailed
+    issues Reassign
+  }
+  policy OnCancel {
+    on ShipmentCancelled
+    issues Reassign
+  }`),
+        );
+        expect(two.map((d) => d.code)).toEqual(['S030']);
+        expect(two[0]!.message).toContain("is issued by the policies 'OnFailure' and 'OnCancel' and has `reads DeliveryDetails`");
+        expect(two[0]!.hint).toBe("move it: write `reads DeliveryDetails` in the policy that looks at it ('OnFailure' or 'OnCancel') and remove it here");
+        // with `by` too, S025 comes first and S030 is not reported
+        const withBy = validate(
+            cancel(`  command Reassign {
+    by Customer
+    reads DeliveryDetails
+    handledBy BikeAssignment
+    emits BikeReleased
+  }
+  policy OnFailure {
+    on ReleaseFailed
+    issues Reassign
+  }`),
+        );
+        expect(withBy.map((d) => d.code)).toEqual(['S025']);
     });
 
     test("a policy's `reads` names a read model (S003), and counts as a use of it (S027)", () => {
