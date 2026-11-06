@@ -528,8 +528,9 @@ Rules:
 3. A \`.dtes\` storming stays exploratory: open hotspots and events without a model counterpart are fine. Keep its
    labels short (\`dt check\` warns, S015). Never copy or sync \`.dtes\` content into \`.dt\` files by yourself.
    Write its relations in Event Storming's grammar (\`dt guide dtes-quick\`): a command is issued \`by\` an actor or
-   external system (or a policy \`issues\` it), \`reads\` read models, is \`handledBy\` an aggregate or external
-   system and \`emits\` events. Never fill a relation you do not know by guessing (who issues or handles a command, what
+   external system, who \`reads\` read models to decide, is \`handledBy\` an aggregate or external system and
+   \`emits\` events; a policy is \`on\` events, \`reads\` the read models it decides with and \`issues\` one
+   command, which then has no \`by\` and no \`reads\` (\`reads\` is on the row of whoever decides). Never fill a relation you do not know by guessing (who issues or handles a command, what
    a policy reacts to, where an element is used): put a \`hotspot\` \`on\` that element asking it — an open hotspot
    turns its incompleteness errors (S024, S008, S027) off; inventing an actor, aggregate or event to silence them is
    wrong.

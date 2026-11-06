@@ -82,7 +82,7 @@ const line = (range: SourceRange): number => range.start.line;
  *   - S030: `reads` on a command a policy issues (without `by`): whoever decides has the `reads`, here the policy (ADR 0032 §9)
  *   - S031: a policy that issues more than one command: one policy per command, each with its own `reads` (ADR 0032 §9)
  * Not diagnosed (spec §11): timeline order against causality, Big Picture completeness (unreferenced events, events in
- * no timeline, read models without `from`) and the optional Info rule on policies with several `on` and `issues`.
+ * no timeline, read models without `from`). A policy with several `issues` is S031 (ADR 0032 §9), not an Info.
  */
 export function validateStormings(stormings: readonly Storming[]): Diagnostic[] {
     const out: Diagnostic[] = [];

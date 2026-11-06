@@ -2384,8 +2384,8 @@ cannot show it, and a quiet line without a head (問い) from a hotspot to its s
 selecting it keeps its two stickies in full view.
 Design Level reads left to right as Event Storming does (ADR 0032): read model → issuer (an actor or external system,
 stuck on top of its command when no read model leads to it) → command → handler (an aggregate or external system) →
-event → policy → the command it issues → … The read model goes to the issuer that looks at it; a command a policy
-issues has no issuer, and its read model goes to the command. A command goes to its handler, which decides and emits
+event → policy → the command it issues → … A read model goes to whoever looks at it to decide: a command's issuer, or a
+policy (read model → policy, the read model just before the policy). A command goes to its handler, which decides and emits
 the command's events, so the `emits` arrows start at the handler; a command without `handledBy` emits them itself.
 At Design Level no line joins two events in time order where the placement shows it (the steps left to right): only an
 exception's branch and its `then` are drawn (Big Picture draws the time order). An issuer or handler an open hotspot
@@ -2534,7 +2534,7 @@ storming Checkout {
 ```
 
 **S006**: a clause the element does not take: relations belong to commands (`by`, `reads`, `handledBy`, `emits`),
-policies (`on`, `issues`), read models and events (`from`) and hotspots (`on`), `status` and `resolution` to hotspots,
+policies (`on`, `reads`, `issues`, `by`), read models and events (`from`) and hotspots (`on`), `status` and `resolution` to hotspots,
 `level` to events. Move it to the element it belongs to (an event's outcome is the command's `emits`); a command's
 `issues` is a policy between two commands.
 
@@ -3021,8 +3021,8 @@ the command that does a step, the places to look at and the questions to ask the
 **Design Level next**, once the flow is agreed (the brief says how far to go):
 - Write each command as its whole row (`dt guide dtes-quick`): who issues it, `by` an `actor` or `external` system —
   or the `policy` that `issues` it, reacting to an earlier event (「〜したら〜する」), and then no `by`; the
-  `readmodel` the issuer `reads` to decide; what handles it, `handledBy` an `aggregate` or an `external` system; and
-  what it `emits`. An event that arrives from outside without a command of ours is `from` the external system.
+  `readmodel` the issuer `reads` to decide (for a policy's command, the policy `reads` it: 「〜が起きたら、〜を見て、〜を出す」,
+  one command per policy); what handles it, `handledBy` an `aggregate` or an `external` system; and what it `emits`. An event that arrives from outside without a command of ours is `from` the external system.
 - **Never fill a relation by guessing.** When nobody knows who issues or handles a command, or what a policy reacts to,
   do not invent an actor or an aggregate to silence the error: put a `hotspot` `on` that command or policy, asking it.
   The open hotspot is the honest result, and it turns the incompleteness error (S024, S008, S027) off.
@@ -3081,7 +3081,7 @@ storming](#diagnostics-of-a-storming).
 | L003 | (warning) different things in one scope share a Japanese name |
 | S001 | `.dtes`: the IDs of a storming's declarations are unique across kinds (groups and timelines included), and storming IDs are unique in the workspace |
 | S002 | `.dtes`: a relation target or timeline step names a declaration of its storming |
-| S003 | `.dtes`: a reference names a declaration of the right kind (`by` an actor or external, `reads` a read model, `handledBy` an aggregate or external, `emits` / a policy's `on` and timeline steps an event, `issues` a command, a read model's `from` an event, an event's `from` an external, a hotspot's `on` a sticky) |
+| S003 | `.dtes`: a reference names a declaration of the right kind (`by` an actor or external, a command's or policy's `reads` a read model, `handledBy` an aggregate or external, `emits` / a policy's `on` and timeline steps an event, `issues` a command, a read model's `from` an event, an event's `from` an external, a hotspot's `on` a sticky) |
 | S004 | `.dtes`: at most one `handledBy`, `ref`, hotspot `on`, `status`, `resolution` and `level` per element |
 | S005 | `.dtes`: only events, aggregates and commands have a `ref` |
 | S006 | `.dtes`: an element has only the clauses of its kind: relations in commands, policies, read models and events (`from`) and hotspots, `status` / `resolution` in hotspots, `level` in events; a command never `issues` |

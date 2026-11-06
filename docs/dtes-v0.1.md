@@ -2,7 +2,7 @@
 
 > 対象: Claude Code / Codex による実装
 >
-> ステータス: 設計合意事項の統合版（2026-10-31、最終仕様反映版。2026-11-03 に Design Level のみの Event（`level design`、§3.6）と、段階・例外・合流（`stage` / `exception` / `then`、§3.7）を追加。2026-11-06 に関係を Event Storming のデザインレベルの文法そのものに作り直した（ADR 0032：`by` / `reads` / `handledBy` / `emits` / `on` / `issues` / `from`、§3.2、§3.8、§4、§9.1、§11）。v0.1 の `actor` / `target` 関係はエラーで、`dt migrate dtes` が書き換える）。本書中の **確定** は対話で採用した方針、**提案** は実装を進めるための具体化、**要確認** はリポジトリの現行実装との照合が必要な項目を意味する。
+> ステータス: 設計合意事項の統合版（2026-10-31、最終仕様反映版。2026-11-03 に Design Level のみの Event（`level design`、§3.6）と、段階・例外・合流（`stage` / `exception` / `then`、§3.7）を追加。2026-11-06 に関係を Event Storming のデザインレベルの文法そのものに作り直した（ADR 0032：`by` / `reads` / `handledBy` / `emits` / `on` / `issues` / `from`、§3.2、§3.8、§4、§9.1、§11）。v0.1 の `actor` / `target` 関係はエラーで、`dt migrate dtes` が書き換える。同日、`reads` を判断する者の行に書くことにした（ADR 0032 §9：Policy が発行する Command の `reads` は Policy に書く。Policy が発行する Command は1つ）。本書中の **確定** は対話で採用した方針、**提案** は実装を進めるための具体化、**要確認** はリポジトリの現行実装との照合が必要な項目を意味する。
 >
 > 対象プロジェクト: DomainTrail（`.dt` の既存実装に独立した `.dtes` を追加）。既存のパーサー／型体系／CLI／描画基盤を先に調査して適合させること。**本書の `.dt` サンプルを現行パーサーで動く構文と決めつけない。**
 
@@ -62,11 +62,12 @@
 | 所属 | 記述 | 対象 | 多重度 | 意味 |
 |---|---|---|---|---|
 | Command | `by A` | Actor または External System | 1..N（Policy が `issues` する Command は 0） | 発行し得る主体。複数なら代替的な発行主体であり AND ではない |
-| Command | `reads R` | Read Model | 0..N | 発行者が判断に見る情報。描画は Read Model → 発行者（`by` がなければ Command） |
+| Command | `reads R` | Read Model | 0..N（Policy が `issues` する Command は 0） | 発行者が判断に見る情報。描画は Read Model → 発行者 |
 | Command | `handledBy G` | Aggregate または External System | **1** | Command を受けて処理し、結果の Event を生むもの |
 | Command | `emits E` | Event | 1..N | 発生し得る結果（処理するものが生む）。必須・排他・全列挙ではない |
 | Policy | `on E` | Event | **1..N** | いずれかの Event を契機に Policy が評価され得る（OR） |
-| Policy | `issues C` | Command | **1..N** | 発行し得る Command。順序/必須性/全部実行を保証しない |
+| Policy | `reads R` | Read Model | 0..N | Policy が判断に見る情報（ADR 0032 §9）。描画は Read Model → Policy |
+| Policy | `issues C` | Command | **1** | 発行し得る Command。実行を保証しない。2つ以上は S031 |
 | Event / Aggregate / Command | `ref ...` | `.dt` | **0..1** | 型の合う `.dt` シンボルへの明示対応。他の要素では禁止 |
 | Policy | `by A` | Actor | 0..N | 人が手で適用するルールのとき、その人（ADR 0032） |
 | Read Model | `from E` | Event | 0..N | 反映元の Event |
@@ -76,13 +77,13 @@
 
 関係のキーワードはこの7つだけ（別名なし）。`emits A, B` のようにカンマで並べた一覧は1つの節で、`emits A` と `emits B` に同じ。Command 同士をつなぐのは Policy だけ。Command の多重度（`by` または Policy、`handledBy`、`emits`）を満たさないことは Design Level のエラー（S024）だが、その Command に**未解決の Hotspot が `on` している間は**未決定の問いとして許す（§3.8）。
 
-**複数 `on` と複数 `issues` を持つ Policy は許可**。ただし、任意の Event が任意の Command を必ず起動するという**直積の意味を与えてはならない**。個別の対応条件が異なるなら AI は Policy を分割するよう推奨する。`rule` のネストは v0.1 で導入しない。
+**複数 `on` を持つ Policy は許可**。**Policy が発行する Command は1つ**（ADR 0032 §9、S031）：複数の Command を出すなら Command ごとに Policy を分け、それぞれが判断に見るものを `reads` に書く。1つの Command を複数の Policy が発行するのは許す。`rule` のネストは v0.1 で導入しない。
 
 **Policy は BC を横断してよい**。Policy 自体の所有 BC を `.dtes` で指定する必要はない。実装上の責任・配置は `.dt` 化やアプリケーション設計で決定する。
 
 ### 3.3 `reads` の明確化【確定】
 
-`reads DeliveryDetails` は「この Command を発行する人・システムが判断に DeliveryDetails の情報を使う」を意味し、`by` が複数あるときは、その全員の付箋へ描く（ADR 0032）。データベースクエリ、Actor が読む UI の実装、Command Handler が読む依存関係を特定しない。複数可。Read Model に `.dt` で対応する型がないことはエラーにしない。
+`reads DeliveryDetails` は「判断する者が判断に DeliveryDetails の情報を使う」を意味し、判断する者の行に書く（ADR 0032 §9）。人・外部システムが出す Command では Command に書き（その `by` の全員の付箋へ描く）、Policy が出す Command では Policy に書く（Read Model → Policy の付箋へ描く。Policy が出す Command の `reads` は S030）。Policy に `by` があるときも Policy に書く（当てはめる人が見るもの）。データベースクエリ、Actor が読む UI の実装、Command Handler が読む依存関係を特定しない。複数可。Read Model に `.dt` で対応する型がないことはエラーにしない。
 
 ### 3.8 未決定の関係【確定（2026-11-06 追加、ADR 0032）】
 
@@ -119,7 +120,7 @@ hotspot WhoReassigns "手配車は何が処理する？" {
 
 - Event は本体に `level design` を書くと **Design Level のみ**に表示される。仕組み側の細かい出来事（引当・与信・内部の失敗や再試行など）を、Big Picture の業務の流れから外すためのもの。
 - 書かなければ両方の抽象度に表示する（従来どおり）。`level big-picture` は書かない（Error）。値は `design` のみ。
-- `level` を書けるのは Event だけ（他の要素は Error）。1つの Event に2つ以上は Error。`ref` との順序は自由で、正規の位置は本体の最後（`ref` の後）。`dt fmt` は句を正規の順に並べる（ADR 0032：`ref`・`by`・`reads`・`handledBy`・`emits`・`on`・`issues`・`from`・`status`・`resolution`・`level`。同じキーワードの関係は1つの一覧にまとめる）。
+- `level` を書けるのは Event だけ（他の要素は Error）。1つの Event に2つ以上は Error。`ref` との順序は自由で、正規の位置は本体の最後（`ref` の後）。`dt fmt` は句を正規の順に並べる（ADR 0032：`ref`・`by`・`reads`・`handledBy`・`emits`・`on`・`issues`・`from`・`status`・`resolution`・`level`。Policy は `on`・`reads`・`issues`・`by`（ADR 0032 §9）。同じキーワードの関係は1つの一覧にまとめる）。
 - Big Picture に「昇格」させるときは `level design` を消す。`.dtes` の意味（timeline の順序、関係、`ref`）は変わらず、表示だけが変わる（§6）。
 
 ### 3.7 段階・本流・例外・合流【確定（2026-11-03 追加）】
@@ -202,6 +203,9 @@ storming DeliveryCancellation "配送キャンセル" {
   policy CleanupAfterCancel "キャンセル後処理" {
     on ShipmentCancelled
     issues ReleaseBike
+  }
+  policy FreeSlotAfterCancel "キャンセル後に枠を空ける" {
+    on ShipmentCancelled
     issues ReleaseSlot
   }
 
@@ -420,13 +424,14 @@ ADR 0032 で、関係は Event Storming のデザインレベルの文法その�
 - `Policy → Command` (`issues`)
 - `Command → Event` (`emits`。描画は `handledBy` があれば処理するもの（Aggregate / External）の付箋から Event へ。§6)
 - `Actor / External → Command` (`by`, 関連)
-- `Read Model → Command` (`reads`, 関連。描画は Read Model → その Command の発行者の付箋。`by` がなければ Command へ)
+- `Read Model → Command` (Command の `reads`, 関連。描画は Read Model → その Command の発行者の付箋)
+- `Read Model → Policy` (Policy の `reads`, 関連。描画は Read Model → その Policy の付箋。ADR 0032 §9)
 - `Command → Aggregate / External` (`handledBy`。描画は因果の線: Command が処理するものに至り、それが判断して Event を出す。§6)
 - `Event → Read Model` (Read Model の `from`, 反映)
 - `External → Event` (Event の `from`, 因果: Command を経ずに届く)
 - `Hotspot → 付箋` (`on`, 非因果)
 
-`on / issues / emits` は可能性・候補を表す。Policy に `on` と `issues` が複数あるとき、**Event → Command の直積の直接因果エッジを推論・生成しない**。Policy 自身を独立ノードとして保持する。
+`on / issues / emits` は可能性・候補を表す。Policy に `on` が複数あるとき、**Event → Command の直接因果エッジを推論・生成しない**（Policy の `issues` は1つ：ADR 0032 §9）。Policy 自身を独立ノードとして保持する。
 
 ### 9.2 順序エッジ
 
@@ -498,9 +503,9 @@ Design Level では Event 同士の時間順の線を描かない（配置が左
 | Syntax | 不正なブロック、未知の関係、構文不備、キーワード（`by`・`handledBy`・`from` など）の ID | Error |
 | Removed | v0.1 の `actor`・`target` 関係（S023。`by`・`handledBy` に置き換え、`dt migrate dtes` が書き換える） | Error |
 | Symbol | storming 内 ID 重複、未定義参照 | Error |
-| Kind | `timeline` に Event 以外、`by` 非 Actor/External、`handledBy` 非 Aggregate/External、`reads` 非 Read Model、`emits` 非 Event（Command を `emits` しない：Policy を挟む）、`issues` 非 Command、Policy の `on` 非 Event、Read Model の `from` 非 Event、Event の `from` 非 External、Hotspot の `on` が Hotspot。ヒントは意図した関係を示す | Error |
+| Kind | `timeline` に Event 以外、`by` 非 Actor/External、`handledBy` 非 Aggregate/External、Command・Policy の `reads` 非 Read Model、`emits` 非 Event（Command を `emits` しない：Policy を挟む）、`issues` 非 Command、Policy の `on` 非 Event、Read Model の `from` 非 Event、Event の `from` 非 External、Hotspot の `on` が Hotspot。ヒントは意図した関係を示す | Error |
 | Cardinality | Command に `handledBy` 2つ以上、`ref` 2つ以上、禁止要素の `ref`、同じ関係の重複（S026） | Error |
-| Design | 発行者（`by` か Policy）・`handledBy`・`emits` のない Command（S024）、Policy が `issues` する Command の `by`（S025）、どの関係にも名指されない Actor / External / Aggregate / Read Model（S027）、Command が `emits` し外部からも `from` で届く Event（S028）。S024・S027・S008 は未解決の Hotspot が `on` している要素では出さない（§3.8） | Error |
+| Design | 発行者（`by` か Policy）・`handledBy`・`emits` のない Command（S024）、Policy が `issues` する Command の `by`（S025）、どの関係にも名指されない Actor / External / Aggregate / Read Model（S027）、Command が `emits` し外部からも `from` で届く Event（S028）、Policy が `issues` する Command の `reads`（S030。Policy に書く）、2つ以上の Command を `issues` する Policy（S031）。S024・S027・S008 は未解決の Hotspot が `on` している要素では出さない（§3.8） | Error |
 | Group | group 内の同じ Event ID の重複 | Error |
 | Policy | `on` 0件、`issues` 0件 | Error |
 | Hotspot | 不正 status、resolved なのに resolution なし、`on` の対象不正 | Error |
@@ -510,7 +515,7 @@ Design Level では Event 同士の時間順の線を描かない（配置が左
 | `.dt ref` | 完全修飾でない、未解決、種別不一致 | Error |
 | `.dt` contract | 有効な `ref` 同士で証明できる不整合 | Warning |
 | Graph | Policy→Command→Event→Policy の型レベル循環 | Warning（無限ループ断定禁止） |
-| Policy | 2つ以上の `on` と2つ以上の `issues` | Info（任意、直積意味ではない旨をレビュー） |
+| Policy | 2つ以上の Command を `issues`（S031。Command ごとに Policy を分ける。ADR 0032 §9） | Error |
 | Timeline | 因果が示唆する順序と逆に見える | **原則診断しない**（Occurrence 対応未確定） |
 | Source | Design Level で、どの Command も `emits` せず、`from` もなく、Policy の契機（時刻の Event）でもない Event（S029） | Info |
 | Completeness | 未参照 Event、timeline の部分性、Event の再登場、`from` のない Read Model（Big Picture の完全性） | 診断なし |
@@ -525,7 +530,7 @@ Design Level では Event 同士の時間順の線を描かない（配置が左
 - [ ] ES02: `timeline` に Command を書くと Error。
 - [ ] ES03: Command `handledBy` が2件だと Error、0件は（未解決の Hotspot がなければ）S024。
 - [ ] ES04: `by`（Actor / External System）、`reads`、`emits` が各複数で合法（`emits A, B` の一覧も）。
-- [ ] ES05: Policy の `on` と `issues` が各複数で合法、欠けたら Error。
+- [ ] ES05: Policy の `on` は複数で合法、`issues` する Command は1つ（2つ以上は S031）、欠けたら Error。
 - [ ] ES06: `.dt ref` は fully qualified、存在・種別整合性を検証。
 - [ ] ES07: `.dt ref` 省略は合法、未参照への網羅性警告なし。
 - [ ] ES08: `resolved` Hotspot の `resolution` 必須。
