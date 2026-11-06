@@ -188,6 +188,30 @@ describe("a person's edit in the chat", () => {
             },
         });
         expect(chatRow(resolved, false)).toContain('解決を書きました: 返金しない');
+        const hotspotEdit = edited({
+            input: {
+                requests: [
+                    {
+                        request: 'm1',
+                        author: 'bob',
+                        targets: [],
+                        body: 'x',
+                        edit: {
+                            kind: 'HotspotEdited',
+                            storming: 'Returns',
+                            path: 'p',
+                            hotspot: 'Broken',
+                            questionBefore: '壊れていたら？',
+                            questionAfter: '壊れて届いたら？',
+                            resolutionBefore: '返金する',
+                        },
+                    },
+                ],
+            },
+        });
+        const html = chatRow(hotspotEdit, false);
+        expect(html).toContain('<del>壊れていたら？</del> → <span>壊れて届いたら？</span>');
+        expect(html).toContain('<del>返金する</del> → 未解決に戻した');
         expect(actKinds(chatRow(edited({ conflict: { run: 'run1', runLabel: '返品を受け取った', settled: false } }), false))).toEqual(['decide-sub', 'decide']);
     });
 

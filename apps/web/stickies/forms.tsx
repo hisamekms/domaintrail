@@ -6,7 +6,7 @@ import { localNameProblem, referencesTo, type Storming } from '@domaintrail/stor
 import { Act } from '../shared/act';
 import { TOOLTIP_ATTR } from '../tooltip';
 import { useT } from '../i18n';
-import { isMac, type Sticky } from './registry';
+import { EDIT_FIELDS, isMac, type Sticky, type StickyField, type StickyFieldId } from './registry';
 
 /** Where a window is anchored: the sticky's box on the canvas (viewport pixels), and the canvas's size. */
 export interface Anchor {
@@ -38,12 +38,15 @@ function Popover({
     label,
     onCancel,
     onSubmit,
+    focus,
     children,
 }: {
     anchor: Anchor;
     label: string;
     onCancel: () => void;
     onSubmit: () => void;
+    /** The field focused first (its `data-field`); else the first. */
+    focus?: string;
     children: ReactNode;
 }): ReactNode {
     const ref = useRef<HTMLFormElement>(null);
@@ -52,9 +55,13 @@ function Popover({
         const h = ref.current?.offsetHeight ?? 0;
         const below = anchor.y + anchor.h + GAP;
         setTop(below + h <= anchor.height ? below : Math.max(GAP, anchor.y - h - GAP));
-        const first = ref.current?.querySelector<HTMLInputElement | HTMLTextAreaElement>('input, textarea');
+        const first =
+            (focus !== undefined ? ref.current?.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-field="${focus}"]`) : null) ??
+            ref.current?.querySelector<HTMLInputElement | HTMLTextAreaElement>('input, textarea');
         first?.focus();
         first?.select();
+        // the focus is placed when the window opens only
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [anchor.y, anchor.h, anchor.height]);
     const left = Math.max(GAP, Math.min(anchor.x, anchor.width - WIDTH - GAP));
     // a press outside cancels, as Escape does (a press on another sticky then selects it); never while composing
@@ -97,6 +104,7 @@ function Popover({
 }
 
 function Field({
+    id,
     label,
     value,
     onChange,
@@ -104,6 +112,7 @@ function Field({
     invalid,
     describedBy,
 }: {
+    id?: string;
     label: string;
     value: string;
     onChange: (v: string) => void;
@@ -116,6 +125,7 @@ function Field({
             <span>{label}</span>
             <input
                 className={mono ? 'mono' : undefined}
+                {...(id !== undefined && { 'data-field': id })}
                 value={value}
                 spellCheck={!mono}
                 aria-invalid={invalid === true}
@@ -176,24 +186,55 @@ function useSave(save: () => Promise<SaveResult>, onDone: () => void): { saving:
     return { saving, error, run };
 }
 
-/** 編集: the label (selected first) and the name, checked as typed; a new name says what it rewrites. */
+/** What a person changed in the edit window: only the fields that differ (`resolution: null` clears it). */
+export interface EditValues {
+    readonly label?: string;
+    readonly name?: string;
+    readonly question?: string;
+    readonly resolution?: string | null;
+}
+
+/** The fields' values as a sticky has them now. */
+export function fieldValues(sticky: Sticky): Readonly<Record<StickyFieldId, string>> {
+    return { label: sticky.label ?? '', name: sticky.local, question: sticky.label ?? '', resolution: sticky.resolution ?? '' };
+}
+
+/** The changes of `values` against the sticky, for the fields of its kind (a field emptied that may not be: left out). */
+export function editValues(sticky: Sticky, fields: readonly StickyField[], values: Readonly<Record<StickyFieldId, string>>): EditValues {
+    const now = fieldValues(sticky);
+    const out: { -readonly [K in keyof EditValues]: EditValues[K] } = {};
+    for (const { id } of fields) {
+        const v = values[id].trim();
+        if (v === now[id].trim()) continue;
+        if (id === 'resolution') out.resolution = v.length === 0 ? null : v;
+        else if (v.length > 0) out[id] = v;
+    }
+    return out;
+}
+
+/**
+ * 編集: a window built from the fields the sticky's kind declares (`EDIT_FIELDS`): a label and a name (checked as typed;
+ * a new name says what it rewrites), or a hotspot's question and resolution on several lines (Enter a new line,
+ * ⌘/Ctrl+Enter saves; a resolution emptied reopens it). `focus`: the field focused first.
+ */
 export function EditForm(props: {
     sticky: Sticky;
     storming: Storming;
     anchor: Anchor;
-    onSave: (change: { label?: string; name?: string }) => Promise<SaveResult>;
+    focus?: StickyFieldId;
+    onSave: (change: EditValues) => Promise<SaveResult>;
     onClose: () => void;
 }): ReactNode {
     const { sticky, storming } = props;
     const t = useT().stickies;
     const e = t.edit;
-    const [label, setLabel] = useState(sticky.label ?? '');
-    const [name, setName] = useState(sticky.local);
+    const fields = EDIT_FIELDS[sticky.kind];
+    const [values, setValues] = useState(() => fieldValues(sticky));
+    const set = (id: StickyFieldId) => (v: string) => setValues((old) => ({ ...old, [id]: v }));
     const errorId = useId();
-    const n = name.trim();
-    const l = label.trim();
-    const taken = new Set(declarationNames(storming));
-    const problem = localNameProblem(n, taken, sticky.local);
+    const has = (id: StickyFieldId): boolean => fields.some((f) => f.id === id);
+    const n = values.name.trim();
+    const problem = has('name') ? localNameProblem(n, new Set(declarationNames(storming)), sticky.local) : undefined;
     const nameError =
         problem === 'format'
             ? e.problems.format
@@ -202,24 +243,71 @@ export function EditForm(props: {
               : problem === 'duplicate'
                 ? e.problems.duplicate(n)
                 : undefined;
-    const labelError = l.length === 0 && sticky.label !== undefined ? e.emptyLabel : undefined;
-    const renamed = n !== sticky.local && !nameError;
+    const emptied = (id: 'label' | 'question'): boolean => has(id) && values[id].trim().length === 0 && sticky.label !== undefined;
+    const textError = emptied('label') ? e.emptyLabel : emptied('question') ? e.emptyQuestion : undefined;
+    const renamed = has('name') && n !== sticky.local && !nameError;
     const references = renamed ? referencesTo(storming, sticky.local).length : 0;
-    const changed = (l !== (sticky.label ?? '') && l.length > 0) || n !== sticky.local;
-    const { saving, error, run } = useSave(
-        () => props.onSave({ ...(l !== (sticky.label ?? '') && l.length > 0 && { label: l }), ...(n !== sticky.local && { name: n }) }),
-        props.onClose,
-    );
-    const invalid = nameError !== undefined || labelError !== undefined;
+    const change = editValues(sticky, fields, values);
+    const changed = Object.keys(change).length > 0;
+    const { saving, error, run } = useSave(() => props.onSave(change), props.onClose);
+    const invalid = nameError !== undefined || textError !== undefined;
+    const several = fields.some((f) => f.lines === 'several');
+    const mac = isMac();
+    const save = (): void => {
+        if (!invalid && changed) run();
+    };
+    const names: Record<StickyFieldId, string> = { label: e.label, name: e.name, question: t.hotspot.label, resolution: t.resolve.label };
     return (
-        <Popover anchor={props.anchor} label={e.dialog} onCancel={props.onClose} onSubmit={() => !invalid && changed && run()}>
-            <Field label={e.label} value={label} onChange={setLabel} invalid={labelError !== undefined} describedBy={errorId} />
-            <Field label={e.name} value={name} onChange={setName} mono invalid={nameError !== undefined} describedBy={errorId} />
+        <Popover
+            anchor={props.anchor}
+            label={sticky.kind === 'hotspot' ? e.hotspotDialog : e.dialog}
+            onCancel={props.onClose}
+            onSubmit={save}
+            {...(props.focus !== undefined && { focus: props.focus })}
+        >
+            {fields.map((f) =>
+                f.lines === 'one' ? (
+                    <Field
+                        key={f.id}
+                        id={f.id}
+                        label={names[f.id]}
+                        value={values[f.id]}
+                        onChange={set(f.id)}
+                        mono={f.id === 'name'}
+                        invalid={f.id === 'name' ? nameError !== undefined : textError !== undefined}
+                        describedBy={errorId}
+                    />
+                ) : (
+                    <label key={f.id} className="sticky-form-field">
+                        <span>{names[f.id]}</span>
+                        <textarea
+                            data-field={f.id}
+                            value={values[f.id]}
+                            rows={3}
+                            readOnly={saving}
+                            aria-describedby={errorId}
+                            aria-keyshortcuts={mac ? 'Meta+Enter' : 'Control+Enter'}
+                            onChange={(ev) => set(f.id)(ev.target.value)}
+                            onKeyDown={(ev) => {
+                                if (ev.key !== 'Enter' || ev.nativeEvent.isComposing || !(ev.metaKey || ev.ctrlKey)) return;
+                                ev.preventDefault();
+                                save();
+                            }}
+                        />
+                    </label>
+                ),
+            )}
             <div id={errorId} aria-live="polite">
                 {renamed && references > 0 && <p className="sticky-form-impact">{e.impact(references, references)}</p>}
-                {(nameError ?? labelError ?? error) !== undefined && <p className="sticky-form-error">{nameError ?? labelError ?? error}</p>}
+                {(nameError ?? textError ?? error) !== undefined && <p className="sticky-form-error">{nameError ?? textError ?? error}</p>}
             </div>
-            <Foot save={e.save} saving={saving} disabled={invalid || !changed} onCancel={props.onClose} />
+            <Foot
+                save={e.save}
+                saving={saving}
+                disabled={invalid || !changed}
+                onCancel={props.onClose}
+                {...(several && { saveKeys: mac ? '⌘Enter' : 'Ctrl+Enter' })}
+            />
         </Popover>
     );
 }
@@ -246,28 +334,6 @@ export function HotspotForm(props: { anchor: Anchor; onSave: (question: string) 
     const t = useT().stickies;
     return (
         <TextForm label={t.hotspot.dialog} field={t.hotspot.label} save={t.hotspot.save} onSave={props.onSave} onClose={props.onClose} anchor={props.anchor} />
-    );
-}
-
-/** 解決を書く, or 解決を直す for a resolved hotspot (opened with its resolution): the resolution, on several lines. */
-export function ResolveForm(props: {
-    anchor: Anchor;
-    resolution?: string;
-    onSave: (resolution: string) => Promise<SaveResult>;
-    onClose: () => void;
-}): ReactNode {
-    const t = useT().stickies;
-    const again = props.resolution !== undefined;
-    return (
-        <TextForm
-            label={again ? t.resolve.redo : t.resolve.dialog}
-            field={t.resolve.label}
-            save={t.resolve.save}
-            {...(props.resolution !== undefined && { initial: props.resolution })}
-            onSave={props.onSave}
-            onClose={props.onClose}
-            anchor={props.anchor}
-        />
     );
 }
 

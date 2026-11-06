@@ -3,11 +3,12 @@ import * as path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { analyzeStormings } from '@domaintrail/storming';
 import { focusBack, matchItems, type PaletteItem } from '../shared/palette';
-import { outsidePressCancels } from './forms';
+import { editValues, fieldValues, outsidePressCancels } from './forms';
 import { elementLink, linkedElement } from './link';
 import {
     actionOfKey,
     actionsFor,
+    EDIT_FIELDS,
     escapeClearsSelection,
     HOTSPOT_TARGETS,
     toolbarActions,
@@ -150,5 +151,32 @@ describe('a press outside a sticky window', () => {
         expect(outsidePressCancels({ inside: false, composing: false })).toBe(true);
         expect(outsidePressCancels({ inside: true, composing: false })).toBe(false);
         expect(outsidePressCancels({ inside: false, composing: true })).toBe(false);
+    });
+});
+
+describe('the fields a person edits, by kind', () => {
+    test('a sticky: its label and name; a hotspot: its question and resolution, never its name', () => {
+        expect(EDIT_FIELDS.command.map((f) => f.id)).toEqual(['label', 'name']);
+        expect(EDIT_FIELDS.hotspot).toEqual([
+            { id: 'question', lines: 'several' },
+            { id: 'resolution', lines: 'several' },
+        ]);
+        for (const kind of Object.keys(EDIT_FIELDS) as (keyof typeof EDIT_FIELDS)[])
+            if (kind !== 'hotspot') expect(EDIT_FIELDS[kind].map((f) => f.id)).toContain('name');
+    });
+
+    test('what changed: only the fields that differ; a resolution emptied reopens; a label emptied is no change', () => {
+        const resolved = sticky('MixedCurrencies');
+        const values = fieldValues(resolved);
+        expect(editValues(resolved, EDIT_FIELDS.hotspot, values)).toEqual({});
+        expect(editValues(resolved, EDIT_FIELDS.hotspot, { ...values, question: '通貨が混ざったら？\n例外は？' })).toEqual({
+            question: '通貨が混ざったら？\n例外は？',
+        });
+        expect(editValues(resolved, EDIT_FIELDS.hotspot, { ...values, resolution: '  ' })).toEqual({ resolution: null });
+        const open = sticky('IssuedEvent');
+        expect(editValues(open, EDIT_FIELDS.hotspot, { ...fieldValues(open), resolution: 'する' })).toEqual({ resolution: 'する' });
+        const event = sticky('OrderPlaced');
+        expect(editValues(event, EDIT_FIELDS.event, { ...fieldValues(event), label: '' })).toEqual({});
+        expect(editValues(event, EDIT_FIELDS.event, { ...fieldValues(event), name: 'Placed' })).toEqual({ name: 'Placed' });
     });
 });

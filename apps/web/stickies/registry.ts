@@ -30,7 +30,42 @@ export interface Sticky {
     readonly timelines: readonly string[];
     /** A hotspot written `status resolved`. */
     readonly resolved: boolean;
+    /** A hotspot's resolution, when it has one. */
+    readonly resolution?: string;
 }
+
+/** A field of a sticky that a person edits in its window. */
+export type StickyFieldId = 'label' | 'name' | 'question' | 'resolution';
+
+export interface StickyField {
+    readonly id: StickyFieldId;
+    /** One line (an input: Enter saves), or several (a text area: Enter a new line, ⌘/Ctrl+Enter saves). */
+    readonly lines: 'one' | 'several';
+}
+
+/** The label and the name (with the references a new name rewrites). */
+const WORDING: readonly StickyField[] = [
+    { id: 'label', lines: 'one' },
+    { id: 'name', lines: 'one' },
+];
+
+/**
+ * The fields a person edits, by kind: the edit window is built from them. A hotspot's name is the system's (provisional,
+ * then the AI's): never one of its fields, and editing its question never renames it. A field is added here for a kind.
+ */
+export const EDIT_FIELDS: Readonly<Record<NodeElementKind, readonly StickyField[]>> = {
+    event: WORDING,
+    command: WORDING,
+    aggregate: WORDING,
+    actor: WORDING,
+    external: WORDING,
+    readmodel: WORDING,
+    policy: WORDING,
+    hotspot: [
+        { id: 'question', lines: 'several' },
+        { id: 'resolution', lines: 'several' },
+    ],
+};
 
 /** Where the actions are offered: what the page can do now. */
 export interface ActionContext {
@@ -170,6 +205,7 @@ export function stickyOf(stormings: readonly { readonly id: string; readonly sto
     const declaration = storming && firstDeclarations(storming).get(local);
     if (!storming || !declaration || !isNodeKind(declaration.kind) || !('clauses' in declaration)) return undefined;
     const ref = declaration.clauses.find((c) => c.type === 'ref');
+    const resolution = declaration.clauses.find((c) => c.type === 'resolution');
     const timelines =
         declaration.kind === 'event' ? stormingTimelines(storming).flatMap((t) => (timelineOccurrences(t).some((o) => o.eventId === local) ? [t.id] : [])) : [];
     return {
@@ -181,5 +217,6 @@ export function stickyOf(stormings: readonly { readonly id: string; readonly sto
         ...(ref?.type === 'ref' && { ref: ref.path }),
         timelines,
         resolved: declaration.clauses.some((c) => c.type === 'status' && c.value === 'resolved'),
+        ...(resolution?.type === 'resolution' && { resolution: resolution.text }),
     };
 }

@@ -20,7 +20,7 @@ import { dtTarget } from '../storming';
 import { TOOLTIP_ATTR } from '../tooltip';
 import { useCanvasValue, type DiagramCanvas } from '../view/diagram';
 import { isTyping } from '../session/selection';
-import { EditForm, HotspotForm, ResolveForm, type Anchor, type SaveResult } from './forms';
+import { EditForm, HotspotForm, type Anchor, type SaveResult } from './forms';
 import { elementLink } from './link';
 import {
     actionOfKey,
@@ -34,6 +34,7 @@ import {
     type Sticky,
     type StickyAction,
     type StickyActionId,
+    type StickyFieldId,
 } from './registry';
 
 /** A person's edit as the page sends it (`POST /api/session/stickies`). */
@@ -55,7 +56,16 @@ export type StickyEditRequest =
           readonly onLabel?: string;
           readonly onKind?: string;
       }
-    | { readonly kind: 'resolveHotspot'; readonly storming: string; readonly element: string; readonly resolution: string };
+    | { readonly kind: 'resolveHotspot'; readonly storming: string; readonly element: string; readonly resolution: string }
+    /** A hotspot's question and resolution in one edit (`resolution: null` reopens it); its name is the system's. */
+    | {
+          readonly kind: 'hotspot';
+          readonly storming: string;
+          readonly element: string;
+          readonly expected: { readonly question?: string; readonly resolution?: string };
+          readonly question?: string;
+          readonly resolution?: string | null;
+      };
 
 /** Why the server refused an edit, as the window says it. */
 export interface EditRefusal {
@@ -107,7 +117,8 @@ export interface StickyActions {
     readonly palette: readonly PaletteItem[];
 }
 
-type Form = { readonly kind: 'edit' | 'hotspot' | 'resolve'; readonly sticky: Sticky; readonly anchor: Anchor };
+/** A window open on a sticky: its edit (`focus`: the field focused first), or a new hotspot on it. */
+type Form = { readonly kind: 'edit' | 'hotspot'; readonly sticky: Sticky; readonly anchor: Anchor; readonly focus?: StickyFieldId };
 
 /** Gives the canvas the keyboard focus (its own keys: Escape clears the selection), without scrolling the page. */
 export const focusCanvas = (canvas: DiagramCanvas): void => canvas.container().focus({ preventScroll: true });
@@ -189,9 +200,9 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
         [canvas],
     );
     const open = useCallback(
-        (kind: Form['kind'], sticky: Sticky | undefined) => {
+        (kind: Form['kind'], sticky: Sticky | undefined, focus?: StickyFieldId) => {
             const anchor = sticky && anchorOf(sticky);
-            if (sticky && anchor) setForm({ kind, sticky, anchor });
+            if (sticky && anchor) setForm({ kind, sticky, anchor, ...(focus !== undefined && { focus }) });
         },
         [anchorOf],
     );
@@ -240,7 +251,8 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
                 case 'addHotspot':
                     return open('hotspot', first);
                 case 'resolve':
-                    return open('resolve', first);
+                    // the hotspot's one window, at its resolution
+                    return open('edit', first, 'resolution');
                 case 'copyLink': {
                     if (!first) return;
                     const link = elementLink(window.location.href, first.id);
@@ -368,7 +380,6 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
     };
 
     const formStorming = form && stormingOf(form.sticky);
-    const resolution = form?.kind === 'resolve' ? resolutionOf(formStorming, form.sticky.local) : undefined;
     const overlay = active ? (
         <div className="sticky-layer">
             {at && selected.length > 0 && !form && available.length > 0 && (
@@ -424,9 +435,28 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
                     sticky={form.sticky}
                     storming={formStorming}
                     anchor={form.anchor}
+                    {...(form.focus !== undefined && { focus: form.focus })}
                     onClose={closeForm}
                     onSave={(change) => {
                         const { sticky } = form;
+                        if (sticky.kind === 'hotspot') {
+                            // its question and resolution, one edit; never its name
+                            const { question, resolution } = change;
+                            return edit(
+                                {
+                                    kind: 'hotspot',
+                                    storming: sticky.storming,
+                                    element: sticky.local,
+                                    expected: {
+                                        ...(sticky.label !== undefined && { question: sticky.label }),
+                                        ...(sticky.resolution !== undefined && { resolution: sticky.resolution }),
+                                    },
+                                    ...(question !== undefined && { question }),
+                                    ...(resolution !== undefined && { resolution }),
+                                },
+                                s.edit.body(sticky.label ?? sticky.local, question ?? resolution ?? s.hotspotReopened),
+                            );
+                        }
                         const before = sticky.label ?? sticky.local;
                         const after = change.label ?? change.name ?? before;
                         return edit(
@@ -435,7 +465,8 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
                                 storming: sticky.storming,
                                 element: sticky.local,
                                 expected: { name: sticky.local, ...(sticky.label !== undefined && { label: sticky.label }) },
-                                ...change,
+                                ...(change.label !== undefined && { label: change.label }),
+                                ...(change.name !== undefined && { name: change.name }),
                             },
                             s.edit.body(change.label !== undefined ? before : sticky.local, change.label !== undefined ? after : (change.name ?? sticky.local)),
                             change.name !== undefined ? `es/${sticky.storming}/${change.name}` : undefined,
@@ -459,19 +490,6 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
                             },
                             s.hotspot.body(form.sticky.label ?? form.sticky.local, question),
                             (written) => written.hotspot && `es/${form.sticky.storming}/${written.hotspot}`,
-                        )
-                    }
-                />
-            )}
-            {form?.kind === 'resolve' && (
-                <ResolveForm
-                    anchor={form.anchor}
-                    {...(resolution !== undefined && { resolution })}
-                    onClose={closeForm}
-                    onSave={(text) =>
-                        edit(
-                            { kind: 'resolveHotspot', storming: form.sticky.storming, element: form.sticky.local, resolution: text },
-                            s.resolve.body(form.sticky.label ?? form.sticky.local, text),
                         )
                     }
                 />
@@ -514,12 +532,4 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
     }, [selected, context, stormings, mode, mac, session?.chat.added, onOpenSticky, t]);
 
     return { overlay, palette };
-}
-
-/** A hotspot's resolution as written, if any. */
-function resolutionOf(storming: StormingView['storming'] | undefined, local: string): string | undefined {
-    const el = storming?.elements.find((e) => e.id === local);
-    if (!el || el.kind === 'timeline' || el.kind === 'stage') return undefined;
-    const r = el.clauses.find((c) => c.type === 'resolution');
-    return r?.type === 'resolution' ? r.text : undefined;
 }

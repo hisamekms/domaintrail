@@ -212,15 +212,15 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   it. Outside a session only seeing and copying are offered. `⌘K` (Ctrl+K) opens the command palette: the actions on
   the selection, then every sticky by name (its kind, storming and ID matched too).
   **Editing a sticky** (in a session; anyone may): a double-click, `F2` or ✎ opens a small window under it with its
-  ラベル (selected) and 名前 (its ID). A name is checked as typed (the `.dtes` ID's form, not a keyword, not taken in the
+  ラベル (selected) and 名前 (its ID) — the fields its kind declares. A name is checked as typed (the `.dtes` ID's form, not a keyword, not taken in the
   storming); a new one says 「参照 n 件も書き換えます（.dtes n）」. Enter saves, Escape — or a press outside the window, not while typing with an IME — cancels (the windows show no key hints;
   the buttons' tooltips name the keys). dt writes it at once — no
   AI run: only the label, and for a new name the name and every reference to it in the storming, change in the file —
   and everyone's canvas shows it; if someone (or the AI) changed the sticky meanwhile, the window says what it is now.
   ホットスポットを付ける opens a window with the question only, on several lines (Enter starts a new line, ⌘Enter / Ctrl+Enter
   adds it): its name (ID) is not asked — dt writes it at once as `<Sticky>Question` and selects it, and the agent's
-  light model renames it from the question a few seconds later (knowledge or not; not when it was changed meanwhile). 解決を書く (on a hotspot's toolbar beside 編集; 解決を直す once resolved, opened with its resolution) takes the resolution
-  on several lines the same way. Each edit is in AI の作業.
+  light model renames it from the question a few seconds later (knowledge or not; not when it was changed meanwhile). A hotspot's 編集 — and 解決を書く (解決を直す once resolved) on its toolbar, at the resolution — opens one window with
+  its 問い and 解決 on several lines (⌘Enter / Ctrl+Enter saves), never its name; emptying 解決 reopens it. Each edit is in AI の作業.
   **Back from a jump**: after ドメインモデルで見る (or このタイムラインで見る), the detail's back button names the sticky
   (「← 注文を受け付けた」) and returns to the storming as it was shown — the same view, level and scope, the camera, the
   sticky selected; the browser's Back does the same.

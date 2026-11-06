@@ -41,12 +41,12 @@ it, so an action added there shows everywhere at once:
 | Action | Kinds | Several | Frequent | Key | Needs |
 |---|---|---|---|---|---|
 | チャットに追加 | all | yes | yes | Enter | a live session |
-| 編集 | all | no | yes | F2 | a live session |
+| 編集 (the window of the kind's fields, `EDIT_FIELDS`) | all | no | yes | F2 | a live session |
 | ナレッジを見る | a sticky with knowledge (ADR 0031), in a session with a knowledge store | no | no | | a store |
 | ドメインモデルで見る | event, command, aggregate with a `ref` the model has | no | no | | |
 | このタイムラインで見る | an event in a timeline the view does not show | no | no | | |
 | ホットスポットを付ける | any sticky but a hotspot (`HOTSPOT_TARGETS`, the grammar's `hotspot { on <any sticky> }` since ADR 0032) | no | no | | a live session |
-| 解決を書く (解決を直す once resolved, opened with its resolution) | hotspot | no | yes, a hotspot's (`frequent` may depend on the sticky) | | a live session |
+| 解決を書く (解決を直す once resolved): the hotspot's edit window, at its resolution | hotspot | no | yes, a hotspot's (`frequent` may depend on the sticky) | | a live session |
 | リンクをコピー | all | no | no | ⌘⇧C | |
 
 The `see` actions have the `see` look (the eye) and name their place in the tooltip (「ドメインモデルの 注文 › 確定する
@@ -88,6 +88,16 @@ answer within 30 s (the job is withdrawn), the provisional name stays.
 **Turn marks** (#63). A person's edit is a turn like a run's: its base → result revision feeds the storming canvas's
 marks of the latest change (`changingRuns` takes `Edited` runs), so the stickies it added or changed are marked as
 a run's are.
+
+**The fields a person edits, by kind** (*Decided by the maintainer*). The registry declares them (`EDIT_FIELDS`) and the
+edit window is built from them, so a field is added to a kind there: an event, a command, an aggregate, an actor, an
+external system, a read model and a policy have ラベル (one line) and 名前 (checked, with the references a new name
+rewrites); a hotspot has 問い and 解決 (several lines each: Enter a new line, ⌘/Ctrl+Enter saves). A hotspot's name
+is the system's — written provisional, renamed once by the light model — and never shown nor asked: editing its
+question does not rename it (chat `#` targets and knowledge items' `about` refer to it by its ID). 編集 on a hotspot and
+解決を書く (解決を直す once resolved) open the same window, the latter at its resolution. Saving writes both in one edit
+(`hotspot`: `question`, `resolution`; one record `HotspotEdited` with 問い and 解決 old → new): a resolution written sets
+`status resolved` and `resolution`, one emptied reopens the hotspot (both clauses removed).
 
 **Links.** A link names an element in the page's fragment, `#select=es/<Storming>/<Local>`: the view state stays the
 page's (per browser, not in the URL), and the page opens the world and the storming's view that draws the element

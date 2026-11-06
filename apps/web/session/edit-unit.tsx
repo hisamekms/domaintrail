@@ -51,6 +51,33 @@ function EditLines({ edit, chat }: { edit: StickyEditJson; chat: boolean }): Rea
             return <div className="edit-unit-line">{chat ? h.chatHotspot(edit.label) : h.hotspotAdded(edit.label, edit.on)}</div>;
         case 'HotspotResolved':
             return <div className="edit-unit-line">{chat ? `${h.chatResolved}: ${edit.resolution}` : h.resolved(edit.hotspot, edit.resolution)}</div>;
+        case 'HotspotEdited':
+            return (
+                <>
+                    {edit.questionBefore !== edit.questionAfter && (
+                        <div className="edit-unit-line">
+                            <span className="edit-unit-field">{h.question}</span>
+                            <del>{edit.questionBefore ?? h.none}</del> → <span>{edit.questionAfter ?? h.none}</span>
+                        </div>
+                    )}
+                    {edit.resolutionBefore !== edit.resolutionAfter && (
+                        <div className="edit-unit-line">
+                            <span className="edit-unit-field">{h.resolution}</span>
+                            {edit.resolutionAfter === undefined ? (
+                                <>
+                                    <del>{edit.resolutionBefore}</del> → {h.reopened}
+                                </>
+                            ) : edit.resolutionBefore === undefined ? (
+                                <span>{edit.resolutionAfter}</span>
+                            ) : (
+                                <>
+                                    <del>{edit.resolutionBefore}</del> → <span>{edit.resolutionAfter}</span>
+                                </>
+                            )}
+                        </div>
+                    )}
+                </>
+            );
     }
 }
 
@@ -62,6 +89,7 @@ export function editedSticky(edit: StickyEditJson): { readonly storming: string;
         case 'HotspotAdded':
             return { storming: edit.storming, local: edit.hotspot, label: edit.label };
         case 'HotspotResolved':
+        case 'HotspotEdited':
             return { storming: edit.storming, local: edit.hotspot };
     }
 }
