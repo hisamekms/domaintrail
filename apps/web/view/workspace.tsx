@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { BookOpen, Box, LayoutGrid, LayoutList, Network, Workflow, type LucideIcon } from 'lucide-react';
 import { type DisplayMode, type Lang, STRUCTURE_LEVELS, type StructureLevel } from '@domaintrail/visualization';
 import type { StormingView, ViewPayload } from '@domaintrail/visualization/protocol';
@@ -13,6 +13,7 @@ import { workspaceName } from '../app/health';
 import type { Legends } from '../app/legends';
 import { buildScene } from '../render';
 import { useViewCamera } from './camera';
+import type { CanvasMarks } from './change-marks';
 import { useCenterOnResize } from './center';
 import { CanvasControls, EdgeHint } from './canvas-controls';
 import { emptyLine, isEmptyView } from './empty';
@@ -51,6 +52,26 @@ export interface Workspace {
     printer: Printer;
     /** What an export (and a print) includes besides the diagram, remembered. */
     exportOptions: { options: ExportOptions; setOptions: (options: ExportOptions) => void };
+    /**
+     * The marks of a turn's changes on the storming canvas (docs/live-view.md, "What a turn changed"): the page's own
+     * (per viewer), set by the session; and the stormings the page saw before, where removed stickies are found.
+     */
+    marks: { shown: CanvasMarks | null; set: (marks: CanvasMarks | null) => void; snapshots: readonly (readonly StormingView[])[] };
+}
+
+/** How many earlier versions of the stormings a page keeps, to draw removed stickies where they were. */
+const SNAPSHOTS = 8;
+
+/**
+ * The stormings the page was sent, the last few versions, oldest first (the current one last): the same array until
+ * another version comes.
+ */
+function useStormingSnapshots(stormings: readonly StormingView[]): readonly (readonly StormingView[])[] {
+    const kept = useRef<readonly (readonly StormingView[])[]>([]);
+    return useMemo(() => {
+        if (stormings.length > 0 && kept.current.at(-1) !== stormings) kept.current = [...kept.current, stormings].slice(-SNAPSHOTS);
+        return kept.current;
+    }, [stormings]);
 }
 
 /**
@@ -71,7 +92,12 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
     const viewGraph = useViewGraph(current, nav.view, settings, stormings, settings.compact || printer.phase !== 'idle');
     usePrintWhenReady(printer, isCanvas(nav.view) ? viewGraph.graph : null);
     useOpenOnStormings(current, nav.setView);
-    useViewCamera(canvas, current, nav.view, settings, viewGraph, { mode, lang }, current !== null && isEmptyView(nav.view.kind, current));
+    const [marks, setMarks] = useState<CanvasMarks | null>(null);
+    const snapshots = useStormingSnapshots(stormings);
+    useViewCamera(canvas, current, nav.view, settings, viewGraph, { mode, lang }, current !== null && isEmptyView(nav.view.kind, current), {
+        shown: marks,
+        snapshots,
+    });
 
     useEffect(() => {
         applyTheme(theme, canvas);
@@ -93,6 +119,7 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
         catalog,
         printer,
         exportOptions: { options: exportOptions, setOptions: setExportOptions },
+        marks: { shown: marks, set: setMarks, snapshots },
     };
 }
 

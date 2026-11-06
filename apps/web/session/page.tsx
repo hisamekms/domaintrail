@@ -45,6 +45,7 @@ import type { KnowledgeView } from '../knowledge/useKnowledge';
 import { defaultDraftStorage, useComposerDraft, usePresence, useSession } from './useSession';
 import { journeyOverview, journeysOfContext, journeysOfStorming, pageGuideWorkspace } from './journey-view';
 import { JourneyDetail } from './journey-detail';
+import { TurnMarksBar, useTurnMarks } from './turn-marks';
 
 export interface SessionPage {
     /** The session's chat for `AppShell`'s `conversation`, for everyone; undefined outside a session. */
@@ -257,6 +258,8 @@ export function useSessionPage(input: {
     // the detail of a storming element: what the session did about it, the way to it in the chat and AI の作業, and the
     // beginnings of messages about it
     const runChanges = useRunChanges(session?.state);
+    // what a turn changed, marked on the storming canvas: the latest turn's as it ends, a card's on 図で見る
+    const turnMarks = useTurnMarks(session?.state, workspace, input.mode);
     const [goTo, setGoTo] = useState<ChatGoTo | undefined>();
     const go = useCallback(
         (kind: ChatGoTo['kind'], id: string): void => {
@@ -431,6 +434,7 @@ export function useSessionPage(input: {
             <>
                 <PeerCursors canvas={canvas} cursors={cursorsOn(session.peers, location)} />
                 <SelectionAction canvas={canvas} action={addAction(selectionTargets)} />
+                {view.kind === 'storming' && <TurnMarksBar canvas={canvas} marks={turnMarks} stormings={stormings} choice={stormingChoice} />}
             </>
         ),
         inspectorAction: inspectorAdd && <AddButton action={inspectorAdd} />,
@@ -468,6 +472,7 @@ export function useSessionPage(input: {
                         viewedAt={viewedAt}
                         onOpenView={openView}
                         onNavigate={navigate}
+                        onSeeChanges={turnMarks.see}
                         goTo={goTo}
                         onOpen={() => setConversationOpen(true)}
                         onClose={() => setConversationOpen(false)}

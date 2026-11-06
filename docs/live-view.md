@@ -302,7 +302,7 @@ With either baseline:
   transition, a description).
 
 A revision whose sources do not parse is reported in a banner, and nothing is marked then. Stormings are compared with
-neither baseline: their views are not marked.
+neither baseline: in a session their stickies are marked by turn instead (see [What a turn changed](#what-a-turn-changed)).
 
 ## Behaviour and settings
 
@@ -475,6 +475,43 @@ the journeys panel; the latest card follows the journey file as it is now. A few
   chat, the choices shared with the chat's card — and チャットで見る scrolls the chat to it. By default 終わったもの lists the cards
   that changed files; すべて also lists the runs that changed nothing, and those declined, failed or cancelled. The
   other groups always show.
+
+### What a turn changed
+
+In a session (`dt open` and `dt collab` alike), when a run that changed the sources ends while the page is open, the
+Event Storming canvas marks the stickies it changed, with the model canvas's marks: an added sticky has the green ring
+and a 新 badge, a changed one the amber ring and 変 — with its label before the change small and struck through just
+under it, when the label changed (the whole of it in the tooltip) — and a removed one is a faded, dashed ghost with
+削除, where the page last saw it. A ghost that would cover a note (a sticky added where one was removed) is moved off it,
+to the nearest free place. A small bar at the canvas's top right says whose changes are marked and how many —
+「直前の作業：新 1 変 1 削除 1」 (a kind with none left out) — then 「ほかに n 件の変更 →」 while some of them are out of
+view or not drawn in this view (a press goes to the nearest one, and, when none is drawn here, to the view that draws
+them), and 印を消す. The bar is a group of ordinary buttons, reached with Tab.
+
+- **Which turn**: the latest run that ended having changed the sources (completed, waiting for an answer, declined or
+  reverted with changes), as the page saw it end. The marks stay until the next such run ends — whose marks replace
+  them, or clear them when it changed no sticky (only `.dt`, or only a timeline's or a group's steps) — or until the
+  reader presses 印を消す. A page opened after a run ended marks nothing until the next one: the reader did not see it
+  end, and a card's 図で見る shows it.
+- **Only the stickies**: the `.dtes` elements drawn as notes. A run that changed only `.dt` marks nothing here; the
+  model canvas keeps marking against its own baseline (前回の保存 or a git revision, see
+  [Comparing with a git revision](#comparing-with-a-git-revision)).
+- **The camera** moves for the marks only when none of them is in view as they appear: the reader may be reading
+  elsewhere on purpose, and one mark in view already says that the turn changed something (the bar counts the rest and
+  offers to go there). It then fits them all, zoomed in no further than it was (nor past 100%), or, when that would
+  make them too small to read, centers on the nearest; never while the reader drags or pans. With reduced motion it
+  jumps instead of gliding.
+- **図で見る** (the eye, under a run's text in the chat and under a card's row in AI の作業, while it changed stickies)
+  marks that run's (or that card's) changes the same way, whenever it ran, and brings them into view: the view shown if
+  it draws any of them, else the integrated canvas of the storming they are in, at a level that draws them (switching
+  from the domain model's views if needed). The bar then names it: 「作業「返品の受付」：新 1」.
+- **Per viewer**: the marks are the page's own, never sent nor shared; each page marks the turns it saw end. A removed
+  sticky is drawn only where this page saw it before (the last few versions of the stormings are kept in the page):
+  marks shown for a run that ended before the page opened count it in the bar without a ghost. A compact layout
+  (詰めて表示) draws no ghosts, as for the model's diff.
+
+The marks take a span of revisions (before and after), not a run as such, so that other changes — a person's edit of a
+sticky — can be marked the same way. Printing and exporting draw the diagram without them.
 
 The others' cursors are drawn on the same view. `dt open --host <non-loopback>` serves the same page read-only, without any of it. See [`dt guide session`](guide.md#collaboration-sessions).
 
