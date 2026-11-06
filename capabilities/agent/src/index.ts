@@ -119,4 +119,4 @@ export {
 export { createDtTools, type DtCommand } from './adapters/dt-tools.js';
 export { createHttpAgentApi } from './adapters/http-agent-api.js';
 export { randomNonce, systemClock } from './adapters/system.js';
-export { scanWorkspace } from './adapters/workspace-scan.js';
+export { scanWorkspace, type ScanOptions } from './adapters/workspace-scan.js';

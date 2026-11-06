@@ -58,6 +58,7 @@ export async function createWarmClaudeRunner(options: WarmRunnerOptions): Promis
             deniedPaths,
             ...(extra && { extraRead: extra }),
             ...(options.configFiles && { configFiles: options.configFiles }),
+            ...(options.dtWrittenDirs && { dtWrittenDirs: options.dtWrittenDirs }),
             ...(options.knowledge && { knowledge: options.knowledge }),
         });
         const end = await warm.turn({

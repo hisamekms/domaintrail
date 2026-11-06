@@ -30,6 +30,7 @@ import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import { resolveConfig, type SessionSettings } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { findDomainFiles } from '@domaintrail/workspace';
+import { createFilesKnowledgeStore, Knowledge } from '@domaintrail/knowledge';
 import { tempCopyOfExamples } from './helpers';
 import { sourceSelection } from '@domaintrail/analysis';
 import { hasElement } from '@domaintrail/modeling';
@@ -700,6 +701,67 @@ describe('the pipeline', () => {
             expect(invocation.mcp?.content[0].text).toContain('注文は在庫を確かめてから受ける。');
         },
     );
+
+    integration('the files knowledge store written while a run runs (an extraction): the run completes, and the next run is claimed', async () => {
+        const ctx = await setup();
+        const file = path.join(ctx.root, 'domaintrail.jsonc');
+        const knowledge = { config: resolveConfig(await readFile(file, 'utf8'), file), approval: undefined };
+        expect(knowledge.config.knowledge.store).toBe('files');
+        const flag = path.join(await scratch('domaintrail-flag-'), 'go');
+        const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
+        const { log } = await subscribe(ctx, await ctx.plan([{ waitForFile: flag, edits: ADD_RETURN_CANCELLED }, {}]), { knowledge });
+        await until(ctx, run, ['Running']);
+        await waitFor('the agent', async () => (await ctx.invocations())[0]);
+
+        // the session's extraction applies an item while the agent runs: knowledge/ is made, an item and the audit written
+        const known = <T>(made: { ok: true; value: T } | { ok: false; error: unknown }): T => {
+            if (!made.ok) throw new Error(`invalid test value: ${JSON.stringify(made.error)}`);
+            return made.value;
+        };
+        const store = createFilesKnowledgeStore({
+            dir: path.join(ctx.root, 'knowledge'),
+            project: known(Knowledge.makeProjectName('shop')),
+            stateDir: await scratch('domaintrail-knowledge-state-'),
+        });
+        const session = known(Knowledge.makeSessionRef(ctx.server.session));
+        const applied = await store.applyExtraction(known(Knowledge.makeProjectName('shop')), {
+            by: { session, number: known(Knowledge.makeExtractionNumber(1)) },
+            operations: [
+                {
+                    kind: 'Add',
+                    id: known(Knowledge.makeKnowledgeItemId('kn_00000001')),
+                    content: {
+                        title: known(Knowledge.makeItemTitle('注文は在庫を確かめてから受ける')),
+                        text: known(Knowledge.makeItemText('注文は在庫を確かめてから受ける。')),
+                        labels: { when: 'as_is', kind: 'rule', origin: 'said' },
+                        about: [known(Knowledge.makeStickyRef('OrderToCash.OrderPlaced'))],
+                    },
+                    sources: [
+                        {
+                            session,
+                            message: known(Knowledge.makeMessageRef('m1')),
+                            at: new Date(),
+                            quote: known(Knowledge.makeQuote('在庫を見てから受ける')),
+                        },
+                    ],
+                    reason: known(Knowledge.makeReason('heard in the session')),
+                },
+            ],
+        });
+        expect(applied.items).toHaveLength(1);
+        await writeFile(flag, '');
+
+        expect((await until(ctx, run, ['Completed', 'Failed'])).state).toBe('Completed');
+        expect(log.some((l) => l.includes('changed files other than .dt/.dtes sources'))).toBe(false);
+        expect(await readFile(path.join(ctx.root, RETURNS), 'utf8')).toContain('event ReturnCancelled');
+        // the subscriber goes on: the next run is claimed and run
+        const next = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Next.')]);
+        expect((await until(ctx, next, ['Completed', 'Failed'])).state).toBe('Completed');
+        expect(log.some((l) => l.includes('not claiming further runs'))).toBe(false);
+        // the agent may read knowledge/, never edit it
+        const [invocation] = await ctx.invocations();
+        expect(invocation.args).toEqual(expect.arrayContaining(['Edit(./knowledge)', 'Edit(./knowledge/**)']));
+    });
 
     integration('an agent that writes a configuration file in any case beside a -c file outside the workspace: its run fails', async () => {
         const ctx = await setup();

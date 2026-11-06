@@ -288,7 +288,8 @@ export interface DslTools {
 export interface WorkspaceFiles {
     /**
      * Every file below the root (relative, `/`-separated) with a fingerprint that changes when it is written, except
-     * `.domaintrail/` and the directories that are never the agent's (`.git`, `node_modules`).
+     * `.domaintrail/` and the directories that are never the agent's (`.git`, `node_modules`); the runner's skips those
+     * only dt writes too (the `files` knowledge store's `knowledge/`, which the session may write while the agent runs).
      */
     scan(): Promise<ReadonlyMap<string, string>>;
     /** The DSL sources (`.dt` and `.dtes` matching the configured `sources`), relative to the root. */
