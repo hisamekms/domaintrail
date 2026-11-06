@@ -93,7 +93,8 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 
 - `dt guide [topic]` — this reference, one section, or `--all`.
 - `dt fmt` — format the `.dt` and `.dtes` files in place (`--check` for CI).
-- `dt migrate dtes` — rewrite `.dtes` files of v0.1 (`actor`, `target` in a command → `by`, `handledBy`).
+- `dt migrate dtes` — rewrite `.dtes` files of earlier versions (v0.1: `actor`, `target` in a command → `by`,
+  `handledBy`; 0.8: the `reads` of a command a policy issues → that policy's `reads`).
 - `dt check` — check the model and its stormings (`.dtes`); exit 0 when there are no errors (`--format json` for JSON).
 - `dt generate ts` — check, then write the TypeScript (and the contract tests, if configured).
 - `dt show <name>` — one element, command or state resolved, with who uses it; read it instead of the `.dt` files.
@@ -2145,7 +2146,8 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
   and timeline of a stage on its own line, an element without clauses on one line, comments kept. It puts the clauses
   of a body in one order, each with its comments: `ref`, `by`, `reads`, `handledBy`, `emits`, `on`, `issues`, `from`,
   `status`, `resolution`, `level`; in a policy `on`, `reads`, `issues`, `by` (「〜が起きたら、〜を見て、〜を出す」).
-- Files written for v0.1 (`actor X`, `target X` in a command) are errors (S023): `dt migrate dtes` rewrites them.
+- Files written for v0.1 (`actor X`, `target X` in a command) are errors (S023), and so are the `reads` of a command a
+  policy issues written for 0.8 (S030): `dt migrate dtes` rewrites them.
 
 A storming in stages:
 
@@ -2299,7 +2301,8 @@ storming Dispatch "配車" {
 | `hotspot` | `on` | any sticky | the question is about it (one) |
 
 - Only these keywords; a list is one clause, `emits A, B` (`dt fmt` merges `by A` and `by B` into `by A, B`).
-  `actor` and `target` inside a body are v0.1 (S023): `dt migrate dtes` rewrites them.
+  `actor` and `target` inside a body are v0.1 (S023), and `reads` on a command a policy issues is 0.8 (S030):
+  `dt migrate dtes` rewrites them.
 - **From outside.** `event E { from Ext }` when we only record a fact the outside system decided (an order arrived, a
   payment was authorised); a command `by Ext` when, on what it sends, our aggregate decides something (accepts or
   rejects it).
