@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { contextNames, formatDomain } from '@domaintrail/modeling';
-import { formatStorming, isStormingFile, migrateStorming } from '@domaintrail/storming';
+import { formatStorming, isStormingFile, migrateStorming, openGaps } from '@domaintrail/storming';
 import { generateTypeScript, policyModes, staysInside, testsWarnings } from '@domaintrail/generation';
 import { type Analysis, analyze } from '@domaintrail/analysis';
 import { compareDiagnostics, formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/kernel';
@@ -60,7 +60,7 @@ const formatOption = () => new Option('--format <format>', 'output format').choi
 /** What `--format json` prints: one JSON document on stdout (see schema/diagnostics.schema.json). */
 interface JsonReport {
     diagnostics?: JsonDiagnostic[];
-    summary?: { files: number; errors: number; warnings: number };
+    summary?: { files: number; errors: number; warnings: number; infos?: number };
     /** Output directories written by `generate ts`, relative to the working directory. */
     written?: string[];
     /** `generate ts`: advice about the project (what text mode prints after `hint: `). */
@@ -101,18 +101,22 @@ async function runCheck(config: ResolvedConfig, io: CliIO, deps: CliDeps, report
     const sources = await deps.loadWorkspace(root, config.sources, config.respectGitignore);
     const analysis = await journeyCheck(root, await analyze(sources));
     const errors = analysis.diagnostics.filter((d) => d.severity === 'error').length;
-    const warnings = analysis.diagnostics.length - errors;
+    const warnings = analysis.diagnostics.filter((d) => d.severity === 'warning').length;
+    const infos = analysis.diagnostics.filter((d) => d.severity === 'info').length;
     const noFiles = noSourcesMessage(config);
     if (report) {
         report.diagnostics = analysis.diagnostics.map(jsonDiagnostic);
-        report.summary = { files: sources.length, errors, warnings };
+        report.summary = { files: sources.length, errors, warnings, ...(infos > 0 && { infos }) };
         if (sources.length === 0) report.error = noFiles;
         return analysis;
     }
     for (const d of analysis.diagnostics) {
         for (const line of formatDiagnostic(d).split('\n')) (d.severity === 'error' ? io.err : io.out)(line);
     }
-    const summary = `${sources.length} file(s) checked: ${errors} error(s), ${warnings} warning(s).`;
+    // the gaps an open hotspot keeps open (ADR 0032): not errors, but not to be forgotten
+    const gaps = analysis.stormings.stormings.flatMap((s) => openGaps(s).map((g) => `${s.id}/${g.elementId}`));
+    if (gaps.length) io.out(`${gaps.length} element(s) incomplete under open hotspots: ${gaps.join(', ')}.`);
+    const summary = `${sources.length} file(s) checked: ${errors} error(s), ${warnings} warning(s)${infos ? `, ${infos} info(s)` : ''}.`;
     if (sources.length === 0) io.err(noFiles);
     else (errors ? io.err : io.out)(summary);
     return analysis;
@@ -165,7 +169,8 @@ of topics to read with \`dt guide <topic>\` (e.g. \`dt guide requires\`) when yo
 Prints \`file:line:col - error CODE: message\` per problem (errors on stderr, warnings on stdout), followed by an
 indented \`hint:\` line when there is a suggested fix, then a summary line. With --format json, prints one JSON document
 on stdout instead: {"diagnostics": [...], "summary": {...}}, or {"error": "..."} when the check could not run.
-Checks the Event Storming files (.dtes) too, their \`ref\`s against the .dt model; their rules start with S.
+Checks the Event Storming files (.dtes) too, their \`ref\`s against the .dt model; their rules start with S. An info
+(on stdout) only informs; the gaps of a storming that open hotspots keep undecided are listed before the summary.
 Exits 0 when there are no errors, 1 on errors or when no .dt or .dtes file is found, 2 on an invalid config.
 
 Examples:

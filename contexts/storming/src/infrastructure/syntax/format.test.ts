@@ -80,8 +80,7 @@ describe('formatStorming', () => {
                 '    ref X.Y.target // the .dt command',
                 '    actor P',
                 '',
-                '    emits E',
-                '    emits F',
+                '    emits E, F',
                 '  }',
                 '',
                 '  timeline T {',
@@ -140,7 +139,7 @@ describe('formatStorming', () => {
 
     test('invalid but well-formed files are formatted (validation is not the formatter’s)', () => {
         expect(formatStorming('storming S { policy P { target Nowhere target Nowhere ref A.B } timeline T { P } }')).toBe(
-            lines('storming S {', '  policy P {', '    ref A.B', '    target Nowhere', '    target Nowhere', '  }', '  timeline T {', '    P', '  }', '}'),
+            lines('storming S {', '  policy P {', '    ref A.B', '    target Nowhere, Nowhere', '  }', '  timeline T {', '    P', '  }', '}'),
         );
     });
 
@@ -203,6 +202,16 @@ describe('formatStorming', () => {
         );
         expect(formatStorming(text)).toBe(out);
         expect(formatStorming(out)).toBe(out);
+    });
+
+    test('repeated relations of one keyword are one list, unless a comment is on one of them', () => {
+        expect(formatStorming('storming S { command C { by A by B emits E reads R emits F } }')).toBe(
+            lines('storming S {', '  command C {', '    by A, B', '    reads R', '    emits E, F', '  }', '}'),
+        );
+        const commented = lines('storming S {', '  policy P {', '    on A // the first', '    on B', '  }', '}');
+        expect(formatStorming(commented)).toBe(commented);
+        const hotspot = lines('storming S {', '  hotspot H {', '    on A', '    on B', '  }', '}');
+        expect(formatStorming(hotspot)).toBe(hotspot);
     });
 
     test('a syntax error throws FormatError', () => {

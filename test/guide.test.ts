@@ -88,7 +88,7 @@ describe('dt guide', () => {
         expect([...keywords].filter((k) => !new RegExp(`\\b${k}\\b`).test(examples))).toEqual([]);
     });
 
-    test('each S rule has an example storming that reports it and nothing else against the workspace, formatted', async () => {
+    test('each S rule has an example storming that reports it and nothing else (infos aside) against the workspace, formatted', async () => {
         const rules = [...(await ruleIds()).matchAll(/'(S\d{3})'/g)].map((m) => m[1]);
         const examples = blocks('dtes').flatMap((b) => {
             const code = /^\/\/ (S\d{3})\n/.exec(b)?.[1];
@@ -98,7 +98,9 @@ describe('dt guide', () => {
         for (const [code, block] of examples) {
             expect(formatStorming(block)).toBe(block);
             const a = await check({ ...workspace(), 'example.dtes': block });
-            expect({ code, found: [...new Set(a.diagnostics.map((d): string => d.code))] }).toEqual({ code, found: [code] });
+            // an info (S029) informs about the rest of a one-problem example: only its own rule counts
+            const found = a.diagnostics.filter((d) => d.code === code || d.severity !== 'info');
+            expect({ code, found: [...new Set(found.map((d): string => d.code))] }).toEqual({ code, found: [code] });
         }
     });
 

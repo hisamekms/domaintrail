@@ -82,7 +82,12 @@ describe('analyze with .dtes sources', () => {
 
     test('reports S010–S013 at their file and line, merged with the .dt diagnostics', async () => {
         const a = await check({ 'domain.dt': DT, 'flow.dtes': FLOW });
-        expect(a.diagnostics.map(where)).toEqual(['flow.dtes:4 S011', 'flow.dtes:5 S010', 'flow.dtes:8 S012', 'flow.dtes:15 S013']);
+        expect(a.diagnostics.filter((d) => d.severity !== 'info').map(where)).toEqual([
+            'flow.dtes:4 S011',
+            'flow.dtes:5 S010',
+            'flow.dtes:8 S012',
+            'flow.dtes:15 S013',
+        ]);
         expect(a.ok).toBe(false);
         expect(a.syntaxOk).toBe(true);
         expect(a.files).toEqual(['domain.dt', 'flow.dtes']);
@@ -112,7 +117,7 @@ describe('analyze with .dtes sources', () => {
     test('without a .dt model the refs are not checked, the local rules are', async () => {
         const a = await check({ 'domain.dt': 'context Delivery {', 'flow.dtes': FLOW.replace('handledBy Shipment', 'handledBy Gone') });
         expect(a.model).toBeUndefined();
-        expect(a.diagnostics.map(where)).toEqual(['domain.dt:1 SYNTAX', 'flow.dtes:9 S003']);
+        expect(a.diagnostics.filter((d) => d.severity !== 'info').map(where)).toEqual(['domain.dt:1 SYNTAX', 'flow.dtes:9 S003']);
     });
 
     test('a workspace of .dtes files only is valid', async () => {

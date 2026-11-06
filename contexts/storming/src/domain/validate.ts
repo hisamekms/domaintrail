@@ -21,6 +21,7 @@ import {
     type Timeline,
 } from './ir.js';
 import { labelOverflowsNote } from './sticky-note.js';
+import { designGaps, hasDesignLevel, type Gap, type Missing } from './gaps.js';
 import { branchPoints, drawnInSections, onCycle, rejoinPoint, topLevel, trunk, type Section } from './stages.js';
 
 /** How an element kind is named in messages. */
@@ -77,6 +78,7 @@ const line = (range: SourceRange): number => range.start.line;
  *   - S026: one relation written twice in an element (`emits A` twice, `emits A, A`)
  *   - S027: an actor, external system, aggregate or read model that no relation names, unless an open hotspot is `on` it
  *   - S028: an event both emitted by a command and arriving `from` an external system
+ *   - S029 (info): at Design Level (a command or policy in the storming), an event no command emits and from no external
  * Not diagnosed (spec §11): timeline order against causality, Big Picture completeness (unreferenced events, events in
  * no timeline, read models without `from`) and the optional Info rule on policies with several `on` and `issues`.
  */
@@ -168,28 +170,40 @@ function validateStorming(storming: Storming): Diagnostic[] {
         return undefined;
     };
 
-    // ADR 0032: an open hotspot `on` an element marks what is missing there as an open question (S008, S024, S027)
-    const questions = new Map<string, string>();
-    /** The elements a relation names (a hotspot's `on` aside), whatever the relation's validity: S027's uses. */
-    const named = new Set<string>();
+    // ADR 0032: the gaps of the Design Level (S024, S008, S027); an open hotspot `on` an element makes its gap a question
+    const gaps = new Map(designGaps(storming).map((g) => [g.elementId, g]));
+    /** The gap of an element that no open hotspot asks about: an error. */
+    const unasked = (el: NodeElement): Gap | undefined => {
+        const g = byId.get(el.id) === el ? gaps.get(el.id) : undefined;
+        return g && g.question === undefined ? g : undefined;
+    };
+    /** An ID for the hotspot a hint suggests, clashing with no declaration (S001). */
+    const freeId = (base: string): string => {
+        let id = base;
+        for (let n = 2; byId.has(id); n++) id = `${base}${n}`;
+        return id;
+    };
+    const dontGuess = (el: NodeElement, question: string): string =>
+        `don't guess: if it is not decided yet, add \`hotspot ${freeId(`${el.id}Open`)} "${question}" { on ${el.id} }\`, which records the open question and turns this error off`;
     /** The policies that issue each command, and the commands that emit each event (written, of the right kinds). */
     const issuers = new Map<string, string[]>();
     const emitters = new Map<string, string[]>();
     for (const d of decls) {
-        if (byId.get(d.id) !== d || !('clauses' in d)) continue;
+        if (byId.get(d.id) !== d || !('clauses' in d) || d.kind === 'hotspot') continue;
         for (const c of d.clauses) {
             if (c.type !== 'relation') continue;
-            if (d.kind === 'hotspot') {
-                const status = d.clauses.find((x) => x.type === 'status')?.value;
-                if (c.keyword === 'on' && status !== 'resolved' && !questions.has(c.target)) questions.set(c.target, d.id);
-                continue;
-            }
-            named.add(c.target);
             const target = byId.get(c.target)?.kind;
             if (d.kind === 'policy' && c.keyword === 'issues' && target === 'command') issuers.set(c.target, [...(issuers.get(c.target) ?? []), d.id]);
             if (d.kind === 'command' && c.keyword === 'emits' && target === 'event') emitters.set(c.target, [...(emitters.get(c.target) ?? []), d.id]);
         }
     }
+    const designLevel = hasDesignLevel(storming);
+    /** The events a policy is `on`. */
+    const triggers = new Set(
+        decls.flatMap((d) =>
+            d.kind === 'policy' && byId.get(d.id) === d ? d.clauses.flatMap((c) => (c.type === 'relation' && c.keyword === 'on' ? [c.target] : [])) : [],
+        ),
+    );
 
     const stages = storming.elements.filter((el): el is Stage => el.kind === 'stage');
     const top = topLevel(storming);
@@ -515,12 +529,9 @@ function validateStorming(storming: Storming): Diagnostic[] {
                 );
             }
         }
-        const missing = [
-            ...(!has(el, 'by') && !policies.length ? [MISSING.by] : []),
-            ...(!has(el, 'handledBy') ? [MISSING.handledBy] : []),
-            ...(!has(el, 'emits') ? [MISSING.emits] : []),
-        ];
-        if (!missing.length || questions.has(el.id)) return;
+        const gap = unasked(el);
+        if (!gap) return;
+        const missing = (['by', 'handledBy', 'emits'] as const).filter((m) => gap.missing.includes(m)).map((m) => MISSING[m]);
         const emitted = el.clauses.find((c): c is Extract<Clause, { type: 'relation' }> => c.type === 'relation' && c.keyword === 'emits');
         const detail = emitted && !has(el, 'handledBy') ? ` It emits '${emitted.target}', but nothing handles it to produce that event.` : '';
         out.push(
@@ -530,7 +541,7 @@ function validateStorming(storming: Storming): Diagnostic[] {
                 `Command '${el.id}' does not say ${listed(missing.map((m) => m.what))}.${detail} At Design Level a command's row is \`by\` (or a policy's \`issues\`) → \`handledBy\` → \`emits\`.`,
                 el.nameRange,
                 {
-                    hint: `add ${listed(missing.map((m) => m.clause))} if it is decided; ${dontGuess(el, missing[0]!.question)}`,
+                    hint: `add ${listed(missing.map((m) => m.clause))} if it is decided; ${dontGuess(el, commandQuestion(gap.missing))}`,
                     elementId: elementId(el.id),
                 },
             ),
@@ -540,7 +551,24 @@ function validateStorming(storming: Storming): Diagnostic[] {
     /** S028: an event comes from a command's handler or from an external system, not both. */
     function checkEventSource(el: NodeElement): void {
         const commands = emitters.get(el.id);
-        if (!commands?.length || byId.get(el.id) !== el) return;
+        if (byId.get(el.id) !== el) return;
+        // S029 (info): at Design Level, an event no command emits and that comes from no external system
+        // an event a policy reacts to and nothing produces is a trigger (a time event: 「毎晩2時になった」), not reported
+        if (!commands?.length && designLevel && !has(el, 'from') && !triggers.has(el.id)) {
+            out.push(
+                esDiagnostic(
+                    'info',
+                    'S029',
+                    `Event '${el.id}' has no source at Design Level: no command emits it, and it comes \`from\` no external system.`,
+                    el.nameRange,
+                    {
+                        hint: `write \`emits ${el.id}\` in the command that produces it, \`from <external>\` if it arrives from outside, or a time event and a policy for a schedule; nothing is needed while the storming is at Big Picture there`,
+                        elementId: elementId(el.id),
+                    },
+                ),
+            );
+        }
+        if (!commands?.length) return;
         for (const c of el.clauses) {
             if (c.type !== 'relation' || c.keyword !== 'from' || byId.get(c.target)?.kind !== 'external') continue;
             out.push(
@@ -560,12 +588,12 @@ function validateStorming(storming: Storming): Diagnostic[] {
 
     /** S027: an actor, external system, aggregate or read model that no relation names is a sticky of no step. */
     function checkUsed(el: NodeElement): void {
-        if (named.has(el.id) || questions.has(el.id) || byId.get(el.id) !== el) return;
+        if (!unasked(el)) return;
         const how: Record<string, string> = {
-            actor: `\`by ${el.id}\` in the command it issues`,
+            actor: `\`by ${el.id}\` in the command it issues (or the policy it applies)`,
             external: `\`by ${el.id}\` in the command it issues, \`handledBy ${el.id}\` in the command it handles, or \`from ${el.id}\` in the event it sends`,
             aggregate: `\`handledBy ${el.id}\` in the command it handles`,
-            readmodel: `\`reads ${el.id}\` in the command whose issuer looks at it`,
+            readmodel: `\`reads ${el.id}\` in the command whose issuer looks at it, or \`from <event>\` for what it shows`,
         };
         out.push(
             esDiagnostic(
@@ -600,8 +628,9 @@ function validateStorming(storming: Storming): Diagnostic[] {
     }
 
     function checkPolicy(el: NodeElement): void {
-        const missing = (['on', 'issues'] as const).filter((k) => !has(el, k));
-        if (!missing.length || questions.has(el.id)) return;
+        const gap = unasked(el);
+        const missing = (['on', 'issues'] as const).filter((k) => gap?.missing.includes(k));
+        if (!missing.length) return;
         const clauses = missing.length === 2 ? 'neither `on` nor `issues`' : `no \`${missing[0]}\``;
         out.push(
             esDiagnostic(
@@ -610,7 +639,7 @@ function validateStorming(storming: Storming): Diagnostic[] {
                 `Policy '${el.id}' has ${clauses}; a policy reacts to at least one event (\`on\`) and issues at least one command (\`issues\`).`,
                 el.nameRange,
                 {
-                    hint: `add ${missing.map((k) => (k === 'on' ? '`on <Event>`' : '`issues <Command>`')).join(' and ')} if it is decided; ${dontGuess(el, missing[0] === 'on' ? '何に反応する？' : '何を発行する？')}`,
+                    hint: `add ${missing.map((k) => (k === 'on' ? '`on <Event>`' : '`issues <Command>`')).join(' and ')} if it is decided; ${dontGuess(el, missing.length === 2 ? '何に反応し、何を発行する？' : missing[0] === 'on' ? '何に反応する？' : '何を発行する？')}`,
                     elementId: elementId(el.id),
                 },
             ),
@@ -663,16 +692,19 @@ const has = (el: NodeElement, keyword: RelationKeyword): boolean =>
 /** `a`, `a and b`, `a, b and c`. */
 const listed = (items: readonly string[]): string => (items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
 
-/** The hint of an incomplete element: fill it when it is decided, never with a guess (ADR 0032). */
-const dontGuess = (el: NodeElement, question: string): string =>
-    `don't guess: if it is not decided yet, add \`hotspot ${el.id}Open "${question}" { on ${el.id} }\`, which records the open question and turns this error off`;
-
 /** What S024 says of each relation a command lacks. */
 const MISSING = {
-    by: { clause: '`by <actor or external>` (or a policy that `issues` it)', what: 'who issues it', question: '誰が発行する？' },
-    handledBy: { clause: '`handledBy <aggregate or external>`', what: 'who handles it', question: '誰が処理する？' },
-    emits: { clause: '`emits <event>`', what: 'its outcomes', question: '結果は何？' },
+    by: { clause: '`by <actor or external>` (or a policy that `issues` it)', what: 'who issues it' },
+    handledBy: { clause: '`handledBy <aggregate or external>`', what: 'who handles it' },
+    emits: { clause: '`emits <event>`', what: 'its outcomes' },
 } as const;
+
+/** The question of the hotspot S024 suggests, of everything a command lacks: 「誰が発行し、誰が処理する？結果は？」. */
+function commandQuestion(missing: readonly Missing[]): string {
+    const who = [...(missing.includes('by') ? ['誰が発行'] : []), ...(missing.includes('handledBy') ? ['誰が処理'] : [])];
+    const asked = who.length === 2 ? `${who[0]}し、${who[1]}する？` : who.length === 1 ? `${who[0]}する？` : '';
+    return `${asked}${missing.includes('emits') ? (asked ? '結果は？' : '結果は何？') : ''}`;
+}
 
 /**
  * S006's hint for a relation an element kind does not take: the relation that says what was meant (ADR 0032), or
@@ -686,7 +718,6 @@ function misplacedHint(kind: NodeElementKind, keyword: RelationKeyword, target: 
         if (keyword === 'from') return `remove it: a command is issued \`by\` someone, who \`reads\` read models to decide it`;
     }
     if (kind === 'policy') {
-        if (keyword === 'by') return `remove it: a policy is the issuer of the commands it \`issues\``;
         if (keyword === 'emits') return `remove it: a policy emits nothing; the command it issues does (\`emits ${target}\` in that command)`;
         if (keyword === 'handledBy') return `remove it: write \`handledBy ${target}\` in the command the policy \`issues\``;
         if (keyword === 'reads')
@@ -743,6 +774,8 @@ function kindHint(owner: NodeElement, keyword: RelationKeyword, target: AnyDecla
         }
     }
     if (owner.kind === 'policy') {
+        if (keyword === 'by' && target.kind !== 'actor')
+            return `who applies a policy by hand is an actor (\`by <actor>\`); a system's rule needs no \`by\`: the policy is its issuer`;
         if (keyword === 'on' && target.kind === 'command') return `a policy reacts to an event: write \`on <an event '${t}' emits>\``;
         if (keyword === 'issues' && target.kind === 'event')
             return `a policy issues commands; an event is emitted by the command it issues (\`emits ${t}\` in that command)`;

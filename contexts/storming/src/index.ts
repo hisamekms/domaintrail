@@ -65,6 +65,7 @@ export {
     type StageOrder,
 } from './domain/stages.js';
 export type { StormingRuleId } from './domain/rule-ids.js';
+export { designGaps, hasDesignLevel, openGaps, openQuestions, type Gap, type Missing } from './domain/gaps.js';
 export { isStormingFile } from './domain/files.js';
 export { estimatedLabelLines, labelOverflowsNote, LINES_AT_FLOOR, STICKY_NOTE } from './domain/sticky-note.js';
 

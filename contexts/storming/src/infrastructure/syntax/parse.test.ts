@@ -115,7 +115,7 @@ describe('ES01: parsing the spec sample (docs/dtes-v0.1.md §4)', () => {
     test('source ranges: declarations, names, clauses, relation targets and steps (1-based, end exclusive)', async () => {
         const [s] = await parseOne(SAMPLE);
         const file = 'a.dtes';
-        expect(s.range).toEqual({ file, start: { line: 1, column: 1 }, end: { line: 70, column: 2 } });
+        expect(s.range).toEqual({ file, start: { line: 1, column: 1 }, end: { line: 68, column: 2 } });
         expect(s.nameRange).toEqual({ file, start: { line: 1, column: 10 }, end: { line: 1, column: 30 } });
         const cancel = element(s, 'CancelShipment');
         expect(cancel.range).toEqual({ file, start: { line: 23, column: 3 }, end: { line: 29, column: 4 } });
@@ -125,9 +125,9 @@ describe('ES01: parsing the spec sample (docs/dtes-v0.1.md §4)', () => {
         expect(target.type === 'relation' && target.targetRange).toEqual({ file, start: { line: 27, column: 15 }, end: { line: 27, column: 23 } });
         expect(target.range).toEqual({ file, start: { line: 27, column: 5 }, end: { line: 27, column: 23 } });
         const [first, group] = timeline(s, 'Normal').steps;
-        expect(first.range).toEqual({ file, start: { line: 51, column: 5 }, end: { line: 51, column: 22 } });
-        expect(group.type === 'group' && group.nameRange).toEqual({ file, start: { line: 52, column: 11 }, end: { line: 52, column: 25 } });
-        expect(group.type === 'group' && group.events[1].range).toEqual({ file, start: { line: 54, column: 7 }, end: { line: 54, column: 19 } });
+        expect(first.range).toEqual({ file, start: { line: 49, column: 5 }, end: { line: 49, column: 22 } });
+        expect(group.type === 'group' && group.nameRange).toEqual({ file, start: { line: 50, column: 11 }, end: { line: 50, column: 25 } });
+        expect(group.type === 'group' && group.events[1].range).toEqual({ file, start: { line: 52, column: 7 }, end: { line: 52, column: 19 } });
     });
 });
 
@@ -159,7 +159,7 @@ describe('end to end with the validator (T3)', () => {
             '  }',
             '}',
         );
-        const ds = validateStormings(await parseOne(text));
+        const ds = validateStormings(await parseOne(text)).filter((d) => d.severity !== 'info');
         expect(ds.map((d) => [d.code, d.start.line, d.start.column])).toEqual([
             ['S004', 6, 5],
             ['S005', 9, 5],
@@ -339,6 +339,14 @@ describe('syntax errors (spec §11 Syntax: 不正なブロック, 未知の関�
         await syntaxErrors('storming S {\n  event E');
         const [d] = await syntaxErrors(wrap('event E "unterminated'));
         expect(d.start.line).toBe(2);
+    });
+
+    test('a near miss of a keyword gets a suggestion (ADR 0032)', async () => {
+        const message = async (text: string): Promise<string> => (await syntaxErrors(text))[0]!.message;
+        expect(await message('storming S {\n  command C {\n    handledby G\n  }\n}')).toEndWith("(did you mean 'handledBy'?)");
+        expect(await message('storming S {\n  readModel R\n}')).toEndWith("(did you mean 'readmodel'?)");
+        expect(await message('storming S {\n  command C { by A emit E }\n}')).toEndWith("(did you mean 'emits'?)");
+        expect(await message('storming S {\n  event E\n  Unrelated\n}')).not.toContain('did you mean');
     });
 
     test('an unexpected end of file is named as such, not as an empty token', async () => {

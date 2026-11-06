@@ -40,12 +40,12 @@ beforeAll(async () => {
 describe('analyzeStormings', () => {
     test('links the refs against the model it is given, after the local rules, sorted', async () => {
         const a = await analyzeStormings([{ path: 'flow.dtes', text: FLOW }], model);
-        expect(a.diagnostics.map(where)).toEqual(['flow.dtes:2 S010', 'flow.dtes:5 S003']);
+        expect(a.diagnostics.filter((d) => d.severity !== 'info').map(where)).toEqual(['flow.dtes:2 S010', 'flow.dtes:5 S003']);
         expect(a).toMatchObject({ files: ['flow.dtes'], syntaxOk: true, stormings: [{ id: 'Delivery' }] });
     });
 
     test('without a model the refs are not checked, the local rules are', async () => {
         const a = await analyzeStormings([{ path: 'flow.dtes', text: FLOW }], undefined);
-        expect(a.diagnostics.map(where)).toEqual(['flow.dtes:5 S003']);
+        expect(a.diagnostics.filter((d) => d.severity !== 'info').map(where)).toEqual(['flow.dtes:5 S003']);
     });
 });

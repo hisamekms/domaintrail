@@ -174,7 +174,7 @@ const STICKIES: readonly NodeElementKind[] = ['event', 'actor', 'external', 'com
  */
 export const RELATION_RULES: Readonly<Partial<Record<NodeElementKind, Readonly<Partial<Record<RelationKeyword, readonly NodeElementKind[]>>>>>> = {
     command: { by: ['actor', 'external'], reads: ['readmodel'], handledBy: ['aggregate', 'external'], emits: ['event'] },
-    policy: { on: ['event'], issues: ['command'] },
+    policy: { by: ['actor'], on: ['event'], issues: ['command'] },
     readmodel: { from: ['event'] },
     event: { from: ['external'] },
     hotspot: { on: STICKIES },

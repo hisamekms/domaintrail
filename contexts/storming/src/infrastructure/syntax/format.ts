@@ -18,8 +18,10 @@ export class FormatError extends Error {}
  * - No space around the dots of a `ref` path, nor around the hyphens of a `level` (`level big-picture`).
  * - Clauses go in one canonical order (ADR 0032), each with its comments (those on lines of their own above it and the
  *   one after it on its line): `ref`, then the relations `by`, `reads`, `handledBy`, `emits`, `on`, `issues`, `from`,
- *   then `status`, `resolution` and `level`; clauses of one kind keep their order. `emits A, B` stays one clause, with
- *   a space after each comma and none before it.
+ *   then `status`, `resolution` and `level`; clauses of one kind keep their order. Repeated relations of one keyword
+ *   are one clause (`by A` and `by B` → `by A, B`, unless a comment is on one of them; `handledBy` and a hotspot's `on`,
+ *   which take one, aside), with a
+ *   space after each comma and none before it.
  * - A comment on the line of a token stays there, one space after it; other comments stay on their own line.
  */
 
@@ -128,14 +130,15 @@ const rankOf = (c: ast.EsClause): number =>
  */
 function inCanonicalOrder(text: string, file: ast.EsFile, comments: readonly Comment[]): string {
     const edits: { from: number; to: number; text: string }[] = [];
+    const hasComment = (from: number, to: number): boolean => comments.some((k) => k.offset >= from && k.offset < to);
     for (const storming of file.stormings) {
         for (const el of storming.elements) {
             if (!ast.isEsNode(el) || el.clauses.length < 2) continue;
             const ranks = el.clauses.map(rankOf);
-            if (ranks.every((r, i) => i === 0 || ranks[i - 1]! <= r)) continue;
             const open = el.$cstNode && CstUtils.streamCst(el.$cstNode).find((n) => isLeafCstNode(n) && n.text === '{' && n.astNode === el);
             if (!open) continue;
-            const chunks: { text: string; rank: number; lineComment: boolean }[] = [];
+            type Chunk = { text: string; rank: number; lineComment: boolean; clause: ast.EsClause; start: number; end: number; i: number };
+            const chunks: Chunk[] = [];
             let start = open.end;
             for (const [i, c] of el.clauses.entries()) {
                 let end = c.$cstNode!.end;
@@ -146,16 +149,41 @@ function inCanonicalOrder(text: string, file: ast.EsFile, comments: readonly Com
                     end = after.end;
                     lineComment = after.text.startsWith('//');
                 }
-                chunks.push({ text: text.slice(start, end), rank: ranks[i]!, lineComment });
+                chunks.push({ text: text.slice(start, end), rank: ranks[i]!, lineComment, clause: c, start, end, i });
                 start = end;
             }
-            const sorted = chunks.map((c, i) => ({ ...c, i })).sort((a, b) => a.rank - b.rank || a.i - b.i);
+            const sorted = [...chunks].sort((a, b) => a.rank - b.rank || a.i - b.i);
+            // one keyword, one clause: `by A` and `by B` (each without a comment) are written `by A, B` (a second
+            // `handledBy` or hotspot `on` is S004: left as it is)
+            const keywordOf = (c: ast.EsClause): string | undefined => (ast.isEsRelationClause(c) ? c.keyword : undefined);
+            const merged: Chunk[] = [];
+            for (const c of sorted) {
+                const last = merged.at(-1);
+                const keyword = keywordOf(c.clause);
+                const mergeable =
+                    last &&
+                    keyword !== undefined &&
+                    !ast.isEsHotspot(el) &&
+                    keyword !== 'handledBy' &&
+                    keywordOf(last.clause) === keyword &&
+                    !last.lineComment &&
+                    last.end === last.clause.$cstNode!.end &&
+                    !hasComment(c.start, c.end);
+                if (!mergeable) {
+                    merged.push({ ...c });
+                    continue;
+                }
+                const cst = c.clause.$cstNode!;
+                const keywordLeaf = CstUtils.streamCst(cst).find((n) => isLeafCstNode(n) && n.text === keyword)!;
+                last.text += `, ${text.slice(keywordLeaf.end, cst.end).trim()}`;
+            }
+            if (merged.length === chunks.length && merged.every((c, k) => c.i === k)) continue;
             let out = '';
-            sorted.forEach((c, k) => {
-                const prev = sorted[k - 1];
+            merged.forEach((c, k) => {
+                const prev = merged[k - 1];
                 out += prev?.lineComment && !/^[ \t]*(\r?\n)/.test(c.text) ? `\n${c.text}` : c.text;
             });
-            const last = sorted.at(-1)!;
+            const last = merged.at(-1)!;
             if (last.lineComment && !/^[ \t]*\r?\n/.test(text.slice(start))) out += '\n';
             edits.push({ from: open.end, to: start, text: out });
         }

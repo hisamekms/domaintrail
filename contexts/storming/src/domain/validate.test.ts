@@ -64,7 +64,8 @@ function ir(text: string, file = 'cancel.dtes'): Storming[] {
     return stormings;
 }
 
-const validate = (text: string): Diagnostic[] => validateStormings(ir(text));
+/** The errors and warnings of a storming; the infos (S029, an event without a source) are tested on their own. */
+const validate = (text: string): Diagnostic[] => validateStormings(ir(text)).filter((d) => d.severity !== 'info');
 const summary = (ds: Diagnostic[]) => ds.map((d) => ({ code: d.code, severity: d.severity, line: d.start.line }));
 
 /** The base of spec §4: a valid storming, wrapped around `extra` declarations. */
@@ -586,7 +587,7 @@ describe('validateStormings', () => {
             ],
             [
                 'S006',
-                "Policy 'Targeted' has `handledBy Shipment`, but a policy takes `on`, `issues`.",
+                "Policy 'Targeted' has `handledBy Shipment`, but a policy takes `by`, `on`, `issues`.",
                 'remove it: write `handledBy Shipment` in the command the policy `issues`',
             ],
             ['S006', "Command 'Opened' has a `status` clause, which only a hotspot takes.", 'remove the `status` clause'],
@@ -901,9 +902,50 @@ describe('validateStormings', () => {
             { code: 'S027', severity: 'error', line: lineOf(text, 'actor Nobody') },
             { code: 'S027', severity: 'error', line: lineOf(text, 'external Silent') },
             { code: 'S027', severity: 'error', line: lineOf(text, 'aggregate Untargeted') },
-            { code: 'S027', severity: 'error', line: lineOf(text, 'readmodel Unread') },
         ]);
-        expect(ds[3]!.hint).toContain('write `reads Unread` in the command whose issuer looks at it, or remove it');
+        // a read model's own `from` is its part: one people only look at (Unread) is valid
+        // at Big Picture (no command, no policy) nothing is a gap
+        expect(validate('storming B {\n  event E\n  actor Someone\n  readmodel R\n}\n')).toEqual([]);
+    });
+
+    test('S024: the suggested hotspot asks every missing relation, under an ID no declaration has', () => {
+        const text = cancel(`  command Silent
+  hotspot SilentOpen "別の問い"`);
+        const ds = validate(text).filter((d) => d.code === 'S024');
+        expect(ds[0]!.hint).toContain('add `hotspot SilentOpen2 "誰が発行し、誰が処理する？結果は？" { on Silent }`');
+        const handled = validate(cancel(`  command Half {\n    by Customer\n  }`)).find((d) => d.code === 'S024')!;
+        expect(handled.hint).toContain('"誰が処理する？結果は？"');
+    });
+
+    test('a hotspot asks about the element of its first `on` only; a policy may be applied `by` an actor', () => {
+        const text = cancel(`  command Silent
+  hotspot Two {
+    on ReleaseFailed
+    on Silent
+  }
+  policy ByHand {
+    by Customer
+    on ShipmentCancelled
+    issues ReleaseBike
+  }
+  policy ByMachine {
+    by PaymentGateway
+    on ShipmentCancelled
+    issues ReleaseBike
+  }`);
+        expect(summary(validate(text))).toEqual([
+            { code: 'S024', severity: 'error', line: lineOf(text, 'command Silent') },
+            { code: 'S004', severity: 'error', line: lineOf(text, 'on Silent') },
+            { code: 'S003', severity: 'error', line: lineOf(text, 'by PaymentGateway') },
+        ]);
+        expect(validate(text).find((d) => d.code === 'S003')!.hint).toContain('who applies a policy by hand is an actor');
+    });
+
+    test('S029 (info): at Design Level, an event without a source; nothing at Big Picture', () => {
+        const text = cancel(`  event Arrived`);
+        const infos = validateStormings(ir(text)).filter((d) => d.severity === 'info');
+        expect(infos.map((d) => [d.code, d.start.line])).toEqual([['S029', lineOf(text, 'event Arrived')]]);
+        expect(validateStormings(ir('storming B {\n  event E\n}\n'))).toEqual([]);
     });
 
     test('S028 an event both emitted by a command and from an external system', () => {
