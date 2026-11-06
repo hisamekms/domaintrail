@@ -184,11 +184,12 @@ export function EdgeHint({ canvas, view }: { canvas: DiagramCanvas | null; view:
     const hint = useCanvasValue(
         canvas,
         (c) => {
-            if (!c || rows.length === 0 || c.isPointing()) return null;
+            if (!c || c.isPointing()) return null;
             const id = c.hoveredId();
             const item = id ? c.item(id) : undefined;
             if (item?.type !== 'edge') return null;
-            const text = rows.find((r) => r.kind === item.kind)?.text;
+            // a storming's line says what it means; other edges, what their kind means
+            const text = item.explanation ?? rows.find((r) => r.kind === item.kind)?.text;
             if (!text) return null;
             const p = c.pointer();
             return { id: item.id, text, x: p.x, y: p.y };

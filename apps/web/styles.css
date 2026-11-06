@@ -1638,6 +1638,10 @@ a.field-origin {
     stroke: var(--model-edge-quiet);
     stroke-width: 1.2;
 }
+/* above the notes: a selected line's explanation is never under a sticky */
+.react-flow__edgelabel-renderer:has(.de-explain) {
+    z-index: 1001;
+}
 .de-explain {
     position: absolute;
     pointer-events: none;

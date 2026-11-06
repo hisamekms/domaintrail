@@ -512,7 +512,8 @@ function createFlowCanvas(state: CanvasState, store: ReturnType<typeof useStoreA
             const item = state.items.get(id);
             if (!item) return undefined;
             const kind = item.type === 'internal' ? '' : item.props.kind;
-            return { id, type: item.type, elementId: item.elementId, ghost: item.ghost === true, kind };
+            const explanation = item.type === 'edge' ? item.props.tooltip : undefined;
+            return { id, type: item.type, elementId: item.elementId, ghost: item.ghost === true, kind, ...(explanation && { explanation }) };
         },
         itemBounds,
         // of an element drawn more than once, the note nearest the middle of what the canvas shows
