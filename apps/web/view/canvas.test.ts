@@ -75,6 +75,7 @@ function fakeCanvas(items: Record<string, Rect & { elementId: string }>, viewpor
             effect();
             return () => {};
         },
+        onUserInput: () => () => {},
     };
     return { canvas, calls };
 }

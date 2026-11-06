@@ -29,6 +29,7 @@ import { PrintSheet, printKind, usePrint, usePrintWhenReady, type Printer } from
 import { canvasSubject, exportFileName, sheetHeading } from './sheet';
 import { isCanvas, useNavigation, useOpenOnStormings, useSelectOnCanvas, type Navigation, type View } from './navigation';
 import { useViewSettings, type ViewSettings } from './settings';
+import { useFollow, type Follow } from './follow';
 import { FilterPopover, FilterSection, LevelSwitch, NameSwitch, SubjectName, ToolbarEnd, ToolbarSubject } from './toolbar';
 import { MODEL_VIEWS, useWorlds, type ModelView, type Worlds } from './worlds';
 
@@ -40,14 +41,19 @@ export const shortName = (name: string): string => name.split(' — ')[0] ?? nam
 
 /** The state of the view workspace: the canvas, the current view with its navigation, settings and graph. */
 export interface Workspace {
+    /** The reader's canvas: a camera move or a selection asked through it stops following (`view/follow.ts`). */
     canvas: DiagramCanvas | null;
     onMount: (canvas: DiagramCanvas) => void;
     stormings: readonly StormingView[];
+    /** The reader's navigation: showing a view or selecting through it stops following. */
     nav: Navigation;
     /** The world shown (the app bar's switch), derived from the view. */
     worlds: Worlds;
+    /** The reader's settings: a change through them stops following. */
     settings: ViewSettings;
     viewGraph: ViewGraph;
+    /** Whom the page follows (the AI, a participant), and the bare canvas and setters for their moves. */
+    follow: Follow;
     /** The catalog's filter (a session's message carries it as where it was sent from). */
     catalog: { filter: CatalogFilter; setFilter: (filter: CatalogFilter) => void };
     printer: Printer;
@@ -83,16 +89,19 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
     const { mode, lang, theme } = display;
     const [canvas, setCanvas] = useState<DiagramCanvas | null>(null);
     const stormings = useMemo(() => current?.stormings ?? [], [current?.stormings]);
-    const nav = useNavigation(canvas, current, stormings);
+    const bareNav = useNavigation(canvas, current, stormings);
+    const bareSettings = useViewSettings();
+    // what the reader's controls get: each of their moves stops following; the page's own (a view drawn, a resize, the
+    // canvas's selection becoming the navigation's) use the bare ones
+    const { follow, canvas: readerCanvas, nav, settings } = useFollow(canvas, bareNav, bareSettings);
     const worlds = useWorlds(nav.view, nav.setView);
-    const settings = useViewSettings();
     const catalog = useCatalogFilter();
     const printer = usePrint(theme);
     const [exportOptions, setExportOptions] = useExportOptions();
     // printing a diagram prints its compact layout
     const viewGraph = useViewGraph(current, nav.view, settings, stormings, settings.compact || printer.phase !== 'idle');
     usePrintWhenReady(printer, isCanvas(nav.view) ? viewGraph.graph : null);
-    useOpenOnStormings(current, nav.setView);
+    useOpenOnStormings(current, bareNav.setView);
     const [marks, setMarks] = useState<CanvasMarks | null>(null);
     const snapshots = useStormingSnapshots(stormings);
     useViewCamera(canvas, current, nav.view, settings, viewGraph, { mode, lang }, current !== null && isEmptyView(nav.view.kind, current), {
@@ -104,13 +113,13 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
         applyTheme(theme, canvas);
     }, [theme, canvas]);
 
-    useSelectOnCanvas(canvas, nav.select);
+    useSelectOnCanvas(canvas, bareNav.select);
     useCenterOnResize(canvas);
 
     const onMount = useCallback((c: DiagramCanvas) => setCanvas(c), []);
 
     return {
-        canvas,
+        canvas: readerCanvas,
         onMount,
         stormings,
         nav,
@@ -121,6 +130,7 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
         printer,
         exportOptions: { options: exportOptions, setOptions: setExportOptions },
         marks: { shown: marks, set: setMarks, snapshots },
+        follow,
     };
 }
 
