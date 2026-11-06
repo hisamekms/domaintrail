@@ -54,6 +54,16 @@ context Collaboration {
       label: Text "問い"
       on: StormingLocalName "イベント"
     }
+    /// ホットスポットの問いと解決（一度の編集で両方）。解決を書けば解決済み、消せば未解決に戻る。名前は変えない。
+    HotspotEdited "ホットスポットの編集" {
+      storming: StormingName "ストーミング"
+      path: WorkspacePath "ファイル"
+      hotspot: StormingLocalName "ホットスポット"
+      questionBefore: Text? "前の問い"
+      questionAfter: Text? "あとの問い"
+      resolutionBefore: Text? "前の解決"
+      resolutionAfter: Text? "あとの解決"
+    }
     /// ホットスポットの解決。
     HotspotResolved "解決" {
       storming: StormingName "ストーミング"

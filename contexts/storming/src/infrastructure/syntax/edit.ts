@@ -60,7 +60,20 @@ export type StickyEditInput =
           readonly uniqueName?: boolean;
       }
     /** A hotspot resolved: `status resolved` and its `resolution`. */
-    | { readonly kind: 'resolveHotspot'; readonly storming: string; readonly element: string; readonly resolution: string };
+    | { readonly kind: 'resolveHotspot'; readonly storming: string; readonly element: string; readonly resolution: string }
+    /**
+     * A hotspot's question and resolution in one edit (its name is the system's, never changed here): `expected` is what
+     * the person saw; `question` absent keeps it; `resolution` a text resolves it (`status resolved` + `resolution`),
+     * `null` reopens it (both clauses removed), absent keeps it. Both may hold line breaks (written as `\n`).
+     */
+    | {
+          readonly kind: 'hotspot';
+          readonly storming: string;
+          readonly element: string;
+          readonly expected: { readonly question?: string; readonly resolution?: string };
+          readonly question?: string;
+          readonly resolution?: string | null;
+      };
 
 /** The edit planned: the file's new text, the sticky before and after, and how many references were rewritten. */
 export interface StickyEditPlan {
@@ -262,6 +275,29 @@ function plan(text: string, storming: EsStorming, declarations: readonly EsDecla
             }
             return { ok: true, value: { text: edited, after: { name, label: input.label }, references: 0 } };
         }
+        case 'hotspot': {
+            const decl = declarations.find((d) => d.name === input.element);
+            if (!decl) return fail({ type: 'NotFound' });
+            if (!isEsHotspot(decl)) return fail({ type: 'WrongKind' });
+            const resolution = decl.clauses.find(isEsResolutionClause)?.text;
+            if (decl.label !== input.expected.question || resolution !== input.expected.resolution) return fail({ type: 'Stale', current: wordingOf(decl) });
+            const question = input.question;
+            if (question !== undefined && (question.trim().length === 0 || question.length > MAX_HOTSPOT_QUESTION)) return fail({ type: 'InvalidLabel' });
+            if (typeof input.resolution === 'string' && (input.resolution.trim().length === 0 || input.resolution.length > MAX_RESOLUTION))
+                return fail({ type: 'InvalidLabel' });
+            const splices: Splice[] = [];
+            if (question !== undefined && question !== decl.label) {
+                const labelNode = propertyNode(decl, 'label');
+                const nameNode = propertyNode(decl, 'name');
+                if (labelNode) splices.push({ offset: labelNode.offset, end: labelNode.end, text: quoteLabel(question) });
+                else if (nameNode) splices.push({ offset: nameNode.end, end: nameNode.end, text: ` ${quoteLabel(question)}` });
+            }
+            if (typeof input.resolution === 'string') splices.push(...resolveSplices(text, decl, input.resolution));
+            else if (input.resolution === null) splices.push(...reopenSplices(text, decl));
+            if (splices.length === 0) return fail({ type: 'NothingToChange' });
+            const after = { name: decl.name, ...((question ?? decl.label) !== undefined && { label: question ?? decl.label }) };
+            return { ok: true, value: { text: apply(text, splices), before: wordingOf(decl), after, references: 0 } };
+        }
         case 'resolveHotspot': {
             const decl = declarations.find((d) => d.name === input.element);
             if (!decl) return fail({ type: 'NotFound' });
@@ -273,6 +309,19 @@ function plan(text: string, storming: EsStorming, declarations: readonly EsDecla
             return { ok: true, value: { text: apply(text, splices), before: wordingOf(decl), after: wordingOf(decl), references: 0 } };
         }
     }
+}
+
+/** The splices that reopen a hotspot: its `status` and `resolution` clauses removed (each with its line when alone on it). */
+function reopenSplices(text: string, hotspot: EsHotspot): Splice[] {
+    return hotspot.clauses.flatMap((c): Splice[] => {
+        if (!(isEsStatusClause(c) || isEsResolutionClause(c)) || !c.$cstNode) return [];
+        const { offset, end } = c.$cstNode;
+        const lineStart = text.lastIndexOf('\n', offset - 1) + 1;
+        const newline = text.indexOf('\n', end);
+        const lineEnd = newline < 0 ? text.length : newline + 1;
+        const alone = text.slice(lineStart, offset).trim() === '' && text.slice(end, newline < 0 ? text.length : newline).trim() === '';
+        return [alone ? { offset: lineStart, end: lineEnd, text: '' } : { offset, end, text: '' }];
+    });
 }
 
 /** The splices that make a hotspot `status resolved` with `resolution`, keeping its other clauses where they are. */

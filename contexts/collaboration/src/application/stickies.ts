@@ -175,6 +175,20 @@ function stickyEdit(input: StickyEditInput, path: string, plan: StickyEditPlan):
             };
         case 'addHotspot':
             return { kind: 'HotspotAdded', storming, path: file, hotspot: local(plan.after.name), label: text(input.label), on: local(input.on) };
+        case 'hotspot': {
+            const question = input.question ?? input.expected.question;
+            const resolution = input.resolution === undefined ? input.expected.resolution : (input.resolution ?? undefined);
+            return {
+                kind: 'HotspotEdited',
+                storming,
+                path: file,
+                hotspot: local(input.element),
+                ...(input.expected.question !== undefined && { questionBefore: text(input.expected.question) }),
+                ...(question !== undefined && { questionAfter: text(question) }),
+                ...(input.expected.resolution !== undefined && { resolutionBefore: text(input.expected.resolution) }),
+                ...(resolution !== undefined && { resolutionAfter: text(resolution) }),
+            };
+        }
         case 'resolveHotspot':
             return { kind: 'HotspotResolved', storming, path: file, hotspot: local(input.element), resolution: text(input.resolution) };
     }

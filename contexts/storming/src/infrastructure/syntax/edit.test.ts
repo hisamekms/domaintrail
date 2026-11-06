@@ -246,4 +246,35 @@ describe('hotspots (ADR 0033)', () => {
             error: { type: 'WrongKind' },
         });
     });
+
+    test("a hotspot's question and resolution in one edit; clearing the resolution reopens it; its name never changes", async () => {
+        const source = 'storming S {\n  event A "a"\n  hotspot Q "q?" {\n    on A\n  }\n}\n';
+        const hotspot = (expected: { question?: string; resolution?: string }, change: { question?: string; resolution?: string | null }, from = source) =>
+            planned(from, { kind: 'hotspot', storming: 'S', element: 'Q', expected, ...change });
+        const both = hotspot({ question: 'q?' }, { question: '誰が？\n二行目', resolution: '係が\nする' });
+        expect(both).toBe(
+            'storming S {\n  event A "a"\n  hotspot Q "誰が？\\n二行目" {\n    on A\n    status resolved\n    resolution "係が\\nする"\n  }\n}\n',
+        );
+        const parsed = await parseStormings([{ path: 'a.dtes', text: both }]);
+        expect(parsed.stormings[0].elements.find((e) => e.id === 'Q')?.label).toBe('誰が？\n二行目');
+        // cleared: open again, the clauses' lines gone
+        expect(hotspot({ question: '誰が？\n二行目', resolution: '係が\nする' }, { resolution: null }, both)).toBe(
+            'storming S {\n  event A "a"\n  hotspot Q "誰が？\\n二行目" {\n    on A\n  }\n}\n',
+        );
+        // stale: the question or the resolution seen is no longer there
+        expect(planStickyEdit(both, { kind: 'hotspot', storming: 'S', element: 'Q', expected: { question: '誰が？\n二行目' }, resolution: 'x' })).toMatchObject(
+            {
+                ok: false,
+                error: { type: 'Stale' },
+            },
+        );
+        expect(planStickyEdit(source, { kind: 'hotspot', storming: 'S', element: 'Q', expected: { question: 'q?' }, question: 'q?' })).toEqual({
+            ok: false,
+            error: { type: 'NothingToChange' },
+        });
+        expect(planStickyEdit(source, { kind: 'hotspot', storming: 'S', element: 'A', expected: { question: 'a' }, question: 'x' })).toEqual({
+            ok: false,
+            error: { type: 'WrongKind' },
+        });
+    });
 });

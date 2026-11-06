@@ -1520,6 +1520,61 @@ describe("people's edits of the stickies (ADR 0033)", () => {
         expect(reverted).toContain('  hotspot Broken "壊れていたら？" {\n    on Arrived\n');
     });
 
+    test("a hotspot's question and resolution: one edit records both; emptying the resolution reopens it; its name stays", async () => {
+        const s = await labelledSession();
+        const { id } = await started(s);
+        value(
+            await s.use.editSticky({
+                session: id,
+                actor: actor(guest),
+                edit: { kind: 'addHotspot', storming: 'Returns', on: 'Received', name: 'ReceivedQuestion', label: '壊れていたら？' },
+                body,
+            }),
+        );
+        const both = value(
+            await s.use.editSticky({
+                session: id,
+                actor: actor(guest),
+                edit: {
+                    kind: 'hotspot',
+                    storming: 'Returns',
+                    element: 'ReceivedQuestion',
+                    expected: { question: '壊れていたら？' },
+                    question: '壊れて届いたら？',
+                    resolution: '返金する',
+                },
+                body,
+            }),
+        );
+        expect(both.request.edit).toMatchObject({
+            kind: 'HotspotEdited',
+            hotspot: 'ReceivedQuestion',
+            questionBefore: '壊れていたら？',
+            questionAfter: '壊れて届いたら？',
+            resolutionAfter: '返金する',
+        });
+        expect(await s.read('stormings/returns.dtes')).toContain(
+            '  hotspot ReceivedQuestion "壊れて届いたら？" {\n    on Received\n    status resolved\n    resolution "返金する"\n  }\n',
+        );
+        const reopened = value(
+            await s.use.editSticky({
+                session: id,
+                actor: actor(guest),
+                edit: {
+                    kind: 'hotspot',
+                    storming: 'Returns',
+                    element: 'ReceivedQuestion',
+                    expected: { question: '壊れて届いたら？', resolution: '返金する' },
+                    resolution: null,
+                },
+                body,
+            }),
+        );
+        expect(reopened.request.edit).toMatchObject({ kind: 'HotspotEdited', resolutionBefore: '返金する' });
+        expect(reopened.request.edit).not.toHaveProperty('resolutionAfter');
+        expect(await s.read('stormings/returns.dtes')).toContain('  hotspot ReceivedQuestion "壊れて届いたら？" {\n    on Received\n  }\n');
+    });
+
     describe('while a run runs (the maintainer chose to re-apply)', () => {
         /** A run claimed and started now: its base is the workspace as it is. */
         async function running(s: Session, id: C.SessionId): Promise<{ run: C.QueuedAgentRun; token: string }> {

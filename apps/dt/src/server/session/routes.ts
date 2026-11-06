@@ -1076,6 +1076,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                     'on',
                     'onLabel',
                     'onKind',
+                    'question',
                     'resolution',
                     'body',
                 ]);

@@ -419,6 +419,16 @@ function peopleEditOf(e: AgentPeopleEdit, names: ReadonlyMap<string, string>): R
             return { by, storming: edit.storming, addedHotspot: edit.hotspot, label: edit.label, on: edit.on };
         case 'HotspotResolved':
             return { by, storming: edit.storming, resolvedHotspot: edit.hotspot, resolution: edit.resolution };
+        case 'HotspotEdited':
+            return {
+                by,
+                storming: edit.storming,
+                editedHotspot: edit.hotspot,
+                ...(edit.questionBefore !== edit.questionAfter && { question: { from: edit.questionBefore ?? null, to: edit.questionAfter ?? null } }),
+                ...(edit.resolutionBefore !== edit.resolutionAfter && {
+                    resolution: { from: edit.resolutionBefore ?? null, to: edit.resolutionAfter ?? null },
+                }),
+            };
     }
 }
 

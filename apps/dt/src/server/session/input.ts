@@ -520,8 +520,42 @@ export function stickyEditInput(raw: Record<string, unknown>): Result<StickyEdit
             if (!resolution.ok) return resolution;
             return { ok: true, value: { kind: 'resolveHotspot', storming: storming.value, element: element.value, resolution: resolution.value } };
         }
+        case 'hotspot': {
+            // a hotspot's question and resolution in one edit; `resolution: null` reopens it
+            const element = field('element');
+            if (!element.ok) return element;
+            const question = optional('question');
+            if (!question.ok) return question;
+            const resolution = raw.resolution === null ? { ok: true as const, value: null } : optional('resolution');
+            if (!resolution.ok) return resolution;
+            const expected = raw.expected;
+            if (typeof expected !== 'object' || expected === null || Array.isArray(expected)) return invalid('expected', 'Expected what the page saw.');
+            const seen = (key: string): Result<string | undefined, InvalidInput> => {
+                const v: unknown = Reflect.get(expected, key);
+                return v === undefined ? { ok: true, value: undefined } : stickyField(v, `expected.${key}`);
+            };
+            const seenQuestion = seen('question');
+            if (!seenQuestion.ok) return seenQuestion;
+            const seenResolution = seen('resolution');
+            if (!seenResolution.ok) return seenResolution;
+            if (question.value === undefined && resolution.value === undefined) return invalid('question', 'Expected a question or a resolution.');
+            return {
+                ok: true,
+                value: {
+                    kind: 'hotspot',
+                    storming: storming.value,
+                    element: element.value,
+                    expected: {
+                        ...(seenQuestion.value !== undefined && { question: seenQuestion.value }),
+                        ...(seenResolution.value !== undefined && { resolution: seenResolution.value }),
+                    },
+                    ...(question.value !== undefined && { question: question.value }),
+                    ...(resolution.value !== undefined && { resolution: resolution.value }),
+                },
+            };
+        }
         default:
-            return invalid('kind', "Expected 'wording', 'addHotspot' or 'resolveHotspot'.");
+            return invalid('kind', "Expected 'wording', 'addHotspot', 'resolveHotspot' or 'hotspot'.");
     }
 }
 

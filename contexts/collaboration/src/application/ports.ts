@@ -378,7 +378,16 @@ export type StickyEditInput =
           /** A taken name gets the first free numeric suffix instead of being refused (a name the AI or dt gave). */
           readonly uniqueName?: boolean;
       }
-    | { readonly kind: 'resolveHotspot'; readonly storming: string; readonly element: string; readonly resolution: string };
+    | { readonly kind: 'resolveHotspot'; readonly storming: string; readonly element: string; readonly resolution: string }
+    /** A hotspot's question and resolution in one edit (`resolution: null` reopens it); its name is never changed. */
+    | {
+          readonly kind: 'hotspot';
+          readonly storming: string;
+          readonly element: string;
+          readonly expected: { readonly question?: string; readonly resolution?: string };
+          readonly question?: string;
+          readonly resolution?: string | null;
+      };
 
 /** Why an edit of a sticky is not made (see Storming's `StickyEditProblem`). */
 export type StickyEditProblem =
