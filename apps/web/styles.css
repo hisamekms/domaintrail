@@ -9561,3 +9561,338 @@ button.knowledge-extraction:disabled {
     border: 3px solid var(--action);
     border-radius: 6px;
 }
+
+/* ---- the stickies' actions (ADR 0033): the toolbar above the selection, its menu, the edit windows, the palette ---- */
+.sticky-layer {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 310;
+}
+.sticky-layer > * {
+    pointer-events: auto;
+}
+.sticky-layer > .sticky-status {
+    pointer-events: none;
+}
+.sticky-toolbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px var(--shadow);
+}
+.sticky-toolbar .icon-button {
+    display: inline-grid;
+    place-items: center;
+    width: 28px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: var(--text);
+}
+.sticky-toolbar .icon-button:hover,
+.sticky-toolbar .icon-button[aria-expanded='true'] {
+    background: var(--hover);
+}
+.sticky-toolbar .icon-button.added {
+    color: var(--muted);
+}
+.sticky-toolbar-count {
+    padding: 0 var(--space-2);
+    font-size: var(--fs-small);
+    color: var(--muted);
+    white-space: nowrap;
+}
+/* a menu of actions (shared/menu.tsx): groups under small headings, each item with its icon and its key */
+.action-menu {
+    position: absolute;
+    z-index: 30;
+    min-width: 14rem;
+    padding: var(--space-1);
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-raised);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px var(--shadow);
+}
+.action-menu > button {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    border: none;
+    border-radius: 5px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-size: 0.8125rem;
+    text-align: left;
+    white-space: nowrap;
+}
+.action-menu > button:hover,
+.action-menu > button:focus-visible {
+    background: var(--hover);
+}
+.action-menu-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 16px;
+    color: var(--muted);
+}
+.action-menu-label {
+    flex: 1;
+}
+.action-menu kbd,
+.command-palette kbd {
+    font: inherit;
+    font-family: var(--mono);
+    font-size: var(--fs-small);
+    color: var(--muted);
+}
+.action-menu-group {
+    padding: var(--space-1) var(--space-2) 0;
+    font-size: var(--fs-small);
+    color: var(--muted);
+}
+.action-menu-separator {
+    height: 1px;
+    margin: var(--space-1) 0;
+    background: var(--border);
+}
+/* a window anchored to a sticky: 直す, ホットスポットを付ける, 解決を書く */
+.sticky-form {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-inside);
+    padding: var(--space-3);
+    background: var(--surface-raised);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px var(--shadow);
+    font-size: var(--fs-body);
+}
+.sticky-form-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    font-size: var(--fs-small);
+    color: var(--muted);
+}
+.sticky-form-field input {
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--border-strong);
+    border-radius: 5px;
+    background: var(--panel);
+    font: inherit;
+    font-size: var(--fs-body);
+    color: var(--text);
+}
+.sticky-form-field input.mono {
+    font-family: var(--mono);
+}
+.sticky-form-field input[aria-invalid='true'] {
+    border-color: var(--error);
+}
+.sticky-form-impact,
+.sticky-form-error {
+    margin: 0;
+    font-size: var(--fs-small);
+}
+.sticky-form-impact {
+    color: var(--muted);
+}
+.sticky-form-error {
+    color: var(--error);
+}
+.sticky-form-foot {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--gap-inside);
+}
+.sticky-status {
+    position: absolute;
+    left: 50%;
+    bottom: var(--space-5);
+    transform: translateX(-50%);
+    padding: var(--space-1) var(--space-3);
+    border-radius: 6px;
+    background: var(--text);
+    color: var(--surface-raised);
+    font-size: var(--fs-small);
+}
+.sticky-status:empty {
+    display: none;
+}
+/* the command palette (shared/palette.tsx) */
+.command-palette {
+    width: min(36rem, calc(100vw - 32px));
+    margin-top: calc(var(--space-5) * 4);
+    padding: 0;
+    background: var(--surface-raised);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    box-shadow: 0 12px 40px var(--shadow);
+}
+.command-palette::backdrop {
+    background: var(--backdrop);
+}
+.command-palette-input {
+    width: 100%;
+    padding: var(--space-3) var(--space-4);
+    border: none;
+    border-bottom: 1px solid var(--border);
+    background: none;
+    font: inherit;
+    font-size: 0.9375rem;
+    color: var(--text);
+    outline: none;
+}
+.command-palette-list {
+    max-height: min(24rem, 60vh);
+    overflow: auto;
+    margin: 0;
+    padding: var(--space-1);
+    list-style: none;
+}
+.command-palette-section {
+    padding: var(--space-2) var(--space-2) var(--space-1);
+    font-size: var(--fs-small);
+    color: var(--muted);
+}
+.command-palette-item {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    border-radius: 5px;
+    cursor: pointer;
+}
+.command-palette-item[aria-selected='true'] {
+    background: var(--hover);
+}
+.command-palette-icon {
+    align-self: center;
+    display: inline-grid;
+    place-items: center;
+    width: 16px;
+    color: var(--muted);
+}
+.command-palette-label {
+    white-space: nowrap;
+}
+.command-palette-detail {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--fs-small);
+    color: var(--muted);
+}
+.command-palette-empty {
+    padding: var(--space-3);
+    color: var(--muted);
+}
+/* a person's edit in AI の作業 (session/edit-unit.tsx) */
+.edit-unit {
+    padding: var(--space-2) var(--space-3);
+}
+.edit-unit-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--fs-body);
+}
+.edit-unit-who {
+    flex: 1;
+    font-weight: 600;
+}
+.edit-unit-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding-left: calc(var(--space-4) + var(--space-2));
+    font-size: var(--fs-body);
+}
+.edit-unit-line del {
+    color: var(--muted);
+}
+.edit-unit-field {
+    display: inline-block;
+    min-width: 4em;
+    margin-right: var(--space-2);
+    font-size: var(--fs-small);
+    color: var(--muted);
+}
+.edit-unit-conflict {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-2);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+}
+.edit-unit-conflict p {
+    margin: 0;
+}
+.edit-unit-actions {
+    display: flex;
+    gap: var(--gap-inside);
+    margin-top: var(--space-1);
+}
+.edit-unit.reverted .edit-unit-line {
+    text-decoration: line-through;
+    color: var(--muted);
+}
+.sticky-form-field textarea {
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--border-strong);
+    border-radius: 5px;
+    background: var(--panel);
+    font: inherit;
+    font-size: var(--fs-body);
+    color: var(--text);
+    resize: vertical;
+}
+.sticky-form-busy {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin: 0;
+    font-size: var(--fs-small);
+    color: var(--muted);
+}
+/* a person's edit of a sticky in the chat (session/edit-unit.tsx): an activity row of theirs, not a bubble — their avatar,
+   a muted line with the sticky's chip, the change under it in the body's size */
+.chat-edit-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+    color: var(--muted);
+    font-size: var(--fs-small);
+}
+.chat-edit-icon {
+    flex: none;
+}
+.chat-edit .edit-unit-body {
+    padding-left: 0;
+    margin-top: var(--space-1);
+}
+.chat-edit.reverted .edit-unit-line {
+    text-decoration: line-through;
+    color: var(--muted);
+}

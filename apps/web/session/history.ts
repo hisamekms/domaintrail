@@ -14,7 +14,7 @@ type RevisionJson = SessionStateBody['revisions'][number];
 type FrozenRequest = RunJson['input']['requests'][number];
 
 /** How a unit ended, from its latest run; `changed`/`unchanged` for a completed one, by the files the unit changed. */
-export type UnitOutcome = 'changed' | 'unchanged' | 'clarification' | 'declined' | 'failed' | 'cancelled' | 'running' | 'queued';
+export type UnitOutcome = 'changed' | 'unchanged' | 'clarification' | 'declined' | 'failed' | 'cancelled' | 'running' | 'queued' | 'edited';
 
 /** A run in a unit, with its number in the session (as the chat numbers it: by when it was queued, from 1). */
 export interface UnitRun {
@@ -87,7 +87,7 @@ export function changedPaths(before: RevisionJson | undefined, after: RevisionJs
 
 /** The revisions a run went from and to, when it has both. */
 function revisionsOf(run: RunJson): { base: string; result: string } | undefined {
-    if (run.state === 'Completed' || run.state === 'NeedsClarification' || run.state === 'Declined' || run.state === 'Reverted')
+    if (run.state === 'Completed' || run.state === 'NeedsClarification' || run.state === 'Declined' || run.state === 'Reverted' || run.state === 'Edited')
         return { base: run.baseRevision, result: run.resultRevision };
     return undefined;
 }
@@ -115,6 +115,8 @@ function outcomeOf(run: RunJson, files: number | undefined): UnitOutcome {
             return (files ?? 0) > 0 || (files === undefined && run.changed) ? 'changed' : 'unchanged';
         case 'Reverted':
             return (files ?? 1) > 0 ? 'changed' : 'unchanged';
+        case 'Edited':
+            return 'edited';
         case 'Declined':
             return 'declined';
         case 'Failed':

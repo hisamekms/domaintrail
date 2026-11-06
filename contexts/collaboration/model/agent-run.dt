@@ -36,6 +36,8 @@ context Collaboration {
     reverts: AgentRunId? "打ち消す実行"
     /// 送ったときに依頼者が見ていたビュー。エージェントには「ここ」が指すところとして渡す。
     viewedAt: ViewedAt? "送ったときのビュー"
+    /// 人が付箋を直した記録なら、何をどう直したか（ADR 0033）。
+    edit: StickyEdit? "付箋の手直し"
   }
 
   /// 登録のときに写し取った、依頼の返信先。メッセージへの返信は、そのときの依頼者と本文を写し取る。
@@ -192,6 +194,17 @@ context Collaboration {
     Unreadable "前後の内容がない"
   }
 
+  /// 人の手直しのあとで、AI の作業が同じ付箋のラベルや名前を別のものにしていた（ADR 0033）。AI の作業の値を残し、人に選んでもらう。
+  value EditConflict "AI の作業との食い違い" {
+    run: AgentRunId "食い違った実行"
+    /// AI の作業のあとの名前（人の手直しのあとの名前と違うときだけ）。
+    runName: StormingLocalName? "AI の作業の名前"
+    /// AI の作業のあとのラベル（人の手直しのあとのラベルと違うときだけ）。
+    runLabel: Text? "AI の作業のラベル"
+    /// 人が選んだ（どちらかにした）。
+    settled: Bool "選んだ"
+  }
+
   /// ファシリテーターが依頼を束ねて登録する、エージェントの1回の実行。実行は1つずつ順に行う。
   /// 作業の打ち消しの依頼も、ほかの依頼と同じく実行として待ちに入る。順が来ると、サーバーがまず機械的に打ち消し
   /// （エージェントを使わない。その記録が打ち消しの状態）、できなければエージェントに任せる。
@@ -302,6 +315,23 @@ context Collaboration {
       invariant revertsRevertRequests "打ち消しの依頼を束ねる" { all(input.requests, r => exists(r.reverts)) }
     }
 
+    /// 人が付箋を直した記録（ADR 0033）。AI を使わず、dt が `.dtes` に書いた。待ちには入らず、書いた時点で記録する。直す前の
+    /// ワークスペースが基準リビジョン、直した後が結果リビジョン。ほかの実行と同じく打ち消せる。
+    state Edited "人の手直し" {
+      baseRevision: RevisionId "基準リビジョン"
+      resultRevision: RevisionId "結果リビジョン"
+      finishedAt: Timestamp "終了日時"
+      /// AI の作業の結果が人の手直しを落としていたので、その作業のあとに当て直した記録なら、その作業。
+      reapplies: AgentRunId? "当て直した実行"
+      /// あとの AI の作業が同じ付箋を別の文言にしていた。
+      conflict: EditConflict? "AI の作業との食い違い"
+      /// 付けたホットスポットに、あとで AI（軽いモデル）が付けた名前。仮の名前から書き換えた（結果リビジョンも書き換えのあと）。
+      hotspotName: StormingLocalName? "AI が付けた名前"
+
+      invariant editChanges "手直しはファイルを変える" { resultRevision != baseRevision }
+      invariant editsEditRequests "手直しの記録を束ねる" { all(input.requests, r => exists(r.edit)) }
+    }
+
     /// 実行を登録するのはファシリテーター（問いへの回答と別案の選択も、登録の入力）。
     create command queue(id: AgentRunId, session: ActiveSession, requests: PendingRequest[1..*], input: RunInput, queuedBy: ParticipantId, queuedByRole: ParticipantRole, queuedAt: Timestamp) "実行を登録する"
       -> Queued
@@ -313,6 +343,30 @@ context Collaboration {
         count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
       } else InputMismatch
       emits RunQueued
+
+    /// 参加者が付箋を直した（誰でも直せる）。待ちに入らず、dt が書いた記録として作る。
+    create command recordEdit(id: AgentRunId, session: ActiveSession, requests: PendingRequest[1..*], input: RunInput, queuedBy: ParticipantId, queuedAt: Timestamp, baseRevision: RevisionId "基準リビジョン", resultRevision: RevisionId "結果リビジョン", reapplies: AgentRunId? "当て直した実行", finishedAt: Timestamp) "手直しを記録する"
+      -> Edited
+      requires inputEdits "入力は手直しの記録" { all(input.requests, r => exists(r.edit)) } else InputMismatch
+      requires editInputCoversRequests "入力は束ねた記録の写し" {
+        count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
+      } else InputMismatch
+      requires editChanges "手直しはファイルを変える" { resultRevision != baseRevision } else ChangedMismatch
+      emits RunEdited
+
+    /// 付けたホットスポットの仮の名前を、AI が付けた名前に書き換えた（ほかに何も変わっていないときだけ）。同じ手直しの記録に
+    /// 含め、結果リビジョンを書き換えのあとにする。
+    command nameHotspot(name: StormingLocalName "AI が付けた名前", renamed: RevisionId "書き換えたあとのリビジョン") "ホットスポットの名前を付ける"
+      Edited -> Edited
+      requires renamedChanges "手直しはファイルを変える" { renamed != baseRevision } else ChangedMismatch
+      changes hotspotName, resultRevision
+      emits RunHotspotNamed
+
+    /// 手直しとあとの AI の作業の食い違いを記す、または人が選んだ印を付ける。
+    command noteConflict(conflict: EditConflict "食い違い") "食い違いを記す"
+      Edited -> Edited
+      changes conflict
+      emits RunEditConflicted
 
     /// 順が来た打ち消しの実行を、サーバーがエージェントを使わずに機械的に打ち消した（または、打ち消すものがもうなかった）。
     command revert(baseRevision: RevisionId "基準リビジョン", resultRevision: RevisionId "結果リビジョン", changed: Bool "変更あり", finishedAt: Timestamp) "機械的に打ち消す"
@@ -400,6 +454,28 @@ context Collaboration {
     resultRevision: RevisionId "結果リビジョン"
     changed: Bool "変更あり"
     finishedAt: Timestamp
+  }
+
+  persistent event RunEdited "人の手直し" {
+    runId: AgentRunId
+    session: SessionId
+    requests: RequestId[1..*]
+    queuedBy: ParticipantId
+    baseRevision: RevisionId "基準リビジョン"
+    resultRevision: RevisionId "結果リビジョン"
+    reapplies: AgentRunId? "当て直した実行"
+    finishedAt: Timestamp
+  }
+
+  persistent event RunHotspotNamed "ホットスポットの名前" {
+    runId: AgentRunId
+    hotspotName: StormingLocalName "AI が付けた名前"
+    resultRevision: RevisionId "結果リビジョン"
+  }
+
+  persistent event RunEditConflicted "手直しの食い違い" {
+    runId: AgentRunId
+    conflict: EditConflict "食い違い"
   }
 
   persistent event RevertLeftToAgent "AI に任せた打ち消し" {

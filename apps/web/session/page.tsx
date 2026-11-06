@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { firstDeclarations } from '@domaintrail/storming';
 import { type DisplayMode, LEVEL_KINDS } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
+import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { contextNames } from '@domaintrail/modeling';
 import type { Panes } from '../app/panes';
 import type { Conversation } from '../app/shell';
@@ -25,6 +26,8 @@ import { PeerCursors } from './cursors';
 import { TargetNamingProvider } from './naming';
 import { viewLocation } from './location';
 import { AddButton, SelectionAction, type AddAction } from './selection-action';
+import { SessionApiError, sessionApi } from './api';
+import type { StickySession, StickyWritten } from '../stickies/layer';
 import { confirmSelection, isAdded, isConfirmKey, isTyping } from './selection';
 import type { ComposerValue } from './mentions';
 import { cursorsOn } from './presence';
@@ -66,6 +69,35 @@ export interface SessionPage {
     readonly contextJourneys?: (context: string) => ReactNode;
     /** A knowledge item's source when the session holds its message: its author as the chat names them, and going to it. */
     readonly messageOf?: KnowledgeView['messageOf'];
+    /** What the stickies' actions get of the session (ADR 0033): adding to the chat, and editing; undefined outside a session. */
+    readonly stickies: StickySession | undefined;
+}
+
+/** The hotspots the AI named after a person added them under a provisional name: `es/S/<provisional>` → `es/S/<name>`. */
+export function renamedHotspots(runs: SessionStateBody['runs']): Map<string, string> {
+    const out = new Map<string, string>();
+    for (const r of runs) {
+        if (r.state !== 'Edited' || r.hotspotName === undefined) continue;
+        const added = r.input.requests[0]?.edit;
+        if (added?.kind === 'HotspotAdded') out.set(`es/${added.storming}/${added.hotspot}`, `es/${added.storming}/${r.hotspotName}`);
+    }
+    return out;
+}
+
+/** A person's edit of a sticky, written by the server; a refusal is thrown as its error body (`type`, `current`, …). */
+async function editSticky(edit: object, body: string): Promise<StickyWritten> {
+    try {
+        const answer = await sessionApi.editSticky(edit, body);
+        // a new hotspot's name, the AI's or dt's: the page selects it once drawn
+        const request: unknown = typeof answer === 'object' && answer !== null && 'request' in answer ? answer.request : undefined;
+        const written: unknown = typeof request === 'object' && request !== null && 'edit' in request ? request.edit : undefined;
+        const hotspot =
+            typeof written === 'object' && written !== null && 'hotspot' in written && typeof written.hotspot === 'string' ? written.hotspot : undefined;
+        return hotspot === undefined ? {} : { hotspot };
+    } catch (e) {
+        if (e instanceof SessionApiError) throw { ...e.detail, type: e.type };
+        throw e;
+    }
 }
 
 export function useSessionPage(input: {
@@ -413,6 +445,7 @@ export function useSessionPage(input: {
             baselineLocked: false,
             ended: false,
             aiReady: false,
+            stickies: undefined,
         };
     const facilitator = session.me.participant.role === 'facilitator';
     const names = participantNames(session.state, session.peers, session.me);
@@ -433,11 +466,18 @@ export function useSessionPage(input: {
         canvasOverlay: (
             <>
                 <PeerCursors canvas={canvas} cursors={cursorsOn(session.peers, location)} />
-                <SelectionAction canvas={canvas} action={addAction(selectionTargets)} />
+                {/* on a storming, the stickies' toolbar has the 💬 among its actions (ADR 0033) */}
+                {view.kind !== 'storming' && <SelectionAction canvas={canvas} action={addAction(selectionTargets)} />}
                 {view.kind === 'storming' && <TurnMarksBar canvas={canvas} marks={turnMarks} stormings={stormings} choice={stormingChoice} />}
             </>
         ),
         inspectorAction: inspectorAdd && <AddButton action={inspectorAdd} />,
+        stickies: {
+            live,
+            chat: { added: isAdded(composerValue, selectionTargets), add: () => confirm(selectionTargets) },
+            edit: editSticky,
+            renamed: renamedHotspots(session.state.runs),
+        },
         stormingDetail: {
             activity: (el) => elementActivity(session.state, runChanges, el),
             ...(live && { begin }),

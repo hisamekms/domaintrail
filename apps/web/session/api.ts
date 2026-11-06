@@ -153,6 +153,10 @@ export const sessionApi = {
     cancelRun: (id: string): Promise<unknown> => call(`runs/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} }),
     /** Asks to revert the changes of a run (the facilitator), with the message everyone sees: queued, the server tries it first. */
     revertRun: (id: string, body: string): Promise<RevertRequestedBody> => call(`runs/${encodeURIComponent(id)}/revert`, { method: 'POST', body: { body } }),
+    /** A person's edit of a sticky (anyone's, ADR 0033): written by dt at once, refused with what it is now when stale. */
+    editSticky: (edit: object, body: string): Promise<unknown> => call('stickies', { method: 'POST', body: { ...edit, body } }),
+    /** People chose about an edit a run changed otherwise (ADR 0033). */
+    settleConflict: (run: string): Promise<unknown> => call(`runs/${encodeURIComponent(run)}/settle`, { method: 'POST', body: {} }),
     /** Records the workspace as it is now (the facilitator). */
     takeRevision: (): Promise<unknown> => call('revisions', { method: 'POST', body: {} }),
     /** Restores a revision (the facilitator); `recordExternalChanges` records the workspace's external changes first. */

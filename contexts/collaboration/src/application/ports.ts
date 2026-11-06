@@ -127,10 +127,10 @@ export interface StoredRun {
  */
 export interface RunQueue {
     /**
-     * Adds a run at the end of its session's queue, with the requests it bundles: a queued run, or a mechanical revert,
-     * recorded done (it is never claimed).
+     * Adds a run at the end of its session's queue, with the requests it bundles: a queued run, or a mechanical revert
+     * or a person's edit, recorded done (never claimed).
      */
-    enqueue(run: Collaboration.QueuedAgentRun | Collaboration.RevertedAgentRun): void;
+    enqueue(run: Collaboration.QueuedAgentRun | Collaboration.RevertedAgentRun | Collaboration.EditedAgentRun): void;
     load(id: AgentRunId): StoredRun | undefined;
     /** Replaces a run's aggregate (its new state); the lease is kept. */
     save(run: Collaboration.AgentRun): void;
@@ -352,6 +352,78 @@ export interface SourceFormatter {
     format(path: string, text: string): string;
 }
 
+/** What a sticky (a storming's declaration) is called: its local ID and its label (none when it has none). */
+export interface StickyWording {
+    readonly name: string;
+    readonly label?: string;
+}
+
+/** A person's edit of a sticky of one storming (ADR 0033), as Storming's `planStickyEdit` takes it. */
+export type StickyEditInput =
+    | {
+          readonly kind: 'wording';
+          readonly storming: string;
+          readonly element: string;
+          /** What the person saw: the edit is refused when the file says otherwise. */
+          readonly expected: StickyWording;
+          readonly label?: string;
+          readonly name?: string;
+      }
+    | {
+          readonly kind: 'addHotspot';
+          readonly storming: string;
+          readonly on: string;
+          readonly name: string;
+          readonly label: string;
+          /** A taken name gets the first free numeric suffix instead of being refused (a name the AI or dt gave). */
+          readonly uniqueName?: boolean;
+      }
+    | { readonly kind: 'resolveHotspot'; readonly storming: string; readonly element: string; readonly resolution: string }
+    /** A hotspot's question and resolution in one edit (`resolution: null` reopens it); its name is never changed. */
+    | {
+          readonly kind: 'hotspot';
+          readonly storming: string;
+          readonly element: string;
+          readonly expected: { readonly question?: string; readonly resolution?: string };
+          readonly question?: string;
+          readonly resolution?: string | null;
+      };
+
+/** Why an edit of a sticky is not made (see Storming's `StickyEditProblem`). */
+export type StickyEditProblem =
+    | { readonly type: 'SyntaxError' }
+    | { readonly type: 'StormingNotFound' }
+    | { readonly type: 'NotFound' }
+    | { readonly type: 'Stale'; readonly current: StickyWording }
+    | { readonly type: 'InvalidName'; readonly problem: 'format' | 'keyword' | 'duplicate' }
+    | { readonly type: 'InvalidLabel' }
+    | { readonly type: 'WrongKind' }
+    | { readonly type: 'NothingToChange' }
+    | { readonly type: 'NoLongerParses' };
+
+/** An edit planned on a file's text: its new text, the sticky before and after, the references rewritten. */
+export interface StickyEditPlan {
+    readonly text: string;
+    readonly before?: StickyWording;
+    readonly after: StickyWording;
+    readonly references: number;
+}
+
+/**
+ * People's edits of the stickies, planned on the parsed `.dtes` text (Storming's `planStickyEdit` and `stickyWording`,
+ * wired by the app): only the tokens concerned change, the result parses.
+ */
+export interface StickyEditor {
+    plan(
+        text: string,
+        input: StickyEditInput,
+    ): { readonly ok: true; readonly value: StickyEditPlan } | { readonly ok: false; readonly error: StickyEditProblem };
+    /** What a declaration is called in a file's text now; undefined when it is not there (or the file does not parse). */
+    wording(text: string, storming: string, element: string): StickyWording | undefined;
+    /** Every ID a storming declares in a file's text; undefined when the file has no such storming (or does not parse). */
+    names(text: string, storming: string): string[] | undefined;
+}
+
 /** Everything the use cases need. */
 /**
  * The journey file (`domaintrail.journey.json` at the workspace root): its text, and a whole new text written
@@ -373,6 +445,8 @@ export interface CollaborationDeps {
     readonly validator: ModelValidator;
     /** Formats what a mechanical revert writes; without one it is written as merged. */
     readonly formatter?: SourceFormatter;
+    /** Plans people's edits of the stickies (ADR 0033); without one, editing a sticky is refused (`StickyEditsUnavailable`). */
+    readonly stickies?: StickyEditor;
     readonly clock: Clock;
     readonly ids: IdGenerator;
 }

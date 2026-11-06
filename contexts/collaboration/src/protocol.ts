@@ -173,6 +173,9 @@ export const EVENT_MESSAGE_TYPES = {
     RunCancelled: 'run.cancelled',
     RunReverted: 'run.reverted',
     RevertLeftToAgent: 'run.revert_left_to_agent',
+    RunEdited: 'run.edited',
+    RunEditConflicted: 'run.edit_conflicted',
+    RunHotspotNamed: 'run.hotspot_named',
     RevisionRecorded: 'revision.recorded',
     RevisionRestored: 'revision.restored',
     MarkPlaced: 'mark.placed',
@@ -649,6 +652,8 @@ export const AGENT_EVENT_TYPES = {
     RunQueued: 'run.queued',
     RunReverted: 'run.reverted',
     RevertLeftToAgent: 'run.revert_left_to_agent',
+    RunEdited: 'run.edited',
+    RunEditConflicted: 'run.edit_conflicted',
     RunStarted: 'run.started',
     RunCompleted: 'run.completed',
     RunNeedsClarification: 'run.needs_clarification',
@@ -741,6 +746,18 @@ export interface AgentStartedBody {
     readonly sessionSoFarSince?: AgentSessionSoFar;
     /** The journeys when the run starts (the current one, where it stands, the others): what the work is for and how far it goes. */
     readonly journeys?: AgentJourneysBody;
+    /**
+     * The people's edits of the stickies since the previous run started (ADR 0033), oldest first: who, when, what (old →
+     * new). Absent when there were none, and from a server before them.
+     */
+    readonly peopleEdits?: readonly AgentPeopleEdit[];
+}
+
+/** A person's edit of a sticky as a starting run is told of it. */
+export interface AgentPeopleEdit {
+    readonly by: string;
+    readonly at: string;
+    readonly edit: Json<Collaboration.StickyEdit>;
 }
 
 /**

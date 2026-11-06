@@ -13,18 +13,19 @@ import { elementChanges, stormingElements, type ElementChanges, type StormingEle
 import { compareFiles, lineDiff, MAX_DIFF_BYTES, statusCounts, type FileComparison, type FileStatus, type LineDiff } from '../domain/compare.js';
 import { resolveAnswer, resolvePick, type AnswerData, type PickData } from '../domain/reply.js';
 import { boundChanges, previousRunIds, type ComparedChange, type PreviousRunChanges } from '../domain/previous-runs.js';
-import { nonEmpty, workspacePath } from '../domain/snapshot.js';
+import { workspacePath } from '../domain/snapshot.js';
 import { awaitsServer, isRevert, reverseChanges, revertableChanges, revertChanges, revertedRunId, type RevertChanges } from '../domain/revert.js';
 import { targetStatus, type TargetStatus } from '../domain/targets.js';
 import { diagnosticsDiff, runReport, tally, type DiagnosticsDiff, type RunFacts } from '../domain/validation.js';
 import type { Actor } from './actor.js';
-import type { CollaborationDeps, Lease, OutboxEntry, RestoreOperation, StoredRun, Stores, ValidationResult, WorkspaceScan, WriteRefusal } from './ports.js';
-import { analysisOf, capture, sourcesOf, type BlobMissing, type Captured } from './snapshots.js';
+import type { CollaborationDeps, Lease, OutboxEntry, RestoreOperation, StoredRun, Stores, ValidationResult, WorkspaceScan } from './ports.js';
+import { analysisOf, capture, sourcesOf, writeRefusal, type BlobMissing, type Captured } from './snapshots.js';
 import { publish, queueRequests, type NoRequests } from './queueing.js';
 import { createConversation, invalidTargets, overrideAnsweredTriages, sendIn, type ConversationUseCases } from './conversation.js';
 import { createInterviews, noteStormingRun, type InterviewUseCases } from './interviews.js';
 import { createJourneys, type JourneyUseCases } from './journeys.js';
 import { createRecords, type RecordUseCases } from './records.js';
+import { createStickies, type StickyUseCases } from './stickies.js';
 import { createSlashCommands, type SlashCommandUseCases } from './slash-commands.js';
 import { notAllowed, notFound, type InvalidTarget, type NotAllowed, type NotAParticipant, type NotFound } from './errors.js';
 import { restorableRevision, storeVerifications } from './verifications.js';
@@ -252,7 +253,7 @@ export type RestoreError =
     | Collaboration.ExternalChangesSinceSnapshot
     | ManualRecoveryNeeded;
 
-export interface CollaborationUseCases extends ConversationUseCases, InterviewUseCases, SlashCommandUseCases, JourneyUseCases, RecordUseCases {
+export interface CollaborationUseCases extends ConversationUseCases, InterviewUseCases, SlashCommandUseCases, JourneyUseCases, RecordUseCases, StickyUseCases {
     /**
      * Opens a session with its facilitator, in `mode` (Collab when not given), and records the workspace as its first
      * revision (SessionStart). `openSession` applies the rules between the modes (decision 13) on top of it.
@@ -576,26 +577,6 @@ class RestoreFailure extends Error {
     }
 }
 
-/** A refusal of the workspace's writer as the model's error. */
-function writeRefusal(e: WriteRefusal): Collaboration.ExternalChangesSinceSnapshot | Collaboration.SymlinkInWorkspace | Collaboration.PathOutsideRoot {
-    if (e.type === 'ExternalChangesSinceSnapshot') {
-        const paths: Collaboration.WorkspacePath[] = [];
-        for (const raw of e.paths) {
-            const p = workspacePath(raw);
-            if (!p.ok) return p.error;
-            paths.push(p.value);
-        }
-        const changed = nonEmpty(paths);
-        if (!changed) throw new Error('The workspace adapter refused a write for external changes without naming a path');
-        return { type: 'ExternalChangesSinceSnapshot', paths: changed };
-    }
-    if (e.type === 'SymlinkInWorkspace') {
-        const p = workspacePath(e.path);
-        return p.ok ? { type: 'SymlinkInWorkspace', path: p.value } : p.error;
-    }
-    return { type: 'PathOutsideRoot', path: e.path };
-}
-
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
@@ -815,7 +796,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
 
     const useCases: Omit<
         CollaborationUseCases,
-        keyof ConversationUseCases | keyof InterviewUseCases | keyof SlashCommandUseCases | keyof JourneyUseCases | keyof RecordUseCases
+        keyof ConversationUseCases | keyof InterviewUseCases | keyof SlashCommandUseCases | keyof JourneyUseCases | keyof RecordUseCases | keyof StickyUseCases
     > = {
         async startSession({ facilitator, name, mode = 'Collab' }) {
             const captured = await capture(deps);
@@ -1672,5 +1653,6 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
         ...createJourneys(deps),
         ...createSlashCommands(deps),
         ...createRecords(deps),
+        ...createStickies(deps),
     };
 }

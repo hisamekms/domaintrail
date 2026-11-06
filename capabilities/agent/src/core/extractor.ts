@@ -13,7 +13,7 @@
 // the light model's prompt; its reply goes back as given (the server reads it, and takes one that is not a reply as
 // unsure). Functions over the ports only; the log has job IDs and counts, never a message's text or an item's.
 import { readExtractorReply, type ExtractionJobBody, type ExtractionResultBody } from '@domaintrail/knowledge';
-import { buildExtractionPrompt, buildGatePrompt, extractorContext, gateContext } from './extract-prompt.js';
+import { buildExtractionPrompt, buildGatePrompt, buildHotspotNamePrompt, extractorContext, gateContext } from './extract-prompt.js';
 import { AgentApiError, type AnswerTurnResult, type Clock, type ExtractAgent, type ExtractionApi } from './ports.js';
 
 export interface ExtractorDeps {
@@ -78,6 +78,13 @@ export function startExtractor(deps: ExtractorDeps, options: ExtractorOptions = 
     const resultOf = async (job: ExtractionJobBody, signal: AbortSignal): Promise<ExtractionResultBody> => {
         const started = now();
         const elapsed = (): number => Math.max(0, Math.round(now() - started));
+        // a hotspot's name (ADR 0033): the light model, its reply sent back as given (the server checks the name)
+        if (job.stage === 'hotspotName') {
+            if (!deps.agent.hotspotName) return { error: 'no hotspot naming', durationMs: elapsed() };
+            const named = await deps.agent.hotspotName({ prompt: buildHotspotNamePrompt(job, deps.nonce()), signal });
+            const meta = { ...(named.model && { model: named.model }), ...(named.usage && { usage: named.usage }), durationMs: elapsed() };
+            return named.error !== undefined ? { error: named.error, ...meta } : { reply: outputOf(named), ...meta };
+        }
         const context = job.stage === 'gate' ? gateContext(job) : extractorContext(job);
         const result =
             job.stage === 'gate'
@@ -99,9 +106,11 @@ export function startExtractor(deps: ExtractorDeps, options: ExtractorOptions = 
         const timeout = AbortSignal.timeout(limit);
         const signal = AbortSignal.any([withdrawn.signal, stopping.signal, timeout]);
         log(
-            job.stage === 'gate'
-                ? `extraction job ${job.job}: the light model on extraction ${job.number} (${job.messages.filter((m) => m.isNew).length} new messages)`
-                : `extraction job ${job.job}: extraction ${job.number} (${job.messages.filter((m) => m.isNew).length} new messages, ${job.items.length} items)`,
+            job.stage === 'hotspotName'
+                ? `extraction job ${job.job}: the light model names a hotspot`
+                : job.stage === 'gate'
+                  ? `extraction job ${job.job}: the light model on extraction ${job.number} (${job.messages.filter((m) => m.isNew).length} new messages)`
+                  : `extraction job ${job.job}: extraction ${job.number} (${job.messages.filter((m) => m.isNew).length} new messages, ${job.items.length} items)`,
         );
         try {
             let result: ExtractionResultBody;

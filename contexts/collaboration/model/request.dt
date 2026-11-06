@@ -34,6 +34,45 @@ context Collaboration {
     targets: ModelTarget[0..3] "その場"
   }
 
+  /// 人が付箋（ストーミングの要素）を直したこと（ADR 0033）。AI を通さずに dt が `.dtes` に書いた。前後の値を写し取る。
+  union StickyEdit "付箋の手直し" {
+    /// ラベルと名前。名前を変えたら、同じストーミングの参照も書き換えた。
+    Wording "文言" {
+      storming: StormingName "ストーミング"
+      path: WorkspacePath "ファイル"
+      nameBefore: StormingLocalName "前の名前"
+      nameAfter: StormingLocalName "あとの名前"
+      labelBefore: Text? "前のラベル"
+      labelAfter: Text? "あとのラベル"
+      references: Tally "書き換えた参照"
+    }
+    /// イベントに付けたホットスポット（未解決）。
+    HotspotAdded "ホットスポット" {
+      storming: StormingName "ストーミング"
+      path: WorkspacePath "ファイル"
+      hotspot: StormingLocalName "ホットスポット"
+      label: Text "問い"
+      on: StormingLocalName "イベント"
+    }
+    /// ホットスポットの問いと解決（一度の編集で両方）。解決を書けば解決済み、消せば未解決に戻る。名前は変えない。
+    HotspotEdited "ホットスポットの編集" {
+      storming: StormingName "ストーミング"
+      path: WorkspacePath "ファイル"
+      hotspot: StormingLocalName "ホットスポット"
+      questionBefore: Text? "前の問い"
+      questionAfter: Text? "あとの問い"
+      resolutionBefore: Text? "前の解決"
+      resolutionAfter: Text? "あとの解決"
+    }
+    /// ホットスポットの解決。
+    HotspotResolved "解決" {
+      storming: StormingName "ストーミング"
+      path: WorkspacePath "ファイル"
+      hotspot: StormingLocalName "ホットスポット"
+      resolution: Text "解決"
+    }
+  }
+
   /// 本文で言及できると、依頼を送るときに確かめた人。そのセッションの参加者（オフラインの人も）と、AI（予約の参加者 ID `ai`）。
   verified MentionableParticipant "言及できる参加者" of ParticipantId for SessionId errors MentionedNotAParticipant
 
@@ -59,6 +98,8 @@ context Collaboration {
     viewedAt: ViewedAt? "送ったときのビュー"
     /// 聞き取りを確定したあとの dt のお知らせ（AI の名で書く）なら、その道のりと次の一手のボタン。ほかのメッセージにはない。
     journeyNote: JourneyNote? "旅程のお知らせ"
+    /// 人が付箋を直した記録なら、何をどう直したか（ADR 0033）。チャットには出さず、AI の作業に出す。ほかのメッセージにはない。
+    edit: StickyEdit? "付箋の手直し"
     /// 墨消ししたなら、その日時。本文は決まった文（`REDACTED_BODY`）に置き換わり、行（だれが・いつ・何についての
     /// メッセージか）は残る。ナレッジを消すと、その出典のメッセージが墨消しになる（ADR 0031 の 7）。
     redactedAt: Timestamp? "墨消し日時"
@@ -99,6 +140,11 @@ context Collaboration {
       } else FacilitatorOnly
       emits RequestSent
 
+    /// 参加者が付箋を直した（ADR 0033）。誰でも直せる。対象も言及もなく、本文は何を直したかの一文。
+    create command recordEdit(id: RequestId, session: ActiveSession, author: ParticipantId, body: Text, sentAt: Timestamp, edit: StickyEdit) "付箋の手直しを記録する"
+      -> Sent
+      emits RequestSent
+
     /// 読むだけの AI（回答役）が、相談のメッセージに答える。書き手は AI（`ai`）で、答えたメッセージへの返信。対象も言及もない。
     /// 聞き取りを確定したあとの dt のお知らせも、これで AI の名で書く（`journeyNote` を添える）。道のりを完了にしたあとのお知らせは
     /// 答えるメッセージがなく、返信にならない。
@@ -129,6 +175,8 @@ context Collaboration {
     viewedAt: ViewedAt? "送ったときのビュー"
     /// 聞き取りを確定したあとの dt のお知らせなら、その道のりと次の一手のボタン。
     journeyNote: JourneyNote? "旅程のお知らせ"
+    /// 付箋の手直しの記録なら、何をどう直したか。
+    edit: StickyEdit? "付箋の手直し"
   }
 
   /// 本文を墨消しした。ページには状態を送り直して伝える（アウトボックスには残さない: 残せば本文の代わりに墨消しの記録が

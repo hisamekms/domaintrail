@@ -21,7 +21,7 @@ export {
 } from './wiring/session.js';
 export { pairAgent, startSubscriber, type RunningSubscriber, type SubscriberOptions } from './wiring/subscriber.js';
 export { createWatcherHold, ECHO_MS, type WatcherHold } from './wiring/watcher-hold.js';
-export { createModelValidator, createSourceFormatter } from './wiring/validator.js';
+export { createModelValidator, createSourceFormatter, createStickyEditor } from './wiring/validator.js';
 
 // ---- the CLI ---------------------------------------------------------------------------------------------------
 export { consoleIO, runCli, type CliIO } from './cli/main.js';

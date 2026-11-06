@@ -42,6 +42,7 @@ import {
     type ExtractionInput,
     type ExtractionResultBody,
     type ExtractionUsage,
+    type HotspotNameInput,
     type KnownItem,
     type KnownSticky,
     operationsOf,
@@ -160,6 +161,8 @@ export type ExtractorAnswer = { readonly kind: 'unavailable' } | { readonly kind
 export interface Extractor {
     extract(input: ExtractionInput): Promise<ExtractorAnswer>;
     gate(input: GateInput): Promise<ExtractorAnswer>;
+    /** The light model's name of a hotspot a person writes (ADR 0033), within `timeoutMs`; absent: never asked. */
+    hotspotName?(input: HotspotNameInput, timeoutMs: number): Promise<ExtractorAnswer>;
 }
 
 export interface SessionExtractionDeps {

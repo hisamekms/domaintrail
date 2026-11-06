@@ -113,10 +113,47 @@ export const EXTRACTION_EVENT_TYPES = {
 } as const;
 
 /**
- * An extraction job, as the stream hands it to the extractor: an extraction (stage 3; `stage` absent from a server
- * before the stages), or the light model's question whether to extract (stage 2, `gate`).
+ * A light question beside the extractions (ADR 0033): the light model names a hotspot a person writes on a sticky —
+ * a short English ID from its question and the sticky, which the server checks and writes. The extractor role asks it
+ * as it asks the gate (no tools, the light model).
  */
-export type ExtractionJobBody = ((ExtractionInput & { readonly stage?: 'extract' }) | (GateInput & { readonly stage: 'gate' })) & {
+export interface HotspotNameInput {
+    /** The hotspot's question, as the person wrote it. */
+    readonly question: string;
+    /** The sticky it is on: its ID, label and kind. */
+    readonly on: { readonly id: string; readonly label?: string; readonly kind: string };
+    /** The IDs the storming declares already (every kind; at most `HOTSPOT_TAKEN_MAX`): the name must be none of them. */
+    readonly taken?: readonly string[];
+    /** The name an earlier answer gave that is taken: asked again, naming it. */
+    readonly clash?: string;
+}
+
+/** The most IDs of the storming a hotspot's name job lists. */
+export const HOTSPOT_TAKEN_MAX = 300;
+
+/** The most characters of a hotspot's name the light model may give (the server shortens and checks it again). */
+export const HOTSPOT_NAME_MAX = 40;
+
+/** The JSON schema of the light model's reply to a hotspot's name (`--json-schema`): `{ name }`, English PascalCase. */
+export function hotspotNameJsonSchema(): Record<string, unknown> {
+    return {
+        type: 'object',
+        properties: { name: { type: 'string', pattern: `^[A-Z][A-Za-z0-9]{1,${HOTSPOT_NAME_MAX - 1}}$` } },
+        required: ['name'],
+        additionalProperties: false,
+    };
+}
+
+/**
+ * An extraction job, as the stream hands it to the extractor: an extraction (stage 3; `stage` absent from a server
+ * before the stages), the light model's question whether to extract (stage 2, `gate`), or its name of a hotspot
+ * (`hotspotName`, ADR 0033).
+ */
+export type ExtractionJobBody = (
+    | (ExtractionInput & { readonly stage?: 'extract' })
+    | (GateInput & { readonly stage: 'gate' })
+    | (HotspotNameInput & { readonly stage: 'hotspotName' })
+) & {
     readonly job: string;
     /** The most milliseconds the job may take. */
     readonly timeoutMs: number;

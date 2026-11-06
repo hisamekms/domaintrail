@@ -137,7 +137,7 @@ export function stormingLocation(stormings: readonly StormingView[], id: string)
 export const stormingSelectionName = (id: string): string => id.slice(id.lastIndexOf('/') + 1);
 
 /** The `.dt` item a `ref` names, when the model has it (an event or an aggregate `Ctx.Name`, a command `Ctx.Agg.cmd`). */
-function dtTarget(model: DomainModel | null, kind: string, path: string): string | undefined {
+export function dtTarget(model: DomainModel | null, kind: string, path: string): string | undefined {
     if (!model) return undefined;
     const segments = path.split('.');
     if (kind === 'command' && segments.length === 3) {

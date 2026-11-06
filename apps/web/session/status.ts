@@ -33,6 +33,7 @@ export function turnState(m: AgentMessage): MarkState | undefined {
         case 'completed':
         case 'clarification':
         case 'reverted':
+        case 'edited':
             return undefined;
         default:
             return m.kind;

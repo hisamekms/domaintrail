@@ -64,6 +64,7 @@ export {
     type Section,
     type StageOrder,
 } from './domain/stages.js';
+export { localNameProblem, referencesTo, STORMING_KEYWORDS, type LocalNameProblem, type ReferenceSite, type StormingReference } from './domain/references.js';
 export type { StormingRuleId } from './domain/rule-ids.js';
 export { designGaps, hasDesignLevel, openGaps, openQuestions, type Gap, type Missing } from './domain/gaps.js';
 export { isStormingFile } from './domain/files.js';
@@ -72,6 +73,20 @@ export { estimatedLabelLines, labelOverflowsNote, LINES_AT_FLOOR, STICKY_NOTE } 
 // ---- use cases: Storming's analysis of the `.dtes` sources against the typed model; formatting; migrating v0.1 ------
 export { analyzeStormings } from './application/analyze.js';
 export { formatStorming } from './infrastructure/syntax/format.js';
+export {
+    MAX_HOTSPOT_QUESTION,
+    MAX_RESOLUTION,
+    MAX_STICKY_LABEL,
+    planStickyEdit,
+    quoteLabel,
+    stickyWording,
+    stormingNames,
+    type StickyEditInput,
+    type StickyEditPlan,
+    type StickyEditProblem,
+    type StickyEditResult,
+    type StickyWording,
+} from './infrastructure/syntax/edit.js';
 export { migrateStorming, type MigrationLeft, type MigrationPlace, type MigrationRewrite, type StormingMigration } from './infrastructure/syntax/migrate.js';
 
 // ---- the syntax, for the language server -----------------------------------------------------------------------

@@ -20,6 +20,7 @@ import {
     readViewedAt,
     REPLY_LIMITS,
     type ReplyOutcome,
+    type StickyEditInput,
     type Result,
     toAgentReply,
     VOTE,
@@ -423,3 +424,162 @@ export function markSign(v: unknown, field = 'sign'): Result<Collaboration.MarkS
     if (!emoji?.ok) return invalid(`${field}.emoji`, `Expected exactly one emoji (at most ${MAX_EMOJI_BYTES} bytes).`);
     return ok({ kind: 'Reaction', emoji: emoji.value });
 }
+
+/** The longest ID or label a sticky's edit carries (a label is checked again by the planner, `MAX_STICKY_LABEL`). */
+const MAX_STICKY_FIELD = 2000;
+
+/** A short string of a sticky's edit, on one line. */
+function stickyField(v: unknown, field: string): Result<string, InvalidInput> {
+    if (typeof v !== 'string' || !v.trim()) return invalid(field, 'Expected a non-empty string.');
+    if (v.length > MAX_STICKY_FIELD) return invalid(field, `At most ${MAX_STICKY_FIELD} characters.`);
+    if (hasControl(v)) return invalid(field, 'No control characters.');
+    return { ok: true, value: v };
+}
+
+/**
+ * A person's edit of a sticky (`POST /api/session/stickies`, ADR 0033): `wording` (the label and/or the name, with what
+ * the page saw in `expected`), `addHotspot` or `resolveHotspot`. What it may change is the planner's to check.
+ */
+/**
+ * A hotspot whose name the person did not give (ADR 0033): the server names it (the light model, else after the sticky),
+ * with what the page told of the sticky it is on (its label and kind, for the light model only).
+ */
+export interface UnnamedHotspot {
+    readonly kind: 'unnamedHotspot';
+    readonly storming: string;
+    readonly on: string;
+    readonly label: string;
+    readonly onLabel?: string;
+    readonly onKind?: string;
+}
+
+export function stickyEditInput(raw: Record<string, unknown>): Result<StickyEditInput | UnnamedHotspot, InvalidInput> {
+    const storming = stickyField(raw.storming, 'storming');
+    if (!storming.ok) return storming;
+    const field = (name: string): Result<string, InvalidInput> => stickyField(raw[name], name);
+    const optional = (name: string): Result<string | undefined, InvalidInput> => (raw[name] === undefined ? { ok: true, value: undefined } : field(name));
+    switch (raw.kind) {
+        case 'wording': {
+            const element = field('element');
+            if (!element.ok) return element;
+            const label = optional('label');
+            if (!label.ok) return label;
+            const name = optional('name');
+            if (!name.ok) return name;
+            const expected = raw.expected;
+            if (typeof expected !== 'object' || expected === null || Array.isArray(expected)) return invalid('expected', 'Expected what the page saw.');
+            const seenName = stickyField(Reflect.get(expected, 'name'), 'expected.name');
+            if (!seenName.ok) return seenName;
+            const rawLabel: unknown = Reflect.get(expected, 'label');
+            const seenLabel = rawLabel === undefined ? { ok: true as const, value: undefined } : stickyField(rawLabel, 'expected.label');
+            if (!seenLabel.ok) return seenLabel;
+            if (label.value === undefined && name.value === undefined) return invalid('label', 'Expected a new label or name.');
+            return {
+                ok: true,
+                value: {
+                    kind: 'wording',
+                    storming: storming.value,
+                    element: element.value,
+                    expected: { name: seenName.value, ...(seenLabel.value !== undefined && { label: seenLabel.value }) },
+                    ...(label.value !== undefined && { label: label.value }),
+                    ...(name.value !== undefined && { name: name.value }),
+                },
+            };
+        }
+        case 'addHotspot': {
+            const on = field('on');
+            if (!on.ok) return on;
+            const label = field('label');
+            if (!label.ok) return label;
+            // no name: the server gives it
+            if (raw.name === undefined) {
+                const onLabel = optional('onLabel');
+                if (!onLabel.ok) return onLabel;
+                const onKind = optional('onKind');
+                if (!onKind.ok) return onKind;
+                return {
+                    ok: true,
+                    value: {
+                        kind: 'unnamedHotspot',
+                        storming: storming.value,
+                        on: on.value,
+                        label: label.value,
+                        ...(onLabel.value !== undefined && { onLabel: onLabel.value }),
+                        ...(onKind.value !== undefined && { onKind: onKind.value }),
+                    },
+                };
+            }
+            const name = field('name');
+            if (!name.ok) return name;
+            return { ok: true, value: { kind: 'addHotspot', storming: storming.value, on: on.value, name: name.value, label: label.value } };
+        }
+        case 'resolveHotspot': {
+            const element = field('element');
+            if (!element.ok) return element;
+            const resolution = field('resolution');
+            if (!resolution.ok) return resolution;
+            return { ok: true, value: { kind: 'resolveHotspot', storming: storming.value, element: element.value, resolution: resolution.value } };
+        }
+        case 'hotspot': {
+            // a hotspot's question and resolution in one edit; `resolution: null` reopens it
+            const element = field('element');
+            if (!element.ok) return element;
+            const question = optional('question');
+            if (!question.ok) return question;
+            const resolution = raw.resolution === null ? { ok: true as const, value: null } : optional('resolution');
+            if (!resolution.ok) return resolution;
+            const expected = raw.expected;
+            if (typeof expected !== 'object' || expected === null || Array.isArray(expected)) return invalid('expected', 'Expected what the page saw.');
+            const seen = (key: string): Result<string | undefined, InvalidInput> => {
+                const v: unknown = Reflect.get(expected, key);
+                return v === undefined ? { ok: true, value: undefined } : stickyField(v, `expected.${key}`);
+            };
+            const seenQuestion = seen('question');
+            if (!seenQuestion.ok) return seenQuestion;
+            const seenResolution = seen('resolution');
+            if (!seenResolution.ok) return seenResolution;
+            if (question.value === undefined && resolution.value === undefined) return invalid('question', 'Expected a question or a resolution.');
+            return {
+                ok: true,
+                value: {
+                    kind: 'hotspot',
+                    storming: storming.value,
+                    element: element.value,
+                    expected: {
+                        ...(seenQuestion.value !== undefined && { question: seenQuestion.value }),
+                        ...(seenResolution.value !== undefined && { resolution: seenResolution.value }),
+                    },
+                    ...(question.value !== undefined && { question: question.value }),
+                    ...(resolution.value !== undefined && { resolution: resolution.value }),
+                },
+            };
+        }
+        default:
+            return invalid('kind', "Expected 'wording', 'addHotspot', 'resolveHotspot' or 'hotspot'.");
+    }
+}
+
+/** The most characters of a hotspot's name, the light model's or dt's. */
+const MAX_HOTSPOT_NAME = 40;
+
+/**
+ * A hotspot's name from what the light model gave (ADR 0033): its letters and digits only, PascalCase from its words
+ * (`refund after shipping` → `RefundAfterShipping`), starting with a letter, at most 40 characters; undefined when
+ * nothing usable is left. Whether it is free is the planner's (a suffix when taken).
+ */
+export function hotspotNameOf(raw: unknown): string | undefined {
+    if (typeof raw !== 'string') return undefined;
+    const words = raw
+        .normalize('NFKC')
+        .split(/[^A-Za-z0-9]+/)
+        .filter(Boolean);
+    const joined = words
+        .map((w) => w[0].toUpperCase() + w.slice(1))
+        .join('')
+        .replace(/^[0-9]+/, '');
+    const name = (joined.charAt(0).toUpperCase() + joined.slice(1)).slice(0, MAX_HOTSPOT_NAME);
+    return /^[A-Z][A-Za-z0-9]+$/.test(name) ? name : undefined;
+}
+
+/** The name dt gives a hotspot when the light model gives none: after the sticky it is on, `<Sticky>Question`. */
+export const fallbackHotspotName = (on: string): string => `${on}Question`.slice(0, 60);

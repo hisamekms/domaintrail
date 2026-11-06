@@ -18,6 +18,7 @@ import {
     type AnswerStreamItem,
     type ApiResult,
     type ExtractionApi,
+    type HelperApi,
     type ExtractionStreamItem,
     type Started,
     type StreamItem,
@@ -91,7 +92,7 @@ export async function* parseSse(body: ReadableStream<Uint8Array>): AsyncGenerato
     }
 }
 
-export function createHttpAgentApi(options: HttpAgentApiOptions): AgentApi & ExtractionApi {
+export function createHttpAgentApi(options: HttpAgentApiOptions): AgentApi & ExtractionApi & HelperApi {
     const base = options.url.endsWith('/') ? options.url : `${options.url}/`;
     const authorization = `Bearer ${options.token}`;
 
@@ -174,36 +175,47 @@ export function createHttpAgentApi(options: HttpAgentApiOptions): AgentApi & Ext
             }
         },
         answerResult: (job, result) => call('POST', `answers/${encodeURIComponent(job)}`, result),
-        async *extractionEvents(signal): AsyncGenerator<ExtractionStreamItem> {
-            const res = await fetch(`${base}agent/extractions/events`, { headers: { authorization, accept: 'text/event-stream' }, signal });
-            if (!res.ok) throw new AgentApiError(res.status, await errorType(res));
-            if (!res.body) throw new Error('The extraction stream has no body');
-            yield { kind: 'open' };
-            for await (const e of parseSse(res.body)) {
-                let data: unknown;
-                try {
-                    data = e.data ? JSON.parse(e.data) : {};
-                } catch (error) {
-                    throw new Error(`An extraction event is not JSON: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
-                }
-                switch (e.event) {
-                    case EXTRACTION_EVENT_TYPES.job:
-                        if (!isObject(data) || typeof data.job !== 'string' || !Array.isArray(data.messages))
-                            throw new Error('An extraction job without its ID');
-                        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- a job as the server encodes it (ExtractionJobBody), checked for its ID above
-                        yield { kind: 'job', job: data as unknown as ExtractionJobBody };
-                        break;
-                    case EXTRACTION_EVENT_TYPES.withdrawn:
-                        if (isObject(data) && typeof data.job === 'string') yield { kind: 'withdrawn', job: data.job };
-                        break;
-                    case EXTRACTION_EVENT_TYPES.closed:
-                        yield { kind: 'closed' };
-                        break;
-                    default:
-                    // an event of a later server: not this extractor's
-                }
-            }
-        },
+        extractionEvents: (signal) => jobStream('extractions', signal),
         extractionResult: (job, result) => call('POST', `extractions/${encodeURIComponent(job)}`, result),
+        // the light model's small jobs (ADR 0033): the same stream and results, on a path of their own
+        helperEvents: (signal) => jobStream('helpers', signal),
+        helperResult: (job, result) => call('POST', `helpers/${encodeURIComponent(job)}`, result),
     };
+
+    /** The extractor role's stream, or the helpers' (`/agent/<path>/events`). */
+    async function* jobStream(at: 'extractions' | 'helpers', signal: AbortSignal): AsyncGenerator<ExtractionStreamItem> {
+        const res = await fetch(`${base}agent/${at}/events`, { headers: { authorization, accept: 'text/event-stream' }, signal });
+        if (!res.ok) throw new AgentApiError(res.status, await errorType(res));
+        if (!res.body) throw new Error('The extraction stream has no body');
+        yield { kind: 'open' };
+        for await (const e of parseSse(res.body)) {
+            let data: unknown;
+            try {
+                data = e.data ? JSON.parse(e.data) : {};
+            } catch (error) {
+                throw new Error(`An extraction event is not JSON: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+            }
+            switch (e.event) {
+                case EXTRACTION_EVENT_TYPES.job:
+                    // an extraction or the light model's question (their talk), or a hotspot's name (its question, ADR 0033)
+                    if (
+                        !isObject(data) ||
+                        typeof data.job !== 'string' ||
+                        !(Array.isArray(data.messages) || (data.stage === 'hotspotName' && typeof data.question === 'string'))
+                    )
+                        throw new Error('An extraction job without its ID');
+                    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- a job as the server encodes it (ExtractionJobBody), checked for its ID above
+                    yield { kind: 'job', job: data as unknown as ExtractionJobBody };
+                    break;
+                case EXTRACTION_EVENT_TYPES.withdrawn:
+                    if (isObject(data) && typeof data.job === 'string') yield { kind: 'withdrawn', job: data.job };
+                    break;
+                case EXTRACTION_EVENT_TYPES.closed:
+                    yield { kind: 'closed' };
+                    break;
+                default:
+                // an event of a later server: not this extractor's
+            }
+        }
+    }
 }

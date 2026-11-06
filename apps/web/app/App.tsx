@@ -1,7 +1,9 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Blocks, StickyNote, type LucideIcon } from 'lucide-react';
 import type { Diagnostic } from '@domaintrail/kernel';
 import type { DomainModel } from '@domaintrail/modeling';
+import { firstDeclarations } from '@domaintrail/storming';
+import { LEVEL_KINDS } from '@domaintrail/visualization';
 import { BaselineButton, BaselineMenu, baselineName } from '../baseline-picker';
 import { Explorer } from '../explorer';
 import { I18nProvider, MESSAGES } from '../i18n';
@@ -10,7 +12,7 @@ import { changeCount, ChangesList, problemCounts, ProblemsList } from '../lists'
 import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from '../model-utils';
 import { StatesCanvas } from '../states-canvas';
 import { useSessionPage } from '../session/page';
-import { chooseScope, StormingDetails, stormingExists } from '../storming';
+import { type StormingChoice, chooseScope, StormingDetails, stormingExists } from '../storming';
 import { StormingNavigator } from '../storming-navigator';
 import { NameSwitch } from '../view/toolbar';
 import { ViewWorkspace, useViewWorkspace } from '../view/workspace';
@@ -24,6 +26,12 @@ import type { TreeFold } from '../tree-fold';
 import { workspaceName } from './health';
 import { HealthButton } from './status';
 import { useViewSocket } from './useViewSocket';
+import { CommandPalette, usePaletteKey } from '../shared/palette';
+import { focusCanvas, useStickyActions } from '../stickies/layer';
+import { linkedElement } from '../stickies/link';
+import { currentReturn, RETURN_STATE, type ReturnPoint } from '../stickies/return';
+import { isMac } from '../stickies/registry';
+import { highlightElement } from '../view/canvas';
 import { KnowledgeList, KnowledgeMarks, KnowledgeNotice, StickyKnowledge } from '../knowledge/panel';
 import { KnowledgeContext, useKnowledge } from '../knowledge/useKnowledge';
 
@@ -98,6 +106,142 @@ export function App() {
         },
         showList: () => showLeft('knowledge'),
     });
+
+    /**
+     * Shows a sticky: its storming's integrated canvas (the view shown kept when it draws it), at a level that draws
+     * it, and selects it there (the palette, a link, a sticky renamed).
+     */
+    const { stormingChoice, setStormingChoice } = settings;
+    const { canvas } = workspace;
+    const openSticky = useCallback(
+        (id: string): void => {
+            const [, stormingId, local] = id.split('/');
+            const storming = stormings.find((x) => x.id === stormingId);
+            if (!storming || local === undefined) return;
+            const kind = firstDeclarations(storming.storming).get(local)?.kind;
+            const drawn = LEVEL_KINDS[stormingChoice.level].some((k) => k === kind);
+            const inView = view.kind === 'storming' && shown?.storming.id === stormingId && drawn && canvas?.findElement(id) !== undefined;
+            if (!inView) {
+                const { [stormingId]: _, ...others } = stormingChoice.timelines;
+                setStormingChoice({ ...stormingChoice, stormingId, level: drawn ? stormingChoice.level : 'design-level', timelines: others });
+                setView({ kind: 'storming' });
+            }
+            select(id, { highlight: false });
+            // selected on the canvas, which takes the focus: Escape clears the selection there
+            requestAnimationFrame(() =>
+                requestAnimationFrame(() => {
+                    if (!canvas) return;
+                    highlightElement(canvas, id);
+                    focusCanvas(canvas);
+                }),
+            );
+        },
+        [stormings, stormingChoice, setStormingChoice, view.kind, shown?.storming.id, canvas, select, setView],
+    );
+
+    // the way back from ドメインモデルで見る and このタイムラインで見る (ADR 0033): a return point per jump, with a browser
+    // history entry of its own, so that the detail's ← and the browser's Back both return to the storming as it was shown
+    const [returns, setReturns] = useState<ReturnPoint<StormingChoice>[]>([]);
+    const leave = useCallback(
+        (from: string, to: string): void => {
+            const point: ReturnPoint<StormingChoice> = { from, to, view, choice: stormingChoice, ...(canvas && { camera: canvas.getCamera() }) };
+            setReturns((r) => [...r, point]);
+            window.history.pushState({ [RETURN_STATE]: true }, '');
+        },
+        [view, stormingChoice, canvas],
+    );
+    const comeBack = useCallback(
+        (point: ReturnPoint<StormingChoice>): void => {
+            setReturns((r) => r.slice(0, -1));
+            setStormingChoice(point.choice);
+            setView(point.view);
+            select(point.from, { highlight: false });
+            // once the view is drawn again (it is fitted when shown): the camera it had, and the sticky selected there
+            setTimeout(() => {
+                if (!canvas) return;
+                if (point.camera) canvas.setCamera(point.camera);
+                const item = canvas.findElement(point.from);
+                if (item) canvas.select([item]);
+            }, 200);
+        },
+        [setStormingChoice, setView, select, canvas],
+    );
+    const returnPoint = currentReturn(returns, selected);
+    useEffect(() => {
+        const onPop = (): void => {
+            const point = returns.at(-1);
+            if (point) comeBack(point);
+        };
+        window.addEventListener('popstate', onPop);
+        return () => window.removeEventListener('popstate', onPop);
+    }, [returns, comeBack]);
+    /** The detail's ←: back across the jump through the browser's history (one entry each), else the selection's. */
+    const back = (): void => {
+        if (!returnPoint) return goBack();
+        const state: unknown = window.history.state;
+        const ours = typeof state === 'object' && state !== null && RETURN_STATE in state;
+        if (ours) window.history.back();
+        else comeBack(returnPoint);
+    };
+
+    // the stickies' actions (ADR 0033): the toolbar, the menu, the keys and the windows over a storming, the palette's items
+    const stickyActions = useStickyActions({
+        canvas,
+        stormings,
+        model,
+        mode,
+        active: view.kind === 'storming',
+        ...(shown?.options.timelineId !== undefined && { timelineShown: shown.options.timelineId }),
+        session: session.stickies,
+        onSeeModel: (dtId, from) => {
+            leave(from, dtId);
+            openBest(dtId);
+        },
+        onSeeTimeline: (stormingId, timeline, then) => {
+            leave(then, then);
+            setStormingChoice(chooseScope(stormingChoice, stormingId, timeline));
+            setView({ kind: 'storming' });
+            requestAnimationFrame(() => requestAnimationFrame(() => select(then)));
+        },
+        onOpenSticky: openSticky,
+        // ナレッジを見る: the sticky's knowledge in the detail, under the tree (a session with a store only)
+        ...(knowledge.available && {
+            knowledge: {
+                has: (id: string) => knowledge.marks.has(id),
+                open: (id: string) => {
+                    select(id, { highlight: false });
+                    showInspector();
+                    requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector('.knowledge-sticky')?.scrollIntoView({ block: 'start' })));
+                },
+            },
+        }),
+    });
+    // a hotspot the AI renamed while it was selected (ADR 0033): selected again under its name
+    const renamed = session.stickies?.renamed;
+    useEffect(() => {
+        const next = selected !== undefined ? renamed?.get(selected) : undefined;
+        if (next !== undefined && stormingExists(stormings, next) && !stormingExists(stormings, selected ?? '')) openSticky(next);
+    }, [selected, renamed, stormings, openSticky]);
+    // the command palette (⌘K / Ctrl+K), shared by the features that give it items
+    const mac = useMemo(isMac, []);
+    const [paletteOpen, setPaletteOpen] = useState(false);
+    const openPalette = useCallback(() => setPaletteOpen(true), []);
+    usePaletteKey(mac, openPalette);
+
+    // a link to an element (`#select=…`): opened once its storming is there, then the fragment is dropped
+    const [linked, setLinked] = useState(() => linkedElement(window.location.hash));
+    useEffect(() => {
+        // a link opened in a page already showing the Live View only changes the fragment
+        const onHash = (): void => setLinked(linkedElement(window.location.hash));
+        window.addEventListener('hashchange', onHash);
+        return () => window.removeEventListener('hashchange', onHash);
+    }, []);
+    useEffect(() => {
+        if (linked === undefined || !stormingExists(stormings, linked)) return;
+        setLinked(undefined);
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        openSticky(linked);
+    }, [linked, stormings, openSticky]);
 
     const locate = (d: Diagnostic) => {
         // e.g. syntax errors belong to no element: only their file can show them
@@ -247,6 +391,7 @@ export function App() {
                                 <>
                                     {session.canvasOverlay}
                                     <KnowledgeMarks canvas={workspace.canvas} />
+                                    {stickyActions.overlay}
                                 </>
                             }
                             aiReady={session.aiReady}
@@ -321,8 +466,8 @@ export function App() {
                                 settings.setStructureContexts([ctx]);
                                 setView({ kind: 'structure' });
                             }}
-                            backTo={backTo}
-                            onBack={goBack}
+                            backTo={returnPoint?.from ?? backTo}
+                            onBack={back}
                         />
                     }
                     overlays={
@@ -331,6 +476,15 @@ export function App() {
                                 <BaselineMenu baseline={current.baseline} anchor={baselineAnchor} onClose={closeBaselineMenu} />
                             )}
                             <KnowledgeNotice />
+                            {paletteOpen && (
+                                <CommandPalette
+                                    label={t.stickies.palette.title}
+                                    placeholder={t.stickies.palette.placeholder}
+                                    empty={t.stickies.palette.empty}
+                                    items={stickyActions.palette}
+                                    onClose={() => setPaletteOpen(false)}
+                                />
+                            )}
                         </>
                     }
                 />

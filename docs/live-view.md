@@ -200,6 +200,30 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   keeps its events; the stages' and groups' frames are never dimmed. Clicking the empty canvas (or `Escape`) clears the
   selection and brings everything back. Both drawings do it, the integrated canvas and a timeline laid out by ELK and
   the stages' grid.
+  **Acting on a sticky** ([ADR 0033](adr/0033-people-edit-stickies.md)): every action comes from one list, so the
+  same ones are in four places. Selecting stickies shows a small toolbar above them (below them when there is no room;
+  never on hover, hidden while the canvas moves): the frequent actions as icons — チャットに追加 (💬, a muted ✓ once
+  added) and 編集 ✎ — then 「…」; with several selected, how many and the actions for several only. 「…」 and a
+  right-click on a sticky open the menu of every action that applies to it, by group with their keys: よく使う
+  (チャットに追加 `Enter`, 編集 `F2`), 見る (ナレッジを見る for a sticky with knowledge, opening it in the detail; ドメインモデルで見る for an event, a command or an aggregate whose
+  `ref` the model has, its tooltip naming the element 「ドメインモデルの 注文 › 確定する を見る」; このタイムラインで見る for an
+  event, opening a timeline it is in), 書く (ホットスポットを付ける on any sticky but a hotspot; 解決を書く on a hotspot) and そのほか (リンクをコピー
+  `⌘⇧C`, a link that opens the Live View with that sticky selected). The arrow keys move in the menu, Escape closes
+  it. Outside a session only seeing and copying are offered. `⌘K` (Ctrl+K) opens the command palette: the actions on
+  the selection, then every sticky by name (its kind, storming and ID matched too).
+  **Editing a sticky** (in a session; anyone may): a double-click, `F2` or ✎ opens a small window under it with its
+  ラベル (selected) and 名前 (its ID) — the fields its kind declares. A name is checked as typed (the `.dtes` ID's form, not a keyword, not taken in the
+  storming); a new one says 「参照 n 件も書き換えます（.dtes n）」. Enter saves, Escape — or a press outside the window, not while typing with an IME — cancels (the windows show no key hints;
+  the buttons' tooltips name the keys). dt writes it at once — no
+  AI run: only the label, and for a new name the name and every reference to it in the storming, change in the file —
+  and everyone's canvas shows it; if someone (or the AI) changed the sticky meanwhile, the window says what it is now.
+  ホットスポットを付ける opens a window with the question only, on several lines (Enter starts a new line, ⌘Enter / Ctrl+Enter
+  adds it): its name (ID) is not asked — dt writes it at once as `<Sticky>Question` and selects it, and the agent's
+  light model renames it from the question a few seconds later (knowledge or not; not when it was changed meanwhile). On a hotspot, 編集 (or a double-click, `F2`) opens its 問い alone, and 解決を書く (解決を直す once resolved) on its toolbar
+  its 解決 alone, on several lines (⌘Enter / Ctrl+Enter saves); never its name; emptying 解決 reopens it. Each edit is in AI の作業.
+  **Back from a jump**: after ドメインモデルで見る (or このタイムラインで見る), the detail's back button names the sticky
+  (「← 注文を受け付けた」) and returns to the storming as it was shown — the same view, level and scope, the camera, the
+  sticky selected; the browser's Back does the same.
 
 The modeling views (Context Map, Structure, Catalog, the inspector, the explorer) use the same hues for the same
 concepts, on smaller areas: the cards are neutral, and the kind is on their edge, their stereotype («集約ルート») and
@@ -491,6 +515,12 @@ the journeys panel; the latest card follows the journey file as it is now. A few
   the source diff is open. The dialog keeps one width and its top in place whether the source diff is open or not; its
   body scrolls under the header. The facilitator cancels a running or
   queued card with ✕, after a dialog asks.
+  A person's edit of a sticky is a row of its own there — and, in the chat, a compact row of that person where it
+  happened (their avatar, no bubble; the sticky as its `#` chip; never a message to the AI, nothing unread): 「◯◯が編集しました」, its time and what changed
+  (ラベル: ~~旧~~ → 新; 名前 with the references it rewrote; a hotspot added; a resolution), and for the facilitator
+  打ち消す, which reverts it as any card is reverted. An edit made while the AI was working and dropped by its result is
+  written again after it (「AI の作業が落としたので…当て直しました」); when the AI's result gave the same sticky other
+  wording, the row shows both, people and AI, with AI の文言のまま and 人の文言にする.
   A row is one block between lines: a click anywhere on it but a chip, 変更を見る and ✕ opens it, and under the same left
   edge it shows the run's card, compact — a waiting one with the AI's question, answered (or voted on with ♡) as in the
   chat, the choices shared with the chat's card — and チャットで見る scrolls the chat to it. By default 終わったもの lists the cards

@@ -21,7 +21,7 @@ import {
     type ReplyData,
     toAgentReply,
 } from '@domaintrail/collaboration';
-import { createModelValidator, createSourceFormatter } from '@domaintrail/dt';
+import { createModelValidator, createSourceFormatter, createStickyEditor } from '@domaintrail/dt';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 import { sourceSelection } from '@domaintrail/analysis';
 
@@ -95,6 +95,7 @@ async function session(root?: string, database: 'memory' | 'file' = 'memory', cl
         blobs: await openSessionBlobs(dir),
         validator: createModelValidator(),
         formatter: createSourceFormatter(),
+        stickies: createStickyEditor(),
         clock: { now: () => new Date(clock.t) },
         ids: { newId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}` },
     };
@@ -1400,6 +1401,276 @@ describe('who may do what (ADR 0027): the actor of every use case, the rules in 
             participant: value(C.makeParticipantId('dev:ada')),
             role: 'Participant',
             identity: ada,
+        });
+    });
+});
+
+describe("people's edits of the stickies (ADR 0033)", () => {
+    const LABELLED = `storming Returns "返品" {
+  event Requested "返品を受け付けた"
+  event Received "返品が届いた"
+  policy Refund "返金する" {
+    on Received
+  }
+  timeline Normal "通常" {
+    Requested
+    Received
+  }
+}
+`;
+    const labelledSession = async (): Promise<Session> => session(await workspace({ 'sales/sales.dt': SALES, 'stormings/returns.dtes': LABELLED }));
+    const body = text('「返品が届いた」を直す');
+    const relabel = (label: string, expected = '返品が届いた') =>
+        ({ kind: 'wording', storming: 'Returns', element: 'Received', expected: { name: 'Received', label: expected }, label }) as const;
+
+    test('anyone edits a label: only that string changes, recorded as an edit with its revisions, out of the queue', async () => {
+        const s = await labelledSession();
+        const { id } = await started(s);
+        const edited = value(await s.use.editSticky({ session: id, actor: actor(guest), edit: relabel('荷物が戻った'), body }));
+        expect(await s.read('stormings/returns.dtes')).toBe(LABELLED.replace('"返品が届いた"', '"荷物が戻った"'));
+        expect(edited.request).toMatchObject({
+            author: guest,
+            body,
+            edit: {
+                kind: 'Wording',
+                storming: 'Returns',
+                nameBefore: 'Received',
+                nameAfter: 'Received',
+                labelBefore: '返品が届いた',
+                labelAfter: '荷物が戻った',
+            },
+        });
+        expect(edited.run).toMatchObject({ state: 'Edited', queuedBy: guest, input: { requests: [{ request: edited.request.id, author: guest }] } });
+        const state = value(await s.use.sessionState({ session: id }));
+        const origin = (rid: C.RevisionId) => state.revisions.find((r) => r.id === rid)?.origin;
+        expect(origin(edited.run.baseRevision)).toEqual({ kind: 'RunBase', run: edited.run.id });
+        expect(origin(edited.run.resultRevision)).toEqual({ kind: 'RunResult', run: edited.run.id });
+        // never claimed by an agent
+        expect(error(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000 }))).toEqual({ type: 'NothingQueued' });
+    });
+
+    test('refused, with nothing written: what the page saw is gone, a taken or bad name, nothing to change', async () => {
+        const s = await labelledSession();
+        const { id } = await started(s);
+        await s.write('stormings/returns.dtes', LABELLED.replace('"返品が届いた"', '"届いた"'));
+        expect(error(await s.use.editSticky({ session: id, actor: actor(guest), edit: relabel('荷物が戻った'), body }))).toEqual({
+            type: 'StickyStale',
+            current: { name: 'Received', label: '届いた' },
+        });
+        const rename = (name: string) =>
+            ({ kind: 'wording', storming: 'Returns', element: 'Received', expected: { name: 'Received', label: '届いた' }, name }) as const;
+        expect(error(await s.use.editSticky({ session: id, actor: actor(guest), edit: rename('Requested'), body }))).toEqual({
+            type: 'InvalidStickyName',
+            problem: 'duplicate',
+        });
+        expect(error(await s.use.editSticky({ session: id, actor: actor(guest), edit: rename('9x'), body }))).toEqual({
+            type: 'InvalidStickyName',
+            problem: 'format',
+        });
+        expect(error(await s.use.editSticky({ session: id, actor: actor(guest), edit: relabel('届いた', '届いた'), body }))).toEqual({
+            type: 'NothingToChange',
+        });
+        expect(await s.read('stormings/returns.dtes')).toBe(LABELLED.replace('"返品が届いた"', '"届いた"'));
+        expect(value(await s.use.sessionState({ session: id })).runs).toEqual([]);
+    });
+
+    test('a rename rewrites the references; a hotspot is put on an event and resolved; an edit is reverted as a run is', async () => {
+        const s = await labelledSession();
+        const { id } = await started(s);
+        const renamed = value(
+            await s.use.editSticky({
+                session: id,
+                actor: actor(guest),
+                edit: { kind: 'wording', storming: 'Returns', element: 'Received', expected: { name: 'Received', label: '返品が届いた' }, name: 'Arrived' },
+                body,
+            }),
+        );
+        expect(renamed.references).toBe(2);
+        const renamedText = LABELLED.replace('event Received', 'event Arrived').replace('on Received', 'on Arrived').replace('    Received\n', '    Arrived\n');
+        expect(await s.read('stormings/returns.dtes')).toBe(renamedText);
+
+        value(
+            await s.use.editSticky({
+                session: id,
+                actor: actor(guest),
+                edit: { kind: 'addHotspot', storming: 'Returns', on: 'Arrived', name: 'Broken', label: '壊れていたら？' },
+                body,
+            }),
+        );
+        value(
+            await s.use.editSticky({
+                session: id,
+                actor: actor(guest),
+                edit: { kind: 'resolveHotspot', storming: 'Returns', element: 'Broken', resolution: '返金しない' },
+                body,
+            }),
+        );
+        expect(await s.read('stormings/returns.dtes')).toContain(
+            '  hotspot Broken "壊れていたら？" {\n    on Arrived\n    status resolved\n    resolution "返金しない"\n  }\n}\n',
+        );
+
+        // the facilitator reverts the rename like any run: the old name comes back everywhere, the later edits stay
+        value(await s.use.requestRevert({ session: id, actor: actor(facilitator), run: renamed.run.id, body: text('「名前」の変更を打ち消す') }));
+        const outcome = value(await s.use.revertNext({ session: id, leaseMs: 30_000 }));
+        expect(outcome.kind).toBe('reverted');
+        const reverted = await s.read('stormings/returns.dtes');
+        expect(reverted).toContain('event Received "返品が届いた"');
+        expect(reverted).toContain('on Received');
+        // the hotspot written after the rename keeps the name it was written with (a line-based revert)
+        expect(reverted).toContain('  hotspot Broken "壊れていたら？" {\n    on Arrived\n');
+    });
+
+    test("a hotspot's question and resolution: one edit records both; emptying the resolution reopens it; its name stays", async () => {
+        const s = await labelledSession();
+        const { id } = await started(s);
+        value(
+            await s.use.editSticky({
+                session: id,
+                actor: actor(guest),
+                edit: { kind: 'addHotspot', storming: 'Returns', on: 'Received', name: 'ReceivedQuestion', label: '壊れていたら？' },
+                body,
+            }),
+        );
+        const both = value(
+            await s.use.editSticky({
+                session: id,
+                actor: actor(guest),
+                edit: {
+                    kind: 'hotspot',
+                    storming: 'Returns',
+                    element: 'ReceivedQuestion',
+                    expected: { question: '壊れていたら？' },
+                    question: '壊れて届いたら？',
+                    resolution: '返金する',
+                },
+                body,
+            }),
+        );
+        expect(both.request.edit).toMatchObject({
+            kind: 'HotspotEdited',
+            hotspot: 'ReceivedQuestion',
+            questionBefore: '壊れていたら？',
+            questionAfter: '壊れて届いたら？',
+            resolutionAfter: '返金する',
+        });
+        expect(await s.read('stormings/returns.dtes')).toContain(
+            '  hotspot ReceivedQuestion "壊れて届いたら？" {\n    on Received\n    status resolved\n    resolution "返金する"\n  }\n',
+        );
+        const reopened = value(
+            await s.use.editSticky({
+                session: id,
+                actor: actor(guest),
+                edit: {
+                    kind: 'hotspot',
+                    storming: 'Returns',
+                    element: 'ReceivedQuestion',
+                    expected: { question: '壊れて届いたら？', resolution: '返金する' },
+                    resolution: null,
+                },
+                body,
+            }),
+        );
+        expect(reopened.request.edit).toMatchObject({ kind: 'HotspotEdited', resolutionBefore: '返金する' });
+        expect(reopened.request.edit).not.toHaveProperty('resolutionAfter');
+        expect(await s.read('stormings/returns.dtes')).toContain('  hotspot ReceivedQuestion "壊れて届いたら？" {\n    on Received\n  }\n');
+    });
+
+    describe('while a run runs (the maintainer chose to re-apply)', () => {
+        /** A run claimed and started now: its base is the workspace as it is. */
+        async function running(s: Session, id: C.SessionId): Promise<{ run: C.QueuedAgentRun; token: string }> {
+            const latest = value(await s.use.sessionState({ session: id })).revisions.at(-1);
+            if (!latest) throw new Error('no revision');
+            const run = await queuedRun(s, id, latest);
+            const { lease } = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000 }));
+            value(await s.use.startRun({ run: run.id, token: lease.token }));
+            return { run, token: lease.token };
+        }
+
+        test("an edit the run dropped (it wrote the file as it read it) is written again after it, as the same person's", async () => {
+            const s = await labelledSession();
+            const { id } = await started(s);
+            const { run, token } = await running(s, id);
+            const read = await s.read('stormings/returns.dtes');
+            s.clock.t += 1000;
+            const edited = value(await s.use.editSticky({ session: id, actor: actor(guest), edit: relabel('荷物が戻った'), body }));
+            // the agent writes its version of what it read before the edit: a new event, and the old label
+            await s.write('stormings/returns.dtes', read.replace('  policy Refund', '  event Inspected "検品した"\n  policy Refund'));
+            s.clock.t += 1000;
+            value(await s.use.finishRun({ run: run.id, token, facts }));
+            const after = await s.use.reapplyEdits({ session: id, run: run.id });
+            expect(after.conflicts).toEqual([]);
+            expect(after.reapplied).toMatchObject({
+                state: 'Edited',
+                reapplies: run.id,
+                queuedBy: guest,
+                input: { requests: [{ request: edited.request.id }] },
+            });
+            const text_ = await s.read('stormings/returns.dtes');
+            expect(text_).toContain('event Received "荷物が戻った"');
+            expect(text_).toContain('event Inspected "検品した"');
+            // the agent's next run is told of the edit, old → new
+            const next = await running(s, id);
+            const told = await s.use.peopleEditsSince({ run: next.run.id });
+            expect(told.map((e): unknown[] => [e.by, e.edit.kind === 'Wording' && [String(e.edit.labelBefore), String(e.edit.labelAfter)]])).toEqual([
+                [guest, ['返品が届いた', '荷物が戻った']],
+                [guest, ['返品が届いた', '荷物が戻った']],
+            ]);
+        });
+
+        test('a rename the run dropped gets the new name back, in the references the run wrote too', async () => {
+            const s = await labelledSession();
+            const { id } = await started(s);
+            const { run, token } = await running(s, id);
+            const read = await s.read('stormings/returns.dtes');
+            s.clock.t += 1000;
+            value(
+                await s.use.editSticky({
+                    session: id,
+                    actor: actor(guest),
+                    edit: { kind: 'wording', storming: 'Returns', element: 'Received', expected: { name: 'Received', label: '返品が届いた' }, name: 'Arrived' },
+                    body,
+                }),
+            );
+            // the agent adds a step naming the old ID
+            await s.write('stormings/returns.dtes', read.replace('    Received\n  }', '    Received\n    Received\n  }'));
+            s.clock.t += 1000;
+            value(await s.use.finishRun({ run: run.id, token, facts }));
+            expect((await s.use.reapplyEdits({ session: id, run: run.id })).reapplied?.state).toBe('Edited');
+            const text_ = await s.read('stormings/returns.dtes');
+            expect(text_).not.toMatch(/\bReceived\b/);
+            expect(text_.match(/\bArrived\b/g)).toHaveLength(4);
+        });
+
+        test("a label the run changed otherwise is kept as the run's, and the edit notes the conflict for people to choose", async () => {
+            const s = await labelledSession();
+            const { id } = await started(s);
+            const { run, token } = await running(s, id);
+            const read = await s.read('stormings/returns.dtes');
+            s.clock.t += 1000;
+            const edited = value(await s.use.editSticky({ session: id, actor: actor(guest), edit: relabel('荷物が戻った'), body }));
+            await s.write('stormings/returns.dtes', read.replace('"返品が届いた"', '"返品を受け取った"'));
+            s.clock.t += 1000;
+            value(await s.use.finishRun({ run: run.id, token, facts }));
+            const after = await s.use.reapplyEdits({ session: id, run: run.id });
+            expect(after.reapplied).toBeUndefined();
+            expect(after.conflicts.map((c): unknown[] => [c.id, c.conflict])).toEqual([
+                [edited.run.id, { run: run.id, runLabel: '返品を受け取った', settled: false }],
+            ]);
+            expect(await s.read('stormings/returns.dtes')).toContain('"返品を受け取った"');
+            // people chose: settled
+            expect(value(await s.use.settleConflict({ session: id, run: edited.run.id })).conflict?.settled).toBe(true);
+            expect(error(await s.use.settleConflict({ session: id, run: edited.run.id }))).toEqual({ type: 'NothingToSettle' });
+        });
+
+        test('an edit the run kept is left alone', async () => {
+            const s = await labelledSession();
+            const { id } = await started(s);
+            const { run, token } = await running(s, id);
+            s.clock.t += 1000;
+            value(await s.use.editSticky({ session: id, actor: actor(guest), edit: relabel('荷物が戻った'), body }));
+            s.clock.t += 1000;
+            value(await s.use.finishRun({ run: run.id, token, facts }));
+            expect(await s.use.reapplyEdits({ session: id, run: run.id })).toEqual({ conflicts: [] });
         });
     });
 });

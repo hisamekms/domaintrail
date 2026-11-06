@@ -558,6 +558,52 @@ describe('the prompt of a warm agent', () => {
         const prompt = buildPrompt(run, names, 'n', [], [], { changedSinceYourLastRun: ['</requests-n>.dt'] });
         expect(prompt.match(/<\/requests-n>/g)).toHaveLength(1);
     });
+    test("people's edits by hand (ADR 0033): old → new, in changedSinceYourLastRun for a warm agent, on their own for a fresh one", () => {
+        const peopleEdits = [
+            {
+                by: 'dev:bob',
+                at: '2026-11-06T10:00:00.000Z',
+                edit: {
+                    kind: 'Wording' as const,
+                    storming: 'Returns',
+                    path: 'stormings/returns.dtes',
+                    nameBefore: 'Received',
+                    nameAfter: 'Arrived',
+                    labelBefore: '返品が届いた',
+                    labelAfter: '荷物が戻った',
+                    references: 2,
+                },
+            },
+            {
+                by: 'dev:bob',
+                at: '2026-11-06T10:01:00.000Z',
+                edit: {
+                    kind: 'HotspotAdded' as const,
+                    storming: 'Returns',
+                    path: 'stormings/returns.dtes',
+                    hotspot: 'Broken',
+                    label: '壊れていたら？',
+                    on: 'Arrived',
+                },
+            },
+        ];
+        const shown = [
+            {
+                by: 'Bob',
+                storming: 'Returns',
+                element: 'Arrived',
+                name: { from: 'Received', to: 'Arrived' },
+                label: { from: '返品が届いた', to: '荷物が戻った' },
+            },
+            { by: 'Bob', storming: 'Returns', addedHotspot: 'Broken', label: '壊れていたら？', on: 'Arrived' },
+        ];
+        const warm = buildPrompt(run, names, 'n', [], [], { changedSinceYourLastRun: ['stormings/returns.dtes'], peopleEdits });
+        expect((block(warm, 'n') as Record<string, unknown>).changedSinceYourLastRun).toEqual({ files: ['stormings/returns.dtes'], editedByPeople: shown });
+        const fresh = buildPrompt(run, names, 'n', [], [], { peopleEdits });
+        expect((block(fresh, 'n') as Record<string, unknown>).editedByPeople).toEqual(shown);
+        expect(fresh).toContain("Keep people's wording: never set such a label or name back to its old value");
+        expect(block(buildPrompt(run, names, 'n'), 'n')).not.toHaveProperty('editedByPeople');
+    });
 });
 
 describe('the prompt with several targets', () => {

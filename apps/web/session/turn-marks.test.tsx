@@ -27,6 +27,10 @@ describe('the latest turn', () => {
         expect(latestEnded(runs, new Set(['r1', 'r3']))).toBeUndefined();
         expect(latestEnded([run('r4', 'Failed', 'a', 'b', 4), run('r5', 'Running', 'a', 'a', 5)], new Set())).toBeUndefined();
     });
+
+    test("a person's edit of a sticky is a turn too (ADR 0033): its base → result marked as a run's", () => {
+        expect(latestEnded([...runs, run('e1', 'Edited', 'c', 'd', 5)], new Set())).toEqual({ id: 'e1', base: 'c', result: 'd' });
+    });
 });
 
 describe('the bar over the storming canvas', () => {

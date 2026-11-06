@@ -307,13 +307,21 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
             if (soFar) lastSoFar = soFar.last;
             // the journeys when it starts: the run keeps within the current one
             const journeys = started.journeys ? { journeys: started.journeys } : {};
+            // what people edited by hand since the previous run (ADR 0033): their wording is kept
+            const peopleEdits = started.peopleEdits && started.peopleEdits.length > 0 ? { peopleEdits: started.peopleEdits } : {};
             try {
                 outcome = await deps.runner.run({
-                    prompt: buildPrompt(input, names, nonce, previousRuns, revert, { ...(soFar && { sessionSoFar: soFar.text }), ...fixed, ...journeys }),
+                    prompt: buildPrompt(input, names, nonce, previousRuns, revert, {
+                        ...(soFar && { sessionSoFar: soFar.text }),
+                        ...fixed,
+                        ...journeys,
+                        ...peopleEdits,
+                    }),
                     ...(sinceLast && {
                         continuedPrompt: buildPrompt(input, names, nonce, previousRuns, revert, {
                             ...fixed,
                             ...journeys,
+                            ...peopleEdits,
                             changedSinceYourLastRun: sinceLast,
                             ...(soFarSince && { sessionSoFar: soFarSince.text }),
                         }),

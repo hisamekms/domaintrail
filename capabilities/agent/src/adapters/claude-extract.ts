@@ -9,10 +9,11 @@
 //
 // The light model that decides first whether to extract (`gate`, stage 2) runs the same way — a fresh process, no tools
 // at all, the same empty directory — with its own model (`agent.extract.gateModel`, Haiku unless configured; no
-// effort: the light model is the point), its schema and its instructions in the system prompt.
-import { extractorJsonSchema, gateJsonSchema } from '@domaintrail/knowledge';
+// effort: the light model is the point), its schema and its instructions in the system prompt. So does the name of a
+// hotspot a person writes (ADR 0033).
+import { extractorJsonSchema, gateJsonSchema, hotspotNameJsonSchema } from '@domaintrail/knowledge';
 import type { AnswerTurnResult, ExtractAgent, ExtractTurn } from '../core/ports.js';
-import { extractorInstructions, gateInstructions } from '../core/extract-prompt.js';
+import { extractorInstructions, gateInstructions, hotspotNameInstructions } from '../core/extract-prompt.js';
 import { runClaudeOnce } from './claude-answer.js';
 import { type AgentCommand, CLAUDE, claudeArguments } from './claude-code.js';
 import { DEFAULT_TRIAGE_MODEL } from './config.js';
@@ -49,6 +50,15 @@ export function gateArguments(options: { readonly model?: string } = {}, context
     ];
 }
 
+/** The arguments of a hotspot's name (ADR 0033): the light model, no tool at all, its schema and instructions. */
+export function hotspotNameArguments(options: { readonly model?: string } = {}): string[] {
+    return [
+        ...claudeArguments([], undefined, { model: options.model ?? DEFAULT_TRIAGE_MODEL, schema: hotspotNameJsonSchema() }),
+        '--append-system-prompt',
+        hotspotNameInstructions(),
+    ];
+}
+
 export function createClaudeExtractor(options: ClaudeExtractorOptions): ExtractAgent {
     const command = options.command ?? CLAUDE;
     const extractOptions = {
@@ -71,5 +81,6 @@ export function createClaudeExtractor(options: ClaudeExtractorOptions): ExtractA
     return {
         extract: (turn) => turnOf(turn, extractorArguments(extractOptions, turn.context), options.model),
         gate: (turn) => turnOf(turn, gateArguments({ model: gateModel }, turn.context), gateModel),
+        hotspotName: (turn) => turnOf(turn, hotspotNameArguments({ model: gateModel }), gateModel),
     };
 }

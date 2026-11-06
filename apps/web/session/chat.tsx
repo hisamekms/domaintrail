@@ -26,6 +26,7 @@ import {
     Info,
     LoaderCircle,
     MessagesSquare,
+    PencilLine,
     SendHorizontal,
     Ban,
     X,
@@ -65,6 +66,7 @@ import { messageMarks, updatedCards } from './cards';
 import { ChatProvider, useChat, type ChatContextValue, type Tx } from './chat-context';
 import { ChatHead, type ChatView } from './chat-head';
 import { ComposerResizer, useComposerSize } from './composer-resizer';
+import { EditRow, EditUnit } from './edit-unit';
 import { changeUnits, requestersOf, shownUnits, statusUnit, unfinishedCount, unitName, workGroups, type ChangeUnit, type UnitOutcome } from './history';
 import {
     addChips,
@@ -1084,6 +1086,9 @@ function streamRows(shown: Shown, tx: Tx): Row[] {
                     author: undefined,
                     render: () => <RecordRow record={item.record} hangs={look.hangsOn !== undefined} />,
                 };
+            case 'edit':
+                // the person's, continuing their messages as theirs do
+                return { key: item.key, kind: item.kind, author: item.run.queuedBy, render: (continues) => <EditRow run={item.run} continues={continues} /> };
         }
     };
     const toOf = (item: StreamItem): ReplyTo | undefined =>
@@ -1540,6 +1545,7 @@ function UndoBar() {
 }
 
 const OUTCOME_ICONS: Record<UnitOutcome, LucideIcon> = {
+    edited: PencilLine,
     changed: CircleCheck,
     unchanged: CircleMinus,
     clarification: CircleHelp,
@@ -1587,9 +1593,14 @@ function History({ units: all, reveal }: { units: readonly ChangeUnit[]; reveal:
     };
     const rows = (units: readonly ChangeUnit[], mark?: (i: number) => ReactNode): ReactNode => (
         <ol className="chat-units">
-            {units.map((unit, i) => (
-                <HistoryUnit key={unit.key} unit={unit} mark={mark?.(i)} open={open.has(unit.key)} onToggle={() => toggle(unit.key)} />
-            ))}
+            {units.map((unit, i) =>
+                // a person's edit of a sticky (ADR 0033): its own row, with what changed and its revert
+                unit.outcome === 'edited' ? (
+                    <EditUnit key={unit.key} unit={unit} />
+                ) : (
+                    <HistoryUnit key={unit.key} unit={unit} mark={mark?.(i)} open={open.has(unit.key)} onToggle={() => toggle(unit.key)} />
+                ),
+            )}
         </ol>
     );
     return (

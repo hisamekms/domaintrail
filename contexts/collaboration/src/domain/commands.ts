@@ -111,6 +111,7 @@ export const requestCommands: Collaboration.RequestCommands = {
                     viewedAt,
                     journeyNote: undefined,
                     redactedAt: undefined,
+                    edit: undefined,
                 },
                 events: {
                     RequestSent: {
@@ -150,12 +151,37 @@ export const requestCommands: Collaboration.RequestCommands = {
                     reverts,
                     viewedAt: undefined,
                     journeyNote: undefined,
+                    edit: undefined,
                     redactedAt: undefined,
                 },
                 events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, mentions: [], reverts } },
             },
         });
     }),
+
+    // a person's edit of a sticky (ADR 0033): anyone's, about the workspace as a whole, kept out of the chat
+    recordEdit: decide<Collaboration.RecordEditRequestDecision>(Collaboration.RequestShape, ({ id, session, author, body, sentAt, edit }) =>
+        ok({
+            Sent: {
+                set: {
+                    id,
+                    session,
+                    author,
+                    targets: [],
+                    body,
+                    sentAt,
+                    replyTo: undefined,
+                    mentions: [],
+                    reverts: undefined,
+                    viewedAt: undefined,
+                    journeyNote: undefined,
+                    redactedAt: undefined,
+                    edit,
+                },
+                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, mentions: [], edit } },
+            },
+        }),
+    ),
 
     // the read-only answerer's answer: written as the AI, a reply to the message it answers, with no target or mention;
     // also dt's note after an interview's brief is confirmed (its journey and next step's buttons on `journeyNote`)
@@ -177,6 +203,7 @@ export const requestCommands: Collaboration.RequestCommands = {
                     reverts: undefined,
                     viewedAt: undefined,
                     journeyNote,
+                    edit: undefined,
                     redactedAt: undefined,
                 },
                 events: {
@@ -237,6 +264,68 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
                 events: { RunQueued: { type: 'RunQueued', runId: id, session, requests, queuedBy, queuedAt } },
             },
         });
+    }),
+
+    // a person's edit of a sticky, written by dt: recorded at once, never queued (ADR 0033)
+    recordEdit: decide<Collaboration.RecordEditAgentRunDecision>(Collaboration.AgentRunShape, (params) => {
+        switch (Collaboration.checkRecordEditAgentRunRequires(params)) {
+            case 'inputEdits':
+            case 'editInputCoversRequests':
+                return err({ type: 'InputMismatch' });
+            case 'editChanges':
+                return err({ type: 'ChangedMismatch' });
+        }
+        const { id, session, requests, input, queuedBy, queuedAt, baseRevision, resultRevision, reapplies, finishedAt } = params;
+        return ok({
+            Edited: {
+                set: {
+                    id,
+                    session,
+                    input,
+                    queuedBy,
+                    queuedAt,
+                    baseRevision,
+                    resultRevision,
+                    reapplies,
+                    finishedAt,
+                    conflict: undefined,
+                    hotspotName: undefined,
+                },
+                events: {
+                    RunEdited: {
+                        type: 'RunEdited',
+                        runId: id,
+                        session,
+                        requests,
+                        queuedBy,
+                        baseRevision,
+                        resultRevision,
+                        ...(reapplies && { reapplies }),
+                        finishedAt,
+                    },
+                },
+            },
+        });
+    }),
+
+    // the AI's name of a hotspot a person added, written over its provisional one: part of the same edit (ADR 0033)
+    nameHotspot: decide<Collaboration.NameHotspotAgentRunDecision>(Collaboration.AgentRunShape, {
+        Edited: (run, params) => {
+            if (Collaboration.checkNameHotspotAgentRunRequires(run, params) === 'renamedChanges') return err({ type: 'ChangedMismatch' });
+            const { name: hotspotName, renamed: resultRevision } = params;
+            return ok({
+                Edited: {
+                    set: { hotspotName, resultRevision },
+                    events: { RunHotspotNamed: { type: 'RunHotspotNamed', runId: run.id, hotspotName, resultRevision } },
+                },
+            });
+        },
+    }),
+
+    // what a later run did to the same sticky, or the person's choice made (ADR 0033)
+    noteConflict: decide<Collaboration.NoteConflictAgentRunDecision>(Collaboration.AgentRunShape, {
+        Edited: (run, { conflict }) =>
+            ok({ Edited: { set: { conflict }, events: { RunEditConflicted: { type: 'RunEditConflicted', runId: run.id, conflict } } } }),
     }),
 
     // a queued revert whose turn came, reverted mechanically by the server (no agent); unchanged when nothing was left

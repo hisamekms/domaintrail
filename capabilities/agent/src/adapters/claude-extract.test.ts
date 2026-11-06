@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { extractorJsonSchema, gateJsonSchema } from '@domaintrail/knowledge';
 import { extractorInstructions, gateInstructions } from '../core/extract-prompt.js';
-import { createClaudeExtractor } from './claude-extract.js';
+import { createClaudeExtractor, hotspotNameArguments } from './claude-extract.js';
 
 const FAKE = path.join(import.meta.dir, '..', '..', 'test-fixtures', 'warm-claude.mjs');
 
@@ -96,5 +96,14 @@ describe("the extractor role's Claude Code", () => {
         expect(valueOf(a.args, '--append-system-prompt')).toBe(`${extractorInstructions()}\n<workspace-stickies>\n[]\n</workspace-stickies>\n`);
         expect(valueOf(b.args, '--append-system-prompt')).toBe(`${gateInstructions()}\n<workspace-stickies>\n["a"]\n</workspace-stickies>\n`);
         expect(a.prompt).toBe('the talk');
+    });
+});
+
+describe("the light model's name of a hotspot (ADR 0033)", () => {
+    test('no tool at all, the light model, its schema and instructions', () => {
+        const argv = hotspotNameArguments({ model: 'haiku' });
+        expect(argv).toContain('haiku');
+        expect(argv.join(' ')).toContain('"name"');
+        expect(argv.at(-1)).toContain('PascalCase');
     });
 });

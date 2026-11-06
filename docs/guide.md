@@ -2397,6 +2397,11 @@ and SVG save it as a file (`dt export svg` draws the same SVG without a browser;
 `dt open`, the イベントストーミング world shows one storming at a time, with the storming and the timeline picked as
 its view bar's subject (a breadcrumb at the left) and the level next to them; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in (and
 デザインレベルのみ for an event marked `level design`).
+Selecting notes shows a toolbar above them, and 「…」 or a right-click the menu of every action on them: add them to the
+chat (`Enter`), edit the label and the name (`F2`, or a double-click), see the `.dt` element of a `ref` or a timeline
+the event is in, put a hotspot on any sticky but a hotspot (its question only: written at once, the AI names it afterwards), write a hotspot's resolution, copy a link to the note (`⌘⇧C`); `⌘K` finds
+actions and notes by name. Editing is in a session only (below). After a jump to the domain model or another
+timeline, the detail's back button (and the browser's Back) returns to the storming as it was shown.
 
 A storming with stages or exceptions is drawn in time order instead: the stages left to right, each a labelled frame,
 one column per step, the trunks as one straight row through every frame (the `after` arrow joins one trunk's end to
@@ -4166,6 +4171,18 @@ around it (its ⋯ → 変更を見る).
   If writing fails halfway, nothing is recorded as restored and the page says that manual recovery is needed: check
   the files, then restore the *before a restore* revision it names (through *Record the current state, then restore*,
   since the workspace now differs from the last revision).
+
+**People's edits of the stickies** ([ADR 0033](adr/0033-people-edit-stickies.md)). Anyone in the session can change a
+sticky's label and name, put a hotspot on any sticky and write a hotspot's resolution on the canvas; dt writes it into
+the `.dtes` at once, without an AI run, changing only the label string, or for a new name the declaration's name and
+every reference to it in the storming (relations — `by`, `reads`, `handledBy`, `emits`, `on`, `issues`, `from` —, timelines and groups, an exception's `then`, a stage's `after`) —
+the rest of the file stays as it was (no `dt fmt`). An edit is refused, with nothing written, when the sticky is no
+longer as the page showed it, when the name is not an ID of `.dtes` or is taken in the storming, or when the file would
+not parse. Each edit is a unit of work with its revisions before and after: it shows in AI の作業 as 「◯◯が編集しました」
+with old → new, and the facilitator reverts it as any work. Edits are allowed while the AI works, even on what it is
+changing: when its run ends, an edit its result dropped (the old label or name left in the file) is written again, and
+a label the run changed to something else is kept as the run's, with both wordings offered to people in AI の作業. The
+next run is told what people edited, old → new, and to keep their wording.
 
 <!-- topic: session-agent -->
 ### The agent and its security

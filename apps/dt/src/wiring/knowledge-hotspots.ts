@@ -68,6 +68,8 @@ async function outcomeOfRun(collaboration: CollaborationUseCases, session: Colla
             return { kind: 'ended', why: 'the run was cancelled' };
         case 'Reverted':
             return { kind: 'ended', why: 'the run was a revert' };
+        case 'Edited':
+            return { kind: 'ended', why: "the run was a person's edit" };
     }
 }
 

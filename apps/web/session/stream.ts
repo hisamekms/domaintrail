@@ -73,6 +73,8 @@ export type AgentMessage =
     | { readonly kind: 'declined'; readonly result: number | undefined; readonly files: number | undefined; readonly reply: ReplyView }
     /** The changes of a run reverted mechanically, without the agent. */
     | { readonly kind: 'reverted'; readonly changed: boolean; readonly result: number | undefined; readonly files: number | undefined }
+    /** A person's edit of a sticky, written by dt (ADR 0033). */
+    | { readonly kind: 'edited'; readonly result: number | undefined; readonly files: number | undefined }
     | { readonly kind: 'failed'; readonly reason: FailureReason }
     | { readonly kind: 'cancelled'; readonly by: string };
 
@@ -116,6 +118,11 @@ export type StreamItem =
     | { readonly kind: 'session-start'; readonly key: string; readonly at: string; readonly revision: number }
     | { readonly kind: 'message'; readonly key: string; readonly at: string; readonly request: RequestJson }
     | { readonly kind: 'card'; readonly key: string; readonly at: string; readonly updatedAt: string; readonly unit: ChangeUnit }
+    /**
+     * A person's edit of a sticky (ADR 0033), where it was written: an activity row of theirs, never a message (the AI
+     * is not asked, nothing unread). A re-application after a run and a conflict's choice are rows of the same kind.
+     */
+    | { readonly kind: 'edit'; readonly key: string; readonly at: string; readonly run: Extract<RunJson, { state: 'Edited' }> }
     /** A change proposal the AI wrote for a participant's 依頼 (ADR 0030), where it was made. */
     | { readonly kind: 'proposal'; readonly key: string; readonly at: string; readonly proposal: ProposalJson }
     /**
@@ -193,6 +200,11 @@ export function agentMessage(run: RunJson, lookup: ReturnType<typeof revisionLoo
             return { at: run.finishedAt, message: { kind: 'failed', reason: run.reason } };
         case 'Cancelled':
             return { at: run.cancelledAt, message: { kind: 'cancelled', by: run.cancelledBy } };
+        case 'Edited':
+            return {
+                at: run.finishedAt,
+                message: { kind: 'edited', result: revisionNumber(run.resultRevision), files: files(run.baseRevision, run.resultRevision) },
+            };
         case 'Reverted':
             return {
                 at: run.finishedAt,
@@ -233,9 +245,12 @@ export function streamItems(
         items.push({ kind: 'record', key: `record:${record.id}`, at: record.at, updatedAt: record.revisedAt ?? record.at, record });
     // a guide's answer is its card's: not a message of its own
     const answers = guideAnswers(state);
+    // a person's edit of a sticky (ADR 0033) is in AI の作業, not in the chat: neither its message nor its unit
     for (const request of state.requests)
-        if (!answers.has(request.id)) items.push({ kind: 'message', key: `message:${request.id}`, at: request.sentAt, request });
-    for (const unit of changeUnits(state)) items.push({ kind: 'card', key: `card:${unit.key}`, at: unit.start, updatedAt: unit.at, unit });
+        if (!answers.has(request.id) && request.edit === undefined) items.push({ kind: 'message', key: `message:${request.id}`, at: request.sentAt, request });
+    for (const unit of changeUnits(state))
+        if (unit.outcome !== 'edited') items.push({ kind: 'card', key: `card:${unit.key}`, at: unit.start, updatedAt: unit.at, unit });
+    for (const run of state.runs) if (run.state === 'Edited') items.push({ kind: 'edit', key: `edit:${run.id}`, at: run.finishedAt, run });
     for (const proposal of state.proposals ?? []) items.push({ kind: 'proposal', key: `proposal:${proposal.id}`, at: proposal.proposedAt, proposal });
     // an answer command's answer is the AI's message: its card says only that the AI works on it (in Solo, its slot
     // does), or that it had nothing to work on (a guide stored from when it was `/es:next` and had no storming in view:

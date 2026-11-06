@@ -75,7 +75,7 @@ import type { ViewService } from '@domaintrail/visualization';
 import type { KnowledgeStore } from '@domaintrail/knowledge';
 import { createGuardedTextFile, createWorkspaceSnapshot, watchFile } from '@domaintrail/workspace';
 import { processAlive } from './process.js';
-import { createModelValidator, createSourceFormatter } from './validator.js';
+import { createModelValidator, createSourceFormatter, createStickyEditor } from './validator.js';
 import { prepareLiveView, serverUrl, watchLiveView, type ViewServerOptions } from './view.js';
 import { createWatcherHold, type WatcherHold } from './watcher-hold.js';
 import { workspaceState } from './state.js';
@@ -134,6 +134,8 @@ export interface SessionServerOptions extends ViewServerOptions {
     clock?: Clock;
     /** How long a claim or a heartbeat holds the agent's lease (default `AGENT_LEASE_MS`). */
     leaseMs?: number;
+    /** How long a person waits for the light model's name of their hotspot (ADR 0033; default 30 s). */
+    hotspotNameTimeoutMs?: number;
     /** How often expired leases are applied (default 5 s). */
     expireEveryMs?: number;
     /** A classifier instead of the configured one (tests). */
@@ -317,6 +319,8 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             `A session server is already running for this workspace${running ? ` (pid ${running.pid}, ${running.url})` : ''}: stop it before starting another.`,
         );
     const leaseMs = options.leaseMs ?? AGENT_LEASE_MS;
+    /** How long the light model may take to name a hotspot written under a provisional name (ADR 0033); past it, the name stays. */
+    const HOTSPOT_NAME_TIMEOUT_MS = options.hotspotNameTimeoutMs ?? 30_000;
     const sources = options.sources ?? DEFAULT_SOURCES;
     const respectGitignore = options.respectGitignore ?? true;
 
@@ -342,6 +346,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             blobs: await openSessionBlobs(state.state),
             validator: createModelValidator(),
             formatter: createSourceFormatter(),
+            stickies: createStickyEditor(),
             clock,
             ids: randomIds,
         });
@@ -483,6 +488,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 await knowledge.end(extractTimeoutMs + 15_000).catch((e: unknown) => log(`knowledge: ${e instanceof Error ? e.message : String(e)}`));
             }
             extractions?.close(true);
+            helpers.close(true);
             resolveClosed();
         };
 
@@ -591,6 +597,8 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                   log,
               })
             : undefined;
+        // the light model's small jobs, whatever the knowledge config: a hotspot's name (ADR 0033), on a stream of their own
+        const helpers = createExtractionDispatcher({ timeoutMs: HOTSPOT_NAME_TIMEOUT_MS, maxStreams: MAX_AGENT_STREAMS, token: agentToken, log });
         const relay = createEventRelay({
             collaboration,
             session,
@@ -647,11 +655,22 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 if (activities.set(run, activity)) hub.publish({ type: 'run.activity', run, activity });
             },
             reverts: () => void reverts.kick(),
+            // the people's edits a run dropped are written again before the agent claims the next run (ADR 0033)
+            afterRun: async (run) => {
+                const r = await watcherHold.aroundWrite(
+                    () => collaboration.reapplyEdits({ session, run }),
+                    (done) => done.reapplied !== undefined,
+                );
+                if (r.reapplied) log(`re-applied people's edits after run ${run} (run ${r.reapplied.id})`);
+                if (r.conflicts.length > 0) log(`run ${run} changed ${r.conflicts.length} edited label(s) otherwise: left to people`);
+                await pump();
+            },
             answerTimeoutMs: options.answerTimeoutMs ?? ANSWER_TIMEOUT_MS,
             onPresence: () => presenceChanged(),
             log,
             pair: (code) => access.redeemAgentCode({ session, code }),
             ...(extractions && { extractions }),
+            helpers,
             journeys: async () => {
                 const file = journeys.file();
                 if (!file) return undefined;
@@ -786,6 +805,13 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             triaged: () => stage.kick(),
             agentPresence,
             retryAnswer: (request) => agent.answers.retry(request),
+            // the light model names a hotspot a person writes (ADR 0033), through the extractor role; none: dt names it
+            hotspotName: async (input: Parameters<typeof helpers.hotspotName>[0]): Promise<unknown> => {
+                const answer = await helpers.hotspotName(input, HOTSPOT_NAME_TIMEOUT_MS);
+                if (answer.kind !== 'done' || answer.result.error !== undefined) return undefined;
+                const reply = answer.result.reply;
+                return typeof reply === 'object' && reply !== null && 'name' in reply ? reply.name : undefined;
+            },
             knownViewNames: () => knownViewNames(view.state),
             guideWorkspace: guideWorkspaceNow,
             journeys,
@@ -892,6 +918,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                     presence.dispose();
                     knowledge?.stop();
                     extractions?.close(false);
+                    helpers.close(false);
                     agent.close();
                     await stage.settled();
                     await watch?.stop();

@@ -92,6 +92,8 @@ const json = { 'content-type': 'application/json' };
 
 interface Step {
     edits?: ({ path: string; replace: [string, string] } | { path: string; append: string } | { path: string; write: string })[];
+    /** The edits wait until this file exists. */
+    waitForFile?: string;
     delayMs?: number;
     hang?: boolean;
     exitCode?: number;
@@ -1192,5 +1194,86 @@ describe('the CLI', () => {
         const found = await restarted.collaboration.sessionState({ session: restarted.session });
         const failed = found.ok ? found.value.runs.find((r) => r.id === run) : undefined;
         expect(failed?.state === 'Failed' && failed.reason).toBe('LeaseExpired');
+    });
+});
+
+describe("people's edits while a run runs (ADR 0033, the maintainer chose to re-apply)", () => {
+    type Edited = Extract<Run, { state: 'Edited' }>;
+    const editedRuns = (s: SessionStateBody): Edited[] => s.runs.filter((r): r is Edited => r.state === 'Edited');
+
+    /** A run of Bob's request queued, the fake agent writing `write` over Returns once the flag exists: the run, the flag. */
+    async function runWriting(ctx: Context, write: (read: string) => string): Promise<{ run: string; flag: string; read: string }> {
+        const read = await readFile(path.join(ctx.root, RETURNS), 'utf8');
+        const flag = path.join(await scratch('domaintrail-flag-'), 'go');
+        const planFile = await ctx.plan([
+            { waitForFile: flag, edits: [{ path: RETURNS, write: write(read) }], outcome: { outcome: 'done', summary: 'Added an event.' } },
+            { outcome: { outcome: 'done', summary: 'Nothing.' } },
+        ]);
+        const asked = await request(ctx, ctx.bob, { kind: 'DtesElement', storming: 'Returns', local: 'ItemDisposed' }, 'Add an event for a cancelled return.');
+        const run = await queue(ctx, [asked]);
+        await subscribe(ctx, planFile);
+        await until(ctx, run, ['Running']);
+        return { run, flag, read };
+    }
+
+    const relabel = (label: string) => ({
+        kind: 'wording',
+        storming: 'Returns',
+        element: 'ReturnRequested',
+        expected: { name: 'ReturnRequested', label: '返品が依頼された' },
+        label,
+        body: '「返品が依頼された」を直す',
+    });
+
+    integration('an edit the run dropped is written again when it ends, and the next run is told of it', async () => {
+        const ctx = await setup();
+        const { run, flag } = await runWriting(ctx, (read) =>
+            // the agent writes back what it read before the edit, with its new event
+            read.replace('  event ItemDisposed "商品を廃棄した"\n', '  event ItemDisposed "商品を廃棄した"\n  event ReturnCancelled "返品を取り消した"\n'),
+        );
+        // Bob edits a label while the run runs (on an element it targets in the same storming)
+        const res = await api(ctx.server, ctx.bob, 'stickies', relabel('返品の申し出があった'));
+        expect(res.status).toBe(201);
+        expect(await readFile(path.join(ctx.root, RETURNS), 'utf8')).toContain('event ReturnRequested "返品の申し出があった"');
+        await writeFile(flag, '');
+        expect((await until(ctx, run, ['Completed', 'Failed'])).state).toBe('Completed');
+        const reapplied = await waitFor('the re-application', async () => editedRuns(await state(ctx)).find((r) => r.reapplies === run));
+        expect(reapplied.queuedBy).not.toBe('facilitator');
+        const text = await readFile(path.join(ctx.root, RETURNS), 'utf8');
+        expect(text).toContain('event ReturnRequested "返品の申し出があった"');
+        expect(text).toContain('event ReturnCancelled "返品を取り消した"');
+
+        // the next run's prompt names the edit, old → new
+        const next = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'DtesStorming', storming: 'Returns' }, 'Tidy up.')]);
+        await until(ctx, next, ['Completed', 'Failed']);
+        const prompt = (await ctx.invocations()).at(-1)?.prompt ?? '';
+        expect(prompt).toContain('"editedByPeople"');
+        expect(prompt).toContain('"from": "返品が依頼された"');
+        expect(prompt).toContain('"to": "返品の申し出があった"');
+    });
+
+    integration("a label the run changed otherwise stays the run's; the edit shows both, and people settle it", async () => {
+        const ctx = await setup();
+        const { run, flag } = await runWriting(ctx, (read) => read.replace('"返品が依頼された"', '"返品を受け付けた"'));
+        const res = await api(ctx.server, ctx.bob, 'stickies', relabel('返品の申し出があった'));
+        expect(res.status).toBe(201);
+        const edit = ((await res.json()) as { run: { id: string } }).run.id;
+        await writeFile(flag, '');
+        await until(ctx, run, ['Completed', 'Failed']);
+        const noted = await waitFor('the conflict', async () => editedRuns(await state(ctx)).find((r) => r.id === edit && r.conflict));
+        expect(noted.conflict).toEqual({ run, runLabel: '返品を受け付けた', settled: false });
+        expect(await readFile(path.join(ctx.root, RETURNS), 'utf8')).toContain('event ReturnRequested "返品を受け付けた"');
+        expect(editedRuns(await state(ctx)).some((r) => r.reapplies === run)).toBe(false);
+
+        // a stale edit is refused with what it is now
+        const stale = await api(ctx.server, ctx.bob, 'stickies', relabel('別の文言'));
+        expect(stale.status).toBe(409);
+        expect(((await stale.json()) as { error: unknown }).error).toMatchObject({
+            type: 'StickyStale',
+            current: { name: 'ReturnRequested', label: '返品を受け付けた' },
+        });
+
+        expect((await api(ctx.server, ctx.bob, `runs/${edit}/settle`, {})).status).toBe(200);
+        expect(editedRuns(await state(ctx)).find((r) => r.id === edit)?.conflict?.settled).toBe(true);
     });
 });

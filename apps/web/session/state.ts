@@ -99,6 +99,7 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
                 ...(e.replyTo !== undefined && { replyTo: e.replyTo }),
                 mentions: e.mentions,
                 ...(e.journeyNote !== undefined && { journeyNote: e.journeyNote }),
+                ...(e.edit !== undefined && { edit: e.edit }),
                 state: 'Sent',
             };
             return { state: { ...at, requests: [...state.requests, request] }, refetch: false };
@@ -139,6 +140,20 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
             };
             return { state: runs(() => reverted, e.runId), refetch: false };
         }
+        case 'RunEdited':
+            // a person's edit of a sticky (ADR 0033): its frozen input is not in the event
+            return { state: at, refetch: !state.runs.some((r) => r.id === e.runId) };
+        case 'RunHotspotNamed':
+            // the AI's name of a hotspot a person added, over its provisional one (ADR 0033)
+            return {
+                state: runs((r) => (r.state === 'Edited' ? { ...r, hotspotName: e.hotspotName, resultRevision: e.resultRevision } : r), e.runId),
+                refetch: !state.runs.some((r) => r.id === e.runId) || !state.revisions.some((r) => r.id === e.resultRevision),
+            };
+        case 'RunEditConflicted':
+            return {
+                state: runs((r) => (r.state === 'Edited' ? { ...r, conflict: e.conflict } : r), e.runId),
+                refetch: !state.runs.some((r) => r.id === e.runId),
+            };
         case 'RevertLeftToAgent':
             // still queued, now for the agent, with why
             return {

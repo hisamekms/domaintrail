@@ -20,6 +20,7 @@ import {
     type Extractor,
     type ExtractorAnswer,
     type GateInput,
+    type HotspotNameInput,
     readUsage,
 } from '@domaintrail/knowledge';
 import { sendError } from '../http/json.js';
@@ -42,6 +43,8 @@ export interface ExtractionDispatcherDeps {
 }
 
 export interface ExtractionDispatcher extends Extractor {
+    /** The light model's name of a hotspot (ADR 0033), withdrawn at `timeoutMs`. */
+    hotspotName(input: HotspotNameInput, timeoutMs: number): Promise<ExtractorAnswer>;
     /** `GET /agent/extractions/events`: a connected extractor. */
     events(req: IncomingMessage, res: ServerResponse): void;
     /** `POST /agent/extractions/:job`: a job's result (the body read as JSON); answers the request. */
@@ -104,7 +107,7 @@ export function createExtractionDispatcher(deps: ExtractionDispatcherDeps): Extr
     };
 
     /** Hands a job to a connected extractor that has none in hand; `unavailable` when there is none. */
-    const handOut = (job: (id: string) => ExtractionJobBody): Promise<ExtractorAnswer> => {
+    const handOut = (job: (id: string) => ExtractionJobBody, timeoutMs = deps.timeoutMs, grace = GRACE_MS): Promise<ExtractorAnswer> => {
         const stream = [...streams].find((s) => !s.closed && s.job === undefined);
         if (!stream) return Promise.resolve({ kind: 'unavailable' });
         const id = randomUUID();
@@ -114,8 +117,8 @@ export function createExtractionDispatcher(deps: ExtractionDispatcherDeps): Extr
                 if (!h) return;
                 send(h.stream, EXTRACTION_EVENT_TYPES.withdrawn, { job: id });
                 log(`extraction job ${id} timed out`);
-                settle(h, { kind: 'done', result: { error: 'timed out', durationMs: deps.timeoutMs } });
-            }, deps.timeoutMs + GRACE_MS);
+                settle(h, { kind: 'done', result: { error: 'timed out', durationMs: timeoutMs } });
+            }, timeoutMs + grace);
             timer.unref();
             handed.set(id, { id, stream, timer, resolve });
             stream.job = id;
@@ -126,6 +129,8 @@ export function createExtractionDispatcher(deps: ExtractionDispatcherDeps): Extr
     return {
         extract: (input: ExtractionInput) => handOut((job) => ({ ...input, stage: 'extract', job, timeoutMs: deps.timeoutMs })),
         gate: (input: GateInput) => handOut((job) => ({ ...input, stage: 'gate', job, timeoutMs: deps.timeoutMs })),
+        // a hotspot's name (ADR 0033): a person waits for it, so it is withdrawn at its own short timeout, no grace
+        hotspotName: (input: HotspotNameInput, timeoutMs: number) => handOut((job) => ({ ...input, stage: 'hotspotName', job, timeoutMs }), timeoutMs, 0),
 
         events(_req, res) {
             if (streams.size >= deps.maxStreams) return sendError(res, 429, 'TooManyStreams', `At most ${deps.maxStreams} streams at once.`);

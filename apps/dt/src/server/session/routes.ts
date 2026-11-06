@@ -32,8 +32,10 @@ import {
     PROPOSAL_LIMITS,
     readProposalText,
     type SessionState,
+    type StickyEditInput,
 } from '@domaintrail/collaboration';
 import type { AgentPresence, Me, MessageTemplateBody, ModelChangesBody, Role, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import { HOTSPOT_TAKEN_MAX } from '@domaintrail/knowledge';
 import type { AccessPolicy, Authorization } from '../http/access.js';
 import { BodyError, mediaType, readJson, readText, sendError, sendJson } from '../http/json.js';
 import type { SessionSurface } from '../http/server.js';
@@ -55,7 +57,10 @@ import {
     mentionIds,
     modelTarget,
     replyTarget,
+    fallbackHotspotName,
+    hotspotNameOf,
     requestTargets,
+    stickyEditInput,
     text,
     uuid,
     viewedAt as viewedAtInput,
@@ -130,6 +135,16 @@ export interface SessionHttpDeps {
      * keeps no knowledge, `/api/session/extraction` is 404).
      */
     readonly extraction?: { enabled(): boolean; setEnabled(enabled: boolean): Promise<void> };
+    /**
+     * The light model's name of a hotspot a person wrote under a provisional name (ADR 0033), asked in the background:
+     * its raw reply, undefined when no AI answered (none connected, a failure, the time out). Absent: the name stays.
+     */
+    readonly hotspotName?: (input: {
+        readonly question: string;
+        readonly on: { readonly id: string; readonly label?: string; readonly kind: string };
+        readonly taken?: readonly string[];
+        readonly clash?: string;
+    }) => Promise<unknown>;
     readonly log: (line: string) => void;
 }
 
@@ -167,6 +182,10 @@ export function statusOf(type: string): number {
         case 'NotAJourneyMark':
         case 'NotAJourneyBrief':
         case 'GuideMarksInJourneyFile':
+        case 'InvalidStickyName':
+        case 'InvalidStickyText':
+        case 'WrongStickyKind':
+        case 'NothingToChange':
             return 400;
         case 'NotTheInterviewer':
         case 'NotTheStarter':
@@ -196,6 +215,8 @@ export function statusOf(type: string): number {
         case 'TriageOfAnotherSession':
         case 'JourneyNotFound':
         case 'NoJourneyFile':
+        case 'StickyNotFound':
+        case 'StickyEditsUnavailable':
             return 404;
         case 'BlobMissing':
         case 'ManualRecoveryNeeded':
@@ -388,6 +409,46 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
         await deps.pump();
         deps.log(`joined: ${r.value.identified.participant.id}`);
         return { ok: true, ...r.value };
+    };
+
+    /**
+     * The light model's name of a hotspot written under a provisional name (ADR 0033), asked once the person has their
+     * hotspot: written over it as part of the same edit when it answers in time with an ID, and nothing else changed.
+     */
+    const nameLater = async (
+        run: Collaboration.AgentRunId,
+        hotspot: { readonly storming: string; readonly label: string; readonly on: string; readonly onLabel?: string; readonly onKind?: string },
+        provisional: string,
+    ): Promise<void> => {
+        try {
+            // the storming's IDs, for the light model to avoid (its own provisional name is free to take over)
+            const taken = new Set((await use.stormingNames({ storming: hotspot.storming })).filter((n) => n !== provisional));
+            const ask = async (clash?: string): Promise<string | undefined> =>
+                hotspotNameOf(
+                    await deps.hotspotName?.({
+                        question: hotspot.label,
+                        on: { id: hotspot.on, kind: hotspot.onKind ?? 'event', ...(hotspot.onLabel !== undefined && { label: hotspot.onLabel }) },
+                        taken: [...taken].slice(0, HOTSPOT_TAKEN_MAX),
+                        ...(clash !== undefined && { clash }),
+                    }),
+                );
+            const first = await ask();
+            // a taken name: asked once more, naming it; only then the planner's numeric suffix
+            const named = first !== undefined && taken.has(first) ? ((await ask(first)) ?? first) : first;
+            if (!named) return deps.log(`the hotspot of run ${run} keeps its provisional name (no name from the light model)`);
+            const done = await deps.holdWatcher(
+                () => use.nameHotspot({ session, run, name: named }),
+                (r) => r.kind === 'named',
+            );
+            deps.log(
+                done.kind === 'named'
+                    ? `the light model named the hotspot of run ${run} ${done.name}`
+                    : `the hotspot of run ${run} keeps its name (${done.why})`,
+            );
+            await deps.pump();
+        } catch (e) {
+            deps.log(`naming the hotspot of run ${run} failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
     };
 
     const routes: Route[] = [
@@ -996,6 +1057,63 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                         ? runs.filter((r) => r.state === 'Running' || (r.state === 'Queued' && runs.indexOf(r) < runs.indexOf(run))).length
                         : 0;
                 sendJson(res, 201, { request: requested.value.request, run, ahead });
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/stickies$/,
+            role: 'participant',
+            handle: async ({ req, res, auth }) => {
+                // a person's edit of a sticky (ADR 0033): anyone's, written by dt itself (no AI run), behind the watcher's
+                // hold; refused with what the sticky is now when the page saw it otherwise
+                const raw = await input(req, res, [
+                    'kind',
+                    'storming',
+                    'element',
+                    'expected',
+                    'label',
+                    'name',
+                    'on',
+                    'onLabel',
+                    'onKind',
+                    'question',
+                    'resolution',
+                    'body',
+                ]);
+                if (!raw) return;
+                const read = checked(res, stickyEditInput(raw));
+                if (!read) return;
+                // a new hotspot without a name: written at once under dt's provisional name (after its sticky, suffixed when
+                // taken); the light model names it afterwards, in the background (below)
+                let edit: StickyEditInput;
+                if (read.kind === 'unnamedHotspot') {
+                    const { onLabel: _, onKind: __, ...rest } = read;
+                    edit = { ...rest, kind: 'addHotspot', name: fallbackHotspotName(read.on), uniqueName: true };
+                } else edit = read;
+                const message = checked(res, text(raw.body, 'body', MAX_NOTE));
+                if (!message) return;
+                const me = who(auth);
+                const edited = await deps.holdWatcher(
+                    () => use.editSticky({ session, actor: me.actor, edit, body: message }),
+                    (r) => r.ok,
+                );
+                if (edited.ok) deps.log(`${me.participant.id} edited ${edit.storming} (run ${edited.value.run.id})`);
+                await answer(res, edited, 201, (v) => v);
+                if (edited.ok && read.kind === 'unnamedHotspot') {
+                    const added = edited.value.request.edit;
+                    if (added?.kind === 'HotspotAdded') void nameLater(edited.value.run.id, read, added.hotspot);
+                }
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/runs\/([^/]+)\/settle$/,
+            role: 'participant',
+            handle: async ({ res, params }) => {
+                // people chose about an edit that a run's result changed otherwise (ADR 0033): anyone may say so
+                const id = checked(res, uuid(params[0], 'id'));
+                if (!id) return;
+                await answer(res, await use.settleConflict({ session, run: knownAgentRunId(id) }), 200, (run) => ({ run }));
             },
         },
         {

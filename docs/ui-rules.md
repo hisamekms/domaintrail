@@ -25,6 +25,10 @@ Every text button is an `<Act kind="…">` (`apps/web/shared/act.tsx`). The kind
   `/es:start`: it is `insert`.
 - **Icon-only buttons** stay on `icon-button` (or their own shape: the chat's send arrow, ♡, a chip's ✕), with an
   `aria-label` and a tooltip.
+- **Menus of actions** are `<ActionMenu>` (`apps/web/shared/menu.tsx`): `role="menu"` with `menuitem`s in groups,
+  each with its icon and key; the arrow keys, Home and End move, Escape and Tab close it and give the focus back. The
+  stickies' actions (ADR 0033) and their command palette (`shared/palette.tsx`, ⌘K) are drawn from one list
+  (`apps/web/stickies/registry.ts`); a `see` action there has the eye.
 - **The ✓ of the journey's map** is `<MarkToggle>`: a checkbox with 済み / 済みにする. It is a decide (the journey file
   changes), drawn as a checkbox because it toggles.
 

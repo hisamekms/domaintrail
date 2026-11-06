@@ -29,10 +29,11 @@ export interface MarksSubject {
     readonly n: number;
 }
 
-/** The runs that ended having changed the sources, with when they ended. */
+/** The runs that ended having changed the sources, with when they ended: a person's edit of a sticky too (ADR 0033). */
 export function changingRuns(runs: readonly RunJson[]): { readonly id: string; readonly base: string; readonly result: string; readonly at: string }[] {
     return runs.flatMap((r) =>
-        (r.state === 'Completed' || r.state === 'NeedsClarification' || r.state === 'Declined' || r.state === 'Reverted') && r.baseRevision !== r.resultRevision
+        (r.state === 'Completed' || r.state === 'NeedsClarification' || r.state === 'Declined' || r.state === 'Reverted' || r.state === 'Edited') &&
+        r.baseRevision !== r.resultRevision
             ? [{ id: r.id, base: r.baseRevision, result: r.resultRevision, at: r.finishedAt }]
             : [],
     );

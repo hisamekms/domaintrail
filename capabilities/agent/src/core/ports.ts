@@ -19,6 +19,7 @@ import type {
     EventMessage,
     Json,
     RunActivity,
+    AgentPeopleEdit,
 } from '@domaintrail/collaboration/protocol';
 import type { Collaboration, CommandReplyShape, ReplyData, ReplyOutcome } from '@domaintrail/collaboration';
 import type { ExtractionJobBody, ExtractionResultBody } from '@domaintrail/knowledge';
@@ -74,6 +75,8 @@ export interface Started {
     readonly sessionSoFarSince?: AgentSessionSoFar;
     /** The journeys when the run starts (absent: no journey file, or an older server). */
     readonly journeys?: AgentJourneysBody;
+    /** The stickies people edited by hand since the previous run started (absent: none, or an older server). */
+    readonly peopleEdits?: readonly AgentPeopleEdit[];
 }
 
 /** The agent API of the session server (loopback, bearer token). */
@@ -118,6 +121,18 @@ export interface ExtractionApi {
     /** A job's result (or why it failed). */
     extractionResult(job: string, result: ExtractionResultBody): Promise<ApiResult<unknown>>;
 }
+
+/** The light model's small jobs (a hotspot's name, ADR 0033): the extraction's stream and results on a path of their own. */
+export interface HelperApi {
+    helperEvents(signal: AbortSignal): AsyncIterable<ExtractionStreamItem>;
+    helperResult(job: string, result: ExtractionResultBody): Promise<ApiResult<unknown>>;
+}
+
+/** The helpers' stream as the extractor's loop takes it (`startExtractor` follows either). */
+export const helperStream = (api: HelperApi): ExtractionApi => ({
+    extractionEvents: (signal) => api.helperEvents(signal),
+    extractionResult: (job, result) => api.helperResult(job, result),
+});
 
 /** What the extractor role's stream carries. */
 export type ExtractionStreamItem =
@@ -185,6 +200,8 @@ export interface ExtractTurn extends AnswerTurn {
 export interface ExtractAgent {
     extract(turn: ExtractTurn): Promise<AnswerTurnResult>;
     gate(turn: ExtractTurn): Promise<AnswerTurnResult>;
+    /** The light model names a hotspot a person writes (ADR 0033); absent: such jobs fail (the server then names it). */
+    hotspotName?(turn: ExtractTurn): Promise<AnswerTurnResult>;
     /** Ends what it keeps; resolves once it is gone. */
     close?(): Promise<void>;
 }
