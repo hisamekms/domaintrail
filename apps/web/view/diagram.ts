@@ -3,6 +3,7 @@
 // implementation is React Flow's (`view/flow-canvas.tsx`); apps/web/canvas-boundary.test.ts keeps React Flow out of the
 // rest.
 import { useEffect, useState, type DependencyList } from 'react';
+import type { LineRelation } from '@domaintrail/visualization';
 import type { Point, Rect, Scene, SceneId, SceneItemType } from '../scene';
 import type { Theme } from '../theme';
 
@@ -30,8 +31,19 @@ export interface CanvasItem {
     readonly ghost: boolean;
     /** The node's, group's or edge's kind (`owns`, `references`, `esEvent`...); empty for internal transitions. */
     readonly kind: string;
-    /** An edge's own explanation (a storming's line says what it means, ADR 0032), shown in place of its kind's. */
-    readonly explanation?: string;
+    /** A node's or group's label, as it is drawn (in the display mode). */
+    readonly label?: string;
+    /** A storming's line (ADR 0032): what it means and its two ends, said in place of its kind's meaning. */
+    readonly line?: CanvasLine;
+}
+
+/** What a storming's line means (`EdgeProps.relation`), between the items at its two ends. */
+export interface CanvasLine {
+    readonly relation: { readonly kind: LineRelation; readonly names: readonly string[] };
+    readonly source: SceneId;
+    readonly target: SceneId;
+    /** A resolved hotspot's question (its text then has a check). */
+    readonly resolved?: true;
 }
 
 /**

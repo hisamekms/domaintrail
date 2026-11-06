@@ -241,7 +241,7 @@ function edgeItem(graph: LaidOutGraph, e: GraphEdge, v: Variant, owner: string, 
             lw: l?.width ?? 0,
             lh: l?.height ?? 0,
             tone,
-            ...(e.tooltip && { tooltip: textOf(e.tooltip, v) }),
+            ...(e.relation && { relation: { kind: e.relation.kind, names: (e.relation.names ?? []).map((n) => textOf(n, v)) } }),
         },
     };
 }

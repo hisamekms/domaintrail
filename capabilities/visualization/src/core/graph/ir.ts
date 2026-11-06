@@ -146,13 +146,57 @@ export interface GraphEdge {
     label?: Texts;
     /** Events a transition raises, shown with or instead of its command (see `TransitionLabels`). */
     events?: Texts;
-    /** What the line means in plain words, shown on hover and selection (an Event Storming line, ADR 0032). */
-    tooltip?: Texts;
+    /**
+     * What an Event Storming line means (ADR 0032): the Live View says it in plain words when it is hovered or pressed,
+     * from the relation and the labels of its two ends (`apps/web/i18n.tsx`, `lines`).
+     */
+    relation?: EdgeRelation;
     /**
      * Laid out but not drawn: at Event Storming's Design Level, the time order the placement already shows (the steps
      * left to right), so that only the lines the placement cannot show are drawn (an exception's branch, a `then`).
      */
     hidden?: true;
+}
+
+/**
+ * The relations an Event Storming line can stand for, read from its source (A) to its target (B):
+ *
+ * - `issues`: an actor or external system issues a command (`by`); `follows`: an actor applies a policy (`by`)
+ * - `looksAt`: the issuer looks at a read model to decide (`reads`); `readsWhen`: a command without an issuer (a
+ *   policy's) looks at a read model itself
+ * - `handles`: a command goes to its handler (`handledBy`); `decides`: the handler decides an event (`emits`; `names`:
+ *   the commands of a merged handler); `results`: a command without a handler results in an event
+ * - `triggers`: an event triggers a policy (`on`); `policyIssues`: a policy issues a command (`issues`)
+ * - `updates`: an event updates a read model; `arrives`: an event arrives from an external system
+ * - `branches`: the time order into an exception's first step (`names`: the exceptions); `returns`: an exception's
+ *   `then` back to the main flow (`names`: the exceptions); `order`: the time order (`names`: the timelines, none when
+ *   it is in every timeline of the view)
+ * - `question`: a hotspot on a sticky; `undecided`: an open hotspot's empty slot of a command's issuer (`by`) or
+ *   handler (`handledBy`)
+ */
+export type LineRelation =
+    | 'issues'
+    | 'follows'
+    | 'looksAt'
+    | 'readsWhen'
+    | 'handles'
+    | 'decides'
+    | 'results'
+    | 'triggers'
+    | 'policyIssues'
+    | 'updates'
+    | 'arrives'
+    | 'branches'
+    | 'returns'
+    | 'order'
+    | 'question'
+    | 'undecidedIssuer'
+    | 'undecidedHandler';
+
+/** What a line means: its relation, and the other names it is said with (the merged commands, the exceptions, the timelines). */
+export interface EdgeRelation {
+    kind: LineRelation;
+    names?: Texts[];
 }
 
 /** A command that leaves a state as it is, drawn as a row in the state's box instead of a loop. */

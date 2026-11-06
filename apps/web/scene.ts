@@ -1,5 +1,5 @@
 // The scene the canvas draws (`@domaintrail/visualization`'s drawing: every item at its place on the page with what it
-// shows), and what the page does with one: which item draws an element, and which stay in view around a selection.
+// shows), and what the page does with one: which item draws an element, how a selection marks its copies and lines.
 import type { Point, SceneEdge, SceneId, SceneItem, SceneNode } from '@domaintrail/visualization';
 
 export {
@@ -47,119 +47,37 @@ export function itemForElement(items: readonly SceneItem[], elementId: string, n
     });
 }
 
+/** Reading order on a storming's canvas: left to right (the flow of time), then top to bottom. */
+export const readingOrder = (a: Point, b: Point): number => a.x - b.x || a.y - b.y;
+
+/** Where a note stands among its element's notes: the `k`-th (from 1, in reading order) of `n`. */
+export interface CopyIndex {
+    readonly k: number;
+    readonly n: number;
+}
+
 /**
- * The other notes of the elements whose notes are selected (`selected`): an element drawn more than once (a storming's
- * actor, read model or aggregate beside each command that uses it) shows all its notes when one is selected.
+ * The notes of the elements whose notes are selected (`selected`), each with its place among its element's notes: an
+ * element drawn more than once (a storming's actor, read model or aggregate beside each command that uses it) shows
+ * all its notes, numbered 「k/n」, when one is selected. Elements drawn once are left out; so are ghosts.
  */
-export function sameElementNodes(items: Iterable<SceneItem>, selected: ReadonlySet<SceneId>): Set<SceneId> {
-    const nodes = [...items].filter((s) => s.type === 'node' && !s.ghost);
+export function copyIndices(items: Iterable<SceneItem>, selected: ReadonlySet<SceneId>): Map<SceneId, CopyIndex> {
+    const nodes = [...items].filter((s): s is SceneNode => s.type === 'node' && !s.ghost);
     const elements = new Set(nodes.filter((s) => selected.has(s.id)).map((s) => s.elementId));
-    return new Set(nodes.filter((s) => elements.has(s.elementId) && !selected.has(s.id)).map((s) => s.id));
+    const out = new Map<SceneId, CopyIndex>();
+    for (const element of elements) {
+        const copies = nodes.filter((s) => s.elementId === element).sort(readingOrder);
+        if (copies.length > 1) copies.forEach((c, i) => out.set(c.id, { k: i + 1, n: copies.length }));
+    }
+    return out;
 }
 
-/** The kinds of an Event Storming note (`dn-es…`): what the canvas focuses on when one is selected. */
-const isStormingNote = (item: SceneItem): item is SceneNode => item.type === 'node' && !item.ghost && item.props.kind.startsWith('es');
-
 /**
- * What stays in full view while storming notes are selected (docs/plans/layout.md, step 5): the notes of the selected
- * elements (every copy of an element drawn once per use or per step), the notes joined to them by an edge (the previous
- * and next steps, what causes an event and the policies reacting to it, its hotspots; for a command its issuer, read
- * model and handler), and those edges. The drawing follows Event Storming's grammar (ADR 0032), read model → issuer →
- * command → handler (an aggregate or external system) → event: an event caused through a handler brings the commands
- * that go to that handler along, and a command brings the events its handler emits. A command that causes a selected
- * event brings its actor or external system and the read model it looks at along. A selected event in a group is joined through its group (the time order runs to and from the group), and
- * a group joined to it brings its events. Containers are never dimmed, so they are not listed. `undefined` when no
- * storming note is selected: nothing is dimmed.
+ * The lines joined to the selected storming notes, drawn thicker in the accent colour (nothing else changes around a
+ * selection); none while only lines are selected, and none on the domain model's canvas.
  */
-export function focusedItems(items: Iterable<SceneItem>, selected: ReadonlySet<SceneId>): Set<SceneId> | undefined {
+export function joinedEdges(items: Iterable<SceneItem>, selected: ReadonlySet<SceneId>): Set<SceneId> {
     const all = [...items];
-    const seeds = all.filter((s) => selected.has(s.id) && isStormingNote(s));
-    if (seeds.length === 0) return focusedLines(all, selected);
-    const elements = new Set(seeds.map((s) => s.elementId));
-    const notes = all.filter(isStormingNote);
-    const edges = all.filter((s): s is SceneEdge => s.type === 'edge' && !s.ghost);
-    const byId = new Map(all.map((s) => [s.id, s]));
-    const members = (group: SceneId): SceneId[] => notes.filter((n) => n.parent === group).map((n) => n.id);
-    const kindOf = (id: SceneId): string | undefined => {
-        const item = byId.get(id);
-        return item?.type === 'node' ? item.props.kind : undefined;
-    };
-    const kept = new Set<SceneId>();
-    /** Keeps a note, or a group's events (the group itself is never dimmed). */
-    const keep = (id: SceneId): void => {
-        if (byId.get(id)?.type !== 'group') kept.add(id);
-        else for (const m of members(id)) kept.add(m);
-    };
-    // the selected elements' notes, and what their edges end at (a note in a group: its group's edges too)
-    const own = notes.filter((n) => elements.has(n.elementId));
-    const ends = new Set(own.flatMap((n) => (n.parent === undefined ? [n.id] : [n.id, n.parent])));
-    for (const n of own) kept.add(n.id);
-    const causes: SceneId[] = [];
-    /** The handlers (an aggregate or external system) that decide a selected event (their commands are its cause). */
-    const deciding: SceneId[] = [];
-    /** The handlers a selected command goes to (their events are its). */
-    const decided: SceneId[] = [];
-    const isHandler = (id: SceneId): boolean => kindOf(id) === 'esAggregate' || kindOf(id) === 'esExternal';
-    for (const e of edges) {
-        const [from, to] = [ends.has(e.source), ends.has(e.target)];
-        if (!from && !to) continue;
-        kept.add(e.id);
-        const other = from ? e.target : e.source;
-        keep(other);
-        if (e.props.kind !== 'esCausal') continue;
-        // a command (or a handler) whose solid edge leads into a selected note: what causes it
-        if (to && kindOf(e.source) === 'esCommand') causes.push(e.source);
-        if (to && isHandler(e.source) && kindOf(e.target) !== 'esCommand') deciding.push(e.source);
-        if (from && kindOf(e.source) === 'esCommand' && isHandler(e.target)) decided.push(e.target);
-    }
-    for (const e of edges) {
-        if (e.props.kind !== 'esCausal') continue;
-        // the command going to a handler that decides a selected event
-        if (deciding.includes(e.target) && kindOf(e.source) === 'esCommand') {
-            kept.add(e.id);
-            keep(e.source);
-            causes.push(e.source);
-        }
-        // the events emitted by the handler of a selected command
-        if (decided.includes(e.source)) {
-            kept.add(e.id);
-            keep(e.target);
-        }
-    }
-    // the cause's actor or external system and read model (the dotted relations of the command), and the read model its
-    // issuer looks at
-    const issuers: SceneId[] = [];
-    for (const e of edges) {
-        if (e.props.kind !== 'esRelated') continue;
-        const at = causes.includes(e.source) ? e.target : causes.includes(e.target) ? e.source : undefined;
-        if (at === undefined) continue;
-        kept.add(e.id);
-        keep(at);
-        issuers.push(at);
-    }
-    for (const e of edges) {
-        if (e.props.kind !== 'esRelated' || !issuers.includes(e.target) || kindOf(e.source) !== 'esReadModel') continue;
-        kept.add(e.id);
-        keep(e.source);
-    }
-    return kept;
-}
-
-/**
- * What stays in full view while storming lines are selected (ADR 0032): the lines and the stickies at their two ends (a
- * group's events for a group); `undefined` when no storming line is selected.
- */
-function focusedLines(all: readonly SceneItem[], selected: ReadonlySet<SceneId>): Set<SceneId> | undefined {
-    const lines = all.filter((s): s is SceneEdge => s.type === 'edge' && !s.ghost && selected.has(s.id) && s.props.kind.startsWith('es'));
-    if (!lines.length) return undefined;
-    const kept = new Set<SceneId>();
-    for (const l of lines) {
-        kept.add(l.id);
-        for (const end of [l.source, l.target]) {
-            const item = all.find((s) => s.id === end);
-            if (item?.type === 'group') for (const m of all) if (m.type === 'node' && m.parent === end) kept.add(m.id);
-            if (item?.type === 'node') kept.add(end);
-        }
-    }
-    return kept;
+    const notes = new Set(all.filter((s) => s.type === 'node' && !s.ghost && s.props.kind.startsWith('es') && selected.has(s.id)).map((s) => s.id));
+    return new Set(all.filter((s): s is SceneEdge => s.type === 'edge' && !s.ghost && (notes.has(s.source) || notes.has(s.target))).map((s) => s.id));
 }

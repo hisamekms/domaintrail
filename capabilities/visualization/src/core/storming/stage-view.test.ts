@@ -698,16 +698,17 @@ describe('lines at Design Level: only what the placement cannot show, each sayin
 `);
         const graph = renderToGraph(projectView(s, DL), s);
         const shown = graph.edges.filter((e) => !e.hidden);
-        expect(shown.map((e) => [e.kind, e.tooltip?.ja.label])).toEqual(
+        const said = (e: (typeof shown)[number]) => [e.kind, e.relation?.kind, e.relation?.names?.map((n) => n.ja.label)];
+        expect(shown.map(said)).toEqual(
             expect.arrayContaining([
-                ['esException', '例外 失敗 はここから分かれる'],
-                ['esRejoin', '元の流れの B へ戻る'],
+                ['esException', 'branches', ['失敗']],
+                ['esRejoin', 'returns', ['失敗']],
             ]),
         );
         expect(shown.filter((e) => e.kind === 'esSequence')).toEqual([]);
         // Big Picture keeps the time order
         const big = renderToGraph(projectView(s, BP), s);
-        expect(big.edges.filter((e) => e.kind === 'esSequence' && !e.hidden).map((e) => e.tooltip?.ja.label)).toEqual(['A のあとに B']);
+        expect(big.edges.filter((e) => e.kind === 'esSequence' && !e.hidden).map((e) => e.relation?.kind)).toEqual(['order']);
     });
 });
 

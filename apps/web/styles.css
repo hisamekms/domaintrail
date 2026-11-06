@@ -1464,20 +1464,28 @@ a.field-origin {
     outline: 2px dashed color-mix(in srgb, var(--selected-ring) 60%, transparent);
     outline-offset: 5px;
 }
-/* a storming note selected: the notes and edges joined to it stay, the rest fades (`focusedItems`); clicking the empty
-   canvas clears the selection and brings everything back */
-.diagram-canvas .react-flow__node,
-.diagram-canvas .react-flow__edge {
-    transition: opacity 160ms ease-out;
+/* where a selected sticky stands among its element's notes (`copyIndices`): 「k/n」 on its top right edge, filled on the
+   selected one, outlined on the others; nothing else changes around a selection (docs/live-view.md) */
+.dn-copy {
+    position: absolute;
+    top: -10px;
+    right: 14px;
+    height: 17px;
+    line-height: 15px;
+    box-sizing: border-box;
+    padding: 0 var(--space-1);
+    border: 1px solid var(--selected-ring);
+    border-radius: 999px;
+    font: 600 11px var(--sans);
+    font-variant-numeric: tabular-nums;
+    color: var(--selected-ring);
+    background: var(--surface);
+    white-space: nowrap;
+    pointer-events: none;
 }
-.diagram-canvas .diagram-dim {
-    opacity: 0.25;
-}
-@media (prefers-reduced-motion: reduce) {
-    .diagram-canvas .react-flow__node,
-    .diagram-canvas .react-flow__edge {
-        transition: none;
-    }
+.dn-selected .dn-copy {
+    color: var(--on-status);
+    background: var(--selected-ring);
 }
 /* on the top edge, where the selection outline goes around them (see `nodeOutlinePath`) */
 .dn-badge {
@@ -1658,22 +1666,13 @@ a.field-origin {
     stroke: var(--model-edge-quiet);
     stroke-width: 1.2;
 }
-/* above the notes: a selected line's explanation is never under a sticky */
-.react-flow__edgelabel-renderer:has(.de-explain) {
-    z-index: 1001;
+/* the lines joined to a selected sticky (`joinedEdges`): thicker, in the selection's colour */
+.de.de-hot .de-line {
+    stroke: var(--selected-ring);
+    stroke-width: 2.6;
 }
-.de-explain {
-    position: absolute;
-    pointer-events: none;
-    max-width: 280px;
-    padding: var(--space-1) var(--space-2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--surface);
-    color: var(--text);
-    font: 13px var(--sans);
-    box-shadow: 0 2px 6px var(--shadow);
-    white-space: normal;
+.de.de-hot .de-head {
+    fill: var(--selected-ring);
 }
 .de-esHotspot.de-resolved .de-line {
     stroke: var(--es-hotspot-resolved-edge);
@@ -7718,6 +7717,176 @@ button.add-to-request.added:hover {
     font: 0.75rem/1.4 var(--sans);
     box-shadow: 0 2px 8px var(--shadow);
     pointer-events: none;
+}
+
+/* a storming line's tooltip (`LineTip`) and its pressed popover (`LinePopover`): 「■ A → ■ B」, then the relation */
+.edge-hint-line {
+    display: grid;
+    gap: 2px;
+    max-width: 24rem;
+}
+.line-ends {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+    font-weight: 600;
+}
+.line-end,
+.line-relation {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+.line-relation {
+    align-items: baseline;
+}
+.line-resolved {
+    flex: none;
+    align-self: center;
+    color: var(--es-resolved-mark);
+}
+.edge-hint .line-resolved {
+    color: inherit;
+}
+/* a sticky's colour box: its paper and edge; an actor's rounded, an external system's and an empty slot's dashed */
+.line-swatch {
+    flex: none;
+    display: inline-block;
+    box-sizing: border-box;
+    width: 12px;
+    height: 12px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    background: var(--surface);
+}
+.line-swatch-event {
+    border-color: var(--es-event-border);
+    background: var(--es-event);
+}
+.line-swatch-command {
+    border-color: var(--es-command-border);
+    background: var(--es-command);
+}
+.line-swatch-policy {
+    border-color: var(--es-policy-border);
+    background: var(--es-policy);
+}
+.line-swatch-aggregate {
+    border-color: var(--es-aggregate-border);
+    background: var(--es-aggregate);
+}
+.line-swatch-readmodel {
+    border-color: var(--es-readmodel-border);
+    background: var(--es-readmodel);
+}
+.line-swatch-hotspot {
+    border-color: var(--es-hotspot-border);
+    background: var(--es-hotspot);
+}
+.line-swatch-actor {
+    border-color: var(--es-actor-border);
+    background: var(--es-actor);
+    border-radius: 6px;
+}
+.line-swatch-external {
+    border-color: var(--es-external-border);
+    background: var(--es-external);
+    border-style: dashed;
+}
+.line-swatch-gap {
+    border: 1px dashed var(--muted);
+    background: transparent;
+}
+.line-swatch-group {
+    border-color: var(--es-group-border);
+    background: var(--es-group-bg);
+}
+.line-popover {
+    position: fixed;
+    z-index: 1000;
+    display: grid;
+    gap: var(--space-1);
+    max-width: 380px;
+    padding: var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font: 0.8125rem/1.45 var(--sans);
+    box-shadow: 0 8px 24px var(--shadow);
+}
+.line-popover .line-relation {
+    color: var(--muted);
+}
+.line-end-button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    max-width: 100%;
+    padding: 2px var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-weight: 600;
+}
+.line-end-button:hover,
+.line-end-button:focus-visible {
+    border-color: var(--selected-ring);
+}
+.line-end-button:focus-visible,
+.offscreen-pointer:focus-visible {
+    outline: 2px solid var(--selected-ring);
+    outline-offset: 2px;
+}
+.line-end-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* a pointer at the canvas's edge to the stickies a selection points at out of view (`OffscreenPointers`): 「→ n」 */
+.offscreen-pointer {
+    position: fixed;
+    z-index: 999;
+    padding: 2px var(--space-2);
+    border: 1px solid var(--selected-ring);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--selected-ring);
+    font: 600 0.75rem var(--sans);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px var(--shadow);
+}
+.offscreen-pointer:hover {
+    background: var(--brand-wash);
+}
+.offscreen-left {
+    transform: translateY(-50%);
+}
+.offscreen-right {
+    transform: translate(-100%, -50%);
+}
+.offscreen-top {
+    transform: translateX(-50%);
+}
+.offscreen-bottom {
+    transform: translate(-50%, -100%);
+}
+/* the detail's steps through an element's copies: 「同じ付箋 n 件 ◀ k/n ▶」 */
+.copy-steps {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--muted);
+    font-size: 0.78125rem;
+}
+.copy-steps-at {
+    min-width: 2.5em;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
 }
 
 /* ---------- replies to runs ---------- */
