@@ -225,7 +225,7 @@ describe('layout of an Event Storming view', () => {
         }
     });
 
-    test('draws the grammar left to right: read model → actor → command → aggregate → event; short edges', async () => {
+    test('draws the grammar left to right: read model → actor → command → aggregate → event, read model → policy; short edges', async () => {
         const storming = await parse(`storming S {
   event Opened event Approved event Shipped event Closed
   actor Clerk
@@ -234,11 +234,11 @@ describe('layout of an Event Storming view', () => {
   command Open { by Clerk reads Board handledBy Ticket emits Opened }
   command Approve { emits Approved }
   command Ship { emits Shipped }
-  command Close { reads Board handledBy Ticket emits Closed }
+  command Close { handledBy Ticket emits Closed }
   command Note { by Clerk handledBy Ticket emits Approved }
   policy P1 { on Opened issues Approve }
   policy P2 { on Approved issues Ship }
-  policy P3 { on Shipped issues Close }
+  policy P3 { on Shipped reads Board issues Close }
   timeline T { Opened Approved Shipped Closed }
 }`);
         for (const options of [{ level: 'design-level' }, { level: 'design-level', timelineId: 'T' }] satisfies ViewOptions[]) {
@@ -252,8 +252,12 @@ describe('layout of an Event Storming view', () => {
             expect(centre('n:Clerk@Open')).toBeLessThan(centre('n:Open'));
             expect(centre('n:Ticket@Open')).toBeGreaterThan(centre('n:Open'));
             expect(centre('n:Ticket@Open')).toBeLessThan(centre(eventOf('Opened')));
-            // Close, which a policy issues: the read model goes to the command itself
-            expect(centre('n:Board@Close')).toBeLessThan(centre('n:Close'));
+            // Close, which a policy issues: the policy decides, so the read model goes to the policy (ADR 0032 §9)
+            expect(laid.nodes.some((n) => n.id === 'n:Board@Close')).toBe(false);
+            expect(laid.edges.some((e) => e.target === 'n:Close' && e.source.startsWith('n:Board'))).toBe(false);
+            expect(laid.edges.find((e) => e.source === 'n:Board@P3')?.target).toBe('n:P3');
+            expect(centre('n:Board@P3')).toBeLessThan(centre('n:P3'));
+            expect(centre('n:P3')).toBeLessThan(centre('n:Close'));
             expect(centre('n:Ticket@Close')).toBeLessThan(centre(eventOf('Closed')));
             // Note: an actor that nothing leads to is stuck on top of its command
             if (options.timelineId === undefined) {
@@ -264,7 +268,8 @@ describe('layout of an Event Storming view', () => {
             // each copy's edges are short: no longer than a few notes, though the two commands lie far apart
             for (const [command, copies] of [
                 ['Open', ['Clerk', 'Board', 'Ticket']],
-                ['Close', ['Board', 'Ticket']],
+                ['Close', ['Ticket']],
+                ['P3', ['Board']],
             ] as const) {
                 for (const copy of copies) {
                     for (const edge of laid.edges.filter((e) => [e.source, e.target].includes(`n:${copy}@${command}`))) {

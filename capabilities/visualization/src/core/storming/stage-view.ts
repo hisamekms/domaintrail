@@ -293,10 +293,10 @@ function ofExceptionsOnly(edges: readonly SemanticEdge[], events: ReadonlySet<st
 /**
  * The sub-columns of a step's column, left to right, as Event Storming reads (ADR 0024, amendment of 2026-11-05; ADR
  * 0032): the read models, the commands (their issuers stuck on top of them), their handlers, the event (its hotspots
- * stuck on top of it) and the policies reacting to it. A column has only the sub-columns some step of it uses (the
- * event's always).
+ * stuck on top of it), the read models the policies look at (§9) and the policies reacting to it. A column has only
+ * the sub-columns some step of it uses (the event's always).
  */
-const SUB_COLUMNS = ['readmodel', 'command', 'handler', 'event', 'policy'] as const;
+const SUB_COLUMNS = ['readmodel', 'command', 'handler', 'event', 'policyReads', 'policy'] as const;
 type SubColumn = (typeof SUB_COLUMNS)[number];
 
 /**
@@ -319,6 +319,9 @@ interface Merged {
 }
 const hotspotRows = (c: Chain): number => Math.max(0, ...SUB_COLUMNS.map((sub) => c.hotspots.filter((h) => h.sub === sub).length));
 const chainHeight = (c: Chain): number => hotspotRows(c) + Math.max(c.issuers.length + 1, c.readmodels.length);
+/** The rows a step's policies take: each as many as the read models it looks at, at least one. */
+const policyRows = (s: { policies: string[]; policyReads: ReadonlyMap<string, string[]> }): number =>
+    s.policies.reduce((h, id) => h + Math.max(1, s.policyReads.get(id)?.length ?? 0), 0);
 
 /**
  * Places the Design Level notes (`chains`) in the grid and spreads the steps' columns and rows to make room for them
@@ -348,11 +351,20 @@ function placeChains(chains: Chains, cells: Record<string, GridCell>, frames: St
     /** What stands at each step. */
     const at = new Map<
         string,
-        { chains: Chain[]; hotspots: string[]; policies: string[]; policyIssuers: string[]; policyHotspots: string[]; merged: Merged[] }
+        {
+            chains: Chain[];
+            hotspots: string[];
+            policies: string[];
+            /** The read models each policy looks at (its copies beside the policy's note). */
+            policyReads: Map<string, string[]>;
+            policyIssuers: string[];
+            policyHotspots: string[];
+            merged: Merged[];
+        }
     >();
     const stepOf = (slot: string) => {
         let s = at.get(slot);
-        if (!s) at.set(slot, (s = { chains: [], hotspots: [], policies: [], policyIssuers: [], policyHotspots: [], merged: [] }));
+        if (!s) at.set(slot, (s = { chains: [], hotspots: [], policies: [], policyReads: new Map(), policyIssuers: [], policyHotspots: [], merged: [] }));
         return s;
     };
     /** The merged handler each command note's chain converges on (the first, by ID). */
@@ -361,6 +373,8 @@ function placeChains(chains: Chains, cells: Record<string, GridCell>, frames: St
     /** The chain each note is in, and its sub-column there. */
     const chainOf = new Map<string, { chain: Chain; sub: SubColumn }>();
     const placed = new Set<string>();
+    /** The copies beside a policy's note: its actor and its read models. */
+    const policyNotes = new Set<string>();
     for (const n of sorted) {
         const slot = slotOf(n.id);
         if (slot === undefined) continue;
@@ -387,10 +401,13 @@ function placeChains(chains: Chains, cells: Record<string, GridCell>, frames: St
     }
     for (const n of sorted) {
         const command = n.use !== undefined ? chainOf.get(`n:${n.use}`) : undefined;
-        // the actor applying a policy by hand: above the policy
+        // the actor applying a policy by hand: above the policies; the read models a policy looks at: before it
         const policy = n.use !== undefined && byId.get(`n:${n.use}`)?.kind === 'policy' ? `n:${n.use}` : undefined;
-        if (policy !== undefined && role.get(n.id) === 'issuer' && placed.has(policy)) {
-            stepOf(slotOf(policy)!).policyIssuers.push(n.id);
+        if (policy !== undefined && (role.get(n.id) === 'issuer' || role.get(n.id) === 'readmodel') && placed.has(policy)) {
+            const step = stepOf(slotOf(policy)!);
+            if (role.get(n.id) === 'issuer') step.policyIssuers.push(n.id);
+            else step.policyReads.set(policy, [...(step.policyReads.get(policy) ?? []), n.id]);
+            policyNotes.add(n.id);
             placed.add(n.id);
             continue;
         }
@@ -431,7 +448,13 @@ function placeChains(chains: Chains, cells: Record<string, GridCell>, frames: St
         if (inChain && placed.has(subject!)) inChain.chain.hotspots.push({ id: n.id, sub: inChain.sub });
         // on a merged handler: above the first chain converging on it, in the handlers' column
         else if (mergedChain) mergedChain.chain.hotspots.push({ id: n.id, sub: 'handler' });
-        else if (subject !== undefined && byId.get(subject)?.kind === 'policy' && placed.has(subject)) stepOf(slotOf(subject)!).policyHotspots.push(n.id);
+        else if (
+            subject !== undefined &&
+            (byId.get(subject)?.kind === 'policy' || policyNotes.has(subject)) &&
+            placed.has(subject) &&
+            slotOf(subject) !== undefined
+        )
+            stepOf(slotOf(subject)!).policyHotspots.push(n.id);
         else if (slot !== undefined && (subject === undefined || !byId.has(subject))) stepOf(slot).hotspots.push(n.id);
         else continue;
         placed.add(n.id);
@@ -458,10 +481,11 @@ function placeChains(chains: Chains, cells: Record<string, GridCell>, frames: St
         }
         if (s.merged.length) subs.add('handler');
         if (s.policies.length) subs.add('policy');
+        if (s.policyReads.size) subs.add('policyReads');
         const height = Math.max(
             s.chains.reduce((h, c) => h + chainHeight(c), 0),
             s.hotspots.length,
-            s.policies.length + s.policyIssuers.length + s.policyHotspots.length,
+            policyRows(s) + s.policyIssuers.length + s.policyHotspots.length,
         );
         band.set(row, Math.max(band.get(row) ?? 0, height));
     }
@@ -527,9 +551,16 @@ function placeChains(chains: Chains, cells: Record<string, GridCell>, frames: St
             place(m.id, 'handler', r);
         }
         s.hotspots.forEach((id, i) => place(id, 'event', bottom - i));
-        s.policies.forEach((id, i) => place(id, 'policy', bottom - i));
-        s.policyIssuers.forEach((id, i) => place(id, 'policy', bottom - s.policies.length - i));
-        s.policyHotspots.forEach((id, i) => place(id, 'policy', bottom - s.policies.length - s.policyIssuers.length - i));
+        // each policy as tall as its read models, the first on its row, the others above it
+        let policyRow = bottom;
+        for (const id of s.policies) {
+            const reads = s.policyReads.get(id) ?? [];
+            place(id, 'policy', policyRow);
+            reads.forEach((rm, i) => place(rm, 'policyReads', policyRow - i));
+            policyRow -= Math.max(1, reads.length);
+        }
+        s.policyIssuers.forEach((id, i) => place(id, 'policy', policyRow - i));
+        s.policyHotspots.forEach((id, i) => place(id, 'policy', policyRow - s.policyIssuers.length - i));
     }
     return eventRow[lastLane] ?? 0;
 }

@@ -593,7 +593,7 @@ function validateStorming(storming: Storming): Diagnostic[] {
             actor: `\`by ${el.id}\` in the command it issues (or the policy it applies)`,
             external: `\`by ${el.id}\` in the command it issues, \`handledBy ${el.id}\` in the command it handles, or \`from ${el.id}\` in the event it sends`,
             aggregate: `\`handledBy ${el.id}\` in the command it handles`,
-            readmodel: `\`reads ${el.id}\` in the command whose issuer looks at it, or \`from <event>\` for what it shows`,
+            readmodel: `\`reads ${el.id}\` in the command whose issuer looks at it (or in the policy that looks at it), or \`from <event>\` for what it shows`,
         };
         out.push(
             esDiagnostic(
@@ -720,12 +720,10 @@ function misplacedHint(kind: NodeElementKind, keyword: RelationKeyword, target: 
     if (kind === 'policy') {
         if (keyword === 'emits') return `remove it: a policy emits nothing; the command it issues does (\`emits ${target}\` in that command)`;
         if (keyword === 'handledBy') return `remove it: write \`handledBy ${target}\` in the command the policy \`issues\``;
-        if (keyword === 'reads')
-            return `remove it: a policy reacts to events (\`on\`); a read model is read by the issuer of a command (\`reads ${target}\` in it)`;
     }
     if (kind === 'event')
         return `remove it: an event is emitted by a command (\`emits\` in it), or arrives \`from\` an external system; a read model is fed \`from\` it`;
-    if (kind === 'readmodel') return `remove it: a read model is fed \`from\` events; the command that uses it \`reads\` it`;
+    if (kind === 'readmodel') return `remove it: a read model is fed \`from\` events; the command or policy that uses it \`reads\` it`;
     if (kind === 'hotspot') return `remove it: a hotspot is \`on\` one sticky`;
     if (kind === 'actor' || kind === 'external' || kind === 'aggregate') {
         return `remove it: write the relation in the command instead (${kind === 'aggregate' ? `the command it handles has \`handledBy\` and its \`emits\`` : `the command it issues has \`by\` and its \`reads\``})`;
@@ -780,6 +778,12 @@ function kindHint(owner: NodeElement, keyword: RelationKeyword, target: AnyDecla
         if (keyword === 'issues' && target.kind === 'event')
             return `a policy issues commands; an event is emitted by the command it issues (\`emits ${t}\` in that command)`;
         if (keyword === 'issues' && target.kind === 'policy') return `a policy never issues a policy: issue a command whose event policy '${t}' is \`on\``;
+        if (keyword === 'reads' && target.kind === 'event')
+            return `a policy reads a read model, not an event: declare \`readmodel <Id> { from ${t} }\` and write \`reads <Id>\` (what it reacts to is \`on ${t}\`)`;
+        if (keyword === 'reads' && target.kind === 'aggregate')
+            return `an aggregate is not read: what the policy looks at to decide is a read model (\`readmodel <Id> { from <its events> }\`)`;
+        if (keyword === 'reads' && (target.kind === 'actor' || target.kind === 'external'))
+            return `who applies a policy by hand is \`by ${t}\`; \`reads\` names the read model it looks at`;
     }
     if (owner.kind === 'readmodel' && target.kind === 'external')
         return `data from an external system arrives as an event: declare \`event <Id> { from ${t} }\` and write \`from <Id>\``;

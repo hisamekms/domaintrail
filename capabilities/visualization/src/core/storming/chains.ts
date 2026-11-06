@@ -5,14 +5,16 @@
  * the `.dtes`, the semantic graph and the edges' semantic keys do not.
  *
  * - **Copies per use**: the issuers of a command (`by`), its read models (`reads`) and its handler (`handledBy`) get a
- *   note beside each command note, `n:<element>@<command note>`; an external system that an event comes `from` gets a
+ *   note beside each command note, `n:<element>@<command note>`; so do a policy's read models and the actor applying it
+ *   by hand, beside each policy note; an external system that an event comes `from` gets a
  *   note beside each note of that event, `n:<element>@<event note>`. An element no note of the view uses is drawn
  *   once, `n:<element>`.
  * - **The handler decides**: a command with a `handledBy` reaches its events through its handler's note: the
  *   `handledBy` edge runs from the command to the handler's copy, each `emits` from that copy to the event (with the
  *   `emits` edge's semantic key). A command without one keeps its `emits` from itself.
- * - **The issuer looks**: a read model's `reads` edge runs to the issuers' copies of the command note when it has some
- *   (`by`), else to the command note itself (a policy's command). An event feeding a read model (`readmodel-from`) runs
+ * - **Whoever decides looks** (ADR 0032 §9): a command's `reads` edge runs from the read model to the issuers' copies of
+ *   the command note (`by`); a policy's, to the policy's note. A command without `by` has no `reads` (S030): one there
+ *   is left out, with nobody to look. An event feeding a read model (`readmodel-from`) runs
  *   to each copy of it, from the event's note at the nearest slot before the copy (every note with a single slot).
  * - **Copies per step** (spec §7.3, §10.2: drawing-only splits): the projection says at which *slot* (a step of a
  *   timeline, or one slot for the whole view) each event note stands. A command whose events stand at several slots
@@ -48,7 +50,10 @@ export interface Chains {
     slots: Map<string, string>;
 }
 
-/** The use a semantic edge stands for: a command's issuer, read model or handler; none for the other kinds. */
+/**
+ * The use a semantic edge stands for: a command's issuer, read model or handler, or a policy's actor or read model
+ * (`commandId` is then the policy's); none for the other kinds.
+ */
 function useOf(e: SemanticEdge): { elementId: string; commandId: string } | undefined {
     if (e.kind === 'by' || e.kind === 'reads') return { elementId: e.sourceId, commandId: e.targetId };
     if (e.kind === 'handledBy') return { elementId: e.targetId, commandId: e.sourceId };
@@ -86,11 +91,11 @@ interface Note {
 }
 
 /**
- * Draws `elements` (shown at this level, never events) with the semantic edges `drawn`, around the event notes `events`.
+ * Draws `elements` (shown at this level, never events) with the semantic edges `semantic`, around the event notes `events`.
  */
 export function drawChains(
     elements: readonly ElementOfView[],
-    drawn: readonly SemanticEdge[],
+    semantic: readonly SemanticEdge[],
     events: readonly EventPlace[],
     openGaps: readonly Gap[] = [],
 ): Chains {
@@ -98,6 +103,9 @@ export function drawChains(
     const eventsOf = new Map<string, EventPlace[]>();
     for (const e of events) eventsOf.set(e.eventId, [...(eventsOf.get(e.eventId) ?? []), e]);
     const kindOf = (id: string): NodeElementKind | undefined => shown.get(id)?.kind ?? (eventsOf.has(id) ? 'event' : undefined);
+    // a command's `reads` goes to its issuers: without one (a policy's command, S030), nobody looks
+    const withIssuer = new Set(semantic.filter((e) => e.kind === 'by' && kindOf(e.sourceId)).map((e) => e.targetId));
+    const drawn = semantic.filter((e) => e.kind !== 'reads' || kindOf(e.targetId) !== 'command' || withIssuer.has(e.targetId));
     const edgesOf = (kind: SemanticEdge['kind']): SemanticEdge[] => drawn.filter((e) => e.kind === kind && kindOf(e.sourceId) && kindOf(e.targetId));
 
     /** The notes of an anchored element: one per slot of the events it is anchored at when those are several. */
@@ -259,9 +267,9 @@ export function drawChains(
                 for (const note of notesOf(e.targetId)) {
                     const copy = copyAt(e.sourceId, note);
                     if (!copy) continue;
-                    const issuers = (issuersOf.get(e.targetId) ?? []).flatMap((i) => copyAt(i, note) ?? []);
-                    // the read model is what the issuer looks at; a policy's command reads it itself
-                    for (const target of issuers.length ? issuers : [`n:${note.key}`]) add(e, copy, target);
+                    // a policy looks at it itself; a command's issuers look at it
+                    if (kindOf(e.targetId) === 'policy') add(e, copy, `n:${note.key}`);
+                    else for (const issuer of (issuersOf.get(e.targetId) ?? []).flatMap((i) => copyAt(i, note) ?? [])) add(e, copy, issuer);
                 }
                 break;
             case 'readmodel-from':

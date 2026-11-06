@@ -66,7 +66,6 @@ storming OrderToCash "注文から入金まで" {
   }
   command IssueInvoice "請求書を発行する" { // issued by the policy BillConfirmedOrder: no `by`
     ref Billing.Invoice.issue
-    reads OrderTotal
     handledBy Invoice
     emits InvoiceIssued
   }
@@ -80,6 +79,7 @@ storming OrderToCash "注文から入金まで" {
   // From Sales to Billing, as the .dt policy Billing.BillConfirmedOrder
   policy BillConfirmedOrder "確定した注文に請求する" {
     on OrderConfirmed
+    reads OrderTotal // the policy decides, so it is what the policy looks at
     issues IssueInvoice
   }
 

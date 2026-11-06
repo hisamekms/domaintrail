@@ -587,7 +587,7 @@ describe('validateStormings', () => {
             ],
             [
                 'S006',
-                "Policy 'Targeted' has `handledBy Shipment`, but a policy takes `by`, `on`, `issues`.",
+                "Policy 'Targeted' has `handledBy Shipment`, but a policy takes `by`, `reads`, `on`, `issues`.",
                 'remove it: write `handledBy Shipment` in the command the policy `issues`',
             ],
             ['S006', "Command 'Opened' has a `status` clause, which only a hotspot takes.", 'remove the `status` clause'],
@@ -972,6 +972,36 @@ describe('validateStormings', () => {
   }`),
         );
         expect(ds).toEqual([]);
+    });
+
+    test("a policy's `reads` names a read model (S003), and counts as a use of it (S027)", () => {
+        const text = cancel(`  readmodel Looked
+  policy Reading {
+    on ShipmentCancelled
+    reads Looked
+    reads ReleaseFailed
+    reads BikeAssignment
+    reads Customer
+    issues ReleaseBike
+  }`);
+        const ds = validate(text);
+        expect(ds.map((d) => [d.code, d.start.line, d.hint])).toEqual([
+            [
+                'S003',
+                lineOf(text, 'reads ReleaseFailed'),
+                'a policy reads a read model, not an event: declare `readmodel <Id> { from ReleaseFailed }` and write `reads <Id>` (what it reacts to is `on ReleaseFailed`)',
+            ],
+            [
+                'S003',
+                lineOf(text, 'reads BikeAssignment'),
+                'an aggregate is not read: what the policy looks at to decide is a read model (`readmodel <Id> { from <its events> }`)',
+            ],
+            ['S003', lineOf(text, 'reads Customer'), 'who applies a policy by hand is `by Customer`; `reads` names the read model it looks at'],
+        ]);
+        // without the policy's `reads`, the read model is used by nothing
+        const unused = validate(cancel(`  readmodel Looked`));
+        expect(unused.map((d) => d.code)).toEqual(['S027']);
+        expect(unused[0]!.hint).toStartWith('write `reads Looked` in the command whose issuer looks at it (or in the policy that looks at it)');
     });
 
     test('diagnostics are sorted by file and position', () => {

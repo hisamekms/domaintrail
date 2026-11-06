@@ -426,8 +426,22 @@ describe('actors, external systems, read models and aggregates drawn once per us
         }
     });
 
-    test('a command a policy issues has no issuer: its read model goes to the command itself', () => {
+    test('a policy decides: its read model goes to the policy, and a command without an issuer has no read model line (ADR 0032 §9)', () => {
         const s = storming(
+            ...events('E1', 'E2'),
+            el('readmodel', 'Stock'),
+            el('aggregate', 'Order'),
+            el('command', 'Auto', ['handledBy', 'Order'], ['emits', 'E2']),
+            el('policy', 'P', ['on', 'E1'], ['reads', 'Stock'], ['issues', 'Auto']),
+            tl('T', 'E1', 'E2'),
+        );
+        for (const options of [DL, { ...DL, timelineId: 'T' }]) {
+            const view = projectView(s, options);
+            expect(semanticEdges(view).filter((e) => e.startsWith('reads:'))).toEqual(['reads:n:Stock@P->n:P']);
+            expect(view.nodes.find((n) => n.id === 'n:Stock@P')).toMatchObject({ elementId: 'Stock', use: 'P' });
+        }
+        // a `reads` left on the policy's command (S030) draws no line to the command: nobody there looks at it
+        const invalid = storming(
             ...events('E1', 'E2'),
             el('readmodel', 'Stock'),
             el('aggregate', 'Order'),
@@ -435,7 +449,7 @@ describe('actors, external systems, read models and aggregates drawn once per us
             el('policy', 'P', ['on', 'E1'], ['issues', 'Auto']),
             tl('T', 'E1', 'E2'),
         );
-        expect(semanticEdges(projectView(s, DL)).filter((e) => e.startsWith('reads:'))).toEqual(['reads:n:Stock@Auto->n:Auto']);
+        expect(semanticEdges(projectView(invalid, DL)).filter((e) => e.startsWith('reads:'))).toEqual([]);
     });
 
     test('an external system handles a command, and an event comes from one: a copy beside each note', () => {

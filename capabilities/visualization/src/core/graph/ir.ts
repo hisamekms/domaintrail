@@ -162,8 +162,7 @@ export interface GraphEdge {
  * The relations an Event Storming line can stand for, read from its source (A) to its target (B):
  *
  * - `issues`: an actor or external system issues a command (`by`); `follows`: an actor applies a policy (`by`)
- * - `looksAt`: the issuer looks at a read model to decide (`reads`); `readsWhen`: a command without an issuer (a
- *   policy's) looks at a read model itself
+ * - `looksAt`: whoever decides (a command's issuer, or a policy) looks at a read model to decide (`reads`, ADR 0032 §9)
  * - `handles`: a command goes to its handler (`handledBy`); `decides`: the handler decides an event (`emits`; `names`:
  *   the commands of a merged handler); `results`: a command without a handler results in an event
  * - `triggers`: an event triggers a policy (`on`); `policyIssues`: a policy issues a command (`issues`)
@@ -178,7 +177,6 @@ export type LineRelation =
     | 'issues'
     | 'follows'
     | 'looksAt'
-    | 'readsWhen'
     | 'handles'
     | 'decides'
     | 'results'

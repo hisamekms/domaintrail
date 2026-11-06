@@ -29,7 +29,8 @@ export type NodeElementKind = Exclude<ElementKind, 'timeline' | 'group' | 'stage
 /**
  * The keywords of a relation clause inside an element's body (spec §3.2, ADR 0032): Event Storming's design-level
  * grammar. A command is issued `by` an actor or external system, who `reads` read models to decide it, and is
- * `handledBy` an aggregate or external system, which `emits` its events; a policy is `on` events and `issues` commands;
+ * `handledBy` an aggregate or external system, which `emits` its events; a policy is `on` events, `reads` read models
+ * to decide and `issues` a command (whoever decides has the `reads`: a command a policy issues has none, S030);
  * a read model is fed `from` events and an event arrives `from` an external system; a hotspot is `on` any sticky.
  */
 export type RelationKeyword = 'by' | 'reads' | 'handledBy' | 'emits' | 'on' | 'issues' | 'from';
@@ -174,7 +175,7 @@ const STICKIES: readonly NodeElementKind[] = ['event', 'actor', 'external', 'com
  */
 export const RELATION_RULES: Readonly<Partial<Record<NodeElementKind, Readonly<Partial<Record<RelationKeyword, readonly NodeElementKind[]>>>>>> = {
     command: { by: ['actor', 'external'], reads: ['readmodel'], handledBy: ['aggregate', 'external'], emits: ['event'] },
-    policy: { by: ['actor'], on: ['event'], issues: ['command'] },
+    policy: { by: ['actor'], reads: ['readmodel'], on: ['event'], issues: ['command'] },
     readmodel: { from: ['event'] },
     event: { from: ['external'] },
     hotspot: { on: STICKIES },

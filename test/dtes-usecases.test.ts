@@ -366,7 +366,7 @@ describe('UC2: storming from the existing model of examples/shop', () => {
         const a = Object.fromEntries(await Promise.all([SHOP_STORMING].map(async (f) => [f, await readFile(path.join(EXAMPLES, f), 'utf8')])));
         const normal = await view(a, { level: 'design-level', timelineId: 'Normal' });
         // OrderConfirmed → BillConfirmedOrder → IssueInvoice → InvoiceIssued: both ends are in Normal
-        expect(normal).toEqual(expect.arrayContaining(['n:BillConfirmedOrder', 'n:IssueInvoice', 'n:OrderTotal@IssueInvoice', 'n:Invoice@IssueInvoice']));
+        expect(normal).toEqual(expect.arrayContaining(['n:BillConfirmedOrder', 'n:OrderTotal@BillConfirmedOrder', 'n:IssueInvoice', 'n:Invoice@IssueInvoice']));
         expect(normal).not.toContain('n:CancelOrder');
         const cancel = await view(a, { level: 'big-picture', timelineId: 'CancelAfterConfirm' });
         expect(cancel.filter((id) => id.startsWith('n:'))).toEqual(['n:InvoiceOfCancelledOrder', 'n:MixedCurrencies']);
