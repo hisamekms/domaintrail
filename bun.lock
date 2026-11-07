@@ -7,7 +7,7 @@
       "dependencies": {
         "chokidar": "6.0.0",
         "commander": "15.0.0",
-        "elkjs": "0.12.0",
+        "elkjs": "0.12.1",
         "ignore": "7.0.14",
         "langium": "4.4.0",
         "picomatch": "4.0.7",
@@ -140,7 +140,7 @@
         "@domaintrail/kernel": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "@domaintrail/storming": "workspace:*",
-        "elkjs": "0.12.0",
+        "elkjs": "0.12.1",
       },
       "devDependencies": {
         "fast-check": "4.10.2",
@@ -538,7 +538,7 @@
 
     "detect-libc": ["detect-libc@2.1.2", "", {}, "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ=="],
 
-    "elkjs": ["elkjs@0.12.0", "", {}, "sha512-YZcKynxVxYoKIOEpywEPwCFdg+BTbxQRNf3pbwdDCvc8O3kQD8bmIwSxKU1eOTVc4Xo+VG9Te+575mlfvOrhEQ=="],
+    "elkjs": ["elkjs@0.12.1", "", {}, "sha512-IhMYKHE4S2vtx0QrhBP3lYOIKDeIiJXBrdq9MGYkuB8ZHqhrBnHNfSUndjXFewrX1CPK8chwq+2NA0K0hliYuw=="],
 
     "error-stack-parser-es": ["error-stack-parser-es@1.0.5", "", {}, "sha512-5qucVt2XcuGMcEGgWI7i+yZpmpByQ8J1lHhcL7PwqCwu9FPP3VUXzT4ltHe5i2z9dePwEHcDVOAfSnHsOlCXRA=="],
 
