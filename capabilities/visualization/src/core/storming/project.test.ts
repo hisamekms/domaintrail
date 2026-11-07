@@ -452,6 +452,62 @@ describe('actors, external systems, read models and aggregates drawn once per us
         expect(semanticEdges(projectView(invalid, DL)).filter((e) => e.startsWith('reads:'))).toEqual([]);
     });
 
+    test('a policy whose read model is fed by its event: the trigger is drawn through the read model, without its own `on` line', () => {
+        const s = storming(
+            ...events('E1', 'E2', 'E3'),
+            el('readmodel', 'Stock', ['from', 'E1']),
+            el('aggregate', 'Order'),
+            el('command', 'Auto', ['handledBy', 'Order'], ['emits', 'E3']),
+            el('policy', 'P', ['on', 'E1'], ['on', 'E2'], ['reads', 'Stock'], ['issues', 'Auto']),
+            tl('T', 'E1', 'E2', 'E3'),
+        );
+        // E1 → Stock → P says that E1 triggers P; E2, which does not feed Stock, keeps its `on` line
+        expect(semanticEdges(projectView(s, DL)).filter((e) => /^(on|readmodel-from|reads):/.test(e))).toEqual([
+            'on:t:e:E1>e:E2->n:P',
+            'readmodel-from:t:e:E1->n:Stock@P',
+            'reads:n:Stock@P->n:P',
+        ]);
+        // a timeline's view, a note of P after each event: the one after E1 without its `on` line, the one after E2 with
+        expect(semanticEdges(projectView(s, { ...DL, timelineId: 'T' })).filter((e) => /^(on|readmodel-from|reads):/.test(e))).toEqual([
+            'on:t:e:E1>e:E2->n:P#2',
+            'readmodel-from:t:e:E1->n:Stock@P#1',
+            'readmodel-from:t:e:E1->n:Stock@P#2',
+            'reads:n:Stock@P#1->n:P#1',
+            'reads:n:Stock@P#2->n:P#2',
+        ]);
+    });
+
+    test('a policy applied by hand: the actor looks at its read model, event → read model → actor → policy (ADR 0032 §9)', () => {
+        const s = storming(
+            ...events('E1', 'E2'),
+            el('actor', 'Clerk'),
+            el('readmodel', 'Stock', ['from', 'E1']),
+            el('aggregate', 'Order'),
+            el('command', 'Auto', ['handledBy', 'Order'], ['emits', 'E2']),
+            el('policy', 'P', ['on', 'E1'], ['reads', 'Stock'], ['issues', 'Auto'], ['by', 'Clerk']),
+            tl('T', 'E1', 'E2'),
+        );
+        for (const options of [DL, { ...DL, timelineId: 'T' }]) {
+            expect(semanticEdges(projectView(s, options)).filter((e) => /^(on|readmodel-from|reads|by):/.test(e))).toEqual([
+                'by:n:Clerk@P->n:P',
+                'readmodel-from:t:e:E1->n:Stock@P',
+                'reads:n:Stock@P->n:Clerk@P',
+            ]);
+        }
+        // without a read model, the actor stays stuck on its policy, and the `on` line is drawn
+        const alone = storming(
+            ...events('E1', 'E2'),
+            el('actor', 'Clerk'),
+            el('aggregate', 'Order'),
+            el('command', 'Auto', ['handledBy', 'Order'], ['emits', 'E2']),
+            el('policy', 'P', ['on', 'E1'], ['issues', 'Auto'], ['by', 'Clerk']),
+            tl('T', 'E1', 'E2'),
+        );
+        const graph = renderToGraph(projectView(alone, DL), alone);
+        expect(graph.nodes.find((n) => n.id === 'n:Clerk@P')?.attachTo).toBe('n:P');
+        expect(semanticEdges(projectView(alone, DL)).filter((e) => e.startsWith('on:'))).toEqual(['on:t:e:E1->n:P']);
+    });
+
     test('an external system handles a command, and an event comes from one: a copy beside each note', () => {
         const s = storming(
             ...events('Asked', 'Done'),

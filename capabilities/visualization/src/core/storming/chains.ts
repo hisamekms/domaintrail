@@ -13,9 +13,11 @@
  *   `handledBy` edge runs from the command to the handler's copy, each `emits` from that copy to the event (with the
  *   `emits` edge's semantic key). A command without one keeps its `emits` from itself.
  * - **Whoever decides looks** (ADR 0032 §9): a command's `reads` edge runs from the read model to the issuers' copies of
- *   the command note (`by`); a policy's, to the policy's note. A command without `by` has no `reads` (S030): one there
- *   is left out, with nobody to look. An event feeding a read model (`readmodel-from`) runs
- *   to each copy of it, from the event's note at the nearest slot before the copy (every note with a single slot).
+ *   the command note (`by`); a policy's, to the copy of the actor applying it by hand (`by`), else to the policy's
+ *   note. A command without `by` has no `reads` (S030): one there is left out, with nobody to look. An event feeding a
+ *   read model (`readmodel-from`) runs to each copy of it, from the event's note at the nearest slot before the copy
+ *   (every note with a single slot). When a policy's read model is fed by the event the policy is `on`, the line through
+ *   the read model says the trigger: the policy's `on` line from that event note is not drawn (the others are).
  * - **Copies per step** (spec §7.3, §10.2: drawing-only splits): the projection says at which *slot* (a step of a
  *   timeline, or one slot for the whole view) each event note stands. A command whose events stand at several slots
  *   gets a note per slot, `n:<command>#<k>` (with its own issuer, read model and handler); a policy on events at
@@ -267,9 +269,11 @@ export function drawChains(
                 for (const note of notesOf(e.targetId)) {
                     const copy = copyAt(e.sourceId, note);
                     if (!copy) continue;
-                    // a policy looks at it itself; a command's issuers look at it
-                    if (kindOf(e.targetId) === 'policy') add(e, copy, `n:${note.key}`);
-                    else for (const issuer of (issuersOf.get(e.targetId) ?? []).flatMap((i) => copyAt(i, note) ?? [])) add(e, copy, issuer);
+                    // a command's issuers look at it, and so does the actor applying a policy by hand; a policy without
+                    // one looks at it itself
+                    const issuers = (issuersOf.get(e.targetId) ?? []).flatMap((i) => copyAt(i, note) ?? []);
+                    if (!issuers.length && kindOf(e.targetId) === 'policy') add(e, copy, `n:${note.key}`);
+                    else for (const issuer of issuers) add(e, copy, issuer);
                 }
                 break;
             case 'readmodel-from':
@@ -312,6 +316,17 @@ export function drawChains(
             semantic: keys[0]!,
             ...(keys.length > 1 && { merged: keys }),
         });
+    }
+    // a policy's trigger already drawn through the read model it looks at (event → read model → policy, or → the actor
+    // applying it → policy): its own `on` line from that event note is left out
+    const lines = new Set([...edges.values()].flatMap((e) => (e.type === 'semantic' ? [`${e.kind}:${e.source}->${e.target}`] : [])));
+    const looks = (reader: string, policy: string): boolean => reader === policy || lines.has(`by:${reader}->${policy}`);
+    for (const [id, e] of edges) {
+        if (e.type !== 'semantic' || e.kind !== 'on') continue;
+        const through = [...edges.values()].some(
+            (r) => r.type === 'semantic' && r.kind === 'reads' && looks(r.target, e.target) && lines.has(`readmodel-from:${e.source}->${r.source}`),
+        );
+        if (through) edges.delete(id);
     }
     // the empty slot of an issuer or a handler an open hotspot keeps undecided, beside each note of its command
     const gaps: RenderGapNode[] = [];

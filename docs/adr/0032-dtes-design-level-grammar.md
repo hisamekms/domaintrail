@@ -171,7 +171,8 @@ remain (commands without `handledBy`), and no S025, S027 or S028.
   the command, the empty slot of an undecided issuer or handler (`RenderGapNode`, a dashed note 「誰が処理する？」 whose
   selection selects the hotspot).
 - **A policy may be `by` an actor** (a rule a person applies by hand), drawn as a command's issuer is, above the policy.
-  A command a policy issues still has no `by` (S025).
+  A command a policy issues still has no `by` (S025). (Amended by §12: when the policy has a `reads`, the actor looks at
+  the read model, read model → actor → policy, as a command's issuer does.)
 - **From outside, and on a schedule**: `event E { from Ext }` when we only record a fact the outside system decided; a
   command `by Ext` when our aggregate decides something on what it sends. A schedule is a time event and a policy `on`
   it, not an external "batch". The examples follow it.
@@ -232,7 +233,7 @@ the main author, the rule has to be plain and a violation an error at once, as S
 5. **`dt fmt`'s order is per kind.** A policy's clauses go `on`, `reads`, `issues`, `by` (read aloud: when this happens,
    looking at that, issue this); a command's stay as in §4.
 6. **Drawing.** A policy's `reads` is read model → the policy's note (with copies per step, the note of the same step),
-   in ELK and in the grid. There is no read model → command line any more: a command without `by` cannot have `reads`.
+   in ELK and in the grid (amended by §12: read model → the actor's copy when the policy is `by` one). There is no read model → command line any more: a command without `by` cannot have `reads`.
    In the grid a policy's read models stand just before it, as a command's stand before the command.
 7. **The lines' words** (`Messages.lines`, `apps/web/i18n.tsx`). Read model → whoever decides (an actor, an external
    system, a policy) is one sentence, 「「{B}」は「{A}」を見て判断する」 (“{B}” looks at “{A}” to decide): the colour box of
@@ -344,6 +345,34 @@ they change (every recommendation approved). The view bar mixed what is looked a
 *Decided here*, while implementing: the trunk's main flow is named and identified by its first stage's timeline (any
 of its timelines' IDs reads as it); the bands of the lanes are drawn by the page in the canvas's layer, behind the
 notes, and not printed nor exported; a caption naming several exceptions (a lane they share) emphasizes them in turn.
+
+### 12. Whoever applies a policy looks, and the trigger through a read model (2026-11-07)
+
+*Decided by the maintainer* 2026-11-07, after a real storming (DSS 出退勤) drew two lines for one trigger: the policy
+「チェックが済んだら点呼する」 is `on` 「アルコールが検知されなかった」 and `reads` 「アルコールチェック結果」, which is fed
+`from` that event, so the canvas had event → read model → policy and, beside it, event → policy. §9 put the policy's
+`reads` on the policy's row, but drew it to the policy even when a person applies the rule. Both are drawing changes:
+the `.dtes`, its errors, `dt fmt` and the semantic graph do not change.
+
+1. **Whoever applies a policy looks at its read model.** When a policy is `by` an actor (a rule a person applies by
+   hand, §7), its `reads` is read model → the actor's copy beside the policy's note → the policy: event → read model →
+   actor → policy, as a command's is read model → issuer → command (§6). A policy without `by` keeps read model → the
+   policy (§9.6). The actor is stuck on its policy only when no read model leads to it, as an issuer is on its command
+   (§6, ELK).
+2. **The trigger through a read model is not drawn twice.** When an event a policy is `on` feeds a read model the
+   policy `reads` (`readmodel { from … }`), and the drawing has the line from that event's note to the read model's
+   copy beside the policy's note and from there to the policy (directly, or through the actor applying it), the
+   policy's `on` line from that event note is left out: the path through the read model says the trigger. The `on`
+   lines from the events that feed none of its read models stay. Only the line is left out: the semantic edge, the
+   timeline filter (which follows `on`) and the layout's input otherwise are unchanged. Policies are drawn at Design
+   Level only, so Big Picture does not change.
+3. **The lines' words** do not change: read model → actor is §9.7's 「「{B}」は「{A}」を見て判断する」, now also for the
+   actor applying a policy.
+
+*Decided here*, while implementing it: the `on` line is left out per policy note (with copies per step, the note
+after an event fed into its read model loses the line from that event, a note after another event keeps its own),
+after every line of the view is drawn (`drawChains`), so that it is left out only where the path through the read model
+is drawn.
 
 ## Alternatives
 
