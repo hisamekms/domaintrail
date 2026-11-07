@@ -19,12 +19,14 @@
  *   (every note with a single slot). When a policy's read model is fed by the event the policy is `on`, the line through
  *   the read model says the trigger: the policy's `on` line from that event note is not drawn (the others are).
  * - **Copies per step** (spec §7.3, §10.2: drawing-only splits): the projection says at which *slot* (a step of a
- *   timeline, or one slot for the whole view) each event note stands. A command whose events stand at several slots
- *   gets a note per slot, `n:<command>#<k>` (with its own issuer, read model and handler); a policy on events at
- *   several slots a note after each, `n:<policy>#<k>`. A hotspot gets a note on each note of its sticky: of an event,
- *   one per slot, `n:<hotspot>#<k>`; of any other sticky, one per note of it, `n:<hotspot>#<k>` in the order of those
- *   notes. `k` counts from 1. A policy's note issues the command's note at the nearest slot after its own (every note of
- *   the command when none is after it). With a single slot, nothing is copied per step.
+ *   timeline, or one slot for the whole view) each event note stands, and at which position in time. A command whose
+ *   events stand at several positions gets a note per position, `n:<command>#<k>` (with its own issuer, read model and
+ *   handler); a policy on events at several positions a note after each, `n:<policy>#<k>`. Slots at one position (the
+ *   lanes of alternatives at the same step: an exception beside its main flow) share the note, which stands at the slot
+ *   of the topmost lane and joins the event notes of each (ADR 0032 §13). A hotspot gets a note on each note of its
+ *   sticky: of an event, one per slot, `n:<hotspot>#<k>`; of any other sticky, one per note of it, `n:<hotspot>#<k>` in
+ *   the order of those notes. `k` counts from 1. A policy's note issues the command's note at the nearest position after
+ *   its own (every note of the command when none is after it). With a single position, nothing is copied per step.
  */
 import type { Gap, NodeElement, NodeElementKind, SemanticEdge } from '@domaintrail/storming';
 import { semanticEdgeKey } from '@domaintrail/storming';
@@ -38,6 +40,8 @@ export interface EventPlace {
     eventId: string;
     slot: string;
     position: number;
+    /** The row of its lane, when the view has lanes: a note shared by the slots at one position stands at the topmost. */
+    lane?: number;
     /** The note the graph draws it as, when the graph draws several event nodes as one (the integrated canvas: `e:<event>`). */
     drawnAs?: string;
 }
@@ -85,10 +89,11 @@ export const useNodeId = (elementId: string, note: string): string => `n:${eleme
 
 type ElementOfView = NodeElement & { kind: Exclude<NodeElementKind, 'event'> };
 
-/** A note of an element: its ID without `n:`, and its slot. */
+/** A note of an element: its ID without `n:`, the slot it stands at, and every slot it stands for (the same position). */
 interface Note {
     key: string;
     slot?: string;
+    slots?: string[];
     position?: number;
 }
 
@@ -110,13 +115,32 @@ export function drawChains(
     const drawn = semantic.filter((e) => e.kind !== 'reads' || kindOf(e.targetId) !== 'command' || withIssuer.has(e.targetId));
     const edgesOf = (kind: SemanticEdge['kind']): SemanticEdge[] => drawn.filter((e) => e.kind === kind && kindOf(e.sourceId) && kindOf(e.targetId));
 
-    /** The notes of an anchored element: one per slot of the events it is anchored at when those are several. */
-    const notesAt = (id: string, places: EventPlace[]): Note[] => {
-        const bySlot = new Map<string, number>();
-        for (const p of places) bySlot.set(p.slot, Math.min(bySlot.get(p.slot) ?? Infinity, p.position));
-        const slots = [...bySlot].sort(([a, pa], [b, pb]) => pa - pb || compare(a, b));
-        if (slots.length <= 1) return [slots.length ? { key: id, slot: slots[0]![0], position: slots[0]![1] } : { key: id }];
-        return slots.map(([slot, position], i) => ({ key: `${id}#${i + 1}`, slot, position }));
+    /**
+     * The notes of an anchored element: one per position of the events it is anchored at when those are several, at the
+     * slot of the topmost lane there and standing for every slot there; one per slot when `perSlot` (a hotspot on an
+     * event, which stands on each note of it).
+     */
+    const notesAt = (id: string, places: EventPlace[], perSlot: boolean = false): Note[] => {
+        const bySlot = new Map<string, { position: number; lane: number }>();
+        for (const p of places) {
+            const seen = bySlot.get(p.slot);
+            bySlot.set(p.slot, { position: Math.min(seen?.position ?? Infinity, p.position), lane: Math.min(seen?.lane ?? Infinity, p.lane ?? 0) });
+        }
+        const ordered = [...bySlot].sort(([a, pa], [b, pb]) => pa.position - pb.position || pa.lane - pb.lane || compare(a, b));
+        const times: { slots: string[]; position: number }[] = [];
+        for (const [slot, { position }] of ordered) {
+            const last = times.at(-1);
+            if (!perSlot && last?.position === position) last.slots.push(slot);
+            else times.push({ slots: [slot], position });
+        }
+        const noteOf = (key: string, time: { slots: string[]; position: number }): Note => ({
+            key,
+            slot: time.slots[0]!,
+            ...(time.slots.length > 1 && { slots: time.slots }),
+            position: time.position,
+        });
+        if (times.length <= 1) return [times.length ? noteOf(id, times[0]!) : { key: id }];
+        return times.map((time, i) => noteOf(`${id}#${i + 1}`, time));
     };
     const placesOf = (kind: SemanticEdge['kind'], end: 'sourceId' | 'targetId', id: string): EventPlace[] =>
         edgesOf(kind)
@@ -138,9 +162,9 @@ export function drawChains(
         if (n.kind === 'command') for (const note of notesAt(n.id, placesOf('emits', 'targetId', n.id))) addNote(n, note);
         if (n.kind === 'policy') for (const note of notesAt(n.id, placesOf('on', 'sourceId', n.id))) addNote(n, note);
     }
-    /** The event notes of `eventId` at a note's slot (every one when the note has none). */
+    /** The event notes of `eventId` at the slots a note stands for (every one when the note has none). */
     const eventsAt = (eventId: string, note: Note): EventPlace[] =>
-        (eventsOf.get(eventId) ?? []).filter((p) => note.slot === undefined || p.slot === note.slot);
+        (eventsOf.get(eventId) ?? []).filter((p) => note.slot === undefined || (note.slots ?? [note.slot]).includes(p.slot));
     // one handler for the chains that converge on one event note: the command notes handled by the same element that
     // emit it, at its slot (`n:<handler>@*<event note>`); a command note keeps a copy of its own for the rest
     const handlerOfCommand = new Map<string, string>();
@@ -204,7 +228,7 @@ export function drawChains(
         if (n.kind !== 'hotspot') continue;
         const subject = subjectOf.get(n.id);
         if (subject === undefined || kindOf(subject) === 'event') {
-            for (const note of notesAt(n.id, subject === undefined ? [] : (eventsOf.get(subject) ?? []))) addNote(n, note);
+            for (const note of notesAt(n.id, subject === undefined ? [] : (eventsOf.get(subject) ?? []), true)) addNote(n, note);
             continue;
         }
         const on = notes.get(subject) ?? [];

@@ -127,10 +127,10 @@ export function projectStageView(storming: Storming, options: ViewOptions): Rend
     const eventNodes = new Map<string, string[]>();
     /** Where each event note stands: at its step (its column orders the copies, `chains.ts`). */
     const places: EventPlace[] = [];
-    const addEvent = (id: string, eventId: string, occurrences: EventOccurrence[], slot: string, col: number): void => {
+    const addEvent = (id: string, eventId: string, occurrences: EventOccurrence[], slot: string, col: number, lane?: number): void => {
         nodes.set(id, { type: 'event', id, eventId, occurrences: [...occurrences].sort(compareOccurrences) });
         eventNodes.set(eventId, [...(eventNodes.get(eventId) ?? []), id]);
-        places.push({ id, eventId, slot, position: col });
+        places.push({ id, eventId, slot, position: col, ...(lane !== undefined && { lane }) });
     };
     const addSequence = (type: 'sequence' | 'rejoin', source: string, target: string, timelineId: string): string => {
         const id = `${type === 'sequence' ? 's' : 'r'}:${source}->${target}`;
@@ -158,10 +158,10 @@ export function projectStageView(storming: Storming, options: ViewOptions): Rend
             cells[node.id] = cell;
             const occurrencesOf = (eventId: string): EventOccurrence[] => node.occurrences.get(eventId) ?? [];
             if (node.step.type === 'event') {
-                addEvent(node.id, node.step.eventId, occurrencesOf(node.step.eventId), node.id, cell.col);
+                addEvent(node.id, node.step.eventId, occurrencesOf(node.step.eventId), node.id, cell.col, cell.row);
                 continue;
             }
-            for (const eventId of node.step.eventIds) addEvent(memberOf(node, eventId), eventId, occurrencesOf(eventId), node.id, cell.col);
+            for (const eventId of node.step.eventIds) addEvent(memberOf(node, eventId), eventId, occurrencesOf(eventId), node.id, cell.col, cell.row);
             nodes.set(node.id, {
                 type: 'group',
                 id: node.id,

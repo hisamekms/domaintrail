@@ -224,7 +224,8 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   an external system has that system before it; a hotspot is stuck on top of the sticky it is `on` (an event, a
   command, a policy, …), never a step of the flow, and at Big Picture only one on an event is drawn. Where an event is
   drawn at several steps, the command before it, its copies and the policy after it are drawn at each step (ADR 0024,
-  amendment of 2026-11-05). The notes take the convention's
+  amendment of 2026-11-05); lanes side by side at one step (an exception beside its main flow) are alternatives at the
+  same time, and share one command and one policy there, in the band of the topmost lane (ADR 0032 §13). The notes take the convention's
   colours, and the legend shows each kind with its colour and name: event orange, command blue, policy purple,
   aggregate yellow, read model green, hotspot pink, actor pale yellow (rounded), external system lilac (dashed edge),
   and a group a dashed frame tinted with the event's orange. A resolved hotspot (`status resolved`) is a paler,
