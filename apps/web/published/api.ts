@@ -5,8 +5,11 @@
 import type { Knowledge, MissingStickies, PublishedEntry, PublishedStorming } from '@domaintrail/knowledge';
 import {
     API_VERSION,
+    approvedProposal,
     decodeErrorBody,
     deletion,
+    dismissedProposal,
+    openProposals,
     itemWithHistory,
     liveItem,
     liveItems,
@@ -82,6 +85,11 @@ export function workerKnowledgeApi(project: string): KnowledgeApi {
         restore: (id) => call(`${item(id)}/restore`, liveItem, { method: 'POST' }),
         unlink: (id, other) => call(`${item(id)}/unlink`, liveItems, { method: 'POST', body: { json: { other } } }),
         attachImage: (id, file) => call(`${item(id)}/images`, liveItem, { method: 'POST', body: { blob: file } }),
+        retire: (id, retirement) => call(`${item(id)}/retire`, liveItem, { method: 'POST', body: { json: retirement } }),
+        unretire: (id) => call(`${item(id)}/unretire`, liveItem, { method: 'POST' }),
+        proposals: () => call(`${base}/proposals`, openProposals),
+        approve: (proposal) => call(`${base}/proposals/${enc(proposal)}/approve`, approvedProposal, { method: 'POST' }),
+        dismiss: (proposal) => call(`${base}/proposals/${enc(proposal)}/dismiss`, dismissedProposal, { method: 'POST' }),
         imageUrl: (id) => `/${API_VERSION}${base}/images/${enc(id)}`,
         hotspots: false,
     };

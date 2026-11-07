@@ -9611,6 +9611,70 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
     font: inherit;
     font-size: var(--fs-small);
 }
+/* a retired item (廃止), shown only with 廃止も表示: faded, its reason first on its line */
+.knowledge-item.retired > .knowledge-item-head,
+.knowledge-item.retired > .knowledge-fold {
+    opacity: 0.55;
+}
+.knowledge-retired-label {
+    font-weight: var(--fw-strong);
+}
+/* another item named in running text: the item that replaced a retired one, a proposal's item and evidence */
+.knowledge-link,
+button.knowledge-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--action);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+}
+span.knowledge-link {
+    color: inherit;
+    cursor: auto;
+}
+button.knowledge-link:hover {
+    text-decoration: underline;
+}
+.knowledge-replaced {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--gap-inside);
+}
+/* 廃止の候補 at the head of the ナレッジ list: each proposal a card on a calm tint, its decision under it */
+.knowledge-proposals > summary {
+    font-weight: var(--fw-strong);
+    cursor: pointer;
+}
+.knowledge-proposals > ul {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-inside);
+    margin: 0;
+    margin-top: var(--gap-inside);
+    padding: 0;
+    list-style: none;
+}
+.knowledge-proposal {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-inside);
+    padding: var(--space-2);
+    border-radius: 6px;
+    background: var(--neutral-tint);
+}
+.knowledge-proposal-head,
+.knowledge-evidence {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--gap-inside);
+}
+.knowledge-proposal-why {
+    font-size: var(--fs-small);
+}
 /* a conflict: the two items side by side on the danger's wash */
 .knowledge-conflict,
 .knowledge-hotspot {

@@ -3,10 +3,12 @@
 // handed over to, then the other items newest first or by kind), the ナレッジ list of the left column
 // with its search and filters, an item closed to its title and its labels' line, opened to its text (Markdown), its
 // labels as the list's chips (a press filters the list by it), its quotes, the other stickies it concerns, its versions
-// and images, with 直す / 画像を付ける / 消す; the deletion's 元に戻す; the dot and the conflict mark on the canvas, the
-// stickies an opened item lights up, and the session's extraction switch in the app bar (section 3).
-import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
-import { Bot, CircleAlert, ImagePlus, Lightbulb, LightbulbOff, PanelLeftClose, Pencil, Search, Trash2 } from 'lucide-react';
+// and images, with 直す / 画像を付ける / 廃止する / 消す; the deletion's and the retirement's 元に戻す; the dot and the conflict
+// mark on the canvas, the stickies an opened item lights up, and the session's extraction switch in the app bar
+// (section 3). A retired item (廃止, section 12) is hidden from the lists unless 廃止も表示, then faded, with its reason
+// and the item that replaced it; the AI's 廃止の候補 head the ナレッジ list, each approved or dismissed by a person.
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { Archive, ArchiveRestore, Bot, CircleAlert, ImagePlus, Lightbulb, LightbulbOff, PanelLeftClose, Pencil, Search, Trash2 } from 'lucide-react';
 import { latestRevision } from '../session/state';
 import { sessionApi } from '../session/api';
 import { AI_NAME } from '../session/ai';
@@ -25,8 +27,10 @@ import {
     labelChips,
     missingConflicts,
     NO_FILTERS,
+    isRetired,
     ordered,
     ORIGINS,
+    RETIREMENT_REASONS,
     pairKey,
     outsideConflicts,
     queryOf,
@@ -43,7 +47,7 @@ import {
 } from './model';
 import { KnowledgeMarkdown, KnowledgePlain } from './text';
 import { useKnowledgeView, type KnowledgeView } from './useKnowledge';
-import type { PastVersion } from '@domaintrail/knowledge';
+import type { Knowledge, PastVersion } from '@domaintrail/knowledge';
 
 const failure = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -79,7 +83,15 @@ function Meta({ item }: { item: KnowledgeItem }): ReactElement {
     const date = useShortDate();
     const { when, origin, perspective } = item.content.labels;
     const ai = origin === 'investigated' || origin === 'inferred';
+    const retired = item.retirement;
     const parts: ReactNode[] = [
+        ...(retired
+            ? [
+                  <span key="r" className="knowledge-retired-label">
+                      {retired.reason ? `${t.retired}: ${t.reasons[retired.reason]}` : t.retired}
+                  </span>,
+              ]
+            : []),
         ...(when !== 'none'
             ? [
                   <span key="w" className={when === 'to_be' ? 'knowledge-to-be' : undefined}>
@@ -198,6 +210,96 @@ function CorrectForm({ item, onDone }: { item: KnowledgeItem; onDone: () => void
     );
 }
 
+/** Opens an item of the list it is in (the ナレッジ list); none elsewhere: a link to an item is then its title only. */
+const OpenItemContext = createContext<((id: string) => void) | undefined>(undefined);
+
+/** An item named by its ID: its title, opening it in the list when there is one to open it in. */
+function ItemLink({ id }: { id: string }): ReactElement | null {
+    const api = useKnowledgeApi();
+    const open = useContext(OpenItemContext);
+    const [title, setTitle] = useState<string | undefined>();
+    useEffect(() => {
+        let stale = false;
+        api.get(id).then(
+            (got) => !stale && setTitle(got?.item.content.title),
+            () => undefined,
+        );
+        return () => {
+            stale = true;
+        };
+    }, [api, id]);
+    if (title === undefined) return null;
+    if (!open) return <span className="knowledge-link">{title}</span>;
+    return (
+        <button type="button" className="knowledge-link" onClick={() => open(id)}>
+            {title}
+        </button>
+    );
+}
+
+/**
+ * 廃止する: a reason, or none (each chip pressed again unchooses it), and the newer item for 置き換わった, chosen among
+ * the items not retired; retired at once, with 元に戻す for a while.
+ */
+function RetireForm({ item, onDone }: { item: KnowledgeItem; onDone: () => void }): ReactElement {
+    const t = useT().knowledge;
+    const view = useKnowledgeView();
+    const api = useKnowledgeApi();
+    const [reason, setReason] = useState<Knowledge.RetirementReason | undefined>();
+    const [replacedBy, setReplacedBy] = useState<string>('');
+    const [candidates, setCandidates] = useState<readonly KnowledgeItem[]>([]);
+    useEffect(() => {
+        if (reason !== 'replaced') return;
+        let stale = false;
+        api.search(new URLSearchParams({ limit: '200' })).then(
+            (p) => !stale && setCandidates(p.items.filter((i) => i.id !== item.id)),
+            () => undefined,
+        );
+        return () => {
+            stale = true;
+        };
+    }, [api, reason, item.id]);
+    const retire = async (): Promise<void> => {
+        await view?.retire(item.id, { ...(reason && { reason }), ...(reason === 'replaced' && replacedBy && { replacedBy }) });
+        onDone();
+    };
+    return (
+        <div className="knowledge-form knowledge-retire">
+            <span className="knowledge-chips" role="group" aria-label={t.retire}>
+                {RETIREMENT_REASONS.map((r) => (
+                    <button
+                        key={r}
+                        type="button"
+                        className="knowledge-chip"
+                        aria-pressed={reason === r}
+                        onClick={() => setReason((o) => (o === r ? undefined : r))}
+                    >
+                        {t.reasons[r]}
+                    </button>
+                ))}
+            </span>
+            {reason === 'replaced' && (
+                <select aria-label={t.replacedBy} value={replacedBy} onChange={(e) => setReplacedBy(e.target.value)}>
+                    <option value="">{t.replacedBy}</option>
+                    {candidates.map((c) => (
+                        <option key={c.id} value={c.id}>
+                            {c.content.title}
+                        </option>
+                    ))}
+                </select>
+            )}
+            <span className="knowledge-actions">
+                <Act kind="decide" icon={<Archive size={12} aria-hidden />} onClick={() => void retire()}>
+                    {t.retire}
+                </Act>
+                <Act kind="stop" onClick={onDone}>
+                    {t.cancel}
+                </Act>
+            </span>
+        </div>
+    );
+}
+
 /** The versions an item replaced, newest first. */
 function Versions({ item, history }: { item: KnowledgeItem; history: readonly PastVersion[] }): ReactElement | null {
     const t = useT().knowledge;
@@ -241,6 +343,7 @@ function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefi
     const view = useKnowledgeView();
     const api = useKnowledgeApi();
     const [editing, setEditing] = useState(false);
+    const [retiring, setRetiring] = useState(false);
     const [history, setHistory] = useState<readonly PastVersion[]>([]);
     const file = useRef<HTMLInputElement>(null);
     useEffect(() => {
@@ -264,8 +367,15 @@ function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefi
     };
     if (editing) return <CorrectForm item={item} onDone={() => setEditing(false)} />;
     const others = item.content.about.filter((s) => s !== from);
+    const retired = item.retirement;
     return (
         <div className="knowledge-detail">
+            {retired?.replacedBy && (
+                <div className="knowledge-replaced">
+                    <span className="knowledge-meta">{t.replacedBy}</span>
+                    <ItemLink id={retired.replacedBy} />
+                </div>
+            )}
             <div className="knowledge-body markdown">
                 <KnowledgeMarkdown text={item.content.text} />
             </div>
@@ -286,13 +396,23 @@ function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefi
                 </div>
             )}
             <Versions item={item} history={history} />
-            <span className="knowledge-actions">
+            {retiring && <RetireForm item={item} onDone={() => setRetiring(false)} />}
+            <span className="knowledge-actions" hidden={retiring}>
                 <Act kind="open" icon={<Pencil size={12} aria-hidden />} onClick={() => setEditing(true)}>
                     {t.correct}
                 </Act>
                 <Act kind="open" icon={<ImagePlus size={12} aria-hidden />} onClick={() => file.current?.click()}>
                     {t.attachImage}
                 </Act>
+                {retired ? (
+                    <Act kind="decide-sub" icon={<ArchiveRestore size={12} aria-hidden />} onClick={() => void view?.unretire(item.id)}>
+                        {t.unretire}
+                    </Act>
+                ) : (
+                    <Act kind="open" icon={<Archive size={12} aria-hidden />} onClick={() => setRetiring(true)}>
+                        {t.retire}
+                    </Act>
+                )}
                 <Act kind="decide-sub" icon={<Trash2 size={12} aria-hidden />} onClick={() => void view?.remove(item.id)}>
                     {t.delete}
                 </Act>
@@ -355,7 +475,7 @@ export function ItemRow({
     const view = useKnowledgeView();
     const shown = useStaying(open);
     return (
-        <li className={`knowledge-item${open ? ' open' : ''}`}>
+        <li className={`knowledge-item${open ? ' open' : ''}${isRetired(item) ? ' retired' : ''}`}>
             <button type="button" className="knowledge-item-head" aria-expanded={open} onClick={onToggle}>
                 <span className="knowledge-kind">{t.kinds[item.content.labels.kind]}</span>
                 <span className="knowledge-item-title">{item.content.title}</span>
@@ -537,7 +657,7 @@ function SideDetail({ item, from, open }: { item: KnowledgeItem; from: string | 
 function useOpened(
     view: KnowledgeView | undefined,
     items: readonly KnowledgeItem[],
-): { isOpen: (id: string) => boolean; toggle: (item: KnowledgeItem) => void } {
+): { isOpen: (id: string) => boolean; toggle: (item: KnowledgeItem) => void; open: (id: string) => void } {
     const [opened, setOpened] = useState<string | undefined>();
     const item = items.find((i) => i.id === opened);
     const setLit = view?.setLit;
@@ -546,7 +666,7 @@ function useOpened(
         setLit?.(about ? about.split(',') : []);
     }, [about, setLit]);
     useEffect(() => () => setLit?.([]), [setLit]);
-    return { isOpen: (id) => id === opened, toggle: (i) => setOpened((o) => (o === i.id ? undefined : i.id)) };
+    return { isOpen: (id) => id === opened, toggle: (i) => setOpened((o) => (o === i.id ? undefined : i.id)), open: setOpened };
 }
 
 /**
@@ -672,63 +792,190 @@ export function KnowledgeList({ onClose, closeLabel }: { onClose: () => void; cl
         setNext(p.next);
     };
     const opened = useOpened(view, items);
+    /** An item linked from another (its replacement, a proposal's): opened in the list, fetched when it is not listed. */
+    const openItem = async (id: string): Promise<void> => {
+        if (!items.some((i) => i.id === id)) {
+            const got = await api.get(id).catch(() => undefined);
+            if (!got) return;
+            setItems((old) => (old.some((i) => i.id === id) ? old : [got.item, ...old]));
+        }
+        if (!opened.isOpen(id)) opened.open(id);
+    };
     return (
-        <div className="list knowledge-list">
-            <div className="list-head">
-                <span className="list-title">{t.title}</span>
-                <OrderSwitch order={order} onOrder={setOrder} />
-                <button className="icon-button" onClick={onClose} data-tooltip={closeLabel} aria-label={closeLabel}>
-                    <PanelLeftClose size={16} aria-hidden />
-                </button>
-            </div>
-            <div className="list-body knowledge-list-body">
-                <label className="knowledge-search">
-                    <Search size={14} aria-hidden />
-                    <input
-                        type="search"
-                        placeholder={t.search}
-                        aria-label={t.search}
-                        value={filters.q}
-                        onChange={(e) => setFilters({ ...filters, q: e.target.value })}
-                    />
-                </label>
-                <div className="knowledge-filters">
-                    <ChipRow label={t.axes.when} values={WHENS} names={t.whens} on={filters.when} onToggle={(v) => setFilters(toggled(filters, 'when', v))} />
-                    <ChipRow label={t.axes.kind} values={KINDS} names={t.kinds} on={filters.kind} onToggle={(v) => setFilters(toggled(filters, 'kind', v))} />
-                    <ChipRow
-                        label={t.axes.origin}
-                        values={ORIGINS}
-                        names={t.origins}
-                        on={filters.origin}
-                        onToggle={(v) => setFilters(toggled(filters, 'origin', v))}
-                    />
-                    {/* the perspective has no fixed values: chosen from an item's chip, shown while it filters */}
-                    {filters.perspective !== undefined && (
-                        <ChipRow
-                            label={t.axes.perspective}
-                            values={[filters.perspective]}
-                            names={{ [filters.perspective]: filters.perspective }}
-                            on={[filters.perspective]}
-                            onToggle={() => setFilters({ q: filters.q, when: filters.when, kind: filters.kind, origin: filters.origin })}
+        <OpenItemContext.Provider value={(id) => void openItem(id)}>
+            <div className="list knowledge-list">
+                <div className="list-head">
+                    <span className="list-title">{t.title}</span>
+                    <OrderSwitch order={order} onOrder={setOrder} />
+                    <button className="icon-button" onClick={onClose} data-tooltip={closeLabel} aria-label={closeLabel}>
+                        <PanelLeftClose size={16} aria-hidden />
+                    </button>
+                </div>
+                <div className="list-body knowledge-list-body">
+                    <label className="knowledge-search">
+                        <Search size={14} aria-hidden />
+                        <input
+                            type="search"
+                            placeholder={t.search}
+                            aria-label={t.search}
+                            value={filters.q}
+                            onChange={(e) => setFilters({ ...filters, q: e.target.value })}
                         />
+                    </label>
+                    <Proposals />
+                    <div className="knowledge-filters">
+                        <ChipRow
+                            label={t.axes.when}
+                            values={WHENS}
+                            names={t.whens}
+                            on={filters.when}
+                            onToggle={(v) => setFilters(toggled(filters, 'when', v))}
+                        />
+                        <ChipRow
+                            label={t.axes.kind}
+                            values={KINDS}
+                            names={t.kinds}
+                            on={filters.kind}
+                            onToggle={(v) => setFilters(toggled(filters, 'kind', v))}
+                        />
+                        <ChipRow
+                            label={t.axes.origin}
+                            values={ORIGINS}
+                            names={t.origins}
+                            on={filters.origin}
+                            onToggle={(v) => setFilters(toggled(filters, 'origin', v))}
+                        />
+                        {/* the perspective has no fixed values: chosen from an item's chip, shown while it filters */}
+                        {filters.perspective !== undefined && (
+                            <ChipRow
+                                label={t.axes.perspective}
+                                values={[filters.perspective]}
+                                names={{ [filters.perspective]: filters.perspective }}
+                                on={[filters.perspective]}
+                                onToggle={() =>
+                                    setFilters({
+                                        q: filters.q,
+                                        when: filters.when,
+                                        kind: filters.kind,
+                                        origin: filters.origin,
+                                        ...(filters.retired && { retired: true }),
+                                    })
+                                }
+                            />
+                        )}
+                        <span className="knowledge-chips">
+                            <button
+                                type="button"
+                                className="knowledge-chip"
+                                aria-pressed={filters.retired === true}
+                                onClick={() => setFilters({ ...filters, retired: !filters.retired })}
+                            >
+                                {t.showRetired}
+                            </button>
+                        </span>
+                    </div>
+                    {items.length === 0 ? (
+                        <p className="muted">{t.noMatch}</p>
+                    ) : (
+                        <ul className="knowledge-items">
+                            {ordered(items, order).map((i) => (
+                                <ItemRow key={i.id} item={i} from={undefined} open={opened.isOpen(i.id)} onToggle={() => opened.toggle(i)} />
+                            ))}
+                        </ul>
+                    )}
+                    {next !== undefined && (
+                        <Act kind="open" onClick={() => void more()}>
+                            {t.more}
+                        </Act>
                     )}
                 </div>
-                {items.length === 0 ? (
-                    <p className="muted">{t.noMatch}</p>
-                ) : (
-                    <ul className="knowledge-items">
-                        {ordered(items, order).map((i) => (
-                            <ItemRow key={i.id} item={i} from={undefined} open={opened.isOpen(i.id)} onToggle={() => opened.toggle(i)} />
-                        ))}
-                    </ul>
-                )}
-                {next !== undefined && (
-                    <Act kind="open" onClick={() => void more()}>
-                        {t.more}
-                    </Act>
-                )}
             </div>
-        </div>
+        </OpenItemContext.Provider>
+    );
+}
+
+/** The AI's proposals to retire (or unretire) waiting for a person, at the head of the ナレッジ list: 廃止の候補 n. */
+function Proposals(): ReactElement | null {
+    const t = useT().knowledge;
+    const view = useKnowledgeView();
+    const proposals = view?.proposals ?? [];
+    if (proposals.length === 0) return null;
+    return (
+        <details className="knowledge-proposals" open>
+            <summary>{t.proposalCount(proposals.length)}</summary>
+            <ul>
+                {proposals.map((p) => (
+                    <ProposalCard key={p.id} proposal={p} />
+                ))}
+            </ul>
+        </details>
+    );
+}
+
+/** One proposal: what it asks of which item, why, on what evidence; 承認 / 却下. */
+function ProposalCard({ proposal }: { proposal: Knowledge.OpenRetirementProposal }): ReactElement {
+    const t = useT().knowledge;
+    const view = useKnowledgeView();
+    const date = useShortDate();
+    const [busy, setBusy] = useState(false);
+    const decide = async (f: ((p: Knowledge.OpenRetirementProposal) => Promise<void>) | undefined): Promise<void> => {
+        setBusy(true);
+        await f?.(proposal);
+        setBusy(false);
+    };
+    return (
+        <li className="knowledge-proposal">
+            <span className="knowledge-proposal-head">
+                <span className="knowledge-kind">{proposal.action === 'retire' ? t.retire : t.unretire}</span>
+                <ItemLink id={proposal.item} />
+            </span>
+            {proposal.reason && (
+                <span className="knowledge-meta">
+                    {t.reasons[proposal.reason]}
+                    {proposal.replacedBy && ' → '}
+                    {proposal.replacedBy && <ItemLink id={proposal.replacedBy} />}
+                </span>
+            )}
+            <span className="knowledge-proposal-why">{proposal.explanation}</span>
+            <div className="knowledge-sources" role="group" aria-label={t.evidence}>
+                {proposal.evidence.map((e) => {
+                    if (e.kind === 'Said') {
+                        const said = view?.messageOf?.(e.session, e.message);
+                        return (
+                            <ReferenceLine
+                                key={`s${e.session}/${e.message}`}
+                                who={said?.who ?? date(proposal.proposedAt)}
+                                head={e.quote}
+                                tooltip={e.quote}
+                                onClick={said?.open}
+                            />
+                        );
+                    }
+                    if (e.kind === 'Decision')
+                        return (
+                            <span key={`d${e.item}`} className="knowledge-evidence">
+                                <span className="knowledge-kind">{t.kinds.decision}</span>
+                                <ItemLink id={e.item} />
+                            </span>
+                        );
+                    const name = view?.label(e.sticky) ?? e.sticky;
+                    return (
+                        <span key={`k${e.sticky}`} className="knowledge-evidence">
+                            <TargetLink name={name} tooltip={name} kind="DtesElement" onClick={() => view?.select(e.sticky)} />
+                            <span>{e.change}</span>
+                        </span>
+                    );
+                })}
+            </div>
+            <span className="knowledge-actions">
+                <Act kind="decide" disabled={busy} onClick={() => void decide((p) => view?.approve(p) ?? Promise.resolve())}>
+                    {t.approve}
+                </Act>
+                <Act kind="danger" disabled={busy} onClick={() => void decide((p) => view?.dismiss(p) ?? Promise.resolve())}>
+                    {t.dismiss}
+                </Act>
+            </span>
+        </li>
     );
 }
 
@@ -770,7 +1017,7 @@ export function ExtractionSwitch({ facilitator, live }: { facilitator: boolean; 
     );
 }
 
-/** 消しました / 元に戻す, for 10 seconds after a deletion; and a failure, once. */
+/** 消しました or 廃止しました / 元に戻す, for 10 seconds after a deletion or a retirement; and a failure, once. */
 export function KnowledgeNotice(): ReactElement | null {
     const t = useT().knowledge;
     const view = useKnowledgeView();
@@ -785,7 +1032,7 @@ export function KnowledgeNotice(): ReactElement | null {
     if (view.undoable)
         return (
             <div className="knowledge-notice" role="status">
-                <span>{t.deleted}</span>
+                <span>{view.undoable.what === 'deleted' ? t.deleted : t.retiredDone}</span>
                 <Act kind="decide-sub" onClick={() => void view.undo()}>
                     {t.undo}
                 </Act>
