@@ -3496,21 +3496,30 @@ svg.chat-launcher-mark {
 }
 /* the exceptions' lanes over the canvas: a band behind a lane, deeper while its label is hovered, outlined while its
    exception is emphasized; its label (over the line's caption) a button, filled while emphasized */
+/* the bands: in React Flow's viewport (page coordinates, moved by the camera), behind every note and line */
 .exception-lanes {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: -1;
+    pointer-events: none;
+}
+/* the labels: over the canvas, from page coordinates with the camera */
+.exception-lane-labels {
     position: absolute;
     inset: 0;
     overflow: hidden;
     pointer-events: none;
-    z-index: 5;
+    z-index: 7;
 }
 .exception-lane {
     position: absolute;
     border-radius: 8px;
-    background: color-mix(in srgb, var(--es-hotspot) 18%, transparent);
+    background: color-mix(in srgb, var(--es-hotspot) 70%, transparent);
     transition: background var(--motion-short, 120ms) ease;
 }
 .exception-lane.hovered {
-    background: color-mix(in srgb, var(--es-hotspot) 42%, transparent);
+    background: color-mix(in srgb, var(--es-exception) 35%, transparent);
 }
 .exception-lane.focus {
     box-shadow: 0 0 0 2px var(--es-exception);
