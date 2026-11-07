@@ -4069,6 +4069,17 @@ cancel a queued or running one. A run **succeeds** when the agent exits 0, `dt f
 before and `.dtes` warnings are shown (before → after), not a failure. A run that changes nothing completes with its
 base revision as its result.
 
+**The review at a run's end** (ADR 0034). A run that changed stormings is reviewed before it ends, in the same run:
+dt's rules look at its changes — a hotspot it resolved while the sticky it is on stayed as it was; a sticky it changed
+under a hotspot it left open; a label or name it changed that another sticky still has; a sticky it added with the label
+of another one —, then the agent gets one more turn (the same conversation when warm) with what they found, the
+neighbourhood of what it changed (the hotspots on it, one relation away) and, when the session keeps knowledge and
+extracts it, the decisions and rules about them (never AS-IS). It fixes what is at odds with the requests within their
+scope, and says why for what it leaves; knowledge it finds at odds with the stickies goes to the next extraction as a
+candidate conflict, never changed. When a run renames a sticky, the knowledge about it is linked to the new name. The
+card shows what was found, fixed and left (見直し), and 見直しを頼む while something is left. `agent.run.review: false`
+turns it off.
+
 **The agent's reply** is structured (Claude Code's structured output, `--json-schema`): a short summary, a line per
 request (✓ done, ◐ partly, – not done, ? a question, with a note for the last ones), the assumptions it made where a
 request left a choice open (with the alternatives it saw), and for a question up to 3 questions, each with up to 5
@@ -4167,6 +4178,7 @@ are shown. The old sections `session` and `view` are refused when the file is lo
       "warm": true,            // one Claude Code process across runs (each run a turn); false: one process per run
       "restartAfter": 20,      // runs of one warm process before a fresh one replaces it
       "idleTimeout": 30        // minutes without a run before the warm process ends (its memory freed); 0 = never
+      // "review": false,      // no review at a run's end (default: a run that changed stormings is reviewed in one more turn)
       // "model": "sonnet",    // claude --model; default: your Claude Code settings' model
       // "effort": "medium",   // claude --effort (low, medium, high, xhigh, max); default: your settings'
       // the dt the agent runs (and dt fmt / dt check after it); default: the running dt itself.
