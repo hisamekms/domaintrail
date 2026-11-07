@@ -376,12 +376,12 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
                 case 'replyAboutInput':
                     return err({ type: 'InvalidReply' });
             }
-            const { report, resultRevision, changed, reply, finishedAt } = params;
+            const { report, resultRevision, changed, reply, review, finishedAt } = params;
             if (succeeded(report, changed)) {
                 return ok({
                     Completed: {
-                        // the reply is kept with a completed run only: a failure is the facts'
-                        set: { report, resultRevision, changed, reply, finishedAt },
+                        // the reply and the review are kept with a completed run only: a failure is the facts'
+                        set: { report, resultRevision, changed, reply, review, finishedAt },
                         events: { RunCompleted: { type: 'RunCompleted', runId: run.id, resultRevision, changed, finishedAt } },
                     },
                 });

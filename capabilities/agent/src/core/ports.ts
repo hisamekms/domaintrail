@@ -9,6 +9,7 @@ import type {
     AgentFailReason,
     AgentReplyBody,
     AgentFinishBody,
+    AgentReviewBody,
     AgentJourneysBody,
     AgentLease,
     AgentPreviousRun,
@@ -97,6 +98,11 @@ export interface AgentApi {
     /** What the running run is doing now (the server keeps the latest for the pages; the lease is not extended). */
     activity(run: string, token: string, activity: RunActivity): Promise<ApiResult<unknown>>;
     finish(run: string, token: string, facts: Omit<AgentFinishBody, 'token'>): Promise<ApiResult<unknown>>;
+    /**
+     * Stage 0 of the review of the running run (ADR 0034): what the rules found in its changes so far, its
+     * neighbourhood and the knowledge about it. Absent from an older client: no review.
+     */
+    review?(run: string, token: string): Promise<ApiResult<AgentReviewBody>>;
     clarification(run: string, token: string, question: string, reply?: AgentReplyBody): Promise<ApiResult<unknown>>;
     decline(run: string, token: string, reply: AgentReplyBody): Promise<ApiResult<unknown>>;
     fail(run: string, token: string, reason: AgentFailReason): Promise<ApiResult<unknown>>;

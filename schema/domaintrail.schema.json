@@ -304,6 +304,11 @@
               "minimum": 0,
               "default": 30
             },
+            "review": {
+              "description": "Review a run that changed stormings before it ends (ADR 0034): the agent checks the neighbourhood of its changes and what dt's rules found in them, in one more turn of the same run, and fixes what is at odds with the requests and decisions.",
+              "type": "boolean",
+              "default": true
+            },
             "model": {
               "description": "The model Claude Code runs with (claude --model, e.g. \"sonnet\"). Default: the model of your Claude Code settings.",
               "type": "string",

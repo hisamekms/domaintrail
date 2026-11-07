@@ -696,10 +696,11 @@ describe('the agent in process, with a fake claude on the PATH', () => {
 
     test('dt open starts the agent in process: a run queued in the page is carried out by it; closing the session ends both', async () => {
         const root = await copy();
-        // the agent's dt (and dt fmt / dt check after a run): this repository's, outside the workspace
+        // the agent's dt (and dt fmt / dt check after a run): this repository's, outside the workspace; one turn a run
+        // (the review at a run's end has tests of its own)
         await writeFile(
             path.join(root, 'domaintrail.jsonc'),
-            JSON.stringify({ agent: { run: { dt: ['bun', path.join(ROOT, 'bin', 'dt.ts')], warm: false } } }),
+            JSON.stringify({ agent: { run: { dt: ['bun', path.join(ROOT, 'bin', 'dt.ts')], warm: false, review: false } } }),
         );
         const returns = 'stormings/returns.dtes';
         const realRoot = await realpath(root);

@@ -597,6 +597,14 @@ the journeys panel; the latest card follows the journey file as it is now. A few
   chat, the choices shared with the chat's card — and チャットで見る scrolls the chat to it. By default 終わったもの lists the cards
   that changed files; すべて also lists the runs that changed nothing, and those declined, failed or cancelled. The
   other groups always show.
+- **見直し** (the review at a run's end, [ADR 0034](adr/0034-reviewing-a-run.md)): a run that changed stormings is
+  checked before it ends — dt's rules on its diff, then the AI, in the same run, over the neighbourhood of what it
+  changed — and its card (in the chat and in AI の作業) says, under what the AI says, in a small muted block: 見直し, a
+  line per kind dt found (解決したが付箋はそのまま, 付箋を変えたがホットスポットは開いたまま, 前のラベル・名前が残る, 同じラベルで別の ID)
+  with how many and 「· 直した」, or 「· 残り n 件」 in the warning's ink when the run ended with some left; ✓ what the AI says
+  it fixed, – what it kept and why (elements as links). Nothing when nothing was found, fixed or kept. While something
+  is left, the facilitator's 見直しを頼む (on the card's latest run) sends a message to the AI that replies to the run,
+  with the stickies left as its targets: the card continues with that run.
 
 ### What a turn changed
 

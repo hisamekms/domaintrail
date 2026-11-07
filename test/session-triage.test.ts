@@ -902,7 +902,7 @@ describe('end to end with the two roles and a fake Claude Code', () => {
             dt: DT_COMMAND,
             agentCommand: { command: process.execPath, args: [FAKE, runPlan] },
             answerCommand: { command: process.execPath, args: [FAKE, answerPlan] },
-            run: { warm: false, restartAfter: 20, idleTimeout: 30 },
+            run: { warm: false, restartAfter: 20, idleTimeout: 30, review: false },
             log: (l) => log.push(l),
             reconnect: { minMs: 100, maxMs: 500, giveUpMs: 5_000 },
         });

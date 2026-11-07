@@ -11,8 +11,10 @@ import type { RunActivity, RunActivityPhase } from './domain/activity.js';
 import type { TemplateContext } from './domain/templates.js';
 import type { JourneyAct, JourneyFile, JourneyProblem, JourneySummary } from './domain/journey.js';
 import type { JourneyWhere } from './domain/guide.js';
+import type { NeighbourSticky, ReviewFindingData, StickyRename } from './domain/review.js';
+import type { ReviewRetireData } from './domain/reply.js';
 
-export type { RunActivity, RunActivityPhase, RevertChanges, RevertFile, TemplateContext };
+export type { RunActivity, RunActivityPhase, RevertChanges, RevertFile, TemplateContext, NeighbourSticky, ReviewFindingData, StickyRename };
 
 /** A branded string or number of the generated code as plain JSON: the brand is a promise checked on the server. */
 type Unbranded<T> = T extends string & { readonly __domain: string } ? string : T extends number & { readonly __domain: string } ? number : T;
@@ -835,6 +837,49 @@ export interface AgentFinishBody extends AgentLeaseBody {
     readonly formatted: ToolOutcomeBody;
     readonly checked: ToolOutcomeBody;
     readonly reply?: AgentReplyBody;
+    /**
+     * The review at the run's end (ADR 0034), when the agent was asked to check its neighbourhood: what it says it
+     * fixed and kept (and why), and the knowledge items it found at odds with the stickies. Absent: not asked (nothing
+     * to review, or a subscriber before the review).
+     */
+    readonly review?: AgentFinishReview;
+}
+
+/** What the agent says of its review (untrusted: validated against `REPLY_LIMITS` as a reply is). */
+export interface AgentFinishReview {
+    readonly fixed: readonly string[];
+    readonly kept: readonly { readonly what: string; readonly why: string }[];
+    readonly knowledge?: readonly { readonly item: string; readonly sticky: string; readonly why: string }[];
+    /** The items it proposes to retire (ADR 0031 §12), each with why and its evidence: the server proposes them to the store. */
+    readonly retire?: readonly ReviewRetireData[];
+}
+
+/**
+ * A knowledge item as the review gives it to the agent (ADR 0034): a decision or a rule first, TO-BE or with no
+ * "when" (never AS-IS), newest first, its text cut.
+ */
+export interface AgentReviewKnowledge {
+    readonly id: string;
+    readonly title: string;
+    readonly text: string;
+    readonly kind: string;
+    readonly when: string;
+    readonly about: readonly string[];
+    readonly createdAt: string;
+}
+
+/**
+ * `POST /agent/runs/:id/review` → 200: stage 0 of the review of the running run (ADR 0034), from its lease's holder:
+ * what the rules found in its changes so far, the neighbourhood to check, and the knowledge about it (absent: the
+ * session keeps none, or does not extract it). `complete` is false when a side's `.dtes` files do not all parse.
+ */
+export interface AgentReviewBody {
+    readonly complete: boolean;
+    readonly findings: readonly ReviewFindingData[];
+    readonly neighbourhood: readonly NeighbourSticky[];
+    /** The stickies the run renamed (old → new): the knowledge still names them by their old names until the run ends. */
+    readonly renamed?: readonly StickyRename[];
+    readonly knowledge?: readonly AgentReviewKnowledge[];
 }
 
 /** `POST /agent/runs/:id/clarification`: the question as plain text, and the structured reply (outcome `clarification`) when there is one. */

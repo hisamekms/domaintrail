@@ -52,7 +52,7 @@ export const AGENT_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type AgentEffort = (typeof AGENT_EFFORTS)[number];
 
 /** How Claude Code carries out runs (the run role), its keys of `agent.run` besides `allowedTools` and `dt`. */
-export const RUN_CONFIG_KEYS = ['warm', 'restartAfter', 'idleTimeout', 'model', 'effort'] as const;
+export const RUN_CONFIG_KEYS = ['warm', 'restartAfter', 'idleTimeout', 'review', 'model', 'effort'] as const;
 
 /** The keys of `agent.answer`. */
 export const ANSWER_CONFIG_KEYS = ['model', 'effort', 'warm', 'restartAfter', 'idleTimeout', 'timeout'] as const;
@@ -109,6 +109,8 @@ export interface RunConfigFile {
     restartAfter?: number;
     /** Minutes without a run after which the warm process is ended; `0`: never. Default: `DEFAULT_IDLE_TIMEOUT`. */
     idleTimeout?: number;
+    /** Review a run that changed stormings before it ends (ADR 0034): one more turn of the same run. Default: true. */
+    review?: boolean;
     /** `claude --model`; unset: the model of the user's Claude Code settings. */
     model?: string;
     /** `claude --effort`; unset: the effort of the user's Claude Code settings. */
@@ -123,6 +125,8 @@ export interface RunConfig {
     restartAfter: number;
     /** Minutes; `0`: never. */
     idleTimeout: number;
+    /** The review at the run's end (ADR 0034); absent: on. */
+    review?: boolean;
     model?: string;
     effort?: AgentEffort;
 }
@@ -282,6 +286,7 @@ function validateRunConfig(run: unknown, fail: (msg: string) => never): void {
         if (wrong) fail(`'${at}.dt' ${wrong}`);
     }
     validateProcessConfig(at, run, 'runs', fail);
+    if (run.review !== undefined && typeof run.review !== 'boolean') fail(`'${at}.review' must be true or false`);
     if (run.read !== undefined) validateReadConfig(run.read, `${at}.read`, fail);
 }
 
@@ -354,6 +359,7 @@ export function resolveRunConfig(run: RunConfigFile = {}): RunConfig {
         warm: run.warm ?? true,
         restartAfter: run.restartAfter ?? DEFAULT_RESTART_AFTER,
         idleTimeout: run.idleTimeout ?? DEFAULT_IDLE_TIMEOUT,
+        ...(run.review !== undefined && { review: run.review }),
         ...(run.model !== undefined && { model: run.model }),
         ...(run.effort !== undefined && { effort: run.effort }),
     };

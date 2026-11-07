@@ -33,6 +33,8 @@ import {
 } from './ports.js';
 import { createActivityReporter } from './activity.js';
 import { buildPrompt, type Practice } from './prompt.js';
+import { buildReviewPrompts, hasReview } from './review-prompt.js';
+import type { AgentFinishReview } from '@domaintrail/collaboration/protocol';
 
 export interface SubscriberDeps {
     readonly api: AgentApi;
@@ -64,6 +66,8 @@ export interface SubscriberOptions {
     readonly practice?: Practice;
     /** The runner has the knowledge tools of `dt mcp` (ADR 0031): its prompt says when to use them. */
     readonly knowledge?: boolean;
+    /** The review at a run's end (ADR 0034, `agent.run.review`); default: on. */
+    readonly review?: boolean;
 }
 
 /** Why a subscriber ended. */
@@ -113,6 +117,12 @@ export function changedPaths(before: ReadonlyMap<string, string>, after: Readonl
 /** The changed paths that are not DSL sources, before or after: what the agent must not touch (ADR 0026). */
 export function changesOutsideSources(changed: readonly string[], sources: ReadonlySet<string>): string[] {
     return changed.filter((p) => !sources.has(p) || !(p.endsWith('.dt') || p.endsWith('.dtes')));
+}
+
+/** A reply without the review's report (ADR 0034): the report goes with the finish on its own, never in the reply. */
+function withoutReview<R>(reply: R & { readonly review?: unknown }): Omit<R, 'review'> {
+    const { review: _, ...rest } = reply;
+    return rest;
 }
 
 /** Most paths a log line names. */
@@ -263,9 +273,10 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
          * What the agent changed outside the DSL sources, scanned once after it, on every way out: found or unknown (the
          * scan failed), the subscriber stops claiming. `undefined` until scanned.
          */
-        let inspected: { changed: number; outside: boolean } | undefined;
-        const inspect = async (): Promise<{ changed: number; outside: boolean }> => {
-            if (inspected) return inspected;
+        let inspected: { changed: number; outside: boolean; stormings: boolean } | undefined;
+        /** What the agent left; `again`: scanned anew (after the review's turn, which may have changed more). */
+        const inspect = async (again = false): Promise<{ changed: number; outside: boolean; stormings: boolean }> => {
+            if (inspected && !(again && !inspected.outside)) return inspected;
             try {
                 const after = await deps.workspace.scan();
                 lastAgentScan = after;
@@ -278,12 +289,12 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                     // they stay on disk and may change how the next agent runs (e.g. `.claude/` settings)
                     halt(id, shown);
                 }
-                inspected = { changed: changed.length, outside: outside.length > 0 };
+                inspected = { changed: changed.length, outside: outside.length > 0, stormings: changed.some((p) => p.endsWith('.dtes')) };
             } catch (e) {
                 // what the agent left is unknown: fail closed
                 log(`run ${id}: the workspace could not be scanned after the agent: ${message(e)}`);
                 halt(id, '<scan failed>');
-                inspected = { changed: 0, outside: true };
+                inspected = { changed: 0, outside: true, stormings: false };
             }
             return inspected;
         };
@@ -299,6 +310,8 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
             });
             let outcome: AgentOutcome;
             const nonce = deps.nonce();
+            /** The run's prompt for an agent that starts afresh (the review's fresh prompt starts with it). */
+            let runPrompt = '';
             // for an agent that remembers its previous run: what changed since (people, another agent, dt fmt, a restore),
             // and the session so far since then
             const sinceLast = lastAgentScan && changedPaths(lastAgentScan, before);
@@ -309,14 +322,15 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
             const journeys = started.journeys ? { journeys: started.journeys } : {};
             // what people edited by hand since the previous run (ADR 0033): their wording is kept
             const peopleEdits = started.peopleEdits && started.peopleEdits.length > 0 ? { peopleEdits: started.peopleEdits } : {};
+            runPrompt = buildPrompt(input, names, nonce, previousRuns, revert, {
+                ...(soFar && { sessionSoFar: soFar.text }),
+                ...fixed,
+                ...journeys,
+                ...peopleEdits,
+            });
             try {
                 outcome = await deps.runner.run({
-                    prompt: buildPrompt(input, names, nonce, previousRuns, revert, {
-                        ...(soFar && { sessionSoFar: soFar.text }),
-                        ...fixed,
-                        ...journeys,
-                        ...peopleEdits,
-                    }),
+                    prompt: runPrompt,
                     ...(sinceLast && {
                         continuedPrompt: buildPrompt(input, names, nonce, previousRuns, revert, {
                             ...fixed,
@@ -342,11 +356,27 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                 return complete('failed (AgentError)', id, () => api.fail(id, token, 'AgentError'));
             }
             activity.stop();
-            const { changed, outside } = await inspect();
+            let { changed, outside } = await inspect();
             if (cancelled.aborted) return log(`run ${id}: cancelled; the agent was stopped`);
             if (stopping.signal.aborted) return complete('failed (Interrupted)', id, () => api.fail(id, token, 'Interrupted'));
             log(`run ${id}: the agent exited with ${outcome.exitCode}`);
             if (outside) return complete('failed (AgentError)', id, () => api.fail(id, token, 'AgentError'));
+            // the review at the run's end (ADR 0034): a done run that changed stormings checks its neighbourhood, in the
+            // same run, before it is finished
+            let reviewed: AgentFinishReview | undefined;
+            if (outcome.exitCode === 0 && outcome.outcome === 'done' && (await inspect()).stormings) {
+                const r = await review(id, token, input.requests.length, runPrompt, nonce, signal);
+                if (r.kind === 'cancelled') {
+                    await inspect(true);
+                    if (cancelled.aborted) return log(`run ${id}: cancelled; the agent was stopped`);
+                    return complete('failed (Interrupted)', id, () => api.fail(id, token, 'Interrupted'));
+                }
+                if (r.kind === 'reviewed') {
+                    reviewed = r.review;
+                    ({ changed, outside } = await inspect(true));
+                    if (outside) return complete('failed (AgentError)', id, () => api.fail(id, token, 'AgentError'));
+                }
+            }
             // the reply names requests by their number in the prompt: back to the frozen input's IDs
             const reply = outcome.reply && mapRequests(outcome.reply, (n) => input.requests[n - 1]?.request ?? '');
             if (outcome.exitCode === 0 && outcome.outcome === 'clarification' && outcome.question !== undefined) {
@@ -365,11 +395,86 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                 `finished (${changed} file(s) changed; dt fmt ${formatted}, dt check ${checked})`,
                 id,
                 // the reply of a done run only: a question or a decline that did not end the run is dropped
-                () => api.finish(id, token, { exitCode: outcome.exitCode, formatted, checked, ...(outcome.outcome === 'done' && reply && { reply }) }),
+                () =>
+                    api.finish(id, token, {
+                        exitCode: outcome.exitCode,
+                        formatted,
+                        checked,
+                        ...(outcome.outcome === 'done' && reply && { reply: withoutReview(reply) }),
+                        ...(reviewed && { review: reviewed }),
+                    }),
             );
         } finally {
             // any other way out (an exception) still looks at what the agent left
             await inspect();
+        }
+    };
+
+    /**
+     * The review's turn (ADR 0034): stage 0 of the server, then, when there is anything to check, one more turn of the
+     * agent with it — the same conversation for a warm agent — whose `review` is what it says it fixed and kept. A
+     * failure of the server's review or of the turn ends the review, never the run (`skipped`; a failed turn is still
+     * `reviewed`, with nothing said).
+     */
+    const review = async (
+        id: string,
+        token: string,
+        requests: number,
+        runPrompt: string,
+        nonce: string,
+        signal: AbortSignal,
+    ): Promise<{ readonly kind: 'skipped' } | { readonly kind: 'cancelled' } | { readonly kind: 'reviewed'; readonly review: AgentFinishReview }> => {
+        if (!api.review || options.review === false) return { kind: 'skipped' };
+        let body;
+        try {
+            const r = await api.review(id, token);
+            if (!r.ok) {
+                log(`run ${id}: no review (${r.status} ${r.type})`);
+                return { kind: 'skipped' };
+            }
+            body = r.value;
+        } catch (e) {
+            log(`run ${id}: no review (${message(e)})`);
+            return { kind: 'skipped' };
+        }
+        if (!body.complete || !hasReview(body)) return { kind: 'skipped' };
+        log(
+            `run ${id}: reviewing (${body.findings.length} found, ${body.neighbourhood.length} in the neighbourhood, ${body.knowledge?.length ?? 0} knowledge item(s))`,
+        );
+        const prompts = buildReviewPrompts(body, runPrompt, nonce);
+        const activity = createActivityReporter({
+            send: (a) => api.activity(id, token, a),
+            clock,
+            log: (line) => log(`run ${id}: ${line}`),
+            ...(options.activityGapMs !== undefined && { gapMs: options.activityGapMs }),
+        });
+        try {
+            const outcome = await deps.runner.run({
+                prompt: prompts.fresh,
+                continuedPrompt: prompts.continued,
+                allowedTools: options.allowedTools,
+                requests,
+                signal,
+                onActivity: (a) => activity.report(a),
+            });
+            if (signal.aborted) return { kind: 'cancelled' };
+            const said = outcome.reply?.review;
+            log(`run ${id}: reviewed (exit ${outcome.exitCode}; ${said?.fixed.length ?? 0} fixed, ${said?.kept.length ?? 0} kept)`);
+            return {
+                kind: 'reviewed',
+                review: {
+                    fixed: said?.fixed ?? [],
+                    kept: said?.kept ?? [],
+                    ...(said && said.knowledge.length > 0 && { knowledge: said.knowledge }),
+                    ...(said && said.retire.length > 0 && { retire: said.retire }),
+                },
+            };
+        } catch (e) {
+            if (signal.aborted) return { kind: 'cancelled' };
+            log(`run ${id}: the review's turn could not run: ${message(e)}`);
+            return { kind: 'reviewed', review: { fixed: [], kept: [] } };
+        } finally {
+            activity.stop();
         }
     };
 

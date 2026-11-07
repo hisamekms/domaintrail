@@ -7147,6 +7147,44 @@ button.add-to-request.added:hover {
 .run-files-icon {
     flex: none;
 }
+/* the review at a run's end (ADR 0034): a small muted block under what the AI says — its title, a line per kind dt
+   found (what is left in the warning's ink), what the AI fixed and kept — and 見直しを頼む while something is left */
+.run-review {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-1) var(--space-2);
+    min-width: 0;
+    color: var(--muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.run-review-title {
+    flex: none;
+    font-weight: 600;
+}
+.run-review-lines {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.run-review-state {
+    white-space: nowrap;
+}
+.run-review-lines .left .run-review-state {
+    color: var(--status-warning-ink);
+}
+.run-review-actions {
+    display: flex;
+    flex-basis: 100%;
+    align-items: center;
+    gap: var(--space-2);
+}
 /* what a running run is doing: one small line — the phase's icon in the agent's active hue (one hue for every phase;
    the icon and the word tell them apart), the phase (strong), then the file or the command in monospace, muted — close
    under the quoted messages, and under the facts of the unit in AI の作業 */

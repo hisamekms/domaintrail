@@ -409,6 +409,36 @@ describe("a session's extraction", () => {
     });
 });
 
+describe('the items a run’s review flagged (ADR 0034)', () => {
+    test('given to the next extraction with their keys, past a sure no of the light model; then no more', async () => {
+        const messages = [message('ctx', 500), message('new', 1000)];
+        const flagged = liveItem('kn_00000090', { createdIn: 'sess-0' });
+        const extractor = fakeExtractor(reply(), reply());
+        extractor.gates.push({ reply: { verdict: 'no', messages: [] }, durationMs: 1 });
+        const { extraction, checkpoints } = setup(messages, extractor, { items: [flagged] });
+        await checkpoints.save(SESSION, { ...EMPTY_CHECKPOINT, lastMessage: 'ctx', lastMessageAt: t(500) });
+        extraction.flag([{ item: 'kn_00000090', sticky: 'Returns.ReturnRequested', why: '30日に変わった' }]);
+        await extraction.extract('quiet');
+        const [input] = extractor.inputs;
+        expect<unknown>(input.items.map((i) => [i.key, i.id])).toEqual([['k1', 'kn_00000090']]);
+        expect<unknown>(input.reviewFlags).toEqual([{ item: 'k1', sticky: 'Returns.ReturnRequested', why: '30日に変わった' }]);
+        // the flag reached the extractor: the next extraction is as without it (a sure no stops it)
+        messages.push(message('later', 1100));
+        extractor.gates.push({ reply: { verdict: 'no', messages: [] }, durationMs: 1 });
+        expect<unknown>(await extraction.extract('quiet')).toEqual({ stoppedAt: 'gate' });
+        expect(extractor.inputs).toHaveLength(1);
+    });
+
+    test('a flagged item deleted since is left out', async () => {
+        const messages = [message('new', 1000)];
+        const extractor = fakeExtractor(reply());
+        const { extraction } = setup(messages, extractor);
+        extraction.flag([{ item: 'kn_00000091', sticky: 'Returns.ReturnRequested', why: 'x' }]);
+        await extraction.extract('quiet');
+        expect<unknown>(extractor.inputs[0].reviewFlags).toBeUndefined();
+    });
+});
+
 describe('the checkpoint in the session database', () => {
     test('a checkpoint with held and pending operations reads back as it was written, dates and all', async () => {
         const db = new DatabaseSync(':memory:');
