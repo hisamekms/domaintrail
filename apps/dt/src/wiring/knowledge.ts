@@ -52,6 +52,7 @@ import {
     loadExtractionSwitch,
     type SessionMessage,
     type SessionTalk,
+    type FlaggedItem,
     type StickyFocus,
 } from '@domaintrail/knowledge';
 import type { ExtractionDispatcher } from '../server/session/extractions.js';
@@ -292,6 +293,11 @@ export interface SessionKnowledge {
     observe(events: readonly { readonly event: { readonly type: string } }[]): void;
     /** An extractor connected, or the server started: decide again. */
     kick(): void;
+    /**
+     * Items the review at the end of an AI run found at odds with the stickies (ADR 0034): given to the next extraction
+     * as a hint for a conflict (`SessionExtraction.flag`).
+     */
+    flag(flags: readonly FlaggedItem[]): void;
     /** The session ended: the last extraction, waited for at most `timeoutMs`. */
     end(timeoutMs: number): Promise<void>;
     stop(): void;
@@ -346,6 +352,11 @@ export async function startSessionKnowledge(deps: SessionKnowledgeDeps): Promise
             if (events.some((e) => e.event.type === 'RequestSent')) scheduler.kick();
         },
         kick: () => scheduler.kick(),
+        flag(flags) {
+            if (flags.length === 0) return;
+            extraction.flag(flags);
+            log(`knowledge: ${flags.length} item(s) flagged by a run's review, for the next extraction`);
+        },
         async end(timeoutMs) {
             let timer: ReturnType<typeof setTimeout> | undefined;
             const late = new Promise<void>((resolve) => {

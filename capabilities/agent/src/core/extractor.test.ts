@@ -184,6 +184,17 @@ describe('the extraction prompt', () => {
     });
 });
 
+describe("the items a run's review flagged (ADR 0034)", () => {
+    test('in the message as `reviewFlags`, by the items’ keys; the instructions say a flag alone is no source', () => {
+        const flags = [{ item: 'k1', sticky: 'Ordering.Estimate', why: '見積もりの担当が変わった' }];
+        const prompt = buildExtractionPrompt(job(1, { reviewFlags: flags }), 'n');
+        const data = JSON.parse(prompt.slice(prompt.indexOf('<talk-n>') + 8, prompt.indexOf('</talk-n>'))) as { reviewFlags: unknown };
+        expect<unknown>(data.reviewFlags).toEqual(flags);
+        expect<unknown>(buildExtractionPrompt(job(1), 'n')).not.toContain('reviewFlags');
+        expect<unknown>(extractorInstructions()).toContain('A flag alone is no source');
+    });
+});
+
 describe("the workspace's stickies in the prompts", () => {
     const workspaceStickies = [
         { ref: 'Ordering.Estimate', label: '見積もり', kind: 'event' },

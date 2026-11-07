@@ -127,7 +127,10 @@ export function memoryStore(items: readonly Knowledge.LiveKnowledgeItem[] = []):
             return result;
         },
         counts: unused,
-        get: unused,
+        async get(_project: Knowledge.ProjectName, id: Knowledge.KnowledgeItemId) {
+            const item = byId.get(id);
+            return item?.state === 'Live' ? { item } : undefined;
+        },
         correct: unused,
         unlinkConflict: unused,
         handOverToHotspot: unused,

@@ -115,6 +115,19 @@ export interface ExtractionInput {
     readonly mentioned?: readonly string[];
     /** The retired items about the same stickies and those of this session: titles and reasons only. */
     readonly retired?: readonly RetiredItem[];
+    /**
+     * Items the review at the end of an AI run found at odds with the stickies as the run left them (ADR 0034), by
+     * their key among `items`: a hint for a `conflict` when the talk states the new decision; never a reason to change
+     * an item by itself.
+     */
+    readonly reviewFlags?: readonly ReviewFlag[];
+}
+
+/** An item the review of an AI run flagged (ADR 0034): its key, the sticky, and why (the agent's words). */
+export interface ReviewFlag {
+    readonly item: string;
+    readonly sticky: string;
+    readonly why: string;
 }
 
 // ---- the agent API's extraction entry point --------------------------------------------------------------------------

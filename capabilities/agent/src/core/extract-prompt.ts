@@ -98,6 +98,10 @@ Compare each finding of the new messages with the items, and decide one of:
   it; nothing is retired by you. ${RETIREMENT_PROPOSAL_RULES.replace(/\n/g, '\n  ')}
 - \`unretire\`: the talk brings up anew, firmly, the finding of a retired item (\`item\`: its key \`r…\`). Do not add it
   again: propose to undo its retirement, with the \`sources\` that bring it up.
+  \`reviewFlags\`, when present: the AI, reviewing its work on the stickies, found these items at odds with what the
+  stickies say now (\`why\` in its words). Check them against the new messages: when the talk states the decision the
+  stickies now follow, record it as a \`conflict\` with the flagged item. A flag alone is no source: without a message
+  that says so, leave the item as it is.
 
 Every operation has a short \`reason\` (why this operation, in the talk's language).
 
@@ -161,6 +165,7 @@ export function buildExtractionPrompt(job: ExtractionInput, nonce: string): stri
         ...(job.mentioned && job.mentioned.length > 0 && { mentioned: job.mentioned }),
         ...(job.retired &&
             job.retired.length > 0 && { retired: job.retired.map((r) => ({ key: r.key, title: r.title, ...(r.reason && { reason: r.reason }) })) }),
+        ...(job.reviewFlags && job.reviewFlags.length > 0 && { reviewFlags: job.reviewFlags }),
         items: job.items.map((i) => ({
             key: i.key,
             title: i.title,

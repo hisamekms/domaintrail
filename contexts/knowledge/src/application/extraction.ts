@@ -58,6 +58,7 @@ import { type GateInput, type GateReading, type GateVerdict, mechanicalStage, re
 import type { ExtractionTrigger, TalkState } from '../domain/timing.js';
 import { chooseStickies, mentionedStickies, type StickyBasis, type StickyFocus, type WorkspaceSticky } from '../domain/stickies.js';
 import { idempotencyKey } from '../domain/extraction.js';
+import { isRetired } from '../domain/retirement.js';
 
 /** A message of the session, as the session database holds it. */
 export interface SessionMessage {
@@ -215,6 +216,12 @@ export interface SessionExtraction {
     /** Applies the held operations that settled (the others dropped when the session ended), and what is pending. */
     settle(ended: boolean): Promise<void>;
     /**
+     * Items the review at the end of an AI run found at odds with the stickies (ADR 0034): given to the next extraction
+     * that reaches the extractor (which then goes past the light model's no), with the items, as a hint for a conflict.
+     * In memory, at most `MAX_FLAGS`; the oldest go first.
+     */
+    flag(flags: readonly FlaggedItem[]): void;
+    /**
      * The extraction was switched on again: the messages since the checkpoint older than `contextMinutes` are skipped
      * (the checkpoint moved past them). How many were.
      */
@@ -288,6 +295,7 @@ export function extractionInput(
     workspace: readonly WorkspaceSticky[] = [],
     mentioned: readonly string[] = [],
     retiredItems: readonly Knowledge.LiveKnowledgeItem[] = [],
+    flags: readonly FlaggedItem[] = [],
 ): ExtractionInput {
     const messages = talkMessages(context, fresh, likely);
     // the retired ones by their title and reason only: never their text (ADR 0031, section 12)
@@ -297,7 +305,7 @@ export function extractionInput(
         title: item.content.title,
         ...(item.retirement?.reason && { reason: item.retirement.reason }),
     }));
-    const keys = new Map(items.map((item, i) => [item.id, `k${i + 1}`]));
+    const keys = new Map<string, string>(items.map((item, i) => [item.id, `k${i + 1}`]));
     const known: KnownItem[] = items.map((item) => ({
         key: keys.get(item.id) ?? '',
         id: item.id,
@@ -322,8 +330,24 @@ export function extractionInput(
         ...(workspace.length > 0 && { workspaceStickies: workspace }),
         ...(mentioned.length > 0 && { mentioned }),
         ...(retired.length > 0 && { retired }),
+        ...(flags.some((f) => keys.has(f.item)) && {
+            reviewFlags: flags.flatMap((f) => {
+                const key = keys.get(f.item);
+                return key === undefined ? [] : [{ item: key, sticky: f.sticky, why: f.why }];
+            }),
+        }),
     };
 }
+
+/** An item the review of an AI run found at odds with the stickies (ADR 0034), as the session hands it to the extraction. */
+export interface FlaggedItem {
+    readonly item: string;
+    readonly sticky: string;
+    readonly why: string;
+}
+
+/** The most flagged items one extraction is given, and kept waiting. */
+export const MAX_FLAGS = 10;
 
 export function createSessionExtraction(deps: SessionExtractionDeps): SessionExtraction {
     const { project, session, store, checkpoints, talk, log } = deps;
@@ -413,7 +437,28 @@ export function createSessionExtraction(deps: SessionExtractionDeps): SessionExt
         }
     };
 
+    /** The flagged items waiting for an extraction (ADR 0034). */
+    let flagged: FlaggedItem[] = [];
+
+    /** The flagged items still live, read from the store (those deleted since are dropped). */
+    const flaggedItems = async (have: ReadonlySet<string>): Promise<Knowledge.LiveKnowledgeItem[]> => {
+        const out: Knowledge.LiveKnowledgeItem[] = [];
+        for (const id of new Set(flagged.map((f) => f.item))) {
+            if (have.has(id)) continue;
+            const made = Knowledge.makeKnowledgeItemId(id);
+            if (!made.ok) continue;
+            const got = await store.get(project, made.value);
+            // a retired item is never given whole (ADR 0031, section 12)
+            if (got && !isRetired(got.item)) out.push(got.item);
+        }
+        return out;
+    };
+
     const extraction: SessionExtraction = {
+        flag(flags) {
+            flagged = [...flagged, ...flags].slice(-MAX_FLAGS);
+        },
+
         async talkState() {
             const checkpoint = await checkpoints.load(session);
             const fresh = messagesSince(await talk.messages(), checkpoint);
@@ -500,7 +545,8 @@ export function createSessionExtraction(deps: SessionExtractionDeps): SessionExt
             };
             if (gated.result.error !== undefined) log(`knowledge: extraction ${number}: the light model failed (${gated.result.error}); extracting anyway`);
             else if (reading.malformed) log(`knowledge: extraction ${number}: the light model's reply is not one; extracting anyway`);
-            if (reading.verdict === 'no') return stop('gate', { ...base, stage: 'gate', gate, messages: 0, items: 0, ...nothingDone });
+            // flagged items (ADR 0034) go to the extractor whatever the light model said
+            if (reading.verdict === 'no' && flagged.length === 0) return stop('gate', { ...base, stage: 'gate', gate, messages: 0, items: 0, ...nothingDone });
 
             // stage 3: the extractor, the messages the light model named first
             const pointedAt = new Set(targeted);
@@ -512,13 +558,18 @@ export function createSessionExtraction(deps: SessionExtractionDeps): SessionExt
                 .slice(0, MAX_MENTIONED);
             let items: readonly Knowledge.LiveKnowledgeItem[];
             let retired: readonly Knowledge.LiveKnowledgeItem[];
+            const flags = flagged;
             try {
-                [items, retired] = await Promise.all([itemsFor(targeted, mentioned), retiredFor(targeted, mentioned)]);
+                let found: readonly Knowledge.LiveKnowledgeItem[];
+                [found, retired] = await Promise.all([itemsFor(targeted, mentioned), retiredFor(targeted, mentioned)]);
+                // the flagged items first, so that the bound never drops them
+                const extra = await flaggedItems(new Set(found.map((i) => i.id)));
+                items = [...extra, ...found].slice(0, Math.max(maxItems, extra.length));
             } catch (e) {
                 log(`knowledge: the items could not be read for an extraction (${message(e)})`);
                 return 'store-failed';
             }
-            const input = extractionInput(session, number, context, fresh, items, new Set(reading.named), workspace, mentioned, retired);
+            const input = extractionInput(session, number, context, fresh, items, new Set(reading.named), workspace, mentioned, retired, flags);
             const answer = await deps.extractor.extract(input);
             if (answer.kind === 'unavailable') return 'unavailable';
             const result = answer.result;
@@ -549,6 +600,8 @@ export function createSessionExtraction(deps: SessionExtractionDeps): SessionExt
                 return 'failed';
             }
 
+            // the flags reached the extractor: it decides
+            flagged = flagged.filter((f) => !flags.includes(f));
             const reply = readExtractorReply(result.reply);
             if (!reply.ok) log(`knowledge: extraction ${number}: the reply is not one (${reply.error.path}: ${reply.error.message}); nothing extracted`);
             const made = reply.ok ? operationsOf(reply.value, input) : { operations: [], rejected: [reply.error] };

@@ -54,6 +54,8 @@ import { createExtractionDispatcher } from '../server/session/extractions.js';
 import { journeyStormings, openKnowledgeStore, type SessionKnowledge, startSessionKnowledge, stickyFocus } from './knowledge.js';
 import { type LiveKnowledge, startLiveKnowledge } from './knowledge-live.js';
 import { ownRequest, requestOutcomes } from './knowledge-hotspots.js';
+import { relinkRenamed, reviewKnowledgeOf, stickyRefs } from './knowledge-review.js';
+import { KNOWLEDGE_CHANGED } from '@domaintrail/knowledge/protocol';
 import type { SettingsApproval } from '../cli/trust.js';
 import type { ResolvedConfig } from '../config/config.js';
 import { createApiRoutes } from '../server/http/routes.js';
@@ -664,6 +666,20 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 if (r.reapplied) log(`re-applied people's edits after run ${run} (run ${r.reapplied.id})`);
                 if (r.conflicts.length > 0) log(`run ${run} changed ${r.conflicts.length} edited label(s) otherwise: left to people`);
                 await pump();
+                // the knowledge about a sticky the run renamed follows it to its new name (ADR 0034)
+                await relinkAfterRun(run).catch((e: unknown) =>
+                    log(`knowledge: relinking after run ${run} failed: ${e instanceof Error ? e.message : String(e)}`),
+                );
+            },
+            // the knowledge the review gives the agent (ADR 0034): only where the session keeps and extracts it
+            reviewKnowledge: async (stickies) => {
+                if (!store || !knowledgeConfig || !knowledge?.enabled()) return undefined;
+                const refs = stickyRefs(stickies);
+                return refs.length > 0 ? reviewKnowledgeOf(await store.about(knowledgeConfig.project, refs)) : [];
+            },
+            // the items the review found at odds with the stickies go to the next extraction (ADR 0034)
+            reviewed: (_run, review) => {
+                if (review.knowledge && review.knowledge.length > 0) knowledge?.flag(review.knowledge);
             },
             answerTimeoutMs: options.answerTimeoutMs ?? ANSWER_TIMEOUT_MS,
             onPresence: () => presenceChanged(),
@@ -681,6 +697,20 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 return { ...given, ...(where && { where }) };
             },
         });
+        /** The items about the stickies a completed run renamed, linked to their new names (ADR 0034); the pages told. */
+        const relinkAfterRun = async (id: Collaboration.AgentRunId): Promise<void> => {
+            if (!store || !knowledgeConfig) return;
+            const state = await collaboration.sessionState({ session });
+            const run = state.ok ? state.value.runs.find((r) => r.id === id) : undefined;
+            if (run?.state !== 'Completed' || !run.changed) return;
+            const reviewed = await collaboration.stormingReview({ session, before: run.baseRevision, after: run.resultRevision });
+            if (!reviewed.ok || reviewed.value.review.renames.length === 0) return;
+            const relinked = await relinkRenamed(store, knowledgeConfig.project, reviewed.value.review.renames, log);
+            if (relinked > 0) {
+                log(`knowledge: ${relinked} item(s) relinked to the stickies run ${id} renamed`);
+                hub.publish(KNOWLEDGE_CHANGED);
+            }
+        };
         if (store && extractions && knowledgeConfig)
             knowledge = await startSessionKnowledge({
                 store,
