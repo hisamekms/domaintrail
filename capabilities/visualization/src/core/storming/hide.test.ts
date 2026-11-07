@@ -1,9 +1,9 @@
-// What a reader can hide of a view of a storming (ADR 0032 §10, §11): one set of kinds, each left out of the drawing
-// alone; the exceptions are a flow of the view instead.
+// What a reader can hide of a view of a storming (ADR 0032 §10): one set of kinds, each hidden by
+// another layout or by the drawing alone.
 import { describe, expect, test } from 'bun:test';
 import type { GraphNode, LaidOutGraph } from '../graph/ir.js';
 import { drawsElement, hiddenInDrawing, hideInDrawing } from './hide.js';
-import { HIDEABLE, type Hideable } from './ir.js';
+import { HIDDEN_BY, HIDEABLE, hides, laidOutHidden, type Hideable } from './ir.js';
 import { stormingViewKey } from './graph.js';
 
 const note = (id: string, extra: Partial<GraphNode> = {}): GraphNode => ({
@@ -18,11 +18,18 @@ const note = (id: string, extra: Partial<GraphNode> = {}): GraphNode => ({
 });
 
 describe('the kinds a view of a storming can hide', () => {
-    test('the resolved hotspots, by the drawing alone: the main flows only are a flow of the view, keyed as before', () => {
-        expect([...HIDEABLE]).toEqual(['resolvedHotspots']);
-        expect(stormingViewKey({ level: 'big-picture', flow: 'main' })).toBe('big-picture|-exceptions');
-        expect(stormingViewKey({ level: 'big-picture', stageId: 'P', flow: 'main' })).toBe('big-picture|@P-exceptions');
-        expect(stormingViewKey({ level: 'big-picture' })).toBe('big-picture|');
+    test('one set of kinds; only those hidden by another layout make another view (its key)', () => {
+        expect([...HIDEABLE].sort()).toEqual(Object.keys(HIDDEN_BY).sort() as Hideable[]);
+        expect(HIDDEN_BY).toEqual({ exceptions: 'layout', resolvedHotspots: 'drawing' });
+        const all = new Set<Hideable>(['resolvedHotspots', 'exceptions']);
+        expect(laidOutHidden(all)).toEqual({ hidden: ['exceptions'] });
+        expect(laidOutHidden(['resolvedHotspots'])).toEqual({});
+        expect(laidOutHidden([])).toEqual({});
+        // the views keyed as before: `-exceptions`, and nothing for what the drawing hides
+        expect(stormingViewKey({ level: 'big-picture', ...laidOutHidden(all) })).toBe('big-picture|-exceptions');
+        expect(stormingViewKey({ level: 'big-picture', ...laidOutHidden(['resolvedHotspots']) })).toBe('big-picture|');
+        expect(hides({ hidden: ['exceptions'] }, 'exceptions')).toBe(true);
+        expect(hides({}, 'exceptions')).toBe(false);
     });
 });
 
@@ -58,8 +65,9 @@ describe('hiding in the drawing', () => {
         expect(drawn.signature).toBe(graph.signature);
     });
 
-    test('the graph itself when nothing of it is hidden', () => {
+    test('the graph itself when nothing of it is hidden (the exceptions are the layout’s)', () => {
         expect(hideInDrawing(graph, new Set())).toBe(graph);
+        expect(hideInDrawing(graph, new Set(['exceptions']))).toBe(graph);
     });
 
     test('what the view draws of an element, hidden or not', () => {

@@ -35,19 +35,34 @@ export { dependencyCounts } from './core/graph/context-map.js';
 
 // ---- core: the storming views ----------------------------------------------------------------------------------
 export {
+    HIDDEN_BY,
     HIDEABLE,
+    hides,
+    laidOutHidden,
     LEVEL_KINDS,
     VIEW_LEVELS,
+    type DrawnHideable,
     type GridCell,
     type Hideable,
+    type LaidOutHideable,
     type RenderGraph,
     type StageGrid,
-    type StormingFlow,
     type ViewLevel,
     type ViewOptions,
 } from './core/storming/ir.js';
 export { drawsElement, hiddenInDrawing, hideInDrawing } from './core/storming/hide.js';
-export { caseInDrawing, caseNotes, type CaseNotes, type CaseTimeline } from './core/storming/case.js';
+export {
+    exceptionLanes,
+    exceptionSpan,
+    flowInDrawing,
+    flowNotes,
+    mainFlowOf,
+    mainFlows,
+    type FlowChoice,
+    type FlowNotes,
+    type FlowTimeline,
+    type MainFlow,
+} from './core/storming/flows.js';
 export { stormingViewKey } from './core/storming/graph.js';
 
 // ---- core: the drawing of a laid-out graph, shared by the Live View's canvas and `dt export svg` ------------------
@@ -104,7 +119,6 @@ export {
     type Named,
     type SheetSubject,
     type StormingOutline,
-    type SheetFlow,
     type StormingScope,
 } from './core/drawing/sheet.js';
 export { tableMeasure } from './core/drawing/text-measure.js';

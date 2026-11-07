@@ -140,15 +140,13 @@ describe('the Live View of a storming with stages', () => {
             'big-picture|',
             'big-picture|@Issuance',
             'design-level|@Submission',
-            'big-picture|IssuanceFlow',
+            'big-picture|PinLockedBranch',
             'big-picture|-exceptions',
             'design-level|@Issuance-exceptions',
         ])
             expect(keys).toContain(key);
-        // an exception has no view of its own: its case is drawn from the view of every flow; a main flow's view is
-        // never of the main flows only
-        expect(keys).not.toContain('big-picture|PinLockedBranch');
-        expect(keys).not.toContain('big-picture|IssuanceFlow-exceptions');
+        // a timeline's view is never without its exceptions
+        expect(keys).not.toContain('big-picture|PinLockedBranch-exceptions');
         for (const [key, { render, graph }] of Object.entries(view.views)) {
             expect(stormingViewKey(render.options)).toBe(key);
             expect(Object.keys(graph.nodeLayout).sort()).toEqual(graph.nodes.map((n) => n.id).sort());

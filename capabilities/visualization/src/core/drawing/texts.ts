@@ -17,14 +17,15 @@ export interface DiagramTexts {
     sheet: {
         structureLevels: Record<StructureLevel, string>;
         allContexts: string;
+        withExceptions: string;
+        withoutExceptions: string;
     };
     stormingLevels: Record<ViewLevel, { label: string; hint: string }>;
-    /** The whole storming, as the place's picker names it beside its stages. */
     allTimelines: string;
-    /** An exception named among the timelines. */
+    /** A timeline of a stage in the timeline picker. */
+    stageTimeline: (stage: string, timeline: string) => string;
+    /** An exception in the timeline picker. */
     exceptionTimeline: (name: string) => string;
-    /** The flows of a view of a storming (the 流れ beside the place): their names, and one main flow or exception chosen. */
-    flows: { main: string; all: string; exceptions: string; mainFlow: (name: string) => string; exception: (name: string) => string };
     legend: string;
     legendRows: {
         mapReferences: string;
@@ -61,14 +62,16 @@ const ja: DiagramTexts = {
     sheet: {
         structureLevels: { detail: '詳細', overview: '概観', aggregates: '集約' },
         allContexts: 'すべてのコンテキスト',
+        withExceptions: '例外を含む',
+        withoutExceptions: '例外を除く',
     },
     stormingLevels: {
         'big-picture': { label: 'ビッグピクチャー', hint: 'イベント・タイムライン・ホットスポットだけを表示' },
         'design-level': { label: 'デザインレベル', hint: 'コマンド・ポリシー・アクター・外部システム・集約・リードモデルも表示' },
     },
-    allTimelines: 'すべて',
+    allTimelines: 'すべて（統合）',
+    stageTimeline: (stage, timeline) => `${stage} / ${timeline}`,
     exceptionTimeline: (name) => `例外：${name}`,
-    flows: { main: '主な流れ', all: '例外も', exceptions: '例外', mainFlow: (name) => `主な流れ: ${name}`, exception: (name) => `例外: ${name}` },
     legend: '凡例',
     legendRows: {
         mapReferences: 'ID だけで依存（ID 参照の件数）',
@@ -116,20 +119,16 @@ const en: DiagramTexts = {
     sheet: {
         structureLevels: { detail: 'Detail', overview: 'Overview', aggregates: 'Aggregates' },
         allContexts: 'All contexts',
+        withExceptions: 'with exceptions',
+        withoutExceptions: 'without exceptions',
     },
     stormingLevels: {
         'big-picture': { label: 'Big Picture', hint: 'Events, timelines and hotspots only' },
         'design-level': { label: 'Design Level', hint: 'Also commands, policies, actors, external systems, aggregates and read models' },
     },
-    allTimelines: 'All',
+    allTimelines: 'All (integrated)',
+    stageTimeline: (stage, timeline) => `${stage} / ${timeline}`,
     exceptionTimeline: (name) => `Exception: ${name}`,
-    flows: {
-        main: 'Main flows',
-        all: 'With exceptions',
-        exceptions: 'Exception',
-        mainFlow: (name) => `Main flow: ${name}`,
-        exception: (name) => `Exception: ${name}`,
-    },
     legend: 'Legend',
     legendRows: {
         mapReferences: 'Depends by IDs only (ID references)',

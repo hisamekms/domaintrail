@@ -34,17 +34,14 @@ context Collaboration {
       sections: CatalogSection[0..20] "絞った区分"
       contexts: ContextName[0..50] "絞ったコンテキスト"
     }
-    /// ストーミング。場所（段階。なければストーミング全体）と、そこに描いていた流れ。
+    /// ストーミング。タイムラインも段階もなければ統合キャンバス。
     Storming "ストーミング" {
       storming: StormingName
       level: StormingLevel "レベル"
-      /// 主な流れを1本だけ描いていた（以前の版では、例外を含むタイムライン1本のビュー）。
       timeline: TimelineName? "タイムライン"
       stage: StageName? "段階"
-      /// 例外を描いていた（流れ「例外も」、または例外を1つ選んでいた）。
+      /// 例外を表示していた（「例外を表示」）。
       exceptions: Bool "例外の表示"
-      /// 例外を1つ選んでいた（流れ「例外: …」）。主な流れとその例外だけを描いていた。
-      exception: TimelineName? "選んでいた例外"
     }
   }
 

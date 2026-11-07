@@ -20,11 +20,11 @@ import { esElementId, firstDeclarations, STICKY_NOTE, type AnyDeclaration, type 
 import { isCausal, type RenderEdge, type RenderGraph, type RenderNode, type ViewOptions } from './ir.js';
 
 /**
- * What a view is of: a timeline's ID, `@<stage ID>` for a stage, nothing for the integrated canvas; `-exceptions` after
- * it for the main flows only (`ViewOptions.flow`, keyed as when the exceptions were something the 絞り込み hid).
+ * What a view is of: a timeline's ID, `@<stage ID>` for a stage, nothing for the integrated canvas; `-<kind>` after it
+ * for each kind it is laid out without (`ViewOptions.hidden`: `-exceptions`).
  */
 const scopeOf = (options: ViewOptions): string =>
-    (options.timelineId ?? (options.stageId !== undefined ? `@${options.stageId}` : '')) + (options.flow === 'main' ? '-exceptions' : '');
+    (options.timelineId ?? (options.stageId !== undefined ? `@${options.stageId}` : '')) + (options.hidden ?? []).map((k) => `-${k}`).join('');
 
 /**
  * Graph ID of a view: `storming:<StormingId>:<level>:<timelineId, @stageId or *>` (the `storming` prefix lays it out left

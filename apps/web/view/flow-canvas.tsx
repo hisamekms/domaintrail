@@ -392,7 +392,7 @@ function useFlowElements(state: CanvasState): { nodes: FlowNode[]; edges: ItemEd
 
 function toNode(item: BoxItem, { selected, copy, chosen }: ItemLook): ItemNode {
     const ghost = item.ghost === true;
-    // off the path of an exception's case: faint (`caseInDrawing`)
+    // off the path of the exception emphasized: faint (`flowInDrawing`)
     const dimmed = item.type !== 'internal' && item.props.dimmed === true;
     const same = copy !== undefined && !selected;
     return {

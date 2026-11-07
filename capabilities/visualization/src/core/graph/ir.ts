@@ -128,9 +128,11 @@ export interface GraphNode {
      */
     folded?: string[];
     /**
-     * A note off the path of an exception's case (`caseInDrawing`): drawn faint. Absent in a graph as laid out.
+     * A note off the path of the exception emphasized (`flowInDrawing`): drawn faint. Absent in a graph as laid out.
      */
     dimmed?: true;
+    /** A stage frame with nothing drawn in it (one main flow shown, `flowInDrawing`): drawn dashed. */
+    unused?: true;
     width: number;
     height: number;
 }
@@ -165,7 +167,7 @@ export interface GraphEdge {
      * left to right), so that only the lines the placement cannot show are drawn (an exception's branch, a `then`).
      */
     hidden?: true;
-    /** A line off the path of an exception's case (`caseInDrawing`): drawn faint. Absent in a graph as laid out. */
+    /** A line off the path of the exception emphasized (`flowInDrawing`): drawn faint. Absent in a graph as laid out. */
     dimmed?: true;
 }
 

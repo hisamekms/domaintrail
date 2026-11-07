@@ -122,26 +122,13 @@ export interface TriageOutcomeBody {
 export type TriageBody = Json<Collaboration.Triage> | TriageOutcomeBody;
 
 /**
- * Where a participant is looking: a `.dt` view (`viewKey` of the page's navigation) or a storming at a level, at a
- * place (`stageId`: a stage; none, the whole storming) with the flow drawn there. `layoutKey` is the laid-out graph's ID
- * and signature: cursors are drawn only between equal locations.
+ * Where a participant is looking: a `.dt` view (`viewKey` of the page's navigation) or a storming at a level, in a
+ * timeline's view or the integrated canvas. `layoutKey` is the laid-out graph's ID and signature: cursors are drawn
+ * only between equal locations.
  */
 export type ViewLocation =
     | { readonly kind: 'dt'; readonly viewKey: string; readonly layoutKey: string }
-    | {
-          readonly kind: 'dtes';
-          readonly stormingId: string;
-          readonly level: string;
-          readonly stageId?: string;
-          /**
-           * The flow: `main`, the main flows only, or the one main flow `timelineId` alone; `exception`, the case of the
-           * exception `timelineId`; none, every flow. A page of an earlier version sends a `timelineId` without it: that
-           * timeline's view (read as an exception's case or one main flow).
-           */
-          readonly flow?: 'main' | 'exception';
-          readonly timelineId?: string;
-          readonly layoutKey: string;
-      };
+    | { readonly kind: 'dtes'; readonly stormingId: string; readonly level: string; readonly timelineId?: string; readonly layoutKey: string };
 
 /** A cursor in page coordinates (the layout's space, whatever draws the canvas). */
 export interface Cursor {

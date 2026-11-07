@@ -361,10 +361,9 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
                     const whole: ViewOptions[] = [{ level }, ...stages.map((st) => ({ level, stageId: st.id }))];
                     const scopes: ViewOptions[] = [
                         ...whole,
-                        // one main flow (an exception is drawn as its case, from the layout of every flow: `caseInDrawing`)
-                        ...timelines.filter((t) => !t.exception).map((t) => ({ level, timelineId: t.id })),
-                        // the integrated canvas and the stages with their main flows only (the 流れ「主な流れ」)
-                        ...(withExceptions ? whole.map((o): ViewOptions => ({ ...o, flow: 'main' })) : []),
+                        ...timelines.map((t) => ({ level, timelineId: t.id })),
+                        // the integrated canvas and the stages without their exceptions (「例外を表示」 off)
+                        ...(withExceptions ? whole.map((o): ViewOptions => ({ ...o, hidden: ['exceptions'] })) : []),
                     ];
                     for (const options of scopes) {
                         const render = projectView(storming, options);

@@ -1,5 +1,5 @@
-// dt export svg through the CLI: the convenience store's stages drawn whole, one stage with its exceptions, its main
-// flows only, one exception's case and one main flow, at Big Picture and Design Level; the domain model's views of examples/shop; the
+// dt export svg through the CLI: the convenience store's stages drawn whole, one stage with its exceptions, one
+// timeline, at Big Picture and Design Level, without the exceptions; the domain model's views of examples/shop; the
 // options' errors; the same bytes every time. The drawing itself is the Live View's (its tests:
 // apps/web/view/portable-svg.test.ts); what is checked here is that the CLI draws the view asked for, in the
 // stylesheet's colours, and says what it cannot draw.
@@ -95,7 +95,7 @@ describe('dt export svg: an Event Storming', () => {
         const stage = await svg(root, '--storming', 'ConvenienceStoreIssuance', '--stage', 'Issuance', '--heading', '--legend');
         const lines = texts(stage);
         expect(lines[0]).toBe(
-            'convenience-store › イベントストーミング › 住民票などのコンビニ交付（ビッグピクチャ） › コンビニでの発行 · ビッグピクチャー · 例外も',
+            'convenience-store › イベントストーミング › 住民票などのコンビニ交付（ビッグピクチャ） › コンビニでの発行 · ビッグピクチャー · 例外を含む',
         );
         // the exceptions' captions; their arrows in the one colour of every line (ADR 0032: no red for exceptions)
         expect(lines).toContain('暗証番号を忘れた');
@@ -106,47 +106,25 @@ describe('dt export svg: an Event Storming', () => {
         expect(outline(stage)).toMatchSnapshot();
     });
 
-    test('the main flows only (--flow main; --exceptions hide, its earlier name, the same)', async () => {
+    test('without the exceptions (--exceptions hide)', async () => {
         const root = await convenienceStore();
-        const without = await svg(root, '--storming', 'ConvenienceStoreIssuance', '--stage', 'Issuance', '--flow', 'main', '--heading');
-        expect(texts(without)[0]).toEndWith(' · 主な流れ');
+        const without = await svg(root, '--storming', 'ConvenienceStoreIssuance', '--stage', 'Issuance', '--exceptions', 'hide', '--heading');
+        expect(texts(without)[0]).toEndWith(' · 例外を除く');
         expect(texts(without)).not.toContain('暗証番号を忘れた');
         expect(without).not.toContain('dt-arrow-es-exception');
-        expect(await svg(root, '--storming', 'ConvenienceStoreIssuance', '--stage', 'Issuance', '--exceptions', 'hide', '--heading')).toBe(without);
     });
 
-    test('one exception’s case, in English: the main flows and that exception, where every flow puts them', async () => {
+    test('one timeline, in English', async () => {
         const root = await convenienceStore();
-        const exception = await svg(
-            root,
-            '--storming',
-            'ConvenienceStoreIssuance',
-            '--stage',
-            'Issuance',
-            '--exception',
-            'PinForgottenBranch',
-            '--heading',
-            '--lang',
-            'en',
+        const timeline = await svg(root, '--storming', 'ConvenienceStoreIssuance', '--timeline', 'PinForgottenBranch', '--heading', '--lang', 'en');
+        expect(texts(timeline)[0]).toBe(
+            'convenience-store › Event Storming › 住民票などのコンビニ交付（ビッグピクチャ） › コンビニでの発行 / Exception: 暗証番号を忘れた · Big Picture',
         );
-        expect(texts(exception)[0]).toBe(
-            'convenience-store › Event Storming › 住民票などのコンビニ交付（ビッグピクチャ） › コンビニでの発行 · Big Picture · Exception: 暗証番号を忘れた',
+        // the stereotypes in English, the labels as written; the timeline's events only, wrapped in their notes
+        expect(stereotypes(timeline)).toEqual({ '«event»': 3 });
+        expect(texts(timeline).slice(1).join('')).toBe(
+            '«event»マイナンバーカードが読み取られた«event»暗証番号を忘れた«event»市役所で暗証番号を初期化・再設定した',
         );
-        const said = texts(exception).join('');
-        expect(said).toContain('市役所で暗証番号を初期化・再設定した');
-        // the other exceptions are not drawn (their room left empty)
-        expect(said).not.toContain('暗証番号のロック');
-        // --timeline with an exception's ID: its case at its stage, as the navigator opens it
-        expect(await svg(root, '--storming', 'ConvenienceStoreIssuance', '--timeline', 'PinForgottenBranch', '--heading', '--lang', 'en')).toBe(exception);
-    });
-
-    test('one main flow alone (--timeline)', async () => {
-        const root = await convenienceStore();
-        const main = await svg(root, '--storming', 'ConvenienceStoreIssuance', '--timeline', 'IssuanceFlow', '--heading');
-        expect(texts(main)[0]).toBe(
-            'convenience-store › イベントストーミング › 住民票などのコンビニ交付（ビッグピクチャ） › コンビニでの発行 · ビッグピクチャー · 主な流れ: 通常',
-        );
-        expect(texts(main)).not.toContain('暗証番号を忘れた');
     });
 
     test('Design Level draws the commands, the policies and the actors; names by ID with --names name', async () => {
@@ -232,9 +210,6 @@ describe('dt export svg: errors', () => {
             const r = await run('-r', root, 'export', 'svg', ...args, '-o', '-');
             expect({ code: r.code, err: r.err, bytes: r.bytes.length }).toEqual({ code: 1, err: [message], bytes: 0 });
         }
-        const exception = await run('-r', root, 'export', 'svg', '--storming', 'ConvenienceStoreIssuance', '--exception', 'IssuanceFlow', '-o', '-');
-        expect(exception.code).toBe(1);
-        expect(exception.err[0]).toStartWith("Unknown exception 'IssuanceFlow' of ConvenienceStoreIssuance. Exceptions: ");
         const timeline = await run('-r', root, 'export', 'svg', '--storming', 'ConvenienceStoreIssuance', '--timeline', 'Nope', '-o', '-');
         expect(timeline.code).toBe(1);
         expect(timeline.err[0]).toStartWith("Unknown timeline 'Nope' of ConvenienceStoreIssuance. Timelines: PreparationFlow, ");
@@ -245,12 +220,10 @@ describe('dt export svg: errors', () => {
             [[], 'Give the diagram to draw: --storming <ID> (an Event Storming) or --model (the domain model).'],
             [['--storming', 'S', '--model'], 'Give --storming <ID> or --model, not both.'],
             [['--storming', 'S', '--stage', 'A', '--timeline', 'B'], 'Give --stage or --timeline, not both.'],
-            [['--storming', 'S', '--timeline', 'B', '--flow', 'main'], 'Give one flow: --flow, --exception <id> or --timeline <id>.'],
-            [['--storming', 'S', '--exception', 'B', '--flow', 'all'], 'Give one flow: --flow, --exception <id> or --timeline <id>.'],
-            [['--storming', 'S', '--flow', 'main', '--exceptions', 'hide'], 'Give --flow (--exceptions is its earlier name), not both.'],
+            [['--storming', 'S', '--timeline', 'B', '--exceptions', 'hide'], '--exceptions applies to the whole storming or a stage, not to one timeline.'],
             [['--storming', 'S', '--level', 'detail'], "Unknown level 'detail' of a storming. Choose: big-picture, design"],
-            [['--model', '--stage', 'A'], '--stage, --timeline, --flow, --exception and --resolved-hotspots are options of --storming.'],
-            [['--model', '--resolved-hotspots', 'hide'], '--stage, --timeline, --flow, --exception and --resolved-hotspots are options of --storming.'],
+            [['--model', '--stage', 'A'], '--stage, --timeline, --exceptions and --resolved-hotspots are options of --storming.'],
+            [['--model', '--resolved-hotspots', 'hide'], '--stage, --timeline, --exceptions and --resolved-hotspots are options of --storming.'],
             [['--model', '--view', 'map', '--context', 'Sales'], '--context and --level are options of --view structure.'],
         ];
         for (const [args, message] of cases) {

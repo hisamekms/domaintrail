@@ -431,8 +431,7 @@ a decision).`,
   timelines, exceptions and hotspots. Propose no event the storming already has (look for it under another name too)
   nor one the session so far turned down.
 - Stay within \`viewedAt\`: a stage in view, its flows only; a timeline in view, that one only; else the whole
-  storming. The exceptions only when the view shows them (\`exceptions: true\`) or there is no view; only the one
-  in \`exception\` when it names one (with the main flows).
+  storming. The exceptions only when the view shows them (\`exceptions: true\`) or there is no view.
 - One candidate per gap (two consecutive events of one flow), the most telling first; one to three new events in it.
 - label: the new event as its sticky note reads (the first, when several), a short past-tense phrase in the words of
   the business (「在庫を引き当てた」, "Stock reserved").

@@ -46,29 +46,3 @@ describe('the camera of a presence update', () => {
         });
     });
 });
-
-describe('the location of a storming', () => {
-    const at = (extra: Record<string, unknown>): unknown =>
-        parseClientMessage(JSON.stringify({ type: 'presence.update', location: { ...location, ...extra } }));
-
-    test('its place and its flow: a stage, the main flows only, one main flow, an exception’s case', () => {
-        for (const extra of [
-            { stageId: 'Issuance' },
-            { stageId: 'Issuance', flow: 'main' },
-            { flow: 'main', timelineId: 'Normal' },
-            { stageId: 'Issuance', flow: 'exception', timelineId: 'PinLocked' },
-        ])
-            expect(at(extra)).toEqual({ type: 'presence.update', location: { ...location, ...extra } });
-    });
-
-    test('an earlier version’s: a timeline’s ID alone', () => {
-        expect(at({ timelineId: 'PinLocked' })).toEqual({ type: 'presence.update', location: { ...location, timelineId: 'PinLocked' } });
-    });
-
-    test('drops the message for a flow it does not know, an exception without its ID, or an empty stage', () => {
-        expect(at({ flow: 'all' })).toBeUndefined();
-        expect(at({ flow: 'exception' })).toBeUndefined();
-        expect(at({ stageId: '' })).toBeUndefined();
-        expect(at({ stageId: 3 })).toBeUndefined();
-    });
-});

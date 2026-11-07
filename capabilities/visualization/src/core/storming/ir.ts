@@ -44,32 +44,42 @@ export interface ViewOptions {
     /** One stage of a storming with stages: its main flows and its exceptions (never with `timelineId`). */
     stageId?: string;
     /**
-     * `main`: the main flows only (the 流れ「主な流れ」, ADR 0032 §11) — the integrated canvas and a stage of a storming
-     * drawn in sections laid out without the exceptions: their steps, the events only they have and the hotspots on
-     * those events are not drawn. Absent: every flow. One exception's case is drawn from the layout of every flow
-     * (`caseInDrawing`), never laid out of its own.
+     * What the view is laid out without (`HIDDEN_BY`: the kinds hidden in the layout), sorted, absent when none. The
+     * exceptions (the integrated canvas and a stage of a storming drawn in sections only): their steps, the events only
+     * they have and the hotspots on those events are not drawn.
      */
-    flow?: 'main';
+    hidden?: LaidOutHideable[];
 }
 
-/**
- * The flow a view of a storming draws (the 流れ beside the place, ADR 0032 §11): the main flows only, every flow (「例外も」),
- * one exception's case (the main flows and that exception, in the layout of every flow), or one main flow (its own
- * timeline's view).
- */
-export type StormingFlow = 'main' | 'all' | { readonly exception: string } | { readonly main: string };
-
-// ---- What a reader hides of a view of a storming (the 絞り込み's 「…を表示」, ADR 0032 §10, §11) ----
+// ---- What a view of a storming can hide (the 絞り込み's 「…を表示」, ADR 0032 §10) ----
 
 /**
- * What a reader can hide: each kind is left out of the drawing of the same layout, its place left empty, so that
- * hiding it moves nothing (`hideInDrawing`; the page does it alone). What takes room of its own — the exceptions — is
- * not hidden but a flow of the view (`ViewOptions.flow`, `StormingFlow`). A new kind is one more entry here.
+ * How each thing a reader can hide is left out: `layout`, by laying the view out without it (another graph of the view,
+ * `ViewOptions.hidden`: the exceptions take room of their own); `drawing`, by leaving it out of the drawing of the same
+ * layout (the resolved hotspots, drawn on their stickies: hiding them moves nothing, and the page does it alone). A new
+ * kind is one more entry here: only a `layout` one adds graphs to lay out.
  */
-export const HIDEABLE = ['resolvedHotspots'] as const;
+export const HIDDEN_BY = { exceptions: 'layout', resolvedHotspots: 'drawing' } as const satisfies Record<string, 'layout' | 'drawing'>;
 
 /** What a view of a storming can hide. */
-export type Hideable = (typeof HIDEABLE)[number];
+export type Hideable = keyof typeof HIDDEN_BY;
+export const HIDEABLE: readonly Hideable[] = ['exceptions', 'resolvedHotspots'];
+/** What is hidden by laying the view out without it. */
+export type LaidOutHideable = { [K in Hideable]: (typeof HIDDEN_BY)[K] extends 'layout' ? K : never }[Hideable];
+/** What is hidden by leaving it out of the drawing. */
+export type DrawnHideable = Exclude<Hideable, LaidOutHideable>;
+
+const isLaidOut = (k: Hideable): k is LaidOutHideable => HIDDEN_BY[k] === 'layout';
+
+/** The part of `hidden` the layout depends on, as `ViewOptions.hidden` holds it (in `HIDEABLE`'s order; absent when none). */
+export function laidOutHidden(hidden: Iterable<Hideable>): { hidden?: LaidOutHideable[] } {
+    const all = new Set(hidden);
+    const kinds = HIDEABLE.filter(isLaidOut).filter((k) => all.has(k));
+    return kinds.length ? { hidden: kinds } : {};
+}
+
+/** Whether a view is laid out without `kind`. */
+export const hides = (options: Pick<ViewOptions, 'hidden'>, kind: LaidOutHideable): boolean => options.hidden?.includes(kind) === true;
 
 export type ViewLevel = ViewOptions['level'];
 export const VIEW_LEVELS: ViewLevel[] = ['big-picture', 'design-level'];
@@ -207,7 +217,8 @@ export interface StageGrid {
     captions: Record<string, string[]>;
     /**
      * The step each element note stands at (`chains.ts`'s slot): the node of an event or a group step, by the note's
-     * render node ID; a note of no event in view stands at none. A case (`caseInDrawing`) keeps a note with its step.
+     * render node ID; a note of no event in view stands at none. A main flow or an exception's path drawn in the layout
+     * of every flow (`flows.ts`) keeps a note with its step.
      */
     slots: Record<string, string>;
 }

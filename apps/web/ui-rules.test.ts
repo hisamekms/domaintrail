@@ -278,10 +278,6 @@ const RAW_BUTTONS: Readonly<Record<string, { readonly count: number; readonly re
         count: 1,
         reason: 'a segment or toggle of a view setting (active / aria-pressed): it changes how the view shows, not the files nor the session',
     },
-    'storming.tsx active': {
-        count: 2,
-        reason: 'a segment or toggle of a view setting (active / aria-pressed): the flow drawn (主な流れ, 例外も); it changes how the view shows, not the files nor the session',
-    },
     'storming.tsx es-action': {
         count: 1,
         reason: "a storming element's action icon (its name as the tooltip): icon-only, on a shape of its own (round, bordered or sized to its place): not a text button",
@@ -311,12 +307,8 @@ const RAW_BUTTONS: Readonly<Record<string, { readonly count: number; readonly re
         reason: "the pointer at the canvas's edge to stickies out of view (「→ n」): the view's chrome (the toolbar, the canvas controls, the app bar), floating on the canvas: moves the camera, changes nothing",
     },
     'view/toolbar.tsx toolbar-button': {
-        count: 1,
+        count: 2,
         reason: "the view's chrome (the toolbar, the canvas controls, the app bar): labels collapse to icons by container queries; view settings, not session actions",
-    },
-    'view/toolbar.tsx menu-picker-button': {
-        count: 1,
-        reason: "the view's chrome (the toolbar, the canvas controls, the app bar): a picker's button that opens its list (a storming, a stage, a flow); view settings, not session actions",
     },
     'view/toolbar.tsx role=option': { count: 1, reason: 'an option of a listbox (role=option): a choice inside the picker, a widget of its own' },
     'view/toolbar.tsx active': {

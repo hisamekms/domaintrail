@@ -156,16 +156,16 @@ const ja = {
     stormingPicker: '表示するストーミング',
     stormingLevel: '抽象度',
     stormingLevels: DIAGRAM_TEXTS.ja.stormingLevels,
-    /** The breadcrumb's place in a storming with stages: すべて (the whole storming), or a stage. */
-    stagePicker: 'ステージ',
+    timelineFilter: 'タイムライン',
     allTimelines: DIAGRAM_TEXTS.ja.allTimelines,
-    /** An exception named among the timelines. */
+    /** A stage's view in the timeline picker: its main flow and its exceptions. */
+    stageView: (stage: string) => `${stage}（例外を含む）`,
+    /** A timeline of a stage in the timeline picker. */
+    stageTimeline: DIAGRAM_TEXTS.ja.stageTimeline,
+    /** An exception in the timeline picker. */
     exceptionTimeline: DIAGRAM_TEXTS.ja.exceptionTimeline,
-    /** The flow drawn at the place (beside the breadcrumb): its name for screen readers, its choices, its menus. */
-    flowSwitch: '流れ',
-    flows: DIAGRAM_TEXTS.ja.flows,
-    allMainFlows: 'すべての主な流れ',
-    chooseMainFlow: '主な流れを1本選ぶ',
+    /** The storming's 絞り込み of the exceptions (on the integrated canvas and a stage). */
+    showExceptions: '例外を表示',
     /** The storming's 絞り込み of the resolved hotspots (hidden, a sticky keeps a check for them). */
     showResolvedHotspots: '解決済みを表示',
     staleStorming: (file: string) => `${file} に構文エラーがあるため、最後に解析できた内容を表示しています`,
@@ -1434,13 +1434,12 @@ const en: Messages = {
     stormingPicker: 'Storming to show',
     stormingLevel: 'Level',
     stormingLevels: DIAGRAM_TEXTS.en.stormingLevels,
-    stagePicker: 'Stage',
+    timelineFilter: 'Timeline',
     allTimelines: DIAGRAM_TEXTS.en.allTimelines,
+    stageView: (stage) => `${stage} (with its exceptions)`,
+    stageTimeline: DIAGRAM_TEXTS.en.stageTimeline,
     exceptionTimeline: DIAGRAM_TEXTS.en.exceptionTimeline,
-    flowSwitch: 'Flow',
-    flows: DIAGRAM_TEXTS.en.flows,
-    allMainFlows: 'Every main flow',
-    chooseMainFlow: 'Choose one main flow',
+    showExceptions: 'Show exceptions',
     showResolvedHotspots: 'Show resolved',
     staleStorming: (file) => `${file} has syntax errors: showing what it was when it last parsed`,
 

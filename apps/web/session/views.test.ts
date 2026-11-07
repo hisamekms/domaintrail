@@ -9,31 +9,19 @@ const words: ViewWords = {
     structureLevels: { detail: '詳細', overview: '概観', aggregates: '集約' },
     stormingLevels: { 'big-picture': 'ビッグピクチャー', 'design-level': 'デザインレベル' },
     allContexts: 'すべての BC',
-    flows: { main: '主な流れ', mainFlow: (name) => `主な流れ: ${name}`, exception: (name) => `例外: ${name}` },
 };
 const scope: ViewScope = {
     mode: 'label',
     contexts: ['Sales', 'Billing'],
     contextLabels: { Sales: '販売', Billing: '請求' },
-    stormings: [
-        {
-            id: 'Delivery',
-            label: '配送',
-            timelines: [
-                { id: 'Normal', label: '通常', stageId: 'Shipping' },
-                { id: 'Failure', stageId: 'Shipping', exception: true },
-            ],
-            stages: [{ id: 'Shipping', label: '出荷' }],
-        },
-    ],
+    stormings: [{ id: 'Delivery', label: '配送', timelines: [{ id: 'Normal', label: '通常' }, { id: 'Failure' }] }],
 };
 const dt = (viewKey: string): ViewLocation => ({ kind: 'dt', viewKey, layoutKey: 'g@1' });
-const dtes = (stormingId: string, level: string, timelineId?: string, at: Partial<Extract<ViewLocation, { kind: 'dtes' }>> = {}): ViewLocation => ({
+const dtes = (stormingId: string, level: string, timelineId?: string): ViewLocation => ({
     kind: 'dtes',
     stormingId,
     level,
     ...(timelineId && { timelineId }),
-    ...at,
     layoutKey: 'g@1',
 });
 
@@ -59,15 +47,6 @@ describe('the view of a location', () => {
             timelineId: 'Normal',
         });
         expect(viewTargetOf(dtes('Delivery', 'big-picture'))).toEqual({ kind: 'storming', stormingId: 'Delivery', level: 'big-picture' });
-        // its place and its flow
-        expect(viewTargetOf(dtes('Delivery', 'big-picture', 'Failure', { stageId: 'Shipping', flow: 'exception' }))).toEqual({
-            kind: 'storming',
-            stormingId: 'Delivery',
-            level: 'big-picture',
-            stageId: 'Shipping',
-            flow: 'exception',
-            timelineId: 'Failure',
-        });
         for (const unknown of [dt('structure:huge'), dt('nope'), dt('structure:focus:|x|detail'), dtes('Delivery', 'zoomed')])
             expect(viewTargetOf(unknown)).toBeUndefined();
     });
@@ -83,13 +62,6 @@ describe('the view of a location', () => {
         expect(name(dtes('Delivery', 'design-level', 'Normal'))).toBe('配送 · デザインレベル · 通常');
         expect(name(dtes('Delivery', 'big-picture', 'Failure'))).toBe('配送 · ビッグピクチャー · Failure');
         expect(name(dtes('Gone', 'big-picture'))).toBe('Gone · ビッグピクチャー');
-        // a place and a flow: the stage, then the flow in the view bar's words
-        expect(name(dtes('Delivery', 'big-picture', undefined, { stageId: 'Shipping' }))).toBe('配送 · ビッグピクチャー · 出荷');
-        expect(name(dtes('Delivery', 'big-picture', undefined, { stageId: 'Shipping', flow: 'main' }))).toBe('配送 · ビッグピクチャー · 出荷 · 主な流れ');
-        expect(name(dtes('Delivery', 'big-picture', 'Failure', { stageId: 'Shipping', flow: 'exception' }))).toBe(
-            '配送 · ビッグピクチャー · 出荷 · 例外: Failure',
-        );
-        expect(name(dtes('Delivery', 'design-level', 'Normal', { flow: 'main' }))).toBe('配送 · デザインレベル · 主な流れ: 通常');
     });
 
     test('opens here only while its contexts, storming and timeline exist', () => {
@@ -104,8 +76,6 @@ describe('the view of a location', () => {
         expect(opens(dtes('Delivery', 'big-picture', 'Normal'))).toBe(true);
         expect(opens(dtes('Delivery', 'big-picture', 'Gone'))).toBe(false);
         expect(opens(dtes('Gone', 'big-picture'))).toBe(false);
-        expect(opens(dtes('Delivery', 'big-picture', undefined, { stageId: 'Shipping' }))).toBe(true);
-        expect(opens(dtes('Delivery', 'big-picture', undefined, { stageId: 'Gone' }))).toBe(false);
     });
 });
 
@@ -178,21 +148,9 @@ describe('the view a message is sent from', () => {
             view: { kind: 'Catalog', query: '注文', sections: ['aggregates'], contexts: [] },
         });
         expect(sentView({ location: dt('catalog') })).toEqual({ view: { kind: 'Catalog', sections: [], contexts: [] } });
-        expect(sentView({ location: dtes('Delivery', 'design-level', undefined, { stageId: 'Shipping', flow: 'main' }) })).toEqual({
+        expect(sentView({ location: dtes('Delivery', 'design-level'), storming: { stageId: 'Shipping', hidden: ['exceptions'] } })).toEqual({
             view: { kind: 'Storming', storming: 'Delivery', level: 'DesignLevel', stage: 'Shipping', exceptions: false },
         });
-        expect(sentView({ location: dtes('Delivery', 'design-level', undefined, { stageId: 'Shipping' }) })).toEqual({
-            view: { kind: 'Storming', storming: 'Delivery', level: 'DesignLevel', stage: 'Shipping', exceptions: true },
-        });
-        // one exception's case: its stage, the exceptions drawn, and which one
-        expect(sentView({ location: dtes('Delivery', 'design-level', 'Failure', { stageId: 'Shipping', flow: 'exception' }) })).toEqual({
-            view: { kind: 'Storming', storming: 'Delivery', level: 'DesignLevel', stage: 'Shipping', exceptions: true, exception: 'Failure' },
-        });
-        // one main flow alone: its timeline, no exceptions
-        expect(sentView({ location: dtes('Delivery', 'big-picture', 'Normal', { flow: 'main' }) })).toEqual({
-            view: { kind: 'Storming', storming: 'Delivery', level: 'BigPicture', timeline: 'Normal', exceptions: false },
-        });
-        // an earlier version's page: a timeline's view, as it was sent
         expect(sentView({ location: dtes('Delivery', 'big-picture', 'Normal') })).toEqual({
             view: { kind: 'Storming', storming: 'Delivery', level: 'BigPicture', timeline: 'Normal', exceptions: true },
         });

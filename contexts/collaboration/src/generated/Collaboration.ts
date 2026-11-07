@@ -10904,7 +10904,7 @@ export type ViewShown =
       }
     /**
      * ストーミング
-     * ストーミング。場所（段階。なければストーミング全体）と、そこに描いていた流れ。
+     * ストーミング。タイムラインも段階もなければ統合キャンバス。
      */
     | {
           readonly kind: 'Storming';
@@ -10912,14 +10912,12 @@ export type ViewShown =
           readonly storming: StormingName;
           /** レベル */
           readonly level: StormingLevel;
-          /** タイムライン — 主な流れを1本だけ描いていた（以前の版では、例外を含むタイムライン1本のビュー）。 */
+          /** タイムライン */
           readonly timeline?: TimelineName;
           /** 段階 */
           readonly stage?: StageName;
-          /** 例外の表示 — 例外を描いていた（流れ「例外も」、または例外を1つ選んでいた）。 */
+          /** 例外の表示 — 例外を表示していた（「例外を表示」）。 */
           readonly exceptions: boolean;
-          /** 選んでいた例外 — 例外を1つ選んでいた（流れ「例外: …」）。主な流れとその例外だけを描いていた。 */
-          readonly exception?: TimelineName;
       };
 
 /**
@@ -10942,7 +10940,7 @@ export function equalViewShown(a: ViewShown, b: ViewShown): boolean {
     }
     if (a.kind === 'Storming') {
         const y = b as Extract<ViewShown, { readonly kind: 'Storming' }>;
-        return a.storming === y.storming && a.level === y.level && sameOptional(a.timeline, y.timeline, ($138: TimelineName, $139: TimelineName) => $138 === $139) && sameOptional(a.stage, y.stage, ($140: StageName, $141: StageName) => $140 === $141) && a.exceptions === y.exceptions && sameOptional(a.exception, y.exception, ($142: TimelineName, $143: TimelineName) => $142 === $143);
+        return a.storming === y.storming && a.level === y.level && sameOptional(a.timeline, y.timeline, ($138: TimelineName, $139: TimelineName) => $138 === $139) && sameOptional(a.stage, y.stage, ($140: StageName, $141: StageName) => $140 === $141) && a.exceptions === y.exceptions;
     }
     return true;
 }
@@ -10952,7 +10950,7 @@ export function equalViewShown(a: ViewShown, b: ViewShown): boolean {
  * 依頼者がメッセージを送ったときに見ていたところ。AI の役（仕分け・回答・実行・聞き取り）に、「ここ」が何かを伝える。
  * 選んでいた要素は対象（`#`）が担うので、ここには持たない。名前は送ったときにサーバーがワークスペースと照らし、
  * 見つからないものは落とす（ストーミングが見つからなければ、ビューごと落とす）。
- * @see contexts/collaboration/model/view.dt:54
+ * @see contexts/collaboration/model/view.dt:51
  */
 export interface ViewedAt {
     /** ビュー */
@@ -10963,10 +10961,10 @@ export interface ViewedAt {
 
 /**
  * Whether two ViewedAt values are equal: by all their fields (ADR 0016).
- * @see contexts/collaboration/model/view.dt:54
+ * @see contexts/collaboration/model/view.dt:51
  */
 export function equalViewedAt(a: ViewedAt, b: ViewedAt): boolean {
-    return equalViewShown(a.view, b.view) && sameOptional(a.states, b.states, ($144: ElementName, $145: ElementName) => $144 === $145);
+    return equalViewShown(a.view, b.view) && sameOptional(a.states, b.states, ($142: ElementName, $143: ElementName) => $142 === $143);
 }
 
 /** Events of Collaboration that are persisted (declared `persistent`). */

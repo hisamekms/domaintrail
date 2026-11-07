@@ -46,7 +46,7 @@
           "example": "exceptions",
           "storming": "CertificateIssuance",
           "level": "big-picture",
-          "flow": "main",
+          "exceptions": "hide",
           "theme": "light",
           "lang": "ja"
         },

@@ -5,12 +5,12 @@ import type { DomainModel } from '@domaintrail/modeling';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { shownStorming, type StormingChoice } from '../storming';
 
-export { exportFileName, sheetHeading, slug, type Named, type SheetFlow, type SheetSubject, type StormingScope } from '@domaintrail/visualization';
+export { exportFileName, sheetHeading, slug, type Named, type SheetSubject, type StormingScope } from '@domaintrail/visualization';
 
-/** What the Event Storming view shows for `choice` (as `shownStorming` picks it: its place and its flow), as a sheet's subject. */
+/** What the Event Storming view shows for `choice` (as `shownStorming` picks it), as a sheet's subject. */
 export function stormingSubject(stormings: readonly StormingView[], choice: StormingChoice): SheetSubject | undefined {
     const shown = shownStorming(stormings, choice);
-    return shown && stormingSheetSubject(shown.storming, shown.options, shown.flow);
+    return shown && stormingSheetSubject(shown.storming, shown.options);
 }
 
 /** What a canvas view of the workspace shows, as its toolbar sets it (none for the catalog, or nothing to show). */

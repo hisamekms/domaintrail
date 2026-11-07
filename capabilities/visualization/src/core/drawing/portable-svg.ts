@@ -499,7 +499,7 @@ class Drawing {
                     fillAlpha: look.paperAlpha,
                     stroke: this.c(look.border),
                     width: 1.5,
-                    dash: look.dashed ? dashed(1.5) : undefined,
+                    dash: look.dashed || p.unused ? dashed(1.5) : undefined,
                 }),
             );
         const font: Font = { family: this.sans, size: (look?.small ? 13 : 16) * p.scale, weight: 700 };
@@ -999,10 +999,10 @@ class Drawing {
  * the legend (if any) under it at the left, with a margin around all. Its size is in px of the page (1 px per layout
  * unit).
  */
-/** How faint an item off the path of an exception's case is drawn (`.diagram-dimmed` in styles.css). */
+/** How faint an item off the path of the exception emphasized is drawn (`.diagram-dimmed` in styles.css). */
 export const DIMMED_OPACITY = 0.28;
 
-/** An item's drawing, faint when it is off the path of an exception's case. */
+/** An item's drawing, faint when it is off the path of the exception emphasized. */
 const faint = (dimmed: true | undefined, svg: string): string => (dimmed && svg ? tag('g', { opacity: DIMMED_OPACITY }, svg) : svg);
 
 export function portableSvg(input: PortableSvgInput): PortableSvg {

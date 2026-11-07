@@ -1,5 +1,5 @@
 // The storming navigator (storming-navigator.tsx): the stormings › stages › timelines, a filter, and the view it shows
-// in step with the view bar's place and flow (a row chooses through `chooseScope`; the row shown is read back from them).
+// chosen with the view bar's pickers (the two choose through `chooseScope` and show the same scope).
 import { afterAll, describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
@@ -8,7 +8,7 @@ import { createViewService, ElkLayoutEngine } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { groupCount } from './explorer';
 import { I18nProvider } from './i18n';
-import { chooseFlow, choosePlace, chooseScope, shownScope, shownStorming, stageChoice, type StormingChoice } from './storming';
+import { chooseScope, shownScope, shownStorming, stageChoice, type StormingChoice } from './storming';
 import { navigatorRows, StormingNavigator, stormingNavigatorTree, type NavigatorNode } from './storming-navigator';
 
 const engine = new ElkLayoutEngine();
@@ -94,35 +94,23 @@ describe('the tree of the storming navigator', () => {
     });
 });
 
-describe('the navigator, the breadcrumb and the flow show the same view', () => {
-    test('a storming’s or a stage’s row opens the place with every flow; an exception’s, its case at its stage; a main flow’s, it alone', () => {
-        const stage = chooseScope(stormings, choice, STAGED, stageChoice('Issuance'));
-        expect(stage).toEqual({ ...choice, stormingId: STAGED, timelines: { [STAGED]: '@Issuance' }, flow: 'all' });
+describe('the navigator and the view bar choose the same view', () => {
+    test('a row chooses its storming and scope; the scope shown is read back the same way the pickers write it', () => {
+        const stage = chooseScope(choice, STAGED, stageChoice('Issuance'));
+        expect(stage).toEqual({ ...choice, stormingId: STAGED, timelines: { [STAGED]: '@Issuance' } });
         expect(shownStorming(stormings, stage)?.options).toEqual({ level: 'big-picture', stageId: 'Issuance' });
         expect(shownScope(stormings, stage)).toEqual({ stormingId: STAGED, scope: '@Issuance' });
-        // an exception: the place is its stage, the flow its case (the row selected, its stage marked faintly)
-        const exception = chooseScope(stormings, choice, STAGED, 'PinLockedBranch');
-        expect(shownStorming(stormings, exception)).toMatchObject({ stageId: 'Issuance', flow: { exception: 'PinLockedBranch' } });
-        expect(shownStorming(stormings, exception)?.options).toEqual({ level: 'big-picture', stageId: 'Issuance' });
-        expect(shownScope(stormings, exception)).toEqual({ stormingId: STAGED, scope: 'PinLockedBranch', place: '@Issuance' });
-        // a main flow: drawn alone, in its stage
-        const main = chooseScope(stormings, exception, STAGED, 'IssuanceFlow');
-        expect(shownStorming(stormings, main)).toMatchObject({
-            stageId: 'Issuance',
-            flow: { main: 'IssuanceFlow' },
-            options: { level: 'big-picture', timelineId: 'IssuanceFlow' },
-        });
-        expect(shownScope(stormings, main)).toEqual({ stormingId: STAGED, scope: 'IssuanceFlow', place: '@Issuance' });
-        // the storming's own row: back to the whole storming with every flow, the others' places kept
+        const timeline = chooseScope(stage, STAGED, 'PinLockedBranch');
+        expect(shownScope(stormings, timeline)).toEqual({ stormingId: STAGED, scope: 'PinLockedBranch' });
+        // the storming's own row: back to its integrated canvas, the others' scopes kept
         const other = stormings.find((s) => s.id !== STAGED)?.id ?? '';
-        const both = chooseScope(stormings, chooseScope(stormings, main, other, ''), STAGED, '');
+        const both = chooseScope(chooseScope(timeline, other, ''), STAGED, '');
         expect(both.timelines).toEqual({});
-        expect(both.flow).toBe('all');
-        expect(chooseScope(stormings, { ...choice, timelines: { [other]: 'X' } }, STAGED, '').timelines).toEqual({ [other]: 'X' });
+        expect(chooseScope({ ...choice, timelines: { [other]: 'X' } }, STAGED, '').timelines).toEqual({ [other]: 'X' });
         expect(shownScope(stormings, both)).toEqual({ stormingId: STAGED, scope: '' });
     });
 
-    test('one row selected, as the view bar shows it; the place of an exception or a main flow marked faintly', () => {
+    test('the row of the view shown is the current one, whether the pickers or the navigator chose it', () => {
         const render = (c: StormingChoice): string =>
             renderToStaticMarkup(
                 <I18nProvider lang="ja">
@@ -131,38 +119,15 @@ describe('the navigator, the breadcrumb and the flow show the same view', () => 
             );
         const current = (html: string): string[] =>
             [...html.matchAll(/class="tree-item storming-nav-(\w+) selected"[^>]*aria-current="true"[^>]*title="([^"]+)"/g)].map((m) => `${m[1]}:${m[2]}`);
-        const within = (html: string): string[] =>
-            [...html.matchAll(/class="tree-item storming-nav-(\w+) within"[^>]*title="([^"]+)"/g)].map((m) => `${m[1]}:${m[2]}`);
-        const stage = chooseScope(stormings, choice, STAGED, stageChoice('Issuance'));
-        expect(current(render(stage))).toEqual(['stage:Issuance']);
-        expect(within(render(stage))).toEqual([]);
-        const exception = chooseScope(stormings, choice, STAGED, 'PinForgottenBranch');
-        expect(current(render(exception))).toEqual(['timeline:PinForgottenBranch']);
-        expect(within(render(exception))).toEqual(['stage:Issuance']);
-        // the breadcrumb and the flow switch move the same row: every flow at the stage is the stage's row again
-        expect(current(render(chooseFlow(stormings, exception, 'all')))).toEqual(['stage:Issuance']);
-        expect(current(render(chooseFlow(stormings, stage, 'main')))).toEqual(['stage:Issuance']);
-        // an exception chosen on the whole storming: its row, the storming's marked
-        const whole = chooseFlow(stormings, chooseScope(stormings, choice, STAGED, ''), { exception: 'PinForgottenBranch' });
-        expect(current(render(whole))).toEqual(['timeline:PinForgottenBranch']);
-        expect(within(render(whole))).toEqual([`storming:${STAGED}`]);
-        // nothing chosen yet: the first storming's whole
+        expect(current(render(chooseScope(choice, STAGED, stageChoice('Issuance'))))).toEqual(['stage:Issuance']);
+        expect(current(render(chooseScope(choice, STAGED, 'PinForgottenBranch')))).toEqual(['timeline:PinForgottenBranch']);
+        // nothing chosen yet: the first storming's integrated canvas
         expect(current(render(choice))).toEqual([`storming:${STAGED}`]);
         const html = render(choice);
         expect(html).toContain('aria-label="例外"');
         expect(html).toContain('placeholder="フィルタ"');
         // everything open: nothing counts its rows
         expect(html).not.toContain('tree-count');
-    });
-
-    test('another place keeps the exception chosen when it has it, else every flow; one main flow chosen is the main flows', () => {
-        const exception = chooseScope(stormings, choice, STAGED, 'PinLockedBranch');
-        // the whole storming has it: still its case
-        expect(shownStorming(stormings, choosePlace(stormings, exception, ''))).toMatchObject({ stageId: undefined, flow: { exception: 'PinLockedBranch' } });
-        // another stage has not: every flow
-        expect(shownStorming(stormings, choosePlace(stormings, exception, stageChoice('Submission')))).toMatchObject({ stageId: 'Submission', flow: 'all' });
-        const main = chooseScope(stormings, choice, STAGED, 'IssuanceFlow');
-        expect(shownStorming(stormings, choosePlace(stormings, main, stageChoice('Submission')))).toMatchObject({ stageId: 'Submission', flow: 'main' });
     });
 
     test('a stage counts its timelines only while collapsed, after its name, as the model tree’s groups do', () => {

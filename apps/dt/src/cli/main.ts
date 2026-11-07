@@ -522,17 +522,15 @@ Examples:
         .command('svg')
         .description('Draw a diagram of the Live View as an SVG file, as its 書き出し → SVG saves it, without a browser.')
         .option('--storming <id>', 'an Event Storming: the storming to draw (its ID)')
-        .option('--stage <id>', 'with --storming: the place, one stage (default: the whole storming)')
+        .option('--stage <id>', 'with --storming: one stage (its main flows and its exceptions)')
+        .option('--timeline <id>', 'with --storming: one timeline')
         .option('--level <level>', 'with --storming: big-picture (default) or design; with --model: detail (default), overview or aggregates')
         .addOption(
-            new Option(
-                '--flow <flow>',
-                'with --storming: the flow drawn at the place, every flow with the exceptions (default) or the main flows only',
-            ).choices(['all', 'main']),
+            new Option('--exceptions <exceptions>', 'with --storming, on the whole storming or a stage: draw its exceptions (default) or not').choices([
+                'show',
+                'hide',
+            ]),
         )
-        .option('--exception <id>', "with --storming: one exception's case, the main flows and that exception at the place")
-        .option('--timeline <id>', 'with --storming: one main flow alone (an exception: its case at its stage)')
-        .addOption(new Option('--exceptions <exceptions>', 'the earlier name of --flow: show (all) or hide (main)').choices(['show', 'hide']).hideHelp())
         .addOption(
             new Option('--resolved-hotspots <resolvedHotspots>', 'with --storming: draw its resolved hotspots (default) or not, in any view').choices([
                 'show',
@@ -565,8 +563,7 @@ together or an invalid config.
 Examples:
   dt export svg --storming OrderToCash -o order-to-cash.svg
   dt export svg --storming OrderToCash --timeline PaymentRetry --level design --legend -o retry.svg
-  dt export svg --storming OrderToCash --flow main --theme dark --lang en --heading -o dark.svg
-  dt export svg --storming ConvenienceStoreIssuance --stage Issuance --exception PinLockedBranch --level design -o pin-locked.svg
+  dt export svg --storming OrderToCash --exceptions hide --theme dark --lang en --heading -o dark.svg
   dt export svg --storming OrderToCash --level design --resolved-hotspots hide -o open-questions.svg
   dt export svg --model --view map --all --heading -o map.svg
   dt export svg --model --context Sales Billing --level aggregates -o - > sales.svg`,

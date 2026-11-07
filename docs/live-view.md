@@ -64,11 +64,8 @@ the view or inspector tab that suits it.
 In event storming, the stormings › their stages › each stage's timelines (its main flow, then its exceptions, marked
 with a small arrow in the exceptions' red), and a storming's timelines that are in no stage right under it (all of
 them, for a storming without stages); a collapsed stage counts its timelines after its name, muted, as 「(3)」, as the
-model tree's groups do. A click shows it and selects it for the detail: a storming's or a stage's row opens that place
-with every flow (例外も), an exception's row its case at its stage (例外: …), a main flow's row that main flow alone
-(主な流れ: …). One row is selected, as the view bar shows it — the exception or the main flow chosen, else the place —
-and the place of a timeline selected has a faint mark at its edge; the navigator, the breadcrumb and the flow always
-show the same choice. The filter at the top keeps the rows whose name or ID holds the text, with their rows above
+model tree's groups do. A click shows that view — the storming's integrated canvas, the stage or the timeline — as the
+view bar's pickers do (the two always show the same choice) and selects it for the detail. The filter at the top keeps the rows whose name or ID holds the text, with their rows above
 (a matching storming or stage keeps all its rows); what is folded is remembered per browser.
 
 The detail is under the tree, past the split. To give the detail more room, fold the tree: drag the split to the top,
@@ -92,9 +89,9 @@ it, the items added, changed and removed since then. A removed item opens in the
 One row above the canvas, the view bar, holds what acts on the canvas only. It puts the same kinds of controls in the
 same places in every view, leaving out what the view does not have: in the domain model, first the view switch —
 マップ (the Context Map), 構造 (the Structure View) and カタログ — then the subject (what is looked at: the structure's
-focused contexts, the catalog's search, the storming's place and the flow drawn there) and the level (how much of it is drawn: the
+focused contexts, the catalog's search, the storming and its timeline) and the level (how much of it is drawn: the
 structure's 詳細 / 概観 / 集約 with their names, the storming's two levels as icons named in their tooltips); at the right
-「⏷ 絞り込み」 (what is hidden: the BCs, the kinds, a storming's resolved hotspots…, in a popover, absent when there is nothing to hide; while anything is narrowed
+「⏷ 絞り込み」 (what is hidden: the BCs, the kinds, a storming's exceptions…, in a popover; while anything is narrowed
 the button shows how many narrowings are active, e.g. 「絞り込み 2」, and the popover clears them all with すべて解除),
 then 「⤓ 書き出し」 (a menu: 印刷, PDF, PNG, SVG; see [Printing and exporting](#printing-and-exporting)) — the
 catalog has 「印刷」 there instead. The view bar says what is shown (what an AI is told the view was); the canvas's
@@ -151,17 +148,9 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   subject or level); 絞り込み picks the BCs and the kinds (checkboxes with each kind's colour). The catalog's filter is
   not remembered across reloads, so that a reload never hides elements without saying so.
 - **Event Storming** (the イベントストーミング world; a workspace of `.dtes` files only opens on it): one storming as
-  sticky notes, laid out left to right (`dt guide storming-views`). The view bar's subject is the place, a breadcrumb
-  as the navigator nests it: the storming (表示するストーミング; its name alone when there is only one) ▸ its stage
-  (すべて, the whole storming, or one stage; no stage picker for a storming without stages). Beside it, the flow drawn
-  there (ADR 0032 §11), a segmented switch named only for screen readers (流れ), its choice marked by a pale wash and an
-  underline apart from the level's fill: 主な流れ (the main flows only), 例外も (every exception, the default) and
-  例外 ▾ (one exception: its case, the main flows and that exception only, drawn where every flow puts them; on the
-  whole storming the menu lists the exceptions under their stages). 主な流れ has a ▾ of its own where there are
-  several main flows, to draw one alone with its one-hop causal paths and the causes of its events (主な流れ: …; its
-  place becomes its stage). A place without exceptions has 主な流れ ▾ alone when it has several main flows, and no
-  switch otherwise. Another place keeps the exception chosen when it has it, else draws every flow again; another
-  storming draws every flow. The level icons are ビッグピクチャー (the telescope: events, timelines
+  sticky notes, laid out left to right (`dt guide storming-views`). The view bar's subject is a breadcrumb of two pickers: the storming (表示するストーミング; its name alone when there is only one) ▸ the
+  タイムライン — すべて（統合） for the integrated canvas, or one timeline with its one-hop causal paths and the causes of its events (a subject, not
+  a filter: the two draw different things). The level icons are ビッグピクチャー (the telescope: events, timelines
   and hotspots only, without the events marked `level design`) and デザインレベル (the microscope: also commands, policies, actors, external systems, aggregates
   and read models). The choices are
   remembered per browser and never change the `.dtes` file. The integrated canvas draws each event once (no group
@@ -199,19 +188,16 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   the command asks it) is an empty dashed note 「誰が処理する？」 where it would stand. At Design
   Level each step is a group of columns (read models on the row of the issuer looking at them, commands with their
   issuers on top, handlers, the event, policies; a hotspot above the sticky it is on) and the elements stand in a band
-  above the row of their event, an exception's above its lane. 主な流れ draws the whole storming and the stages without
-  their exceptions (another layout); an exception's case is drawn from the layout of every flow: the other exceptions
-  are left out where they stood (their room stays empty), and in its stage the notes off its path — the main flows
-  after it branches off and before it returns, the other main flows — are faint. The flow is not a narrowing: the
-  絞り込み's すべて解除 leaves it as it is.
+  above the row of their event, an exception's above its lane. The タイムライン
+  picker then also lists each stage (「…（例外を含む）」), and the 絞り込み has 「例外を表示」 (on by default,
+  remembered per browser; off counts as one narrowing) to draw the integrated canvas and the stages without their exceptions.
   A storming with a resolved hotspot also has 「解決済みを表示」 in its 絞り込み, in every view (on by default, remembered
   per browser — a facilitator hiding them changes nothing for the others; off counts as one narrowing): off, the
   resolved hotspots and their lines are not drawn, their places left empty (nothing moves: the page hides them in the
-  drawing alone; ADR 0032 §10), and each sticky they are on keeps a green ✓ in
+  drawing alone, where 「例外を表示」 draws another layout; ADR 0032 §10), and each sticky they are on keeps a green ✓ in
   its corner (left of its 「k/n」), which tells what was agreed on hover and selects the hotspot. Going to an element the
-  flow or the 絞り込み leaves out — a link, the palette, the knowledge, the detail, a chat's reference, a turn's marks —
-  shows it first (another exception's case while a case is shown, else every flow, then what the 絞り込み hides), then
-  selects it.
+  絞り込み hides — a link, the palette, the knowledge, the detail, a chat's reference, a turn's marks — shows what hides
+  it first, then selects it.
   **Acting on a sticky** ([ADR 0033](adr/0033-people-edit-stickies.md)): every action comes from one list, so the
   same ones are in four places. Selecting stickies shows a small toolbar above them (below them when there is no room;
   never on hover, hidden while the canvas moves): the frequent actions as icons — チャットに追加 (💬, a muted ✓ once
@@ -303,10 +289,9 @@ The page has no margin of the browser's, so the browser prints no header or foot
 URL, the date); the sheet keeps its own margin. Above the diagram, one line says what it is and how it is shown, in the
 display mode's names: the workspace, the world, the view and what in it is shown, then its conditions, e.g.
 `ws › ドメインモデル › 構造図 · 詳細` or
-`ws › イベントストーミング › 住民票などのコンビニ交付 › コンビニでの発行 · デザインレベル · 例外も` (an Event Storming
-view: the storming, すべて or a stage when it has stages, the level, and the flow in the view bar's words — 主な流れ,
-例外も, 例外: …, 主な流れ: … — when the place has a flow to choose; the file's name has the flow too, `main` or the
-timeline's ID; the Structure View: the focused contexts, if any, and the level; the Context Map: すべてのコンテキスト when
+`ws › イベントストーミング › 住民票などのコンビニ交付 › コンビニでの発行 · デザインレベル · 例外を含む` (an Event Storming
+view: the storming, すべて（統合）, a stage or a timeline, the level, and whether the exceptions are drawn when the storming
+has some; the Structure View: the focused contexts, if any, and the level; the Context Map: すべてのコンテキスト when
 shared and external BCs are shown). Nothing else is printed (no date, no version).
 
 書き出し at the right end of the view bar opens a menu below it. Its **印刷** is the surer way to print: it gets
@@ -637,16 +622,15 @@ view and camera). Nothing else moves it — not a turn that ends, not someone el
 - **The AI followed**: as a turn ends, its changes are brought into view (see [What a turn changed](#what-a-turn-changed));
   choosing to follow it brings its latest changes into view at once. While it does not work, the toggle shows only while
   it is followed, faint (a press stops following); never while no agent is connected.
-- **A participant followed**: the page opens the view they are on (the storming, level, place and flow — an exception's
-  case is another view than every flow, though of the same layout —, the domain model's view, 詰めて表示; what the
-  絞り込み hides stays the reader's own) and fits what their canvas shows to its own, gliding as they pan and zoom (their presence's
+- **A participant followed**: the page opens the view they are on (the storming, level and timeline, the domain model's
+  view, 詰めて表示) and fits what their canvas shows to its own, gliding as they pan and zoom (their presence's
   `camera`, sent a few times a second: [ADR 0026](adr/0026-collaboration-sessions.md#appendix-following-someone-amendment)).
   While they are where no canvas is (the catalog, a view still loading) or on a view this page cannot open, the page
   stays and keeps following; it catches up once they are back. The detail's pillar is not followed. When they leave
   the session, the following stops.
 - **Stopping**: any move of the reader's own stops following at once, without asking: a pan or zoom (drag, wheel, pinch,
   the keys, the canvas's buttons), a selection (a click on the canvas, in the tree or the navigator, a link), switching
-  what is shown (the world, the storming, the level, the place and the flow, the domain model's views, the filters, 詰めて表示, a
+  what is shown (the world, the storming, the level, the timeline, the domain model's views, the filters, 詰めて表示, a
   participant's 「→」, 図で見る, 「ほかに n 件の変更 →」) — and the toggle again. The followee's own moves of the camera
   and the view are not the reader's and stop nothing.
 - **How it shows**: a thin frame round the canvas in the followee's color (the AI's, or the participant's cursor color),

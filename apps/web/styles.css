@@ -1603,6 +1603,14 @@ a.field-origin {
 .dg-esStage .dg-label {
     color: var(--text-secondary);
 }
+/* a stage with nothing drawn in it (one main flow shown): its frame kept, dashed, where the stage stands */
+.dg-esStage.dg-unused {
+    border-style: dashed;
+    background: transparent;
+}
+.dg-esStage.dg-unused .dg-label {
+    opacity: 0.6;
+}
 .dg-aggregateBoundary .dg-label {
     font-size: calc(13px * var(--s, 1));
     color: var(--model-aggregate);
@@ -1798,7 +1806,7 @@ a.field-origin {
 .diagram-ghost .di {
     cursor: default;
 }
-/* off the path of an exception's case (caseInDrawing): faint, as the portable SVG draws it (DIMMED_OPACITY) */
+/* off the path of the exception emphasized (flowInDrawing): faint, as the portable SVG draws it (DIMMED_OPACITY) */
 .react-flow__node.diagram-dimmed,
 .react-flow__edge.diagram-dimmed {
     opacity: 0.28;
@@ -3400,84 +3408,6 @@ svg.chat-launcher-mark {
     color: var(--accent);
     font-weight: 600;
 }
-.subject-menu > button {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-}
-/* a heading of the list's options (a stage's timelines, on the whole storming) */
-.subject-menu-group {
-    padding: var(--space-1) var(--space-3) 2px;
-    font-size: 0.6875rem;
-    font-weight: 600;
-    color: var(--muted);
-}
-.subject-menu-group:not(:first-child) {
-    margin-top: var(--space-1);
-    border-top: 1px solid var(--border);
-}
-/* the flow drawn at the place, beside the breadcrumb: its choice marked by the accent's line (as the view switch's),
-   so that it reads apart from the level (filled) next to it; its menus open below it, outside the control */
-.segmented.flow-switch {
-    flex: 0 1 auto;
-    min-width: 0;
-    overflow: visible;
-}
-.flow-switch > button,
-.flow-pick > button {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    min-width: 0;
-    height: calc(1.625rem - 2px);
-    white-space: nowrap;
-    color: var(--text);
-}
-.view-toolbar .flow-switch > .flow-pick > button {
-    border: none;
-    border-right: 1px solid var(--border);
-    border-radius: 0;
-    background: var(--panel);
-    font: inherit;
-    font-size: 0.8125rem;
-    padding: 2px var(--space-3);
-}
-.flow-switch > :first-child,
-.view-toolbar .flow-switch > .flow-pick:first-child > button {
-    border-radius: 5px 0 0 5px;
-}
-.flow-switch > :last-child,
-.view-toolbar .flow-switch > .flow-pick:last-child > button {
-    border-right: none;
-    border-radius: 0 5px 5px 0;
-}
-.view-toolbar .flow-switch > .flow-pick:only-child > button {
-    border-radius: 5px;
-}
-.view-toolbar .flow-switch > .flow-pick > button.flow-split {
-    padding: 2px var(--space-1);
-}
-.flow-pick {
-    position: relative;
-    display: flex;
-    min-width: 0;
-}
-.flow-switch button.active {
-    background: var(--selected-bg);
-    color: var(--accent);
-    box-shadow: inset 0 -2px 0 var(--accent);
-    font-weight: 600;
-}
-.flow-switch button.active .toolbar-caret {
-    color: inherit;
-}
-.flow-switch button:hover:not(.active) {
-    background: var(--hover);
-}
-.flow-exception-mark {
-    flex: none;
-    color: var(--es-exception-text);
-}
 .filter-popover {
     position: relative;
 }
@@ -3751,10 +3681,6 @@ svg.chat-launcher-mark {
 .tree-item.selected {
     background: var(--selected-bg);
     color: var(--selected-text);
-}
-/* the place of the exception or the main flow selected (the storming navigator): a faint mark at its edge */
-.tree-item.within {
-    box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .tree-twisty {
     width: 14px;

@@ -44,9 +44,8 @@ export interface StormingView {
     /** The storming as written, for the inspector (`ref`s, clauses, timelines). */
     storming: Storming;
     /**
-     * Keyed by `stormingViewKey` (`<level>|<a main flow's timelineId, @stageId or empty>`, then `-exceptions` for the main
-     * flows only): the render graph (the occurrences each event node stands for) and its drawing. An exception has no
-     * view of its own: its case is drawn from the view of every flow (`caseInDrawing`).
+     * Keyed by `stormingViewKey` (`<level>|<timelineId, @stageId or empty>`, then `-exceptions` for a view without the
+     * exceptions): the render graph (the occurrences each event node stands for) and its drawing.
      */
     views: Record<string, { render: RenderGraph; graph: LaidOutGraph }>;
     /** True when its file no longer parses and this is the storming as it last did. */

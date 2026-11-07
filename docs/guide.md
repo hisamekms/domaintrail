@@ -2426,12 +2426,11 @@ note for both; a dashed arrow goes from an exception's last step back to the ste
 at them), commands (their issuers on top, a hotspot on the command above them), handlers (aggregates and external
 systems, and the external system an event comes from), the event (its hotspots on top), policies (their hotspots on
 top) — and the elements stand in a band above the row of the event
-they belong to, an exception's on its own lane: the chain reads left to right into each event. The view bar's
-breadcrumb is the place — the storming › すべて or a stage — and beside it the flow drawn there: 主な流れ (the main
-flows only: no exception's steps, no event only exceptions have, no hotspot on those events, no `then` arrow; its ▾
-draws one main flow alone), 例外も (every exception, the default) and 例外 ▾ (one exception's case: the main flows and
-that exception, where every flow puts them, the other exceptions' room left empty and the notes off its path faint).
-Clicking a stage's frame selects it (its main flows, its exceptions and 「この段階を表示」).
+they belong to, an exception's on its own lane: the chain reads left to right into each event. The timeline picker lists the
+stages (「コンビニでの発行（例外を含む）」) between すべて（統合） and the timelines; clicking a stage's frame selects
+it (its main flows, its exceptions and 「この段階を表示」). 「例外を表示」 in the view bar's 絞り込み (a storming with
+exceptions only) hides the exceptions of the integrated canvas and of a stage: their steps, the events only they have, the
+hotspots on those events and their `then` arrows; an exception's own view is unchanged.
 
 <!-- topic: storming-rules -->
 ### Diagnostics of a storming
@@ -3249,18 +3248,16 @@ figures of a document or a site built in CI. `-o <file>` is required (`-o -` for
 ```sh
 dt export svg --storming ConvenienceStoreIssuance -o all.svg
 dt export svg --storming ConvenienceStoreIssuance --stage Issuance --level design --legend -o issuance.svg
-dt export svg --storming ConvenienceStoreIssuance --stage Issuance --exception PinForgottenBranch --theme dark --lang en -o pin.svg
-dt export svg --storming ConvenienceStoreIssuance --flow main --heading -o main-flows.svg
+dt export svg --storming ConvenienceStoreIssuance --timeline PinForgottenBranch --theme dark --lang en -o pin.svg
+dt export svg --storming ConvenienceStoreIssuance --exceptions hide --heading -o main-flows.svg
 dt export svg --storming OrderToCash --level design --resolved-hotspots hide -o open-questions.svg
 dt export svg --model --view map --all -o map.svg
 dt export svg --model --context Sales Billing --level aggregates -o - > sales.svg
 ```
 
-- **An Event Storming:** `--storming <ID>`; the place, the whole storming by default or `--stage <ID>`; the flow
-  drawn there, as the view bar's: `--flow all` (default, every exception), `--flow main` (the main flows only),
-  `--exception <ID>` (one exception's case at the place) or `--timeline <ID>` (one main flow alone; an exception's ID
-  draws its case at its stage), one of them; `--level big-picture` (default) or `design` (`--exceptions show|hide`,
-  the earlier name of `--flow`, is still taken); `--resolved-hotspots hide` leaves the resolved
+- **An Event Storming:** `--storming <ID>`, the whole storming by default, or `--stage <ID>` (its main flows and its
+  exceptions) or `--timeline <ID>`; `--level big-picture` (default) or `design`; `--exceptions hide` leaves the
+  exceptions out of the whole storming or a stage (「例外を表示」 off); `--resolved-hotspots hide` leaves the resolved
   hotspots out of any view (「解決済みを表示」 off: their notes and lines are not drawn, their stickies keep a ✓, nothing moves).
 - **The domain model:** `--model`, the Structure View by default (`--level detail`, `overview` or `aggregates`;
   `--context <names…>` focuses it on some bounded contexts, their dependencies as stubs) or `--view map`, the Context

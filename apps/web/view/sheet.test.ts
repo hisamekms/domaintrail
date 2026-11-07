@@ -33,35 +33,27 @@ const en = MESSAGES.en;
 const choice = (extra: Partial<StormingChoice> = {}): StormingChoice => ({ stormingId: undefined, level: 'design-level', timelines: {}, ...extra });
 
 describe('the heading of a printed diagram', () => {
-    test('an Event Storming view: the storming, its place, its level and its flow, in the view bar’s words, by display mode', async () => {
+    test('an Event Storming view: the storming, what of it is shown, its level and the exceptions, by display mode', async () => {
         const stormings = await stormingsOf(STAGES);
         const id = 'ConvenienceStoreIssuance';
         const stage = stormingSubject(stormings, choice({ timelines: { [id]: stageChoice('Issuance') } }))!;
         expect(sheetHeading('ws', stage, ja, 'label')).toBe(
-            'ws › イベントストーミング › 住民票などのコンビニ交付（ビッグピクチャ） › コンビニでの発行 · デザインレベル · 例外も',
+            'ws › イベントストーミング › 住民票などのコンビニ交付（ビッグピクチャ） › コンビニでの発行 · デザインレベル · 例外を含む',
         );
-        expect(sheetHeading('ws', stage, ja, 'name')).toBe('ws › イベントストーミング › ConvenienceStoreIssuance › Issuance · デザインレベル · 例外も');
+        expect(sheetHeading('ws', stage, ja, 'name')).toBe('ws › イベントストーミング › ConvenienceStoreIssuance › Issuance · デザインレベル · 例外を含む');
         expect(sheetHeading('ws', stage, en, 'both')).toBe(
-            'ws › Event Storming › 住民票などのコンビニ交付（ビッグピクチャ） (ConvenienceStoreIssuance) › コンビニでの発行 (Issuance) · Design Level · With exceptions',
+            'ws › Event Storming › 住民票などのコンビニ交付（ビッグピクチャ） (ConvenienceStoreIssuance) › コンビニでの発行 (Issuance) · Design Level · with exceptions',
         );
-        // the whole storming, the main flows only (as an earlier version kept it)
+        // the integrated canvas, without the exceptions
         const all = stormingSubject(stormings, choice({ level: 'big-picture', exceptions: false }))!;
         expect(sheetHeading('ws', all, ja, 'label')).toBe(
-            'ws › イベントストーミング › 住民票などのコンビニ交付（ビッグピクチャ） › すべて · ビッグピクチャー · 主な流れ',
+            'ws › イベントストーミング › 住民票などのコンビニ交付（ビッグピクチャ） › すべて（統合） · ビッグピクチャー · 例外を除く',
         );
-        // one exception's case: its stage, and the exception as the flow
-        const branch = stormingSubject(stormings, choice({ timelines: { [id]: stageChoice('Issuance') }, flow: { exception: 'PinLockedBranch' } }))!;
+        // one timeline (an exception of a stage): no exceptions' condition, it is one of them
+        const branch = stormingSubject(stormings, choice({ timelines: { [id]: 'PinLockedBranch' } }))!;
         expect(sheetHeading('ws', branch, ja, 'label')).toBe(
-            'ws › イベントストーミング › 住民票などのコンビニ交付（ビッグピクチャ） › コンビニでの発行 · デザインレベル · 例外: 暗証番号のロック',
+            'ws › イベントストーミング › 住民票などのコンビニ交付（ビッグピクチャ） › コンビニでの発行 / 例外：暗証番号のロック · デザインレベル',
         );
-        // one main flow: its stage, and the main flow as the flow
-        const main = stormingSubject(stormings, choice({ flow: { main: 'IssuanceFlow' } }))!;
-        expect(sheetHeading('ws', main, ja, 'name')).toBe(
-            'ws › イベントストーミング › ConvenienceStoreIssuance › Issuance · デザインレベル · 主な流れ: IssuanceFlow',
-        );
-        // a stage without exceptions: no flow to tell
-        const preparation = stormingSubject(stormings, choice({ timelines: { [id]: stageChoice('Preparation') } }))!;
-        expect(sheetHeading('ws', preparation, ja, 'name')).toBe('ws › イベントストーミング › ConvenienceStoreIssuance › Preparation · デザインレベル');
     });
 
     test('a storming without timelines has no timeline part, nor exceptions', async () => {
@@ -92,15 +84,6 @@ describe('the name of an exported file', () => {
         expect(exportFileName('ws', stage, 'png')).toBe('ws-storming-ConvenienceStoreIssuance-Issuance-design-level.png');
         const all = stormingSubject(stormings, choice({ level: 'big-picture' }))!;
         expect(exportFileName('ws', all, 'svg')).toBe('ws-storming-ConvenienceStoreIssuance-all-big-picture.svg');
-        // the flow: the main flows only, or the exception or the main flow drawn alone
-        expect(exportFileName('ws', stormingSubject(stormings, choice({ flow: 'main' }))!, 'svg')).toBe(
-            'ws-storming-ConvenienceStoreIssuance-all-main-design-level.svg',
-        );
-        const branch = stormingSubject(
-            stormings,
-            choice({ timelines: { ConvenienceStoreIssuance: stageChoice('Issuance') }, flow: { exception: 'PinLockedBranch' } }),
-        )!;
-        expect(exportFileName('ws', branch, 'png')).toBe('ws-storming-ConvenienceStoreIssuance-Issuance-PinLockedBranch-design-level.png');
         expect(exportFileName('shop', { view: 'contextMap', all: false }, 'png')).toBe('shop-context-map.png');
         expect(exportFileName('shop', { view: 'contextMap', all: true }, 'png')).toBe('shop-context-map-all.png');
         expect(exportFileName('shop', { view: 'structure', level: 'detail', contexts: [] }, 'svg')).toBe('shop-structure-detail.svg');

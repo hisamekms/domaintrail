@@ -123,6 +123,7 @@ export function buildScene(graph: LaidOutGraph, opts: RenderOptions): Scene {
                     scale,
                     ...marks,
                     ...(n.dimmed && { dimmed: true as const }),
+                    ...(n.unused && { unused: true as const }),
                 },
             });
         } else {

@@ -5,9 +5,9 @@
 // (`tableMeasure`). The SVG names the font stacks and embeds no font.
 import {
     buildScene,
-    caseInDrawing,
     exportBounds,
     hideInDrawing,
+    laidOutHidden,
     legendContent,
     legendKindNames,
     DIAGRAM_TEXTS,
@@ -19,13 +19,11 @@ import {
     styleTokens,
     stormingViewKey,
     tableMeasure,
-    type ViewOptions,
     tokenColour,
     type DiagramTheme,
     type DisplayMode,
     type Hideable,
     type LaidOutGraph,
-    type StormingFlow,
     type Lang,
     type LegendView,
     type SheetSubject,
@@ -39,17 +37,10 @@ import type { DiagramViews } from './ports.js';
 /** What `dt export svg` draws, as its options say it. */
 export interface SvgExportOptions {
     storming?: string | undefined;
-    /** The place: one stage (none: the whole storming). */
     stage?: string | undefined;
-    /** One main flow (an exception's ID: its case, as `exception`). */
     timeline?: string | undefined;
     /** The storming's level (`big-picture`, `design`) or the Structure View's (`detail`, `overview`, `aggregates`). */
     level?: string | undefined;
-    /** The flow drawn at the place, as the view bar's 流れ: every flow (default) or the main flows only. */
-    flow?: 'all' | 'main' | undefined;
-    /** One exception's case: the main flows and that exception, at the place (`stage`, else the whole storming). */
-    exception?: string | undefined;
-    /** An earlier name of `flow`: `show` every flow, `hide` the main flows only. */
     exceptions?: 'show' | 'hide' | undefined;
     /** The resolved hotspots: drawn (default) or not, as the 絞り込み's 「解決済みを表示」 (in any view of a storming). */
     resolvedHotspots?: 'show' | 'hide' | undefined;
@@ -101,22 +92,13 @@ export function checkSvgOptions(o: SvgExportOptions): void {
     if (o.storming !== undefined) {
         if (o.view !== undefined || o.context !== undefined || o.all) usage('--view, --context and --all are options of --model.');
         if (o.stage !== undefined && o.timeline !== undefined) usage('Give --stage or --timeline, not both.');
-        if (o.flow !== undefined && o.exceptions !== undefined) usage('Give --flow (--exceptions is its earlier name), not both.');
-        const flows = [o.timeline, o.exception, o.flow ?? o.exceptions].filter((x) => x !== undefined);
-        if (flows.length > 1) usage('Give one flow: --flow, --exception <id> or --timeline <id>.');
+        if (o.timeline !== undefined && o.exceptions !== undefined) usage('--exceptions applies to the whole storming or a stage, not to one timeline.');
         if (o.level !== undefined && !(o.level in STORMING_LEVELS))
             usage(`Unknown level '${o.level}' of a storming. Choose: ${Object.keys(STORMING_LEVELS).join(', ')}`);
         return;
     }
-    if (
-        o.stage !== undefined ||
-        o.timeline !== undefined ||
-        o.flow !== undefined ||
-        o.exception !== undefined ||
-        o.exceptions !== undefined ||
-        o.resolvedHotspots !== undefined
-    )
-        usage('--stage, --timeline, --flow, --exception and --resolved-hotspots are options of --storming.');
+    if (o.stage !== undefined || o.timeline !== undefined || o.exceptions !== undefined || o.resolvedHotspots !== undefined)
+        usage('--stage, --timeline, --exceptions and --resolved-hotspots are options of --storming.');
     const view = o.view ?? 'structure';
     if (view === 'map' && (o.context !== undefined || o.level !== undefined)) usage('--context and --level are options of --view structure.');
     if (view === 'structure' && o.all) usage('--all is an option of --view map.');
@@ -136,44 +118,19 @@ function stormingDiagram(stormings: readonly StormingView[], o: SvgExportOptions
     if (o.timeline !== undefined && !storming.timelines.some((t) => t.id === o.timeline)) {
         throw new SvgExportError(`Unknown timeline '${o.timeline}' of ${storming.id}. Timelines: ${listed(storming.timelines.map((t) => t.id))}`, 1);
     }
-    const exceptionIds = storming.timelines.filter((t) => t.exception).map((t) => t.id);
-    if (o.exception !== undefined && !exceptionIds.includes(o.exception)) {
-        throw new SvgExportError(`Unknown exception '${o.exception}' of ${storming.id}. Exceptions: ${listed(exceptionIds)}`, 1);
-    }
     const level = STORMING_LEVELS[o.level ?? 'big-picture']!;
-    // the flow, as the view bar's: one main flow alone, one exception's case at the place, or every flow or the main
-    // flows only at the place
-    const one = o.timeline !== undefined ? storming.timelines.find((t) => t.id === o.timeline) : undefined;
-    const flow: StormingFlow =
-        one && !one.exception
-            ? { main: one.id }
-            : one
-              ? { exception: one.id }
-              : o.exception !== undefined
-                ? { exception: o.exception }
-                : (o.flow ?? (o.exceptions === 'hide' ? 'main' : 'all'));
-    // an exception chosen by --timeline is drawn at its stage, as the Live View's navigator opens it
-    const stageId = o.stage ?? (one?.exception ? one.stageId : undefined);
-    if (
-        typeof flow === 'object' &&
-        'exception' in flow &&
-        stageId !== undefined &&
-        !storming.timelines.some((t) => t.id === flow.exception && t.stageId === stageId)
-    ) {
-        throw new SvgExportError(`The exception '${flow.exception}' is not of the stage '${stageId}'.`, 1);
-    }
-    const mainOnly = flow === 'main' && exceptionIds.length > 0;
-    const options: ViewOptions =
-        typeof flow === 'object' && 'main' in flow
-            ? { level, timelineId: flow.main }
-            : { level, ...(stageId !== undefined && { stageId }), ...(mainOnly && { flow: 'main' as const }) };
+    // what is hidden, as the 絞り込み hides it (`HIDDEN_BY`): the exceptions by the integrated canvas's or a stage's layout
+    // without them (only when the storming has some), the resolved hotspots by leaving them out of the drawing
+    const hidden = new Set<Hideable>([
+        ...(o.exceptions === 'hide' ? (['exceptions'] as const) : []),
+        ...(o.resolvedHotspots === 'hide' ? (['resolvedHotspots'] as const) : []),
+    ]);
+    const hide = laidOutHidden(storming.timelines.some((t) => t.exception) ? hidden : []);
+    const options =
+        o.timeline !== undefined ? { level, timelineId: o.timeline } : o.stage !== undefined ? { level, stageId: o.stage, ...hide } : { level, ...hide };
     const view = storming.views[stormingViewKey(options)];
     if (!view) throw new SvgExportError(`${storming.id} has no such view.`, 1);
-    // what the 絞り込み hides, left out of the drawing (the resolved hotspots), and an exception's case drawn from the
-    // layout of every flow
-    const hidden = new Set<Hideable>(o.resolvedHotspots === 'hide' ? ['resolvedHotspots'] : []);
-    const cased = typeof flow === 'object' && 'exception' in flow ? caseInDrawing(view.graph, view.render, storming.timelines, flow.exception) : view.graph;
-    return { graph: hideInDrawing(cased, hidden), subject: stormingSheetSubject(storming, options, flow), legend: 'storming' };
+    return { graph: hideInDrawing(view.graph, hidden), subject: stormingSheetSubject(storming, options), legend: 'storming' };
 }
 
 /** The domain model's view the options name. */

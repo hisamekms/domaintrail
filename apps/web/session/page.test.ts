@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import type { EventMessage, Presence, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
 import { commandsOf, statesOf, type DomainModel } from '@domaintrail/modeling';
 import { analyze } from '@domaintrail/analysis';
-import type { LaidOutGraph, StormingFlow, ViewOptions } from '@domaintrail/visualization';
+import type { LaidOutGraph, ViewOptions } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { createMemoryDrafts, editDraft, newDraft, sendable, sortDrafts } from './drafts';
 import { layoutKeyOf, NO_LAYOUT, sameLocation, shortHash, viewLocation } from './location';
@@ -48,18 +48,12 @@ describe('ViewLocation', () => {
                 view: { kind: 'storming' },
                 viewKey: 'x',
                 graph: graph(`storming:S:${level}:${timelineId ?? '*'}`),
-                storming: {
-                    id: 'S',
-                    options: { level, ...(timelineId && { timelineId }) },
-                    flow: timelineId ? { main: timelineId } : 'all',
-                    stageId: undefined,
-                },
+                storming: { id: 'S', options: { level, ...(timelineId && { timelineId }) } },
             });
         expect(at('design-level', 'Normal')).toEqual({
             kind: 'dtes',
             stormingId: 'S',
             level: 'design-level',
-            flow: 'main',
             timelineId: 'Normal',
             layoutKey: `storming:S:design-level:Normal@${shortHash('sig')}`,
         });
@@ -69,27 +63,6 @@ describe('ViewLocation', () => {
         expect(sameLocation(at('design-level', 'Normal'), at('design-level', 'Failure'))).toBe(false);
         expect(sameLocation(at('design-level', 'Normal'), at('design-level'))).toBe(false);
         expect(sameLocation(at('big-picture'), at('design-level'))).toBe(false);
-    });
-
-    test('a storming view is also its place and its flow: an exception’s case is another view of the same layout', () => {
-        const at = (options: ViewOptions, flow: StormingFlow, stageId?: string): ViewLocation =>
-            viewLocation({
-                view: { kind: 'storming' },
-                viewKey: 'x',
-                graph: graph('storming:S:big-picture:@P'),
-                storming: { id: 'S', options, flow, stageId },
-            });
-        const stage: ViewOptions = { level: 'big-picture', stageId: 'P' };
-        const key = `storming:S:big-picture:@P@${shortHash('sig')}`;
-        expect(at(stage, 'all', 'P')).toEqual({ kind: 'dtes', stormingId: 'S', level: 'big-picture', stageId: 'P', layoutKey: key });
-        expect(at({ ...stage, flow: 'main' }, 'main', 'P')).toMatchObject({ stageId: 'P', flow: 'main' });
-        // the main flows only of a storming without exceptions: every flow, drawn the same
-        expect(at(stage, 'main', 'P')).not.toHaveProperty('flow');
-        const failed = at(stage, { exception: 'Failed' }, 'P');
-        expect(failed).toMatchObject({ stageId: 'P', flow: 'exception', timelineId: 'Failed', layoutKey: key });
-        expect(sameLocation(failed, at(stage, 'all', 'P'))).toBe(false);
-        expect(sameLocation(failed, at(stage, { exception: 'Late' }, 'P'))).toBe(false);
-        expect(sameLocation(failed, at(stage, { exception: 'Failed' }, 'P'))).toBe(true);
     });
 
     test('a layout key stays short, whatever the signature, and changes with it', () => {
