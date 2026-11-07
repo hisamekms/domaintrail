@@ -33,6 +33,8 @@ import { runningLabel, turnState } from './status';
 import { CancelButton, RowActions, StateLabel, StatusSlot } from './status-slot';
 import { elapsed, oneLine, revisionLookup, type AgentMessage, type ReplyView, type RequestProgress } from './stream';
 import { Act } from '../shared/act';
+import { ReviewLine } from './review-line';
+import { reviewShown } from './review';
 import { useT } from '../i18n';
 import { hasMarks, stormingChangeMarks } from '../view/change-marks';
 
@@ -316,6 +318,10 @@ function RunSection({
                 <AgentBody run={run.run.id} message={run.message} />
                 {/* in AI の作業, the unit's own line above already lists what it changed */}
                 {!compact && <RunFiles run={run.run} about={about} name={name} />}
+                {/* the review at the run's end (ADR 0034): what dt found, what the AI fixed and kept */}
+                {run.run.state === 'Completed' && run.run.review && reviewShown(run.run.review) && (
+                    <ReviewLine run={run.run.id} review={run.run.review} offer={last && control && live} />
+                )}
                 {revert.kind === 'reverted' && (
                     <DecidedLine label={tx.chat.reverted} by={revert.by.queuedBy} at={revert.by.queuedAt} run={revert.by.id} hint={tx.chat.revertedHint} />
                 )}

@@ -1019,6 +1019,22 @@ const ja = {
                     `${role === 'all' ? 'AI' : role === 'answer' ? 'AI（回答）' : 'AI（実行）'} 接続なし${waiting > 0 ? `（${waiting} 件待ち）` : ''}`,
                 answeredChanged: '質問への回答ですが、ファイルを変更しました',
             },
+            // the review at the end of a run (ADR 0034): what dt found, what the AI fixed and kept
+            review: {
+                title: '見直し',
+                kinds: {
+                    ResolvedUnchanged: '解決したが付箋はそのまま',
+                    ChangedOpen: '付箋を変えたがホットスポットは開いたまま',
+                    StaleWording: '前のラベル・名前が残る',
+                    DuplicateLabel: '同じラベルで別の ID',
+                } as Record<Collaboration.ReviewFindingKind, string>,
+                count: (n: number) => `${n} 件`,
+                fixed: '直した',
+                left: (n: number) => `残り ${n} 件`,
+                ask: '見直しを頼む',
+                asked: '頼みました',
+                askText: (targets: string) => `見直しで残ったものを確かめて、直すか、直さないわけを書いてください ${targets}`,
+            },
             // what `/` lists in the composer: the commands (an interview) and the templates (text to edit)
             slash: {
                 commands: {
@@ -2255,6 +2271,21 @@ const en: Messages = {
                 presence: (role, waiting) =>
                     `${role === 'all' ? 'AI' : role === 'answer' ? 'AI (answers)' : 'AI (runs)'} not connected${waiting > 0 ? ` (${waiting} waiting)` : ''}`,
                 answeredChanged: 'Answered as a question, yet changed files',
+            },
+            review: {
+                title: 'Review',
+                kinds: {
+                    ResolvedUnchanged: 'Resolved, sticky unchanged',
+                    ChangedOpen: 'Sticky changed, hotspot left open',
+                    StaleWording: 'Old wording left',
+                    DuplicateLabel: 'Same label, other ID',
+                },
+                count: (n) => `${n}`,
+                fixed: 'fixed',
+                left: (n) => `${n} left`,
+                ask: 'Ask for a review',
+                asked: 'Asked',
+                askText: (targets) => `Check what the review left, and fix it or say why not ${targets}`,
             },
             slash: {
                 commands: {
