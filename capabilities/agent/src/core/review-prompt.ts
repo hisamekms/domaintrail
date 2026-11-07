@@ -49,7 +49,8 @@ Reply as before — \`outcome\` "done", the same \`title\`, a \`summary\` of one
 \`requests\` an empty list — with \`review\`:
 - \`fixed\`: what you changed in this review, one short line each (at most ${L.reviewFixed}, ${L.reviewText} characters
   each), naming elements as \`@{es:Storming/Element}\`;
-- \`kept\`: each finding of \`review.found\` you left as it is, \`what\` (the finding, naming its elements) and \`why\`;
+- \`kept\`: each finding of \`review.found\` you left as it is, \`what\` (the finding in a few words, naming its
+  elements, never the rule's name: people read it) and \`why\`;
 - \`knowledge\`: the items of \`review.knowledge\` now at odds with the stickies as you leave them — \`item\` (its ID),
   \`sticky\` (\`Storming.Element\`) and \`why\` (at most ${L.reviewKnowledge}). Never edit knowledge: people decide.
 Empty lists when there is nothing to say.

@@ -7081,6 +7081,9 @@ button.add-to-request.added:hover {
     padding: 0;
     list-style: none;
 }
+.run-review-state {
+    white-space: nowrap;
+}
 .run-review-lines .left .run-review-state {
     color: var(--status-warning-ink);
 }
