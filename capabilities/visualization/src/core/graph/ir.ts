@@ -178,7 +178,8 @@ export interface GraphEdge {
  * - `looksAt`: whoever decides (a command's issuer, or a policy) looks at a read model to decide (`reads`, ADR 0032 §9)
  * - `handles`: a command goes to its handler (`handledBy`); `decides`: the handler decides an event (`emits`; `names`:
  *   the commands of a merged handler); `results`: a command without a handler results in an event
- * - `triggers`: an event triggers a policy (`on`); `policyIssues`: a policy issues a command (`issues`)
+ * - `triggers`: an event triggers a policy (`on`); `policyIssues`: a policy issues a command (`issues`); `notices`: the
+ *   actor issuing a command reacts to an event (a command's `on`, ADR 0032 §14)
  * - `updates`: an event updates a read model; `arrives`: an event arrives from an external system
  * - `branches`: the time order into an exception's first step (`names`: the exceptions); `returns`: an exception's
  *   `then` back to the main flow (`names`: the exceptions); `order`: the time order (`names`: the timelines, none when
@@ -195,6 +196,7 @@ export type LineRelation =
     | 'results'
     | 'triggers'
     | 'policyIssues'
+    | 'notices'
     | 'updates'
     | 'arrives'
     | 'branches'

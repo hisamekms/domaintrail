@@ -18,6 +18,7 @@ describe('what a line says (the approved wording)', () => {
         expect(say('decides', ['C1', 'C2'])).toBe('「A」が処理して「B」（「C1」「C2」から）');
         expect(say('triggers')).toBe('「A」をきっかけにポリシー「B」が働く');
         expect(say('policyIssues')).toBe('ポリシー「A」により「B」');
+        expect(say('notices')).toBe('「A」を受けて「B」が動く');
         expect(say('follows')).toBe('「A」がポリシー「B」に従って動く');
         expect(say('updates')).toBe('「A」で「B」が更新される');
         expect(say('arrives')).toBe('「A」から「B」が届く');
@@ -63,7 +64,7 @@ describe('the lines of a storming, as the canvas says them', () => {
   aggregate Order "注文"
   command Place "受け付ける" { by Clerk reads Board handledBy Order emits Placed }
   command Close "閉じる" { handledBy Order emits Done }
-  command Ask "問い合わせる" { by Clerk emits Done }
+  command Ask "問い合わせる" { by Clerk on Placed emits Done }
   command Notify "知らせる" { handledBy Bank emits Done }
   policy Settle "精算する" { on Paid reads Board issues Close by Clerk }
   policy Inform "終わったら知らせる" { on Done reads Board issues Notify }
@@ -89,6 +90,7 @@ describe('the lines of a storming, as the canvas says them', () => {
             '「支払われた」をきっかけにポリシー「精算する」が働く',
             'ポリシー「精算する」により「閉じる」',
             '「係」がポリシー「精算する」に従って動く',
+            '「受け付けた」を受けて「係」が動く',
             '「問い合わせる」への問い',
             '「問い合わせる」を誰が処理するかはまだ決まっていない',
         ])

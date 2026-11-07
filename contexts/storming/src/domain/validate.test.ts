@@ -573,7 +573,6 @@ describe('validateStormings', () => {
     handledBy Shipment
     emits ShipmentCancelled
     issues ReleaseBike
-    on ReleaseFailed
   }`);
         const ds = validate(text).filter((d) => d.code !== 'S024' && d.code !== 'S027');
         expect(ds.map((d) => [d.code, d.message, d.hint])).toEqual([
@@ -596,13 +595,8 @@ describe('validateStormings', () => {
             ['S006', "Command 'Opened' has a `resolution` clause, which only a hotspot takes.", 'remove the `resolution` clause'],
             [
                 'S006',
-                "Command 'Chained' has `issues ReleaseBike`, but a command takes `by`, `reads`, `handledBy`, `emits`.",
+                "Command 'Chained' has `issues ReleaseBike`, but a command takes `by`, `on`, `reads`, `handledBy`, `emits`.",
                 'a command never issues a command: let it `emits` an event, and put a policy between, `policy <Id> { on <the event> issues ReleaseBike }`',
-            ],
-            [
-                'S006',
-                "Command 'Chained' has `on ReleaseFailed`, but a command takes `by`, `reads`, `handledBy`, `emits`.",
-                'a command does not react to an event: a policy does, `policy <Id> { on ReleaseFailed issues <this command> }`',
             ],
         ]);
     });
@@ -1107,6 +1101,82 @@ describe('validateStormings', () => {
         const unused = validate(cancel(`  readmodel Looked`));
         expect(unused.map((d) => d.code)).toEqual(['S027']);
         expect(unused[0]!.hint).toStartWith('write `reads Looked` in the command whose issuer looks at it (or in the policy that looks at it)');
+    });
+
+    test('a command `by` an actor may be `on` the events the actor reacts to (ADR 0032 §14), and those are triggers (no S029)', () => {
+        const text = cancel(`  event ClockedIn "出勤した"
+  command Recheck {
+    by Customer
+    on ClockedIn
+    on SlotReleased
+    handledBy Shipment
+    emits ShipmentCancelled
+  }`);
+        expect(validate(text)).toEqual([]);
+        expect(validateStormings(ir(text)).filter((d) => d.code === 'S029')).toEqual([]);
+    });
+
+    test('S032 `on` on a command without `by`: a policy reacts, or add the actor', () => {
+        const text = cancel(`  command Recheck {
+    on SlotReleased
+    handledBy BikeAssignment
+    emits BikeReleased
+  }
+  policy Again {
+    on SlotReleased
+    issues Recheck
+  }
+  command Lonely {
+    on SlotReleased
+    handledBy Shipment
+    emits ShipmentCancelled
+  }`);
+        const ds = validate(text);
+        expect(summary(ds)).toEqual([
+            { code: 'S032', severity: 'error', line: lineOf(text, 'on SlotReleased', lineOf(text, 'command Recheck')) },
+            // without `by` and without a policy issuing it, it has no issuer either
+            { code: 'S024', severity: 'error', line: lineOf(text, 'command Lonely') },
+            { code: 'S032', severity: 'error', line: lineOf(text, 'on SlotReleased', lineOf(text, 'command Lonely')) },
+        ]);
+        expect(ds[0]!.message).toBe(
+            "Command 'Recheck' has `on SlotReleased` but no `by`; only the actor issuing a command reacts to an event this way, a rule reacting to it is a policy.",
+        );
+        expect(ds[0]!.hint).toBe("policy 'Again' issues it: write `on SlotReleased` in that policy and remove it here");
+        expect(ds[2]!.hint).toBe(
+            'if a person notices \'SlotReleased\' and issues it, add `by <actor>`; if it is a rule ("when SlotReleased, always …"), remove this `on` and put a policy between, `policy <Id> { on SlotReleased issues Lonely }`',
+        );
+    });
+
+    test('S033 `on` on a command `by` an external system: a policy issuing a command handled by it', () => {
+        const text = cancel(`  command Recheck {
+    by Customer
+    by PaymentGateway
+    on SlotReleased
+    handledBy Shipment
+    emits ShipmentCancelled
+  }`);
+        const ds = validate(text);
+        expect(summary(ds)).toEqual([{ code: 'S033', severity: 'error', line: lineOf(text, 'on SlotReleased', lineOf(text, 'command Recheck')) }]);
+        expect(ds[0]!.hint).toBe(
+            'an external system reacting to our event is a policy: remove this `on`, and write `policy <Id> { on SlotReleased issues <a command handledBy PaymentGateway> }` (the command addressed to it) instead',
+        );
+    });
+
+    test("a command's `on` names an event (S003), with the relation that says what was meant", () => {
+        const text = cancel(`  command Recheck {
+    by Customer
+    on ReleaseSlot
+    on DeliveryDetails
+    handledBy Shipment
+    emits ShipmentCancelled
+  }`);
+        const ds = validate(text);
+        expect(summary(ds)).toEqual([
+            { code: 'S003', severity: 'error', line: lineOf(text, 'on ReleaseSlot') },
+            { code: 'S003', severity: 'error', line: lineOf(text, 'on DeliveryDetails') },
+        ]);
+        expect(ds[0]!.hint).toBe("the actor reacts to an event, not to a command: write `on <an event 'ReleaseSlot' emits>`");
+        expect(ds[1]!.hint).toBe('what the issuer looks at to decide is `reads DeliveryDetails`; `on` names the event it reacts to');
     });
 
     test('diagnostics are sorted by file and position', () => {

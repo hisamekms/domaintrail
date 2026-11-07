@@ -530,7 +530,10 @@ Rules:
    Write its relations in Event Storming's grammar (\`dt guide dtes-quick\`): a command is issued \`by\` an actor or
    external system, who \`reads\` read models to decide, is \`handledBy\` an aggregate or external system and
    \`emits\` events; a policy is \`on\` events, \`reads\` the read models it decides with and \`issues\` one
-   command, which then has no \`by\` and no \`reads\` (\`reads\` is on the row of whoever decides). Never fill a relation you do not know by guessing (who issues or handles a command, what
+   command, which then has no \`by\` and no \`reads\` (\`reads\` is on the row of whoever decides). A rule you can
+   state in one sentence is a policy (\`by\` the actor when a person applies it by hand); a person who notices an
+   event and decides to issue a command is that command's \`on\` (with its \`by\` actor); unsure which, a hotspot.
+   Never fill a relation you do not know by guessing (who issues or handles a command, what
    a policy reacts to, where an element is used): put a \`hotspot\` \`on\` that element asking it — an open hotspot
    turns its incompleteness errors (S024, S008, S027) off; inventing an actor, aggregate or event to silence them is
    wrong.

@@ -161,6 +161,8 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
                 return relation('decides', e.merged?.map(commandOfKey));
             case 'on':
                 return relation('triggers');
+            case 'command-on':
+                return relation('notices');
             case 'issues':
                 return relation('policyIssues');
             case 'readmodel-from':
@@ -277,7 +279,7 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
 /**
  * The notes stuck on another one in a layered layout (`GraphNode.attachTo`; the grid places them in its cells itself): a
  * hotspot on the one sticky it is `on`, an actor or external system on the command it issues (its copy beside it, when
- * no read model leads to it). Only a note whose every edge joins it to that node, in the same container, is stuck on it.
+ * no read model and no event it reacts to leads to it). Only a note whose every edge joins it to that node, in the same container, is stuck on it.
  */
 function attach(graph: Graph): Graph {
     const byId = new Map(graph.nodes.map((n) => [n.id, n]));

@@ -508,6 +508,67 @@ describe('actors, external systems, read models and aggregates drawn once per us
         expect(semanticEdges(projectView(alone, DL)).filter((e) => e.startsWith('on:'))).toEqual(['on:t:e:E1->n:P']);
     });
 
+    test("a command's `on`: the actor issuing it reacts to the event, event → actor → command (ADR 0032 §14)", () => {
+        const s = storming(
+            ...events('ClockedIn', 'Checked', 'Other'),
+            el('actor', 'Staff'),
+            el('readmodel', 'Shifts'), // fed by no event drawn: the `on` line is the trigger (one fed by it: the next test)
+            el('aggregate', 'Alcohol'),
+            el('command', 'Import', ['by', 'Staff'], ['on', 'ClockedIn'], ['reads', 'Shifts'], ['handledBy', 'Alcohol'], ['emits', 'Checked']),
+            tl('T', 'ClockedIn', 'Checked'),
+            tl('U', 'Other'),
+        );
+        const lines = ['by:n:Staff@Import->n:Import', 'command-on:t:e:ClockedIn->n:Staff@Import', 'reads:n:Shifts@Import->n:Staff@Import'];
+        for (const options of [DL, { ...DL, timelineId: 'T' }]) {
+            const render = projectView(s, options);
+            expect(semanticEdges(render).filter((e) => /^(command-on|readmodel-from|reads|by):/.test(e))).toEqual(lines);
+            // the actor has a line of its own coming in: not stuck on its command
+            const graph = renderToGraph(render, s);
+            expect(graph.nodes.find((n) => n.id === 'n:Staff@Import')?.attachTo).toBeUndefined();
+            expect(graph.edges.find((e) => e.id.startsWith('command-on:'))).toMatchObject({ kind: 'esCausal', relation: { kind: 'notices' } });
+        }
+        // a timeline without the event: no line from it, the command and its actor not drawn
+        expect(semanticEdges(projectView(s, { ...DL, timelineId: 'U' }))).toEqual([]);
+        // Big Picture: no command, no actor, no line
+        expect(semanticEdges(projectView(s, BP))).toEqual([]);
+        expect(elementIds(projectView(s, BP))).toEqual([]);
+        // without `on`, the actor stays stuck on its command
+        const plain = storming(
+            ...events('ClockedIn', 'Checked'),
+            el('actor', 'Staff'),
+            el('aggregate', 'Alcohol'),
+            el('command', 'Import', ['by', 'Staff'], ['handledBy', 'Alcohol'], ['emits', 'Checked']),
+            tl('T', 'ClockedIn', 'Checked'),
+        );
+        expect(renderToGraph(projectView(plain, DL), plain).nodes.find((n) => n.id === 'n:Staff@Import')?.attachTo).toBe('n:Import');
+    });
+
+    test("a command's `on` through the read model its actor looks at is drawn once, as a policy's is (ADR 0032 §12, §14)", () => {
+        const s = storming(
+            ...events('E1', 'E2', 'E3'),
+            el('actor', 'Staff'),
+            el('readmodel', 'Rm', ['from', 'E1']),
+            el('aggregate', 'G'),
+            el('command', 'C', ['by', 'Staff'], ['on', 'E1'], ['on', 'E2'], ['reads', 'Rm'], ['handledBy', 'G'], ['emits', 'E3']),
+            tl('T', 'E1', 'E2', 'E3'),
+        );
+        for (const options of [DL, { ...DL, timelineId: 'T' }]) {
+            const render = projectView(s, options);
+            const at = (eventId: string): string => render.nodes.find((n) => n.type === 'event' && n.eventId === eventId)!.id;
+            const lines = semanticEdges(render);
+            // E1 feeds the read model the actor looks at: the path through it says the trigger
+            expect(lines).toEqual(
+                expect.arrayContaining([
+                    `readmodel-from:${at('E1')}->n:Rm@C`,
+                    'reads:n:Rm@C->n:Staff@C',
+                    'by:n:Staff@C->n:C',
+                    `command-on:${at('E2')}->n:Staff@C`,
+                ]),
+            );
+            expect(lines.filter((l) => l.startsWith('command-on:'))).toEqual([`command-on:${at('E2')}->n:Staff@C`]);
+        }
+    });
+
     test('an external system handles a command, and an event comes from one: a copy beside each note', () => {
         const s = storming(
             ...events('Asked', 'Done'),

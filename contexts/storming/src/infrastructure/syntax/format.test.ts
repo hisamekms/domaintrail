@@ -239,6 +239,12 @@ describe('formatStorming', () => {
         expect(formatStorming(out)).toBe(out);
     });
 
+    test("a command's `on` goes right after its `by` (ADR 0032 §14), repeated ones merged", () => {
+        expect(formatStorming('storming S { command C { emits F handledBy G on E reads R by A on D } }')).toBe(
+            lines('storming S {', '  command C {', '    by A', '    on E, D', '    reads R', '    handledBy G', '    emits F', '  }', '}'),
+        );
+    });
+
     test('repeated relations of one keyword are one list, unless a comment is on one of them', () => {
         expect(formatStorming('storming S { command C { by A by B emits E reads R emits F } }')).toBe(
             lines('storming S {', '  command C {', '    by A, B', '    reads R', '    emits E, F', '  }', '}'),

@@ -3,7 +3,8 @@ import type { SemanticEdge } from '@domaintrail/storming';
 /**
  * The semantic edges of a timeline filter (§9.3), and of a stage's view: each 1-hop path Event → Policy → Command → Event
  * whose two events are in view (`events`), each command that emits an event in view (its cause, without the policy that
- * issues it unless that is such a path), the issuers, read models and handler of those commands, the actor and read
+ * issues it unless that is such a path), the issuers, read models and handler of those commands, the events in view
+ * their issuers react to (a command's `on`, ADR 0032 §14: the path Event → Actor → Command → Event), the actor and read
  * models of the policies kept, the events in view
  * that feed those read models, the external systems the events in view come from, and the hotspots on an event in view
  * or on an element kept. No path is followed further, so a cycle is no different from any other path (R10, R16).
@@ -29,6 +30,7 @@ export function filterEdges(edges: readonly SemanticEdge[], events: ReadonlySet<
             (e.kind === 'emits' && events.has(e.targetId)) ||
             ((e.kind === 'by' || e.kind === 'reads') && (commands.has(e.targetId) || policies.has(e.targetId))) ||
             (e.kind === 'handledBy' && commands.has(e.sourceId)) ||
+            (e.kind === 'command-on' && commands.has(e.targetId) && events.has(e.sourceId)) ||
             (e.kind === 'event-from' && events.has(e.targetId));
         if (!keep) continue;
         kept.add(e);
