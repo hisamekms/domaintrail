@@ -114,7 +114,16 @@ export function buildScene(graph: LaidOutGraph, opts: RenderOptions): Scene {
             groups.push({
                 ...base,
                 type: 'group',
-                props: { w: l.width, h: l.height, kind: n.kind, label: textOf(n.label, opts), lines: n.lines.map((r) => textOf(r.key, opts)), scale, ...marks },
+                props: {
+                    w: l.width,
+                    h: l.height,
+                    kind: n.kind,
+                    label: textOf(n.label, opts),
+                    lines: n.lines.map((r) => textOf(r.key, opts)),
+                    scale,
+                    ...marks,
+                    ...(n.dimmed && { dimmed: true as const }),
+                },
             });
         } else {
             nodes.push({
@@ -126,6 +135,7 @@ export function buildScene(graph: LaidOutGraph, opts: RenderOptions): Scene {
                     ...marks,
                     badge: badgeText(marks.change, opts.lang),
                     ...(settled.has(n.id) && { settled: settled.get(n.id) }),
+                    ...(n.dimmed && { dimmed: true as const }),
                 },
             });
             internal.push(...internalRows(graph, n, l, opts, (id) => ({ change: change(id), diag: severity.get(id) ?? 'none' })));
@@ -164,7 +174,13 @@ export function buildScene(graph: LaidOutGraph, opts: RenderOptions): Scene {
         const owner = storming ? (elementOf.get(e.source) ?? e.source) : edgeOwner(e, structure);
         // an element's error is told by its mark and text (issue #33 §5); its lines keep their kind's colour
         const item = edgeItem(graph, e, opts, owner, toneOf(change(owner)));
-        if (item) edges.push(e.kind === 'esHotspot' && resolved.has(e.source) ? { ...item, props: { ...item.props, resolved: true } } : item);
+        if (!item) continue;
+        const props = {
+            ...item.props,
+            ...(e.kind === 'esHotspot' && resolved.has(e.source) && { resolved: true as const }),
+            ...(e.dimmed && { dimmed: true as const }),
+        };
+        edges.push({ ...item, props });
     }
 
     return { groups, nodes, ghosts, internal, edges };

@@ -127,6 +127,10 @@ export interface GraphNode {
      * left empty; the notes it is `on` (their IDs) show a resolved hotspot's check for it. Absent in a graph as laid out.
      */
     folded?: string[];
+    /**
+     * A note off the path of an exception's case (`caseInDrawing`): drawn faint. Absent in a graph as laid out.
+     */
+    dimmed?: true;
     width: number;
     height: number;
 }
@@ -161,6 +165,8 @@ export interface GraphEdge {
      * left to right), so that only the lines the placement cannot show are drawn (an exception's branch, a `then`).
      */
     hidden?: true;
+    /** A line off the path of an exception's case (`caseInDrawing`): drawn faint. Absent in a graph as laid out. */
+    dimmed?: true;
 }
 
 /**

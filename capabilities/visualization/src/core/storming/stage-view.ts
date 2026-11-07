@@ -271,7 +271,13 @@ export function projectStageView(storming: Storming, options: ViewOptions): Rend
         },
         nodes: [...nodes.values()].sort((a, b) => compare(a.id, b.id)),
         edges: [...edges.values()].sort((a, b) => compare(a.id, b.id)),
-        grid: { cells, frames, ...(looseRow !== undefined && { looseRow }), captions },
+        grid: {
+            cells,
+            frames,
+            ...(looseRow !== undefined && { looseRow }),
+            captions,
+            slots: Object.fromEntries([...chains.slots].filter(([, slot]) => cells[slot] !== undefined).sort(([a], [b]) => compare(a, b))),
+        },
     };
 }
 

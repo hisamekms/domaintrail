@@ -1798,6 +1798,11 @@ a.field-origin {
 .diagram-ghost .di {
     cursor: default;
 }
+/* off the path of an exception's case (caseInDrawing): faint, as the portable SVG draws it (DIMMED_OPACITY) */
+.react-flow__node.diagram-dimmed,
+.react-flow__edge.diagram-dimmed {
+    opacity: 0.28;
+}
 .de-hit {
     fill: none;
     stroke: transparent;

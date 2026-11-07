@@ -37,6 +37,8 @@ export interface NodeProps {
      * check in its corner for them. Absent without any.
      */
     settled?: SettledHotspot[];
+    /** Off the path of an exception's case (`GraphNode.dimmed`): drawn faint. */
+    dimmed?: true;
     /**
      * A changed note's label before the change, drawn small and struck through under it (the Live View's marks of a
      * turn's changes); absent elsewhere. The portable SVG does not draw it.
@@ -64,6 +66,8 @@ export interface GroupProps {
     scale: number;
     change: ChangeMark;
     diag: DiagMark;
+    /** Off the path of an exception's case (`GraphNode.dimmed`): drawn faint. */
+    dimmed?: true;
 }
 
 /** What a command that leaves a state as it is shows: a row in the state's compartment (a UML internal transition). */
@@ -98,6 +102,8 @@ export interface EdgeProps {
     tone: EdgeTone;
     /** A resolved hotspot's `on`: drawn quieter, as its note is. */
     resolved?: true;
+    /** Off the path of an exception's case (`GraphEdge.dimmed`): drawn faint. */
+    dimmed?: true;
     /** What a storming's line means (`GraphEdge.relation`), its names in the display mode; the Live View words it. */
     relation?: { kind: LineRelation; names: string[] };
 }

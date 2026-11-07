@@ -999,6 +999,12 @@ class Drawing {
  * the legend (if any) under it at the left, with a margin around all. Its size is in px of the page (1 px per layout
  * unit).
  */
+/** How faint an item off the path of an exception's case is drawn (`.diagram-dimmed` in styles.css). */
+export const DIMMED_OPACITY = 0.28;
+
+/** An item's drawing, faint when it is off the path of an exception's case. */
+const faint = (dimmed: true | undefined, svg: string): string => (dimmed && svg ? tag('g', { opacity: DIMMED_OPACITY }, svg) : svg);
+
 export function portableSvg(input: PortableSvgInput): PortableSvg {
     const { scene, bounds, palette, fonts, measure } = input;
     const paper = input.paper ?? PAPER;
@@ -1013,12 +1019,12 @@ export function portableSvg(input: PortableSvgInput): PortableSvg {
         top += heading.h + GAP;
     }
     const items = sceneItems(scene).map((item) => {
-        if (item.type === 'group') return draw.group(item.x, item.y, item.props);
+        if (item.type === 'group') return faint(item.props.dimmed, draw.group(item.x, item.y, item.props));
         // a hidden resolved hotspot: not drawn (its sticky's check stands for it)
         if (item.type === 'node' && item.on !== undefined) return '';
-        if (item.type === 'node') return draw.node(item.x, item.y, item.props);
+        if (item.type === 'node') return faint(item.props.dimmed, draw.node(item.x, item.y, item.props));
         if (item.type === 'internal') return draw.internal(item.x, item.y, item.props);
-        return draw.edge(item.x, item.y, item.props);
+        return faint(item.props.dimmed, draw.edge(item.x, item.y, item.props));
     });
     parts.push(tag('g', { transform: `translate(${num(MARGIN - bounds.x)},${num(top - bounds.y)})` }, items.join('')));
     top += bounds.h;
