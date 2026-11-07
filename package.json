@@ -76,7 +76,7 @@
     "langium": "4.4.0",
     "picomatch": "4.0.7",
     "vscode-languageserver": "10.1.2",
-    "ws": "8.22.0"
+    "ws": "8.22.1"
   },
   "peerDependencies": {
     "fast-check": "^4.0.0"

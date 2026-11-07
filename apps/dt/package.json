@@ -19,7 +19,7 @@
     "commander": "15.0.0",
     "langium": "4.4.0",
     "vscode-languageserver": "10.1.2",
-    "ws": "8.22.0"
+    "ws": "8.22.1"
   },
   "devDependencies": {
     "@types/ws": "8.18.2"
