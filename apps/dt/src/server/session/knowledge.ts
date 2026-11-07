@@ -13,6 +13,11 @@
 // | POST /api/session/knowledge/items/:id/restore | restore (元に戻す)            |
 // | POST /api/session/knowledge/items/:id/unlink | unlinkConflict `{ other }` (食い違いではない) |
 // | POST /api/session/knowledge/items/:id/images | putImage, then correct: the image at the end of the text (画像を付ける) |
+// | POST /api/session/knowledge/items/:id/retire | retire `{ reason?, replacedBy? }` (廃止する) |
+// | POST /api/session/knowledge/items/:id/unretire | unretire (廃止を取り消す, and 元に戻す) |
+// | GET  /api/session/knowledge/proposals        | proposals (廃止の候補 waiting for a person) |
+// | POST /api/session/knowledge/proposals/:id/approve | approveProposal (承認) |
+// | POST /api/session/knowledge/proposals/:id/dismiss | dismissProposal (却下) |
 // | GET  /api/session/knowledge/images/:id       | getImage                       |
 // | GET  /api/session/knowledge/hand-overs       | the presses of ホットスポットにする still waiting for their run, and those cleared lately with why |
 // | POST /api/session/knowledge/hand-overs       | a press `{ request, items }`, after its message was sent (ADR 0031, section 4) |
@@ -20,7 +25,21 @@
 // A change made here is told to every page (`changed`); a store that fails or cannot be reached is answered 502.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Knowledge, type ClearedHandOver, type KnowledgeStore, type PendingHandOver } from '@domaintrail/knowledge';
-import { IMAGE_MEDIA_TYPES, MAX_IMAGE_BYTES, WireError, itemContent, itemId, imageId, knowledgeQueryOf, unlinkBody } from '@domaintrail/knowledge/protocol';
+import {
+    IMAGE_MEDIA_TYPES,
+    MAX_IMAGE_BYTES,
+    WireError,
+    domainErrorBody,
+    domainErrorStatus,
+    itemContent,
+    itemId,
+    imageId,
+    knowledgeQueryOf,
+    proposalId,
+    retireBody,
+    unlinkBody,
+    type DomainError,
+} from '@domaintrail/knowledge/protocol';
 import type { Identified } from '../http/access.js';
 import { BodyError, mediaType, readJson, sendError, sendJson } from '../http/json.js';
 
@@ -119,6 +138,16 @@ export function createKnowledgeRoutes(deps: KnowledgeRoutesDeps): KnowledgeRoute
 
     const json = async (req: IncomingMessage): Promise<unknown> => readJson(req, MAX_BODY);
 
+    /** A domain's error of a store call, answered as the store's API answers it. */
+    const refused = (res: ServerResponse, e: DomainError): void => {
+        const { error } = domainErrorBody(e);
+        sendError(res, domainErrorStatus(e.type), error.type, error.type, {
+            ...(error.itemId !== undefined && { itemId: error.itemId }),
+            ...(error.proposalId !== undefined && { proposalId: error.proposalId }),
+            ...(error.reason !== undefined && { reason: error.reason }),
+        });
+    };
+
     /** A change made: answered, then told to every page. */
     const done = (res: ServerResponse, status: number, body: unknown): void => {
         sendJson(res, status, body);
@@ -166,6 +195,25 @@ export function createKnowledgeRoutes(deps: KnowledgeRoutesDeps): KnowledgeRoute
             const kept = await handOvers.press({ request, items, by: actorOf(who), participant: who.participant.id });
             return kept ? sendJson(res, 201, { request, items }) : sendError(res, 404, 'NoSuchMessage', 'No such message of yours in the session.');
         }
+        if (resource === 'proposals') {
+            if (rest.length === 1) {
+                if (method !== 'GET') return sendError(res, 405, 'MethodNotAllowed', 'Use GET.');
+                return sendJson(res, 200, { proposals: await store.proposals(project) });
+            }
+            if (raw === undefined || rest.length !== 3) return sendError(res, 404, 'NotFound', 'No such knowledge API.');
+            if (method !== 'POST') return sendError(res, 405, 'MethodNotAllowed', 'Use POST.');
+            const proposal = proposalId(raw, 'id');
+            await json(req);
+            if (action === 'approve') {
+                const r = await store.approveProposal(project, proposal, actorOf(who));
+                return r.ok ? done(res, 200, r.value) : refused(res, r.error);
+            }
+            if (action === 'dismiss') {
+                const r = await store.dismissProposal(project, proposal, actorOf(who));
+                return r.ok ? done(res, 200, r.value) : refused(res, r.error);
+            }
+            return sendError(res, 404, 'NotFound', 'No such knowledge API.');
+        }
         if (resource !== 'items' || raw === undefined || rest.length > 3) return sendError(res, 404, 'NotFound', 'No such knowledge API.');
         const id = itemId(raw, 'id');
         if (action === undefined) {
@@ -191,6 +239,15 @@ export function createKnowledgeRoutes(deps: KnowledgeRoutesDeps): KnowledgeRoute
                 await json(req);
                 const r = await store.restore(project, id, by);
                 return r.ok ? done(res, 200, r.value) : itemError(res, r.error);
+            }
+            case 'retire': {
+                const r = await store.retire(project, id, retireBody(await json(req), 'body'), by);
+                return r.ok ? done(res, 200, r.value) : refused(res, r.error);
+            }
+            case 'unretire': {
+                await json(req);
+                const r = await store.unretire(project, id, by);
+                return r.ok ? done(res, 200, r.value) : refused(res, r.error);
             }
             case 'unlink': {
                 const other = unlinkBody(await json(req), 'body');

@@ -209,6 +209,17 @@ describe("the workspace's stickies in the prompts", () => {
         expect<unknown>([data.targeted, data.mentioned]).toEqual([[{ ref: 'Ordering.Estimate', label: '見積もり' }], ['Ordering.Rush']]);
     });
 
+    test('the retired items: by key, title and reason only in the message; the instructions say to propose, never on the TO-BE for an AS-IS one', () => {
+        const prompt = buildExtractionPrompt(job(1, { retired: [{ key: 'r1', id: 'kn_0000000009', title: '見積もりは翌日に出す', reason: 'obsolete' }] }), 'n');
+        expect(prompt).toContain('"key": "r1"');
+        expect(prompt).toContain('"title": "見積もりは翌日に出す"');
+        expect(prompt).not.toContain('kn_0000000009');
+        const instructions = extractorInstructions();
+        expect(instructions).toContain('`retire`');
+        expect(instructions).toContain('`unretire`');
+        expect(instructions).toContain('never propose to retire one for that');
+    });
+
     test('the instructions: `about` by meaning among the given stickies, the targeted preferred, empty only when none fits', () => {
         const text = extractorInstructions();
         expect<unknown>(text).toContain('Choose them by meaning among the workspace');

@@ -106,5 +106,9 @@ context Knowledge "ナレッジ" {
     Person "人" {
       user: UserName "ユーザー"
     }
+    /// 見直し（廃止の候補を出す）。
+    Review "見直し" {
+      review: ReviewRef "見直し"
+    }
   }
 }

@@ -11,6 +11,12 @@
 // | POST /knowledge/:id/unlink         | unlinkConflict    | correct |
 // | POST /knowledge/:id/hand-over      | handOverToHotspot | correct |
 // | POST /knowledge/:id/images         | attachImage       | correct |
+// | POST /knowledge/:id/retire         | retire (廃止する)  | correct |
+// | POST /knowledge/:id/unretire       | unretire (廃止を取り消す) | correct |
+// | GET /proposals                     | proposals (廃止の候補) | read |
+// | POST /proposals                    | propose (the review's) | extract |
+// | POST /proposals/:id/approve        | approveProposal   | correct |
+// | POST /proposals/:id/dismiss        | dismissProposal   | correct |
 // | GET /counts?storming=              | counts            | read    |
 // | POST /extractions                  | applyExtraction   | extract |
 // | POST /images, GET /images/:id      | putImage, getImage | correct, read |
@@ -35,7 +41,13 @@ import {
     MAX_IMAGE_BYTES,
     MAX_PUBLISHED_BYTES,
     WireError,
+    domainErrorBody,
+    domainErrorStatus,
     extraction as extractionOf,
+    proposalId,
+    retireBody,
+    retirementCandidate,
+    type DomainError,
     imageId,
     itemContent,
     itemId,
@@ -73,6 +85,9 @@ const apiError = (status: number, type: ApiErrorType, message?: string): Respons
 /** The domain's error of a call about an item, as its answer. */
 const itemError = (e: Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone): Response =>
     e.type === 'KnowledgeItemNotFound' ? failure(404, e.type, 'no such item', e.itemId) : failure(410, e.type, 'the item is deleted', e.itemId);
+
+/** A domain's error (a store call's `Result`), as its answer. */
+const domainError = (e: DomainError): Response => json(domainErrorBody(e), domainErrorStatus(e.type));
 
 /** A percent-encoded part of a path or a header, decoded; a `WireError` when it is not one. */
 function decoded(part: string, at: string): string {
@@ -203,6 +218,18 @@ async function route(
                 const r = await store.handOverToHotspot(project, item, other, hotspot, actor());
                 return r.ok ? json({ items: r.value }) : itemError(r.error);
             }
+            if (sub === 'retire' && method === 'POST') {
+                const denied = allow('correct');
+                if (denied) return denied;
+                const r = await store.retire(project, item, retireBody(await body(), 'body'), actor());
+                return r.ok ? json(r.value) : domainError(r.error);
+            }
+            if (sub === 'unretire' && method === 'POST') {
+                const denied = allow('correct');
+                if (denied) return denied;
+                const r = await store.unretire(project, item, actor());
+                return r.ok ? json(r.value) : domainError(r.error);
+            }
             if (sub === 'images' && method === 'POST') {
                 const denied = allow('correct');
                 if (denied) return denied;
@@ -210,6 +237,32 @@ async function route(
                 if (image instanceof Response) return image;
                 const r = await store.attachImage(project, item, image, actor());
                 return r.ok ? json(r.value) : itemError(r.error);
+            }
+            break;
+        }
+        case 'proposals': {
+            if (id === undefined) {
+                if (method === 'GET') return allow('read') ?? json({ proposals: await store.proposals(project) });
+                if (method === 'POST') {
+                    const denied = allow('extract');
+                    if (denied) return denied;
+                    const r = await store.propose(project, retirementCandidate(await body(), 'body'));
+                    return r.ok ? json(r.value) : domainError(r.error);
+                }
+                break;
+            }
+            const proposal = proposalId(decoded(id, 'id'), 'id');
+            if (sub === 'approve' && method === 'POST') {
+                const denied = allow('correct');
+                if (denied) return denied;
+                const r = await store.approveProposal(project, proposal, actor());
+                return r.ok ? json(r.value) : domainError(r.error);
+            }
+            if (sub === 'dismiss' && method === 'POST') {
+                const denied = allow('correct');
+                if (denied) return denied;
+                const r = await store.dismissProposal(project, proposal, actor());
+                return r.ok ? json(r.value) : domainError(r.error);
             }
             break;
         }

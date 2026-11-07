@@ -272,3 +272,37 @@ describe('without a store', () => {
         });
     });
 });
+
+describe('a retired item (廃止)', () => {
+    test('left out by default; include_retired gives it, marked; without retired, never, and the option is not offered', async () => {
+        const id = made(Knowledge.makeKnowledgeItemId('kn_00000001'));
+        const retired = await store.retire(
+            project,
+            id,
+            { reason: 'replaced', replacedBy: made(Knowledge.makeKnowledgeItemId('kn_00000002')) },
+            made(Knowledge.makeUserName('a@example.com')),
+        );
+        expect(retired.ok).toBe(true);
+        try {
+            expect((await call('knowledge_for_element', { element: 'Ordering.ConfirmOrder' })).text).toContain('No knowledge about it yet.');
+            expect((await call('knowledge_search', {})).text).not.toContain('kn_00000001');
+            const included = await call('knowledge_for_element', { element: 'Ordering.ConfirmOrder', include_retired: true });
+            expect(included.text).toContain('## kn_00000001');
+            expect(included.text).toContain('RETIRED 2026-11-06 (replaced by a newer item: read kn_00000002 instead)');
+            expect((await call('knowledge_search', { include_retired: true })).text).toContain('RETIRED');
+            expect((await call('knowledge_get', { id: 'kn_00000001' })).text).toContain('RETIRED');
+            expect((await call('knowledge_search', { include_retired: 'yes' })).isError).toBe(true);
+
+            const agent = Object.fromEntries(
+                knowledgeTools({ access: { store, project }, stickies: async () => stickies, withoutRetired: true }).map((t) => [t.name, t]),
+            );
+            for (const t of Object.values(agent)) expect(Object.keys((t.inputSchema as { properties: object }).properties)).not.toContain('include_retired');
+            expect((await agent.knowledge_search.call({ include_retired: true })).isError).toBe(true);
+            const got = await agent.knowledge_get.call({ id: 'kn_00000001' });
+            expect(got).toMatchObject({ isError: true });
+            expect(got.text).not.toContain('確定は営業');
+        } finally {
+            await store.unretire(project, id, made(Knowledge.makeUserName('a@example.com')));
+        }
+    });
+});

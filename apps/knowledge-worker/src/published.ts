@@ -92,7 +92,7 @@ export async function missingStickies(db: D1Database, store: D1KnowledgeStore, p
         .prepare(
             `SELECT DISTINCT a.sticky AS sticky
              FROM item_about a JOIN items i ON i.project = a.project AND i.id = a.item
-             WHERE a.project = ?1 AND i.state = 'Live'
+             WHERE a.project = ?1 AND i.state = 'Live' AND i.retirement IS NULL
                AND EXISTS (SELECT 1 FROM published WHERE project = ?1)
                AND a.sticky NOT IN (SELECT s.value ->> 'ref' FROM published p, json_each(p.body, '$.stickies') s WHERE p.project = ?1)
              ORDER BY a.sticky`,

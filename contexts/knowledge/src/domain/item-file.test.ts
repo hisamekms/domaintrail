@@ -37,6 +37,29 @@ describe('the file of an item', () => {
         expect(read(text, 'kn_7c0f3a9d2e.md')).toEqual(item);
     });
 
+    test('a retired item: its retirement as a map, read back the same; without a reason too; a replacement only for replaced', () => {
+        const base = liveItem('kn_00000001', { createdIn: 's1' });
+        const retired: Knowledge.LiveKnowledgeItem = {
+            ...base,
+            retirement: {
+                reason: 'replaced',
+                replacedBy: itemId('kn_00000002'),
+                by: userName('access:alice@example.com'),
+                at: later,
+                proposal: 'rp_00000001' as Knowledge.RetirementProposalId,
+            },
+        };
+        const text = printItemFile(retired);
+        expect(text).toContain(
+            'retired:\n  reason: replaced\n  replacedBy: kn_00000002\n  by: "access:alice@example.com"\n  at: 2026-11-05T09:05:00.000Z\n  proposal: rp_00000001\n',
+        );
+        expect(read(text, 'kn_00000001.md')).toEqual(retired);
+        const bare: Knowledge.LiveKnowledgeItem = { ...base, retirement: { by: userName('guest:bob'), at } };
+        expect(read(printItemFile(bare))).toEqual(bare);
+        expect(problem(printItemFile(retired).replace('reason: replaced', 'reason: wrong')).message).toContain('replacedBy');
+        expect(problem(printItemFile(retired).replace('reason: replaced', 'reason: stale')).message).toContain('replaced, obsolete, wrong');
+    });
+
     test('a deleted item, a hand-written item without sources, and empty lists', () => {
         const deleted: Knowledge.DeletedKnowledgeItem = {
             ...liveItem('kn_00000001'),

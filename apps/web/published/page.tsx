@@ -13,7 +13,7 @@ import { I18nProvider, useLang, useT } from '../i18n';
 import { KnowledgeApiContext } from '../knowledge/api';
 import { marksOf, selectionOfSticky, stickyOfSelection, type StickyMark } from '../knowledge/model';
 import { ItemRow, KnowledgeList, KnowledgeMarks, KnowledgeNotice, StickyKnowledge } from '../knowledge/panel';
-import { KnowledgeContext, useDeletion, useListFilters, type KnowledgeView } from '../knowledge/useKnowledge';
+import { KnowledgeContext, useDeletion, useListFilters, useProposals, type KnowledgeView } from '../knowledge/useKnowledge';
 import { buildScene } from '../render';
 import { applyTheme } from '../theme';
 import { Tooltips } from '../tooltip';
@@ -279,11 +279,13 @@ function usePageKnowledge(input: {
     const [error, setError] = useState<string | undefined>();
     const [pending, setPending] = useState<string | undefined>();
     const changed = useCallback(() => setVersion((v) => v + 1), []);
-    const deletion = useDeletion(api ?? { delete: () => Promise.reject(new Error('no project')), restore: () => Promise.reject(new Error('no project')) }, {
+    const none = (): Promise<never> => Promise.reject(new Error('no project'));
+    const deletion = useDeletion(api ?? { delete: none, restore: none, retire: none, unretire: none, approve: none, dismiss: none }, {
         changed,
         deleted: () => setLitState([]),
         failed: (e) => setError(failure(e)),
     });
+    const proposals = useProposals(api, version);
 
     useEffect(() => {
         if (!api || !storming) return;
@@ -315,9 +317,8 @@ function usePageKnowledge(input: {
         marks,
         lit,
         setLit,
-        undoable: deletion.undoable,
-        remove: deletion.remove,
-        undo: deletion.undo,
+        ...deletion,
+        proposals,
         changed,
         label,
         isHotspot: (sticky) => hotspots.has(sticky),

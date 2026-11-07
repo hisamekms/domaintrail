@@ -8,7 +8,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { I18nProvider } from '../i18n';
 import { workerKnowledgeApi } from '../published/api';
 import { KnowledgeApiContext, sessionKnowledgeApi } from './api';
-import { ConflictBox, ExtractionSwitch, HotspotBox, ItemRow } from './panel';
+import { ConflictBox, ExtractionSwitch, HotspotBox, ItemRow, KnowledgeList, KnowledgeNotice } from './panel';
 import { NO_FILTERS, pairKey, type ClearedReason, type KnowledgeItem, type LabelChip } from './model';
 import { KnowledgeContext, type KnowledgeView } from './useKnowledge';
 
@@ -21,7 +21,12 @@ const view = (extraction: boolean | undefined): KnowledgeView =>
         setLit: () => undefined,
         undoable: undefined,
         remove: async () => undefined,
+        retire: async () => undefined,
+        unretire: async () => undefined,
         undo: async () => undefined,
+        proposals: [],
+        approve: async () => undefined,
+        dismiss: async () => undefined,
         changed: () => undefined,
         label: (s: string) => s,
         select: () => undefined,
@@ -260,5 +265,71 @@ describe("an item: its title and labels' line while closed, its text as Markdown
         );
         expect(h).toContain(`src="${workerKnowledgeApi('shop').imageUrl('img_0000abcd')}"`);
         expect(h).toContain('src="/v1/projects/shop/images/img_0000abcd"');
+    });
+});
+
+describe('retiring (廃止, ADR 0031 section 12)', () => {
+    const base = {
+        state: 'Live',
+        id: 'kn_00000001',
+        content: { title: '締めは前日17時', text: '本文', labels: { when: 'as_is', kind: 'rule', origin: 'said' }, about: ['Ordering.Placed'] },
+        sources: [],
+        version: 1,
+        conflictsWith: [],
+        createdAt: new Date('2026-11-05T09:00:00Z'),
+        updatedAt: new Date('2026-11-05T09:00:00Z'),
+    };
+    const retired = {
+        ...base,
+        retirement: { reason: 'replaced', replacedBy: 'kn_00000002', by: 'guest:Ada', at: new Date('2026-11-07T09:00:00Z') },
+    } as unknown as KnowledgeItem;
+
+    test('a retired item is faded, its reason first on its line; one not retired is neither', () => {
+        const html = render(true, <ItemRow item={retired} from={undefined} open={false} onToggle={() => undefined} />);
+        expect(html).toMatch(/<li class="knowledge-item retired">/);
+        expect(html).toContain('<span class="knowledge-retired-label">廃止: 置き換わった</span>');
+        const live = render(true, <ItemRow item={base as unknown as KnowledgeItem} from={undefined} open={false} onToggle={() => undefined} />);
+        expect(live).not.toContain('retired');
+    });
+
+    test('the list: 廃止の候補 n at its head with 承認 and 却下 each, and the filter 廃止も表示', () => {
+        const proposal = {
+            state: 'Open',
+            id: 'rp_00000001',
+            item: 'kn_00000001',
+            action: 'retire',
+            reason: 'obsolete',
+            explanation: 'もうやっていないと話に出た',
+            evidence: [{ kind: 'Said', session: 's2', message: 'm1', quote: 'もうやっていない' }],
+            proposedBy: { kind: 'Extraction', extraction: { session: 's2', number: 1 } },
+            proposedAt: new Date('2026-11-07T09:00:00Z'),
+        };
+        const html = renderToStaticMarkup(
+            <I18nProvider lang="ja">
+                <KnowledgeContext.Provider value={{ ...view(true), proposals: [proposal] as unknown as KnowledgeView['proposals'] }}>
+                    <KnowledgeList onClose={() => undefined} closeLabel="閉じる" />
+                </KnowledgeContext.Provider>
+            </I18nProvider>,
+        );
+        expect(html).toContain('<summary>廃止の候補 1</summary>');
+        expect(html).toContain('もうやっていないと話に出た');
+        expect(html).toContain('当てはまらなくなった');
+        expect(html).toMatch(/class="act act-decide"[^>]*>承認</);
+        expect(html).toMatch(/class="act act-danger"[^>]*>却下</);
+        expect(html).toMatch(/<button[^>]*class="knowledge-chip"[^>]*aria-pressed="false"[^>]*>廃止も表示</);
+        // no proposals, no section
+        expect(render(true, <KnowledgeList onClose={() => undefined} closeLabel="閉じる" />)).not.toContain('廃止の候補');
+    });
+
+    test('元に戻す after 廃止する, said as such', () => {
+        const html = renderToStaticMarkup(
+            <I18nProvider lang="ja">
+                <KnowledgeContext.Provider value={{ ...view(true), undoable: { id: 'kn_00000001', what: 'retired' } }}>
+                    <KnowledgeNotice />
+                </KnowledgeContext.Provider>
+            </I18nProvider>,
+        );
+        expect(html).toContain('廃止しました');
+        expect(html).toContain('元に戻す');
     });
 });

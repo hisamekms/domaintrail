@@ -1,5 +1,6 @@
 // The page's knowledge (ADR 0031, section 10): whether the session has a store, the marks of the storming shown, the
-// stickies an opened item lights up, deleting with 10 seconds to undo, and whether the session extracts (section 3).
+// stickies an opened item lights up, deleting and retiring with 10 seconds to undo, the proposals to retire waiting for
+// a person (section 12), and whether the session extracts (section 3).
 // What is shown is read again whenever dt says the knowledge changed (`knowledge.changed`, after an extraction or
 // anyone's change) and after this page's own; the extraction's state follows dt's `knowledge.extraction`. The conflicts
 // being made hotspots (ホットスポットにする pressed, its run not ended) are read with it. The ナレッジ list's filters are
@@ -11,7 +12,8 @@ import type { StormingView } from '@domaintrail/visualization/protocol';
 import type { ViewSocket } from '../app/useViewSocket';
 import { nameIn } from '../model-utils';
 import { SessionApiError } from '../session/api';
-import { knowledgeApi, type KnowledgeApi } from './api';
+import type { Knowledge } from '@domaintrail/knowledge';
+import { knowledgeApi, type KnowledgeApi, type RetireInput } from './api';
 import {
     clearedReasons,
     extractionOfMessage,
@@ -25,8 +27,14 @@ import {
     type StickyMark,
 } from './model';
 
-/** How long a deletion can be undone on the page (ADR 0031, section 7; the store keeps it longer). */
+/** How long a deletion or a retirement can be undone on the page (ADR 0031, sections 7 and 12; the store keeps a deletion longer). */
 export const UNDO_MS = 10_000;
+
+/** What 元に戻す undoes: the item deleted or retired last. */
+export interface Undoable {
+    readonly id: string;
+    readonly what: 'deleted' | 'retired';
+}
 
 export interface KnowledgeView {
     /** The session has a knowledge store (false until known, and without one). */
@@ -38,10 +46,19 @@ export interface KnowledgeView {
     /** The stickies the opened item is about, lit on the canvas. */
     readonly lit: readonly string[];
     readonly setLit: (stickies: readonly string[]) => void;
-    /** The item deleted last, while it can be undone. */
-    readonly undoable: string | undefined;
+    /** The item deleted or retired last, while it can be undone. */
+    readonly undoable: Undoable | undefined;
     remove(id: string): Promise<void>;
+    /** 廃止する, with 元に戻す for a while. */
+    retire(id: string, retirement: RetireInput): Promise<void>;
+    /** 廃止を取り消す. */
+    unretire(id: string): Promise<void>;
     undo(): Promise<void>;
+    /** The proposals to retire (or unretire) waiting for a person: the list's 廃止の候補, the count on its button. */
+    readonly proposals: readonly Knowledge.OpenRetirementProposal[];
+    /** 承認: an approved retirement can be undone for a while, as one by hand. */
+    approve(proposal: Knowledge.OpenRetirementProposal): Promise<void>;
+    dismiss(proposal: Knowledge.OpenRetirementProposal): Promise<void>;
     /** This page changed the knowledge. */
     changed(): void;
     /** A sticky's name as the canvas shows it. */
@@ -95,41 +112,74 @@ export interface SourceMessage {
 export const KnowledgeContext = createContext<KnowledgeView | undefined>(undefined);
 
 /**
- * Deleting with 元に戻す for `UNDO_MS` (ADR 0031, section 7), the same on a session's page and on the Worker's: the
- * item deleted last, while it can be undone; `deleted` after a deletion, `changed` after either, `failed` with why.
+ * Deleting and retiring with 元に戻す for `UNDO_MS` (ADR 0031, sections 7 and 12), the same on a session's page and on
+ * the Worker's, and the proposals to retire, approved or dismissed by the person: the item deleted or retired last,
+ * while it can be undone; `deleted` after a deletion, `changed` after any change, `failed` with why.
  */
 export function useDeletion(
-    api: Pick<KnowledgeApi, 'delete' | 'restore'>,
+    api: Pick<KnowledgeApi, 'delete' | 'restore' | 'retire' | 'unretire' | 'approve' | 'dismiss'>,
     events: { readonly changed: () => void; readonly deleted: () => void; readonly failed: (e: unknown) => void },
-): { readonly undoable: string | undefined; readonly remove: (id: string) => Promise<void>; readonly undo: () => Promise<void> } {
-    const [undoable, setUndoable] = useState<string | undefined>();
+): Pick<KnowledgeView, 'undoable' | 'remove' | 'retire' | 'unretire' | 'undo' | 'approve' | 'dismiss'> {
+    const [undoable, setUndoable] = useState<Undoable | undefined>();
     const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     useEffect(() => () => clearTimeout(timer.current), []);
-    const remove = async (id: string): Promise<void> => {
+    const offer = (id: string, what: Undoable['what']): void => {
+        clearTimeout(timer.current);
+        setUndoable({ id, what });
+        timer.current = setTimeout(() => setUndoable(undefined), UNDO_MS);
+    };
+    const attempt = async (f: () => Promise<void>): Promise<void> => {
         try {
-            await api.delete(id);
-            clearTimeout(timer.current);
-            setUndoable(id);
-            timer.current = setTimeout(() => setUndoable(undefined), UNDO_MS);
-            events.deleted();
+            await f();
             events.changed();
         } catch (e) {
             events.failed(e);
         }
     };
+    const remove = (id: string): Promise<void> =>
+        attempt(async () => {
+            await api.delete(id);
+            offer(id, 'deleted');
+            events.deleted();
+        });
+    const retire = (id: string, retirement: RetireInput): Promise<void> =>
+        attempt(async () => {
+            await api.retire(id, retirement);
+            offer(id, 'retired');
+        });
+    const unretire = (id: string): Promise<void> => attempt(async () => void (await api.unretire(id)));
+    const approve = (proposal: Knowledge.OpenRetirementProposal): Promise<void> =>
+        attempt(async () => {
+            await api.approve(proposal.id);
+            if (proposal.action === 'retire') offer(proposal.item, 'retired');
+        });
+    const dismiss = (proposal: Knowledge.OpenRetirementProposal): Promise<void> => attempt(async () => void (await api.dismiss(proposal.id)));
     const undo = async (): Promise<void> => {
         if (!undoable) return;
         clearTimeout(timer.current);
         setUndoable(undefined);
-        try {
-            await api.restore(undoable);
-            events.changed();
-        } catch (e) {
-            events.failed(e);
-        }
+        await attempt(async () => void (await (undoable.what === 'deleted' ? api.restore(undoable.id) : api.unretire(undoable.id))));
     };
-    return { undoable, remove, undo };
+    return { undoable, remove, retire, unretire, undo, approve, dismiss };
 }
+
+/** The proposals to retire waiting for a person, read again whenever the knowledge changed (`version`); none while `off`. */
+export function useProposals(api: Pick<KnowledgeApi, 'proposals'> | undefined, version: number, off = false): readonly Knowledge.OpenRetirementProposal[] {
+    const [proposals, setProposals] = useState<readonly Knowledge.OpenRetirementProposal[]>([]);
+    useEffect(() => {
+        if (!api || off) return;
+        let stale = false;
+        api.proposals().then(
+            (p) => !stale && setProposals(p),
+            () => !stale && setProposals([]),
+        );
+        return () => {
+            stale = true;
+        };
+    }, [api, version, off]);
+    return off ? [] : proposals;
+}
+
 export const useKnowledgeView = (): KnowledgeView | undefined => useContext(KnowledgeContext);
 
 export function useKnowledge(input: {
@@ -234,7 +284,8 @@ export function useKnowledge(input: {
 
     const failed = (e: unknown): void => setError(e instanceof Error ? e.message : String(e));
 
-    const { undoable, remove, undo } = useDeletion(knowledgeApi, { changed, deleted: () => setLitState([]), failed });
+    const changes = useDeletion(knowledgeApi, { changed, deleted: () => setLitState([]), failed });
+    const proposals = useProposals(knowledgeApi, version, !session || !available);
 
     const setExtraction = async (enabled: boolean): Promise<void> => {
         try {
@@ -267,9 +318,8 @@ export function useKnowledge(input: {
         marks,
         lit,
         setLit,
-        undoable,
-        remove,
-        undo,
+        ...changes,
+        proposals,
         changed,
         label,
         select: (sticky) => select(`es/${sticky.replace('.', '/')}`),

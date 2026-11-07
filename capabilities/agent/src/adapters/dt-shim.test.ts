@@ -235,14 +235,14 @@ describe("the agent's dt (agent.run.dt)", () => {
         expect(ran.args).toEqual(['-r', root, 'check']);
     });
 
-    test('the launcher of dt mcp: the pinned dt with -r (and -c) and mcp, from a private directory outside the workspace', async () => {
+    test('the launcher of dt mcp: the pinned dt with -r (and -c) and mcp --without-retired, from a private directory outside the workspace', async () => {
         expect(knowledgeMcpLauncher({ runtime: '/usr/bin/node', script: "/opt/it's/dt.js" }, '/w', '/tmp/p', '/c/team.jsonc', 'darwin')).toEqual({
             file: 'dt-mcp',
-            text: `#!/bin/sh\ncd '/tmp/p' || exit 1\nexec '/usr/bin/node' '/opt/it'\\''s/dt.js' '-r' '/w' '-c' '/c/team.jsonc' 'mcp'\n`,
+            text: `#!/bin/sh\ncd '/tmp/p' || exit 1\nexec '/usr/bin/node' '/opt/it'\\''s/dt.js' '-r' '/w' '-c' '/c/team.jsonc' 'mcp' '--without-retired'\n`,
         });
         expect(knowledgeMcpLauncher({ script: 'C:\\dt.exe' }, 'C:\\w', 'C:\\Temp\\p', undefined, 'win32')).toEqual({
             file: 'dt-mcp.cmd',
-            text: '@echo off\r\ncd /d "C:\\Temp\\p" || exit /b 1\r\n"C:\\dt.exe" "-r" "C:\\w" "mcp"\r\n',
+            text: '@echo off\r\ncd /d "C:\\Temp\\p" || exit /b 1\r\n"C:\\dt.exe" "-r" "C:\\w" "mcp" "--without-retired"\r\n',
         });
         expect(() => knowledgeMcpLauncher({ script: 'C:\\dt.exe' }, 'C:\\a&b', 'C:\\p', undefined, 'win32')).toThrow('cannot hold on Windows');
         expect(() => knowledgeMcpLauncher({ script: '/dt' }, '/w\nx', '/p')).toThrow('Not a command word');
@@ -264,7 +264,7 @@ describe("the agent's dt (agent.run.dt)", () => {
             expect(spawnSync(launcher.command, [], { cwd: root }).status).toBe(0);
             const ran = JSON.parse(await readFile(out, 'utf8')) as { cwd: string; args: string[] };
             expect(realpathSync(ran.cwd)).toBe(realpathSync(path.dirname(launcher.command)));
-            expect(ran.args).toEqual(['-r', root, '-c', path.join(tools, 'team.jsonc'), 'mcp']);
+            expect(ran.args).toEqual(['-r', root, '-c', path.join(tools, 'team.jsonc'), 'mcp', '--without-retired']);
         }
         await launcher.dispose();
         expect(await gone(path.dirname(launcher.command))).toBe(true);

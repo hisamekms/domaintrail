@@ -358,7 +358,12 @@ export function App() {
                             content: <ProblemsList items={diagnostics} onLocate={locate} onClose={() => setExplorerOpen(false)} />,
                         },
                         ...(knowledge.available && {
-                            knowledge: { count: 0, content: <KnowledgeList onClose={() => setExplorerOpen(false)} closeLabel={t.closeExplorer} /> },
+                            // the count of 廃止の候補 waiting for a person (ADR 0031, section 12)
+                            knowledge: {
+                                count: knowledge.proposals.length,
+                                badge: knowledge.proposals.length > 0 ? <span className="activity-badge">{knowledge.proposals.length}</span> : undefined,
+                                content: <KnowledgeList onClose={() => setExplorerOpen(false)} closeLabel={t.closeExplorer} />,
+                            },
                         }),
                         changes: {
                             count: changes,

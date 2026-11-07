@@ -1,6 +1,7 @@
 # ADR 0031: Knowledge — what a project learns in its sessions, kept apart from the model and read from the stickies
 
-- Status: accepted (2026-11-06), implemented per [the plan](../plans/knowledge.md). The decisions below were taken by
+- Status: accepted (2026-11-06), implemented per [the plan](../plans/knowledge.md); retiring (section 12) added
+  2026-11-07. The decisions below were taken by
   the maintainer in a design discussion and while trying the implementation (marked *Decided by the maintainer*);
   those marked *Proposed* fill in what was left open.
 - Date: 2026-11-05
@@ -220,6 +221,9 @@ merged.
 | `POST /knowledge/:id/images` | dt (a person) | attach an image to an item (section 10) |
 | `PUT /published/:storming` | `dt publish` | the published storming (section 11) |
 | `DELETE /published/:storming` | `dt publish --prune` | removes a storming no longer in the workspace (section 11) |
+| `POST /knowledge/:id/retire`, `POST /knowledge/:id/unretire` | dt (a person) | retire an item, or undo it (section 12) |
+| `GET /proposals`, `POST /proposals` | dt | the proposals to retire waiting for a person; a review's proposal (section 12) |
+| `POST /proposals/:id/approve`, `POST /proposals/:id/dismiss` | dt (a person) | decide a proposal (section 12) |
 
 - **Extractions are sent as operations, not as resulting states.** An extraction takes a while. If a person deletes or
   corrects an item meanwhile, an operation on it is dropped and the person's change stands. Sending states would bring a
@@ -263,6 +267,47 @@ merged.
   the Live View's canvas and panel in a read-only mode, shows the date of the drawing, and lists items about stickies
   missing from it apart.
 - The drawing is assumed to hold no personal data (stickies carry the business's words only).
+
+### 12. Retiring an item
+
+*Decided by the maintainer* (2026-11-07), after trying knowledge in sessions: findings get overturned — a decision
+replaces a rule, the way of working changes, an item turns out wrong — and an item that no longer holds misleads the
+AI that reads it, while deleting it loses the record of what was said, which section 1 keeps on purpose.
+
+- **Retiring is not deleting.** A retired item (廃止) keeps its text, sources and versions. Deleting (section 7) stays
+  what it is: for personal data, every version gone and the source messages redacted. The two are separate: a
+  retired item may still be deleted.
+- **A person retires.** Anyone who can open the project retires an item (廃止する) or undoes it (廃止を取り消す), in the
+  Live View and on the Worker's page, recorded in the audit log. Retiring shows 元に戻す for a few seconds, as deleting
+  does.
+- **Why, optionally.** One of three reasons, or none: replaced (置き換わった, with a link to the newer item),
+  no longer holds (当てはまらなくなった), wrong (誤り).
+- **The AI proposes, a person decides.** The extractor (an operation of its extraction) and the review of a run (a
+  call of the store) propose to retire an item; the proposals wait in the knowledge list (廃止の候補 n, the count also
+  on the list's icon), not in the chat, and anyone in the session approves or dismisses each one, recorded in the
+  audit log. A proposal of the AI always has its reason and its evidence: which decision, which change of a sticky,
+  which message.
+- **A dismissal is remembered.** The same reason about the same item is not proposed again unless the evidence changed
+  (a new decision, another sticky, another message).
+- **Kept from the AI.** The answerer, the runner and the review are never given a retired item. Only the extractor is
+  told of the retired items, by title and reason, so as not to make them again; it does not rest anything on their
+  text. When it finds the topic of a retired item brought up anew, it proposes to undo the retirement instead of
+  making the item again.
+- **AS-IS stays AS-IS.** An AS-IS item is not proposed for retirement because the TO-BE stickies differ: the
+  extractor's and the review's instructions say so, and the store refuses a proposal whose evidence is only the TO-BE
+  (changes of stickies, TO-BE decisions).
+- **Seen on request.** The knowledge list hides the retired items by default; 廃止も表示 shows them, faded, with their
+  reason and a link to what replaced them. They give a sticky no dot (its link to the sticky stays, as history). The
+  Worker's page hides them too, and `dt mcp`'s tools leave them out unless asked (`include_retired`).
+- **Both stores.** The `files` store keeps the retirement in the item's front matter and the proposals in
+  `knowledge/proposals/`; the Worker adds them with a migration, which users apply when they deploy the new template.
+
+*Proposed*, the details: the retirement is a field of the item, not a state (a retired item is read, corrected and
+deleted like a live one); a proposal is an aggregate of its own (open, approved, dismissed), its ID derived from what
+it proposes (SHA-256), so that a retry is answered with the proposal made the first time and another proposal never
+overwrites it. The audit record of a proposal holds its action and ID only: its explanation and evidence may quote
+someone, and the sweep removes them with the item. An extraction's operation on a retired item is dropped (the
+extractor was not given it).
 
 ## Alternatives considered
 

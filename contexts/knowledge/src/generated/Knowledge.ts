@@ -802,6 +802,15 @@ export type Actor =
           readonly kind: 'Person';
           /** ユーザー */
           readonly user: UserName;
+      }
+    /**
+     * 見直し
+     * 見直し（廃止の候補を出す）。
+     */
+    | {
+          readonly kind: 'Review';
+          /** 見直し */
+          readonly review: ReviewRef;
       };
 
 /**
@@ -817,6 +826,10 @@ export function equalActor(a: Actor, b: Actor): boolean {
     if (a.kind === 'Person') {
         const y = b as Extract<Actor, { readonly kind: 'Person' }>;
         return a.user === y.user;
+    }
+    if (a.kind === 'Review') {
+        const y = b as Extract<Actor, { readonly kind: 'Review' }>;
+        return a.review === y.review;
     }
     return true;
 }
@@ -896,6 +909,36 @@ export type Operation =
           readonly base: ItemVersion;
           /** 理由 */
           readonly reason?: Reason;
+      }
+    /**
+     * 廃止の候補を出す
+     * 廃止の候補を出す（人が承認する）。理由と根拠を必ず持つ。
+     */
+    | {
+          readonly kind: 'ProposeRetire';
+          /** ナレッジ */
+          readonly item: KnowledgeItemId;
+          /** 廃止の理由 */
+          readonly retirementReason: RetirementReason;
+          /** 置き換え先 */
+          readonly replacedBy?: KnowledgeItemId;
+          /** 根拠 */
+          readonly evidence: readonly [Evidence, ...Evidence[]];
+          /** 説明 */
+          readonly reason: Reason;
+      }
+    /**
+     * 廃止を取り消す候補を出す
+     * 廃止したナレッジと同じ話題が新しく話された: 作り直さずに、廃止を取り消す候補を出す。
+     */
+    | {
+          readonly kind: 'ProposeUnretire';
+          /** ナレッジ */
+          readonly item: KnowledgeItemId;
+          /** 根拠 */
+          readonly evidence: readonly [Evidence, ...Evidence[]];
+          /** 説明 */
+          readonly reason: Reason;
       };
 
 /**
@@ -920,13 +963,21 @@ export function equalOperation(a: Operation, b: Operation): boolean {
         const y = b as Extract<Operation, { readonly kind: 'Conflict' }>;
         return a.id === y.id && equalItemContent(a.content, y.content) && sameList(a.sources, y.sources, equalSource) && a.item === y.item && a.base === y.base && sameOptional(a.reason, y.reason, ($12: Reason, $13: Reason) => $12 === $13);
     }
+    if (a.kind === 'ProposeRetire') {
+        const y = b as Extract<Operation, { readonly kind: 'ProposeRetire' }>;
+        return a.item === y.item && a.retirementReason === y.retirementReason && sameOptional(a.replacedBy, y.replacedBy, ($14: KnowledgeItemId, $15: KnowledgeItemId) => $14 === $15) && sameList(a.evidence, y.evidence, equalEvidence) && a.reason === y.reason;
+    }
+    if (a.kind === 'ProposeUnretire') {
+        const y = b as Extract<Operation, { readonly kind: 'ProposeUnretire' }>;
+        return a.item === y.item && sameList(a.evidence, y.evidence, equalEvidence) && a.reason === y.reason;
+    }
     return true;
 }
 
 /**
  * 抽出の操作
  * 1回の抽出の操作。ストアは1つの取引で当て、`by`（セッションと抽出の番号）を冪等キーにする。
- * @see contexts/knowledge/model/extraction.dt:41
+ * @see contexts/knowledge/model/extraction.dt:55
  */
 export interface Extraction {
     /** 抽出 */
@@ -937,7 +988,7 @@ export interface Extraction {
 
 /**
  * Whether two Extraction values are equal: by all their fields (ADR 0016).
- * @see contexts/knowledge/model/extraction.dt:41
+ * @see contexts/knowledge/model/extraction.dt:55
  */
 export function equalExtraction(a: Extraction, b: Extraction): boolean {
     return equalExtractionRef(a.by, b.by) && sameList(a.operations, b.operations, equalOperation);
@@ -946,7 +997,7 @@ export function equalExtraction(a: Extraction, b: Extraction): boolean {
 /**
  * 監査の操作
  * 監査のログの操作の名前。
- * @see contexts/knowledge/model/extraction.dt:47
+ * @see contexts/knowledge/model/extraction.dt:61
  */
 export type AuditOperation =
     | 'add' // 足した
@@ -958,12 +1009,16 @@ export type AuditOperation =
     | 'delete' // 消した
     | 'restore' // 元に戻した
     | 'unlinkConflict' // 食い違いを外した
-    | 'handOverToHotspot'; // ホットスポットに引き継いだ
+    | 'handOverToHotspot' // ホットスポットに引き継いだ
+    | 'retire' // 廃止した
+    | 'unretire' // 廃止を取り消した
+    | 'propose' // 廃止の候補を出した
+    | 'dismiss'; // 廃止の候補を却下した
 
 /**
  * 監査の記録
  * 監査のログの1行: だれが・どのナレッジに・何を・なぜ。消したナレッジの理由は掃除が消す（発言を引くことがあるため）。
- * @see contexts/knowledge/model/extraction.dt:61
+ * @see contexts/knowledge/model/extraction.dt:79
  */
 export interface AuditEntry {
     /** ナレッジ */
@@ -982,16 +1037,16 @@ export interface AuditEntry {
 
 /**
  * Whether two AuditEntry values are equal: by all their fields (ADR 0016).
- * @see contexts/knowledge/model/extraction.dt:61
+ * @see contexts/knowledge/model/extraction.dt:79
  */
 export function equalAuditEntry(a: AuditEntry, b: AuditEntry): boolean {
-    return a.item === b.item && a.version === b.version && a.operation === b.operation && equalActor(a.actor, b.actor) && sameOptional(a.reason, b.reason, ($14: Reason, $15: Reason) => $14 === $15) && a.at.getTime() === b.at.getTime();
+    return a.item === b.item && a.version === b.version && a.operation === b.operation && equalActor(a.actor, b.actor) && sameOptional(a.reason, b.reason, ($16: Reason, $17: Reason) => $16 === $17) && a.at.getTime() === b.at.getTime();
 }
 
 /**
  * メッセージの ID
  * 出典のメッセージ1つの ID。
- * @see contexts/knowledge/model/extraction.dt:71
+ * @see contexts/knowledge/model/extraction.dt:89
  */
 export interface MessageKey {
     /** セッション */
@@ -1002,7 +1057,7 @@ export interface MessageKey {
 
 /**
  * Whether two MessageKey values are equal: by all their fields (ADR 0016).
- * @see contexts/knowledge/model/extraction.dt:71
+ * @see contexts/knowledge/model/extraction.dt:89
  */
 export function equalMessageKey(a: MessageKey, b: MessageKey): boolean {
     return a.session === b.session && a.message === b.message;
@@ -1012,7 +1067,7 @@ export function equalMessageKey(a: MessageKey, b: MessageKey): boolean {
  * 墨消し
  * 墨消しのログの1行: 掃除が消したナレッジと、その出典のメッセージ。ID だけなので、ずっと残す。プロジェクトのどの dt も
  * 読んだところから先を読み、自分のセッションのデータベースにあるメッセージを墨消しする。
- * @see contexts/knowledge/model/extraction.dt:78
+ * @see contexts/knowledge/model/extraction.dt:96
  */
 export interface Redaction {
     /** ナレッジ */
@@ -1023,7 +1078,7 @@ export interface Redaction {
 
 /**
  * Whether two Redaction values are equal: by all their fields (ADR 0016).
- * @see contexts/knowledge/model/extraction.dt:78
+ * @see contexts/knowledge/model/extraction.dt:96
  */
 export function equalRedaction(a: Redaction, b: Redaction): boolean {
     return a.item === b.item && sameList(a.messages, b.messages, equalMessageKey);
@@ -1054,11 +1109,13 @@ export interface KnowledgeItemCommon {
     readonly createdAt: Timestamp;
     /** 変えた日時 */
     readonly updatedAt: Timestamp;
+    /** 廃止 — 廃止したとき。中身・出典・版はそのまま残る（消すのとは別）。 */
+    readonly retirement?: Retirement;
 }
 
 /**
  * 見える
- * @see contexts/knowledge/model/item.dt:24
+ * @see contexts/knowledge/model/item.dt:26
  */
 export interface LiveKnowledgeItem extends KnowledgeItemCommon {
     readonly state: 'Live';
@@ -1067,7 +1124,7 @@ export interface LiveKnowledgeItem extends KnowledgeItemCommon {
 /**
  * 消した
  * 消したナレッジは、すぐにだれからも見えなくなる。ストアの掃除が、元に戻せる間を過ぎてから、版と画像をすべて消す。
- * @see contexts/knowledge/model/item.dt:26
+ * @see contexts/knowledge/model/item.dt:28
  */
 export interface DeletedKnowledgeItem extends KnowledgeItemCommon {
     readonly state: 'Deleted';
@@ -1091,7 +1148,7 @@ export type KnowledgeItem = LiveKnowledgeItem | DeletedKnowledgeItem;
  * @see contexts/knowledge/model/item.dt:5
  */
 export const KnowledgeItemShape: Shape = {
-    fields: ['id', 'content', 'sources', 'version', 'conflictsWith', 'createdIn', 'createdAt', 'updatedAt'],
+    fields: ['id', 'content', 'sources', 'version', 'conflictsWith', 'createdIn', 'createdAt', 'updatedAt', 'retirement'],
     states: { Live: [], Deleted: ['deletedBy', 'deletedAt'] },
 };
 
@@ -1102,15 +1159,15 @@ export const KnowledgeItemShape: Shape = {
 export function checkKnowledgeItemCommon(knowledgeItem: KnowledgeItemCommon): readonly ('distinctSources' | 'distinctConflicts' | 'notConflictingItself' | 'conflictsSourced')[] {
     const violated: ('distinctSources' | 'distinctConflicts' | 'notConflictingItself' | 'conflictsSourced')[] = [];
     if (!(distinct(knowledgeItem.sources, (s, s2) => s.session === s2.session && s.message === s2.message))) violated.push('distinctSources');
-    if (!(distinct(knowledgeItem.conflictsWith, ($16: KnowledgeItemId, $17: KnowledgeItemId) => $16 === $17))) violated.push('distinctConflicts');
-    if (!(!(knowledgeItem.conflictsWith.some(($18) => $18 === knowledgeItem.id)))) violated.push('notConflictingItself');
+    if (!(distinct(knowledgeItem.conflictsWith, ($18: KnowledgeItemId, $19: KnowledgeItemId) => $18 === $19))) violated.push('distinctConflicts');
+    if (!(!(knowledgeItem.conflictsWith.some(($20) => $20 === knowledgeItem.id)))) violated.push('notConflictingItself');
     if (!((knowledgeItem.conflictsWith.length === 0) || (knowledgeItem.sources.length >= 1))) violated.push('conflictsSourced');
     return violated;
 }
 
 /**
  * The invariants of KnowledgeItem in state Live (the aggregate's, by `checkKnowledgeItemCommon`, and the state's) that an aggregate violates, in declaration order.
- * @see contexts/knowledge/model/item.dt:24
+ * @see contexts/knowledge/model/item.dt:26
  */
 export function checkLiveKnowledgeItem(knowledgeItem: LiveKnowledgeItem): readonly ('distinctSources' | 'distinctConflicts' | 'notConflictingItself' | 'conflictsSourced')[] {
     return checkKnowledgeItemCommon(knowledgeItem);
@@ -1118,7 +1175,7 @@ export function checkLiveKnowledgeItem(knowledgeItem: LiveKnowledgeItem): readon
 
 /**
  * The invariants of KnowledgeItem in state Deleted (the aggregate's, by `checkKnowledgeItemCommon`, and the state's) that an aggregate violates, in declaration order.
- * @see contexts/knowledge/model/item.dt:26
+ * @see contexts/knowledge/model/item.dt:28
  */
 export function checkDeletedKnowledgeItem(knowledgeItem: DeletedKnowledgeItem): readonly ('distinctSources' | 'distinctConflicts' | 'notConflictingItself' | 'conflictsSourced')[] {
     return checkKnowledgeItemCommon(knowledgeItem);
@@ -1137,7 +1194,7 @@ export function checkKnowledgeItem(knowledgeItem: KnowledgeItem): readonly ('dis
 
 /**
  * The parameters of KnowledgeItem.add, by name.
- * @see contexts/knowledge/model/item.dt:32
+ * @see contexts/knowledge/model/item.dt:34
  */
 export interface AddKnowledgeItemParams {
     /** ナレッジID */
@@ -1159,7 +1216,7 @@ export interface AddKnowledgeItemParams {
  * 抽出が新しい発見を足す。
  * @requires distinctSources (出典のメッセージは1回) else DuplicateSource: unique(sources, s => s.session, s.message)
  * @emits KnowledgeItemAdded — exactly once when the command succeeds
- * @see contexts/knowledge/model/item.dt:32
+ * @see contexts/knowledge/model/item.dt:34
  */
 export type AddKnowledgeItem = (
     params: AddKnowledgeItemParams,
@@ -1176,20 +1233,20 @@ export type AddKnowledgeItem = (
  * @requires distinctSources (出典のメッセージは1回) else DuplicateSource: unique(sources, s => s.session, s.message)
  * new -> Live — set: every field
  * @emits KnowledgeItemAdded — exactly once when the command succeeds
- * @see contexts/knowledge/model/item.dt:32
+ * @see contexts/knowledge/model/item.dt:34
  */
 export type AddKnowledgeItemDecision = (
     params: AddKnowledgeItemParams,
 ) => Result<{
     readonly Live: {
-        readonly set: { readonly id: KnowledgeItemId; readonly content: ItemContent; readonly sources: readonly Source[]; readonly version: ItemVersion; readonly conflictsWith: readonly KnowledgeItemId[]; readonly createdIn: SessionRef | undefined; readonly createdAt: Timestamp; readonly updatedAt: Timestamp };
+        readonly set: { readonly id: KnowledgeItemId; readonly content: ItemContent; readonly sources: readonly Source[]; readonly version: ItemVersion; readonly conflictsWith: readonly KnowledgeItemId[]; readonly createdIn: SessionRef | undefined; readonly createdAt: Timestamp; readonly updatedAt: Timestamp; readonly retirement: Retirement | undefined };
         readonly events: { readonly KnowledgeItemAdded: KnowledgeItemAdded };
     };
 }, DuplicateSource>;
 
 /**
  * The first requirement of KnowledgeItem.add that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/knowledge/model/item.dt:32
+ * @see contexts/knowledge/model/item.dt:34
  */
 export function checkAddKnowledgeItemRequires(params: AddKnowledgeItemParams): 'distinctSources' | undefined {
     if (!(distinct(params.sources, (s, s2) => s.session === s2.session && s.message === s2.message))) return 'distinctSources';
@@ -1198,7 +1255,7 @@ export function checkAddKnowledgeItemRequires(params: AddKnowledgeItemParams): '
 
 /**
  * The parameters of KnowledgeItem.addConflicting, by name.
- * @see contexts/knowledge/model/item.dt:40
+ * @see contexts/knowledge/model/item.dt:42
  */
 export interface AddConflictingKnowledgeItemParams {
     /** ナレッジID */
@@ -1223,7 +1280,7 @@ export interface AddConflictingKnowledgeItemParams {
  * @requires distinctSources (出典のメッセージは1回) else DuplicateSource: unique(sources, s => s.session, s.message)
  * @requires notItself (自分とは食い違わない) else ConflictWithItself: other != id
  * @emits KnowledgeItemAdded — exactly once when the command succeeds
- * @see contexts/knowledge/model/item.dt:40
+ * @see contexts/knowledge/model/item.dt:42
  */
 export type AddConflictingKnowledgeItem = (
     params: AddConflictingKnowledgeItemParams,
@@ -1241,20 +1298,20 @@ export type AddConflictingKnowledgeItem = (
  * @requires notItself (自分とは食い違わない) else ConflictWithItself: other != id
  * new -> Live — set: every field
  * @emits KnowledgeItemAdded — exactly once when the command succeeds
- * @see contexts/knowledge/model/item.dt:40
+ * @see contexts/knowledge/model/item.dt:42
  */
 export type AddConflictingKnowledgeItemDecision = (
     params: AddConflictingKnowledgeItemParams,
 ) => Result<{
     readonly Live: {
-        readonly set: { readonly id: KnowledgeItemId; readonly content: ItemContent; readonly sources: readonly Source[]; readonly version: ItemVersion; readonly conflictsWith: readonly KnowledgeItemId[]; readonly createdIn: SessionRef | undefined; readonly createdAt: Timestamp; readonly updatedAt: Timestamp };
+        readonly set: { readonly id: KnowledgeItemId; readonly content: ItemContent; readonly sources: readonly Source[]; readonly version: ItemVersion; readonly conflictsWith: readonly KnowledgeItemId[]; readonly createdIn: SessionRef | undefined; readonly createdAt: Timestamp; readonly updatedAt: Timestamp; readonly retirement: Retirement | undefined };
         readonly events: { readonly KnowledgeItemAdded: KnowledgeItemAdded };
     };
 }, DuplicateSource | ConflictWithItself>;
 
 /**
  * The first requirement of KnowledgeItem.addConflicting that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/knowledge/model/item.dt:40
+ * @see contexts/knowledge/model/item.dt:42
  */
 export function checkAddConflictingKnowledgeItemRequires(params: AddConflictingKnowledgeItemParams): 'distinctSources' | 'notItself' | undefined {
     if (!(distinct(params.sources, (s, s2) => s.session === s2.session && s.message === s2.message))) return 'distinctSources';
@@ -1264,7 +1321,7 @@ export function checkAddConflictingKnowledgeItemRequires(params: AddConflictingK
 
 /**
  * The parameters of KnowledgeItem.addSource, by name.
- * @see contexts/knowledge/model/item.dt:49
+ * @see contexts/knowledge/model/item.dt:51
  */
 export interface AddSourceKnowledgeItemParams {
     /** 出典 */
@@ -1287,7 +1344,7 @@ export interface AddSourceKnowledgeItemParams {
  * @requires newSource (まだない出典) else DuplicateSource: all(sources, s => s.session != source.session or s.message != source.message)
  * @changes content, sources, updatedAt
  * @emits KnowledgeSourceAdded — exactly once when the command succeeds
- * @see contexts/knowledge/model/item.dt:49
+ * @see contexts/knowledge/model/item.dt:51
  */
 export type AddSourceKnowledgeItem = (
     knowledgeItem: LiveKnowledgeItem,
@@ -1305,8 +1362,8 @@ export type AddSourceKnowledgeItem = (
  * @requires current (抽出が見た版のまま) else StaleOperation: base == version
  * @requires newSource (まだない出典) else DuplicateSource: all(sources, s => s.session != source.session or s.message != source.message)
  * @changes content, sources, updatedAt
- * Live -> Live — set: content, sources, updatedAt; carried over: id, version, conflictsWith, createdIn, createdAt
- * @see contexts/knowledge/model/item.dt:49
+ * Live -> Live — set: content, sources, updatedAt; carried over: id, version, conflictsWith, createdIn, createdAt, retirement
+ * @see contexts/knowledge/model/item.dt:51
  */
 export type AddSourceKnowledgeItemDecision = {
     /** @emits KnowledgeSourceAdded — exactly once when the command succeeds */
@@ -1320,7 +1377,7 @@ export type AddSourceKnowledgeItemDecision = {
 
 /**
  * The first requirement of KnowledgeItem.addSource that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/knowledge/model/item.dt:49
+ * @see contexts/knowledge/model/item.dt:51
  */
 export function checkAddSourceKnowledgeItemRequires(knowledgeItem: LiveKnowledgeItem, params: AddSourceKnowledgeItemParams): 'current' | 'newSource' | undefined {
     if (!(params.base === knowledgeItem.version)) return 'current';
@@ -1330,7 +1387,7 @@ export function checkAddSourceKnowledgeItemRequires(knowledgeItem: LiveKnowledge
 
 /**
  * The parameters of KnowledgeItem.update, by name.
- * @see contexts/knowledge/model/item.dt:61
+ * @see contexts/knowledge/model/item.dt:63
  */
 export interface UpdateKnowledgeItemParams {
     /** 中身 */
@@ -1356,7 +1413,7 @@ export interface UpdateKnowledgeItemParams {
  * @changes content, sources, version, updatedAt
  * @emits KnowledgeItemRewritten? — at most once when the command succeeds
  * @emits KnowledgeItemRevised? — at most once when the command succeeds
- * @see contexts/knowledge/model/item.dt:61
+ * @see contexts/knowledge/model/item.dt:63
  */
 export type UpdateKnowledgeItem = (
     knowledgeItem: LiveKnowledgeItem,
@@ -1373,8 +1430,8 @@ export type UpdateKnowledgeItem = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires current (抽出が見た版のまま) else StaleOperation: base == version
  * @changes content, sources, version, updatedAt
- * Live -> Live — set: content, sources, version, updatedAt; carried over: id, conflictsWith, createdIn, createdAt
- * @see contexts/knowledge/model/item.dt:61
+ * Live -> Live — set: content, sources, version, updatedAt; carried over: id, conflictsWith, createdIn, createdAt, retirement
+ * @see contexts/knowledge/model/item.dt:63
  */
 export type UpdateKnowledgeItemDecision = {
     /**
@@ -1391,7 +1448,7 @@ export type UpdateKnowledgeItemDecision = {
 
 /**
  * The first requirement of KnowledgeItem.update that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/knowledge/model/item.dt:61
+ * @see contexts/knowledge/model/item.dt:63
  */
 export function checkUpdateKnowledgeItemRequires(knowledgeItem: LiveKnowledgeItem, params: UpdateKnowledgeItemParams): 'current' | undefined {
     if (!(params.base === knowledgeItem.version)) return 'current';
@@ -1400,7 +1457,7 @@ export function checkUpdateKnowledgeItemRequires(knowledgeItem: LiveKnowledgeIte
 
 /**
  * The parameters of KnowledgeItem.linkConflict, by name.
- * @see contexts/knowledge/model/item.dt:69
+ * @see contexts/knowledge/model/item.dt:71
  */
 export interface LinkConflictKnowledgeItemParams {
     /** 食い違うナレッジ */
@@ -1423,7 +1480,7 @@ export interface LinkConflictKnowledgeItemParams {
  * @requires sourced (出典がある) else ConflictWithoutSource: count(sources) >= 1
  * @changes conflictsWith, updatedAt
  * @emits KnowledgeConflictLinked — exactly once when the command succeeds
- * @see contexts/knowledge/model/item.dt:69
+ * @see contexts/knowledge/model/item.dt:71
  */
 export type LinkConflictKnowledgeItem = (
     knowledgeItem: LiveKnowledgeItem,
@@ -1442,8 +1499,8 @@ export type LinkConflictKnowledgeItem = (
  * @requires notItself (自分とは食い違わない) else ConflictWithItself: other != id
  * @requires sourced (出典がある) else ConflictWithoutSource: count(sources) >= 1
  * @changes conflictsWith, updatedAt
- * Live -> Live — set: conflictsWith, updatedAt; carried over: id, content, sources, version, createdIn, createdAt
- * @see contexts/knowledge/model/item.dt:69
+ * Live -> Live — set: conflictsWith, updatedAt; carried over: id, content, sources, version, createdIn, createdAt, retirement
+ * @see contexts/knowledge/model/item.dt:71
  */
 export type LinkConflictKnowledgeItemDecision = {
     /** @emits KnowledgeConflictLinked — exactly once when the command succeeds */
@@ -1457,7 +1514,7 @@ export type LinkConflictKnowledgeItemDecision = {
 
 /**
  * The first requirement of KnowledgeItem.linkConflict that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/knowledge/model/item.dt:69
+ * @see contexts/knowledge/model/item.dt:71
  */
 export function checkLinkConflictKnowledgeItemRequires(knowledgeItem: LiveKnowledgeItem, params: LinkConflictKnowledgeItemParams): 'current' | 'notItself' | 'sourced' | undefined {
     if (!(params.base === knowledgeItem.version)) return 'current';
@@ -1468,7 +1525,7 @@ export function checkLinkConflictKnowledgeItemRequires(knowledgeItem: LiveKnowle
 
 /**
  * The parameters of KnowledgeItem.unlinkConflict, by name.
- * @see contexts/knowledge/model/item.dt:79
+ * @see contexts/knowledge/model/item.dt:81
  */
 export interface UnlinkConflictKnowledgeItemParams {
     /** 食い違うナレッジ */
@@ -1486,7 +1543,7 @@ export interface UnlinkConflictKnowledgeItemParams {
  * @requires notItself (自分とは食い違わない) else ConflictWithItself: other != id
  * @changes conflictsWith, updatedAt
  * @emits KnowledgeConflictUnlinked — exactly once when the command succeeds
- * @see contexts/knowledge/model/item.dt:79
+ * @see contexts/knowledge/model/item.dt:81
  */
 export type UnlinkConflictKnowledgeItem = (
     knowledgeItem: LiveKnowledgeItem,
@@ -1503,8 +1560,8 @@ export type UnlinkConflictKnowledgeItem = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires notItself (自分とは食い違わない) else ConflictWithItself: other != id
  * @changes conflictsWith, updatedAt
- * Live -> Live — set: conflictsWith, updatedAt; carried over: id, content, sources, version, createdIn, createdAt
- * @see contexts/knowledge/model/item.dt:79
+ * Live -> Live — set: conflictsWith, updatedAt; carried over: id, content, sources, version, createdIn, createdAt, retirement
+ * @see contexts/knowledge/model/item.dt:81
  */
 export type UnlinkConflictKnowledgeItemDecision = {
     /** @emits KnowledgeConflictUnlinked — exactly once when the command succeeds */
@@ -1518,7 +1575,7 @@ export type UnlinkConflictKnowledgeItemDecision = {
 
 /**
  * The first requirement of KnowledgeItem.unlinkConflict that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/knowledge/model/item.dt:79
+ * @see contexts/knowledge/model/item.dt:81
  */
 export function checkUnlinkConflictKnowledgeItemRequires(knowledgeItem: LiveKnowledgeItem, params: UnlinkConflictKnowledgeItemParams): 'notItself' | undefined {
     if (!(!(params.other === knowledgeItem.id))) return 'notItself';
@@ -1527,7 +1584,7 @@ export function checkUnlinkConflictKnowledgeItemRequires(knowledgeItem: LiveKnow
 
 /**
  * The parameters of KnowledgeItem.handOverToHotspot, by name.
- * @see contexts/knowledge/model/item.dt:88
+ * @see contexts/knowledge/model/item.dt:90
  */
 export interface HandOverToHotspotKnowledgeItemParams {
     /** ホットスポット */
@@ -1548,7 +1605,7 @@ export interface HandOverToHotspotKnowledgeItemParams {
  * @requires notItself (自分とは食い違わない) else ConflictWithItself: other != id
  * @changes content, conflictsWith, updatedAt
  * @emits KnowledgeHandedOverToHotspot — exactly once when the command succeeds
- * @see contexts/knowledge/model/item.dt:88
+ * @see contexts/knowledge/model/item.dt:90
  */
 export type HandOverToHotspotKnowledgeItem = (
     knowledgeItem: LiveKnowledgeItem,
@@ -1565,8 +1622,8 @@ export type HandOverToHotspotKnowledgeItem = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires notItself (自分とは食い違わない) else ConflictWithItself: other != id
  * @changes content, conflictsWith, updatedAt
- * Live -> Live — set: content, conflictsWith, updatedAt; carried over: id, sources, version, createdIn, createdAt
- * @see contexts/knowledge/model/item.dt:88
+ * Live -> Live — set: content, conflictsWith, updatedAt; carried over: id, sources, version, createdIn, createdAt, retirement
+ * @see contexts/knowledge/model/item.dt:90
  */
 export type HandOverToHotspotKnowledgeItemDecision = {
     /** @emits KnowledgeHandedOverToHotspot — exactly once when the command succeeds */
@@ -1580,7 +1637,7 @@ export type HandOverToHotspotKnowledgeItemDecision = {
 
 /**
  * The first requirement of KnowledgeItem.handOverToHotspot that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/knowledge/model/item.dt:88
+ * @see contexts/knowledge/model/item.dt:90
  */
 export function checkHandOverToHotspotKnowledgeItemRequires(knowledgeItem: LiveKnowledgeItem, params: HandOverToHotspotKnowledgeItemParams): 'notItself' | undefined {
     if (!(!(params.other === knowledgeItem.id))) return 'notItself';
@@ -1589,7 +1646,7 @@ export function checkHandOverToHotspotKnowledgeItemRequires(knowledgeItem: LiveK
 
 /**
  * The parameters of KnowledgeItem.correct, by name.
- * @see contexts/knowledge/model/item.dt:95
+ * @see contexts/knowledge/model/item.dt:97
  */
 export interface CorrectKnowledgeItemParams {
     /** 中身 */
@@ -1605,7 +1662,7 @@ export interface CorrectKnowledgeItemParams {
  * 人が本文・ラベル・付箋を直す。いつも新しい版になる。
  * @changes content, version, updatedAt
  * @emits KnowledgeItemCorrected — exactly once when the command succeeds
- * @see contexts/knowledge/model/item.dt:95
+ * @see contexts/knowledge/model/item.dt:97
  */
 export type CorrectKnowledgeItem = (
     knowledgeItem: LiveKnowledgeItem,
@@ -1621,8 +1678,8 @@ export type CorrectKnowledgeItem = (
  * KnowledgeItem.correct, decided per source state; implement it with `decide(KnowledgeItemShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @changes content, version, updatedAt
- * Live -> Live — set: content, version, updatedAt; carried over: id, sources, conflictsWith, createdIn, createdAt
- * @see contexts/knowledge/model/item.dt:95
+ * Live -> Live — set: content, version, updatedAt; carried over: id, sources, conflictsWith, createdIn, createdAt, retirement
+ * @see contexts/knowledge/model/item.dt:97
  */
 export type CorrectKnowledgeItemDecision = {
     /** @emits KnowledgeItemCorrected — exactly once when the command succeeds */
@@ -1635,8 +1692,134 @@ export type CorrectKnowledgeItemDecision = {
 };
 
 /**
+ * The parameters of KnowledgeItem.retire, by name.
+ * @see contexts/knowledge/model/item.dt:103
+ */
+export interface RetireKnowledgeItemParams {
+    /** 廃止の理由 */
+    readonly reason?: RetirementReason;
+    /** 置き換え先 */
+    readonly replacedBy?: KnowledgeItemId;
+    /** 候補 */
+    readonly proposal?: RetirementProposalId;
+    /** ユーザー */
+    readonly by: UserName;
+    readonly at: Timestamp;
+}
+
+/**
+ * KnowledgeItem.retire (Live -> Live)
+ * 廃止する
+ * 人が廃止する（理由は選ばなくてもよい）。中身・出典・版は変えない。候補を承認したときは、その候補を持つ。
+ * @requires notRetired (廃止していない) else AlreadyRetired: not exists(retirement)
+ * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else ReplacementWithoutReason: exists(replacedBy) implies (exists(reason) and reason == RetirementReason.replaced)
+ * @requires notReplacedByItself (自分には置き換わらない) else ReplacedByItself: exists(replacedBy) implies replacedBy != id
+ * @changes retirement, updatedAt
+ * @emits KnowledgeItemRetired — exactly once when the command succeeds
+ * @see contexts/knowledge/model/item.dt:103
+ */
+export type RetireKnowledgeItem = (
+    knowledgeItem: LiveKnowledgeItem,
+    params: RetireKnowledgeItemParams,
+) => Result<{
+    readonly Live: {
+        readonly aggregate: LiveKnowledgeItem;
+        readonly events: { readonly KnowledgeItemRetired: KnowledgeItemRetired };
+    };
+}, AlreadyRetired | ReplacementWithoutReason | ReplacedByItself>;
+
+/**
+ * KnowledgeItem.retire, decided per source state; implement it with `decide(KnowledgeItemShape, …)` from the runtime.
+ * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
+ * @requires notRetired (廃止していない) else AlreadyRetired: not exists(retirement)
+ * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else ReplacementWithoutReason: exists(replacedBy) implies (exists(reason) and reason == RetirementReason.replaced)
+ * @requires notReplacedByItself (自分には置き換わらない) else ReplacedByItself: exists(replacedBy) implies replacedBy != id
+ * @changes retirement, updatedAt
+ * Live -> Live — set: updatedAt, retirement; carried over: id, content, sources, version, conflictsWith, createdIn, createdAt
+ * @see contexts/knowledge/model/item.dt:103
+ */
+export type RetireKnowledgeItemDecision = {
+    /** @emits KnowledgeItemRetired — exactly once when the command succeeds */
+    readonly Live: (knowledgeItem: LiveKnowledgeItem, params: RetireKnowledgeItemParams) => Result<{
+        readonly Live: {
+            readonly set: { readonly updatedAt: Timestamp; readonly retirement: Retirement | undefined };
+            readonly events: { readonly KnowledgeItemRetired: KnowledgeItemRetired };
+        };
+    }, AlreadyRetired | ReplacementWithoutReason | ReplacedByItself>;
+};
+
+/**
+ * The first requirement of KnowledgeItem.retire that does not hold, in declaration order; `undefined` when all hold.
+ * @see contexts/knowledge/model/item.dt:103
+ */
+export function checkRetireKnowledgeItemRequires(knowledgeItem: LiveKnowledgeItem, params: RetireKnowledgeItemParams): 'notRetired' | 'replacementWhenReplaced' | 'notReplacedByItself' | undefined {
+    if (!(!(knowledgeItem.retirement !== undefined))) return 'notRetired';
+    if (params.replacedBy !== undefined && !((params.reason !== undefined) && (params.reason === 'replaced'))) return 'replacementWhenReplaced';
+    if (params.replacedBy !== undefined && !(!(params.replacedBy === knowledgeItem.id))) return 'notReplacedByItself';
+    return undefined;
+}
+
+/**
+ * The parameters of KnowledgeItem.unretire, by name.
+ * @see contexts/knowledge/model/item.dt:116
+ */
+export interface UnretireKnowledgeItemParams {
+    /** 候補 */
+    readonly proposal?: RetirementProposalId;
+    /** ユーザー */
+    readonly by: UserName;
+    readonly at: Timestamp;
+}
+
+/**
+ * KnowledgeItem.unretire (Live -> Live)
+ * 廃止を取り消す
+ * 人が廃止を取り消す。
+ * @requires retired (廃止している) else NotRetired: exists(retirement)
+ * @changes retirement, updatedAt
+ * @emits KnowledgeItemUnretired — exactly once when the command succeeds
+ * @see contexts/knowledge/model/item.dt:116
+ */
+export type UnretireKnowledgeItem = (
+    knowledgeItem: LiveKnowledgeItem,
+    params: UnretireKnowledgeItemParams,
+) => Result<{
+    readonly Live: {
+        readonly aggregate: LiveKnowledgeItem;
+        readonly events: { readonly KnowledgeItemUnretired: KnowledgeItemUnretired };
+    };
+}, NotRetired>;
+
+/**
+ * KnowledgeItem.unretire, decided per source state; implement it with `decide(KnowledgeItemShape, …)` from the runtime.
+ * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
+ * @requires retired (廃止している) else NotRetired: exists(retirement)
+ * @changes retirement, updatedAt
+ * Live -> Live — set: updatedAt, retirement; carried over: id, content, sources, version, conflictsWith, createdIn, createdAt
+ * @see contexts/knowledge/model/item.dt:116
+ */
+export type UnretireKnowledgeItemDecision = {
+    /** @emits KnowledgeItemUnretired — exactly once when the command succeeds */
+    readonly Live: (knowledgeItem: LiveKnowledgeItem, params: UnretireKnowledgeItemParams) => Result<{
+        readonly Live: {
+            readonly set: { readonly updatedAt: Timestamp; readonly retirement: Retirement | undefined };
+            readonly events: { readonly KnowledgeItemUnretired: KnowledgeItemUnretired };
+        };
+    }, NotRetired>;
+};
+
+/**
+ * The first requirement of KnowledgeItem.unretire that does not hold, in declaration order; `undefined` when all hold.
+ * @see contexts/knowledge/model/item.dt:116
+ */
+export function checkUnretireKnowledgeItemRequires(knowledgeItem: LiveKnowledgeItem, _params: UnretireKnowledgeItemParams): 'retired' | undefined {
+    if (!(knowledgeItem.retirement !== undefined)) return 'retired';
+    return undefined;
+}
+
+/**
  * The parameters of KnowledgeItem.delete, by name.
- * @see contexts/knowledge/model/item.dt:101
+ * @see contexts/knowledge/model/item.dt:123
  */
 export interface DeleteKnowledgeItemParams {
     /** ユーザー */
@@ -1650,7 +1833,7 @@ export interface DeleteKnowledgeItemParams {
  * 人が消す。
  * @changes none — the command changes no common field
  * @emits KnowledgeItemDeleted — exactly once when the command succeeds
- * @see contexts/knowledge/model/item.dt:101
+ * @see contexts/knowledge/model/item.dt:123
  */
 export type DeleteKnowledgeItem = (
     knowledgeItem: LiveKnowledgeItem,
@@ -1666,8 +1849,8 @@ export type DeleteKnowledgeItem = (
  * KnowledgeItem.delete, decided per source state; implement it with `decide(KnowledgeItemShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @changes none — the command changes no common field
- * Live -> Deleted — set: deletedBy (new in Deleted), deletedAt (new in Deleted); carried over: id, content, sources, version, conflictsWith, createdIn, createdAt, updatedAt
- * @see contexts/knowledge/model/item.dt:101
+ * Live -> Deleted — set: deletedBy (new in Deleted), deletedAt (new in Deleted); carried over: id, content, sources, version, conflictsWith, createdIn, createdAt, updatedAt, retirement
+ * @see contexts/knowledge/model/item.dt:123
  */
 export type DeleteKnowledgeItemDecision = {
     /** @emits KnowledgeItemDeleted — exactly once when the command succeeds */
@@ -1681,7 +1864,7 @@ export type DeleteKnowledgeItemDecision = {
 
 /**
  * The parameters of KnowledgeItem.restore, by name.
- * @see contexts/knowledge/model/item.dt:106
+ * @see contexts/knowledge/model/item.dt:128
  */
 export interface RestoreKnowledgeItemParams {
     /** ユーザー */
@@ -1695,7 +1878,7 @@ export interface RestoreKnowledgeItemParams {
  * 人が、掃除の前に消したのを取り消す（元に戻す）。
  * @changes none — the command changes no common field
  * @emits KnowledgeItemRestored — exactly once when the command succeeds
- * @see contexts/knowledge/model/item.dt:106
+ * @see contexts/knowledge/model/item.dt:128
  */
 export type RestoreKnowledgeItem = (
     knowledgeItem: DeletedKnowledgeItem,
@@ -1711,8 +1894,8 @@ export type RestoreKnowledgeItem = (
  * KnowledgeItem.restore, decided per source state; implement it with `decide(KnowledgeItemShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @changes none — the command changes no common field
- * Deleted -> Live — set: nothing; carried over: id, content, sources, version, conflictsWith, createdIn, createdAt, updatedAt; dropped: deletedBy, deletedAt
- * @see contexts/knowledge/model/item.dt:106
+ * Deleted -> Live — set: nothing; carried over: id, content, sources, version, conflictsWith, createdIn, createdAt, updatedAt, retirement; dropped: deletedBy, deletedAt
+ * @see contexts/knowledge/model/item.dt:128
  */
 export type RestoreKnowledgeItemDecision = {
     /** @emits KnowledgeItemRestored — exactly once when the command succeeds */
@@ -1746,6 +1929,10 @@ export interface KnowledgeItemCommands {
     readonly handOverToHotspot: HandOverToHotspotKnowledgeItem;
     /** 直す */
     readonly correct: CorrectKnowledgeItem;
+    /** 廃止する */
+    readonly retire: RetireKnowledgeItem;
+    /** 廃止を取り消す */
+    readonly unretire: UnretireKnowledgeItem;
     /** 消す */
     readonly delete: DeleteKnowledgeItem;
     /** 元に戻す */
@@ -1756,12 +1943,12 @@ export interface KnowledgeItemCommands {
  * Events that the commands of KnowledgeItem may emit.
  * @see contexts/knowledge/model/item.dt:5
  */
-export type KnowledgeItemEvent = KnowledgeItemAdded | KnowledgeSourceAdded | KnowledgeItemRewritten | KnowledgeItemRevised | KnowledgeConflictLinked | KnowledgeConflictUnlinked | KnowledgeHandedOverToHotspot | KnowledgeItemCorrected | KnowledgeItemDeleted | KnowledgeItemRestored;
+export type KnowledgeItemEvent = KnowledgeItemAdded | KnowledgeSourceAdded | KnowledgeItemRewritten | KnowledgeItemRevised | KnowledgeConflictLinked | KnowledgeConflictUnlinked | KnowledgeHandedOverToHotspot | KnowledgeItemCorrected | KnowledgeItemRetired | KnowledgeItemUnretired | KnowledgeItemDeleted | KnowledgeItemRestored;
 
 /**
  * ナレッジを足した
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/knowledge/model/item.dt:114
+ * @see contexts/knowledge/model/item.dt:136
  */
 export interface KnowledgeItemAdded {
     readonly type: 'KnowledgeItemAdded';
@@ -1781,7 +1968,7 @@ export interface KnowledgeItemAdded {
 /**
  * 出典を足した
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/knowledge/model/item.dt:123
+ * @see contexts/knowledge/model/item.dt:145
  */
 export interface KnowledgeSourceAdded {
     readonly type: 'KnowledgeSourceAdded';
@@ -1802,7 +1989,7 @@ export interface KnowledgeSourceAdded {
  * 書き換えた
  * このセッションで作ったナレッジを、版を作らずに書き換えた。
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/knowledge/model/item.dt:133
+ * @see contexts/knowledge/model/item.dt:155
  */
 export interface KnowledgeItemRewritten {
     readonly type: 'KnowledgeItemRewritten';
@@ -1821,7 +2008,7 @@ export interface KnowledgeItemRewritten {
  * 新しい版にした
  * 新しい版を作った。
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/knowledge/model/item.dt:142
+ * @see contexts/knowledge/model/item.dt:164
  */
 export interface KnowledgeItemRevised {
     readonly type: 'KnowledgeItemRevised';
@@ -1839,7 +2026,7 @@ export interface KnowledgeItemRevised {
 /**
  * 食い違いをつないだ
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/knowledge/model/item.dt:150
+ * @see contexts/knowledge/model/item.dt:172
  */
 export interface KnowledgeConflictLinked {
     readonly type: 'KnowledgeConflictLinked';
@@ -1859,7 +2046,7 @@ export interface KnowledgeConflictLinked {
 /**
  * 食い違いを外した
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/knowledge/model/item.dt:159
+ * @see contexts/knowledge/model/item.dt:181
  */
 export interface KnowledgeConflictUnlinked {
     readonly type: 'KnowledgeConflictUnlinked';
@@ -1877,7 +2064,7 @@ export interface KnowledgeConflictUnlinked {
 /**
  * ホットスポットに引き継いだ
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/knowledge/model/item.dt:167
+ * @see contexts/knowledge/model/item.dt:189
  */
 export interface KnowledgeHandedOverToHotspot {
     readonly type: 'KnowledgeHandedOverToHotspot';
@@ -1897,7 +2084,7 @@ export interface KnowledgeHandedOverToHotspot {
 /**
  * 直した
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/knowledge/model/item.dt:176
+ * @see contexts/knowledge/model/item.dt:198
  */
 export interface KnowledgeItemCorrected {
     readonly type: 'KnowledgeItemCorrected';
@@ -1913,7 +2100,7 @@ export interface KnowledgeItemCorrected {
 /**
  * 消した
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/knowledge/model/item.dt:183
+ * @see contexts/knowledge/model/item.dt:205
  */
 export interface KnowledgeItemDeleted {
     readonly type: 'KnowledgeItemDeleted';
@@ -1929,7 +2116,7 @@ export interface KnowledgeItemDeleted {
 /**
  * 元に戻した
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/knowledge/model/item.dt:190
+ * @see contexts/knowledge/model/item.dt:212
  */
 export interface KnowledgeItemRestored {
     readonly type: 'KnowledgeItemRestored';
@@ -1943,9 +2130,49 @@ export interface KnowledgeItemRestored {
 }
 
 /**
+ * 廃止した
+ * @persistent Persisted: storing this event is part of its contract.
+ * @see contexts/knowledge/model/item.dt:219
+ */
+export interface KnowledgeItemRetired {
+    readonly type: 'KnowledgeItemRetired';
+    /** ナレッジID */
+    readonly itemId: KnowledgeItemId;
+    /** 版 */
+    readonly version: ItemVersion;
+    /** 廃止の理由 */
+    readonly reason?: RetirementReason;
+    /** 置き換え先 */
+    readonly replacedBy?: KnowledgeItemId;
+    /** 候補 */
+    readonly proposal?: RetirementProposalId;
+    /** ユーザー */
+    readonly by: UserName;
+    readonly at: Timestamp;
+}
+
+/**
+ * 廃止を取り消した
+ * @persistent Persisted: storing this event is part of its contract.
+ * @see contexts/knowledge/model/item.dt:229
+ */
+export interface KnowledgeItemUnretired {
+    readonly type: 'KnowledgeItemUnretired';
+    /** ナレッジID */
+    readonly itemId: KnowledgeItemId;
+    /** 版 */
+    readonly version: ItemVersion;
+    /** 候補 */
+    readonly proposal?: RetirementProposalId;
+    /** ユーザー */
+    readonly by: UserName;
+    readonly at: Timestamp;
+}
+
+/**
  * 古い版への操作
  * 抽出が見たあとに、ナレッジが変わった（人が直した、ほかの抽出が新しい版にした）。人の変更を残し、操作は捨てる。
- * @see contexts/knowledge/model/item.dt:198
+ * @see contexts/knowledge/model/item.dt:238
  */
 export interface StaleOperation {
     readonly type: 'StaleOperation';
@@ -1954,7 +2181,7 @@ export interface StaleOperation {
 /**
  * 同じ出典
  * 同じメッセージを2回出典にした。
- * @see contexts/knowledge/model/item.dt:201
+ * @see contexts/knowledge/model/item.dt:241
  */
 export interface DuplicateSource {
     readonly type: 'DuplicateSource';
@@ -1963,7 +2190,7 @@ export interface DuplicateSource {
 /**
  * 出典のない食い違い
  * 食い違いの片方に出典がない。
- * @see contexts/knowledge/model/item.dt:204
+ * @see contexts/knowledge/model/item.dt:244
  */
 export interface ConflictWithoutSource {
     readonly type: 'ConflictWithoutSource';
@@ -1972,7 +2199,7 @@ export interface ConflictWithoutSource {
 /**
  * 自分との食い違い
  * 自分と食い違うとした。
- * @see contexts/knowledge/model/item.dt:207
+ * @see contexts/knowledge/model/item.dt:247
  */
 export interface ConflictWithItself {
     readonly type: 'ConflictWithItself';
@@ -1981,7 +2208,7 @@ export interface ConflictWithItself {
 /**
  * ないナレッジ
  * ナレッジがない（ID が違う、掃除が消した）。
- * @see contexts/knowledge/model/item.dt:210
+ * @see contexts/knowledge/model/item.dt:250
  */
 export interface KnowledgeItemNotFound {
     readonly type: 'KnowledgeItemNotFound';
@@ -1992,7 +2219,7 @@ export interface KnowledgeItemNotFound {
 /**
  * あるナレッジ
  * 抽出が足そうとした ID のナレッジがもうある。
- * @see contexts/knowledge/model/item.dt:215
+ * @see contexts/knowledge/model/item.dt:255
  */
 export interface KnowledgeItemExists {
     readonly type: 'KnowledgeItemExists';
@@ -2001,9 +2228,56 @@ export interface KnowledgeItemExists {
 }
 
 /**
+ * 廃止したナレッジの廃止
+ * ナレッジはもう廃止してある。
+ * @see contexts/knowledge/model/item.dt:260
+ */
+export interface AlreadyRetired {
+    readonly type: 'AlreadyRetired';
+}
+
+/**
+ * 廃止していないナレッジの取り消し
+ * ナレッジは廃止していない。
+ * @see contexts/knowledge/model/item.dt:263
+ */
+export interface NotRetired {
+    readonly type: 'NotRetired';
+}
+
+/**
+ * 理由のない置き換え先
+ * 置き換え先を、理由「置き換わった」なしに書いた。
+ * @see contexts/knowledge/model/item.dt:266
+ */
+export interface ReplacementWithoutReason {
+    readonly type: 'ReplacementWithoutReason';
+}
+
+/**
+ * 自分への置き換え
+ * 自分に置き換わるとした。
+ * @see contexts/knowledge/model/item.dt:269
+ */
+export interface ReplacedByItself {
+    readonly type: 'ReplacedByItself';
+}
+
+/**
+ * 廃止したナレッジ
+ * ナレッジは廃止してある: 抽出の操作は当てない（AI には廃止した中身を渡していない）。
+ * @see contexts/knowledge/model/item.dt:272
+ */
+export interface RetiredItem {
+    readonly type: 'RetiredItem';
+    /** ナレッジID */
+    readonly itemId: KnowledgeItemId;
+}
+
+/**
  * 消したナレッジ
  * ナレッジは消してある。
- * @see contexts/knowledge/model/item.dt:220
+ * @see contexts/knowledge/model/item.dt:277
  */
 export interface KnowledgeItemGone {
     readonly type: 'KnowledgeItemGone';
@@ -2011,11 +2285,733 @@ export interface KnowledgeItemGone {
     readonly itemId: KnowledgeItemId;
 }
 
+/**
+ * 廃止の候補ID
+ * 廃止の候補の識別子（`rp_` と小文字の英数字）。候補を出す側の中身から決める（同じ候補を送り直しても同じ ID）。
+ * @invariant valid: matches(value, "^rp_[0-9a-z]{8,32}$")
+ * Make it with `makeRetirementProposalId`; never `as RetirementProposalId` (see dt guide lint).
+ * @see contexts/knowledge/model/retirement.dt:3
+ */
+export type RetirementProposalId = string & { readonly __domain: 'Knowledge.RetirementProposalId' };
+
+/**
+ * A value that violates an invariant of RetirementProposalId.
+ * @see contexts/knowledge/model/retirement.dt:3
+ */
+export interface InvalidRetirementProposalId {
+    readonly type: 'InvalidRetirementProposalId';
+    readonly value: string;
+    /** The violated invariant. */
+    readonly invariant: 'valid';
+}
+
+/**
+ * Creates a RetirementProposalId, checking its invariants: generated as `makeRetirementProposalId`, or written by hand.
+ * @see contexts/knowledge/model/retirement.dt:3
+ */
+export type MakeRetirementProposalId = (value: string) => Result<RetirementProposalId, InvalidRetirementProposalId>;
+
+/**
+ * The invariants of RetirementProposalId that a value violates, in declaration order; empty when it is a RetirementProposalId.
+ * @see contexts/knowledge/model/retirement.dt:3
+ */
+export function checkRetirementProposalId(value: string): readonly InvalidRetirementProposalId['invariant'][] {
+    const violated: InvalidRetirementProposalId['invariant'][] = [];
+    if (!(/^rp_[0-9a-z]{8,32}$/.test(value))) violated.push('valid');
+    return violated;
+}
+
+/**
+ * Creates a RetirementProposalId, checking its invariants with `checkRetirementProposalId`: the first one violated is reported.
+ * @see contexts/knowledge/model/retirement.dt:3
+ */
+export const makeRetirementProposalId: MakeRetirementProposalId = (value) => {
+    const [invariant] = checkRetirementProposalId(value);
+    if (invariant === undefined) return ok(value as RetirementProposalId);
+    return err({ type: 'InvalidRetirementProposalId', value, invariant });
+};
+
+/**
+ * 見直し
+ * 見直しの1回を指す名前。見直しの担当が決める。
+ * @invariant valid: length(value) >= 1 and length(value) <= 100
+ * Make it with `makeReviewRef`; never `as ReviewRef` (see dt guide lint).
+ * @see contexts/knowledge/model/retirement.dt:6
+ */
+export type ReviewRef = string & { readonly __domain: 'Knowledge.ReviewRef' };
+
+/**
+ * A value that violates an invariant of ReviewRef.
+ * @see contexts/knowledge/model/retirement.dt:6
+ */
+export interface InvalidReviewRef {
+    readonly type: 'InvalidReviewRef';
+    readonly value: string;
+    /** The violated invariant. */
+    readonly invariant: 'valid';
+}
+
+/**
+ * Creates a ReviewRef, checking its invariants: generated as `makeReviewRef`, or written by hand.
+ * @see contexts/knowledge/model/retirement.dt:6
+ */
+export type MakeReviewRef = (value: string) => Result<ReviewRef, InvalidReviewRef>;
+
+/**
+ * The invariants of ReviewRef that a value violates, in declaration order; empty when it is a ReviewRef.
+ * @see contexts/knowledge/model/retirement.dt:6
+ */
+export function checkReviewRef(value: string): readonly InvalidReviewRef['invariant'][] {
+    const violated: InvalidReviewRef['invariant'][] = [];
+    if (!((value.length >= 1) && (value.length <= 100))) violated.push('valid');
+    return violated;
+}
+
+/**
+ * Creates a ReviewRef, checking its invariants with `checkReviewRef`: the first one violated is reported.
+ * @see contexts/knowledge/model/retirement.dt:6
+ */
+export const makeReviewRef: MakeReviewRef = (value) => {
+    const [invariant] = checkReviewRef(value);
+    if (invariant === undefined) return ok(value as ReviewRef);
+    return err({ type: 'InvalidReviewRef', value, invariant });
+};
+
+/**
+ * 根拠の説明
+ * 根拠の短い説明（付箋がどう変わったか）。
+ * @invariant valid: length(value) >= 1 and length(value) <= 500
+ * Make it with `makeEvidenceNote`; never `as EvidenceNote` (see dt guide lint).
+ * @see contexts/knowledge/model/retirement.dt:9
+ */
+export type EvidenceNote = string & { readonly __domain: 'Knowledge.EvidenceNote' };
+
+/**
+ * A value that violates an invariant of EvidenceNote.
+ * @see contexts/knowledge/model/retirement.dt:9
+ */
+export interface InvalidEvidenceNote {
+    readonly type: 'InvalidEvidenceNote';
+    readonly value: string;
+    /** The violated invariant. */
+    readonly invariant: 'valid';
+}
+
+/**
+ * Creates a EvidenceNote, checking its invariants: generated as `makeEvidenceNote`, or written by hand.
+ * @see contexts/knowledge/model/retirement.dt:9
+ */
+export type MakeEvidenceNote = (value: string) => Result<EvidenceNote, InvalidEvidenceNote>;
+
+/**
+ * The invariants of EvidenceNote that a value violates, in declaration order; empty when it is a EvidenceNote.
+ * @see contexts/knowledge/model/retirement.dt:9
+ */
+export function checkEvidenceNote(value: string): readonly InvalidEvidenceNote['invariant'][] {
+    const violated: InvalidEvidenceNote['invariant'][] = [];
+    if (!((value.length >= 1) && (value.length <= 500))) violated.push('valid');
+    return violated;
+}
+
+/**
+ * Creates a EvidenceNote, checking its invariants with `checkEvidenceNote`: the first one violated is reported.
+ * @see contexts/knowledge/model/retirement.dt:9
+ */
+export const makeEvidenceNote: MakeEvidenceNote = (value) => {
+    const [invariant] = checkEvidenceNote(value);
+    if (invariant === undefined) return ok(value as EvidenceNote);
+    return err({ type: 'InvalidEvidenceNote', value, invariant });
+};
+
+/**
+ * 廃止の理由
+ * なぜ廃止するか。選ばなくても廃止できる。
+ * @see contexts/knowledge/model/retirement.dt:12
+ */
+export type RetirementReason =
+    | 'replaced' // 置き換わった
+    | 'obsolete' // 当てはまらなくなった
+    | 'wrong'; // 誤り
+
+/**
+ * 候補の操作
+ * 候補が求めること: 廃止するか、廃止を取り消すか。
+ * @see contexts/knowledge/model/retirement.dt:15
+ */
+export type ProposalAction =
+    | 'retire' // 廃止する
+    | 'unretire'; // 廃止を取り消す
+
+/**
+ * 廃止
+ * 廃止: 消すのとは別。本文・出典・版はすべて残し、一覧では既定で隠し、AI（回答役・実行役・見直し）には渡さない。
+ * @invariant replacementWhenReplaced (置き換え先は「置き換わった」のときだけ): exists(replacedBy) implies (exists(reason) and reason == RetirementReason.replaced)
+ * @see contexts/knowledge/model/retirement.dt:18
+ */
+export interface Retirement {
+    /** 理由 */
+    readonly reason?: RetirementReason;
+    /** 置き換え先 — 置き換えた新しいナレッジ（理由が「置き換わった」のときだけ）。 */
+    readonly replacedBy?: KnowledgeItemId;
+    /** 廃止した人 */
+    readonly by: UserName;
+    /** 廃止した日時 */
+    readonly at: Timestamp;
+    /** 候補 — 承認した候補（人が候補なしに廃止したときはない）。 */
+    readonly proposal?: RetirementProposalId;
+}
+
+/**
+ * Whether two Retirement values are equal: by all their fields (ADR 0016).
+ * @see contexts/knowledge/model/retirement.dt:18
+ */
+export function equalRetirement(a: Retirement, b: Retirement): boolean {
+    return sameOptional(a.reason, b.reason, ($21: string, $22: string) => $21 === $22) && sameOptional(a.replacedBy, b.replacedBy, ($23: KnowledgeItemId, $24: KnowledgeItemId) => $23 === $24) && a.by === b.by && a.at.getTime() === b.at.getTime() && sameOptional(a.proposal, b.proposal, ($25: RetirementProposalId, $26: RetirementProposalId) => $25 === $26);
+}
+
+/**
+ * The invariants of Retirement that a value violates, in declaration order; empty when it holds them all.
+ * @see contexts/knowledge/model/retirement.dt:18
+ */
+export function checkRetirement(retirement: Retirement): readonly 'replacementWhenReplaced'[] {
+    const violated: 'replacementWhenReplaced'[] = [];
+    if (retirement.replacedBy !== undefined && !((retirement.reason !== undefined) && (retirement.reason === 'replaced'))) violated.push('replacementWhenReplaced');
+    return violated;
+}
+
+/**
+ * 根拠
+ * 候補の根拠1つ: どの決定・どの付箋の変更・どの発言か。
+ * @see contexts/knowledge/model/retirement.dt:33
+ */
+export type Evidence =
+    /**
+     * 決定
+     * 決定のナレッジ。
+     */
+    | {
+          readonly kind: 'Decision';
+          /** 決定のナレッジ */
+          readonly item: KnowledgeItemId;
+      }
+    /**
+     * 付箋の変更
+     * 付箋の変更。
+     */
+    | {
+          readonly kind: 'StickyChange';
+          /** 付箋 */
+          readonly sticky: StickyRef;
+          /** 変わったこと */
+          readonly change: EvidenceNote;
+      }
+    /**
+     * 発言
+     * セッションの発言。
+     */
+    | {
+          readonly kind: 'Said';
+          /** セッション */
+          readonly session: SessionRef;
+          /** メッセージ */
+          readonly message: MessageRef;
+          /** 引用 */
+          readonly quote: Quote;
+      };
+
+/**
+ * Whether two Evidence values are equal: by `kind` and the fields of the variant (ADR 0016).
+ * @see contexts/knowledge/model/retirement.dt:33
+ */
+export function equalEvidence(a: Evidence, b: Evidence): boolean {
+    if (a.kind !== b.kind) return false;
+    if (a.kind === 'Decision') {
+        const y = b as Extract<Evidence, { readonly kind: 'Decision' }>;
+        return a.item === y.item;
+    }
+    if (a.kind === 'StickyChange') {
+        const y = b as Extract<Evidence, { readonly kind: 'StickyChange' }>;
+        return a.sticky === y.sticky && a.change === y.change;
+    }
+    if (a.kind === 'Said') {
+        const y = b as Extract<Evidence, { readonly kind: 'Said' }>;
+        return a.session === y.session && a.message === y.message && a.quote === y.quote;
+    }
+    return true;
+}
+
+/**
+ * 出したもの
+ * 候補を出したもの: 抽出か、見直し。
+ * @see contexts/knowledge/model/retirement.dt:52
+ */
+export type Proposer =
+    /** 抽出 */
+    | {
+          readonly kind: 'Extraction';
+          /** 抽出 */
+          readonly extraction: ExtractionRef;
+      }
+    /** 見直し */
+    | {
+          readonly kind: 'Review';
+          /** 見直し */
+          readonly review: ReviewRef;
+      };
+
+/**
+ * Whether two Proposer values are equal: by `kind` and the fields of the variant (ADR 0016).
+ * @see contexts/knowledge/model/retirement.dt:52
+ */
+export function equalProposer(a: Proposer, b: Proposer): boolean {
+    if (a.kind !== b.kind) return false;
+    if (a.kind === 'Extraction') {
+        const y = b as Extract<Proposer, { readonly kind: 'Extraction' }>;
+        return equalExtractionRef(a.extraction, y.extraction);
+    }
+    if (a.kind === 'Review') {
+        const y = b as Extract<Proposer, { readonly kind: 'Review' }>;
+        return a.review === y.review;
+    }
+    return true;
+}
+
+/**
+ * Fields shared by every state of 廃止の候補 (RetirementProposal).
+ * @invariant retireHasReason (廃止の候補には理由がある): action == ProposalAction.retire implies exists(reason)
+ * @invariant unretireHasNoReason (取り消しの候補に理由はない): action == ProposalAction.unretire implies not exists(reason)
+ * @invariant replacementWhenReplaced (置き換え先は「置き換わった」のときだけ): exists(replacedBy) implies (exists(reason) and reason == RetirementReason.replaced)
+ * @invariant notReplacedByItself (自分には置き換わらない): exists(replacedBy) implies replacedBy != item
+ * @invariant distinctEvidence (根拠は1回): unique(evidence)
+ * @see contexts/knowledge/model/retirement.dt:63
+ */
+export interface RetirementProposalCommon {
+    /** 廃止の候補ID */
+    readonly id: RetirementProposalId;
+    /** ナレッジ */
+    readonly item: KnowledgeItemId;
+    /** 操作 */
+    readonly action: ProposalAction;
+    /** 理由 — 廃止の候補には必ず。取り消しの候補にはない。 */
+    readonly reason?: RetirementReason;
+    /** 置き換え先 */
+    readonly replacedBy?: KnowledgeItemId;
+    /** 説明 — なぜそう考えたか。監査のログの理由にもなる。 */
+    readonly explanation: Reason;
+    /** 根拠 */
+    readonly evidence: readonly [Evidence, ...Evidence[]];
+    /** 出したもの */
+    readonly proposedBy: Proposer;
+    /** 出した日時 */
+    readonly proposedAt: Timestamp;
+}
+
+/**
+ * 未決
+ * @see contexts/knowledge/model/retirement.dt:86
+ */
+export interface OpenRetirementProposal extends RetirementProposalCommon {
+    readonly state: 'Open';
+}
+
+/**
+ * 承認した
+ * @see contexts/knowledge/model/retirement.dt:87
+ */
+export interface ApprovedRetirementProposal extends RetirementProposalCommon {
+    readonly state: 'Approved';
+    /** 承認した人 */
+    readonly decidedBy: UserName;
+    /** 承認した日時 */
+    readonly decidedAt: Timestamp;
+}
+
+/**
+ * 却下した
+ * @see contexts/knowledge/model/retirement.dt:91
+ */
+export interface DismissedRetirementProposal extends RetirementProposalCommon {
+    readonly state: 'Dismissed';
+    /** 却下した人 */
+    readonly decidedBy: UserName;
+    /** 却下した日時 */
+    readonly decidedAt: Timestamp;
+}
+
+/**
+ * 廃止の候補
+ * AI が出す、廃止（または廃止の取り消し）の候補。人が1件ずつ承認か却下する。却下した候補は残り、同じナレッジに同じ
+ * 理由で、新しい根拠のない候補を二度と出させない。
+ * @see contexts/knowledge/model/retirement.dt:63
+ */
+export type RetirementProposal = OpenRetirementProposal | ApprovedRetirementProposal | DismissedRetirementProposal;
+
+/**
+ * The fields of RetirementProposal as data for `decide`: the common fields, and the fields of each state on top of them.
+ * @see contexts/knowledge/model/retirement.dt:63
+ */
+export const RetirementProposalShape: Shape = {
+    fields: ['id', 'item', 'action', 'reason', 'replacedBy', 'explanation', 'evidence', 'proposedBy', 'proposedAt'],
+    states: { Open: [], Approved: ['decidedBy', 'decidedAt'], Dismissed: ['decidedBy', 'decidedAt'] },
+};
+
+/**
+ * The invariants of RetirementProposal (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.
+ * @see contexts/knowledge/model/retirement.dt:63
+ */
+export function checkRetirementProposalCommon(retirementProposal: RetirementProposalCommon): readonly ('retireHasReason' | 'unretireHasNoReason' | 'replacementWhenReplaced' | 'notReplacedByItself' | 'distinctEvidence')[] {
+    const violated: ('retireHasReason' | 'unretireHasNoReason' | 'replacementWhenReplaced' | 'notReplacedByItself' | 'distinctEvidence')[] = [];
+    if (retirementProposal.action === 'retire' && !(retirementProposal.reason !== undefined)) violated.push('retireHasReason');
+    if (retirementProposal.action === 'unretire' && !(!(retirementProposal.reason !== undefined))) violated.push('unretireHasNoReason');
+    if (retirementProposal.replacedBy !== undefined && !((retirementProposal.reason !== undefined) && (retirementProposal.reason === 'replaced'))) violated.push('replacementWhenReplaced');
+    if (retirementProposal.replacedBy !== undefined && !(!(retirementProposal.replacedBy === retirementProposal.item))) violated.push('notReplacedByItself');
+    if (!(distinct(retirementProposal.evidence, equalEvidence))) violated.push('distinctEvidence');
+    return violated;
+}
+
+/**
+ * The invariants of RetirementProposal in state Open (the aggregate's, by `checkRetirementProposalCommon`, and the state's) that an aggregate violates, in declaration order.
+ * @see contexts/knowledge/model/retirement.dt:86
+ */
+export function checkOpenRetirementProposal(retirementProposal: OpenRetirementProposal): readonly ('retireHasReason' | 'unretireHasNoReason' | 'replacementWhenReplaced' | 'notReplacedByItself' | 'distinctEvidence')[] {
+    return checkRetirementProposalCommon(retirementProposal);
+}
+
+/**
+ * The invariants of RetirementProposal in state Approved (the aggregate's, by `checkRetirementProposalCommon`, and the state's) that an aggregate violates, in declaration order.
+ * @see contexts/knowledge/model/retirement.dt:87
+ */
+export function checkApprovedRetirementProposal(retirementProposal: ApprovedRetirementProposal): readonly ('retireHasReason' | 'unretireHasNoReason' | 'replacementWhenReplaced' | 'notReplacedByItself' | 'distinctEvidence')[] {
+    return checkRetirementProposalCommon(retirementProposal);
+}
+
+/**
+ * The invariants of RetirementProposal in state Dismissed (the aggregate's, by `checkRetirementProposalCommon`, and the state's) that an aggregate violates, in declaration order.
+ * @see contexts/knowledge/model/retirement.dt:91
+ */
+export function checkDismissedRetirementProposal(retirementProposal: DismissedRetirementProposal): readonly ('retireHasReason' | 'unretireHasNoReason' | 'replacementWhenReplaced' | 'notReplacedByItself' | 'distinctEvidence')[] {
+    return checkRetirementProposalCommon(retirementProposal);
+}
+
+/**
+ * The invariants of RetirementProposal in the state it is in that an aggregate violates (see the check of each state).
+ * @see contexts/knowledge/model/retirement.dt:63
+ */
+export function checkRetirementProposal(retirementProposal: RetirementProposal): readonly ('retireHasReason' | 'unretireHasNoReason' | 'replacementWhenReplaced' | 'notReplacedByItself' | 'distinctEvidence')[] {
+    switch (retirementProposal.state) {
+        case 'Open': return checkOpenRetirementProposal(retirementProposal);
+        case 'Approved': return checkApprovedRetirementProposal(retirementProposal);
+        case 'Dismissed': return checkDismissedRetirementProposal(retirementProposal);
+    }
+}
+
+/**
+ * The parameters of RetirementProposal.propose, by name.
+ * @see contexts/knowledge/model/retirement.dt:98
+ */
+export interface ProposeRetirementProposalParams {
+    /** 廃止の候補ID */
+    readonly id: RetirementProposalId;
+    /** ナレッジ */
+    readonly item: KnowledgeItemId;
+    /** 候補の操作 */
+    readonly action: ProposalAction;
+    /** 廃止の理由 */
+    readonly reason?: RetirementReason;
+    /** 置き換え先 */
+    readonly replacedBy?: KnowledgeItemId;
+    /** 理由 */
+    readonly explanation: Reason;
+    /** 根拠 */
+    readonly evidence: readonly [Evidence, ...Evidence[]];
+    /** 出したもの */
+    readonly proposedBy: Proposer;
+    readonly proposedAt: Timestamp;
+}
+
+/**
+ * RetirementProposal.propose (new -> Open) — factory
+ * 候補を出す
+ * AI（抽出・見直し）が候補を出す。ナレッジに照らした受け付け（同じ候補が未決にある、前に却下した、AS-IS の知見を付箋の
+ * 変更だけで廃止しようとしている、など）はストアが決める。
+ * @requires retireHasReason (廃止の候補には理由がある) else MalformedProposal: action == ProposalAction.retire implies exists(reason)
+ * @requires unretireHasNoReason (取り消しの候補に理由はない) else MalformedProposal: action == ProposalAction.unretire implies not exists(reason)
+ * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else MalformedProposal: exists(replacedBy) implies (exists(reason) and reason == RetirementReason.replaced)
+ * @requires notReplacedByItself (自分には置き換わらない) else MalformedProposal: exists(replacedBy) implies replacedBy != item
+ * @requires distinctEvidence (根拠は1回) else MalformedProposal: unique(evidence)
+ * @emits RetirementProposed — exactly once when the command succeeds
+ * @see contexts/knowledge/model/retirement.dt:98
+ */
+export type ProposeRetirementProposal = (
+    params: ProposeRetirementProposalParams,
+) => Result<{
+    readonly Open: {
+        readonly aggregate: OpenRetirementProposal;
+        readonly events: { readonly RetirementProposed: RetirementProposed };
+    };
+}, MalformedProposal>;
+
+/**
+ * RetirementProposal.propose, decided by one function; implement it with `decide(RetirementProposalShape, …)` from the runtime.
+ * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
+ * @requires retireHasReason (廃止の候補には理由がある) else MalformedProposal: action == ProposalAction.retire implies exists(reason)
+ * @requires unretireHasNoReason (取り消しの候補に理由はない) else MalformedProposal: action == ProposalAction.unretire implies not exists(reason)
+ * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else MalformedProposal: exists(replacedBy) implies (exists(reason) and reason == RetirementReason.replaced)
+ * @requires notReplacedByItself (自分には置き換わらない) else MalformedProposal: exists(replacedBy) implies replacedBy != item
+ * @requires distinctEvidence (根拠は1回) else MalformedProposal: unique(evidence)
+ * new -> Open — set: every field
+ * @emits RetirementProposed — exactly once when the command succeeds
+ * @see contexts/knowledge/model/retirement.dt:98
+ */
+export type ProposeRetirementProposalDecision = (
+    params: ProposeRetirementProposalParams,
+) => Result<{
+    readonly Open: {
+        readonly set: { readonly id: RetirementProposalId; readonly item: KnowledgeItemId; readonly action: ProposalAction; readonly reason: RetirementReason | undefined; readonly replacedBy: KnowledgeItemId | undefined; readonly explanation: Reason; readonly evidence: readonly [Evidence, ...Evidence[]]; readonly proposedBy: Proposer; readonly proposedAt: Timestamp };
+        readonly events: { readonly RetirementProposed: RetirementProposed };
+    };
+}, MalformedProposal>;
+
+/**
+ * The first requirement of RetirementProposal.propose that does not hold, in declaration order; `undefined` when all hold.
+ * @see contexts/knowledge/model/retirement.dt:98
+ */
+export function checkProposeRetirementProposalRequires(params: ProposeRetirementProposalParams): 'retireHasReason' | 'unretireHasNoReason' | 'replacementWhenReplaced' | 'notReplacedByItself' | 'distinctEvidence' | undefined {
+    if (params.action === 'retire' && !(params.reason !== undefined)) return 'retireHasReason';
+    if (params.action === 'unretire' && !(!(params.reason !== undefined))) return 'unretireHasNoReason';
+    if (params.replacedBy !== undefined && !((params.reason !== undefined) && (params.reason === 'replaced'))) return 'replacementWhenReplaced';
+    if (params.replacedBy !== undefined && !(!(params.replacedBy === params.item))) return 'notReplacedByItself';
+    if (!(distinct(params.evidence, equalEvidence))) return 'distinctEvidence';
+    return undefined;
+}
+
+/**
+ * The parameters of RetirementProposal.approve, by name.
+ * @see contexts/knowledge/model/retirement.dt:116
+ */
+export interface ApproveRetirementProposalParams {
+    /** ユーザー */
+    readonly by: UserName;
+    readonly at: Timestamp;
+}
+
+/**
+ * RetirementProposal.approve (Open -> Approved)
+ * 承認する
+ * 人が承認する（ストアはナレッジを廃止する、または廃止を取り消す）。
+ * @changes none — the command changes no common field
+ * @emits RetirementProposalApproved — exactly once when the command succeeds
+ * @see contexts/knowledge/model/retirement.dt:116
+ */
+export type ApproveRetirementProposal = (
+    retirementProposal: OpenRetirementProposal,
+    params: ApproveRetirementProposalParams,
+) => Result<{
+    readonly Approved: {
+        readonly aggregate: ApprovedRetirementProposal;
+        readonly events: { readonly RetirementProposalApproved: RetirementProposalApproved };
+    };
+}, never>;
+
+/**
+ * RetirementProposal.approve, decided per source state; implement it with `decide(RetirementProposalShape, …)` from the runtime.
+ * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
+ * @changes none — the command changes no common field
+ * Open -> Approved — set: decidedBy (new in Approved), decidedAt (new in Approved); carried over: id, item, action, reason, replacedBy, explanation, evidence, proposedBy, proposedAt
+ * @see contexts/knowledge/model/retirement.dt:116
+ */
+export type ApproveRetirementProposalDecision = {
+    /** @emits RetirementProposalApproved — exactly once when the command succeeds */
+    readonly Open: (retirementProposal: OpenRetirementProposal, params: ApproveRetirementProposalParams) => Result<{
+        readonly Approved: {
+            readonly set: { readonly decidedBy: UserName; readonly decidedAt: Timestamp };
+            readonly events: { readonly RetirementProposalApproved: RetirementProposalApproved };
+        };
+    }, never>;
+};
+
+/**
+ * The parameters of RetirementProposal.dismiss, by name.
+ * @see contexts/knowledge/model/retirement.dt:121
+ */
+export interface DismissRetirementProposalParams {
+    /** ユーザー */
+    readonly by: UserName;
+    readonly at: Timestamp;
+}
+
+/**
+ * RetirementProposal.dismiss (Open -> Dismissed)
+ * 却下する
+ * 人が却下する。
+ * @changes none — the command changes no common field
+ * @emits RetirementProposalDismissed — exactly once when the command succeeds
+ * @see contexts/knowledge/model/retirement.dt:121
+ */
+export type DismissRetirementProposal = (
+    retirementProposal: OpenRetirementProposal,
+    params: DismissRetirementProposalParams,
+) => Result<{
+    readonly Dismissed: {
+        readonly aggregate: DismissedRetirementProposal;
+        readonly events: { readonly RetirementProposalDismissed: RetirementProposalDismissed };
+    };
+}, never>;
+
+/**
+ * RetirementProposal.dismiss, decided per source state; implement it with `decide(RetirementProposalShape, …)` from the runtime.
+ * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
+ * @changes none — the command changes no common field
+ * Open -> Dismissed — set: decidedBy (new in Dismissed), decidedAt (new in Dismissed); carried over: id, item, action, reason, replacedBy, explanation, evidence, proposedBy, proposedAt
+ * @see contexts/knowledge/model/retirement.dt:121
+ */
+export type DismissRetirementProposalDecision = {
+    /** @emits RetirementProposalDismissed — exactly once when the command succeeds */
+    readonly Open: (retirementProposal: OpenRetirementProposal, params: DismissRetirementProposalParams) => Result<{
+        readonly Dismissed: {
+            readonly set: { readonly decidedBy: UserName; readonly decidedAt: Timestamp };
+            readonly events: { readonly RetirementProposalDismissed: RetirementProposalDismissed };
+        };
+    }, never>;
+};
+
+/**
+ * Command contracts of RetirementProposal. Implement this interface by hand.
+ * Commands are pure functions of the aggregate and their parameters: no I/O, no clock, no randomness. IDs and times are passed in as parameters.
+ * @see contexts/knowledge/model/retirement.dt:63
+ */
+export interface RetirementProposalCommands {
+    /** 候補を出す */
+    readonly propose: ProposeRetirementProposal;
+    /** 承認する */
+    readonly approve: ApproveRetirementProposal;
+    /** 却下する */
+    readonly dismiss: DismissRetirementProposal;
+}
+
+/**
+ * Events that the commands of RetirementProposal may emit.
+ * @see contexts/knowledge/model/retirement.dt:63
+ */
+export type RetirementProposalEvent = RetirementProposed | RetirementProposalApproved | RetirementProposalDismissed;
+
+/**
+ * 廃止の候補を出した
+ * @persistent Persisted: storing this event is part of its contract.
+ * @see contexts/knowledge/model/retirement.dt:126
+ */
+export interface RetirementProposed {
+    readonly type: 'RetirementProposed';
+    /** 廃止の候補ID */
+    readonly proposalId: RetirementProposalId;
+    /** ナレッジ */
+    readonly item: KnowledgeItemId;
+    /** 操作 */
+    readonly action: ProposalAction;
+    /** 出したもの */
+    readonly proposedBy: Proposer;
+    /** 説明 */
+    readonly explanation: Reason;
+    readonly proposedAt: Timestamp;
+}
+
+/**
+ * 廃止の候補を承認した
+ * @persistent Persisted: storing this event is part of its contract.
+ * @see contexts/knowledge/model/retirement.dt:135
+ */
+export interface RetirementProposalApproved {
+    readonly type: 'RetirementProposalApproved';
+    /** 廃止の候補ID */
+    readonly proposalId: RetirementProposalId;
+    /** ナレッジ */
+    readonly item: KnowledgeItemId;
+    /** 操作 */
+    readonly action: ProposalAction;
+    /** ユーザー */
+    readonly by: UserName;
+    readonly at: Timestamp;
+}
+
+/**
+ * 廃止の候補を却下した
+ * @persistent Persisted: storing this event is part of its contract.
+ * @see contexts/knowledge/model/retirement.dt:143
+ */
+export interface RetirementProposalDismissed {
+    readonly type: 'RetirementProposalDismissed';
+    /** 廃止の候補ID */
+    readonly proposalId: RetirementProposalId;
+    /** ナレッジ */
+    readonly item: KnowledgeItemId;
+    /** 操作 */
+    readonly action: ProposalAction;
+    /** ユーザー */
+    readonly by: UserName;
+    readonly at: Timestamp;
+}
+
+/**
+ * 形の正しくない候補
+ * 候補の形が正しくない（理由がない・余計、置き換え先が自分、根拠が重なる）。
+ * @see contexts/knowledge/model/retirement.dt:152
+ */
+export interface MalformedProposal {
+    readonly type: 'MalformedProposal';
+}
+
+/**
+ * 受け付けない候補
+ * 候補を受け付けない: ナレッジに照らした理由。
+ * @see contexts/knowledge/model/retirement.dt:155
+ */
+export interface ProposalRefused {
+    readonly type: 'ProposalRefused';
+    /** 理由 */
+    readonly reason: ProposalRefusal;
+}
+
+/**
+ * 受け付けない理由
+ * 候補を受け付けない理由。
+ * @see contexts/knowledge/model/retirement.dt:160
+ */
+export type ProposalRefusal =
+    | 'itemUnavailable' // ないナレッジ
+    | 'moot' // もうそうなっている
+    | 'pending' // 未決の候補がある
+    | 'dismissedBefore' // 却下した候補と同じ
+    | 'asIsAgainstStickies' // AS-IS の知見と TO-BE
+    | 'replacementUnavailable' // ない置き換え先
+    | 'evidenceUnavailable'; // ない根拠
+
+/**
+ * ない候補
+ * 廃止の候補がない（ID が違う）。
+ * @see contexts/knowledge/model/retirement.dt:178
+ */
+export interface ProposalNotFound {
+    readonly type: 'ProposalNotFound';
+    /** 廃止の候補ID */
+    readonly proposalId: RetirementProposalId;
+}
+
+/**
+ * 決めた候補
+ * 候補はもう承認か却下してある。
+ * @see contexts/knowledge/model/retirement.dt:183
+ */
+export interface ProposalDecided {
+    readonly type: 'ProposalDecided';
+    /** 廃止の候補ID */
+    readonly proposalId: RetirementProposalId;
+}
+
 /** Events of Knowledge that are persisted (declared `persistent`). */
-export type PersistentEvent = KnowledgeItemAdded | KnowledgeSourceAdded | KnowledgeItemRewritten | KnowledgeItemRevised | KnowledgeConflictLinked | KnowledgeConflictUnlinked | KnowledgeHandedOverToHotspot | KnowledgeItemCorrected | KnowledgeItemDeleted | KnowledgeItemRestored;
+export type PersistentEvent = KnowledgeItemAdded | KnowledgeSourceAdded | KnowledgeItemRewritten | KnowledgeItemRevised | KnowledgeConflictLinked | KnowledgeConflictUnlinked | KnowledgeHandedOverToHotspot | KnowledgeItemCorrected | KnowledgeItemDeleted | KnowledgeItemRestored | KnowledgeItemRetired | KnowledgeItemUnretired | RetirementProposed | RetirementProposalApproved | RetirementProposalDismissed;
 
 /** Events of Knowledge. */
-export type DomainEvent = KnowledgeItemAdded | KnowledgeSourceAdded | KnowledgeItemRewritten | KnowledgeItemRevised | KnowledgeConflictLinked | KnowledgeConflictUnlinked | KnowledgeHandedOverToHotspot | KnowledgeItemCorrected | KnowledgeItemDeleted | KnowledgeItemRestored;
+export type DomainEvent = KnowledgeItemAdded | KnowledgeSourceAdded | KnowledgeItemRewritten | KnowledgeItemRevised | KnowledgeConflictLinked | KnowledgeConflictUnlinked | KnowledgeHandedOverToHotspot | KnowledgeItemCorrected | KnowledgeItemDeleted | KnowledgeItemRestored | KnowledgeItemRetired | KnowledgeItemUnretired | RetirementProposed | RetirementProposalApproved | RetirementProposalDismissed;
 
 /** Aggregates of Knowledge. */
-export type Aggregate = KnowledgeItem;
+export type Aggregate = KnowledgeItem | RetirementProposal;

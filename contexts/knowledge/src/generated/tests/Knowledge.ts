@@ -50,6 +50,24 @@ export interface Arbitraries {
     readonly KnowledgeItemCorrected: fc.Arbitrary<Knowledge.KnowledgeItemCorrected>;
     readonly KnowledgeItemDeleted: fc.Arbitrary<Knowledge.KnowledgeItemDeleted>;
     readonly KnowledgeItemRestored: fc.Arbitrary<Knowledge.KnowledgeItemRestored>;
+    readonly KnowledgeItemRetired: fc.Arbitrary<Knowledge.KnowledgeItemRetired>;
+    readonly KnowledgeItemUnretired: fc.Arbitrary<Knowledge.KnowledgeItemUnretired>;
+    readonly RetirementProposalId: fc.Arbitrary<Knowledge.RetirementProposalId>;
+    readonly ReviewRef: fc.Arbitrary<Knowledge.ReviewRef>;
+    readonly EvidenceNote: fc.Arbitrary<Knowledge.EvidenceNote>;
+    readonly RetirementReason: fc.Arbitrary<Knowledge.RetirementReason>;
+    readonly ProposalAction: fc.Arbitrary<Knowledge.ProposalAction>;
+    readonly Retirement: fc.Arbitrary<Knowledge.Retirement>;
+    readonly Evidence: fc.Arbitrary<Knowledge.Evidence>;
+    readonly Proposer: fc.Arbitrary<Knowledge.Proposer>;
+    readonly OpenRetirementProposal: fc.Arbitrary<Knowledge.OpenRetirementProposal>;
+    readonly ApprovedRetirementProposal: fc.Arbitrary<Knowledge.ApprovedRetirementProposal>;
+    readonly DismissedRetirementProposal: fc.Arbitrary<Knowledge.DismissedRetirementProposal>;
+    readonly RetirementProposal: fc.Arbitrary<Knowledge.RetirementProposal>;
+    readonly RetirementProposed: fc.Arbitrary<Knowledge.RetirementProposed>;
+    readonly RetirementProposalApproved: fc.Arbitrary<Knowledge.RetirementProposalApproved>;
+    readonly RetirementProposalDismissed: fc.Arbitrary<Knowledge.RetirementProposalDismissed>;
+    readonly ProposalRefusal: fc.Arbitrary<Knowledge.ProposalRefusal>;
 }
 
 /** Checks of the invariants and requirements of Knowledge that the DSL does not express, as your code implements them. */
@@ -59,7 +77,11 @@ export interface DeclaredChecks {}
 export interface Examples {
     readonly KnowledgeItem?: {
         readonly states?: { readonly Live?: readonly Knowledge.LiveKnowledgeItem[]; readonly Deleted?: readonly Knowledge.DeletedKnowledgeItem[] };
-        readonly commands?: { readonly add?: readonly Parameters<Knowledge.KnowledgeItemCommands['add']>[]; readonly addConflicting?: readonly Parameters<Knowledge.KnowledgeItemCommands['addConflicting']>[]; readonly addSource?: readonly Parameters<Knowledge.KnowledgeItemCommands['addSource']>[]; readonly update?: readonly Parameters<Knowledge.KnowledgeItemCommands['update']>[]; readonly linkConflict?: readonly Parameters<Knowledge.KnowledgeItemCommands['linkConflict']>[]; readonly unlinkConflict?: readonly Parameters<Knowledge.KnowledgeItemCommands['unlinkConflict']>[]; readonly handOverToHotspot?: readonly Parameters<Knowledge.KnowledgeItemCommands['handOverToHotspot']>[]; readonly correct?: readonly Parameters<Knowledge.KnowledgeItemCommands['correct']>[]; readonly delete?: readonly Parameters<Knowledge.KnowledgeItemCommands['delete']>[]; readonly restore?: readonly Parameters<Knowledge.KnowledgeItemCommands['restore']>[] };
+        readonly commands?: { readonly add?: readonly Parameters<Knowledge.KnowledgeItemCommands['add']>[]; readonly addConflicting?: readonly Parameters<Knowledge.KnowledgeItemCommands['addConflicting']>[]; readonly addSource?: readonly Parameters<Knowledge.KnowledgeItemCommands['addSource']>[]; readonly update?: readonly Parameters<Knowledge.KnowledgeItemCommands['update']>[]; readonly linkConflict?: readonly Parameters<Knowledge.KnowledgeItemCommands['linkConflict']>[]; readonly unlinkConflict?: readonly Parameters<Knowledge.KnowledgeItemCommands['unlinkConflict']>[]; readonly handOverToHotspot?: readonly Parameters<Knowledge.KnowledgeItemCommands['handOverToHotspot']>[]; readonly correct?: readonly Parameters<Knowledge.KnowledgeItemCommands['correct']>[]; readonly retire?: readonly Parameters<Knowledge.KnowledgeItemCommands['retire']>[]; readonly unretire?: readonly Parameters<Knowledge.KnowledgeItemCommands['unretire']>[]; readonly delete?: readonly Parameters<Knowledge.KnowledgeItemCommands['delete']>[]; readonly restore?: readonly Parameters<Knowledge.KnowledgeItemCommands['restore']>[] };
+    };
+    readonly RetirementProposal?: {
+        readonly states?: { readonly Open?: readonly Knowledge.OpenRetirementProposal[]; readonly Approved?: readonly Knowledge.ApprovedRetirementProposal[]; readonly Dismissed?: readonly Knowledge.DismissedRetirementProposal[] };
+        readonly commands?: { readonly propose?: readonly Parameters<Knowledge.RetirementProposalCommands['propose']>[]; readonly approve?: readonly Parameters<Knowledge.RetirementProposalCommands['approve']>[]; readonly dismiss?: readonly Parameters<Knowledge.RetirementProposalCommands['dismiss']>[] };
     };
 }
 
@@ -77,8 +99,9 @@ export interface Options extends Generation {
 
 /** What `contract` tests: the constructors of domain primitives and the commands of aggregates, each optional. */
 export interface Implementation {
-    readonly make?: { readonly KnowledgeItemId?: Knowledge.MakeKnowledgeItemId; readonly ImageId?: Knowledge.MakeImageId; readonly ProjectName?: Knowledge.MakeProjectName; readonly ItemTitle?: Knowledge.MakeItemTitle; readonly ItemText?: Knowledge.MakeItemText; readonly Quote?: Knowledge.MakeQuote; readonly Perspective?: Knowledge.MakePerspective; readonly Reason?: Knowledge.MakeReason; readonly StickyRef?: Knowledge.MakeStickyRef; readonly SessionRef?: Knowledge.MakeSessionRef; readonly MessageRef?: Knowledge.MakeMessageRef; readonly UserName?: Knowledge.MakeUserName; readonly ItemVersion?: Knowledge.MakeItemVersion; readonly ExtractionNumber?: Knowledge.MakeExtractionNumber };
+    readonly make?: { readonly KnowledgeItemId?: Knowledge.MakeKnowledgeItemId; readonly ImageId?: Knowledge.MakeImageId; readonly ProjectName?: Knowledge.MakeProjectName; readonly ItemTitle?: Knowledge.MakeItemTitle; readonly ItemText?: Knowledge.MakeItemText; readonly Quote?: Knowledge.MakeQuote; readonly Perspective?: Knowledge.MakePerspective; readonly Reason?: Knowledge.MakeReason; readonly StickyRef?: Knowledge.MakeStickyRef; readonly SessionRef?: Knowledge.MakeSessionRef; readonly MessageRef?: Knowledge.MakeMessageRef; readonly UserName?: Knowledge.MakeUserName; readonly ItemVersion?: Knowledge.MakeItemVersion; readonly ExtractionNumber?: Knowledge.MakeExtractionNumber; readonly RetirementProposalId?: Knowledge.MakeRetirementProposalId; readonly ReviewRef?: Knowledge.MakeReviewRef; readonly EvidenceNote?: Knowledge.MakeEvidenceNote };
     readonly KnowledgeItem?: Knowledge.KnowledgeItemCommands;
+    readonly RetirementProposal?: Knowledge.RetirementProposalCommands;
 }
 
 /** The arbitraries of Knowledge, with the overrides, declared checks and examples of the options. */
@@ -108,15 +131,15 @@ export function arbitraries(options: Options = {}): Arbitraries {
         ItemContent: () => testing.valid(given.ItemContent ?? testing.cast<Knowledge.ItemContent>(fc.record({ title: a.ItemTitle, text: a.ItemText, labels: a.Labels, about: testing.many(a.StickyRef, 0) })), (v) => Knowledge.checkItemContent(v).length === 0, 'Knowledge.ItemContent'),
         Source: () => given.Source ?? testing.cast<Knowledge.Source>(fc.record({ session: a.SessionRef, message: a.MessageRef, at: testing.cast<Date>(scalar.Timestamp), quote: a.Quote })),
         ExtractionRef: () => given.ExtractionRef ?? testing.cast<Knowledge.ExtractionRef>(fc.record({ session: a.SessionRef, number: a.ExtractionNumber })),
-        Actor: () => given.Actor ?? testing.cast<Knowledge.Actor>(fc.oneof(fc.record({ kind: fc.constant('Extractor' as const), extraction: a.ExtractionRef }), fc.record({ kind: fc.constant('Person' as const), user: a.UserName }))),
-        Operation: () => given.Operation ?? testing.cast<Knowledge.Operation>(fc.oneof(fc.record({ kind: fc.constant('Add' as const), id: a.KnowledgeItemId, content: a.ItemContent, sources: testing.many(a.Source, 1), reason: a.Reason }, { requiredKeys: ['kind', 'id', 'content', 'sources'] }), fc.record({ kind: fc.constant('AddSource' as const), item: a.KnowledgeItemId, base: a.ItemVersion, source: a.Source, agreed: testing.cast<boolean>(scalar.Bool), reason: a.Reason }, { requiredKeys: ['kind', 'item', 'base', 'source', 'agreed'] }), fc.record({ kind: fc.constant('Update' as const), item: a.KnowledgeItemId, base: a.ItemVersion, revised: a.ItemContent, sources: testing.many(a.Source, 1), reason: a.Reason }, { requiredKeys: ['kind', 'item', 'base', 'revised', 'sources'] }), fc.record({ kind: fc.constant('Conflict' as const), id: a.KnowledgeItemId, content: a.ItemContent, sources: testing.many(a.Source, 1), item: a.KnowledgeItemId, base: a.ItemVersion, reason: a.Reason }, { requiredKeys: ['kind', 'id', 'content', 'sources', 'item', 'base'] }))),
+        Actor: () => given.Actor ?? testing.cast<Knowledge.Actor>(fc.oneof(fc.record({ kind: fc.constant('Extractor' as const), extraction: a.ExtractionRef }), fc.record({ kind: fc.constant('Person' as const), user: a.UserName }), fc.record({ kind: fc.constant('Review' as const), review: a.ReviewRef }))),
+        Operation: () => given.Operation ?? testing.cast<Knowledge.Operation>(fc.oneof(fc.record({ kind: fc.constant('Add' as const), id: a.KnowledgeItemId, content: a.ItemContent, sources: testing.many(a.Source, 1), reason: a.Reason }, { requiredKeys: ['kind', 'id', 'content', 'sources'] }), fc.record({ kind: fc.constant('AddSource' as const), item: a.KnowledgeItemId, base: a.ItemVersion, source: a.Source, agreed: testing.cast<boolean>(scalar.Bool), reason: a.Reason }, { requiredKeys: ['kind', 'item', 'base', 'source', 'agreed'] }), fc.record({ kind: fc.constant('Update' as const), item: a.KnowledgeItemId, base: a.ItemVersion, revised: a.ItemContent, sources: testing.many(a.Source, 1), reason: a.Reason }, { requiredKeys: ['kind', 'item', 'base', 'revised', 'sources'] }), fc.record({ kind: fc.constant('Conflict' as const), id: a.KnowledgeItemId, content: a.ItemContent, sources: testing.many(a.Source, 1), item: a.KnowledgeItemId, base: a.ItemVersion, reason: a.Reason }, { requiredKeys: ['kind', 'id', 'content', 'sources', 'item', 'base'] }), fc.record({ kind: fc.constant('ProposeRetire' as const), item: a.KnowledgeItemId, retirementReason: a.RetirementReason, replacedBy: a.KnowledgeItemId, evidence: testing.many(a.Evidence, 1), reason: a.Reason }, { requiredKeys: ['kind', 'item', 'retirementReason', 'evidence', 'reason'] }), fc.record({ kind: fc.constant('ProposeUnretire' as const), item: a.KnowledgeItemId, evidence: testing.many(a.Evidence, 1), reason: a.Reason }))),
         Extraction: () => given.Extraction ?? testing.cast<Knowledge.Extraction>(fc.record({ by: a.ExtractionRef, operations: testing.many(a.Operation, 0) })),
-        AuditOperation: () => given.AuditOperation ?? fc.constantFrom<Knowledge.AuditOperation>('add', 'addSource', 'rewrite', 'revise', 'linkConflict', 'correct', 'delete', 'restore', 'unlinkConflict', 'handOverToHotspot'),
+        AuditOperation: () => given.AuditOperation ?? fc.constantFrom<Knowledge.AuditOperation>('add', 'addSource', 'rewrite', 'revise', 'linkConflict', 'correct', 'delete', 'restore', 'unlinkConflict', 'handOverToHotspot', 'retire', 'unretire', 'propose', 'dismiss'),
         AuditEntry: () => given.AuditEntry ?? testing.cast<Knowledge.AuditEntry>(fc.record({ item: a.KnowledgeItemId, version: a.ItemVersion, operation: a.AuditOperation, actor: a.Actor, reason: a.Reason, at: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['item', 'version', 'operation', 'actor', 'at'] })),
         MessageKey: () => given.MessageKey ?? testing.cast<Knowledge.MessageKey>(fc.record({ session: a.SessionRef, message: a.MessageRef })),
         Redaction: () => given.Redaction ?? testing.cast<Knowledge.Redaction>(fc.record({ item: a.KnowledgeItemId, messages: testing.many(a.MessageKey, 0) })),
-        LiveKnowledgeItem: () => testing.withExamples(testing.valid(given.LiveKnowledgeItem ?? testing.cast<Knowledge.LiveKnowledgeItem>(fc.record({ state: fc.constant('Live' as const), id: a.KnowledgeItemId, content: a.ItemContent, sources: testing.many(a.Source, 0), version: a.ItemVersion, conflictsWith: testing.many(a.KnowledgeItemId, 0), createdIn: a.SessionRef, createdAt: testing.cast<Date>(scalar.Timestamp), updatedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'content', 'sources', 'version', 'conflictsWith', 'createdAt', 'updatedAt'] })), (v) => Knowledge.checkLiveKnowledgeItem(v).length === 0, 'Knowledge.LiveKnowledgeItem'), options.examples?.KnowledgeItem?.states?.Live, Knowledge.checkLiveKnowledgeItem, 'Knowledge.LiveKnowledgeItem'),
-        DeletedKnowledgeItem: () => testing.withExamples(testing.valid(given.DeletedKnowledgeItem ?? testing.cast<Knowledge.DeletedKnowledgeItem>(fc.record({ state: fc.constant('Deleted' as const), id: a.KnowledgeItemId, content: a.ItemContent, sources: testing.many(a.Source, 0), version: a.ItemVersion, conflictsWith: testing.many(a.KnowledgeItemId, 0), createdIn: a.SessionRef, createdAt: testing.cast<Date>(scalar.Timestamp), updatedAt: testing.cast<Date>(scalar.Timestamp), deletedBy: a.UserName, deletedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'content', 'sources', 'version', 'conflictsWith', 'createdAt', 'updatedAt', 'deletedBy', 'deletedAt'] })), (v) => Knowledge.checkDeletedKnowledgeItem(v).length === 0, 'Knowledge.DeletedKnowledgeItem'), options.examples?.KnowledgeItem?.states?.Deleted, Knowledge.checkDeletedKnowledgeItem, 'Knowledge.DeletedKnowledgeItem'),
+        LiveKnowledgeItem: () => testing.withExamples(testing.valid(given.LiveKnowledgeItem ?? testing.cast<Knowledge.LiveKnowledgeItem>(fc.record({ state: fc.constant('Live' as const), id: a.KnowledgeItemId, content: a.ItemContent, sources: testing.many(a.Source, 0), version: a.ItemVersion, conflictsWith: testing.many(a.KnowledgeItemId, 0), createdIn: a.SessionRef, createdAt: testing.cast<Date>(scalar.Timestamp), updatedAt: testing.cast<Date>(scalar.Timestamp), retirement: a.Retirement }, { requiredKeys: ['state', 'id', 'content', 'sources', 'version', 'conflictsWith', 'createdAt', 'updatedAt'] })), (v) => Knowledge.checkLiveKnowledgeItem(v).length === 0, 'Knowledge.LiveKnowledgeItem'), options.examples?.KnowledgeItem?.states?.Live, Knowledge.checkLiveKnowledgeItem, 'Knowledge.LiveKnowledgeItem'),
+        DeletedKnowledgeItem: () => testing.withExamples(testing.valid(given.DeletedKnowledgeItem ?? testing.cast<Knowledge.DeletedKnowledgeItem>(fc.record({ state: fc.constant('Deleted' as const), id: a.KnowledgeItemId, content: a.ItemContent, sources: testing.many(a.Source, 0), version: a.ItemVersion, conflictsWith: testing.many(a.KnowledgeItemId, 0), createdIn: a.SessionRef, createdAt: testing.cast<Date>(scalar.Timestamp), updatedAt: testing.cast<Date>(scalar.Timestamp), retirement: a.Retirement, deletedBy: a.UserName, deletedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'content', 'sources', 'version', 'conflictsWith', 'createdAt', 'updatedAt', 'deletedBy', 'deletedAt'] })), (v) => Knowledge.checkDeletedKnowledgeItem(v).length === 0, 'Knowledge.DeletedKnowledgeItem'), options.examples?.KnowledgeItem?.states?.Deleted, Knowledge.checkDeletedKnowledgeItem, 'Knowledge.DeletedKnowledgeItem'),
         KnowledgeItem: () => given.KnowledgeItem ?? fc.oneof(a.LiveKnowledgeItem, a.DeletedKnowledgeItem),
         KnowledgeItemAdded: () => given.KnowledgeItemAdded ?? testing.cast<Knowledge.KnowledgeItemAdded>(fc.record({ type: fc.constant('KnowledgeItemAdded' as const), itemId: a.KnowledgeItemId, version: a.ItemVersion, conflictsWith: testing.many(a.KnowledgeItemId, 0), by: a.ExtractionRef, reason: a.Reason, at: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'itemId', 'version', 'conflictsWith', 'by', 'at'] })),
         KnowledgeSourceAdded: () => given.KnowledgeSourceAdded ?? testing.cast<Knowledge.KnowledgeSourceAdded>(fc.record({ type: fc.constant('KnowledgeSourceAdded' as const), itemId: a.KnowledgeItemId, version: a.ItemVersion, agreed: testing.cast<boolean>(scalar.Bool), by: a.ExtractionRef, reason: a.Reason, at: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'itemId', 'version', 'agreed', 'by', 'at'] })),
@@ -128,6 +151,24 @@ export function arbitraries(options: Options = {}): Arbitraries {
         KnowledgeItemCorrected: () => given.KnowledgeItemCorrected ?? testing.cast<Knowledge.KnowledgeItemCorrected>(fc.record({ type: fc.constant('KnowledgeItemCorrected' as const), itemId: a.KnowledgeItemId, version: a.ItemVersion, by: a.UserName, at: testing.cast<Date>(scalar.Timestamp) })),
         KnowledgeItemDeleted: () => given.KnowledgeItemDeleted ?? testing.cast<Knowledge.KnowledgeItemDeleted>(fc.record({ type: fc.constant('KnowledgeItemDeleted' as const), itemId: a.KnowledgeItemId, version: a.ItemVersion, by: a.UserName, at: testing.cast<Date>(scalar.Timestamp) })),
         KnowledgeItemRestored: () => given.KnowledgeItemRestored ?? testing.cast<Knowledge.KnowledgeItemRestored>(fc.record({ type: fc.constant('KnowledgeItemRestored' as const), itemId: a.KnowledgeItemId, version: a.ItemVersion, by: a.UserName, at: testing.cast<Date>(scalar.Timestamp) })),
+        KnowledgeItemRetired: () => given.KnowledgeItemRetired ?? testing.cast<Knowledge.KnowledgeItemRetired>(fc.record({ type: fc.constant('KnowledgeItemRetired' as const), itemId: a.KnowledgeItemId, version: a.ItemVersion, reason: a.RetirementReason, replacedBy: a.KnowledgeItemId, proposal: a.RetirementProposalId, by: a.UserName, at: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'itemId', 'version', 'by', 'at'] })),
+        KnowledgeItemUnretired: () => given.KnowledgeItemUnretired ?? testing.cast<Knowledge.KnowledgeItemUnretired>(fc.record({ type: fc.constant('KnowledgeItemUnretired' as const), itemId: a.KnowledgeItemId, version: a.ItemVersion, proposal: a.RetirementProposalId, by: a.UserName, at: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['type', 'itemId', 'version', 'by', 'at'] })),
+        RetirementProposalId: () => testing.valid(given.RetirementProposalId ?? testing.collide(testing.cast<Knowledge.RetirementProposalId>(testing.base('String', { pattern: '^rp_[0-9a-z]{8,32}$' })), seed), (v) => Knowledge.checkRetirementProposalId(v).length === 0, 'Knowledge.RetirementProposalId'),
+        ReviewRef: () => testing.valid(given.ReviewRef ?? testing.collide(testing.cast<Knowledge.ReviewRef>(testing.base('String', { minLength: 1, maxLength: 100 })), seed), (v) => Knowledge.checkReviewRef(v).length === 0, 'Knowledge.ReviewRef'),
+        EvidenceNote: () => testing.valid(given.EvidenceNote ?? testing.collide(testing.cast<Knowledge.EvidenceNote>(testing.base('String', { minLength: 1, maxLength: 500 })), seed), (v) => Knowledge.checkEvidenceNote(v).length === 0, 'Knowledge.EvidenceNote'),
+        RetirementReason: () => given.RetirementReason ?? fc.constantFrom<Knowledge.RetirementReason>('replaced', 'obsolete', 'wrong'),
+        ProposalAction: () => given.ProposalAction ?? fc.constantFrom<Knowledge.ProposalAction>('retire', 'unretire'),
+        Retirement: () => testing.valid(given.Retirement ?? testing.cast<Knowledge.Retirement>(fc.record({ reason: a.RetirementReason, replacedBy: a.KnowledgeItemId, by: a.UserName, at: testing.cast<Date>(scalar.Timestamp), proposal: a.RetirementProposalId }, { requiredKeys: ['by', 'at'] })), (v) => Knowledge.checkRetirement(v).length === 0, 'Knowledge.Retirement'),
+        Evidence: () => given.Evidence ?? testing.cast<Knowledge.Evidence>(fc.oneof(fc.record({ kind: fc.constant('Decision' as const), item: a.KnowledgeItemId }), fc.record({ kind: fc.constant('StickyChange' as const), sticky: a.StickyRef, change: a.EvidenceNote }), fc.record({ kind: fc.constant('Said' as const), session: a.SessionRef, message: a.MessageRef, quote: a.Quote }))),
+        Proposer: () => given.Proposer ?? testing.cast<Knowledge.Proposer>(fc.oneof(fc.record({ kind: fc.constant('Extraction' as const), extraction: a.ExtractionRef }), fc.record({ kind: fc.constant('Review' as const), review: a.ReviewRef }))),
+        OpenRetirementProposal: () => testing.withExamples(testing.valid(given.OpenRetirementProposal ?? testing.cast<Knowledge.OpenRetirementProposal>(fc.record({ state: fc.constant('Open' as const), id: a.RetirementProposalId, item: a.KnowledgeItemId, action: a.ProposalAction, reason: a.RetirementReason, replacedBy: a.KnowledgeItemId, explanation: a.Reason, evidence: testing.many(a.Evidence, 1), proposedBy: a.Proposer, proposedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'item', 'action', 'explanation', 'evidence', 'proposedBy', 'proposedAt'] })), (v) => Knowledge.checkOpenRetirementProposal(v).length === 0, 'Knowledge.OpenRetirementProposal'), options.examples?.RetirementProposal?.states?.Open, Knowledge.checkOpenRetirementProposal, 'Knowledge.OpenRetirementProposal'),
+        ApprovedRetirementProposal: () => testing.withExamples(testing.valid(given.ApprovedRetirementProposal ?? testing.cast<Knowledge.ApprovedRetirementProposal>(fc.record({ state: fc.constant('Approved' as const), id: a.RetirementProposalId, item: a.KnowledgeItemId, action: a.ProposalAction, reason: a.RetirementReason, replacedBy: a.KnowledgeItemId, explanation: a.Reason, evidence: testing.many(a.Evidence, 1), proposedBy: a.Proposer, proposedAt: testing.cast<Date>(scalar.Timestamp), decidedBy: a.UserName, decidedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'item', 'action', 'explanation', 'evidence', 'proposedBy', 'proposedAt', 'decidedBy', 'decidedAt'] })), (v) => Knowledge.checkApprovedRetirementProposal(v).length === 0, 'Knowledge.ApprovedRetirementProposal'), options.examples?.RetirementProposal?.states?.Approved, Knowledge.checkApprovedRetirementProposal, 'Knowledge.ApprovedRetirementProposal'),
+        DismissedRetirementProposal: () => testing.withExamples(testing.valid(given.DismissedRetirementProposal ?? testing.cast<Knowledge.DismissedRetirementProposal>(fc.record({ state: fc.constant('Dismissed' as const), id: a.RetirementProposalId, item: a.KnowledgeItemId, action: a.ProposalAction, reason: a.RetirementReason, replacedBy: a.KnowledgeItemId, explanation: a.Reason, evidence: testing.many(a.Evidence, 1), proposedBy: a.Proposer, proposedAt: testing.cast<Date>(scalar.Timestamp), decidedBy: a.UserName, decidedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'item', 'action', 'explanation', 'evidence', 'proposedBy', 'proposedAt', 'decidedBy', 'decidedAt'] })), (v) => Knowledge.checkDismissedRetirementProposal(v).length === 0, 'Knowledge.DismissedRetirementProposal'), options.examples?.RetirementProposal?.states?.Dismissed, Knowledge.checkDismissedRetirementProposal, 'Knowledge.DismissedRetirementProposal'),
+        RetirementProposal: () => given.RetirementProposal ?? fc.oneof(a.OpenRetirementProposal, a.ApprovedRetirementProposal, a.DismissedRetirementProposal),
+        RetirementProposed: () => given.RetirementProposed ?? testing.cast<Knowledge.RetirementProposed>(fc.record({ type: fc.constant('RetirementProposed' as const), proposalId: a.RetirementProposalId, item: a.KnowledgeItemId, action: a.ProposalAction, proposedBy: a.Proposer, explanation: a.Reason, proposedAt: testing.cast<Date>(scalar.Timestamp) })),
+        RetirementProposalApproved: () => given.RetirementProposalApproved ?? testing.cast<Knowledge.RetirementProposalApproved>(fc.record({ type: fc.constant('RetirementProposalApproved' as const), proposalId: a.RetirementProposalId, item: a.KnowledgeItemId, action: a.ProposalAction, by: a.UserName, at: testing.cast<Date>(scalar.Timestamp) })),
+        RetirementProposalDismissed: () => given.RetirementProposalDismissed ?? testing.cast<Knowledge.RetirementProposalDismissed>(fc.record({ type: fc.constant('RetirementProposalDismissed' as const), proposalId: a.RetirementProposalId, item: a.KnowledgeItemId, action: a.ProposalAction, by: a.UserName, at: testing.cast<Date>(scalar.Timestamp) })),
+        ProposalRefusal: () => given.ProposalRefusal ?? fc.constantFrom<Knowledge.ProposalRefusal>('itemUnavailable', 'moot', 'pending', 'dismissedBefore', 'asIsAgainstStickies', 'replacementUnavailable', 'evidenceUnavailable'),
     });
     return a;
 }
@@ -270,6 +311,33 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 check: () => Knowledge.checkExtractionNumber,
                 make: impl.make.ExtractionNumber,
             }, options) : []),
+            ...(impl.make.RetirementProposalId ? testing.primitiveCases({
+                type: 'Knowledge.RetirementProposalId',
+                base: 'String',
+                hints: { pattern: '^rp_[0-9a-z]{8,32}$' },
+                invariants: ['valid'],
+                declared: [],
+                check: () => Knowledge.checkRetirementProposalId,
+                make: impl.make.RetirementProposalId,
+            }, options) : []),
+            ...(impl.make.ReviewRef ? testing.primitiveCases({
+                type: 'Knowledge.ReviewRef',
+                base: 'String',
+                hints: { minLength: 1, maxLength: 100 },
+                invariants: ['valid'],
+                declared: [],
+                check: () => Knowledge.checkReviewRef,
+                make: impl.make.ReviewRef,
+            }, options) : []),
+            ...(impl.make.EvidenceNote ? testing.primitiveCases({
+                type: 'Knowledge.EvidenceNote',
+                base: 'String',
+                hints: { minLength: 1, maxLength: 500 },
+                invariants: ['valid'],
+                declared: [],
+                check: () => Knowledge.checkEvidenceNote,
+                make: impl.make.EvidenceNote,
+            }, options) : []),
         ]),
         impl.KnowledgeItem && testing.suite('KnowledgeItem', [
             ...testing.commandCases({
@@ -384,6 +452,34 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 counted: [],
             }, options),
             ...testing.commandCases({
+                name: 'KnowledgeItem.retire',
+                run: impl.KnowledgeItem.retire,
+                input: () => fc.tuple(fc.oneof(a.LiveKnowledgeItem), fc.record({ reason: a.RetirementReason, replacedBy: a.KnowledgeItemId, proposal: a.RetirementProposalId, by: a.UserName, at: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['by', 'at'] })),
+                examples: options.examples?.KnowledgeItem?.commands?.retire ?? [],
+                factory: false,
+                requires: [{ name: 'notRetired', error: 'AlreadyRetired' }, { name: 'replacementWhenReplaced', error: 'ReplacementWithoutReason' }, { name: 'notReplacedByItself', error: 'ReplacedByItself' }],
+                declaredRequires: [],
+                firstFailing: () => Knowledge.checkRetireKnowledgeItemRequires,
+                invariants: () => Knowledge.checkKnowledgeItem,
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'KnowledgeItem.unretire',
+                run: impl.KnowledgeItem.unretire,
+                input: () => fc.tuple(fc.oneof(a.LiveKnowledgeItem), fc.record({ proposal: a.RetirementProposalId, by: a.UserName, at: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['by', 'at'] })),
+                examples: options.examples?.KnowledgeItem?.commands?.unretire ?? [],
+                factory: false,
+                requires: [{ name: 'retired', error: 'NotRetired' }],
+                declaredRequires: [],
+                firstFailing: () => Knowledge.checkUnretireKnowledgeItemRequires,
+                invariants: () => Knowledge.checkKnowledgeItem,
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
                 name: 'KnowledgeItem.delete',
                 run: impl.KnowledgeItem.delete,
                 input: () => fc.tuple(fc.oneof(a.LiveKnowledgeItem), fc.record({ by: a.UserName, at: testing.cast<Date>(scalar.Timestamp) })),
@@ -405,6 +501,48 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 requires: [],
                 declaredRequires: [],
                 invariants: () => Knowledge.checkKnowledgeItem,
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+        ]),
+        impl.RetirementProposal && testing.suite('RetirementProposal', [
+            ...testing.commandCases({
+                name: 'RetirementProposal.propose',
+                run: impl.RetirementProposal.propose,
+                input: () => fc.tuple(fc.record({ id: a.RetirementProposalId, item: a.KnowledgeItemId, action: a.ProposalAction, reason: a.RetirementReason, replacedBy: a.KnowledgeItemId, explanation: a.Reason, evidence: testing.many(a.Evidence, 1), proposedBy: a.Proposer, proposedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['id', 'item', 'action', 'explanation', 'evidence', 'proposedBy', 'proposedAt'] })),
+                examples: options.examples?.RetirementProposal?.commands?.propose ?? [],
+                factory: true,
+                requires: [{ name: 'retireHasReason', error: 'MalformedProposal' }, { name: 'unretireHasNoReason', error: 'MalformedProposal' }, { name: 'replacementWhenReplaced', error: 'MalformedProposal' }, { name: 'notReplacedByItself', error: 'MalformedProposal' }, { name: 'distinctEvidence', error: 'MalformedProposal' }],
+                declaredRequires: [],
+                firstFailing: () => Knowledge.checkProposeRetirementProposalRequires,
+                invariants: () => Knowledge.checkRetirementProposal,
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'RetirementProposal.approve',
+                run: impl.RetirementProposal.approve,
+                input: () => fc.tuple(fc.oneof(a.OpenRetirementProposal), fc.record({ by: a.UserName, at: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.RetirementProposal?.commands?.approve ?? [],
+                factory: false,
+                requires: [],
+                declaredRequires: [],
+                invariants: () => Knowledge.checkRetirementProposal,
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'RetirementProposal.dismiss',
+                run: impl.RetirementProposal.dismiss,
+                input: () => fc.tuple(fc.oneof(a.OpenRetirementProposal), fc.record({ by: a.UserName, at: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.RetirementProposal?.commands?.dismiss ?? [],
+                factory: false,
+                requires: [],
+                declaredRequires: [],
+                invariants: () => Knowledge.checkRetirementProposal,
                 declaredInvariants: [],
                 stateful: true,
                 counted: [],

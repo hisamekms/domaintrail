@@ -3,8 +3,20 @@
 // decoded with the store's own protocol (`@domaintrail/knowledge/protocol`). A session without a store answers 404: the
 // page then shows no knowledge at all. The Worker's read-only page gives the panels its own (apps/web/published).
 import { createContext, useContext } from 'react';
-import type { Knowledge, ItemWithHistory, Page, StickyCount, Deletion } from '@domaintrail/knowledge';
-import { deletion, extractionSwitch, itemWithHistory, liveItem, liveItems, page, stickyCounts, type Decoder } from '@domaintrail/knowledge/protocol';
+import type { Knowledge, ItemWithHistory, Page, StickyCount, Deletion, ApprovedProposal } from '@domaintrail/knowledge';
+import {
+    approvedProposal,
+    deletion,
+    dismissedProposal,
+    extractionSwitch,
+    itemWithHistory,
+    liveItem,
+    liveItems,
+    openProposals,
+    page,
+    stickyCounts,
+    type Decoder,
+} from '@domaintrail/knowledge/protocol';
 import { isSignInRedirect, reloadForSignIn, SAME_ORIGIN } from '../app/sign-in';
 import type { ClearedHandOver, HandOver, HandOvers } from './model';
 import { SessionApiError } from '../session/api';
@@ -92,12 +104,26 @@ export interface KnowledgeApi {
     restore(id: string): Promise<Knowledge.LiveKnowledgeItem>;
     unlink(id: string, other: string): Promise<Knowledge.LiveKnowledgeItem[]>;
     attachImage(id: string, file: Blob): Promise<Knowledge.LiveKnowledgeItem>;
+    /** 廃止する: a reason or none, and the newer item for `replaced`. */
+    retire(id: string, retirement: RetireInput): Promise<Knowledge.LiveKnowledgeItem>;
+    /** 廃止を取り消す (and 元に戻す after 廃止する). */
+    unretire(id: string): Promise<Knowledge.LiveKnowledgeItem>;
+    /** The proposals to retire (or unretire) waiting for a person, newest first. */
+    proposals(): Promise<Knowledge.OpenRetirementProposal[]>;
+    approve(proposal: string): Promise<ApprovedProposal>;
+    dismiss(proposal: string): Promise<Knowledge.DismissedRetirementProposal>;
     /** Where the page shows an image of the knowledge from. */
     imageUrl(id: string): string;
     /** A conflict can be made a hotspot (a message to the session's AI): only where there is a session. */
     readonly hotspots: boolean;
     /** ホットスポットにする pressed, its message sent (ADR 0031, section 4): only where there is a session. */
     pressHotspot?(request: string, items: readonly [string, string]): Promise<unknown>;
+}
+
+/** What a person gives to retire an item. */
+export interface RetireInput {
+    readonly reason?: Knowledge.RetirementReason;
+    readonly replacedBy?: string;
 }
 
 /** The items about one sticky, every page of `search`'s, newest first. */
@@ -130,6 +156,11 @@ export const knowledgeApi = {
     restore: (id: string): Promise<Knowledge.LiveKnowledgeItem> => call(`/items/${enc(id)}/restore`, liveItem, { json: {} }),
     unlink: (id: string, other: string): Promise<Knowledge.LiveKnowledgeItem[]> => call(`/items/${enc(id)}/unlink`, liveItems, { json: { other } }),
     attachImage: (id: string, file: Blob): Promise<Knowledge.LiveKnowledgeItem> => call(`/items/${enc(id)}/images`, liveItem, { blob: file }),
+    retire: (id: string, retirement: RetireInput): Promise<Knowledge.LiveKnowledgeItem> => call(`/items/${enc(id)}/retire`, liveItem, { json: retirement }),
+    unretire: (id: string): Promise<Knowledge.LiveKnowledgeItem> => call(`/items/${enc(id)}/unretire`, liveItem, { json: {} }),
+    proposals: (): Promise<Knowledge.OpenRetirementProposal[]> => call('/proposals', openProposals),
+    approve: (proposal: string): Promise<ApprovedProposal> => call(`/proposals/${enc(proposal)}/approve`, approvedProposal, { json: {} }),
+    dismiss: (proposal: string): Promise<Knowledge.DismissedRetirementProposal> => call(`/proposals/${enc(proposal)}/dismiss`, dismissedProposal, { json: {} }),
     /** The conflicts being made hotspots, and those whose press was cleared lately (ADR 0031, section 4). */
     handOvers: (): Promise<HandOvers> => call('/hand-overs', handOvers),
     /** ホットスポットにする pressed, its message sent: the conflict shows as being made a hotspot until its run ends. */

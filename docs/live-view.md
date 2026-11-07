@@ -668,6 +668,18 @@ dt only (`/api/session/knowledge`):
 - ナレッジ in the activity bar lists every item, with a search over the titles, the text and the quotes and filters by
   AS-IS / TO-BE, kind and origin (and by a perspective, chosen from an item's chip, shown as one more chip while it
   filters). The filters stay while the tab is closed. Opening an item rings its stickies on the canvas.
+- **Retiring** (廃止, [ADR 0031](adr/0031-knowledge.md#12-retiring-an-item) section 12): an opened item has 廃止する,
+  which offers the reasons 置き換わった (then the newer item, chosen among the others), 当てはまらなくなった and 誤り, one
+  or none, and retires it at once with 元に戻す for 10 seconds, as 消す does. A retired item keeps its text, sources and
+  versions; it leaves the ナレッジ list, a sticky's detail and the dots on the canvas, and the AI no longer reads it.
+  The list's 廃止も表示 shows the retired items too, faded, their line headed by 廃止 and the reason; opened, the item
+  that replaced one is linked (it opens in the list), and 廃止を取り消す brings it back.
+- **廃止の候補**: when the AI (the extractor, or the review of a run) finds an item no longer holds, it proposes to retire
+  it — or, when the talk brings a retired item's topic up anew, to undo its retirement. The proposals head the ナレッジ
+  list (廃止の候補 n, also the count on its button in the activity bar), each with its item, its reason, why, and its
+  evidence (quotes as the chat's reference lines, decisions, changed stickies as `#name` chips), and 承認 or 却下,
+  for any participant; an approved retirement has 元に戻す too. A dismissed proposal is not made again unless it
+  rests on new evidence. Nothing about it goes to the chat.
 - Whether the talk is turned into knowledge shows in the app bar, with the session's other controls: the facilitator
   has a 💡 switch (pressed while the extraction is on, struck through while off; `POST /api/session/extraction`), the
   others a 💡 while it is on and nothing while it is off. Every page follows a change at once (`knowledge.extraction`

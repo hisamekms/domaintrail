@@ -1,0 +1,186 @@
+context Knowledge {
+  /// 廃止の候補の識別子（`rp_` と小文字の英数字）。候補を出す側の中身から決める（同じ候補を送り直しても同じ ID）。
+  id RetirementProposalId "廃止の候補ID": String { matches(value, "^rp_[0-9a-z]{8,32}$") }
+
+  /// 見直しの1回を指す名前。見直しの担当が決める。
+  primitive ReviewRef "見直し": String { length(value) >= 1 and length(value) <= 100 }
+
+  /// 根拠の短い説明（付箋がどう変わったか）。
+  primitive EvidenceNote "根拠の説明": String { length(value) >= 1 and length(value) <= 500 }
+
+  /// なぜ廃止するか。選ばなくても廃止できる。
+  enum RetirementReason "廃止の理由" { replaced "置き換わった" obsolete "当てはまらなくなった" wrong "誤り" }
+
+  /// 候補が求めること: 廃止するか、廃止を取り消すか。
+  enum ProposalAction "候補の操作" { retire "廃止する" unretire "廃止を取り消す" }
+
+  /// 廃止: 消すのとは別。本文・出典・版はすべて残し、一覧では既定で隠し、AI（回答役・実行役・見直し）には渡さない。
+  value Retirement "廃止" {
+    reason: RetirementReason? "理由"
+    /// 置き換えた新しいナレッジ（理由が「置き換わった」のときだけ）。
+    replacedBy: KnowledgeItemId? "置き換え先"
+    by: UserName "廃止した人"
+    at: Timestamp "廃止した日時"
+    /// 承認した候補（人が候補なしに廃止したときはない）。
+    proposal: RetirementProposalId? "候補"
+
+    invariant replacementWhenReplaced "置き換え先は「置き換わった」のときだけ" {
+      exists(replacedBy) implies (exists(reason) and reason == RetirementReason.replaced)
+    }
+  }
+
+  /// 候補の根拠1つ: どの決定・どの付箋の変更・どの発言か。
+  union Evidence "根拠" {
+    /// 決定のナレッジ。
+    Decision "決定" {
+      item: KnowledgeItemId "決定のナレッジ"
+    }
+    /// 付箋の変更。
+    StickyChange "付箋の変更" {
+      sticky: StickyRef "付箋"
+      change: EvidenceNote "変わったこと"
+    }
+    /// セッションの発言。
+    Said "発言" {
+      session: SessionRef "セッション"
+      message: MessageRef "メッセージ"
+      quote: Quote "引用"
+    }
+  }
+
+  /// 候補を出したもの: 抽出か、見直し。
+  union Proposer "出したもの" {
+    Extraction "抽出" {
+      extraction: ExtractionRef "抽出"
+    }
+    Review "見直し" {
+      review: ReviewRef "見直し"
+    }
+  }
+
+  /// AI が出す、廃止（または廃止の取り消し）の候補。人が1件ずつ承認か却下する。却下した候補は残り、同じナレッジに同じ
+  /// 理由で、新しい根拠のない候補を二度と出させない。
+  aggregate RetirementProposal "廃止の候補" {
+    id: RetirementProposalId
+    item: KnowledgeItemId "ナレッジ"
+    action: ProposalAction "操作"
+    /// 廃止の候補には必ず。取り消しの候補にはない。
+    reason: RetirementReason? "理由"
+    replacedBy: KnowledgeItemId? "置き換え先"
+    /// なぜそう考えたか。監査のログの理由にもなる。
+    explanation: Reason "説明"
+    evidence: Evidence[1..*] "根拠"
+    proposedBy: Proposer "出したもの"
+    proposedAt: Timestamp "出した日時"
+
+    invariant retireHasReason "廃止の候補には理由がある" { action == ProposalAction.retire implies exists(reason) }
+    invariant unretireHasNoReason "取り消しの候補に理由はない" {
+      action == ProposalAction.unretire implies not exists(reason)
+    }
+    invariant replacementWhenReplaced "置き換え先は「置き換わった」のときだけ" {
+      exists(replacedBy) implies (exists(reason) and reason == RetirementReason.replaced)
+    }
+    invariant notReplacedByItself "自分には置き換わらない" { exists(replacedBy) implies replacedBy != item }
+    invariant distinctEvidence "根拠は1回" { unique(evidence) }
+
+    state Open "未決"
+    state Approved "承認した" {
+      decidedBy: UserName "承認した人"
+      decidedAt: Timestamp "承認した日時"
+    }
+    state Dismissed "却下した" {
+      decidedBy: UserName "却下した人"
+      decidedAt: Timestamp "却下した日時"
+    }
+
+    /// AI（抽出・見直し）が候補を出す。ナレッジに照らした受け付け（同じ候補が未決にある、前に却下した、AS-IS の知見を付箋の
+    /// 変更だけで廃止しようとしている、など）はストアが決める。
+    create command propose(id: RetirementProposalId, item: KnowledgeItemId "ナレッジ", action: ProposalAction, reason: RetirementReason?, replacedBy: KnowledgeItemId? "置き換え先", explanation: Reason, evidence: Evidence[1..*], proposedBy: Proposer, proposedAt: Timestamp) "候補を出す"
+      -> Open
+      requires retireHasReason "廃止の候補には理由がある" {
+        action == ProposalAction.retire implies exists(reason)
+      } else MalformedProposal
+      requires unretireHasNoReason "取り消しの候補に理由はない" {
+        action == ProposalAction.unretire implies not exists(reason)
+      } else MalformedProposal
+      requires replacementWhenReplaced "置き換え先は「置き換わった」のときだけ" {
+        exists(replacedBy) implies (exists(reason) and reason == RetirementReason.replaced)
+      } else MalformedProposal
+      requires notReplacedByItself "自分には置き換わらない" {
+        exists(replacedBy) implies replacedBy != item
+      } else MalformedProposal
+      requires distinctEvidence "根拠は1回" { unique(evidence) } else MalformedProposal
+      emits RetirementProposed
+
+    /// 人が承認する（ストアはナレッジを廃止する、または廃止を取り消す）。
+    command approve(by: UserName, at: Timestamp) "承認する"
+      Open -> Approved
+      emits RetirementProposalApproved
+
+    /// 人が却下する。
+    command dismiss(by: UserName, at: Timestamp) "却下する"
+      Open -> Dismissed
+      emits RetirementProposalDismissed
+  }
+
+  persistent event RetirementProposed "廃止の候補を出した" {
+    proposalId: RetirementProposalId
+    item: KnowledgeItemId "ナレッジ"
+    action: ProposalAction "操作"
+    proposedBy: Proposer "出したもの"
+    explanation: Reason "説明"
+    proposedAt: Timestamp
+  }
+
+  persistent event RetirementProposalApproved "廃止の候補を承認した" {
+    proposalId: RetirementProposalId
+    item: KnowledgeItemId "ナレッジ"
+    action: ProposalAction "操作"
+    by: UserName
+    at: Timestamp
+  }
+
+  persistent event RetirementProposalDismissed "廃止の候補を却下した" {
+    proposalId: RetirementProposalId
+    item: KnowledgeItemId "ナレッジ"
+    action: ProposalAction "操作"
+    by: UserName
+    at: Timestamp
+  }
+
+  /// 候補の形が正しくない（理由がない・余計、置き換え先が自分、根拠が重なる）。
+  error MalformedProposal "形の正しくない候補"
+
+  /// 候補を受け付けない: ナレッジに照らした理由。
+  error ProposalRefused "受け付けない候補" {
+    reason: ProposalRefusal "理由"
+  }
+
+  /// 候補を受け付けない理由。
+  enum ProposalRefusal "受け付けない理由" {
+    /// ナレッジがない、消してある。
+    itemUnavailable "ないナレッジ"
+    /// 廃止してあるナレッジの廃止、廃止していないナレッジの取り消し。
+    moot "もうそうなっている"
+    /// 同じナレッジに同じ操作の候補が未決にある。
+    pending "未決の候補がある"
+    /// 同じナレッジ・同じ理由で却下した候補があり、新しい根拠がない。
+    dismissedBefore "却下した候補と同じ"
+    /// AS-IS の知見を、TO-BE（付箋の変更、TO-BE の決定）と違うことだけで廃止しようとしている。
+    asIsAgainstStickies "AS-IS の知見と TO-BE"
+    /// 置き換え先がない、消してある、廃止してある。
+    replacementUnavailable "ない置き換え先"
+    /// 根拠の決定がない、または決定ではない。
+    evidenceUnavailable "ない根拠"
+  }
+
+  /// 廃止の候補がない（ID が違う）。
+  error ProposalNotFound "ない候補" {
+    proposalId: RetirementProposalId
+  }
+
+  /// 候補はもう承認か却下してある。
+  error ProposalDecided "決めた候補" {
+    proposalId: RetirementProposalId
+  }
+}
