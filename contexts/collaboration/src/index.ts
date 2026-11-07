@@ -33,6 +33,8 @@ export {
     type PickData,
     type ReplyData,
     type ReviewReplyData,
+    type ReviewRetireData,
+    RETIREMENT_REASONS,
     type ReplyOutcome,
 } from './domain/reply.js';
 export {

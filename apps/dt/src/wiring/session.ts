@@ -54,7 +54,7 @@ import { createExtractionDispatcher } from '../server/session/extractions.js';
 import { journeyStormings, openKnowledgeStore, type SessionKnowledge, startSessionKnowledge, stickyFocus } from './knowledge.js';
 import { type LiveKnowledge, startLiveKnowledge } from './knowledge-live.js';
 import { ownRequest, requestOutcomes } from './knowledge-hotspots.js';
-import { relinkRenamed, reviewKnowledgeOf, stickyRefs } from './knowledge-review.js';
+import { proposeReviewRetirements, relinkRenamed, reviewKnowledgeOf, stickyRefs } from './knowledge-review.js';
 import { KNOWLEDGE_CHANGED } from '@domaintrail/knowledge/protocol';
 import type { SettingsApproval } from '../cli/trust.js';
 import type { ResolvedConfig } from '../config/config.js';
@@ -678,8 +678,19 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 return refs.length > 0 ? reviewKnowledgeOf(await store.about(knowledgeConfig.project, refs)) : [];
             },
             // the items the review found at odds with the stickies go to the next extraction (ADR 0034)
-            reviewed: (_run, review) => {
-                if (review.knowledge && review.knowledge.length > 0) knowledge?.flag(review.knowledge);
+            // and the retirements it proposes go to the store at once, for people to decide (ADR 0031 §12)
+            reviewed: (run, review, given) => {
+                const atOdds = (review.knowledge ?? []).filter((k) => given.has(k.item));
+                if (atOdds.length > 0) knowledge?.flag(atOdds);
+                if (!store || !knowledgeConfig || !review.retire || review.retire.length === 0) return;
+                void proposeReviewRetirements(store, knowledgeConfig.project, run, review.retire, given, log).then(
+                    ({ proposed }) => {
+                        if (proposed === 0) return;
+                        log(`knowledge: ${proposed} retirement(s) proposed by the review of run ${run}`);
+                        hub.publish(KNOWLEDGE_CHANGED);
+                    },
+                    (e: unknown) => log(`knowledge: the review's retirements of run ${run} failed: ${e instanceof Error ? e.message : String(e)}`),
+                );
             },
             answerTimeoutMs: options.answerTimeoutMs ?? ANSWER_TIMEOUT_MS,
             onPresence: () => presenceChanged(),

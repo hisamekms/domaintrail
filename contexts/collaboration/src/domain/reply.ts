@@ -51,6 +51,9 @@ export const REPLY_LIMITS = {
     reviewText: 300,
     /** Knowledge items its review found at odds with the stickies as the run left them. */
     reviewKnowledge: 5,
+    /** Knowledge items its review proposes to retire (ADR 0031 §12), and the evidence of each. */
+    reviewRetire: 5,
+    reviewEvidence: 3,
 } as const;
 
 /** A knowledge item's ID (`kn_…`, the knowledge context's `KnowledgeItemId`) and a sticky reference (`<Storming>.<Local>`). */
@@ -63,6 +66,23 @@ export interface ReviewReplyData {
     readonly kept: readonly { readonly what: string; readonly why: string }[];
     /** Knowledge items at odds with the stickies as the run left them: the item, the sticky, and why. */
     readonly knowledge: readonly { readonly item: string; readonly sticky: string; readonly why: string }[];
+    /** Knowledge items it proposes to retire (ADR 0031 §12), with why and the evidence; people decide. */
+    readonly retire: readonly ReviewRetireData[];
+}
+
+/** The reasons a retirement gives (the knowledge context's `RetirementReason`). */
+export const RETIREMENT_REASONS = ['replaced', 'obsolete', 'wrong'] as const;
+
+/** A proposal of the review to retire an item: a sticky the run changed, or a decision, as its evidence. */
+export interface ReviewRetireData {
+    readonly item: string;
+    readonly reason: (typeof RETIREMENT_REASONS)[number];
+    readonly replacedBy?: string;
+    readonly explanation: string;
+    readonly evidence: readonly (
+        | { readonly kind: 'StickyChange'; readonly sticky: string; readonly change: string }
+        | { readonly kind: 'Decision'; readonly item: string }
+    )[];
 }
 
 export const REPLY_OUTCOMES = ['done', 'clarification', 'declined'] as const;
@@ -296,7 +316,7 @@ export function readReviewReply(raw: unknown): Result<ReviewReplyData, ReplyProb
 /** The review's report: `fixed`, `kept` (`what`, `why`) and `knowledge` (`item`, `sticky`, `why`), each optional, within the limits. */
 function readReview(raw: unknown): ReviewReplyData {
     const L = REPLY_LIMITS;
-    const v = object(raw, 'reply.review', ['fixed', 'kept', 'knowledge']);
+    const v = object(raw, 'reply.review', ['fixed', 'kept', 'knowledge', 'retire']);
     const fixed = (v.fixed === undefined ? [] : list(v.fixed, 'reply.review.fixed', L.reviewFixed)).map((x, i) =>
         text(x, `reply.review.fixed[${i}]`, L.reviewText),
     );
@@ -312,7 +332,35 @@ function readReview(raw: unknown): ReviewReplyData {
         if (typeof o.sticky !== 'string' || !STICKY_REF.test(o.sticky)) throw new Refused(`${p}.sticky`, 'Expected a sticky as <Storming>.<Local>.');
         return { item: o.item, sticky: o.sticky, why: text(o.why, `${p}.why`, L.reviewText) };
     });
-    return { fixed, kept, knowledge };
+    const retire = (v.retire === undefined ? [] : list(v.retire, 'reply.review.retire', L.reviewRetire)).map((x, i) => {
+        const p = `reply.review.retire[${i}]`;
+        const o = object(x, p, ['item', 'reason', 'replacedBy', 'explanation', 'evidence']);
+        const id = (w: unknown, at: string): string => {
+            if (typeof w !== 'string' || !KNOWLEDGE_ID.test(w)) throw new Refused(at, 'Expected a knowledge item ID (kn_…).');
+            return w;
+        };
+        const reason = RETIREMENT_REASONS.find((r) => r === o.reason);
+        if (!reason) throw new Refused(`${p}.reason`, `Expected one of ${RETIREMENT_REASONS.join(', ')}.`);
+        const replacedBy = o.replacedBy === undefined ? undefined : id(o.replacedBy, `${p}.replacedBy`);
+        if (replacedBy !== undefined && reason !== 'replaced') throw new Refused(`${p}.replacedBy`, "Only with the reason 'replaced'.");
+        const evidence = list(o.evidence, `${p}.evidence`, L.reviewEvidence).map((y, j) => {
+            const q = `${p}.evidence[${j}]`;
+            const e = object(y, q, ['kind', 'sticky', 'change', 'item']);
+            if (e.kind === 'Decision') return { kind: 'Decision' as const, item: id(e.item, `${q}.item`) };
+            if (e.kind !== 'StickyChange') throw new Refused(`${q}.kind`, 'Expected StickyChange or Decision.');
+            if (typeof e.sticky !== 'string' || !STICKY_REF.test(e.sticky)) throw new Refused(`${q}.sticky`, 'Expected a sticky as <Storming>.<Local>.');
+            return { kind: 'StickyChange' as const, sticky: e.sticky, change: text(e.change, `${q}.change`, L.reviewText) };
+        });
+        if (evidence.length === 0) throw new Refused(`${p}.evidence`, 'Expected evidence: a sticky changed or a decision.');
+        return {
+            item: id(o.item, `${p}.item`),
+            reason,
+            ...(replacedBy !== undefined && { replacedBy }),
+            explanation: text(o.explanation, `${p}.explanation`, L.reviewText),
+            evidence,
+        };
+    });
+    return { fixed, kept, knowledge, retire };
 }
 
 /** A reader of request numbers as the prompt numbers them: 1 to `count`. */
@@ -394,6 +442,37 @@ export function replyJsonSchema(requests: number): Record<string, unknown> {
                                 why: str(L.reviewText),
                             },
                             ['item', 'sticky', 'why'],
+                        ),
+                    },
+                    retire: {
+                        type: 'array',
+                        maxItems: L.reviewRetire,
+                        items: obj(
+                            {
+                                item: { type: 'string', pattern: KNOWLEDGE_ID.source },
+                                reason: { type: 'string', enum: RETIREMENT_REASONS },
+                                replacedBy: { type: 'string', pattern: KNOWLEDGE_ID.source },
+                                explanation: str(L.reviewText),
+                                evidence: {
+                                    type: 'array',
+                                    minItems: 1,
+                                    maxItems: L.reviewEvidence,
+                                    items: {
+                                        anyOf: [
+                                            obj(
+                                                {
+                                                    kind: { const: 'StickyChange' },
+                                                    sticky: { type: 'string', pattern: STICKY_REF.source },
+                                                    change: str(L.reviewText),
+                                                },
+                                                ['kind', 'sticky', 'change'],
+                                            ),
+                                            obj({ kind: { const: 'Decision' }, item: { type: 'string', pattern: KNOWLEDGE_ID.source } }, ['kind', 'item']),
+                                        ],
+                                    },
+                                },
+                            },
+                            ['item', 'reason', 'explanation', 'evidence'],
                         ),
                     },
                 },

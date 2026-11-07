@@ -12,6 +12,7 @@ import type { TemplateContext } from './domain/templates.js';
 import type { JourneyAct, JourneyFile, JourneyProblem, JourneySummary } from './domain/journey.js';
 import type { JourneyWhere } from './domain/guide.js';
 import type { NeighbourSticky, ReviewFindingData, StickyRename } from './domain/review.js';
+import type { ReviewRetireData } from './domain/reply.js';
 
 export type { RunActivity, RunActivityPhase, RevertChanges, RevertFile, TemplateContext, NeighbourSticky, ReviewFindingData, StickyRename };
 
@@ -849,6 +850,8 @@ export interface AgentFinishReview {
     readonly fixed: readonly string[];
     readonly kept: readonly { readonly what: string; readonly why: string }[];
     readonly knowledge?: readonly { readonly item: string; readonly sticky: string; readonly why: string }[];
+    /** The items it proposes to retire (ADR 0031 §12), each with why and its evidence: the server proposes them to the store. */
+    readonly retire?: readonly ReviewRetireData[];
 }
 
 /**

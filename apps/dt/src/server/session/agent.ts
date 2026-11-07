@@ -89,8 +89,11 @@ export interface AgentApiDeps {
      * `<Storming>.<Local>` each; absent, or `undefined` from it: none (no store, or the session does not extract).
      */
     readonly reviewKnowledge?: (stickies: readonly string[]) => Promise<readonly AgentReviewKnowledge[] | undefined>;
-    /** A run that ended now was reviewed by its agent: what it said (the knowledge at odds goes to the extraction). */
-    readonly reviewed?: (run: Collaboration.AgentRunId, review: AgentFinishReview) => void;
+    /**
+     * A run that ended now was reviewed by its agent: what it said, with the IDs of the knowledge items it was given
+     * (the items at odds go to the extraction, the retirements it proposes to the store: only of those items).
+     */
+    readonly reviewed?: (run: Collaboration.AgentRunId, review: AgentFinishReview, given: ReadonlySet<string>) => void;
     /** The extractor role's entry point (absent: the session keeps no knowledge, and the entry point answers 404). */
     readonly extractions?: ExtractionDispatcher;
     /**
@@ -289,6 +292,8 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
      * what is left only).
      */
     const foundByRun = new Map<Collaboration.AgentRunId, readonly Collaboration.ReviewFinding[]>();
+    /** The knowledge items a running run's review was given: what it may flag or propose to retire is among them. */
+    const givenByRun = new Map<Collaboration.AgentRunId, ReadonlySet<string>>();
 
     /** Whether a reply of the agent carries the agent's own credential (it would reach the pages). */
     const leaks = (v: unknown): boolean => v !== undefined && JSON.stringify(v).includes(deps.token);
@@ -386,6 +391,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
                               return undefined;
                           })
                         : undefined;
+                givenByRun.set(run, new Set((knowledge ?? []).map((k) => k.id)));
                 return sendJson(res, 200, {
                     complete,
                     findings: review.findings,
@@ -426,8 +432,10 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
                     }),
                 });
                 if (finished.ok && !finished.value.replayed) {
+                    const given = givenByRun.get(run) ?? new Set<string>();
                     foundByRun.delete(run);
-                    if (review) deps.reviewed?.(run, review.value);
+                    givenByRun.delete(run);
+                    if (review) deps.reviewed?.(run, review.value, given);
                 }
                 return answer(res, await ended(run, finished), (v) => v);
             }

@@ -5,6 +5,7 @@
 // it fixes within the requests' scope; what it keeps it says why. Its reply is the run's reply shape with `review`.
 import type { AgentReviewBody } from '@domaintrail/collaboration/protocol';
 import { REPLY_LIMITS } from '@domaintrail/collaboration';
+import { RETIREMENT_PROPOSAL_RULES } from './extract-prompt.js';
 
 /** JSON that cannot close the block it is in: `<` and `>` are escaped (JSON reads them back unchanged). */
 const blockJson = (value: unknown): string => JSON.stringify(value, null, 2).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
@@ -23,6 +24,16 @@ const FINDINGS = `- \`ResolvedUnchanged\`: you resolved the hotspot \`sticky\`, 
   thing, give \`sticky\` the new wording too; if not, say why.
 - \`DuplicateLabel\`: the sticky you added (\`sticky\`) has the label of \`other\`, which has another identifier. If they
   are the same thing, keep one; if not, tell them apart.`;
+
+/** What the review may propose about knowledge besides naming it (ADR 0031 §12): to retire an item, people deciding. */
+const RETIRE = `
+- \`retire\`: an item of \`review.knowledge\` that no longer holds because of what this run did by the requests, which
+  you propose a person retire (at most ${REPLY_LIMITS.reviewRetire}): \`item\`, \`reason\` (\`replaced\` by a newer item of
+  \`review.knowledge\`, given as \`replacedBy\`; \`obsolete\`: true before, not now; \`wrong\`: never true), \`explanation\`
+  (why, in the requests' language), and \`evidence\` (1 to ${REPLY_LIMITS.reviewEvidence}): \`{ "kind": "StickyChange",
+  "sticky": "Storming.Element", "change": "what changed" }\` for a sticky this run changed, or \`{ "kind": "Decision",
+  "item": "kn_…" }\` for a decision of \`review.knowledge\` that overturns it. Nothing is retired by you; an item you
+  retire is also in \`knowledge\` when the talk should settle it. ${RETIREMENT_PROPOSAL_RULES.replace(/\n/g, '\n  ')}`;
 
 /** The review's instructions and data, as the turn after the work gives them (the rules of the run still hold). */
 function reviewText(review: AgentReviewBody, nonce: string): string {
@@ -52,7 +63,7 @@ Reply as before — \`outcome\` "done", the same \`title\`, a \`summary\` of one
 - \`kept\`: each finding of \`review.found\` you left as it is, \`what\` (the finding in a few words, naming its
   elements, never the rule's name: people read it) and \`why\`;
 - \`knowledge\`: the items of \`review.knowledge\` now at odds with the stickies as you leave them — \`item\` (its ID),
-  \`sticky\` (\`Storming.Element\`) and \`why\` (at most ${L.reviewKnowledge}). Never edit knowledge: people decide.
+  \`sticky\` (\`Storming.Element\`) and \`why\` (at most ${L.reviewKnowledge}). Never edit knowledge: people decide.${review.knowledge && review.knowledge.length > 0 ? RETIRE : ''}
 Empty lists when there is nothing to say.
 
 <review-${nonce}>

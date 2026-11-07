@@ -462,7 +462,12 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
             log(`run ${id}: reviewed (exit ${outcome.exitCode}; ${said?.fixed.length ?? 0} fixed, ${said?.kept.length ?? 0} kept)`);
             return {
                 kind: 'reviewed',
-                review: { fixed: said?.fixed ?? [], kept: said?.kept ?? [], ...(said && said.knowledge.length > 0 && { knowledge: said.knowledge }) },
+                review: {
+                    fixed: said?.fixed ?? [],
+                    kept: said?.kept ?? [],
+                    ...(said && said.knowledge.length > 0 && { knowledge: said.knowledge }),
+                    ...(said && said.retire.length > 0 && { retire: said.retire }),
+                },
             };
         } catch (e) {
             if (signal.aborted) return { kind: 'cancelled' };

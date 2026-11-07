@@ -6,7 +6,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { createFilesKnowledgeStore, Knowledge } from '@domaintrail/knowledge';
-import { RELINKED_BY, relinkRenamed, REVIEW_KNOWLEDGE_TEXT, reviewKnowledgeOf } from './knowledge-review';
+import { proposeReviewRetirements, RELINKED_BY, relinkRenamed, REVIEW_KNOWLEDGE_TEXT, reviewKnowledgeOf } from './knowledge-review';
 
 const known = <T>(made: { ok: true; value: T } | { ok: false; error: unknown }): T => {
     if (!made.ok) throw new Error(`invalid test value: ${JSON.stringify(made.error)}`);
@@ -104,5 +104,54 @@ describe('the links of a renamed sticky', () => {
         // nothing about the old name: nothing to do
         expect(await relinkRenamed(store, project, [{ storming: 'Returns', from: 'Gone', to: 'Other' }], (l) => log.push(l))).toBe(0);
         expect(log).toEqual([]);
+    });
+});
+
+describe('the retirements a review proposes', () => {
+    const dirs: string[] = [];
+    afterAll(async () => {
+        for (const d of dirs) await rm(d, { recursive: true, force: true });
+    });
+
+    test('proposed by the review of the run; an AS-IS item against a sticky changed refused by the store, as the extractor’s', async () => {
+        const root = await mkdtemp(path.join(tmpdir(), 'dt-review-retire-'));
+        dirs.push(root);
+        const project = known(Knowledge.makeProjectName('shop'));
+        const store = createFilesKnowledgeStore({ dir: path.join(root, 'knowledge'), project, stateDir: path.join(root, 'state') });
+        const session = known(Knowledge.makeSessionRef('s1'));
+        const source = { session, message: known(Knowledge.makeMessageRef('m1')), at: new Date(), quote: known(Knowledge.makeQuote('x')) };
+        await store.applyExtraction(project, {
+            by: { session, number: known(Knowledge.makeExtractionNumber(1)) },
+            operations: [
+                {
+                    kind: 'Add',
+                    id: known(Knowledge.makeKnowledgeItemId('kn_00000001')),
+                    content: item('kn_00000001', 'decision', 'to_be', 0).content,
+                    sources: [source],
+                },
+                {
+                    kind: 'Add',
+                    id: known(Knowledge.makeKnowledgeItemId('kn_00000002')),
+                    content: item('kn_00000002', 'rule', 'as_is', 0).content,
+                    sources: [source],
+                },
+            ],
+        });
+        const evidence = [{ kind: 'StickyChange' as const, sticky: 'Returns.Deadline', change: '30日にした' }];
+        const log: string[] = [];
+        const outcome = await proposeReviewRetirements(
+            store,
+            project,
+            'r1',
+            [
+                { item: 'kn_00000001', reason: 'obsolete', explanation: '30日になった', evidence },
+                { item: 'kn_00000002', reason: 'wrong', explanation: '今は違う', evidence },
+            ],
+            new Set(['kn_00000001', 'kn_00000002']),
+            (l) => log.push(l),
+        );
+        expect(outcome).toEqual({ proposed: 1, refused: 1 });
+        expect(log).toEqual(['knowledge: run r1: a retirement not proposed (asIsAgainstStickies)']);
+        expect<unknown>((await store.proposals(project)).map((p) => [p.item, p.proposedBy])).toEqual([['kn_00000001', { kind: 'Review', review: 'run:r1' }]]);
     });
 });

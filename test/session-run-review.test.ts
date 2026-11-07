@@ -128,7 +128,26 @@ describe("the review at a run's end, with knowledge", () => {
                             title: '名前',
                             summary: '見直した',
                             requests: [],
-                            review: { fixed: [], kept: [], knowledge: [{ item: id(1), sticky: 'Returns.ReturnAsked', why: '今日30日に決めた' }] },
+                            review: {
+                                fixed: [],
+                                kept: [],
+                                knowledge: [{ item: id(1), sticky: 'Returns.ReturnAsked', why: '今日30日に決めた' }],
+                                retire: [
+                                    {
+                                        item: id(1),
+                                        reason: 'obsolete',
+                                        explanation: '期限は30日になった',
+                                        evidence: [{ kind: 'StickyChange', sticky: 'Returns.ReturnAsked', change: '名前を変え、期限を30日にした' }],
+                                    },
+                                    // the AS-IS item, never given to the review: left out
+                                    {
+                                        item: id(2),
+                                        reason: 'wrong',
+                                        explanation: '電話ではない',
+                                        evidence: [{ kind: 'StickyChange', sticky: 'Returns.ReturnAsked', change: '名前を変えた' }],
+                                    },
+                                ],
+                            },
                         },
                     },
                 ],
@@ -173,5 +192,15 @@ describe("the review at a run's end, with knowledge", () => {
         expect(lines.some((l) => l.includes(`2 item(s) relinked to the stickies run ${run} renamed`))).toBe(true);
         // the flag is the extraction's: logged, waiting for the next one
         expect(lines.some((l) => l.includes("1 item(s) flagged by a run's review"))).toBe(true);
+        // the retirement it proposed is in 廃止の候補 at once, the review's; the item not given was not proposed
+        const proposals = await until('the proposal', async () => {
+            const open = await store.proposals(project);
+            return open.length > 0 ? open : undefined;
+        });
+        expect<unknown>(proposals.map((p) => [p.item, p.action, p.reason, p.proposedBy])).toEqual([
+            [id(1), 'retire', 'obsolete', { kind: 'Review', review: `run:${run}` }],
+        ]);
+        expect(lines.some((l) => l.includes('1 retirement(s) of items the review was not given left out'))).toBe(true);
+        expect((await store.get(project, wire.itemId(id(1), 'test')))?.item.retirement).toBeUndefined();
     }, 30_000);
 });

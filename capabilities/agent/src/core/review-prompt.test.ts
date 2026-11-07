@@ -42,6 +42,10 @@ describe("the review's prompts", () => {
         const withIt = buildReviewPrompts(body({ knowledge }), '', 'n').continued;
         expect(withIt).toContain('what was AS-IS is never a reason to change a sticky');
         expect(withIt).toContain('Never edit knowledge');
+        // the retirements it may propose, under the same rules as the extractor's (never an AS-IS item for the TO-BE)
+        expect(withIt).toContain('`retire`: an item of `review.knowledge` that no longer holds');
+        expect(withIt).toContain('never propose to retire one for that');
+        expect(without).not.toContain('`retire`');
         const data = JSON.parse(withIt.slice(withIt.indexOf('<review-n>') + '<review-n>'.length, withIt.indexOf('</review-n>'))) as {
             review: { knowledge: unknown; found: unknown };
         };

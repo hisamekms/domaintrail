@@ -160,14 +160,35 @@ describe("the agent's report of its review in the reply", () => {
             fixed: ['@{es:Returns/ReturnRequested} を直した'],
             kept: [{ what: '重複', why: '別のもの' }],
             knowledge: [{ item: 'kn_00000001', sticky: 'Returns.ReturnRequested', why: '14日のまま' }],
+            retire: [],
         });
         expect(Object.keys((replyJsonSchema(1) as { properties: object }).properties)).toContain('review');
+    });
+
+    test('a retirement it proposes: a reason, an explanation and evidence (a sticky changed, or a decision); never a message', () => {
+        const retire = {
+            item: 'kn_00000001',
+            reason: 'replaced',
+            replacedBy: 'kn_00000002',
+            explanation: '30日に決めた',
+            evidence: [
+                { kind: 'StickyChange', sticky: 'Returns.Deadline', change: '解決: 30日' },
+                { kind: 'Decision', item: 'kn_00000002' },
+            ],
+        };
+        expect<unknown>(readReviewReply({ retire: [retire] })).toEqual({ ok: true, value: { fixed: [], kept: [], knowledge: [], retire: [retire] } });
+        expect(readReviewReply({ retire: [{ ...retire, evidence: [] }] })).toMatchObject({ ok: false, error: { path: 'reply.review.retire[0].evidence' } });
+        expect(readReviewReply({ retire: [{ ...retire, reason: 'obsolete' }] })).toMatchObject({
+            ok: false,
+            error: { path: 'reply.review.retire[0].replacedBy' },
+        });
+        expect(readReviewReply({ retire: [{ ...retire, evidence: [{ kind: 'Said', session: 's', message: 'm', quote: 'q' }] }] })).toMatchObject({ ok: false });
     });
 
     test('a bad item ID, a sticky that is no reference, a kept finding without why: refused', () => {
         expect(readReviewReply({ knowledge: [{ item: 'kn_X', sticky: 'Returns.ReturnRequested', why: 'x' }] })).toMatchObject({ ok: false });
         expect(readReviewReply({ knowledge: [{ item: 'kn_00000001', sticky: 'ReturnRequested', why: 'x' }] })).toMatchObject({ ok: false });
         expect(readReviewReply({ kept: [{ what: 'x' }] })).toMatchObject({ ok: false, error: { path: 'reply.review.kept[0].why' } });
-        expect(readReviewReply({})).toEqual({ ok: true, value: { fixed: [], kept: [], knowledge: [] } });
+        expect(readReviewReply({})).toEqual({ ok: true, value: { fixed: [], kept: [], knowledge: [], retire: [] } });
     });
 });

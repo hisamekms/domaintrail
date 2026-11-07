@@ -7,9 +7,13 @@
 // - **Renames**: a sticky renamed (`<Storming>.<Old>` → `<Storming>.<New>`) breaks the `about` of its items, which
 //   name it by ID. Each such item is corrected to name the new one (a new version, by `dt`): a repair, not a change of
 //   what it says. Its text, labels and the other stickies stay.
-import type { StickyRename } from '@domaintrail/collaboration';
+// - **Retirements the review proposes** (ADR 0031 §12): only of the items it was given, each with its reason, its
+//   explanation and its evidence (a sticky the run changed, a decision), proposed by the review of the run
+//   (`run:<id>`) through `KnowledgeStore.propose`, which refuses what `admitProposal` refuses (an AS-IS item against
+//   the TO-BE, one dismissed before on the same evidence, one already waiting). People decide in 廃止の候補.
+import type { ReviewRetireData, StickyRename } from '@domaintrail/collaboration';
 import type { AgentReviewKnowledge } from '@domaintrail/collaboration/protocol';
-import { Knowledge, type KnowledgeStore } from '@domaintrail/knowledge';
+import { Knowledge, type KnowledgeStore, proposeRetirements, readRetirementCandidates } from '@domaintrail/knowledge';
 
 /** The most items a review gives the agent. */
 export const REVIEW_KNOWLEDGE_MAX = 12;
@@ -72,4 +76,46 @@ export async function relinkRenamed(
         }
     }
     return relinked;
+}
+
+/** What became of the retirements a review proposed: those the store took (new or made before), and those it did not. */
+export interface ReviewProposals {
+    readonly proposed: number;
+    readonly refused: number;
+}
+
+/**
+ * Proposes the retirements a run's review gave (`retire`) to the store, as the review `run:<run>`: only those of the
+ * items it was given (`given`); a malformed one, and one the store refuses, are logged (kinds only, never a text).
+ */
+export async function proposeReviewRetirements(
+    store: KnowledgeStore,
+    project: Knowledge.ProjectName,
+    run: string,
+    retire: readonly ReviewRetireData[],
+    given: ReadonlySet<string>,
+    log: (line: string) => void,
+): Promise<ReviewProposals> {
+    const asked = retire.filter((r) => given.has(r.item));
+    if (asked.length < retire.length) log(`knowledge: run ${run}: ${retire.length - asked.length} retirement(s) of items the review was not given left out`);
+    if (asked.length === 0) return { proposed: 0, refused: 0 };
+    const review = Knowledge.makeReviewRef(`run:${run}`);
+    if (!review.ok) throw new Error('A run is not a review reference');
+    const read = readRetirementCandidates(
+        asked.map((r) => ({ ...r, action: 'retire' })),
+        review.value,
+    );
+    for (const r of read.rejected) log(`knowledge: run ${run}: a retirement left out (${r.path}: ${r.message})`);
+    let proposed = 0;
+    let refused = 0;
+    for (const o of await proposeRetirements(store, project, read.candidates)) {
+        if (o.result.ok) proposed++;
+        else {
+            refused++;
+            log(
+                `knowledge: run ${run}: a retirement not proposed (${o.result.error.type === 'ProposalRefused' ? o.result.error.reason : o.result.error.type})`,
+            );
+        }
+    }
+    return { proposed, refused };
 }
