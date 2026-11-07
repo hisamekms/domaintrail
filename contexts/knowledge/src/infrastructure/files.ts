@@ -14,6 +14,8 @@
 //   reason; no text, no quote);
 // - `knowledge/redactions.jsonl`: the redaction log, IDs only, appended and kept for good, so that every clone's dt
 //   redacts its own session database (it reaches them through git);
+// - `knowledge/proposals/<rp_…>.json`: the proposals to retire an item (or to undo it), open, approved or dismissed
+//   (the dismissed ones keep the same from being proposed again);
 // - `knowledge/.gitattributes`: the two logs merge with `union`, so that sessions on two branches do not conflict;
 // - in the state directory the app gives (outside the workspace, never committed): `deleted/<id>.md`, the items
 //   deleted within the undo window, and `extractions.jsonl`, the extractions applied (the idempotency keys).
@@ -35,13 +37,16 @@ import { createHash, randomBytes } from 'node:crypto';
 import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { err, Knowledge, ok, type Result } from '../generated/index.js';
-import { applyExtraction as applyOperations, idempotencyKey, type DropReason } from '../domain/extraction.js';
+import { applyExtraction as applyOperations, idempotencyKey, proposalsTouched, type DropReason } from '../domain/extraction.js';
 import { knowledgeItemCommands, withLiveConflicts } from '../domain/items.js';
-import { auditOf, imagesIn, redactionOf, sourceMessages, withoutReason } from '../domain/records.js';
+import { auditOf, auditOfProposal, imagesIn, redactionOf, sourceMessages, withoutReason } from '../domain/records.js';
+import { admitProposal, decideApproval, decideDismissal, isRetired, openProposals, proposalsToForget } from '../domain/retirement.js';
+import { retirementProposal as proposalOfJson, WireError } from '../protocol.js';
 import { IMAGES_DIR, idOfFileName, itemFileName, printItemFile, readItemFile } from '../domain/item-file.js';
 import type { KnowledgeFile } from '../domain/check.js';
 import type {
     AppliedExtraction,
+    ApprovedProposal,
     AuditQuery,
     Deletion,
     ItemWithHistory,
@@ -50,6 +55,7 @@ import type {
     KnowledgeStore,
     Page,
     RedactionEntry,
+    RetiredFilter,
     StickyCount,
 } from '../application/ports.js';
 
@@ -57,6 +63,8 @@ export const AUDIT_FILE = 'audit.jsonl';
 export const REDACTIONS_FILE = 'redactions.jsonl';
 const GITATTRIBUTES = `${AUDIT_FILE} merge=union\n${REDACTIONS_FILE} merge=union\n`;
 const DELETED_DIR = 'deleted';
+/** The proposals' directory, inside the knowledge directory. */
+export const PROPOSALS_DIR = 'proposals';
 const EXTRACTIONS_FILE = 'extractions.jsonl';
 /** The extractions remembered: a retry comes within seconds, so the last ones suffice. */
 const EXTRACTIONS_KEPT = 500;
@@ -152,7 +160,13 @@ function randomId(prefix: string): string {
 // ---- the logs' records ----
 
 function auditJson(entry: Knowledge.AuditEntry): string {
-    const actor = entry.actor.kind === 'Extractor' ? { kind: 'Extractor', extraction: entry.actor.extraction } : { kind: 'Person', user: entry.actor.user };
+    const a = entry.actor;
+    const actor =
+        a.kind === 'Extractor'
+            ? { kind: 'Extractor', extraction: a.extraction }
+            : a.kind === 'Person'
+              ? { kind: 'Person', user: a.user }
+              : { kind: 'Review', review: a.review };
     return JSON.stringify({
         item: entry.item,
         version: entry.version,
@@ -174,6 +188,10 @@ const AUDIT_OPERATIONS: readonly Knowledge.AuditOperation[] = [
     'restore',
     'unlinkConflict',
     'handOverToHotspot',
+    'retire',
+    'unretire',
+    'propose',
+    'dismiss',
 ];
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -193,6 +211,10 @@ function actorOfJson(a: unknown): Knowledge.Actor | undefined {
     if (a.kind === 'Person') {
         const user = Knowledge.makeUserName(text(a.user));
         return user.ok ? { kind: 'Person', user: user.value } : undefined;
+    }
+    if (a.kind === 'Review') {
+        const review = Knowledge.makeReviewRef(text(a.review));
+        return review.ok ? { kind: 'Review', review: review.value } : undefined;
     }
     if (a.kind !== 'Extractor' || !isRecord(a.extraction)) return undefined;
     const session = Knowledge.makeSessionRef(text(a.extraction.session));
@@ -268,6 +290,16 @@ function afterItemCursor(cursor: string): (item: Knowledge.KnowledgeItemCommon) 
     return (item) => item.createdAt.getTime() < time || (item.createdAt.getTime() === time && item.id < id);
 }
 
+/** Whether an item is listed under a search's `retired`. */
+const listedUnder =
+    (retired: RetiredFilter | undefined) =>
+    (item: Knowledge.KnowledgeItemCommon): boolean =>
+        retired === 'include' ? true : retired === 'only' ? isRetired(item) : !isRetired(item);
+
+/** A proposal's file: its JSON (`Date`s as ISO strings), one line per field. */
+const proposalFile = (p: Knowledge.RetirementProposal): string => `${JSON.stringify(p, null, 2)}\n`;
+const proposalFileName = (id: Knowledge.RetirementProposalId): string => `${id}.json`;
+
 const limitOf = (limit: number | undefined): number => Math.min(Math.max(Math.floor(limit ?? DEFAULT_LIMIT), 1), MAX_LIMIT);
 
 const known = <T>(r: Result<T, never>): T => {
@@ -282,6 +314,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
     const { dir, stateDir } = options;
     const deletedDir = path.join(stateDir, DELETED_DIR);
     const imagesDir = path.join(dir, IMAGES_DIR);
+    const proposalsDir = path.join(dir, PROPOSALS_DIR);
     const undoWindow = options.undoWindowMs ?? DEFAULT_UNDO_WINDOW_MS;
     const now = options.now ?? (() => new Date());
 
@@ -346,6 +379,40 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
     async function deletedOne(id: Knowledge.KnowledgeItemId): Promise<Knowledge.DeletedKnowledgeItem | undefined> {
         const item = await readOne(deletedDir, id);
         return item?.state === 'Deleted' ? item : undefined;
+    }
+
+    // ---- proposals
+
+    /** Every proposal that reads (a file a person broke is skipped, never written over). */
+    async function allProposals(): Promise<Knowledge.RetirementProposal[]> {
+        const proposals: Knowledge.RetirementProposal[] = [];
+        for (const name of (await listDir(proposalsDir)).filter((n) => /^rp_[0-9a-z]+\.json$/.test(n)).sort()) {
+            const json = parsed((await readText(path.join(proposalsDir, name))) ?? '');
+            try {
+                proposals.push(proposalOfJson(json, name));
+            } catch (e) {
+                if (!(e instanceof WireError)) throw e;
+            }
+        }
+        return proposals;
+    }
+
+    async function writeProposals(proposals: readonly Knowledge.RetirementProposal[]): Promise<void> {
+        if (proposals.length === 0) return;
+        await mkdir(proposalsDir, { recursive: true });
+        await writeAll(proposals.map((p) => ({ file: path.join(proposalsDir, proposalFileName(p.id)), data: proposalFile(p) })));
+    }
+
+    /** The items of the workspace and the deleted ones, by ID: what proposals are decided against. */
+    async function everyItem(): Promise<Map<Knowledge.KnowledgeItemId, Knowledge.KnowledgeItem>> {
+        const live = await itemsIn(dir);
+        const deleted = await itemsIn(deletedDir);
+        return new Map([...deleted.items, ...live.items]);
+    }
+
+    /** Why an item cannot be acted on: missing, or deleted. */
+    async function unavailable(id: Knowledge.KnowledgeItemId): Promise<Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone> {
+        return (await deletedOne(id)) ? { type: 'KnowledgeItemGone', itemId: id } : { type: 'KnowledgeItemNotFound', itemId: id };
     }
 
     // ---- writing
@@ -416,6 +483,8 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
         const images = await listDir(imagesDir);
         for (const id of new Set(due.flatMap((i) => imagesIn(i.content.text))))
             if (!stillUsed.has(id)) for (const name of images.filter((n) => n.startsWith(`${id}.`))) await rm(path.join(imagesDir, name), { force: true });
+        // the proposals about them, or quoting their messages
+        for (const p of proposalsToForget(await allProposals(), due)) await rm(path.join(proposalsDir, proposalFileName(p.id)), { force: true });
         for (const item of due) await rm(path.join(deletedDir, itemFileName(item.id)), { force: true });
     }
 
@@ -435,7 +504,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
         async about(project, stickies) {
             checkProject(project);
             const wanted = new Set<string>(stickies);
-            return (await shownItems()).filter((i) => i.content.about.some((a) => wanted.has(a))).sort(newestFirst);
+            return (await shownItems()).filter((i) => !isRetired(i) && i.content.about.some((a) => wanted.has(a))).sort(newestFirst);
         },
 
         async search(project, query: KnowledgeQuery): Promise<Page<Knowledge.LiveKnowledgeItem>> {
@@ -446,8 +515,10 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                 .split(/\s+/)
                 .filter((t) => t !== '');
             const after = query.cursor === undefined ? undefined : afterItemCursor(query.cursor);
+            const listed = listedUnder(query.retired);
             const matching = (await shownItems())
                 .filter((i) => {
+                    if (!listed(i)) return false;
                     const { labels } = i.content;
                     if (about && !i.content.about.some((a) => about.has(a))) return false;
                     if (query.when && !query.when.includes(labels.when)) return false;
@@ -469,11 +540,12 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
 
         async counts(project, storming): Promise<readonly StickyCount[]> {
             checkProject(project);
-            const live = await liveItems();
+            // a retired item gives no dot, and a conflict with one no mark
+            const live = (await liveItems()).filter((i) => !isRetired(i));
             const liveIds = new Set<string>(live.map((i) => i.id));
             const counts = new Map<Knowledge.StickyRef, StickyCount>();
             for (const item of live) {
-                // a conflict counts while its other side is live
+                // a conflict counts while its other side is live (and not retired)
                 const conflict = item.conflictsWith.some((id) => liveIds.has(id));
                 for (const sticky of item.content.about) {
                     if (!sticky.startsWith(`${storming}.`)) continue;
@@ -529,10 +601,13 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                     if (reason) blocked.push({ index, reason });
                     else kept.push({ index, operation });
                 });
+                const proposing = new Set<string>(proposalsTouched(extraction));
+                const proposals = proposing.size > 0 ? (await allProposals()).filter((p) => proposing.has(p.item)) : [];
                 const outcome = applyOperations(
                     { by: extraction.by, operations: kept.map((k) => k.operation) },
                     (id) => live.items.get(id) ?? deleted.items.get(id),
                     now(),
+                    (item) => proposals.filter((p) => p.item === item),
                 );
                 const indexOf = (operation: Knowledge.Operation): number => kept.find((k) => k.operation === operation)?.index ?? -1;
                 const dropped = [...blocked, ...outcome.dropped.map((d) => ({ index: indexOf(d.operation), reason: d.reason }))].sort(
@@ -541,12 +616,19 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                 const items = outcome.items.filter((i): i is Knowledge.LiveKnowledgeItem => i.state === 'Live');
                 await mkdir(dir, { recursive: true });
                 await writeItems(items, dir);
-                await appendAudit(outcome.applied.flatMap((a) => a.changes.map((c) => auditOf(c.event))));
+                await writeProposals(outcome.proposals);
+                await appendAudit(
+                    outcome.applied.flatMap((a) => [
+                        ...a.changes.map((c) => auditOf(c.event)),
+                        ...(a.proposal ? [auditOfProposal(a.proposal.event, a.proposal.version)] : []),
+                    ]),
+                );
                 await remember({ key, items: items.map((i) => i.id), dropped });
                 return {
                     items,
                     dropped: dropped.map(({ index, reason }) => ({ operation: extraction.operations[index], reason })),
                     replayed: false,
+                    ...(outcome.proposals.length > 0 && { proposals: outcome.proposals }),
                 };
             });
         },
@@ -651,6 +733,92 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
             });
         },
 
+        async retire(project, id, retirement, by) {
+            checkProject(project);
+            return exclusive(async () => {
+                const item = await liveOne(id);
+                if (item === undefined) return err(await unavailable(id));
+                if (retirement.replacedBy !== undefined && retirement.replacedBy !== id) {
+                    const replacement = await liveOne(retirement.replacedBy);
+                    if (replacement === undefined || isRetired(replacement))
+                        return err({ type: 'ProposalRefused' as const, reason: 'replacementUnavailable' as const });
+                }
+                const r = knowledgeItemCommands.retire(item, { ...retirement, by, at: now() });
+                if (!r.ok) return r;
+                await writeItems([r.value.Live.aggregate], dir);
+                await appendAudit([auditOf(r.value.Live.events.KnowledgeItemRetired)]);
+                return ok(r.value.Live.aggregate);
+            });
+        },
+
+        async unretire(project, id, by) {
+            checkProject(project);
+            return exclusive(async () => {
+                const item = await liveOne(id);
+                if (item === undefined) return err(await unavailable(id));
+                const r = knowledgeItemCommands.unretire(item, { by, at: now() });
+                if (!r.ok) return r;
+                await writeItems([r.value.Live.aggregate], dir);
+                await appendAudit([auditOf(r.value.Live.events.KnowledgeItemUnretired)]);
+                return ok(r.value.Live.aggregate);
+            });
+        },
+
+        async propose(project, candidate) {
+            checkProject(project);
+            return exclusive(async () => {
+                const items = await everyItem();
+                const r = admitProposal(
+                    candidate,
+                    { lookup: (id) => items.get(id), proposals: (await allProposals()).filter((p) => p.item === candidate.item) },
+                    now(),
+                );
+                if (!r.ok) return r;
+                const { proposal, event } = r.value;
+                const item = items.get(candidate.item);
+                if (event && item) {
+                    await writeProposals([proposal]);
+                    await appendAudit([auditOfProposal(event, item.version)]);
+                }
+                return ok(proposal);
+            });
+        },
+
+        async proposals(project) {
+            checkProject(project);
+            const items = await everyItem();
+            return openProposals(await allProposals(), (id) => items.get(id));
+        },
+
+        async approveProposal(project, id, by) {
+            checkProject(project);
+            return exclusive(async () => {
+                const items = await everyItem();
+                const proposal = (await allProposals()).find((p) => p.id === id);
+                const r = decideApproval(id, proposal, (i) => items.get(i), by, now());
+                if (!r.ok) return r;
+                const event = r.value.itemEvent;
+                await writeItems([r.value.item], dir);
+                await writeProposals([r.value.proposal]);
+                await appendAudit([auditOf(event)]);
+                const approved: ApprovedProposal = { proposal: r.value.proposal, item: r.value.item };
+                return ok(approved);
+            });
+        },
+
+        async dismissProposal(project, id, by) {
+            checkProject(project);
+            return exclusive(async () => {
+                const proposal = (await allProposals()).find((p) => p.id === id);
+                const r = decideDismissal(id, proposal, by, now());
+                if (!r.ok) return r;
+                const item = proposal && (await everyItem()).get(proposal.item);
+                await writeProposals([r.value.proposal]);
+                if (item) await appendAudit([auditOfProposal(r.value.event, item.version)]);
+                return ok(r.value.proposal);
+            });
+        },
+
         async redactions(project, after): Promise<readonly RedactionEntry[]> {
             checkProject(project);
             const all = lines(await readText(path.join(dir, REDACTIONS_FILE)));
@@ -721,6 +889,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
 /** Why an operation cannot be applied over files that do not read: none when it touches none. */
 function blockedBy(operation: Knowledge.Operation, unreadable: ReadonlySet<string>): DropReason | undefined {
     const fresh = operation.kind === 'Add' || operation.kind === 'Conflict' ? operation.id : undefined;
+    // a proposal's ID is not an item's
     const existing = operation.kind === 'Add' ? undefined : operation.item;
     if (fresh !== undefined && unreadable.has(fresh)) return { type: 'KnowledgeItemExists', itemId: fresh };
     if (existing !== undefined && unreadable.has(existing)) return { type: 'KnowledgeItemNotFound', itemId: existing };

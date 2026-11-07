@@ -9,9 +9,14 @@
 //
 // What every call returns is live: a deleted item is hidden from every read at once (`delete`), until `restore` brings
 // it back or the store's sweep removes it for good.
+//
+// A retired item (廃止, `retire`) is live, and read by its ID (`get`), but left out of the lists (`about`, `search`,
+// `counts`) unless a search asks for it (`retired`): the answerer, the runner and the review read through these and
+// never see one. The AI proposes retirements (`propose`); a person approves or dismisses them.
 import type { Knowledge, Result } from '../generated/index.js';
 import type { DroppedOperation } from '../domain/extraction.js';
 import type { PastVersion } from '../domain/records.js';
+import type { ApprovalError, ProposalRejection, RetirementCandidate } from '../domain/retirement.js';
 
 type Project = Knowledge.ProjectName;
 type ItemId = Knowledge.KnowledgeItemId;
@@ -34,10 +39,36 @@ export interface KnowledgeQuery {
     readonly q?: string;
     /** Items made in this session. */
     readonly session?: Knowledge.SessionRef;
+    /** The retired items too (`include`), or those only (`only`); absent: the items not retired. */
+    readonly retired?: RetiredFilter;
     /** At most this many per page (the store's own default and maximum otherwise). */
     readonly limit?: number;
     /** Where the previous page ended (`Page.next`). */
     readonly cursor?: string;
+}
+
+/** Whether a search lists the retired items: with the others, or alone. */
+export type RetiredFilter = 'include' | 'only';
+
+/** What a person gives to retire an item: a reason or none, and the newer item for `replaced`. */
+export interface RetirementInput {
+    readonly reason?: Knowledge.RetirementReason;
+    readonly replacedBy?: Knowledge.KnowledgeItemId;
+}
+
+/** Why a person's retirement is refused: the item, or what was given (a replacement for another reason, or itself). */
+export type RetireError =
+    | Knowledge.KnowledgeItemNotFound
+    | Knowledge.KnowledgeItemGone
+    | Knowledge.AlreadyRetired
+    | Knowledge.ReplacementWithoutReason
+    | Knowledge.ReplacedByItself
+    | Knowledge.ProposalRefused;
+
+/** A proposal approved: the proposal and the item as they are now. */
+export interface ApprovedProposal {
+    readonly proposal: Knowledge.ApprovedRetirementProposal;
+    readonly item: Knowledge.LiveKnowledgeItem;
 }
 
 /** An item with the versions it replaced, newest first (`get` with `history`). */
@@ -62,6 +93,8 @@ export interface AppliedExtraction {
     readonly dropped: readonly DroppedOperation[];
     /** True when the extraction had been applied before: this is that first result, and nothing was applied again. */
     readonly replayed: boolean;
+    /** The proposals to retire (or to unretire) the extraction made (absent from a store before them). */
+    readonly proposals?: readonly Knowledge.OpenRetirementProposal[];
 }
 
 /** What a deletion leaves to do in the session database: the messages the deleted items came from. */
@@ -91,13 +124,13 @@ export interface AuditQuery {
 }
 
 export interface KnowledgeStore {
-    /** The live items about any of these stickies, newest first: the panel of a sticky, the extractor's context. */
+    /** The live items about any of these stickies, newest first, the retired ones left out: the panel of a sticky, the extractor's context. */
     about(project: Project, stickies: readonly Knowledge.StickyRef[]): Promise<readonly Knowledge.LiveKnowledgeItem[]>;
 
     /** The live items that match, newest first, a page at a time. */
     search(project: Project, query: KnowledgeQuery): Promise<Page<Knowledge.LiveKnowledgeItem>>;
 
-    /** Per sticky of a storming that has items: whether it has a conflict. Stickies without items are left out. */
+    /** Per sticky of a storming that has items (retired ones do not count): whether it has a conflict. Stickies without items are left out. */
     counts(project: Project, storming: string): Promise<readonly StickyCount[]>;
 
     /** The live item, with its past versions when `history` is asked for; `undefined` when it is missing or deleted. */
@@ -151,8 +184,8 @@ export interface KnowledgeStore {
      * A person deletes an item: hidden from every read at once, and recorded in the audit log. It can be restored until
      * the store's own sweep — every few minutes, after the page's undo window (ADR 0031 section 7), whether or not the
      * page that deleted it is still open — removes every version of it and the images only it refers to, drops the
-     * reasons of its audit records (`withoutReason`), and appends its `redactionOf` to the redaction log. Returns the
-     * messages the item came from.
+     * reasons of its audit records (`withoutReason`), forgets the proposals about it or quoting its messages
+     * (`proposalsToForget`), and appends its `redactionOf` to the redaction log. Returns the messages the item came from.
      */
     delete(project: Project, id: ItemId, by: Knowledge.UserName): Promise<Result<Deletion, Knowledge.KnowledgeItemNotFound>>;
 
@@ -161,6 +194,42 @@ export interface KnowledgeStore {
 
     /** A person undoes a deletion the sweep has not yet removed. */
     restore(project: Project, id: ItemId, by: Knowledge.UserName): Promise<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound>>;
+
+    /**
+     * A person retires an item (廃止する): it stays — text, sources, versions — but is left out of the lists and kept
+     * from the AI; recorded in the audit log. A replacement must be a live item not retired (`ProposalRefused`
+     * `replacementUnavailable` otherwise). Returns the item as it is now.
+     */
+    retire(project: Project, id: ItemId, retirement: RetirementInput, by: Knowledge.UserName): Promise<Result<Knowledge.LiveKnowledgeItem, RetireError>>;
+
+    /** A person undoes a retirement (廃止を取り消す, and the page's 元に戻す): recorded in the audit log. */
+    unretire(
+        project: Project,
+        id: ItemId,
+        by: Knowledge.UserName,
+    ): Promise<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone | Knowledge.NotRetired>>;
+
+    /**
+     * The AI proposes to retire an item, or to undo its retirement (the review, through this call; the extractor, as
+     * operations of its extraction), with its reason and evidence. Decided by `admitProposal` (`domain/retirement.ts`):
+     * refused when the item is gone, the proposal moot or already waiting, the same as one dismissed without new
+     * evidence, or an AS-IS item's retirement for differing from the stickies only. The same candidate sent again
+     * answers the proposal made the first time. Recorded in the audit log.
+     */
+    propose(project: Project, candidate: RetirementCandidate): Promise<Result<Knowledge.RetirementProposal, ProposalRejection>>;
+
+    /** The proposals waiting for a person (open, and not moot), newest first: the 廃止の候補 of the list. */
+    proposals(project: Project): Promise<readonly Knowledge.OpenRetirementProposal[]>;
+
+    /** A person approves a proposal: the item is retired (or unretired) at once, recorded in the audit log. */
+    approveProposal(project: Project, id: Knowledge.RetirementProposalId, by: Knowledge.UserName): Promise<Result<ApprovedProposal, ApprovalError>>;
+
+    /** A person dismisses a proposal: kept, dismissed, so that the same is not proposed again; recorded in the audit log. */
+    dismissProposal(
+        project: Project,
+        id: Knowledge.RetirementProposalId,
+        by: Knowledge.UserName,
+    ): Promise<Result<Knowledge.DismissedRetirementProposal, Knowledge.ProposalNotFound | Knowledge.ProposalDecided>>;
 
     /**
      * The redaction log after a cursor (from its start without one), oldest first. It holds IDs only and is kept for

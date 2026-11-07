@@ -8,6 +8,7 @@
 // `KnowledgeStoreError`, as the port says (`application/ports.ts`).
 import { err, ok, type Knowledge, type Result } from '../generated/index.js';
 import type { AuditQuery, KnowledgeImage, KnowledgeQuery, KnowledgeStore, Page, RedactionEntry, StormingPublisher } from '../application/ports.js';
+import type { DomainError } from '../protocol.js';
 import { idempotencyKey } from '../domain/extraction.js';
 import {
     ACCESS_CLIENT_ID_HEADER,
@@ -17,9 +18,14 @@ import {
     MAX_ABOUT,
     MAX_LIMIT,
     appliedExtraction,
+    approvedProposal,
     auditEntry,
     decodeErrorBody,
     deletion,
+    dismissedProposal,
+    domainErrorOf,
+    openProposals,
+    retirementProposal,
     imageRef,
     itemWithHistory,
     knowledgeQueryParams,
@@ -179,6 +185,35 @@ export function cloudflareKnowledgeStore(settings: CloudflareKnowledgeStoreSetti
         return ok(await read(res, d, what));
     };
 
+    /**
+     * The domain's error of an answer, when it is one of `types` (a 4xx whose body names it); `undefined` for a 2xx. Any
+     * other answer is a failure.
+     */
+    const refusal = async <T extends DomainError['type']>(
+        res: Response,
+        what: string,
+        types: readonly T[],
+    ): Promise<Extract<DomainError, { readonly type: T }> | undefined> => {
+        if (res.ok) return undefined;
+        if (res.status >= 400 && res.status < 500) {
+            const text = await res.text().catch(() => '');
+            let parsed: unknown;
+            try {
+                parsed = JSON.parse(text);
+            } catch {
+                parsed = undefined;
+            }
+            const body = decodeErrorBody(parsed);
+            const e = domainErrorOf(body);
+            const wanted = (x: DomainError | undefined): x is Extract<DomainError, { readonly type: T }> => x !== undefined && types.some((t) => t === x.type);
+            if (wanted(e)) return e;
+            throw new KnowledgeStoreError(`the knowledge store refused ${what} (${body?.type ?? `HTTP ${res.status}`})`, res.status, body?.type);
+        }
+        throw await failure(res, what);
+    };
+
+    const proposalPath = (id: Knowledge.RetirementProposalId): string => `/proposals/${encodeURIComponent(id)}`;
+
     const itemPath = (id: Knowledge.KnowledgeItemId): string => `/knowledge/${encodeURIComponent(id)}`;
     const actor = (by: Knowledge.UserName): Record<string, string> => ({ [ACTOR_HEADER]: encodeURIComponent(by) });
 
@@ -260,6 +295,52 @@ export function cloudflareKnowledgeStore(settings: CloudflareKnowledgeStoreSetti
         async restore(project, id, by) {
             const res = await request(project, `${itemPath(id)}/restore`, { method: 'POST', headers: actor(by) });
             return notFoundOr(res, liveItem, id, `restoring ${id}`);
+        },
+
+        async retire(project, id, retirement, by) {
+            const res = await request(project, `${itemPath(id)}/retire`, { method: 'POST', json: retirement, headers: actor(by) });
+            const what = `retiring ${id}`;
+            const e = await refusal(res, what, [
+                'KnowledgeItemNotFound',
+                'KnowledgeItemGone',
+                'AlreadyRetired',
+                'ReplacementWithoutReason',
+                'ReplacedByItself',
+                'ProposalRefused',
+            ] as const);
+            return e ? err(e) : ok(await read(res, liveItem, what));
+        },
+
+        async unretire(project, id, by) {
+            const res = await request(project, `${itemPath(id)}/unretire`, { method: 'POST', headers: actor(by) });
+            const what = `unretiring ${id}`;
+            const e = await refusal(res, what, ['KnowledgeItemNotFound', 'KnowledgeItemGone', 'NotRetired'] as const);
+            return e ? err(e) : ok(await read(res, liveItem, what));
+        },
+
+        async propose(project, candidate) {
+            const res = await request(project, '/proposals', { method: 'POST', json: candidate });
+            const what = `a proposal about ${candidate.item}`;
+            const e = await refusal(res, what, ['MalformedProposal', 'ProposalRefused'] as const);
+            return e ? err(e) : ok(await read(res, retirementProposal, what));
+        },
+
+        async proposals(project) {
+            return read(await request(project, '/proposals'), openProposals, 'the proposals');
+        },
+
+        async approveProposal(project, id, by) {
+            const res = await request(project, `${proposalPath(id)}/approve`, { method: 'POST', headers: actor(by) });
+            const what = `approving ${id}`;
+            const e = await refusal(res, what, ['ProposalNotFound', 'ProposalDecided', 'ProposalRefused'] as const);
+            return e ? err(e) : ok(await read(res, approvedProposal, what));
+        },
+
+        async dismissProposal(project, id, by) {
+            const res = await request(project, `${proposalPath(id)}/dismiss`, { method: 'POST', headers: actor(by) });
+            const what = `dismissing ${id}`;
+            const e = await refusal(res, what, ['ProposalNotFound', 'ProposalDecided'] as const);
+            return e ? err(e) : ok(await read(res, dismissedProposal, what));
         },
 
         async redactions(project, after) {

@@ -83,6 +83,12 @@ function memoryStore(): KnowledgeStore & { readonly extractions: Knowledge.Extra
         audit: unused,
         putImage: unused,
         getImage: unused,
+        retire: unused,
+        unretire: unused,
+        propose: unused,
+        proposals: unused,
+        approveProposal: unused,
+        dismissProposal: unused,
     };
 }
 

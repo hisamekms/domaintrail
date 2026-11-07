@@ -283,6 +283,99 @@ describe('reading', () => {
     });
 });
 
+describe('retiring (廃止)', () => {
+    const said = (message: string): unknown => ({ kind: 'Said', session: 's2', message, quote: 'もうやっていない' });
+    const candidate = (item: number, over: Record<string, unknown> = {}): ReturnType<typeof wire.retirementCandidate> =>
+        wire.retirementCandidate(
+            {
+                item: id(item),
+                action: 'retire',
+                reason: 'obsolete',
+                explanation: 'the talk says it is no longer done',
+                evidence: [said('m9')],
+                proposedBy: { kind: 'Review', review: 'review-1' },
+                ...over,
+            },
+            'test',
+        );
+
+    test('keeps the item, hidden from the lists and the counts unless asked; undone; audited', async () => {
+        const project = newProject();
+        await store.applyExtraction(
+            project,
+            extraction('s1', 1, [add(1, '古いやり方', 's1', { about: ['Ordering.Accept'] }), add(2, '新しいやり方', 's1', { about: ['Ordering.Accept'] })]),
+        );
+        const r = await store.retire(project, id(1), { reason: 'replaced', replacedBy: id(2) }, user);
+        expect(r.ok && plain(r.value.retirement)).toMatchObject({ reason: 'replaced', replacedBy: id(2), by: user });
+        expect(texts((await store.search(project, {})).items)).toEqual(['新しいやり方']);
+        expect(texts((await store.search(project, { retired: 'only' })).items)).toEqual(['古いやり方']);
+        expect(texts((await store.search(project, { retired: 'include' })).items).sort()).toEqual(['古いやり方', '新しいやり方'].sort());
+        expect(texts(await store.about(project, [wire.stickyRef('Ordering.Accept', 'test')]))).toEqual(['新しいやり方']);
+        expect((await store.get(project, id(1)))?.item.retirement?.reason).toBe('replaced');
+        await store.retire(project, id(2), {}, user);
+        expect(await store.counts(project, 'Ordering')).toEqual([]);
+        expect(await store.retire(project, id(2), {}, user)).toEqual({ ok: false, error: { type: 'AlreadyRetired' } });
+        expect(await store.retire(project, id(9), {}, user)).toEqual({ ok: false, error: { type: 'KnowledgeItemNotFound', itemId: id(9) } });
+        expect((await store.unretire(project, id(1), user)).ok).toBe(true);
+        expect(await store.unretire(project, id(1), user)).toEqual({ ok: false, error: { type: 'NotRetired' } });
+        expect(texts((await store.search(project, {})).items)).toEqual(['古いやり方']);
+        expect((await store.audit(project, {})).items.slice(0, 3).map((e) => e.operation)).toEqual(['unretire', 'retire', 'retire']);
+    });
+
+    test('proposals: the review proposes, the list shows the open ones, a person approves or dismisses, a dismissal is remembered', async () => {
+        const project = newProject();
+        await store.applyExtraction(project, extraction('s1', 1, [add(1, '一'), add(2, '二')]));
+        const proposed = await store.propose(project, candidate(1));
+        if (!proposed.ok) throw new Error('not proposed');
+        expect(await store.propose(project, candidate(1))).toEqual(proposed);
+        expect(await store.propose(project, candidate(1, { evidence: [said('m10')] }))).toEqual({
+            ok: false,
+            error: { type: 'ProposalRefused', reason: 'pending' },
+        });
+        expect((await reader.proposals(project)).map((p) => p.id)).toEqual([proposed.value.id]);
+        // a reading token does not propose
+        expect(await thrown(reader.propose(project, candidate(2)))).toMatchObject({ status: 403 });
+
+        const approved = await store.approveProposal(project, proposed.value.id, user);
+        expect(approved.ok && approved.value.item.retirement?.proposal).toBe(proposed.value.id);
+        expect(await store.approveProposal(project, proposed.value.id, user)).toEqual({
+            ok: false,
+            error: { type: 'ProposalDecided', proposalId: proposed.value.id },
+        });
+        expect(await store.proposals(project)).toEqual([]);
+
+        const second = await store.propose(project, candidate(2));
+        if (!second.ok) throw new Error('not proposed');
+        expect((await store.dismissProposal(project, second.value.id, user)).ok).toBe(true);
+        expect(await store.propose(project, candidate(2, { proposedBy: { kind: 'Review', review: 'review-2' } }))).toEqual({
+            ok: false,
+            error: { type: 'ProposalRefused', reason: 'dismissedBefore' },
+        });
+        expect((await store.propose(project, candidate(2, { evidence: [said('m9'), said('m12')] }))).ok).toBe(true);
+        expect((await store.audit(project, {})).items.map((e) => e.operation)).toContain('dismiss');
+    });
+
+    test("an extraction's proposals and the drop of an operation on a retired item; the sweep forgets a deleted item's proposals", async () => {
+        const project = newProject();
+        await store.applyExtraction(project, extraction('s1', 1, [add(1, '一'), add(2, '二')]));
+        const applied = await store.applyExtraction(
+            project,
+            extraction('s2', 1, [{ kind: 'ProposeRetire', item: id(1), retirementReason: 'wrong', evidence: [said('m1')], reason: 'it never was so' }]),
+        );
+        expect(applied.proposals?.map((p) => [p.item, p.action])).toEqual([[id(1), 'retire']]);
+        expect((await store.proposals(project)).map((p) => p.item)).toEqual([id(1)]);
+        await store.retire(project, id(2), {}, user);
+        const dropped = await store.applyExtraction(
+            project,
+            extraction('s2', 2, [{ kind: 'AddSource', item: id(2), base: 1, source: source('s2', 'm3'), agreed: false }]),
+        );
+        expect(plain(dropped.dropped.map((d) => d.reason))).toEqual([{ type: 'RetiredItem', itemId: id(2) }]);
+        await store.delete(project, id(1), user);
+        await worker.scheduled(new Date(Date.now() + 10 * 60 * 1000));
+        expect(await worker.db.prepare('SELECT count(*) AS n FROM proposals WHERE project = ?1').bind(project).first<{ n: number }>()).toEqual({ n: 0 });
+    });
+});
+
 describe('deleting', () => {
     test('hides at once, restores until the sweep, and the sweep removes everything and logs the messages to redact', async () => {
         const project = newProject();
@@ -433,6 +526,7 @@ test('migration 2: the items from before titles are removed, and a new row must 
                     () => 'refused',
                 ),
         ).toBe('refused');
+        await migrate('0003_retirement.sql');
         await s.applyExtraction(project, extraction('s1', 1, [add(3, '新しい', 's1', { title: '新しい見出し' })]));
         expect((await s.search(project, {})).items.map((i) => i.content.title)).toEqual([
             wire.itemContent(content('x', { title: '新しい見出し' }), 'test').title,

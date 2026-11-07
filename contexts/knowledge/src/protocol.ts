@@ -8,9 +8,13 @@
 import { Knowledge, type Result } from './generated/index.js';
 import type { DroppedOperation, DropReason } from './domain/extraction.js';
 import type { PastVersion } from './domain/records.js';
+import type { RetirementCandidate } from './domain/retirement.js';
 import {
     PUBLISHED_LEVELS,
     type AppliedExtraction,
+    type ApprovedProposal,
+    type RetiredFilter,
+    type RetirementInput,
     type Deletion,
     type ItemWithHistory,
     type KnowledgeQuery,
@@ -79,9 +83,67 @@ export const KNOWLEDGE_CHANGED: KnowledgeChangedMessage = { type: 'knowledge.cha
  */
 export interface ErrorBody {
     readonly error: {
-        readonly type: ApiErrorType | 'KnowledgeItemNotFound' | 'KnowledgeItemGone';
+        readonly type: ApiErrorType | DomainErrorType;
         readonly itemId?: string;
+        readonly proposalId?: string;
+        /** `ProposalRefused`'s reason. */
+        readonly reason?: string;
         readonly message?: string;
+    };
+}
+
+/** The domain's errors an answer may carry, by their type (`domainErrorStatus` gives their status). */
+export type DomainErrorType =
+    | 'KnowledgeItemNotFound'
+    | 'KnowledgeItemGone'
+    | 'AlreadyRetired'
+    | 'NotRetired'
+    | 'ReplacementWithoutReason'
+    | 'ReplacedByItself'
+    | 'MalformedProposal'
+    | 'ProposalRefused'
+    | 'ProposalNotFound'
+    | 'ProposalDecided';
+
+export const DOMAIN_ERROR_TYPES: readonly DomainErrorType[] = [
+    'KnowledgeItemNotFound',
+    'KnowledgeItemGone',
+    'AlreadyRetired',
+    'NotRetired',
+    'ReplacementWithoutReason',
+    'ReplacedByItself',
+    'MalformedProposal',
+    'ProposalRefused',
+    'ProposalNotFound',
+    'ProposalDecided',
+];
+
+/** The status of a domain's error: 404 for what is not there, 410 for a deleted item, 409 for a state that refuses, 400 for a malformed request. */
+export function domainErrorStatus(type: DomainErrorType): number {
+    switch (type) {
+        case 'KnowledgeItemNotFound':
+        case 'ProposalNotFound':
+            return 404;
+        case 'KnowledgeItemGone':
+            return 410;
+        case 'ReplacementWithoutReason':
+        case 'ReplacedByItself':
+        case 'MalformedProposal':
+            return 400;
+        default:
+            return 409;
+    }
+}
+
+/** The body of a domain's error (the store's `Result` error, as JSON). */
+export function domainErrorBody(e: DomainError): ErrorBody {
+    return {
+        error: {
+            type: e.type,
+            ...('itemId' in e && { itemId: e.itemId }),
+            ...('proposalId' in e && { proposalId: e.proposalId }),
+            ...('reason' in e && { reason: e.reason }),
+        },
     };
 }
 
@@ -117,9 +179,15 @@ export class WireError extends Error {
 /** The error body of an answer, when it is one. */
 export function decodeErrorBody(v: unknown): ErrorBody['error'] | undefined {
     if (!isObject(v) || !isObject(v.error) || typeof v.error.type !== 'string') return undefined;
-    const { type, itemId, message } = v.error;
-    const known = [...API_ERROR_TYPES, 'KnowledgeItemNotFound' as const, 'KnowledgeItemGone' as const].find((t) => t === type) ?? 'Internal';
-    return { type: known, ...(typeof itemId === 'string' && { itemId }), ...(typeof message === 'string' && { message }) };
+    const { type, itemId, proposalId, reason, message } = v.error;
+    const known = [...API_ERROR_TYPES, ...DOMAIN_ERROR_TYPES].find((t) => t === type) ?? 'Internal';
+    return {
+        type: known,
+        ...(typeof itemId === 'string' && { itemId }),
+        ...(typeof proposalId === 'string' && { proposalId }),
+        ...(typeof reason === 'string' && { reason }),
+        ...(typeof message === 'string' && { message }),
+    };
 }
 
 const API_ERROR_TYPES: readonly ApiErrorType[] = [
@@ -148,6 +216,7 @@ export function knowledgeQueryParams(query: KnowledgeQuery): URLSearchParams {
     if (query.perspective !== undefined) params.set('perspective', query.perspective);
     if (query.q !== undefined) params.set('q', query.q);
     if (query.session !== undefined) params.set('session', query.session);
+    if (query.retired !== undefined) params.set('retired', query.retired);
     if (query.limit !== undefined) params.set('limit', String(query.limit));
     if (query.cursor !== undefined) params.set('cursor', query.cursor);
     return params;
@@ -168,6 +237,7 @@ export function knowledgeQueryOf(params: URLSearchParams): KnowledgeQuery {
     const perspective = one('perspective', branded(Knowledge.makePerspective, str));
     const q = one('q', str);
     const session = one('session', branded(Knowledge.makeSessionRef, str));
+    const retired = one('retired', oneOf<RetiredFilter>(['include', 'only']));
     const limit = one('limit', limitOf);
     const cursor = one('cursor', str);
     return {
@@ -178,6 +248,7 @@ export function knowledgeQueryOf(params: URLSearchParams): KnowledgeQuery {
         ...(perspective !== undefined && { perspective }),
         ...(q !== undefined && q.trim() !== '' && { q }),
         ...(session !== undefined && { session }),
+        ...(retired !== undefined && { retired }),
         ...(limit !== undefined && { limit }),
         ...(cursor !== undefined && { cursor }),
     };
@@ -253,7 +324,13 @@ const AUDIT_OPERATIONS: readonly Knowledge.AuditOperation[] = [
     'restore',
     'unlinkConflict',
     'handOverToHotspot',
+    'retire',
+    'unretire',
+    'propose',
+    'dismiss',
 ];
+const RETIREMENT_REASONS: readonly Knowledge.RetirementReason[] = ['replaced', 'obsolete', 'wrong'];
+const PROPOSAL_ACTIONS: readonly Knowledge.ProposalAction[] = ['retire', 'unretire'];
 
 export const itemId: Decoder<Knowledge.KnowledgeItemId> = branded(Knowledge.makeKnowledgeItemId, str);
 export const imageId: Decoder<Knowledge.ImageId> = branded(Knowledge.makeImageId, str);
@@ -264,6 +341,8 @@ export const stickyRef: Decoder<Knowledge.StickyRef> = branded(Knowledge.makeSti
 const messageRef: Decoder<Knowledge.MessageRef> = branded(Knowledge.makeMessageRef, str);
 export const itemVersion: Decoder<Knowledge.ItemVersion> = branded(Knowledge.makeItemVersion, num);
 const reasonOf: Decoder<Knowledge.Reason> = branded(Knowledge.makeReason, str);
+export const proposalId: Decoder<Knowledge.RetirementProposalId> = branded(Knowledge.makeRetirementProposalId, str);
+const retirementReason: Decoder<Knowledge.RetirementReason> = oneOf(RETIREMENT_REASONS);
 
 const labels: Decoder<Knowledge.Labels> = (v, at) => {
     const o = obj(v, at);
@@ -309,9 +388,37 @@ const withReason = (o: Record<string, unknown>, at: string): { reason?: Knowledg
     return reason === undefined ? {} : { reason };
 };
 
+/** A piece of a proposal's evidence: a decision, a sticky's change, a message. */
+export const evidence: Decoder<Knowledge.Evidence> = (v, at) => {
+    const o = obj(v, at);
+    const kind = oneOf(['Decision', 'StickyChange', 'Said'] as const)(o.kind, `${at}.kind`);
+    switch (kind) {
+        case 'Decision':
+            return { kind, item: itemId(o.item, `${at}.item`) };
+        case 'StickyChange':
+            return { kind, sticky: stickyRef(o.sticky, `${at}.sticky`), change: branded(Knowledge.makeEvidenceNote, str)(o.change, `${at}.change`) };
+        case 'Said':
+            return {
+                kind,
+                session: sessionRef(o.session, `${at}.session`),
+                message: messageRef(o.message, `${at}.message`),
+                quote: branded(Knowledge.makeQuote, str)(o.quote, `${at}.quote`),
+            };
+    }
+};
+
+/** Who proposed: an extraction, or a review. */
+export const proposer: Decoder<Knowledge.Proposer> = (v, at) => {
+    const o = obj(v, at);
+    const kind = oneOf(['Extraction', 'Review'] as const)(o.kind, `${at}.kind`);
+    return kind === 'Extraction'
+        ? { kind, extraction: extractionRef(o.extraction, `${at}.extraction`) }
+        : { kind, review: branded(Knowledge.makeReviewRef, str)(o.review, `${at}.review`) };
+};
+
 const operation: Decoder<Knowledge.Operation> = (v, at) => {
     const o = obj(v, at);
-    const kind = oneOf(['Add', 'AddSource', 'Update', 'Conflict'] as const)(o.kind, `${at}.kind`);
+    const kind = oneOf(['Add', 'AddSource', 'Update', 'Conflict', 'ProposeRetire', 'ProposeUnretire'] as const)(o.kind, `${at}.kind`);
     switch (kind) {
         case 'Add':
             return {
@@ -349,6 +456,24 @@ const operation: Decoder<Knowledge.Operation> = (v, at) => {
                 base: itemVersion(o.base, `${at}.base`),
                 ...withReason(o, at),
             };
+        case 'ProposeRetire': {
+            const replacedBy = opt(itemId, o.replacedBy, `${at}.replacedBy`);
+            return {
+                kind,
+                item: itemId(o.item, `${at}.item`),
+                retirementReason: retirementReason(o.retirementReason, `${at}.retirementReason`),
+                ...(replacedBy !== undefined && { replacedBy }),
+                evidence: nonEmpty(evidence)(o.evidence, `${at}.evidence`),
+                reason: reasonOf(o.reason, `${at}.reason`),
+            };
+        }
+        case 'ProposeUnretire':
+            return {
+                kind,
+                item: itemId(o.item, `${at}.item`),
+                evidence: nonEmpty(evidence)(o.evidence, `${at}.evidence`),
+                reason: reasonOf(o.reason, `${at}.reason`),
+            };
     }
 };
 
@@ -358,10 +483,28 @@ export const extraction: Decoder<Knowledge.Extraction> = (v, at) => {
     return { by: extractionRef(o.by, `${at}.by`), operations: list(operation)(o.operations, `${at}.operations`) };
 };
 
+/** An item's retirement. */
+export const retirement: Decoder<Knowledge.Retirement> = (v, at) => {
+    const o = obj(v, at);
+    const reason = opt(retirementReason, o.reason, `${at}.reason`);
+    const replacedBy = opt(itemId, o.replacedBy, `${at}.replacedBy`);
+    const proposal = opt(proposalId, o.proposal, `${at}.proposal`);
+    const r: Knowledge.Retirement = {
+        ...(reason !== undefined && { reason }),
+        ...(replacedBy !== undefined && { replacedBy }),
+        by: userName(o.by, `${at}.by`),
+        at: time(o.at, `${at}.at`),
+        ...(proposal !== undefined && { proposal }),
+    };
+    if (Knowledge.checkRetirement(r).length > 0) fail(`${at}.replacedBy`, 'a replacement without the reason replaced');
+    return r;
+};
+
 /** An item as the store holds it, live or deleted. */
 export const knowledgeItem: Decoder<Knowledge.KnowledgeItem> = (v, at) => {
     const o = obj(v, at);
     const createdIn = opt(sessionRef, o.createdIn, `${at}.createdIn`);
+    const retired = opt(retirement, o.retirement, `${at}.retirement`);
     const common: Knowledge.KnowledgeItemCommon = {
         id: itemId(o.id, `${at}.id`),
         content: itemContent(o.content, `${at}.content`),
@@ -371,6 +514,7 @@ export const knowledgeItem: Decoder<Knowledge.KnowledgeItem> = (v, at) => {
         ...(createdIn !== undefined && { createdIn }),
         createdAt: time(o.createdAt, `${at}.createdAt`),
         updatedAt: time(o.updatedAt, `${at}.updatedAt`),
+        ...(retired !== undefined && { retirement: retired }),
     };
     const state = oneOf(['Live', 'Deleted'] as const)(o.state, `${at}.state`);
     return state === 'Live'
@@ -429,6 +573,18 @@ export const handOverBody: Decoder<{ readonly other: Knowledge.KnowledgeItemId; 
 /** The body of `GET /counts`: `{ counts }`. */
 export const stickyCounts: Decoder<StickyCount[]> = (v, at) => list(stickyCount)(obj(v, at).counts, `${at}.counts`);
 
+const PROPOSAL_REFUSALS: readonly Knowledge.ProposalRefusal[] = [
+    'itemUnavailable',
+    'moot',
+    'pending',
+    'dismissedBefore',
+    'asIsAgainstStickies',
+    'replacementUnavailable',
+    'evidenceUnavailable',
+];
+/** Why a proposal was not taken. */
+export const proposalRefusal: Decoder<Knowledge.ProposalRefusal> = oneOf(PROPOSAL_REFUSALS);
+
 /** Why an operation was dropped. */
 export const dropReason: Decoder<DropReason> = (v, at) => {
     const o = obj(v, at);
@@ -440,12 +596,18 @@ export const dropReason: Decoder<DropReason> = (v, at) => {
         'DuplicateSource',
         'ConflictWithoutSource',
         'ConflictWithItself',
+        'RetiredItem',
+        'MalformedProposal',
+        'ProposalRefused',
     ] as const)(o.type, `${at}.type`);
     switch (type) {
         case 'KnowledgeItemNotFound':
         case 'KnowledgeItemGone':
         case 'KnowledgeItemExists':
+        case 'RetiredItem':
             return { type, itemId: itemId(o.itemId, `${at}.itemId`) };
+        case 'ProposalRefused':
+            return { type, reason: proposalRefusal(o.reason, `${at}.reason`) };
         default:
             return { type };
     }
@@ -463,6 +625,7 @@ export const appliedExtraction: Decoder<AppliedExtraction> = (v, at) => {
         items: list(liveItem)(o.items, `${at}.items`),
         dropped: list(droppedOperation)(o.dropped, `${at}.dropped`),
         replayed: bool(o.replayed, `${at}.replayed`),
+        ...(o.proposals !== undefined && { proposals: list(openProposal)(o.proposals, `${at}.proposals`) }),
     };
 };
 
@@ -489,10 +652,128 @@ const redactionEntry: Decoder<RedactionEntry> = (v, at) => {
 /** The body of `GET /redactions`: `{ entries }`, oldest first. */
 export const redactionEntries: Decoder<RedactionEntry[]> = (v, at) => list(redactionEntry)(obj(v, at).entries, `${at}.entries`);
 
-const actor: Decoder<Knowledge.Actor> = (v, at) => {
+export const actor: Decoder<Knowledge.Actor> = (v, at) => {
     const o = obj(v, at);
-    const kind = oneOf(['Extractor', 'Person'] as const)(o.kind, `${at}.kind`);
-    return kind === 'Extractor' ? { kind, extraction: extractionRef(o.extraction, `${at}.extraction`) } : { kind, user: userName(o.user, `${at}.user`) };
+    const kind = oneOf(['Extractor', 'Person', 'Review'] as const)(o.kind, `${at}.kind`);
+    switch (kind) {
+        case 'Extractor':
+            return { kind, extraction: extractionRef(o.extraction, `${at}.extraction`) };
+        case 'Person':
+            return { kind, user: userName(o.user, `${at}.user`) };
+        case 'Review':
+            return { kind, review: branded(Knowledge.makeReviewRef, str)(o.review, `${at}.review`) };
+    }
+};
+
+// ---- retiring (廃止) ---------------------------------------------------------------------------------------------
+
+/** A proposal as the store holds it, open, approved or dismissed. */
+export const retirementProposal: Decoder<Knowledge.RetirementProposal> = (v, at) => {
+    const o = obj(v, at);
+    const reason = opt(retirementReason, o.reason, `${at}.reason`);
+    const replacedBy = opt(itemId, o.replacedBy, `${at}.replacedBy`);
+    const common: Knowledge.RetirementProposalCommon = {
+        id: proposalId(o.id, `${at}.id`),
+        item: itemId(o.item, `${at}.item`),
+        action: oneOf(PROPOSAL_ACTIONS)(o.action, `${at}.action`),
+        ...(reason !== undefined && { reason }),
+        ...(replacedBy !== undefined && { replacedBy }),
+        explanation: reasonOf(o.explanation, `${at}.explanation`),
+        evidence: nonEmpty(evidence)(o.evidence, `${at}.evidence`),
+        proposedBy: proposer(o.proposedBy, `${at}.proposedBy`),
+        proposedAt: time(o.proposedAt, `${at}.proposedAt`),
+    };
+    if (Knowledge.checkRetirementProposalCommon(common).length > 0) fail(at, 'not a proposal (its reason, replacement or evidence)');
+    const state = oneOf(['Open', 'Approved', 'Dismissed'] as const)(o.state, `${at}.state`);
+    return state === 'Open'
+        ? { ...common, state }
+        : { ...common, state, decidedBy: userName(o.decidedBy, `${at}.decidedBy`), decidedAt: time(o.decidedAt, `${at}.decidedAt`) };
+};
+
+/** An open proposal: what the list of 廃止の候補 shows. */
+export const openProposal: Decoder<Knowledge.OpenRetirementProposal> = (v, at) => {
+    const p = retirementProposal(v, at);
+    return p.state === 'Open' ? p : fail(`${at}.state`, 'expected an open proposal');
+};
+
+/** The body of `GET /proposals`: `{ proposals }`, newest first. */
+export const openProposals: Decoder<Knowledge.OpenRetirementProposal[]> = (v, at) => list(openProposal)(obj(v, at).proposals, `${at}.proposals`);
+
+/** The body of `POST /knowledge/:id/retire`: `{ reason?, replacedBy? }` (an empty object retires without a reason). */
+export const retireBody: Decoder<RetirementInput> = (v, at) => {
+    const o = v === undefined || v === null ? {} : obj(v, at);
+    const reason = opt(retirementReason, o.reason, `${at}.reason`);
+    const replacedBy = opt(itemId, o.replacedBy, `${at}.replacedBy`);
+    return { ...(reason !== undefined && { reason }), ...(replacedBy !== undefined && { replacedBy }) };
+};
+
+/** The body of `POST /proposals` (the review's, through the store's port): a candidate with its evidence. */
+export const retirementCandidate: Decoder<RetirementCandidate> = (v, at) => {
+    const o = obj(v, at);
+    const reason = opt(retirementReason, o.reason, `${at}.reason`);
+    const replacedBy = opt(itemId, o.replacedBy, `${at}.replacedBy`);
+    return {
+        item: itemId(o.item, `${at}.item`),
+        action: oneOf(PROPOSAL_ACTIONS)(o.action, `${at}.action`),
+        ...(reason !== undefined && { reason }),
+        ...(replacedBy !== undefined && { replacedBy }),
+        explanation: reasonOf(o.explanation, `${at}.explanation`),
+        evidence: nonEmpty(evidence)(o.evidence, `${at}.evidence`),
+        proposedBy: proposer(o.proposedBy, `${at}.proposedBy`),
+    };
+};
+
+/** A domain's error as the model's value, from an answer's error body; `undefined` when the body is not one of them. */
+export type DomainError =
+    | Knowledge.KnowledgeItemNotFound
+    | Knowledge.KnowledgeItemGone
+    | Knowledge.AlreadyRetired
+    | Knowledge.NotRetired
+    | Knowledge.ReplacementWithoutReason
+    | Knowledge.ReplacedByItself
+    | Knowledge.MalformedProposal
+    | Knowledge.ProposalRefused
+    | Knowledge.ProposalNotFound
+    | Knowledge.ProposalDecided;
+
+export function domainErrorOf(body: ErrorBody['error'] | undefined): DomainError | undefined {
+    if (body === undefined) return undefined;
+    try {
+        switch (body.type) {
+            case 'KnowledgeItemNotFound':
+            case 'KnowledgeItemGone':
+                return { type: body.type, itemId: itemId(body.itemId, 'error.itemId') };
+            case 'ProposalNotFound':
+            case 'ProposalDecided':
+                return { type: body.type, proposalId: proposalId(body.proposalId, 'error.proposalId') };
+            case 'ProposalRefused':
+                return { type: body.type, reason: proposalRefusal(body.reason, 'error.reason') };
+            case 'AlreadyRetired':
+            case 'NotRetired':
+            case 'ReplacementWithoutReason':
+            case 'ReplacedByItself':
+            case 'MalformedProposal':
+                return { type: body.type };
+            default:
+                return undefined;
+        }
+    } catch (e) {
+        if (e instanceof WireError) return undefined;
+        throw e;
+    }
+}
+
+/** The body of `POST /proposals/:id/approve`'s answer: `{ proposal, item }`. */
+export const approvedProposal: Decoder<ApprovedProposal> = (v, at) => {
+    const o = obj(v, at);
+    const proposal = retirementProposal(o.proposal, `${at}.proposal`);
+    return proposal.state === 'Approved' ? { proposal, item: liveItem(o.item, `${at}.item`) } : fail(`${at}.proposal.state`, 'expected an approved proposal');
+};
+
+/** The body of `POST /proposals/:id/dismiss`'s answer: the proposal, dismissed. */
+export const dismissedProposal: Decoder<Knowledge.DismissedRetirementProposal> = (v, at) => {
+    const p = retirementProposal(v, at);
+    return p.state === 'Dismissed' ? p : fail(`${at}.state`, 'expected a dismissed proposal');
 };
 
 /** One record of the audit log (its `caller`, the Access identity the Worker recorded, is the Worker's own and not read). */

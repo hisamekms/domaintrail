@@ -3,7 +3,20 @@
 import { describe, expect, test } from 'bun:test';
 import type { Knowledge } from './generated/index.js';
 import type { AppliedExtraction } from './application/ports.js';
-import { WireError, appliedExtraction, extraction, extractionSwitch, knowledgeItem, knowledgeQueryOf, knowledgeQueryParams } from './protocol.js';
+import {
+    WireError,
+    appliedExtraction,
+    decodeErrorBody,
+    domainErrorBody,
+    domainErrorOf,
+    extraction,
+    extractionSwitch,
+    knowledgeItem,
+    knowledgeQueryOf,
+    knowledgeQueryParams,
+    retireBody,
+    retirementProposal,
+} from './protocol.js';
 import { at, content, extraction as extractionRef, itemId, liveItem, reason, source, userName, version } from './test-helpers.js';
 
 const overJson = (v: unknown): unknown => JSON.parse(JSON.stringify(v));
@@ -86,5 +99,62 @@ describe('the wire', () => {
     test("the extraction switch's body", () => {
         expect(extractionSwitch({ enabled: false }, 'body')).toEqual({ enabled: false });
         expect(() => extractionSwitch({ enabled: 'yes' }, 'body')).toThrow('body.enabled: expected a boolean');
+    });
+});
+
+describe('the wire of retiring (廃止)', () => {
+    test('a retired item, the propose operations, a proposal and a candidate come back as they were sent; a domain error too', () => {
+        const retired: Knowledge.KnowledgeItem = {
+            ...liveItem('kn_00000001'),
+            retirement: { reason: 'replaced', replacedBy: itemId('kn_00000002'), by: userName('a@example.com'), at },
+        };
+        expect(knowledgeItem(overJson(retired), 'item')).toEqual(retired);
+        const said: Knowledge.Evidence = {
+            kind: 'Said',
+            session: source('s1', 'm1').session,
+            message: source('s1', 'm1').message,
+            quote: source('s1', 'm1').quote,
+        };
+        const sent: Knowledge.Extraction = {
+            by: extractionRef('s1', 4),
+            operations: [
+                {
+                    kind: 'ProposeRetire',
+                    item: itemId('kn_00000001'),
+                    retirementReason: 'replaced',
+                    replacedBy: itemId('kn_00000002'),
+                    evidence: [said],
+                    reason: reason('newer'),
+                },
+                {
+                    kind: 'ProposeUnretire',
+                    item: itemId('kn_00000003'),
+                    evidence: [said, { kind: 'Decision', item: itemId('kn_00000004') }],
+                    reason: reason('again'),
+                },
+            ],
+        };
+        expect(extraction(overJson(sent), 'body')).toEqual(sent);
+        const proposal: Knowledge.RetirementProposal = {
+            state: 'Dismissed',
+            id: 'rp_00000001' as Knowledge.RetirementProposalId,
+            item: itemId('kn_00000001'),
+            action: 'retire',
+            reason: 'obsolete',
+            explanation: reason('no longer done'),
+            evidence: [said],
+            proposedBy: { kind: 'Review', review: 'r1' as Knowledge.ReviewRef },
+            proposedAt: at,
+            decidedBy: userName('b@example.com'),
+            decidedAt: at,
+        };
+        expect(retirementProposal(overJson(proposal), 'p')).toEqual(proposal);
+        expect(() => retirementProposal(overJson({ ...proposal, reason: undefined }), 'p')).toThrow(WireError);
+        expect(() => retireBody({ reason: 'stale' }, 'body')).toThrow(WireError);
+        expect(retireBody({}, 'body')).toEqual({});
+        const error = { type: 'ProposalRefused' as const, reason: 'dismissedBefore' as const };
+        expect(domainErrorOf(decodeErrorBody(overJson(domainErrorBody(error))))).toEqual(error);
+        expect(knowledgeQueryOf(knowledgeQueryParams({ retired: 'only' }))).toEqual({ retired: 'only' });
+        expect(() => knowledgeQueryOf(new URLSearchParams({ retired: 'all' }))).toThrow(WireError);
     });
 });

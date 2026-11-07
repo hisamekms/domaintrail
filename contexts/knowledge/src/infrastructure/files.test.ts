@@ -386,3 +386,132 @@ describe('the files store', () => {
         expect(await readKnowledgeFiles(path.join(root, 'none'), root)).toEqual([]);
     });
 });
+
+describe('retiring in the files store (廃止)', () => {
+    const said = (message: string): Knowledge.Evidence => ({
+        kind: 'Said',
+        session: sessionRef('s2'),
+        message: message as Knowledge.MessageRef,
+        quote: 'もうやっていない' as Knowledge.Quote,
+    });
+    const candidate = (item: string, over: Partial<Parameters<FilesKnowledgeStore['propose']>[1]> = {}): Parameters<FilesKnowledgeStore['propose']>[1] => ({
+        item: itemId(item),
+        action: 'retire',
+        reason: 'obsolete',
+        explanation: reason('the talk says it is no longer done'),
+        evidence: [said('m9')],
+        proposedBy: { kind: 'Review', review: 'review-1' as Knowledge.ReviewRef },
+        ...over,
+    });
+
+    test('a retired item keeps its file, with its retirement; the lists and the counts leave it out unless asked', async () => {
+        await apply('s1', 1, add('kn_00000001', { about: ['Ordering.Placed'] }), add('kn_00000002', { about: ['Ordering.Placed'] }));
+        tick(1000);
+        const r = await store.retire(project, itemId('kn_00000001'), { reason: 'replaced', replacedBy: itemId('kn_00000002') }, alice);
+        expect(r.ok && r.value.retirement).toEqual({ reason: 'replaced', replacedBy: itemId('kn_00000002'), by: alice, at: clock });
+        const text = await readFile(path.join(dir, 'kn_00000001.md'), 'utf8');
+        expect(text).toContain('retired:\n  reason: replaced\n  replacedBy: kn_00000002\n  by: alice@example.com\n');
+        expect(text).toContain('the finding of kn_00000001');
+        expect(ids((await store.search(project, {})).items)).toEqual(['kn_00000002']);
+        expect(ids((await store.search(project, { retired: 'include' })).items).sort()).toEqual(['kn_00000001', 'kn_00000002']);
+        expect(ids((await store.search(project, { retired: 'only' })).items)).toEqual(['kn_00000001']);
+        expect(ids(await store.about(project, ['Ordering.Placed' as Knowledge.StickyRef]))).toEqual(['kn_00000002']);
+        expect((await store.get(project, itemId('kn_00000001')))?.item.retirement?.reason).toBe('replaced');
+        // the dot counts the other item only; retired alone, no dot
+        expect(await store.counts(project, 'Ordering')).toEqual([{ sticky: 'Ordering.Placed' as Knowledge.StickyRef, hasItems: true, hasConflict: false }]);
+        await store.retire(project, itemId('kn_00000002'), {}, alice);
+        expect(await store.counts(project, 'Ordering')).toEqual([]);
+        // undone
+        const back = await store.unretire(project, itemId('kn_00000001'), alice);
+        expect(back.ok && back.value.retirement).toBeUndefined();
+        expect(await readFile(path.join(dir, 'kn_00000001.md'), 'utf8')).not.toContain('retired:');
+        const audit = (await store.audit(project, {})).items.map((e) => [e.item, e.operation]);
+        expect<unknown>(audit.slice(0, 3)).toEqual([
+            ['kn_00000001', 'unretire'],
+            ['kn_00000002', 'retire'],
+            ['kn_00000001', 'retire'],
+        ]);
+    });
+
+    test('a replacement that is not a usable item is refused; retiring twice and unretiring an item not retired too', async () => {
+        await apply('s1', 1, add('kn_00000001'), add('kn_00000002'));
+        expect(await store.retire(project, itemId('kn_00000001'), { reason: 'replaced', replacedBy: itemId('kn_00000009') }, alice)).toEqual({
+            ok: false,
+            error: { type: 'ProposalRefused', reason: 'replacementUnavailable' },
+        });
+        await store.retire(project, itemId('kn_00000001'), {}, alice);
+        expect(await store.retire(project, itemId('kn_00000001'), {}, alice)).toEqual({ ok: false, error: { type: 'AlreadyRetired' } });
+        expect(await store.unretire(project, itemId('kn_00000002'), alice)).toEqual({ ok: false, error: { type: 'NotRetired' } });
+        expect(await store.retire(project, itemId('kn_00000009'), {}, alice)).toEqual({
+            ok: false,
+            error: { type: 'KnowledgeItemNotFound', itemId: itemId('kn_00000009') },
+        });
+    });
+
+    test('proposals: kept as files, listed while open, approved or dismissed by anyone, a dismissal remembered', async () => {
+        await apply('s1', 1, add('kn_00000001'), add('kn_00000002'));
+        const proposed = await store.propose(project, candidate('kn_00000001'));
+        if (!proposed.ok) throw new Error('not proposed');
+        expect(await readdir(path.join(dir, 'proposals'))).toEqual([`${proposed.value.id}.json`]);
+        expect((await store.proposals(project)).map((p) => p.id)).toEqual([proposed.value.id]);
+        // the same again answers it; another while it waits is refused
+        expect(await store.propose(project, candidate('kn_00000001'))).toEqual(proposed);
+        expect(await store.propose(project, candidate('kn_00000001', { evidence: [said('m10')] }))).toEqual({
+            ok: false,
+            error: { type: 'ProposalRefused', reason: 'pending' },
+        });
+
+        const approved = await store.approveProposal(project, proposed.value.id, alice);
+        expect(approved.ok && approved.value.item.retirement).toEqual({ reason: 'obsolete', by: alice, at: clock, proposal: proposed.value.id });
+        expect(await store.proposals(project)).toEqual([]);
+        expect(ids((await store.search(project, {})).items)).toEqual(['kn_00000002']);
+
+        const second = await store.propose(project, candidate('kn_00000002'));
+        if (!second.ok) throw new Error('not proposed');
+        const dismissed = await store.dismissProposal(project, second.value.id, userName('guest:bob'));
+        expect(dismissed.ok && dismissed.value.state).toBe('Dismissed');
+        expect(await store.dismissProposal(project, second.value.id, alice)).toEqual({
+            ok: false,
+            error: { type: 'ProposalDecided', proposalId: second.value.id },
+        });
+        // the same reason on the same evidence, by the extractor this time: not again; with a new message: again
+        expect(await store.propose(project, candidate('kn_00000002', { proposedBy: { kind: 'Extraction', extraction: extraction('s3', 1) } }))).toEqual({
+            ok: false,
+            error: { type: 'ProposalRefused', reason: 'dismissedBefore' },
+        });
+        expect((await store.propose(project, candidate('kn_00000002', { evidence: [said('m9'), said('m11')] }))).ok).toBe(true);
+
+        const audit = (await store.audit(project, {})).items.map((e) => [e.operation, e.actor.kind]);
+        expect(audit).toContainEqual(['propose', 'Review']);
+        expect(audit).toContainEqual(['dismiss', 'Person']);
+        expect(audit).toContainEqual(['retire', 'Person']);
+    });
+
+    test("an extraction's proposals are written with its items; an operation on a retired item is dropped", async () => {
+        await apply('s1', 1, add('kn_00000001'));
+        const r = await apply('s2', 1, {
+            kind: 'ProposeRetire',
+            item: itemId('kn_00000001'),
+            retirementReason: 'wrong',
+            evidence: [said('m1')],
+            reason: reason('it never was so'),
+        });
+        expect<unknown>(r.proposals?.map((p) => [p.item, p.action, p.proposedBy.kind])).toEqual([['kn_00000001', 'retire', 'Extraction']]);
+        expect((await store.proposals(project)).map((p) => p.item)).toEqual(['kn_00000001'] as Knowledge.KnowledgeItemId[]);
+        await store.retire(project, itemId('kn_00000001'), {}, alice);
+        const dropped = await apply('s2', 2, { kind: 'AddSource', item: itemId('kn_00000001'), base: version(1), source: source('s2', 'm2'), agreed: false });
+        expect(dropped.dropped.map((d) => d.reason)).toEqual([{ type: 'RetiredItem', itemId: itemId('kn_00000001') }]);
+        // moot now: no longer listed
+        expect(await store.proposals(project)).toEqual([]);
+    });
+
+    test('the sweep forgets the proposals about a deleted item', async () => {
+        await apply('s1', 1, add('kn_00000001'));
+        const p = await store.propose(project, candidate('kn_00000001'));
+        expect(p.ok).toBe(true);
+        await store.delete(project, itemId('kn_00000001'), alice);
+        tick(61_000);
+        await store.sweep();
+        expect(await readdir(path.join(dir, 'proposals'))).toEqual([]);
+    });
+});

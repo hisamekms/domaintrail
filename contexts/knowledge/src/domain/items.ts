@@ -17,6 +17,8 @@
 // - handOverToHotspot: a conflict a person made a hotspot is handed over to the hotspot the AI added: the hotspot joins
 //   `about` and the link goes, in one decision; the text, the labels and the version stay (the store does both sides);
 // - correct: a person's edit, always a new version;
+// - retire / unretire: a person retires an item (廃止する), with a reason or none, or undoes it; the text, the sources
+//   and the versions stay, the item is only hidden by default and kept from the AI (see `domain/retirement.ts`);
 // - delete / restore: a person hides the item at once, and may undo it until the store's sweep removes it.
 import { decide, err, Knowledge, ok } from '../generated/index.js';
 
@@ -73,7 +75,17 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
         const { id, content, sources, by, reason, at } = params;
         return ok({
             Live: {
-                set: { id, content, sources, version: FIRST_VERSION, conflictsWith: [], createdIn: by.session, createdAt: at, updatedAt: at },
+                set: {
+                    id,
+                    content,
+                    sources,
+                    version: FIRST_VERSION,
+                    conflictsWith: [],
+                    createdIn: by.session,
+                    createdAt: at,
+                    updatedAt: at,
+                    retirement: undefined,
+                },
                 events: {
                     KnowledgeItemAdded: {
                         type: 'KnowledgeItemAdded',
@@ -99,7 +111,17 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
         const { id, content, sources, other, by, reason, at } = params;
         return ok({
             Live: {
-                set: { id, content, sources, version: FIRST_VERSION, conflictsWith: [other], createdIn: by.session, createdAt: at, updatedAt: at },
+                set: {
+                    id,
+                    content,
+                    sources,
+                    version: FIRST_VERSION,
+                    conflictsWith: [other],
+                    createdIn: by.session,
+                    createdAt: at,
+                    updatedAt: at,
+                    retirement: undefined,
+                },
                 events: {
                     KnowledgeItemAdded: {
                         type: 'KnowledgeItemAdded',
@@ -241,6 +263,66 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                 Live: {
                     set: { content: corrected, version, updatedAt: at },
                     events: { KnowledgeItemCorrected: { type: 'KnowledgeItemCorrected', itemId: item.id, version, by, at } },
+                },
+            });
+        },
+    }),
+
+    retire: decide<Knowledge.RetireKnowledgeItemDecision>(Knowledge.KnowledgeItemShape, {
+        Live: (item, params) => {
+            switch (Knowledge.checkRetireKnowledgeItemRequires(item, params)) {
+                case 'notRetired':
+                    return err({ type: 'AlreadyRetired' });
+                case 'replacementWhenReplaced':
+                    return err({ type: 'ReplacementWithoutReason' });
+                case 'notReplacedByItself':
+                    return err({ type: 'ReplacedByItself' });
+            }
+            const { reason, replacedBy, proposal, by, at } = params;
+            const retirement: Knowledge.Retirement = {
+                ...(reason && { reason }),
+                ...(replacedBy && { replacedBy }),
+                by,
+                at,
+                ...(proposal && { proposal }),
+            };
+            return ok({
+                Live: {
+                    set: { retirement, updatedAt: at },
+                    events: {
+                        KnowledgeItemRetired: {
+                            type: 'KnowledgeItemRetired',
+                            itemId: item.id,
+                            version: item.version,
+                            ...(reason && { reason }),
+                            ...(replacedBy && { replacedBy }),
+                            ...(proposal && { proposal }),
+                            by,
+                            at,
+                        },
+                    },
+                },
+            });
+        },
+    }),
+
+    unretire: decide<Knowledge.UnretireKnowledgeItemDecision>(Knowledge.KnowledgeItemShape, {
+        Live: (item, params) => {
+            if (Knowledge.checkUnretireKnowledgeItemRequires(item, params) === 'retired') return err({ type: 'NotRetired' });
+            const { proposal, by, at } = params;
+            return ok({
+                Live: {
+                    set: { retirement: undefined, updatedAt: at },
+                    events: {
+                        KnowledgeItemUnretired: {
+                            type: 'KnowledgeItemUnretired',
+                            itemId: item.id,
+                            version: item.version,
+                            ...(proposal && { proposal }),
+                            by,
+                            at,
+                        },
+                    },
                 },
             });
         },

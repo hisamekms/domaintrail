@@ -9,16 +9,48 @@ export { Knowledge, err, ok, type Result } from './generated/index.js';
 export { FIRST_VERSION, knowledgeItemCommands, newSourcesOf, nextVersion, raisedOrigin, rewritesInPlace, withLiveConflicts } from './domain/items.js';
 export {
     applyExtraction,
+    candidateOf,
     idempotencyKey,
     itemsTouched,
+    proposalsTouched,
     type AppliedOperation,
+    type ProposalChange,
+    type ProposalLookup,
     type DroppedOperation,
     type DropReason,
     type ExtractionOutcome,
     type ItemChange,
     type ItemLookup,
 } from './domain/extraction.js';
-export { auditOf, imagesIn, pastVersionOf, redactionOf, sourceMessages, withoutReason, type PastVersion } from './domain/records.js';
+export {
+    auditOf,
+    auditOfProposal,
+    imagesIn,
+    pastVersionOf,
+    proposerActor,
+    redactionOf,
+    sourceMessages,
+    withoutReason,
+    type PastVersion,
+} from './domain/records.js';
+export {
+    admitProposal,
+    decideApproval,
+    decideDismissal,
+    evidenceKey,
+    isMoot,
+    isRetired,
+    openProposals,
+    proposalIdOf,
+    proposalsToForget,
+    retirementProposalCommands,
+    type Admitted,
+    type Approval,
+    type ApprovalError,
+    type ProposalContext,
+    type ProposalRejection,
+    type RetirementCandidate,
+} from './domain/retirement.js';
 
 // ---- the extraction (ADR 0031, section 3): the extractor's input and reply, the guards, the timing -----------------
 export {
@@ -90,6 +122,7 @@ export { decideExtraction, type ExtractionTiming, type ExtractionTrigger, type T
 // ---- the store's port, and who may use it ------------------------------------------------------------------------
 export type {
     AppliedExtraction,
+    ApprovedProposal,
     AuditQuery,
     Deletion,
     ItemWithHistory,
@@ -104,6 +137,9 @@ export type {
     PublishedStorming,
     PublishResult,
     RedactionEntry,
+    RetiredFilter,
+    RetireError,
+    RetirementInput,
     StickyCount,
     StormingPublisher,
 } from './application/ports.js';

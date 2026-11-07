@@ -14,6 +14,8 @@ context Knowledge {
     createdIn: SessionRef? "作ったセッション"
     createdAt: Timestamp "作った日時"
     updatedAt: Timestamp "変えた日時"
+    /// 廃止したとき。中身・出典・版はそのまま残る（消すのとは別）。
+    retirement: Retirement? "廃止"
 
     invariant distinctSources "出典のメッセージは1回" { unique(sources, s => s.session, s.message) }
     invariant distinctConflicts "食い違うナレッジは1回" { unique(conflictsWith) }
@@ -96,6 +98,26 @@ context Knowledge {
       Live -> Live
       changes content, version, updatedAt
       emits KnowledgeItemCorrected
+
+    /// 人が廃止する（理由は選ばなくてもよい）。中身・出典・版は変えない。候補を承認したときは、その候補を持つ。
+    command retire(reason: RetirementReason?, replacedBy: KnowledgeItemId? "置き換え先", proposal: RetirementProposalId? "候補", by: UserName, at: Timestamp) "廃止する"
+      Live -> Live
+      requires notRetired "廃止していない" { not exists(retirement) } else AlreadyRetired
+      requires replacementWhenReplaced "置き換え先は「置き換わった」のときだけ" {
+        exists(replacedBy) implies (exists(reason) and reason == RetirementReason.replaced)
+      } else ReplacementWithoutReason
+      requires notReplacedByItself "自分には置き換わらない" {
+        exists(replacedBy) implies replacedBy != id
+      } else ReplacedByItself
+      changes retirement, updatedAt
+      emits KnowledgeItemRetired
+
+    /// 人が廃止を取り消す。
+    command unretire(proposal: RetirementProposalId? "候補", by: UserName, at: Timestamp) "廃止を取り消す"
+      Live -> Live
+      requires retired "廃止している" { exists(retirement) } else NotRetired
+      changes retirement, updatedAt
+      emits KnowledgeItemUnretired
 
     /// 人が消す。
     command delete(by: UserName, at: Timestamp) "消す"
@@ -194,6 +216,24 @@ context Knowledge {
     at: Timestamp
   }
 
+  persistent event KnowledgeItemRetired "廃止した" {
+    itemId: KnowledgeItemId
+    version: ItemVersion
+    reason: RetirementReason?
+    replacedBy: KnowledgeItemId? "置き換え先"
+    proposal: RetirementProposalId? "候補"
+    by: UserName
+    at: Timestamp
+  }
+
+  persistent event KnowledgeItemUnretired "廃止を取り消した" {
+    itemId: KnowledgeItemId
+    version: ItemVersion
+    proposal: RetirementProposalId? "候補"
+    by: UserName
+    at: Timestamp
+  }
+
   /// 抽出が見たあとに、ナレッジが変わった（人が直した、ほかの抽出が新しい版にした）。人の変更を残し、操作は捨てる。
   error StaleOperation "古い版への操作"
 
@@ -213,6 +253,23 @@ context Knowledge {
 
   /// 抽出が足そうとした ID のナレッジがもうある。
   error KnowledgeItemExists "あるナレッジ" {
+    itemId: KnowledgeItemId
+  }
+
+  /// ナレッジはもう廃止してある。
+  error AlreadyRetired "廃止したナレッジの廃止"
+
+  /// ナレッジは廃止していない。
+  error NotRetired "廃止していないナレッジの取り消し"
+
+  /// 置き換え先を、理由「置き換わった」なしに書いた。
+  error ReplacementWithoutReason "理由のない置き換え先"
+
+  /// 自分に置き換わるとした。
+  error ReplacedByItself "自分への置き換え"
+
+  /// ナレッジは廃止してある: 抽出の操作は当てない（AI には廃止した中身を渡していない）。
+  error RetiredItem "廃止したナレッジ" {
     itemId: KnowledgeItemId
   }
 

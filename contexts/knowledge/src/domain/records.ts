@@ -37,7 +37,59 @@ export function auditOf(event: Knowledge.KnowledgeItemEvent): Knowledge.AuditEnt
             return record('delete', person(event.by));
         case 'KnowledgeItemRestored':
             return record('restore', person(event.by));
+        case 'KnowledgeItemRetired':
+            return record('retire', person(event.by), retirementReason(event));
+        case 'KnowledgeItemUnretired':
+            return record('unretire', person(event.by), event.proposal && reasonOf(`proposal ${event.proposal}`));
     }
+}
+
+/** A reason made of dt's own words (an ID, a reason's name): always one. */
+function reasonOf(text: string): Knowledge.Reason {
+    const made = Knowledge.makeReason(text);
+    if (!made.ok) throw new Error(`Not a reason: ${text}`);
+    return made.value;
+}
+
+/** The reason a retirement is recorded with: its reason and replacement, and the proposal approved (none: no reason). */
+function retirementReason(event: Knowledge.KnowledgeItemRetired): Knowledge.Reason | undefined {
+    const parts = [
+        event.reason && (event.replacedBy ? `${event.reason} by ${event.replacedBy}` : event.reason),
+        event.proposal && `proposal ${event.proposal}`,
+    ].filter((p) => p !== undefined);
+    return parts.length > 0 ? reasonOf(parts.join(', ')) : undefined;
+}
+
+/** Who proposed, as the audit log's actor. */
+export const proposerActor = (p: Knowledge.Proposer): Knowledge.Actor =>
+    p.kind === 'Extraction' ? { kind: 'Extractor', extraction: p.extraction } : { kind: 'Review', review: p.review };
+
+/**
+ * The audit log's record of a proposal made or dismissed, on the item it is about at its version then (an approval is
+ * recorded by the item's retirement or unretirement, which names the proposal). A proposal's record has its action and
+ * explanation as the reason; a dismissal names the proposal.
+ */
+export function auditOfProposal(
+    event: Knowledge.RetirementProposed | Knowledge.RetirementProposalDismissed,
+    version: Knowledge.ItemVersion,
+): Knowledge.AuditEntry {
+    if (event.type === 'RetirementProposed')
+        return {
+            item: event.item,
+            version,
+            operation: 'propose',
+            actor: proposerActor(event.proposedBy),
+            reason: reasonOf(`${event.action} (${event.proposalId}): ${event.explanation}`.slice(0, 2000)),
+            at: event.proposedAt,
+        };
+    return {
+        item: event.item,
+        version,
+        operation: 'dismiss',
+        actor: { kind: 'Person', user: event.by },
+        reason: reasonOf(`${event.action} (${event.proposalId})`),
+        at: event.at,
+    };
 }
 
 /** The reason a hand-over is recorded with: the hotspot the conflict went to. */

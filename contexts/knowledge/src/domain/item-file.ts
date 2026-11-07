@@ -17,6 +17,11 @@
 //     createdIn: s_20261105
 //     createdAt: 2026-11-05T09:00:00.000Z
 //     updatedAt: 2026-11-05T09:05:00.000Z
+//     retired:                      # only when it is retired (廃止)
+//       reason: replaced
+//       replacedBy: kn_9a1b2c3d4e
+//       by: "access:someone@example.com"
+//       at: 2026-11-07T10:00:00.000Z
 //     sources:
 //       - session: s_20261105
 //         message: m_12
@@ -258,12 +263,15 @@ const KEYS = [
     'createdIn',
     'createdAt',
     'updatedAt',
+    'retired',
     'sources',
     'state',
     'deletedBy',
     'deletedAt',
 ] as const;
 const SOURCE_KEYS = ['session', 'message', 'at', 'quote'] as const;
+const RETIRED_KEYS = ['reason', 'replacedBy', 'by', 'at', 'proposal'] as const;
+const RETIREMENT_REASONS: readonly Knowledge.RetirementReason[] = ['replaced', 'obsolete', 'wrong'];
 const WHEN: readonly Knowledge.When[] = ['as_is', 'to_be', 'none'];
 const KINDS: readonly Knowledge.KnowledgeKind[] = ['rule', 'flow', 'example', 'term', 'pain', 'want', 'decision'];
 const ORIGINS: readonly Knowledge.Origin[] = ['said', 'agreed', 'investigated', 'inferred'];
@@ -358,6 +366,27 @@ function sourceOf(node: Node, index: number): Knowledge.Source {
     };
 }
 
+/** The `retired` map: a retirement, when the item is retired. */
+function retirementOf(front: Fields, node: MapNode | undefined): Knowledge.Retirement | undefined {
+    if (node === undefined) return undefined;
+    const f = new Fields(node, 'retired');
+    f.unknown(RETIRED_KEYS);
+    const reason = f.optional('reason') === undefined ? undefined : f.oneOf('reason', RETIREMENT_REASONS);
+    const replacedBy = f.optional('replacedBy');
+    const proposal = f.optional('proposal');
+    const retirement: Knowledge.Retirement = {
+        ...(reason !== undefined && { reason }),
+        ...(replacedBy !== undefined && { replacedBy: f.made('replacedBy', Knowledge.makeKnowledgeItemId, replacedBy) }),
+        by: f.made('by', Knowledge.makeUserName),
+        at: f.time('at'),
+        ...(proposal !== undefined && { proposal: f.made('proposal', Knowledge.makeRetirementProposalId, proposal) }),
+    };
+    if (Knowledge.checkRetirement(retirement).length > 0) throw new Unreadable(f.line('replacedBy'), "'retired.replacedBy' is only for the reason replaced.");
+    if (retirement.replacedBy !== undefined && retirement.replacedBy === front.optional('id'))
+        throw new Unreadable(f.line('replacedBy'), "'retired.replacedBy' names the item itself.");
+    return retirement;
+}
+
 function itemOf(front: MapNode, text: string, bodyLine: number, fileId: string | undefined): ItemFile {
     const f = new Fields(front, '');
     f.unknown(KEYS);
@@ -387,6 +416,10 @@ function itemOf(front: MapNode, text: string, bodyLine: number, fileId: string |
     if (Knowledge.checkItemContent(content).length > 0) throw new Unreadable(f.line('about'), "'about' names a sticky twice.");
     const conflictsWith = f.list('conflictsWith').map((n) => made(Knowledge.makeKnowledgeItemId, scalarOf(n, 'conflictsWith'), 'conflictsWith'));
     const createdIn = f.optional('createdIn');
+    const retiredEntry = front.entries.get('retired');
+    if (retiredEntry !== undefined && retiredEntry.node.kind !== 'map')
+        throw new Unreadable(retiredEntry.line, "'retired' is a map of reason, replacedBy, by, at, proposal.");
+    const retirement = retirementOf(f, retiredEntry?.node.kind === 'map' ? retiredEntry.node : undefined);
     const common: Knowledge.KnowledgeItemCommon = {
         id,
         content,
@@ -396,6 +429,7 @@ function itemOf(front: MapNode, text: string, bodyLine: number, fileId: string |
         ...(createdIn !== undefined && { createdIn: f.made('createdIn', Knowledge.makeSessionRef, createdIn) }),
         createdAt: f.time('createdAt'),
         updatedAt: f.time('updatedAt'),
+        ...(retirement !== undefined && { retirement }),
     };
     const state = f.optional('state') ?? 'live';
     let item: Knowledge.KnowledgeItem;
@@ -489,6 +523,14 @@ export function printItemFile(item: Knowledge.KnowledgeItem): string {
     list('conflictsWith', item.conflictsWith);
     if (item.createdIn !== undefined) out.push(`createdIn: ${scalar(item.createdIn)}`);
     out.push(`createdAt: ${time(item.createdAt)}`, `updatedAt: ${time(item.updatedAt)}`);
+    const r = item.retirement;
+    if (r !== undefined) {
+        out.push('retired:');
+        if (r.reason !== undefined) out.push(`  reason: ${r.reason}`);
+        if (r.replacedBy !== undefined) out.push(`  replacedBy: ${r.replacedBy}`);
+        out.push(`  by: ${scalar(r.by)}`, `  at: ${time(r.at)}`);
+        if (r.proposal !== undefined) out.push(`  proposal: ${r.proposal}`);
+    }
     if (item.sources.length === 0) out.push('sources: []');
     else {
         out.push('sources:');
