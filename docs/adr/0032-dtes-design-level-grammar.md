@@ -275,7 +275,8 @@ sticky's top was tried in a preview and dropped: hotspots stay as §8 draws them
    also when open hotspots on it are still drawn. Hovering tells what was agreed (「解決済み: …」); pressing it selects
    the hotspot (the one on that copy), whose detail tells the question and the agreement. No new words. A sticky's
    detail lists every hotspot on it, open and resolved, whatever is hidden.
-3. **What a reader hides is one set** (`Hideable`, `HIDDEN_BY` in `core/storming/ir.ts`): `exceptions` and
+3. **What a reader hides is one set** (`Hideable`, `HIDDEN_BY` in `core/storming/ir.ts`; amended by §11: the exceptions
+   are a flow, and only `drawing` kinds remain): `exceptions` and
    `resolvedHotspots`, each with how it is hidden. `layout`: the view is laid out without it — another graph, keyed by
    `ViewOptions.hidden` (`-exceptions`, as before), laid out by the server. `drawing`: the same layout is drawn without
    it (`hideInDrawing`): in the page alone, and the same way by `dt export svg --resolved-hotspots hide` (beside
@@ -287,6 +288,52 @@ sticky's top was tried in a preview and dropped: hotspots stay as §8 draws them
    the palette and `#select=` links, the knowledge's links, the detail's links, a chat's reference and a turn's marks
    (`marksView`) choose the view, then show again the kinds that hide the element — one kind when that is enough, else
    all of them — then select it. The rule is written once, for every kind; the exceptions go through it too.
+
+### 11. The place and the flow, apart (2026-11-07)
+
+*Decided by the maintainer* 2026-11-07, from a preview of the view bar (its states and how they change, approved as
+recommended). The view bar mixed two questions: its second picker listed すべて（統合）, the stages 「…（例外を含む）」
+and every timeline, exceptions among them, while 「例外を表示」 in the 絞り込み could hide the exceptions of a stage the
+picker said included them. They are now two controls, each answering one question.
+
+1. **The breadcrumb is the place only**: the storming › its stage, as the storming navigator nests them (すべて, the
+   whole storming, in place of すべて（統合）); a storming without stages is its name alone. A stage's name says nothing
+   of its exceptions. The timelines leave the breadcrumb.
+2. **Beside it, the flow drawn there** (a segmented switch, named 流れ for screen readers only; its choice a pale wash
+   and an underline, apart from the level's fill): 主な流れ (the main flows only, the earlier 「例外を表示」 off), 例外も
+   (every exception, the default) and 例外 ▾ (one exception, its *case*; on the whole storming the menu lists the
+   exceptions under their stages). 主な流れ has a ▾ of its own where the place has several main flows, which draws one
+   main flow alone (its own timeline's view, with its one-hop causal paths) and makes its stage the place. A place
+   without exceptions has 主な流れ ▾ alone when it has several main flows, and no switch otherwise.
+3. **A case keeps the layout of every flow.** The main flows and the exception chosen are drawn where 例外も puts them;
+   the other exceptions are left out of the drawing, their room left empty, and in the exception's section the notes
+   off its path (the main flows after it branches off and before it returns, the other main flows) are faint
+   (`caseInDrawing`). It was preferred to the exception's own timeline view, which it replaces (an exception has no
+   view of its own any more): the case reads against the main flows it leaves and rejoins, and switching between 例外も
+   and a case moves no sticky. It is not laid out of its own: a layout per exception would multiply the views by the
+   exceptions. 主な流れ keeps its layout without the exceptions (`ViewOptions.flow`, keyed `-exceptions` as before).
+4. **The flow is not a narrowing.** It is an axis of the view's state (`StormingFlow`, beside the place), not one of
+   the kinds a reader hides: `exceptions` leaves `HIDEABLE`, and §10's split of those kinds by `layout` and `drawing`
+   goes with it — what a reader hides is drawn without it, never laid out again; what takes room of its own is a flow.
+   The 絞り込み keeps 「解決済みを表示」 alone (no button without it), and its すべて解除 leaves the flow.
+5. **The navigator, the breadcrumb and the flow agree.** A storming's or a stage's row opens that place with every
+   flow; an exception's row its case at its stage; a main flow's row that flow alone. One row is selected — the exception
+   or the main flow chosen, else the place — and the place of a timeline selected is marked faintly. Another place keeps
+   the exception chosen when it has it, else draws every flow; another storming draws every flow.
+6. **Moving to what is not drawn** (§10's rule, still one place): another exception's case while a case is shown, else
+   every flow, then what the 絞り込み hides.
+7. **An earlier state is read, not migrated**: the exceptions hidden (`hidden`'s `exceptions`, or `exceptions: false`)
+   read as 主な流れ; a timeline's ID kept as a storming's view reads as its stage and its flow (an exception's case, or
+   one main flow); written again in the new form on the next change. A presence of an earlier page (a `timelineId`
+   alone) reads the same way; a presence now carries the place and the flow (`stageId`, `flow`), and a case is another
+   location than every flow though of the same layout. The view a message is sent from tells the AI the exception
+   chosen (`exception`). `dt export svg` takes `--flow main|all`, `--exception <ID>` and `--timeline <ID>` (one main
+   flow; an exception's ID draws its case), `--exceptions` staying as an earlier name of `--flow`; the heading and the
+   file name say the flow in the view bar's words (主な流れ, 例外も, 例外: …, 主な流れ: …).
+
+*Decided here*, while implementing: dropping §10's `layout` kind with the exceptions (4) rather than keeping an empty
+split; another storming opening at the place last shown of it (the preview opened its whole); in a place without
+exceptions, 主な流れ ▾'s すべての主な流れ drawing every flow (so that no hidden 主な流れ waits in the next place).
 
 ## Alternatives
 

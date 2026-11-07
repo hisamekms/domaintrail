@@ -12,7 +12,8 @@ export interface FigureSpec {
     readonly stage?: string;
     readonly timeline?: string;
     readonly level: 'big-picture' | 'design';
-    readonly exceptions?: 'show' | 'hide';
+    /** The flow drawn at the place (`dt export svg --flow`): every flow (default) or the main flows only. */
+    readonly flow?: 'all' | 'main';
     readonly theme?: 'light' | 'dark';
     readonly lang?: 'ja' | 'en';
     readonly names?: 'label' | 'name' | 'both';
@@ -38,8 +39,8 @@ function readManifest(): Manifest {
             if (!f.example || !f.storming || !LEVELS.includes(f.level))
                 throw new Error(`figures.json: "${guide}/${name}" needs example, storming and level (${LEVELS.join(' | ')})`);
             if (f.stage && f.timeline) throw new Error(`figures.json: "${guide}/${name}" names both a stage and a timeline`);
-            // `dt export svg --help`: --exceptions is for the whole storming or a stage, not a timeline
-            if (f.timeline && f.exceptions) throw new Error(`figures.json: "${guide}/${name}" sets exceptions on a timeline`);
+            // `dt export svg --help`: one flow, --flow or --timeline
+            if (f.timeline && f.flow) throw new Error(`figures.json: "${guide}/${name}" sets a flow on a timeline`);
         }
         guides[guide] = figures;
     }
@@ -55,7 +56,7 @@ export function exportArgs(f: FigureSpec): string[] {
         ...(f.timeline ? ['--timeline', f.timeline] : []),
         '--level',
         f.level,
-        ...(f.exceptions ? ['--exceptions', f.exceptions] : []),
+        ...(f.flow ? ['--flow', f.flow] : []),
         '--theme',
         f.theme ?? 'light',
         '--lang',

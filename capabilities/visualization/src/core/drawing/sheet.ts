@@ -52,7 +52,7 @@ const CONDITION = ' · ';
 /**
  * The line above a printed diagram (and an exported one, if asked): the workspace, the world, the view and what in it
  * is shown, then the conditions it is shown in, e.g. `ws › ドメインモデル › 構造図 · 詳細` or
- * `ws › イベントストーミング › 住民票 › コンビニでの発行 · デザインレベル · 例外を含む` (the storming world has one view).
+ * `ws › イベントストーミング › 住民票 › コンビニでの発行 · デザインレベル · 例外も` (the storming world has one view).
  * Names follow the display mode, as on the screen.
  */
 export function sheetHeading(workspace: string | undefined, subject: SheetSubject, t: DiagramTexts, mode: DisplayMode): string {

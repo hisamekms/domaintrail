@@ -282,7 +282,7 @@ type ViewOptions = {
   level: 'big-picture' | 'design-level'
   timelineId?: string // 省略 = 統合キャンバス
   stageId?: string // 段階ビュー（§3.7。timelineId とは併用しない）
-  hideExceptions?: true // 例外を表示しない（統合キャンバスと段階ビューのみ）
+  flow?: 'main' // 主な流れだけ（統合キャンバスと段階ビューのみ。例外1つのケースは「例外も」の配置から描く）
 }
 ```
 
@@ -305,8 +305,8 @@ type ViewOptions = {
 - **関係の描き方（ADR 0032）**【確定（2026-11-06 改訂）】: 前後の2項目の `actor` は `by`（発行者：Actor か External System）、`target` は `handledBy`（処理するもの：Aggregate か External System）に読み替える。Read Model の付箋はその Command の発行者の付箋へつなぐ（発行者のいない Policy の Command では Command へ）ので、Read Model に導かれる発行者は Command の上に貼らず、Read Model → 発行者 → Command と並ぶ。`handledBy` が External System のときも同じく処理するものの付箋から `emits` を描く。Read Model の `from` は Event → Read Model の点線の矢印、Event の `from` は External System の付箋（その Event の付箋ごとに1枚）→ Event の因果の線。Hotspot はどの付箋にも `on` でき、その付箋（の各コピー）の上に貼る。Big Picture では、Design Level の付箋に `on` する Hotspot は描かない。同じ Event の付箋に至る複数の Command が同じもの（同じ Aggregate、または同じ External System）に処理されるとき、処理するものはその Event の付箋の前に1枚だけ描き（各 Command → その1枚、その1枚 → Event は1本。その線は元の Command の `emits` すべてを表し、ホバーで Command を示す）、Event の付箋をまたいでは合わせない（別ステップの同じ Event には別々に描く）。処理するものが違えば合わせず、発行者は Command ごと。Command は共有しない Event のために自分の処理するものも持つ。グリッドでは合流する Command を隣り合わせ、その行の中央に置く。
 - **Event Storming の文法で描く**【確定（2026-11-05 追加）】: Design Level は一般的な Event Storming の読み方で左→右に描く。Read Model → 発行者 → Command → 処理するもの → Event → Policy → Command …。`handledBy` のある Command は処理するものを経て Event に至る（Command → 処理するもの、処理するもの → Event。`emits` の意味的エッジのキーは変えない）。`handledBy` のない Command は Command → Event。Hotspot は `on` の付箋に貼る注記で、流れの1ステップにはしない（その Event の上に置く）。1つのビューで Event が複数のステップに描かれるとき（timeline のビューで繰り返す Event、段階・例外のある storming）は、その Event を `emits` する Command（とその Actor・Read Model・Aggregate）、その Event に `on` する Policy、その Event への Hotspot を、ステップごとに1枚ずつ描く（ID `n:<要素>#<k>`。§7.3・§10.2 の表示上の分割）。Policy の付箋は、自分のステップの次にある Command の付箋へ `issues` を描く（後ろに無ければすべてへ）。統合キャンバス（段階・例外のない storming）は Event を1枚に描くので、この分割はしない。どの付箋を選んでも同じ要素を選び（インスペクタは1つ）、同じ要素のほかの付箋を控えめに示す。変更マーク・参照・在席表示は要素に付くので全部の付箋に出る。チャットやカタログから要素へ飛ぶときは、画面の中央に最も近い付箋を選ぶ。
 - 複数 timeline フィルタ／抽象度切替は `.dtes` を変更しない。
-- **段階・例外のある storming**（§3.7）: 統合キャンバスは区画を時間順に左→右へ並べ、段階をラベル付きの枠で描く（§8.6）。**段階ビュー**（その段階の本流と例外を同じ描き方で統合）を段階ごとに選べる。名前付き timeline のビューは従来どおり。
-- **例外の表示切替**（「例外を表示」）: 統合キャンバスと段階ビューで、例外を描かないこともできる。そのとき例外のステップ、例外にしか現れない Event、それらだけに付いた Hotspot、例外の `then` を描かない。デザインレベルでは、例外にしか現れない Event だけに関わる要素（それだけを emits する Command、それだけに `on` する Policy とそれが issues する Command、それらの Command の横の Actor・外部システム・Read Model・集約のコピー）も描かない。例外そのものの timeline ビューには影響しない。表示状態は閲覧者ごとの UI 状態で、`.dtes` を変更しない。
+- **段階・例外のある storming**（§3.7）: 統合キャンバスは区画を時間順に左→右へ並べ、段階をラベル付きの枠で描く（§8.6）。**段階ビュー**（その段階の本流と例外を同じ描き方で統合）を段階ごとに選べる。主な流れの timeline のビューは従来どおり（例外には自身のビューはない）。
+- **流れ**（ADR 0032 §11。「主な流れ」「例外も」「例外: …」）: 統合キャンバスと段階ビューで、例外を描かないこともできる（主な流れ）。そのとき例外のステップ、例外にしか現れない Event、それらだけに付いた Hotspot、例外の `then` を描かない。デザインレベルでは、例外にしか現れない Event だけに関わる要素（それだけを emits する Command、それだけに `on` する Policy とそれが issues する Command、それらの Command の横の Actor・外部システム・Read Model・集約のコピー）も描かない。例外を1つ選ぶ（ケース）と、「例外も」の配置のまま、選んでいない例外を描かない。表示状態は閲覧者ごとの UI 状態で、`.dtes` を変更しない。
 
 ## 7. グラフの3階層【確定】
 
@@ -570,7 +570,7 @@ Design Level では Event 同士の時間順の線を描かない（配置が左
 - [ ] R21: `then` は例外の最後のステップから戻り先（同じ段階・前後の段階）へのエッジ。`after` は前の幹の最後から次の幹の最初へのエッジ。
 - [ ] R22: 段階ビューはその段階の本流と例外だけを描き、ほかの段階への `then` を描かない。
 - [ ] R23: 2つ目の本流は幹から分岐し、例外の線ではなく本流の線で、例外より上のレーンに描く。
-- [ ] R24: 例外を表示しないとき、例外のステップ・例外だけの Event・それに付いた Hotspot・`then` を描かない。例外の timeline ビューは変わらない。
+- [ ] R24: 主な流れだけのとき、例外のステップ・例外だけの Event・それに付いた Hotspot・`then` を描かない。例外1つのケースは例外もの配置のまま、ほかの例外を描かない。
 - [ ] R25: 段階も `exception` もない storming の描画は従来どおり（examples/shop の payload は変わらない）。Big Picture で分岐点・戻り先が非表示なら最寄りの見えるステップを使う。どの線も付箋と交差しない。
 
 ### 12.3 Property / 不変条件
