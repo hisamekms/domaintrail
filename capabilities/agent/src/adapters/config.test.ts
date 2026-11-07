@@ -71,6 +71,12 @@ describe("the agent's settings", () => {
         expect(resolveAgentConfig({ run: { idleTimeout: 1.5 } }).run.idleTimeout).toBe(1.5);
     });
 
+    test('the review at a run’s end (ADR 0034): on unless `review` is false', () => {
+        expect(resolveAgentConfig({}).run.review).toBeUndefined();
+        expect(resolveAgentConfig({ run: { review: false } }).run.review).toBe(false);
+        expect(refusal({ run: { review: 'no' } })).toBe("'agent.run.review' must be true or false");
+    });
+
     test("each role's model is its own: an unset one is Claude Code's, never another role's", () => {
         const c = resolveAgentConfig({ run: { model: 'opus' }, answer: { effort: 'low', timeout: 30 }, triage: { warm: true } });
         expect(c.run.model).toBe('opus');

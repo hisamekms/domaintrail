@@ -240,7 +240,8 @@ async function subscribe(ctx: Context, planFile: string, extra: Partial<Subscrib
         connect: { credential: credentialOf(ctx) },
         dt: DT,
         agentCommand: { command: process.execPath, args: [FAKE, planFile] },
-        run: { warm: false, restartAfter: 20, idleTimeout: 30 },
+        // the review at a run's end (ADR 0034) has tests of its own: here a run is one turn
+        run: { warm: false, restartAfter: 20, idleTimeout: 30, review: false },
         // the runner only: the answerer role (its own fake plan) has its tests in session-triage.test.ts
         roles: ['run'],
         log: (l) => log.push(l),
@@ -903,7 +904,7 @@ describe('the pipeline', () => {
 });
 
 describe('the warm agent', () => {
-    const WARM = { run: { warm: true, restartAfter: 20, idleTimeout: 30 } };
+    const WARM = { run: { warm: true, restartAfter: 20, idleTimeout: 30, review: false } };
 
     integration('one process takes the runs one turn each; the next prompt names what changed since; a restore starts a fresh one', async () => {
         const ctx = await setup();
@@ -1118,7 +1119,7 @@ describe('the stream and the completions', () => {
                 nonce: () => 'n'.repeat(32),
                 log: (l) => log.push(l),
             },
-            { allowedTools: [...DEFAULT_AGENT_TOOLS], leaseMs: LEASE_MS, reconnect: { minMs: 100, maxMs: 300, giveUpMs: 5_000 } },
+            { allowedTools: [...DEFAULT_AGENT_TOOLS], leaseMs: LEASE_MS, reconnect: { minMs: 100, maxMs: 300, giveUpMs: 5_000 }, review: false },
         );
         cleanups.push(() => subscriber.stop());
         return { done: subscriber.done, log };
@@ -1368,5 +1369,108 @@ describe("people's edits while a run runs (ADR 0033, the maintainer chose to re-
 
         expect((await api(ctx.server, ctx.bob, `runs/${edit}/settle`, {})).status).toBe(200);
         expect(editedRuns(await state(ctx)).find((r) => r.id === edit)?.conflict?.settled).toBe(true);
+    });
+});
+
+describe("the review at a run's end (ADR 0034)", () => {
+    /** The hotspot on ReturnRequested resolved, the event left as it was: what stage 0 finds. */
+    const RESOLVE_DEADLINE: Step['edits'] = [
+        { path: RETURNS, replace: ['    on ReturnRequested\n  }', '    on ReturnRequested\n    status resolved\n    resolution "注文から30日まで"\n  }'] },
+    ];
+    /** The event changed as the decision says: what the review's turn does. */
+    const DEADLINE_ON_EVENT: Step['edits'] = [{ path: RETURNS, replace: ['"返品が依頼された"', '"返品が依頼された（30日以内）"'] }];
+    const done = { outcome: 'done', title: '返品の期限', summary: '期限を決めた', requests: [{ request: 1, status: 'done' }] };
+
+    integration(
+        'a run that resolved a hotspot and left its sticky: the same run reviews it, fixes the sticky, and the card keeps found, fixed and left',
+        async () => {
+            const ctx = await setup();
+            const planFile = await ctx.plan([
+                { edits: RESOLVE_DEADLINE, reply: done },
+                {
+                    edits: DEADLINE_ON_EVENT,
+                    reply: {
+                        outcome: 'done',
+                        title: '返品の期限',
+                        summary: '見直してイベントに期限を書いた',
+                        requests: [],
+                        review: { fixed: ['@{es:Returns/ReturnRequested} のラベルに期限を書いた'], kept: [] },
+                    },
+                },
+            ]);
+            const { log } = await subscribe(ctx, planFile, { run: { warm: false, restartAfter: 20, idleTimeout: 30 } });
+            const asked = await request(ctx, ctx.bob, { kind: 'DtesElement', storming: 'Returns', local: 'Deadline' }, '返品は注文から30日まで、で決まり');
+            const run = await until(ctx, await queue(ctx, [asked]), ['Completed', 'Failed']);
+            expect(run.state).toBe('Completed');
+
+            const [work, review] = await ctx.invocations();
+            expect(work.prompt).toContain('A decision that answers a hotspot');
+            // a cold agent starts afresh: the run's prompt, said done, then the review with what stage 0 found
+            expect(review.prompt).toContain('An earlier turn of this run already carried out the requests above');
+            const block = JSON.parse(
+                review.prompt.slice(review.prompt.indexOf('<review-') + '<review-'.length + 32 + 1, review.prompt.indexOf('</review-')),
+            ) as {
+                review: { found: { kind: string; element: string }[]; neighbourhood: { element: string; why: string }[]; knowledge?: unknown };
+            };
+            expect<unknown>(block.review.found).toEqual([
+                { kind: 'ResolvedUnchanged', storming: 'Returns', element: 'Deadline', other: { storming: 'Returns', element: 'ReturnRequested' } },
+            ]);
+            expect(block.review.neighbourhood.map((n) => `${n.why} ${n.element}`)).toContain('changed Deadline');
+            // no knowledge store: none given
+            expect(block.review.knowledge).toBeUndefined();
+
+            const completed = run as Extract<Run, { state: 'Completed' }>;
+            expect(completed.reply?.summary).toBe('期限を決めた');
+            expect(completed.review).toEqual({
+                found: [
+                    {
+                        kind: 'ResolvedUnchanged',
+                        sticky: { storming: 'Returns', element: 'Deadline' },
+                        other: { storming: 'Returns', element: 'ReturnRequested' },
+                    },
+                ],
+                left: [],
+                fixed: ['@{es:Returns/ReturnRequested} のラベルに期限を書いた'],
+                kept: [],
+                asked: true,
+            });
+            expect(await readFile(path.join(ctx.root, RETURNS), 'utf8')).toContain('"返品が依頼された（30日以内）"');
+            expect(log.some((l) => l.includes('reviewing (1 found'))).toBe(true);
+        },
+    );
+
+    integration('a warm agent reviews in the same conversation; what it keeps is kept with why, and what is left is left', async () => {
+        const ctx = await setup();
+        const planFile = await ctx.plan([
+            { edits: RESOLVE_DEADLINE, reply: done },
+            {
+                reply: {
+                    outcome: 'done',
+                    title: '返品の期限',
+                    summary: '見直した',
+                    requests: [],
+                    review: { fixed: [], kept: [{ what: '@{es:Returns/ReturnRequested} はそのまま', why: '期限はイベントでなく方針の話' }] },
+                },
+            },
+        ]);
+        await subscribe(ctx, planFile, { run: { warm: true, restartAfter: 20, idleTimeout: 30 } });
+        const asked = await request(ctx, ctx.bob, { kind: 'DtesElement', storming: 'Returns', local: 'Deadline' }, '返品は注文から30日まで、で決まり');
+        const run = (await until(ctx, await queue(ctx, [asked]), ['Completed', 'Failed'])) as Extract<Run, { state: 'Completed' }>;
+        const [work, review] = await ctx.invocations();
+        // one process, one more turn: the review alone, without the run's prompt again
+        expect(review.pid).toBe(work.pid);
+        expect(review.prompt).toStartWith('Before this run ends, review your work');
+        expect(run.review?.kept).toEqual([{ what: '@{es:Returns/ReturnRequested} はそのまま', why: '期限はイベントでなく方針の話' }]);
+        expect(run.review?.left.map((f) => f.kind)).toEqual(['ResolvedUnchanged']);
+    });
+
+    integration('a run that changed no storming is not reviewed: one turn', async () => {
+        const ctx = await setup();
+        const planFile = await ctx.plan([{ edits: [{ path: 'sales/order.dt', append: '\n' }], reply: done }]);
+        await subscribe(ctx, planFile, { run: { warm: false, restartAfter: 20, idleTimeout: 30 } });
+        const asked = await request(ctx, ctx.bob, { kind: 'DtElement', element: 'Sales.Order' }, 'Tidy it.');
+        const run = (await until(ctx, await queue(ctx, [asked]), ['Completed', 'Failed'])) as Extract<Run, { state: 'Completed' }>;
+        expect(await ctx.invocations()).toHaveLength(1);
+        expect(run.review).toBeUndefined();
     });
 });

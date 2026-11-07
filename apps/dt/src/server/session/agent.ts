@@ -22,14 +22,18 @@ import {
     knownAgentRunId,
     type OutboxEntry,
     readActivity,
+    readReviewReply,
     readToolOutcome,
+    reviewFindings,
     type RunActivity,
 } from '@domaintrail/collaboration';
 import {
     AGENT_EVENT_TYPES,
     AGENT_FAIL_REASONS,
     type AgentJourneysBody,
+    type AgentFinishReview,
     type AgentParticipantsBody,
+    type AgentReviewKnowledge,
     type AgentSessionBody,
     type AgentSessionSoFar,
 } from '@domaintrail/collaboration/protocol';
@@ -80,6 +84,13 @@ export interface AgentApiDeps {
      * watcher's hold, before the agent is answered (so that it claims the next run after them). Absent: none.
      */
     readonly afterRun?: (run: Collaboration.AgentRunId) => Promise<void>;
+    /**
+     * The knowledge about the stickies a review gives the agent (ADR 0034: decisions and rules first, never AS-IS),
+     * `<Storming>.<Local>` each; absent, or `undefined` from it: none (no store, or the session does not extract).
+     */
+    readonly reviewKnowledge?: (stickies: readonly string[]) => Promise<readonly AgentReviewKnowledge[] | undefined>;
+    /** A run that ended now was reviewed by its agent: what it said (the knowledge at odds goes to the extraction). */
+    readonly reviewed?: (run: Collaboration.AgentRunId, review: AgentFinishReview) => void;
     /** The extractor role's entry point (absent: the session keeps no knowledge, and the entry point answers 404). */
     readonly extractions?: ExtractionDispatcher;
     /**
@@ -110,6 +121,17 @@ const sameSecret = (given: string, expected: string): boolean => {
     const a = Buffer.from(given);
     const b = Buffer.from(expected);
     return a.length === b.length && timingSafeEqual(a, b);
+};
+
+/** A text the review's report gives, as the model's (read within its limits already). */
+const madeText = (t: string): Collaboration.Text[] => {
+    const made = Collaboration.makeText(t);
+    return made.ok ? [made.value] : [];
+};
+const madeKept = (k: { readonly what: string; readonly why: string }): Collaboration.KeptFinding[] => {
+    const what = Collaboration.makeText(k.what);
+    const why = Collaboration.makeText(k.why);
+    return what.ok && why.ok ? [{ what: what.value, why: why.value }] : [];
 };
 
 /** A lease token or an owner: a short single-line string. */
@@ -261,6 +283,13 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         return result;
     };
 
+    /**
+     * What stage 0 found in a running run when its agent asked for the review (ADR 0034), kept until the run ends: the
+     * card shows what was found and what is left. In memory: a restart between the two loses it (the card then shows
+     * what is left only).
+     */
+    const foundByRun = new Map<Collaboration.AgentRunId, readonly Collaboration.ReviewFinding[]>();
+
     /** Whether a reply of the agent carries the agent's own credential (it would reach the pages). */
     const leaks = (v: unknown): boolean => v !== undefined && JSON.stringify(v).includes(deps.token);
     const refuseLeak = (res: ServerResponse, run: Collaboration.AgentRunId): void => {
@@ -338,10 +367,37 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
                 deps.activity(run, activity);
                 return sendJson(res, 200, {});
             }
-            case 'finish': {
-                const b = await input(req, res, ['token', 'exitCode', 'formatted', 'checked', 'reply']);
+            case 'review': {
+                const b = await input(req, res, ['token']);
                 if (!b) return;
-                if (leaks(b.reply)) return refuseLeak(res, run);
+                const r = await use.reviewRunning({ run, token: String(b.token) });
+                if (!r.ok) return sendError(res, statusOf(r.error.type), r.error.type, undefined, r.error);
+                const { review, complete } = r.value;
+                foundByRun.set(run, reviewFindings(review.findings));
+                // the knowledge about the neighbourhood, when the session keeps and extracts it; a sticky the run renamed by
+                // its old name too, which its items still name until the run ends
+                const stickies = [
+                    ...new Set([...review.neighbourhood.map((n) => `${n.storming}.${n.element}`), ...review.renames.map((r) => `${r.storming}.${r.from}`)]),
+                ];
+                const knowledge =
+                    stickies.length > 0
+                        ? await deps.reviewKnowledge?.(stickies).catch((e: unknown) => {
+                              deps.log?.(`run ${run}: the knowledge for the review is unavailable (${e instanceof Error ? e.message : String(e)})`);
+                              return undefined;
+                          })
+                        : undefined;
+                return sendJson(res, 200, {
+                    complete,
+                    findings: review.findings,
+                    neighbourhood: review.neighbourhood,
+                    ...(review.renames.length > 0 && { renamed: review.renames }),
+                    ...(knowledge && knowledge.length > 0 && { knowledge }),
+                });
+            }
+            case 'finish': {
+                const b = await input(req, res, ['token', 'exitCode', 'formatted', 'checked', 'reply', 'review']);
+                if (!b) return;
+                if (leaks(b.reply) || leaks(b.review)) return refuseLeak(res, run);
                 const { exitCode, formatted, checked } = b;
                 if (typeof exitCode !== 'number' || !Number.isInteger(exitCode) || exitCode < -1024 || exitCode > 1024)
                     return sendError(res, 400, 'InvalidInput', 'Expected the exit code.', { field: 'exitCode' });
@@ -352,19 +408,28 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
                 if (!check) return sendError(res, 400, 'InvalidInput', "Expected 'ran', 'failed' or 'skipped'.", { field: 'checked' });
                 const reply = b.reply === undefined ? undefined : agentReply(b.reply, 'done');
                 if (reply && !reply.ok) return sendError(res, 400, 'InvalidInput', reply.error.message, { field: reply.error.field });
-                return answer(
-                    res,
-                    await ended(
-                        run,
-                        await use.finishRun({
-                            run,
-                            token: String(b.token),
-                            facts: { exitCode, formatted: fmt, checked: check },
-                            ...(reply && { reply: reply.value }),
-                        }),
-                    ),
-                    (v) => v,
-                );
+                // the agent's report of its review (ADR 0034): validated as a reply's
+                const review = b.review === undefined ? undefined : readReviewReply(b.review);
+                if (review && !review.ok)
+                    return sendError(res, 400, 'InvalidInput', review.error.message, { field: review.error.path.replace(/^reply\./, '') });
+                const found = review ? foundByRun.get(run) : undefined;
+                const finished = await use.finishRun({
+                    run,
+                    token: String(b.token),
+                    facts: { exitCode, formatted: fmt, checked: check },
+                    ...(reply && { reply: reply.value }),
+                    ...(review && {
+                        review: {
+                            ...(found && { found }),
+                            report: { fixed: review.value.fixed.flatMap(madeText), kept: review.value.kept.flatMap(madeKept) },
+                        },
+                    }),
+                });
+                if (finished.ok && !finished.value.replayed) {
+                    foundByRun.delete(run);
+                    if (review) deps.reviewed?.(run, review.value);
+                }
+                return answer(res, await ended(run, finished), (v) => v);
             }
             case 'clarification': {
                 const b = await input(req, res, ['token', 'question', 'reply']);

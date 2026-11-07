@@ -8,6 +8,7 @@ import {
     type AgentClaimed,
     type AgentLease,
     type AgentParticipantsBody,
+    type AgentReviewBody,
     type AgentSessionBody,
     type EventMessage,
 } from '@domaintrail/collaboration/protocol';
@@ -138,6 +139,7 @@ export function createHttpAgentApi(options: HttpAgentApiOptions): AgentApi & Ext
         heartbeat: (run, token) => call<{ lease: AgentLease }>('POST', runPath(run, 'heartbeat'), { token }),
         activity: (run, token, activity) => call('POST', runPath(run, 'activity'), { token, ...activity }),
         finish: (run, token, facts) => call('POST', runPath(run, 'finish'), { token, ...facts }),
+        review: (run, token) => call<AgentReviewBody>('POST', runPath(run, 'review'), { token }),
         clarification: (run, token, question, reply) => call('POST', runPath(run, 'clarification'), { token, question, ...(reply && { reply }) }),
         decline: (run, token, reply) => call('POST', runPath(run, 'decline'), { token, reply }),
         fail: (run, token, reason) => call('POST', runPath(run, 'fail'), { token, reason }),

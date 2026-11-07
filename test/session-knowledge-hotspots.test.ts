@@ -178,7 +178,7 @@ describe('a conflict made a hotspot', () => {
             connect: { credential: { url: server.agentUrl, token: server.agentToken, session: server.session } },
             dt: DT,
             agentCommand: { command: process.execPath, args: [FAKE, planFile] },
-            run: { warm: false, restartAfter: 20, idleTimeout: 30 },
+            run: { warm: false, restartAfter: 20, idleTimeout: 30, review: false },
             roles: ['run'],
             log: (l) => lines.push(l),
             reconnect: { minMs: 100, maxMs: 500, giveUpMs: 5_000 },

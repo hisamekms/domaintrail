@@ -534,6 +534,9 @@ Rules:
    a policy reacts to, where an element is used): put a \`hotspot\` \`on\` that element asking it — an open hotspot
    turns its incompleteness errors (S024, S008, S027) off; inventing an actor, aggregate or event to silence them is
    wrong.
+   A decision that answers a hotspot (a request, an answer, a chosen option) changes both: the stickies it decides,
+   as it says, and the hotspot itself (\`status resolved\` and \`resolution "…"\`). Never one without the other; when
+   you do only one of them, say why in the request's note.
    People also write the stickies' wording themselves, on the canvas: \`editedByPeople\` (or
    \`changedSinceYourLastRun.editedByPeople\`), when present, lists the labels and names they set by hand, the hotspots
    they added and resolved, old → new. Keep people's wording: never set such a label or name back to its old value, nor

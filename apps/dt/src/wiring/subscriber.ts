@@ -387,6 +387,8 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             reconnect: options.reconnect,
             ...(options.practice && { practice: options.practice }),
             ...(knowledgeMcp && { knowledge: true }),
+            // the review at a run's end (ADR 0034): on unless `agent.run.review` is false
+            ...(options.run?.review === false && { review: false }),
         },
     );
     // the runner's end ends the answerer and the extractor too (the session closed — after the last extraction —, the
