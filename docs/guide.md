@@ -4075,8 +4075,9 @@ under a hotspot it left open; a label or name it changed that another sticky sti
 of another one —, then the agent gets one more turn (the same conversation when warm) with what they found, the
 neighbourhood of what it changed (the hotspots on it, one relation away) and, when the session keeps knowledge and
 extracts it, the decisions and rules about them (never AS-IS). It fixes what is at odds with the requests within their
-scope, and says why for what it leaves; knowledge it finds at odds with the stickies goes to the next extraction as a
-candidate conflict, never changed. When a run renames a sticky, the knowledge about it is linked to the new name. The
+scope, and says why for what it leaves. Knowledge is never changed by it: an item that no longer holds is proposed for
+retirement (廃止の候補, with its reason and evidence, for people to decide; never an AS-IS item for differing from the
+TO-BE), and one at odds goes to the next extraction as a candidate conflict. When a run renames a sticky, the knowledge about it is linked to the new name. The
 card shows what was found, fixed and left (見直し), and 見直しを頼む while something is left. `agent.run.review: false`
 turns it off.
 

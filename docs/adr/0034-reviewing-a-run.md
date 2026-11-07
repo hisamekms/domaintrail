@@ -80,12 +80,19 @@ the review's fixes too. Nothing changes in the run's states: the review is insid
 - **What the agent does**: fixes what is at odds with the requests and the decisions **within the requests' scope**
   (the run's rules still hold: `.dt`/`.dtes` only, people's wording kept); starts nothing new; says why for each
   finding it leaves.
-- **Knowledge at odds with the stickies** (an old item says 14 days, the run made it 30): the item is not touched. The
-  agent names it; dt hands it to the next extraction as a flag (`SessionExtraction.flag`), with the item among those
-  given and `reviewFlags` in the job; the extractor records a `conflict` (ADR 0031) when the talk states the new
-  decision, and the conflict shows as every conflict does, a candidate for a hotspot. A flag alone is no source. This
-  is the seam to the AI's candidates for retiring knowledge (built on another branch): the same flags are what it will
-  be given.
+- **Knowledge at odds with the stickies** (an old item says 14 days, the run made it 30): the item is never edited
+  by the review. The agent may say it two ways, both only of the items it was given (the server checks):
+  - **a retirement it proposes** (`review.retire`: the item, the reason — replaced, obsolete, wrong —, an explanation,
+    and its evidence, a sticky this run changed or a decision): dt proposes it at once through
+    `KnowledgeStore.propose`, as the review `run:<id>` (`proposedBy: { kind: 'Review' }`, ADR 0031 §12), and it shows
+    in 廃止の候補 for people to approve or dismiss. The agent is told the extractor's rules
+    (`RETIREMENT_PROPOSAL_RULES`), and the store refuses what it refuses for the extractor (an AS-IS item against the
+    TO-BE, one already waiting, one dismissed on the same evidence). The review is never given an AS-IS item, nor a
+    retired one (the store's lists leave them out);
+  - **an item at odds** (`review.knowledge`): handed to the next extraction as a flag (`SessionExtraction.flag`), with
+    the item among those given and `reviewFlags` in the job; the extractor records a `conflict` (ADR 0031) when the
+    talk states the new decision. The flags are kept in memory and wait for the next extraction with new messages; a
+    retirement proposed does not wait.
 
 **The pair rule in the run's prompt** (*Decided by the maintainer*): a decision that answers a hotspot changes both the
 stickies it decides and the hotspot (`status resolved`, `resolution`); doing only one needs a reason in the request's
@@ -131,3 +138,4 @@ neighbourhood; its input is bounded (80 stickies, 50 findings, 12 items of 600 c
   server answers the review 404, and the run finishes as before.
 - `AgentRun.Completed` has `review`; the stored runs need no migration (JSON rows).
 - The extraction takes flags (`reviewFlags`) and goes past the light model's "no" while it has some.
+- A review proposes retirements to the store directly (ADR 0031 §12), never retires.
