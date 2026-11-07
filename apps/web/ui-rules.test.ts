@@ -278,6 +278,14 @@ const RAW_BUTTONS: Readonly<Record<string, { readonly count: number; readonly re
         count: 1,
         reason: 'a segment or toggle of a view setting (active / aria-pressed): it changes how the view shows, not the files nor the session',
     },
+    'storming.tsx exception-layer-main': {
+        count: 1,
+        reason: "a toggle of a view setting (aria-pressed): the exceptions' layer over the canvas, included or not; it changes how the view shows, not the files nor the session",
+    },
+    'view/exception-lanes.tsx exception-lane-label': {
+        count: 1,
+        reason: "a lane's label over the canvas, pressed to emphasize its exception (aria-pressed): the view's chrome floating on the canvas, like a line's end; changes nothing",
+    },
     'storming.tsx es-action': {
         count: 1,
         reason: "a storming element's action icon (its name as the tooltip): icon-only, on a shape of its own (round, bordered or sized to its place): not a text button",
@@ -307,8 +315,12 @@ const RAW_BUTTONS: Readonly<Record<string, { readonly count: number; readonly re
         reason: "the pointer at the canvas's edge to stickies out of view (「→ n」): the view's chrome (the toolbar, the canvas controls, the app bar), floating on the canvas: moves the camera, changes nothing",
     },
     'view/toolbar.tsx toolbar-button': {
-        count: 2,
+        count: 1,
         reason: "the view's chrome (the toolbar, the canvas controls, the app bar): labels collapse to icons by container queries; view settings, not session actions",
+    },
+    'view/toolbar.tsx menu-picker-button': {
+        count: 1,
+        reason: "the view's chrome (the toolbar, the canvas controls, the app bar): a picker's button that opens its list (a storming, a timeline, an exception); view settings, not session actions",
     },
     'view/toolbar.tsx role=option': { count: 1, reason: 'an option of a listbox (role=option): a choice inside the picker, a widget of its own' },
     'view/toolbar.tsx active': {

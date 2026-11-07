@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import type { EventMessage, Presence, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
 import { commandsOf, statesOf, type DomainModel } from '@domaintrail/modeling';
 import { analyze } from '@domaintrail/analysis';
-import type { LaidOutGraph, ViewOptions } from '@domaintrail/visualization';
+import { projectView, type LaidOutGraph, type ViewOptions } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { createMemoryDrafts, editDraft, newDraft, sendable, sortDrafts } from './drafts';
 import { layoutKeyOf, NO_LAYOUT, sameLocation, shortHash, viewLocation } from './location';
@@ -19,7 +19,7 @@ const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', '..', 'test
 const { stormings: parsed } = (await analyze([{ path: 'es.dtes', text: SAMPLE }])).stormings;
 /** The render graph of a view of the sample, as the view service sends it to the page. */
 const sampleViews = (await viewPayloads([{ path: 'es.dtes', text: SAMPLE }]))[0].stormings[0].views;
-const renderOf = (options: ViewOptions) => sampleViews[`${options.level}|${options.timelineId ?? ''}`].render;
+const renderOf = (options: ViewOptions) => (options.timelineId === undefined ? sampleViews[`${options.level}|`]!.render : projectView(parsed[0]!, options));
 const storming = parsed[0];
 const stormingViews = [{ id: storming.id, storming }] as unknown as StormingView[];
 const workspace = await exampleSources();
@@ -48,7 +48,7 @@ describe('ViewLocation', () => {
                 view: { kind: 'storming' },
                 viewKey: 'x',
                 graph: graph(`storming:S:${level}:${timelineId ?? '*'}`),
-                storming: { id: 'S', options: { level, ...(timelineId && { timelineId }) } },
+                storming: { id: 'S', options: { level }, main: timelineId },
             });
         expect(at('design-level', 'Normal')).toEqual({
             kind: 'dtes',
@@ -63,6 +63,15 @@ describe('ViewLocation', () => {
         expect(sameLocation(at('design-level', 'Normal'), at('design-level', 'Failure'))).toBe(false);
         expect(sameLocation(at('design-level', 'Normal'), at('design-level'))).toBe(false);
         expect(sameLocation(at('big-picture'), at('design-level'))).toBe(false);
+        // the exceptions' layer excluded: another view
+        const without = viewLocation({
+            view: { kind: 'storming' },
+            viewKey: 'x',
+            graph: graph('storming:S:big-picture:*'),
+            storming: { id: 'S', options: { level: 'big-picture', hidden: ['exceptions'] } },
+        });
+        expect(without).toMatchObject({ exceptions: false });
+        expect(sameLocation(without, at('big-picture'))).toBe(false);
     });
 
     test('a layout key stays short, whatever the signature, and changes with it', () => {

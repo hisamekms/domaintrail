@@ -21,6 +21,7 @@ import {
     TriangleAlert,
     Undo2,
     Wrench,
+    X,
     type LucideIcon,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -39,10 +40,17 @@ import { type Diagnostic } from '@domaintrail/kernel';
 import {
     type DisplayMode,
     drawsElement,
+    flowInDrawing,
+    flowNotes,
     HIDEABLE,
     type Hideable,
+    hideInDrawing,
+    hides,
     laidOutHidden,
     type LaidOutGraph,
+    mainFlowOf,
+    mainFlows,
+    type MainFlow,
     type RenderGraph,
     stormingViewKey,
     VIEW_LEVELS,
@@ -57,127 +65,296 @@ import { beginActions, hiddenConnections, otherPlaces, problemText, type BeginAc
 import { TOOLTIP_ATTR } from './tooltip';
 import type { SourceFocus } from './source';
 import { activeFilterCount } from './view/filters';
-import { FilterPopover, FilterSection, LevelSwitch, SubjectPicker, ToolbarSubject } from './view/toolbar';
+import { FilterPopover, FilterSection, LevelSwitch, MenuPicker, SubjectPicker, ToolbarSubject } from './view/toolbar';
 
-/** What the Event Storming view shows: a storming, a level and a timeline filter, all of them the page's state only. */
+/**
+ * What the Event Storming view shows, all of it the page's state only (ADR 0032 §11): a storming, the timeline on its
+ * canvas (すべて, or one main flow), a level, and what is hidden — the exceptions (the layer over the canvas, off) and
+ * what the 絞り込み hides.
+ */
 export interface StormingChoice {
     stormingId: string | undefined;
     level: ViewLevel;
-    /** By storming ID: the selected timeline, or `@<stage ID>` for a stage (none: the integrated canvas). */
+    /**
+     * By storming ID: the main flow on its canvas (`MainFlow`'s ID; none: すべて). An earlier version kept here a
+     * stage's `@<ID>` (read as すべて) or any timeline's ID (an exception: すべて, its exceptions included; a main
+     * flow: the main flow it is part of).
+     */
     timelines: Record<string, string>;
     /**
-     * What the 絞り込み hides (its 「…を表示」 unchecked; absent: nothing), in every storming where it applies
-     * (`hideableIn`). Each kind is hidden as `HIDDEN_BY` says: the exceptions by another layout, the resolved hotspots by
-     * the drawing alone.
+     * What is hidden (absent: nothing), in every storming where it applies (`hideableIn`), as `HIDDEN_BY` hides it:
+     * `exceptions` — the exceptions' layer off (the toggle beside the breadcrumb, laid out without them) — and what the
+     * 絞り込み hides (the resolved hotspots, by the drawing alone).
      */
     hidden?: Hideable[];
     /** 「例外を表示」 as an earlier version kept it (false: hidden): read as `hidden`'s `exceptions` (`hiddenOf`). */
     exceptions?: boolean;
+    /** The flow as a trial of this version kept it: read as the exceptions included or not, and one main flow. */
+    flow?: 'main' | 'all' | { readonly exception: string } | { readonly main: string };
 }
 
-/** Whether a storming has exceptions (the 絞り込み's 「例外を表示」 is then shown). */
+/**
+ * The exception emphasized over the canvas (ADR 0032 §11): close to a selection — the page's own, never kept nor
+ * followed — and apart from the stickies' selection (selecting a sticky keeps it).
+ */
+export interface StormingFocus {
+    readonly stormingId: string;
+    readonly exceptionId: string;
+}
+
+/** Whether a storming has exceptions (the exceptions' toggle is then shown). */
 export const hasExceptionTimelines = (storming: StormingView): boolean => storming.timelines.some((t) => t.exception);
 
 /** Whether a storming has a resolved hotspot (the 絞り込み's 「解決済みを表示」 is then shown). */
 export const hasResolvedHotspots = (storming: StormingView): boolean =>
     [...firstDeclarations(storming.storming).values()].some((d) => d.kind === 'hotspot' && hotspotResolved(d.clauses));
 
-/** What a choice hides, wherever it applies (an earlier version's `exceptions: false` is the exceptions hidden). */
+/**
+ * What a choice hides, wherever it applies: an earlier version's `exceptions: false` and a trial's flow 「主な流れ」 are
+ * the exceptions hidden.
+ */
 export function hiddenOf(choice: StormingChoice): ReadonlySet<Hideable> {
-    return new Set([...(choice.hidden ?? []), ...(choice.hidden === undefined && choice.exceptions === false ? (['exceptions'] as const) : [])]);
+    const flow = choice.flow;
+    const exceptions = flow !== undefined ? flow === 'main' : choice.hidden !== undefined ? choice.hidden.includes('exceptions') : choice.exceptions === false;
+    return new Set(HIDEABLE.filter((k) => (k === 'exceptions' ? exceptions : choice.hidden?.includes(k) === true)));
 }
 
-/** The choice with `kind` hidden or shown again (written as `hidden`, an earlier version's `exceptions` dropped). */
+/** The choice as this version writes it: an earlier version's and a trial's fields read and dropped. */
+function written(choice: StormingChoice): StormingChoice {
+    const hidden = hiddenOf(choice);
+    const { exceptions: _, hidden: __, flow, ...rest } = choice;
+    const main = typeof flow === 'object' && 'main' in flow && choice.stormingId !== undefined ? { [choice.stormingId]: flow.main } : {};
+    const kinds = HIDEABLE.filter((k) => hidden.has(k));
+    return { ...rest, timelines: { ...rest.timelines, ...main }, ...(kinds.length && { hidden: kinds }) };
+}
+
+/** The choice with `kind` hidden or shown again (written as `hidden`). */
 export function withHidden(choice: StormingChoice, kind: Hideable, hide: boolean): StormingChoice {
     const all = new Set(hiddenOf(choice));
     if (hide) all.add(kind);
     else all.delete(kind);
-    const { exceptions: _, hidden: __, ...rest } = choice;
+    const { hidden: _, ...rest } = written(choice);
     const hidden = HIDEABLE.filter((k) => all.has(k));
     return hidden.length ? { ...rest, hidden } : rest;
 }
 
-/**
- * What the 絞り込み can hide in a view of `storming` (`scope`: `chooseScope`'s): the exceptions on the integrated canvas
- * and a stage of a storming with some (a timeline's view is one of them or has none); the resolved hotspots in any view
- * of a storming with some.
- */
-export function hideableIn(storming: StormingView, scope: { timelineId?: string | undefined }): Hideable[] {
-    return HIDEABLE.filter((k) => (k === 'exceptions' ? scope.timelineId === undefined && hasExceptionTimelines(storming) : hasResolvedHotspots(storming)));
+/** What a view of `storming` can hide: its exceptions (the toggle), its resolved hotspots (the 絞り込み). */
+export function hideableIn(storming: StormingView): Hideable[] {
+    return HIDEABLE.filter((k) => (k === 'exceptions' ? hasExceptionTimelines(storming) : hasResolvedHotspots(storming)));
 }
+
+/** What the 絞り込み can hide in a view of `storming`: the resolved hotspots (the exceptions are the toggle's). */
+export const filterableIn = (storming: StormingView): Hideable[] => hideableIn(storming).filter((k) => k !== 'exceptions');
 
 /** What the view shown hides: what the choice hides, of what applies to it (`hideableIn`). */
 export function shownHidden(stormings: readonly StormingView[], choice: StormingChoice): ReadonlySet<Hideable> {
     const shown = shownStorming(stormings, choice);
     if (!shown) return new Set();
-    const hidden = hiddenOf(choice);
-    return new Set(hideableIn(shown.storming, shown.options).filter((k) => hidden.has(k)));
+    const hidden = new Set(hiddenOf(choice));
+    // an earlier version's exception shown on its own: its exceptions included
+    if (shown.exceptionShown) hidden.delete('exceptions');
+    return new Set(hideableIn(shown.storming).filter((k) => hidden.has(k)));
 }
 
-/** The picker's value of a stage's view (a timeline's is its ID: an ID never starts with `@`). */
-export const stageChoice = (stageId: string): string => `@${stageId}`;
+/** The main flows of a storming (`mainFlows`). */
+export const mainFlowsOf = (storming: StormingView): MainFlow[] => mainFlows(storming.timelines, storming.stages);
 
-/**
- * The choice showing `scope` of a storming — '' the integrated canvas, `@<stage ID>` a stage, else a timeline's ID —
- * the storming shown with it. The view bar's pickers and the storming navigator both choose through it.
- */
-export function chooseScope(choice: StormingChoice, stormingId: string, scope: string): StormingChoice {
-    const { [stormingId]: _, ...others } = choice.timelines;
-    return { ...choice, stormingId, timelines: scope ? { ...others, [stormingId]: scope } : others };
+/** The view shown: the storming, the layout of it the payload keys (`options`), and the main flow on it, if one. */
+export interface ShownStorming {
+    storming: StormingView;
+    options: ViewOptions;
+    /** The main flow on the canvas (none: すべて). */
+    main: MainFlow | undefined;
+    /** An earlier version showed an exception's own view: its exceptions are included. */
+    exceptionShown?: true;
 }
 
-/** The scope of the view shown (see `chooseScope`), in the storming shown. */
-export function shownScope(stormings: readonly StormingView[], choice: StormingChoice): { stormingId: string; scope: string } | undefined {
-    const shown = shownStorming(stormings, choice);
-    if (!shown) return undefined;
-    const { timelineId, stageId } = shown.options;
-    return { stormingId: shown.storming.id, scope: timelineId ?? (stageId !== undefined ? stageChoice(stageId) : '') };
-}
-
-/** The storming shown (the chosen one, or the first) and the view of it, as the payload keys it. */
-export function shownStorming(stormings: readonly StormingView[], choice: StormingChoice): { storming: StormingView; options: ViewOptions } | undefined {
+/** The storming shown (the chosen one, or the first), the view of it as the payload keys it, and its main flow. */
+export function shownStorming(stormings: readonly StormingView[], choice: StormingChoice): ShownStorming | undefined {
     const storming = stormings.find((s) => s.id === choice.stormingId) ?? stormings[0];
     if (!storming) return undefined;
     const level = VIEW_LEVELS.includes(choice.level) ? choice.level : 'big-picture';
-    const scope = choice.timelines[storming.id];
-    const stage = scope?.startsWith('@') ? storming.stages?.find((st) => stageChoice(st.id) === scope) : undefined;
-    const timelineId = !stage && scope !== undefined && storming.timelines.some((t) => t.id === scope) ? scope : undefined;
-    // laid out without what is hidden by another layout (the exceptions), of what applies to the view; what the drawing
-    // hides is left out of the drawing of that layout (`hideInDrawing`, `view/graph.ts`)
-    const hidden = hiddenOf(choice);
-    const hide = laidOutHidden(hideableIn(storming, { timelineId }).filter((k) => hidden.has(k)));
-    if (stage) return { storming, options: { level, stageId: stage.id, ...hide } };
-    return { storming, options: timelineId !== undefined ? { level, timelineId } : { level, ...hide } };
+    const flows = mainFlowsOf(storming);
+    const trial = typeof choice.flow === 'object' && 'main' in choice.flow && choice.stormingId === storming.id ? choice.flow.main : undefined;
+    const scope = trial ?? choice.timelines[storming.id];
+    const exceptionShown = choice.flow === undefined && scope !== undefined && storming.timelines.some((t) => t.id === scope && t.exception);
+    const main = flows.length > 1 && scope !== undefined ? mainFlowOf(flows, scope) : undefined;
+    const hidden = new Set(hiddenOf(choice));
+    if (exceptionShown) hidden.delete('exceptions');
+    // laid out without what is hidden by another layout (the exceptions), of what applies; what the drawing hides is
+    // left out of the drawing of that layout (`drawnAs`)
+    const hide = laidOutHidden(hideableIn(storming).filter((k) => hidden.has(k)));
+    return { storming, options: { level, ...hide }, main, ...(exceptionShown && { exceptionShown: true as const }) };
+}
+
+/** The choice showing another storming, with all its timelines (すべて). */
+export function chooseStorming(choice: StormingChoice, stormingId: string): StormingChoice {
+    const c = written(choice);
+    const { [stormingId]: _, ...others } = c.timelines;
+    return { ...c, stormingId, timelines: others };
+}
+
+/** The choice showing one main flow of a storming on its canvas (its `MainFlow` ID; '' or none: すべて). */
+export function chooseTimeline(choice: StormingChoice, stormingId: string, mainFlow: string | undefined): StormingChoice {
+    const c = written(choice);
+    const { [stormingId]: _, ...others } = c.timelines;
+    return { ...c, stormingId, timelines: mainFlow ? { ...others, [stormingId]: mainFlow } : others };
+}
+
+/** The choice with the exceptions' layer included or not. */
+export const withExceptions = (choice: StormingChoice, include: boolean): StormingChoice => withHidden(choice, 'exceptions', !include);
+
+/**
+ * The exceptions' layer of the view shown: whether it is included, and the exceptions it lays over the canvas — every
+ * one, or those branching off the main flow shown — in the storming's order. None for a storming without exceptions.
+ */
+export function exceptionLayer(stormings: readonly StormingView[], choice: StormingChoice): { included: boolean; exceptions: string[] } | undefined {
+    const shown = shownStorming(stormings, choice);
+    if (!shown || !hasExceptionTimelines(shown.storming)) return undefined;
+    const all = shown.storming.views[stormingViewKey({ level: shown.options.level })]?.render;
+    const drawn = all ? flowNotes(all, shown.storming.storming, shown.storming.timelines, { main: shown.main }).exceptions : [];
+    return {
+        included: !hides(shown.options, 'exceptions'),
+        exceptions: shown.storming.timelines.filter((t) => t.exception && drawn.includes(t.id)).map((t) => t.id),
+    };
+}
+
+/** The exception emphasized in the view shown: `focus` when it is of the storming shown and drawn there. */
+export function shownFocus(stormings: readonly StormingView[], choice: StormingChoice, focus: StormingFocus | null): string | undefined {
+    const shown = shownStorming(stormings, choice);
+    const layer = exceptionLayer(stormings, choice);
+    if (!focus || !shown || !layer?.included || focus.stormingId !== shown.storming.id) return undefined;
+    return layer.exceptions.includes(focus.exceptionId) ? focus.exceptionId : undefined;
 }
 
 /**
- * The choice that shows `elementId` (a storming selection) where `choice` hides it, to move to it and select it: the
- * kinds the 絞り込み hides that hide it shown again — one kind when showing it is enough, else all of them — in the view
- * `choice` shows (callers choose the view first: the integrated canvas, a level that draws it). One rule for every kind
- * a reader can hide (ADR 0032 §10): whatever hides it, it is shown before it is selected (a
- * link, the palette, a turn's marks, the knowledge, the detail). `choice` itself when the view draws it, or when no
- * showing would.
+ * Emphasizing an exception (its ▾, its lane's label, its row in the navigator): the exceptions included first, and
+ * すべて when the main flow shown does not have it.
+ */
+export function focusOn(
+    stormings: readonly StormingView[],
+    choice: StormingChoice,
+    stormingId: string,
+    exceptionId: string,
+): { choice: StormingChoice; focus: StormingFocus } {
+    let next =
+        choice.stormingId === stormingId || (choice.stormingId === undefined && stormings[0]?.id === stormingId)
+            ? written(choice)
+            : chooseStorming(choice, stormingId);
+    next = withExceptions({ ...next, stormingId }, true);
+    if (!exceptionLayer(stormings, next)?.exceptions.includes(exceptionId)) next = chooseTimeline(next, stormingId, undefined);
+    return { choice: next, focus: { stormingId, exceptionId } };
+}
+
+/**
+ * The choice that shows `elementId` (a storming selection) where `choice` does not draw it, to move to it and select it,
+ * in the view `choice` shows (callers choose the storming and the level first). One rule for whatever keeps it out of
+ * the drawing (ADR 0032 §10, §11): the exceptions included, then すべて, then the kinds the 絞り込み hides — one when
+ * that is enough, else all of them. `choice` itself when the view draws it, or when nothing would (a link, the
+ * palette, a turn's marks, the knowledge, the detail).
  */
 export function revealIn(stormings: readonly StormingView[], choice: StormingChoice, elementId: string): StormingChoice {
-    const hidden = shownHidden(stormings, choice);
-    if (hidden.size === 0) return choice;
+    const shown = shownStorming(stormings, choice);
+    if (!shown) return choice;
     const draws = (c: StormingChoice): boolean => {
-        const graph = stormingGraph(stormings, c)?.graph;
+        const graph = stormingDrawing(stormings, c, null);
         return graph !== undefined && drawsElement(graph, elementId, shownHidden(stormings, c));
     };
     if (draws(choice)) return choice;
-    for (const kind of hidden) {
-        const shown = withHidden(choice, kind, false);
-        if (draws(shown)) return shown;
-    }
-    const all = clearStormingFilter(choice);
-    return draws(all) ? all : choice;
+    const id = shown.storming.id;
+    const hidden = shownHidden(stormings, choice);
+    const included = hidden.has('exceptions') ? withExceptions(choice, true) : choice;
+    const all = shown.main ? chooseTimeline(included, id, undefined) : included;
+    const kinds = [...hidden].filter((k) => k !== 'exceptions');
+    const tries = [included, all, ...[choice, included, all].flatMap((c) => kinds.map((k) => withHidden(c, k, false)))];
+    for (const c of tries) if (c !== choice && draws(c)) return c;
+    const cleared = clearStormingFilter(all);
+    return draws(cleared) ? cleared : choice;
 }
 
-/** The drawing and the render graph of the shown view. */
+/** The layout and the render graph of the view shown (the drawing of it: `drawnAs`). */
 export function stormingGraph(stormings: readonly StormingView[], choice: StormingChoice): { graph: LaidOutGraph; render: RenderGraph } | undefined {
     const shown = shownStorming(stormings, choice);
     return shown && shown.storming.views[stormingViewKey(shown.options)];
+}
+
+/**
+ * `graph` (the layout of the view shown, `stormingGraph`, or its compact one) drawn as the choice draws it: the main
+ * flow shown without the others, the exception emphasized with the rest faint (`flowInDrawing`), without what the
+ * 絞り込み hides (`hideInDrawing`). Nothing moves.
+ */
+export function drawnAs<G extends LaidOutGraph>(stormings: readonly StormingView[], choice: StormingChoice, focus: StormingFocus | null, graph: G): G {
+    const shown = shownStorming(stormings, choice);
+    const render = stormingGraph(stormings, choice)?.render;
+    if (!shown || !render) return graph;
+    const emphasized = shownFocus(stormings, choice, focus);
+    const flowed = flowInDrawing(graph, render, shown.storming.storming, shown.storming.timelines, { main: shown.main, focus: emphasized });
+    const hidden = shownHidden(stormings, choice);
+    return hidden.size ? hideInDrawing(flowed, hidden) : flowed;
+}
+
+/**
+ * The render graph of what the view shown draws (for the detail's other places): with one main flow shown, without the
+ * notes it leaves out, and its events' occurrences of the timelines drawn only. The layout's own otherwise.
+ */
+export function drawnRender(stormings: readonly StormingView[], choice: StormingChoice): RenderGraph | undefined {
+    const shown = shownStorming(stormings, choice);
+    const render = stormingGraph(stormings, choice)?.render;
+    if (!shown || !render || !shown.main) return render;
+    const notes = flowNotes(render, shown.storming.storming, shown.storming.timelines, { main: shown.main });
+    const timelines = new Set([...shown.main.timelines, ...notes.exceptions]);
+    return {
+        ...render,
+        nodes: render.nodes
+            .filter((n) => !notes.hidden.has(n.id))
+            .map((n) => (n.type === 'event' ? { ...n, occurrences: n.occurrences.filter((o) => timelines.has(o.timelineId)) } : n)),
+    };
+}
+
+/** The drawing of the view shown (`drawnAs`). */
+export function stormingDrawing(stormings: readonly StormingView[], choice: StormingChoice, focus: StormingFocus | null): LaidOutGraph | undefined {
+    const graph = stormingGraph(stormings, choice)?.graph;
+    return graph && drawnAs(stormings, choice, focus, graph);
+}
+
+/** The picker's value of a stage (a timeline's is its ID: an ID never starts with `@`). */
+export const stageChoice = (stageId: string): string => `@${stageId}`;
+
+/** What showing a scope does (`scopeView`): the choice, the exception emphasized, and where the camera goes. */
+export interface ScopeView {
+    readonly choice: StormingChoice;
+    readonly focus: StormingFocus | null;
+    /** The camera to a stage's frame, or to an exception's path; none: as the view is drawn. */
+    readonly frame?: { readonly stage: string } | { readonly exception: string };
+}
+
+/**
+ * What a row of the storming navigator, or a declaration's link, shows (`scope`): '' the storming (すべて, nothing
+ * emphasized); `@<stage ID>` the stage's frame on the same canvas (the camera to it, nothing else changed); a main
+ * flow's timeline, that main flow on the canvas; an exception, emphasized (`focusOn`) with the camera on its path.
+ */
+export function scopeView(
+    stormings: readonly StormingView[],
+    choice: StormingChoice,
+    focus: StormingFocus | null,
+    stormingId: string,
+    scope: string,
+): ScopeView {
+    const storming = stormings.find((s) => s.id === stormingId);
+    const same = (shownStorming(stormings, choice)?.storming.id ?? '') === stormingId;
+    if (!storming || scope === '') return { choice: chooseStorming(choice, stormingId), focus: null };
+    if (scope.startsWith('@')) {
+        const next = same ? choice : chooseStorming(choice, stormingId);
+        return { choice: next, focus: same ? focus : null, frame: { stage: scope.slice(1) } };
+    }
+    const timeline = storming.timelines.find((t) => t.id === scope);
+    if (timeline?.exception) {
+        const f = focusOn(stormings, choice, stormingId, timeline.id);
+        return { ...f, frame: { exception: timeline.id } };
+    }
+    const flows = mainFlowsOf(storming);
+    const main = flows.length > 1 ? mainFlowOf(flows, scope)?.id : undefined;
+    return { choice: chooseTimeline(choice, stormingId, main), focus: null };
 }
 
 /** Selection IDs of storming elements: `es/<Storming>/<Local>` (`esElementId`). */
@@ -233,26 +410,29 @@ export function dtTarget(model: DomainModel | null, kind: string, path: string):
 const LEVEL_ICONS: Record<ViewLevel, LucideIcon> = { 'big-picture': Telescope, 'design-level': Microscope };
 
 /**
- * The Event Storming view's toolbar: its subject, the storming then the timeline (すべて（統合）, a stage with its
- * exceptions, or one timeline) as a breadcrumb of pickers, and its level. The timeline is what is looked at, not a
- * filter: the integrated canvas, a stage and a timeline draw different things (the exceptions are, `StormingFilter`).
+ * The Event Storming view's toolbar (ADR 0032 §11): its subject — what the canvas carries, a breadcrumb of pickers:
+ * the storming › its timeline (すべて, or one main flow; none for a storming with one) — then the exceptions' layer over
+ * it (`ExceptionToggle`), and the level. Every change goes through `onView` (with the exception emphasized: a change
+ * of the storming or the timeline ends it).
  */
 export function StormingToolbar({
     stormings,
     choice,
+    focus,
     mode,
-    onChange,
+    onView,
 }: {
     stormings: readonly StormingView[];
     choice: StormingChoice;
+    focus: StormingFocus | null;
     mode: DisplayMode;
-    onChange: (choice: StormingChoice) => void;
+    onView: (view: ScopeView) => void;
 }) {
     const t = useT();
     const shown = shownStorming(stormings, choice);
     if (!shown) return null;
-    const { storming, options } = shown;
-    const stageName = (id: string): string => nameIn(mode, id, storming.stages?.find((st) => st.id === id)?.label);
+    const { storming, options, main } = shown;
+    const flows = mainFlowsOf(storming);
     return (
         <ToolbarSubject>
             <nav className="subject-crumbs" aria-label={t.views.storming}>
@@ -260,43 +440,137 @@ export function StormingToolbar({
                     label={t.stormingPicker}
                     value={storming.id}
                     options={stormings.map((s) => ({ value: s.id, label: nameIn(mode, s.id, s.label) }))}
-                    onChange={(id) => onChange({ ...choice, stormingId: id })}
+                    onChange={(id) => onView({ choice: chooseStorming(choice, id), focus: null })}
                 />
-                {storming.timelines.length > 0 && (
+                {flows.length > 1 && (
                     <>
                         <ChevronRight className="subject-sep" size={14} aria-hidden />
                         <SubjectPicker
                             label={t.timelineFilter}
-                            value={options.timelineId ?? (options.stageId !== undefined ? stageChoice(options.stageId) : '')}
-                            options={[
-                                { value: '', label: t.allTimelines },
-                                ...(storming.stages ?? []).map((st) => ({ value: stageChoice(st.id), label: t.stageView(stageName(st.id)) })),
-                                ...storming.timelines.map((tl) => {
-                                    const name = tl.exception ? t.exceptionTimeline(nameIn(mode, tl.id, tl.label)) : nameIn(mode, tl.id, tl.label);
-                                    return { value: tl.id, label: tl.stageId !== undefined ? t.stageTimeline(stageName(tl.stageId), name) : name };
-                                }),
-                            ]}
-                            onChange={(id) => onChange(chooseScope(choice, storming.id, id))}
+                            value={main?.id ?? ''}
+                            options={[{ value: '', label: t.allTimelines }, ...flows.map((f) => ({ value: f.id, label: nameIn(mode, f.id, f.label) }))]}
+                            onChange={(id) => onView({ choice: chooseTimeline(choice, storming.id, id || undefined), focus: null })}
                         />
                     </>
                 )}
             </nav>
+            <ExceptionToggle stormings={stormings} choice={choice} focus={focus} mode={mode} onView={onView} />
             <LevelSwitch
                 label={t.stormingLevel}
                 levels={VIEW_LEVELS}
                 value={options.level}
                 icons={LEVEL_ICONS}
                 names={(l) => ({ label: t.stormingLevels[l].label, tooltip: `${t.stormingLevels[l].label} — ${t.stormingLevels[l].hint}` })}
-                onChange={(level) => onChange({ ...choice, level })}
+                onChange={(level) => onView({ choice: { ...choice, level }, focus })}
             />
         </ToolbarSubject>
     );
 }
 
 /**
- * The storming's 絞り込み: what it can hide in the view shown (`hideableIn`) — 「例外を表示」 when the storming has
- * exceptions and the view is not one timeline (whose exceptions are what it shows), 「解決済みを表示」 when it has a
- * resolved hotspot. Each kind hidden counts as one narrowing.
+ * The exceptions' layer over the canvas (ADR 0032 §11), apart from the breadcrumb in its look (round, in the
+ * exceptions' pink): ↳ 例外 and how many it lays over the canvas (those branching off the main flow shown). Its left
+ * part includes them or not; its ▾ emphasizes one (included first), which the toggle then names, with its × to end
+ * the emphasis. None for a storming without exceptions.
+ */
+export function ExceptionToggle({
+    stormings,
+    choice,
+    focus,
+    mode,
+    onView,
+}: {
+    stormings: readonly StormingView[];
+    choice: StormingChoice;
+    focus: StormingFocus | null;
+    mode: DisplayMode;
+    onView: (view: ScopeView) => void;
+}): ReactNode {
+    const t = useT();
+    const shown = shownStorming(stormings, choice);
+    const layer = exceptionLayer(stormings, choice);
+    if (!shown || !layer) return null;
+    const { storming, main } = shown;
+    const emphasized = shownFocus(stormings, choice, focus);
+    const timeline = (id: string): StormingView['timelines'][number] | undefined => storming.timelines.find((x) => x.id === id);
+    const named = (id: string): string => nameIn(mode, id, timeline(id)?.label);
+    const byStage = !main && (storming.stages?.length ?? 0) > 0;
+    const stageName = (id: string | undefined): string | undefined => {
+        const st = byStage && id !== undefined ? storming.stages?.find((s) => s.id === id) : undefined;
+        return st && nameIn(mode, st.id, st.label);
+    };
+    const options = layer.exceptions.map((id) => ({
+        value: id,
+        label: named(id),
+        group: stageName(timeline(id)?.stageId),
+        icon: <CornerDownRight className="exception-mark" size={12} aria-hidden />,
+    }));
+    const pick = (id: string): void => onView({ ...focusOn(stormings, choice, storming.id, id), frame: { exception: id } });
+    const caret = (
+        <span className="toolbar-caret" aria-hidden>
+            ▾
+        </span>
+    );
+    const state = emphasized !== undefined ? ' focus' : layer.included ? ' on' : '';
+    return (
+        <div className={`exception-layer${state}`} role="group" aria-label={t.exceptionLayer.label}>
+            {emphasized !== undefined ? (
+                <>
+                    <MenuPicker
+                        className="exception-layer-pick"
+                        buttonClass="exception-layer-main"
+                        label={t.exceptionLayer.label}
+                        value={emphasized}
+                        options={options}
+                        onChange={pick}
+                    >
+                        <CornerDownRight size={13} aria-hidden />
+                        <span className="toolbar-button-text">{t.exceptionLayer.focused(named(emphasized))}</span>
+                        {caret}
+                    </MenuPicker>
+                    <button
+                        className="icon-button exception-layer-clear"
+                        aria-label={t.exceptionLayer.unfocus}
+                        data-tooltip={t.exceptionLayer.unfocus}
+                        onClick={() => onView({ choice, focus: null })}
+                    >
+                        <X size={13} aria-hidden />
+                    </button>
+                </>
+            ) : (
+                <>
+                    <button
+                        className="exception-layer-main"
+                        aria-pressed={layer.included}
+                        onClick={() => onView({ choice: withExceptions(choice, !layer.included), focus: null })}
+                    >
+                        <CornerDownRight size={13} aria-hidden />
+                        {t.exceptionLayer.label}
+                        <span className="exception-layer-count">{layer.exceptions.length}</span>
+                    </button>
+                    {options.length > 0 && (
+                        <MenuPicker
+                            className="exception-layer-pick"
+                            buttonClass="exception-layer-drop"
+                            buttonLabel={t.exceptionLayer.pick}
+                            tooltip={t.exceptionLayer.pick}
+                            label={t.exceptionLayer.label}
+                            value={undefined}
+                            options={options}
+                            onChange={pick}
+                        >
+                            {caret}
+                        </MenuPicker>
+                    )}
+                </>
+            )}
+        </div>
+    );
+}
+
+/**
+ * The storming's 絞り込み: what it can hide in the view shown (`filterableIn`) — 「解決済みを表示」 when the storming has a
+ * resolved hotspot; no button without it. The exceptions are the layer's toggle, not a narrowing.
  */
 export function StormingFilter({
     stormings,
@@ -309,12 +583,13 @@ export function StormingFilter({
 }): ReactNode {
     const t = useT();
     const shown = shownStorming(stormings, choice);
-    const kinds = shown ? hideableIn(shown.storming, shown.options) : [];
+    const kinds = shown ? filterableIn(shown.storming) : [];
     if (!kinds.length) return null;
     const hidden = shownHidden(stormings, choice);
-    const names: Record<Hideable, string> = { exceptions: t.showExceptions, resolvedHotspots: t.showResolvedHotspots };
+    const names: Record<Hideable, string> = { exceptions: '', resolvedHotspots: t.showResolvedHotspots };
+    const count = kinds.filter((k) => hidden.has(k)).length;
     return (
-        <FilterPopover count={activeFilterCount({ view: 'storming', hidden: hidden.size })} onClear={() => onChange(clearStormingFilter(choice))}>
+        <FilterPopover count={activeFilterCount({ view: 'storming', hidden: count })} onClear={() => onChange(clearStormingFilter(choice))}>
             <FilterSection title={t.filters.shown}>
                 {kinds.map((kind) => (
                     <label key={kind} className="check">
@@ -327,11 +602,9 @@ export function StormingFilter({
     );
 }
 
-/** The storming's 絞り込み cleared: everything shown again. */
-export const clearStormingFilter = (choice: StormingChoice): StormingChoice => {
-    const { exceptions: _, hidden: __, ...rest } = choice;
-    return rest;
-};
+/** The storming's 絞り込み cleared: what it hides shown again (the exceptions' layer as it is). */
+export const clearStormingFilter = (choice: StormingChoice): StormingChoice =>
+    HIDEABLE.filter((k) => k !== 'exceptions').reduce((c, k) => withHidden(c, k, false), choice);
 
 /** What the detail of a storming element gets from a session (`useSessionPage`); none outside one. */
 export interface StormingDetailSession {

@@ -12,7 +12,7 @@ import { changeCount, ChangesList, problemCounts, ProblemsList } from '../lists'
 import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from '../model-utils';
 import { StatesCanvas } from '../states-canvas';
 import { useSessionPage } from '../session/page';
-import { type StormingChoice, chooseScope, isStormingSelection, revealIn, StormingDetails, stormingExists } from '../storming';
+import { type StormingChoice, chooseTimeline, drawnRender, isStormingSelection, revealIn, scopeView, StormingDetails, stormingExists } from '../storming';
 import { StormingNavigator } from '../storming-navigator';
 import { NameSwitch } from '../view/toolbar';
 import { ViewWorkspace, useViewWorkspace } from '../view/workspace';
@@ -74,7 +74,7 @@ export function App() {
     const workspace = useViewWorkspace(current, { mode, lang, theme });
     const { stormings, nav, worlds, settings, viewGraph } = workspace;
     const { view, setView, selected, sourceFocus, setSourceFocus, select, backTo, goBack, reveal } = nav;
-    const { shown, stormingShown } = viewGraph;
+    const { shown } = viewGraph;
 
     /** Double-click in the explorer: the view that suits the item best. */
     const openBest = (id: string) => {
@@ -125,8 +125,9 @@ export function App() {
             const kind = firstDeclarations(storming.storming).get(local)?.kind;
             const drawn = LEVEL_KINDS[stormingChoice.level].some((k) => k === kind);
             const inView = view.kind === 'storming' && shown?.storming.id === stormingId && drawn && canvas?.findElement(id) !== undefined;
-            const { [stormingId]: _, ...others } = stormingChoice.timelines;
-            const there = inView ? stormingChoice : { ...stormingChoice, stormingId, level: drawn ? stormingChoice.level : 'design-level', timelines: others };
+            const there = inView
+                ? stormingChoice
+                : { ...chooseTimeline(stormingChoice, stormingId, undefined), level: drawn ? stormingChoice.level : 'design-level' };
             const next = revealIn(stormings, there, id);
             if (next !== stormingChoice) setStormingChoice(next);
             if (view.kind !== 'storming') setView({ kind: 'storming' });
@@ -195,7 +196,7 @@ export function App() {
         model,
         mode,
         active: view.kind === 'storming',
-        ...(shown?.options.timelineId !== undefined && { timelineShown: shown.options.timelineId }),
+        ...(shown?.main && { timelineShown: shown.main.id }),
         session: session.stickies,
         onSeeModel: (dtId, from) => {
             leave(from, dtId);
@@ -203,7 +204,7 @@ export function App() {
         },
         onSeeTimeline: (stormingId, timeline, then) => {
             leave(then, then);
-            setStormingChoice(chooseScope(stormingChoice, stormingId, timeline));
+            workspace.showStorming(scopeView(stormings, stormingChoice, settings.stormingFocus, stormingId, timeline));
             setView({ kind: 'storming' });
             requestAnimationFrame(() => requestAnimationFrame(() => select(then)));
         },
@@ -321,8 +322,11 @@ export function App() {
                                     <StormingNavigator
                                         stormings={stormings}
                                         choice={settings.stormingChoice}
+                                        focus={settings.stormingFocus}
                                         mode={mode}
-                                        onChoose={settings.setStormingChoice}
+                                        onScope={(stormingId, scope) =>
+                                            workspace.showStorming(scopeView(stormings, settings.stormingChoice, settings.stormingFocus, stormingId, scope))
+                                        }
                                         onSelect={(id) => {
                                             if (stormingExists(stormings, id)) select(id, { highlight: false });
                                         }}
@@ -437,7 +441,11 @@ export function App() {
                                 <StormingDetails
                                     stormings={stormings}
                                     selected={id}
-                                    render={view.kind === 'storming' && shown && id.startsWith(`es/${shown.storming.id}/`) ? stormingShown?.render : undefined}
+                                    render={
+                                        view.kind === 'storming' && shown && id.startsWith(`es/${shown.storming.id}/`)
+                                            ? drawnRender(stormings, settings.stormingChoice)
+                                            : undefined
+                                    }
                                     level={shown?.options.level ?? settings.stormingChoice.level}
                                     model={model}
                                     mode={mode}
@@ -454,7 +462,7 @@ export function App() {
                                             : select(x)
                                     }
                                     onShowScope={(stormingId, scope, then) => {
-                                        settings.setStormingChoice(chooseScope(settings.stormingChoice, stormingId, scope));
+                                        workspace.showStorming(scopeView(stormings, settings.stormingChoice, settings.stormingFocus, stormingId, scope));
                                         setView({ kind: 'storming' });
                                         // the element in the view just chosen, once it is drawn
                                         if (then) requestAnimationFrame(() => requestAnimationFrame(() => select(then)));

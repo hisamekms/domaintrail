@@ -128,6 +128,7 @@ describe("the reader's own moves (one place)", () => {
             setHiddenContexts: set('hidden'),
             setMapAll: set('mapAll'),
             setStormingChoice: set('storming'),
+            setStormingFocus: set('focus'),
             setCompact: set('compact'),
         };
         const reader = readerSettings(
@@ -139,7 +140,9 @@ describe("the reader's own moves (one place)", () => {
         reader.setHiddenContexts([]);
         reader.setMapAll(true);
         reader.setStormingChoice({ stormingId: 'S', level: 'big-picture', timelines: {} });
+        // the exception emphasized (the toggle's ▾, a lane's label, the navigator)
+        reader.setStormingFocus({ stormingId: 'S', exceptionId: 'Failed' });
         reader.setCompact(true);
-        expect(calls).toEqual(['level', 'contexts', 'hidden', 'mapAll', 'storming', 'compact'].flatMap((m) => ['mine', m]));
+        expect(calls).toEqual(['level', 'contexts', 'hidden', 'mapAll', 'storming', 'focus', 'compact'].flatMap((m) => ['mine', m]));
     });
 });

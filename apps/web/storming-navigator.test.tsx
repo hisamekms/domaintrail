@@ -1,5 +1,5 @@
-// The storming navigator (storming-navigator.tsx): the stormings › stages › timelines, a filter, and the view it shows
-// chosen with the view bar's pickers (the two choose through `chooseScope` and show the same scope).
+// The storming navigator (storming-navigator.tsx): the stormings › stages › timelines, a filter, and the rows of what
+// the canvas shows (ADR 0032 §11), in step with the view bar.
 import { afterAll, describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
@@ -8,7 +8,7 @@ import { createViewService, ElkLayoutEngine } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { groupCount } from './explorer';
 import { I18nProvider } from './i18n';
-import { chooseScope, shownScope, shownStorming, stageChoice, type StormingChoice } from './storming';
+import { chooseTimeline, focusOn, scopeView, stageChoice, type StormingChoice, type StormingFocus } from './storming';
 import { navigatorRows, StormingNavigator, stormingNavigatorTree, type NavigatorNode } from './storming-navigator';
 
 const engine = new ElkLayoutEngine();
@@ -94,35 +94,22 @@ describe('the tree of the storming navigator', () => {
     });
 });
 
-describe('the navigator and the view bar choose the same view', () => {
-    test('a row chooses its storming and scope; the scope shown is read back the same way the pickers write it', () => {
-        const stage = chooseScope(choice, STAGED, stageChoice('Issuance'));
-        expect(stage).toEqual({ ...choice, stormingId: STAGED, timelines: { [STAGED]: '@Issuance' } });
-        expect(shownStorming(stormings, stage)?.options).toEqual({ level: 'big-picture', stageId: 'Issuance' });
-        expect(shownScope(stormings, stage)).toEqual({ stormingId: STAGED, scope: '@Issuance' });
-        const timeline = chooseScope(stage, STAGED, 'PinLockedBranch');
-        expect(shownScope(stormings, timeline)).toEqual({ stormingId: STAGED, scope: 'PinLockedBranch' });
-        // the storming's own row: back to its integrated canvas, the others' scopes kept
-        const other = stormings.find((s) => s.id !== STAGED)?.id ?? '';
-        const both = chooseScope(chooseScope(timeline, other, ''), STAGED, '');
-        expect(both.timelines).toEqual({});
-        expect(chooseScope({ ...choice, timelines: { [other]: 'X' } }, STAGED, '').timelines).toEqual({ [other]: 'X' });
-        expect(shownScope(stormings, both)).toEqual({ stormingId: STAGED, scope: '' });
-    });
+describe('the navigator shows what the canvas shows', () => {
+    const render = (c: StormingChoice, focus: StormingFocus | null = null): string =>
+        renderToStaticMarkup(
+            <I18nProvider lang="ja">
+                <StormingNavigator stormings={stormings} choice={c} focus={focus} mode="label" onScope={() => {}} onSelect={() => {}} onClose={() => {}} />
+            </I18nProvider>,
+        );
+    const current = (html: string): string[] =>
+        [...html.matchAll(/class="tree-item storming-nav-(\w+) selected"[^>]*aria-current="true"[^>]*title="([^"]+)"/g)].map((m) => `${m[1]}:${m[2]}`);
 
-    test('the row of the view shown is the current one, whether the pickers or the navigator chose it', () => {
-        const render = (c: StormingChoice): string =>
-            renderToStaticMarkup(
-                <I18nProvider lang="ja">
-                    <StormingNavigator stormings={stormings} choice={c} mode="label" onChoose={() => {}} onSelect={() => {}} onClose={() => {}} />
-                </I18nProvider>,
-            );
-        const current = (html: string): string[] =>
-            [...html.matchAll(/class="tree-item storming-nav-(\w+) selected"[^>]*aria-current="true"[^>]*title="([^"]+)"/g)].map((m) => `${m[1]}:${m[2]}`);
-        expect(current(render(chooseScope(choice, STAGED, stageChoice('Issuance'))))).toEqual(['stage:Issuance']);
-        expect(current(render(chooseScope(choice, STAGED, 'PinForgottenBranch')))).toEqual(['timeline:PinForgottenBranch']);
-        // nothing chosen yet: the first storming's integrated canvas
+    test('a storming’s row while all its timelines are shown (its one main flow too); an exception’s while emphasized', () => {
         expect(current(render(choice))).toEqual([`storming:${STAGED}`]);
+        // the trunk through every stage is its only main flow: the canvas carries all of it
+        expect(current(render(chooseTimeline(choice, STAGED, 'PreparationFlow')))).toEqual([`storming:${STAGED}`]);
+        const { choice: c, focus } = focusOn(stormings, choice, STAGED, 'PinLockedBranch');
+        expect(current(render(c, focus))).toEqual(['timeline:PinLockedBranch']);
         const html = render(choice);
         expect(html).toContain('aria-label="例外"');
         expect(html).toContain('placeholder="フィルタ"');
@@ -130,12 +117,26 @@ describe('the navigator and the view bar choose the same view', () => {
         expect(html).not.toContain('tree-count');
     });
 
+    test('a row shows its scope (`scopeView`): a stage’s frame on the same canvas, a main flow, an exception emphasized', () => {
+        expect(scopeView(stormings, choice, null, STAGED, stageChoice('Issuance')).frame).toEqual({ stage: 'Issuance' });
+        expect(scopeView(stormings, choice, null, STAGED, 'IssuanceFlow').choice.timelines).toEqual({});
+        expect(scopeView(stormings, choice, null, STAGED, 'PinForgottenBranch').focus).toEqual({ stormingId: STAGED, exceptionId: 'PinForgottenBranch' });
+    });
+
     test('a stage counts its timelines only while collapsed, after its name, as the model tree’s groups do', () => {
         storage({ 'domaintrail.stormingNavigator.collapsed': JSON.stringify([`${STAGED}@Issuance`]) });
         try {
             const html = renderToStaticMarkup(
                 <I18nProvider lang="ja">
-                    <StormingNavigator stormings={stormings} choice={choice} mode="label" onChoose={() => {}} onSelect={() => {}} onClose={() => {}} />
+                    <StormingNavigator
+                        stormings={stormings}
+                        choice={choice}
+                        mode="label"
+                        focus={null}
+                        onScope={() => {}}
+                        onSelect={() => {}}
+                        onClose={() => {}}
+                    />
                 </I18nProvider>,
             );
             // the same element as the model tree's collapsed group count, and only on the collapsed stage
@@ -149,7 +150,7 @@ describe('the navigator and the view bar choose the same view', () => {
     test('without stormings it says how to start one', () => {
         const html = renderToStaticMarkup(
             <I18nProvider lang="ja">
-                <StormingNavigator stormings={[]} choice={choice} mode="label" onChoose={() => {}} onSelect={() => {}} onClose={() => {}} />
+                <StormingNavigator stormings={[]} choice={choice} mode="label" focus={null} onScope={() => {}} onSelect={() => {}} onClose={() => {}} />
             </I18nProvider>,
         );
         expect(html).toContain('ストーミングがありません');

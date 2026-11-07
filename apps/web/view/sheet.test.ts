@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { createViewService, ElkLayoutEngine } from '@domaintrail/visualization';
 import { MESSAGES } from '../i18n';
-import { stageChoice, type StormingChoice } from '../storming';
+import type { StormingChoice } from '../storming';
 import { canvasSubject, exportFileName, sheetHeading, slug, stormingSubject, type SheetSubject } from './sheet';
 
 const STAGES = await readFile(path.join(import.meta.dir, '..', '..', '..', 'test', 'fixtures', 'stages', 'convenience-store-stages.dtes'), 'utf8');
@@ -33,26 +33,29 @@ const en = MESSAGES.en;
 const choice = (extra: Partial<StormingChoice> = {}): StormingChoice => ({ stormingId: undefined, level: 'design-level', timelines: {}, ...extra });
 
 describe('the heading of a printed diagram', () => {
-    test('an Event Storming view: the storming, what of it is shown, its level and the exceptions, by display mode', async () => {
+    test('an Event Storming view: the storming, its timeline, its level and its exceptions, by display mode', async () => {
         const stormings = await stormingsOf(STAGES);
-        const id = 'ConvenienceStoreIssuance';
-        const stage = stormingSubject(stormings, choice({ timelines: { [id]: stageChoice('Issuance') } }))!;
-        expect(sheetHeading('ws', stage, ja, 'label')).toBe(
-            'ws › イベントストーミング › 住民票などのコンビニ交付（ビッグピクチャ） › コンビニでの発行 · デザインレベル · 例外を含む',
-        );
-        expect(sheetHeading('ws', stage, ja, 'name')).toBe('ws › イベントストーミング › ConvenienceStoreIssuance › Issuance · デザインレベル · 例外を含む');
-        expect(sheetHeading('ws', stage, en, 'both')).toBe(
-            'ws › Event Storming › 住民票などのコンビニ交付（ビッグピクチャ） (ConvenienceStoreIssuance) › コンビニでの発行 (Issuance) · Design Level · with exceptions',
-        );
-        // the integrated canvas, without the exceptions
-        const all = stormingSubject(stormings, choice({ level: 'big-picture', exceptions: false }))!;
+        // one main flow (the trunk through every stage): no timeline part
+        const all = stormingSubject(stormings, choice())!;
         expect(sheetHeading('ws', all, ja, 'label')).toBe(
-            'ws › イベントストーミング › 住民票などのコンビニ交付（ビッグピクチャ） › すべて（統合） · ビッグピクチャー · 例外を除く',
+            'ws › イベントストーミング › 住民票などのコンビニ交付（ビッグピクチャ） · デザインレベル · 例外を含む',
         );
-        // one timeline (an exception of a stage): no exceptions' condition, it is one of them
-        const branch = stormingSubject(stormings, choice({ timelines: { [id]: 'PinLockedBranch' } }))!;
-        expect(sheetHeading('ws', branch, ja, 'label')).toBe(
-            'ws › イベントストーミング › 住民票などのコンビニ交付（ビッグピクチャ） › コンビニでの発行 / 例外：暗証番号のロック · デザインレベル',
+        expect(sheetHeading('ws', all, ja, 'name')).toBe('ws › イベントストーミング › ConvenienceStoreIssuance · デザインレベル · 例外を含む');
+        expect(sheetHeading('ws', all, en, 'both')).toBe(
+            'ws › Event Storming › 住民票などのコンビニ交付（ビッグピクチャ） (ConvenienceStoreIssuance) · Design Level · with exceptions',
+        );
+        // without its exceptions' layer (as an earlier version kept it)
+        const without = stormingSubject(stormings, choice({ level: 'big-picture', exceptions: false }))!;
+        expect(sheetHeading('ws', without, ja, 'label')).toBe(
+            'ws › イベントストーミング › 住民票などのコンビニ交付（ビッグピクチャ） · ビッグピクチャー · 例外なし',
+        );
+        // several main flows: すべて, or the one on the canvas
+        const two = await stormingsOf(
+            'storming Two "二つ" {\n  event A\n  event B\n  timeline One "一" {\n    A\n  }\n  timeline Other "他" {\n    B\n  }\n}\n',
+        );
+        expect(sheetHeading('ws', stormingSubject(two, choice())!, ja, 'label')).toBe('ws › イベントストーミング › 二つ › すべて · デザインレベル');
+        expect(sheetHeading('ws', stormingSubject(two, choice({ timelines: { Two: 'Other' } }))!, ja, 'label')).toBe(
+            'ws › イベントストーミング › 二つ › 他 · デザインレベル',
         );
     });
 
@@ -80,10 +83,10 @@ describe('the heading of a printed diagram', () => {
 describe('the name of an exported file', () => {
     test('is made of IDs, whatever the display mode, the parts a view does not have left out', async () => {
         const stormings = await stormingsOf(STAGES);
-        const stage = stormingSubject(stormings, choice({ timelines: { ConvenienceStoreIssuance: stageChoice('Issuance') } }))!;
-        expect(exportFileName('ws', stage, 'png')).toBe('ws-storming-ConvenienceStoreIssuance-Issuance-design-level.png');
         const all = stormingSubject(stormings, choice({ level: 'big-picture' }))!;
-        expect(exportFileName('ws', all, 'svg')).toBe('ws-storming-ConvenienceStoreIssuance-all-big-picture.svg');
+        expect(exportFileName('ws', all, 'svg')).toBe('ws-storming-ConvenienceStoreIssuance-big-picture.svg');
+        const without = stormingSubject(stormings, choice({ hidden: ['exceptions'] }))!;
+        expect(exportFileName('ws', without, 'png')).toBe('ws-storming-ConvenienceStoreIssuance-design-level-without-exceptions.png');
         expect(exportFileName('shop', { view: 'contextMap', all: false }, 'png')).toBe('shop-context-map.png');
         expect(exportFileName('shop', { view: 'contextMap', all: true }, 'png')).toBe('shop-context-map-all.png');
         expect(exportFileName('shop', { view: 'structure', level: 'detail', contexts: [] }, 'svg')).toBe('shop-structure-detail.svg');

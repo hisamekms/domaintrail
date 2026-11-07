@@ -2,7 +2,8 @@
 // participant's whereabouts seen from this page, the view a location stands for (to name it, to open it, and to send
 // it with a message), and the small rules of the chat's layout (consecutive bubbles of one author, the send shortcut's name).
 import type { Me, SendRequestBody, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
-import { type DisplayMode, hides, STRUCTURE_LEVELS, type StructureLevel, VIEW_LEVELS, type ViewLevel, type ViewOptions } from '@domaintrail/visualization';
+import { type DisplayMode, STRUCTURE_LEVELS, type StructureLevel, VIEW_LEVELS, type ViewLevel } from '@domaintrail/visualization';
+import { chooseTimeline, withExceptions } from '../storming';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { type CatalogFilter, nameIn } from '../model-utils';
 import type { View } from '../view/navigation';
@@ -20,7 +21,15 @@ export type ViewTarget =
           readonly focus?: { readonly contexts: readonly string[]; readonly hidden: readonly string[] };
       }
     | { readonly kind: 'catalog' }
-    | { readonly kind: 'storming'; readonly stormingId: string; readonly level: ViewLevel; readonly timelineId?: string };
+    | {
+          readonly kind: 'storming';
+          readonly stormingId: string;
+          readonly level: ViewLevel;
+          /** The main flow on its canvas (an earlier page's: any timeline); none: すべて. */
+          readonly timelineId?: string;
+          /** Its exceptions' layer not included. */
+          readonly exceptions?: false;
+      };
 
 const isStructureLevel = (s: string): s is StructureLevel => STRUCTURE_LEVELS.some((l) => l === s);
 const isViewLevel = (s: string): s is ViewLevel => VIEW_LEVELS.some((l) => l === s);
@@ -28,7 +37,7 @@ const list = (s: string): string[] => (s ? s.split('+') : []);
 
 /**
  * The view of a location: a `.dt` view by its view key (`contextMap:<all>`, `structure:<level>`,
- * `structure:focus:<contexts>|<hidden>|<level>`, `catalog`), a storming by its storming, level and timeline. Undefined
+ * `structure:focus:<contexts>|<hidden>|<level>`, `catalog`), a storming by its storming, level, timeline and exceptions. Undefined
  * for a key this page does not know.
  */
 export function viewTargetOf(location: ViewLocation): ViewTarget | undefined {
@@ -39,6 +48,7 @@ export function viewTargetOf(location: ViewLocation): ViewTarget | undefined {
             stormingId: location.stormingId,
             level: location.level,
             ...(location.timelineId !== undefined && { timelineId: location.timelineId }),
+            ...(location.exceptions === false && { exceptions: false as const }),
         };
     }
     const key = location.viewKey;
@@ -83,14 +93,10 @@ export function openViewTarget(target: ViewTarget, to: ViewOpener): void {
             if (target.focus) settings.setHiddenContexts([...target.focus.hidden]);
             return setView({ kind: 'structure' });
         case 'storming': {
-            const choice = settings.stormingChoice;
-            const { [target.stormingId]: _, ...others } = choice.timelines;
-            settings.setStormingChoice({
-                ...choice,
-                stormingId: target.stormingId,
-                level: target.level,
-                timelines: target.timelineId === undefined ? others : { ...others, [target.stormingId]: target.timelineId },
-            });
+            // the timeline as written: any timeline's ID is read as the main flow it is part of (`shownStorming`); what
+            // the 絞り込み hides here and the exception emphasized stay the reader's own
+            const choice = chooseTimeline({ ...settings.stormingChoice, level: target.level }, target.stormingId, target.timelineId);
+            settings.setStormingChoice(withExceptions(choice, target.exceptions !== false));
             return setView({ kind: 'storming' });
         }
     }
@@ -105,14 +111,12 @@ export type SentView = NonNullable<SendRequestBody['viewedAt']>;
 const STRUCTURE_DETAIL = { detail: 'Detail', overview: 'Overview', aggregates: 'Aggregates' } as const;
 
 /**
- * The view a message is sent from: the location's view (`viewTargetOf`), with what the location does not tell — a
- * storming's stage and whether its exceptions are shown, the catalog's filter — and the aggregate whose state diagram
- * the inspector shows. Undefined for a view this page cannot name (one still loading).
+ * The view a message is sent from: the location's view (`viewTargetOf`: a storming's timeline and exceptions among
+ * it), with what the location does not tell — the catalog's filter — and the aggregate whose state diagram the
+ * inspector shows. Undefined for a view this page cannot name (one still loading).
  */
 export function sentView(input: {
     readonly location: ViewLocation;
-    /** The storming view's stage and what it is laid out without (`ViewOptions`: the exceptions). */
-    readonly storming?: Pick<ViewOptions, 'stageId' | 'hidden'>;
     /** The catalog's filter. */
     readonly catalog?: CatalogFilter;
     /** The aggregate whose state diagram the inspector shows. */
@@ -135,14 +139,13 @@ export function sentView(input: {
             };
         }
         case 'storming': {
-            const stage = input.storming?.stageId;
             return {
                 view: {
                     kind: 'Storming',
                     storming: target.stormingId,
                     level: target.level === 'design-level' ? 'DesignLevel' : 'BigPicture',
-                    ...(target.timelineId !== undefined ? { timeline: target.timelineId } : stage !== undefined && { stage }),
-                    exceptions: !hides(input.storming ?? {}, 'exceptions'),
+                    ...(target.timelineId !== undefined && { timeline: target.timelineId }),
+                    exceptions: target.exceptions !== false,
                 },
                 ...states,
             };
@@ -157,6 +160,8 @@ export interface ViewWords {
     readonly stormingLevels: Readonly<Record<ViewLevel, string>>;
     /** The context map with every context. */
     readonly allContexts: string;
+    /** A storming without its exceptions' layer. */
+    readonly withoutExceptions: string;
 }
 
 /** What a view's name and whether it opens depend on: the model's contexts and the stormings, named in the display mode. */
@@ -187,6 +192,7 @@ export function viewName(target: ViewTarget, words: ViewWords, scope: ViewScope)
                 nameIn(scope.mode, target.stormingId, storming?.label),
                 words.stormingLevels[target.level],
                 ...(target.timelineId === undefined ? [] : [nameIn(scope.mode, target.timelineId, timeline?.label)]),
+                ...(target.exceptions === false ? [words.withoutExceptions] : []),
             ].join(' · ');
         }
     }

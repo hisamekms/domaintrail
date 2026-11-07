@@ -3408,6 +3408,132 @@ svg.chat-launcher-mark {
     color: var(--accent);
     font-weight: 600;
 }
+.subject-menu > button {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+/* a heading of the list's options (the exceptions of a stage, on every flow) */
+.subject-menu-group {
+    padding: var(--space-1) var(--space-3) 2px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--muted);
+}
+.subject-menu-group:not(:first-child) {
+    margin-top: var(--space-1);
+    border-top: 1px solid var(--border);
+}
+.exception-mark {
+    flex: none;
+    color: var(--es-exception-text);
+}
+/* the exceptions' layer over the canvas (ADR 0032 §11): round and in the exceptions' pink, apart from the breadcrumb
+   (the pickers), the level (filled) and the 絞り込み (outlined): outlined while excluded, washed while included,
+   filled while one is emphasized */
+.exception-layer {
+    flex: 0 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    height: 1.625rem;
+    border: 1px solid var(--es-exception);
+    border-radius: 999px;
+    color: var(--es-exception-text);
+    background: var(--panel);
+}
+.exception-layer.on {
+    background: color-mix(in srgb, var(--es-hotspot) 60%, var(--panel));
+}
+.exception-layer.focus {
+    background: var(--es-hotspot);
+    box-shadow: inset 0 0 0 1px var(--es-exception);
+}
+.exception-layer button {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+    height: 100%;
+    padding: 0 var(--space-2);
+    font: inherit;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: inherit;
+    background: none;
+    border: none;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.exception-layer button:hover {
+    background: color-mix(in srgb, var(--es-exception) 14%, transparent);
+}
+.exception-layer .toolbar-caret {
+    color: inherit;
+}
+.exception-layer-pick {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    height: 100%;
+}
+.exception-layer-count {
+    min-width: 1.1rem;
+    padding: 0 var(--space-1);
+    font-size: 0.6875rem;
+    line-height: 1.1rem;
+    text-align: center;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--es-exception) 22%, transparent);
+}
+.exception-layer > .exception-layer-pick > .exception-layer-drop {
+    padding: 0 var(--space-2) 0 var(--space-1);
+    border-left: 1px solid color-mix(in srgb, var(--es-exception) 40%, transparent);
+    border-radius: 0 999px 999px 0;
+}
+.exception-layer .icon-button.exception-layer-clear {
+    padding: 0 var(--space-2) 0 var(--space-1);
+}
+/* the exceptions' lanes over the canvas: a band behind a lane, deeper while its label is hovered, outlined while its
+   exception is emphasized; its label (over the line's caption) a button, filled while emphasized */
+.exception-lanes {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 5;
+}
+.exception-lane {
+    position: absolute;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--es-hotspot) 18%, transparent);
+    transition: background var(--motion-short, 120ms) ease;
+}
+.exception-lane.hovered {
+    background: color-mix(in srgb, var(--es-hotspot) 42%, transparent);
+}
+.exception-lane.focus {
+    box-shadow: 0 0 0 2px var(--es-exception);
+}
+.exception-lane-label {
+    position: absolute;
+    pointer-events: auto;
+    padding: 0;
+    font: inherit;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--es-exception-text);
+    background: transparent;
+    border: none;
+    border-radius: 999px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.exception-lane-label.focus {
+    color: var(--surface);
+    background: var(--es-exception);
+}
 .filter-popover {
     position: relative;
 }

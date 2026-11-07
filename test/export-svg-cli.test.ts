@@ -1,5 +1,5 @@
-// dt export svg through the CLI: the convenience store's stages drawn whole, one stage with its exceptions, one
-// timeline, at Big Picture and Design Level, without the exceptions; the domain model's views of examples/shop; the
+// dt export svg through the CLI: the convenience store's stages drawn whole, with or without its exceptions, one main
+// flow in the layout of every flow, at Big Picture and Design Level; the domain model's views of examples/shop; the
 // options' errors; the same bytes every time. The drawing itself is the Live View's (its tests:
 // apps/web/view/portable-svg.test.ts); what is checked here is that the CLI draws the view asked for, in the
 // stylesheet's colours, and says what it cannot draw.
@@ -90,48 +90,48 @@ describe('dt export svg: an Event Storming', () => {
         expect(all).toMatch(/<rect width="\d+" height="\d+" fill="#ffffff"\/>/);
     });
 
-    test('one stage with its exceptions, its heading and its legend', async () => {
+    test('its exceptions included, its heading and its legend', async () => {
         const root = await convenienceStore();
-        const stage = await svg(root, '--storming', 'ConvenienceStoreIssuance', '--stage', 'Issuance', '--heading', '--legend');
-        const lines = texts(stage);
-        expect(lines[0]).toBe(
-            'convenience-store › イベントストーミング › 住民票などのコンビニ交付（ビッグピクチャ） › コンビニでの発行 · ビッグピクチャー · 例外を含む',
-        );
+        const all = await svg(root, '--storming', 'ConvenienceStoreIssuance', '--heading', '--legend');
+        const lines = texts(all);
+        expect(lines[0]).toBe('convenience-store › イベントストーミング › 住民票などのコンビニ交付（ビッグピクチャ） · ビッグピクチャー · 例外を含む');
         // the exceptions' captions; their arrows in the one colour of every line (ADR 0032: no red for exceptions)
         expect(lines).toContain('暗証番号を忘れた');
-        expect(stage).not.toContain('dt-arrow-es-exception');
+        expect(all).not.toContain('dt-arrow-es-exception');
         expect(lines).toEqual(expect.arrayContaining(['問い（ホットスポットとその対象）']));
         expect(lines).toContain('凡例');
-        expect(lines).not.toContain('依頼・準備');
-        expect(outline(stage)).toMatchSnapshot();
+        expect(outline(all)).toMatchSnapshot();
     });
 
-    test('without the exceptions (--exceptions hide)', async () => {
+    test('its exceptions excluded (--exceptions exclude; hide, its earlier name, the same)', async () => {
         const root = await convenienceStore();
-        const without = await svg(root, '--storming', 'ConvenienceStoreIssuance', '--stage', 'Issuance', '--exceptions', 'hide', '--heading');
-        expect(texts(without)[0]).toEndWith(' · 例外を除く');
+        const without = await svg(root, '--storming', 'ConvenienceStoreIssuance', '--exceptions', 'exclude', '--heading');
+        expect(texts(without)[0]).toEndWith(' · 例外なし');
         expect(texts(without)).not.toContain('暗証番号を忘れた');
-        expect(without).not.toContain('dt-arrow-es-exception');
+        expect(await svg(root, '--storming', 'ConvenienceStoreIssuance', '--exceptions', 'hide', '--heading')).toBe(without);
     });
 
-    test('one timeline, in English', async () => {
+    test('one main flow (--timeline), in English: in the layout of every flow, the others left out where they stood', async () => {
+        const copy = await tempCopyOfExamples();
+        dirs.push(copy);
+        const all = await svg(copy, '--storming', 'OrderToCash');
+        const normal = await svg(copy, '--storming', 'OrderToCash', '--timeline', 'Normal', '--heading', '--lang', 'en');
+        expect(texts(normal)[0]).toBe(`${path.basename(copy)} › Event Storming › 注文から入金まで › 通常の注文 · Big Picture`);
+        const notes = (x: string): string[] => [...x.matchAll(/<rect x="[\d.]+" y="[\d.]+" width="148.5" height="148.5"/g)].map((m) => m[0]);
+        expect(notes(normal).every((r) => notes(all).includes(r))).toBe(true);
+        expect(notes(normal).length).toBeLessThan(notes(all).length);
+        // a timeline of a main flow made of several (the trunk) names it
         const root = await convenienceStore();
-        const timeline = await svg(root, '--storming', 'ConvenienceStoreIssuance', '--timeline', 'PinForgottenBranch', '--heading', '--lang', 'en');
-        expect(texts(timeline)[0]).toBe(
-            'convenience-store › Event Storming › 住民票などのコンビニ交付（ビッグピクチャ） › コンビニでの発行 / Exception: 暗証番号を忘れた · Big Picture',
-        );
-        // the stereotypes in English, the labels as written; the timeline's events only, wrapped in their notes
-        expect(stereotypes(timeline)).toEqual({ '«event»': 3 });
-        expect(texts(timeline).slice(1).join('')).toBe(
-            '«event»マイナンバーカードが読み取られた«event»暗証番号を忘れた«event»市役所で暗証番号を初期化・再設定した',
-        );
+        expect(
+            (await run('-r', root, 'export', 'svg', '--storming', 'ConvenienceStoreIssuance', '--timeline', 'PinLockedBranch', '-o', '-')).err[0],
+        ).toStartWith("Unknown main flow 'PinLockedBranch' of ConvenienceStoreIssuance. Main flows: PreparationFlow");
     });
 
     test('Design Level draws the commands, the policies and the actors; names by ID with --names name', async () => {
         const root = await convenienceStore();
-        const design = await svg(root, '--storming', 'ConvenienceStoreIssuance', '--stage', 'Issuance', '--level', 'design');
+        const design = await svg(root, '--storming', 'ConvenienceStoreIssuance', '--level', 'design');
         expect(stereotypes(design)).toMatchObject({ '«コマンド»': 2, '«ポリシー»': 1, '«アクター»': 1, '«外部システム»': 2 });
-        const named = await svg(root, '--storming', 'ConvenienceStoreIssuance', '--stage', 'Issuance', '--level', 'design', '--names', 'name');
+        const named = await svg(root, '--storming', 'ConvenienceStoreIssuance', '--level', 'design', '--names', 'name');
         expect(texts(named).join('')).toContain('«コマンド»PayFee«アクター»Resident');
         expect(texts(named).join('')).toContain('«コマンド»IssueCertificate');
         expect(texts(named).join('')).not.toContain('✕');
@@ -150,7 +150,7 @@ describe('dt export svg: an Event Storming', () => {
     test('the same sources give the same bytes, written to a file with -o', async () => {
         const root = await convenienceStore();
         const file = path.join(path.dirname(root), 'stage.svg');
-        const args = ['-r', root, 'export', 'svg', '--storming', 'ConvenienceStoreIssuance', '--stage', 'Issuance', '--legend', '--heading', '-o', file];
+        const args = ['-r', root, 'export', 'svg', '--storming', 'ConvenienceStoreIssuance', '--legend', '--heading', '-o', file];
         const first = await run(...args);
         expect(first.code).toBe(0);
         expect(first.out).toEqual([`written to ${file}`]);
@@ -158,7 +158,7 @@ describe('dt export svg: an Event Storming', () => {
         await writeFile(file, '');
         expect((await run(...args)).code).toBe(0);
         expect((await readFile(file)).equals(bytes)).toBe(true);
-        expect(Buffer.from(await svg(root, '--storming', 'ConvenienceStoreIssuance', '--stage', 'Issuance', '--legend', '--heading')).equals(bytes)).toBe(true);
+        expect(Buffer.from(await svg(root, '--storming', 'ConvenienceStoreIssuance', '--legend', '--heading')).equals(bytes)).toBe(true);
     });
 });
 
@@ -197,33 +197,25 @@ describe('dt export svg: the domain model', () => {
 });
 
 describe('dt export svg: errors', () => {
-    test('an unknown storming, stage or timeline names the choices (exit 1)', async () => {
+    test('an unknown storming or main flow names the choices (exit 1)', async () => {
         const root = await convenienceStore();
-        const cases: [string[], string][] = [
-            [['--storming', 'Nope'], "Unknown storming 'Nope'. Stormings: ConvenienceStoreIssuance"],
-            [
-                ['--storming', 'ConvenienceStoreIssuance', '--stage', 'Nope'],
-                "Unknown stage 'Nope' of ConvenienceStoreIssuance. Stages: Preparation, Issuance, Submission",
-            ],
-        ];
+        const cases: [string[], string][] = [[['--storming', 'Nope'], "Unknown storming 'Nope'. Stormings: ConvenienceStoreIssuance"]];
         for (const [args, message] of cases) {
             const r = await run('-r', root, 'export', 'svg', ...args, '-o', '-');
             expect({ code: r.code, err: r.err, bytes: r.bytes.length }).toEqual({ code: 1, err: [message], bytes: 0 });
         }
         const timeline = await run('-r', root, 'export', 'svg', '--storming', 'ConvenienceStoreIssuance', '--timeline', 'Nope', '-o', '-');
         expect(timeline.code).toBe(1);
-        expect(timeline.err[0]).toStartWith("Unknown timeline 'Nope' of ConvenienceStoreIssuance. Timelines: PreparationFlow, ");
+        expect(timeline.err[0]).toBe("Unknown main flow 'Nope' of ConvenienceStoreIssuance. Main flows: PreparationFlow");
     });
 
     test('options that do not go together (exit 2), before the workspace is read', async () => {
         const cases: [string[], string][] = [
             [[], 'Give the diagram to draw: --storming <ID> (an Event Storming) or --model (the domain model).'],
             [['--storming', 'S', '--model'], 'Give --storming <ID> or --model, not both.'],
-            [['--storming', 'S', '--stage', 'A', '--timeline', 'B'], 'Give --stage or --timeline, not both.'],
-            [['--storming', 'S', '--timeline', 'B', '--exceptions', 'hide'], '--exceptions applies to the whole storming or a stage, not to one timeline.'],
             [['--storming', 'S', '--level', 'detail'], "Unknown level 'detail' of a storming. Choose: big-picture, design"],
-            [['--model', '--stage', 'A'], '--stage, --timeline, --exceptions and --resolved-hotspots are options of --storming.'],
-            [['--model', '--resolved-hotspots', 'hide'], '--stage, --timeline, --exceptions and --resolved-hotspots are options of --storming.'],
+            [['--model', '--timeline', 'A'], '--timeline, --exceptions and --resolved-hotspots are options of --storming.'],
+            [['--model', '--resolved-hotspots', 'hide'], '--timeline, --exceptions and --resolved-hotspots are options of --storming.'],
             [['--model', '--view', 'map', '--context', 'Sales'], '--context and --level are options of --view structure.'],
         ];
         for (const [args, message] of cases) {

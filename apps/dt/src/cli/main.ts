@@ -522,11 +522,13 @@ Examples:
         .command('svg')
         .description('Draw a diagram of the Live View as an SVG file, as its 書き出し → SVG saves it, without a browser.')
         .option('--storming <id>', 'an Event Storming: the storming to draw (its ID)')
-        .option('--stage <id>', 'with --storming: one stage (its main flows and its exceptions)')
-        .option('--timeline <id>', 'with --storming: one timeline')
+        .option('--timeline <id>', 'with --storming: one main flow, in the layout of every flow (default: every flow)')
         .option('--level <level>', 'with --storming: big-picture (default) or design; with --model: detail (default), overview or aggregates')
         .addOption(
-            new Option('--exceptions <exceptions>', 'with --storming, on the whole storming or a stage: draw its exceptions (default) or not').choices([
+            new Option('--exceptions <exceptions>', "with --storming: include its exceptions' layer (default) or exclude it").choices([
+                'include',
+                'exclude',
+                // their earlier names
                 'show',
                 'hide',
             ]),
@@ -556,14 +558,14 @@ Every view is laid out from scratch (never from the layouts the Live View saved)
 the diagnostics' marks are drawn as on the screen. The text is laid out with a table of the Live View's fonts (Hiragino
 Sans and SF Mono, as Chrome on macOS measures them), and the SVG names the page's font stacks without embedding a font.
 The light theme is on white, as the Live View exports it; the dark one on the dark canvas's background.
-An unknown storming, stage, timeline or context is named with the choices. An existing file is replaced.
+An unknown storming, main flow or context is named with the choices. An existing file is replaced.
 Exits 0 when written, 1 when the workspace has no such diagram (or no .dt or .dtes file), 2 on options that do not go
 together or an invalid config.
 
 Examples:
   dt export svg --storming OrderToCash -o order-to-cash.svg
   dt export svg --storming OrderToCash --timeline PaymentRetry --level design --legend -o retry.svg
-  dt export svg --storming OrderToCash --exceptions hide --theme dark --lang en --heading -o dark.svg
+  dt export svg --storming OrderToCash --exceptions exclude --theme dark --lang en --heading -o dark.svg
   dt export svg --storming OrderToCash --level design --resolved-hotspots hide -o open-questions.svg
   dt export svg --model --view map --all --heading -o map.svg
   dt export svg --model --context Sales Billing --level aggregates -o - > sales.svg`,

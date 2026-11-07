@@ -64,6 +64,7 @@ export {
     type MainFlow,
 } from './core/storming/flows.js';
 export { stormingViewKey } from './core/storming/graph.js';
+export { projectView } from './core/storming/render.js';
 
 // ---- core: the drawing of a laid-out graph, shared by the Live View's canvas and `dt export svg` ------------------
 export {

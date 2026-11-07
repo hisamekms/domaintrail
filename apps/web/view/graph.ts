@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { hideInDrawing, type LaidOutGraph } from '@domaintrail/visualization';
+import type { LaidOutGraph } from '@domaintrail/visualization';
 import type { BaseView, StormingView, ViewPayload } from '@domaintrail/visualization/protocol';
 import { fetchServer } from '../app/sign-in';
-import { shownHidden, shownStorming, stormingGraph } from '../storming';
+import { drawnAs, shownFocus, shownHidden, shownStorming, stormingGraph } from '../storming';
 import { useCompactGraph } from './compact';
 import { isCanvas, type View } from './navigation';
 import type { ViewSettings } from './settings';
@@ -25,8 +25,8 @@ export interface ViewGraph {
     noneChecked: boolean;
     /**
      * The graph of the current view: null when it has none, undefined while a focused view loads. While compact
-     * (`compact`), its compact layout once the page has it. A storming's, drawn without what the 絞り込み hides in the
-     * drawing (`hideInDrawing`: the resolved hotspots), in the same layout.
+     * (`compact`), its compact layout once the page has it. A storming's, drawn as its choice draws it in the same
+     * layout (`drawnAs`: one main flow, the exception emphasized, without what the 絞り込み hides).
      */
     graph: LaidOutGraph | null | undefined;
     /** The graph of `v` in the payload `p` (the current one, or the baseline for the ghosts of removed elements). */
@@ -43,7 +43,7 @@ const FOCUS_KEPT = 6;
  * asked for once and kept, and the normal layout is shown until it comes.
  */
 export function useViewGraph(current: ViewPayload | null, view: View, settings: ViewSettings, stormings: readonly StormingView[], compact: boolean): ViewGraph {
-    const { structureLevel, structureContexts, hiddenContexts, mapAll, stormingChoice } = settings;
+    const { structureLevel, structureContexts, hiddenContexts, mapAll, stormingChoice, stormingFocus } = settings;
     const shown = shownStorming(stormings, stormingChoice);
     const stormingShown = view.kind === 'storming' ? stormingGraph(stormings, stormingChoice) : undefined;
 
@@ -121,19 +121,19 @@ export function useViewGraph(current: ViewPayload | null, view: View, settings: 
     const pushed = view.kind === 'storming' ? stormingShown?.graph : graphFor(current, view);
     // a focused view is fetched in the spacing wanted; the others are pushed in the normal one
     const laidOut = useCompactGraph(pushed, compact && !(focusKey && view.kind === 'structure'));
-    const hiddenInDrawing = view.kind === 'storming' ? shownHidden(stormings, stormingChoice) : NOTHING_HIDDEN;
-    const hiddenKey = [...hiddenInDrawing].join();
+    const storming = view.kind === 'storming';
+    const drawnKey = storming
+        ? [shown?.main?.id ?? '', shownFocus(stormings, stormingChoice, stormingFocus) ?? '', ...shownHidden(stormings, stormingChoice)].join('|')
+        : '';
     const graph = useMemo(
-        () => (laidOut && hiddenInDrawing.size ? hideInDrawing(laidOut, hiddenInDrawing) : laidOut),
-        // the key stands for what is hidden
+        () => (laidOut && storming ? drawnAs(stormings, stormingChoice, stormingFocus, laidOut) : laidOut),
+        // the key stands for the main flow, the exception emphasized and what is hidden
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [laidOut, hiddenKey],
+        [laidOut, drawnKey],
     );
 
     return { shown, stormingShown, checked, hidden, focusKey, noneChecked, graph, graphFor, cameraKey };
 }
-
-const NOTHING_HIDDEN: ReadonlySet<never> = new Set();
 
 /** A focused Structure View's key among the fetched ones: its focus key and its spacing. */
 export const focusLayoutKey = (focusKey: string, compact: boolean): string => (compact ? `${focusKey}|compact` : focusKey);

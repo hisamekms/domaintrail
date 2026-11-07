@@ -8,7 +8,7 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
     "nodes": 5,
     "sha": "e071f5575a6c3fc9",
   },
-  "all": "621978288a0598ea",
+  "all": "f947190a5392e65b",
   "base": null,
   "baseline": {
     "kind": "previous",
@@ -153,45 +153,6 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
             "sha": "2df505ef0b5807d1",
           },
         },
-        "big-picture|CancelAfterConfirm": {
-          "graph": {
-            "edges": 5,
-            "id": "storming:OrderToCash:big-picture:CancelAfterConfirm",
-            "nodes": 8,
-            "sha": "dbc87b86663e28db",
-          },
-          "render": {
-            "edges": 5,
-            "nodes": 8,
-            "sha": "9f22abdf591e6e35",
-          },
-        },
-        "big-picture|Normal": {
-          "graph": {
-            "edges": 6,
-            "id": "storming:OrderToCash:big-picture:Normal",
-            "nodes": 7,
-            "sha": "305c9b1259f7ca4e",
-          },
-          "render": {
-            "edges": 6,
-            "nodes": 7,
-            "sha": "a9972c73d5b662fb",
-          },
-        },
-        "big-picture|PaymentRetry": {
-          "graph": {
-            "edges": 8,
-            "id": "storming:OrderToCash:big-picture:PaymentRetry",
-            "nodes": 9,
-            "sha": "9566c7ac374e26b3",
-          },
-          "render": {
-            "edges": 8,
-            "nodes": 9,
-            "sha": "9892fc5d9b1ee294",
-          },
-        },
         "design-level|": {
           "graph": {
             "edges": 39,
@@ -203,45 +164,6 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
             "edges": 39,
             "nodes": 37,
             "sha": "4c8ad39aea7bb14a",
-          },
-        },
-        "design-level|CancelAfterConfirm": {
-          "graph": {
-            "edges": 20,
-            "id": "storming:OrderToCash:design-level:CancelAfterConfirm",
-            "nodes": 22,
-            "sha": "a096619736a399b0",
-          },
-          "render": {
-            "edges": 20,
-            "nodes": 22,
-            "sha": "bf55fe8722c2e959",
-          },
-        },
-        "design-level|Normal": {
-          "graph": {
-            "edges": 28,
-            "id": "storming:OrderToCash:design-level:Normal",
-            "nodes": 27,
-            "sha": "d7fe327572d76ac7",
-          },
-          "render": {
-            "edges": 28,
-            "nodes": 27,
-            "sha": "afcdf5a96e7b21ce",
-          },
-        },
-        "design-level|PaymentRetry": {
-          "graph": {
-            "edges": 31,
-            "id": "storming:OrderToCash:design-level:PaymentRetry",
-            "nodes": 30,
-            "sha": "c15c943553f71735",
-          },
-          "render": {
-            "edges": 31,
-            "nodes": 30,
-            "sha": "a1f11b71bfd50b98",
           },
         },
       },
@@ -275,32 +197,6 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
             "sha": "b5d7ec4b0484e92e",
           },
         },
-        "big-picture|Accepted": {
-          "graph": {
-            "edges": 4,
-            "id": "storming:Returns:big-picture:Accepted",
-            "nodes": 5,
-            "sha": "ab40a86ce3e5180c",
-          },
-          "render": {
-            "edges": 4,
-            "nodes": 5,
-            "sha": "0653e6ca74018914",
-          },
-        },
-        "big-picture|Rejected": {
-          "graph": {
-            "edges": 4,
-            "id": "storming:Returns:big-picture:Rejected",
-            "nodes": 7,
-            "sha": "129525c789584eac",
-          },
-          "render": {
-            "edges": 4,
-            "nodes": 7,
-            "sha": "b8d222353ee246f6",
-          },
-        },
         "design-level|": {
           "graph": {
             "edges": 6,
@@ -312,32 +208,6 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
             "edges": 5,
             "nodes": 9,
             "sha": "bc82601f14400e7f",
-          },
-        },
-        "design-level|Accepted": {
-          "graph": {
-            "edges": 4,
-            "id": "storming:Returns:design-level:Accepted",
-            "nodes": 5,
-            "sha": "0e5545874456aa03",
-          },
-          "render": {
-            "edges": 4,
-            "nodes": 5,
-            "sha": "327259e56e3a010e",
-          },
-        },
-        "design-level|Rejected": {
-          "graph": {
-            "edges": 4,
-            "id": "storming:Returns:design-level:Rejected",
-            "nodes": 7,
-            "sha": "bb75beab73da7d9a",
-          },
-          "render": {
-            "edges": 4,
-            "nodes": 7,
-            "sha": "d2d10d04409d206c",
           },
         },
       },
@@ -487,7 +357,7 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
     "nodes": 5,
     "sha": "e071f5575a6c3fc9",
   },
-  "all": "8be15bb7d759d83b",
+  "all": "4e3cb18e499da653",
   "base": {
     "aggregates": {
       "edges": 2,
@@ -667,45 +537,6 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
             "sha": "2df505ef0b5807d1",
           },
         },
-        "big-picture|CancelAfterConfirm": {
-          "graph": {
-            "edges": 5,
-            "id": "storming:OrderToCash:big-picture:CancelAfterConfirm",
-            "nodes": 8,
-            "sha": "dbc87b86663e28db",
-          },
-          "render": {
-            "edges": 5,
-            "nodes": 8,
-            "sha": "9f22abdf591e6e35",
-          },
-        },
-        "big-picture|Normal": {
-          "graph": {
-            "edges": 6,
-            "id": "storming:OrderToCash:big-picture:Normal",
-            "nodes": 7,
-            "sha": "305c9b1259f7ca4e",
-          },
-          "render": {
-            "edges": 6,
-            "nodes": 7,
-            "sha": "a9972c73d5b662fb",
-          },
-        },
-        "big-picture|PaymentRetry": {
-          "graph": {
-            "edges": 8,
-            "id": "storming:OrderToCash:big-picture:PaymentRetry",
-            "nodes": 9,
-            "sha": "9566c7ac374e26b3",
-          },
-          "render": {
-            "edges": 8,
-            "nodes": 9,
-            "sha": "9892fc5d9b1ee294",
-          },
-        },
         "design-level|": {
           "graph": {
             "edges": 39,
@@ -717,45 +548,6 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
             "edges": 39,
             "nodes": 37,
             "sha": "4c8ad39aea7bb14a",
-          },
-        },
-        "design-level|CancelAfterConfirm": {
-          "graph": {
-            "edges": 20,
-            "id": "storming:OrderToCash:design-level:CancelAfterConfirm",
-            "nodes": 22,
-            "sha": "a096619736a399b0",
-          },
-          "render": {
-            "edges": 20,
-            "nodes": 22,
-            "sha": "bf55fe8722c2e959",
-          },
-        },
-        "design-level|Normal": {
-          "graph": {
-            "edges": 28,
-            "id": "storming:OrderToCash:design-level:Normal",
-            "nodes": 27,
-            "sha": "d7fe327572d76ac7",
-          },
-          "render": {
-            "edges": 28,
-            "nodes": 27,
-            "sha": "afcdf5a96e7b21ce",
-          },
-        },
-        "design-level|PaymentRetry": {
-          "graph": {
-            "edges": 31,
-            "id": "storming:OrderToCash:design-level:PaymentRetry",
-            "nodes": 30,
-            "sha": "c15c943553f71735",
-          },
-          "render": {
-            "edges": 31,
-            "nodes": 30,
-            "sha": "a1f11b71bfd50b98",
           },
         },
       },
@@ -789,32 +581,6 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
             "sha": "b5d7ec4b0484e92e",
           },
         },
-        "big-picture|Accepted": {
-          "graph": {
-            "edges": 4,
-            "id": "storming:Returns:big-picture:Accepted",
-            "nodes": 5,
-            "sha": "ab40a86ce3e5180c",
-          },
-          "render": {
-            "edges": 4,
-            "nodes": 5,
-            "sha": "0653e6ca74018914",
-          },
-        },
-        "big-picture|Rejected": {
-          "graph": {
-            "edges": 4,
-            "id": "storming:Returns:big-picture:Rejected",
-            "nodes": 7,
-            "sha": "129525c789584eac",
-          },
-          "render": {
-            "edges": 4,
-            "nodes": 7,
-            "sha": "b8d222353ee246f6",
-          },
-        },
         "design-level|": {
           "graph": {
             "edges": 6,
@@ -826,32 +592,6 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
             "edges": 5,
             "nodes": 9,
             "sha": "bc82601f14400e7f",
-          },
-        },
-        "design-level|Accepted": {
-          "graph": {
-            "edges": 4,
-            "id": "storming:Returns:design-level:Accepted",
-            "nodes": 5,
-            "sha": "0e5545874456aa03",
-          },
-          "render": {
-            "edges": 4,
-            "nodes": 5,
-            "sha": "327259e56e3a010e",
-          },
-        },
-        "design-level|Rejected": {
-          "graph": {
-            "edges": 4,
-            "id": "storming:Returns:design-level:Rejected",
-            "nodes": 7,
-            "sha": "bb75beab73da7d9a",
-          },
-          "render": {
-            "edges": 4,
-            "nodes": 7,
-            "sha": "d2d10d04409d206c",
           },
         },
       },

@@ -358,13 +358,9 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
                 const stages = orderStages(storming).stages.map((st) => ({ id: st.id, ...(st.label !== undefined && { label: st.label }) }));
                 const byKey: StormingView['views'] = {};
                 for (const level of VIEW_LEVELS) {
-                    const whole: ViewOptions[] = [{ level }, ...stages.map((st) => ({ level, stageId: st.id }))];
-                    const scopes: ViewOptions[] = [
-                        ...whole,
-                        ...timelines.map((t) => ({ level, timelineId: t.id })),
-                        // the integrated canvas and the stages without their exceptions (「例外を表示」 off)
-                        ...(withExceptions ? whole.map((o): ViewOptions => ({ ...o, hidden: ['exceptions'] })) : []),
-                    ];
+                    // the canvas of every flow, and without the exceptions' layer: one main flow and an exception
+                    // emphasized are drawn in the same layout (`flowInDrawing`), never laid out of their own
+                    const scopes: ViewOptions[] = [{ level }, ...(withExceptions ? [{ level, hidden: ['exceptions'] } satisfies ViewOptions] : [])];
                     for (const options of scopes) {
                         const render = projectView(storming, options);
                         byKey[stormingViewKey(options)] = { render, graph: await layoutStorming(render, storming) };

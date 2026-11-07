@@ -10,7 +10,8 @@ import { followedFirst } from './collab-menu';
 import { aiToggle, approvedProposalsOf, followedPage, FollowFrame, followeeColor, FollowToggle, personMove, presentParticipants } from './follow';
 import { ParticipantsList } from './participants';
 import { cameraBounds, participantColor, sameCamera } from './presence';
-import type { ParticipantRow, ViewScope } from './views';
+import { openViewTarget, type ParticipantRow, type ViewScope } from './views';
+import type { StormingChoice } from '../storming';
 
 const storming = (stormingId: string, layoutKey = `${stormingId}@1`): ViewLocation => ({ kind: 'dtes', stormingId, level: 'big-picture', layoutKey });
 const scope: ViewScope = {
@@ -45,6 +46,43 @@ describe("following a participant's page", () => {
         expect(personMove({ location: { kind: 'dt', viewKey: 'structure:overview', layoutKey: 's@1' } }, storming('Dispatch'), scope, false)).toEqual({
             view: { kind: 'structure', level: 'overview' },
         });
+    });
+
+    test('their timeline and exceptions’ layer too; what this page emphasizes and hides is its own', () => {
+        const at = (extra: Pick<Extract<ViewLocation, { kind: 'dtes' }>, 'timelineId' | 'exceptions'>): ViewLocation => ({
+            kind: 'dtes',
+            stormingId: 'Dispatch',
+            level: 'big-picture',
+            layoutKey: 'Dispatch@1',
+            ...extra,
+        });
+        const withTimeline: ViewScope = { ...scope, stormings: [{ id: 'Dispatch', label: '配車', timelines: [{ id: 'Collect' }] }] };
+        expect(personMove({ location: at({ timelineId: 'Collect', exceptions: false }), camera }, at({}), withTimeline, false)).toEqual({
+            view: { kind: 'storming', stormingId: 'Dispatch', level: 'big-picture', timelineId: 'Collect', exceptions: false },
+        });
+        const choices: StormingChoice[] = [];
+        const to = {
+            setView: () => {},
+            settings: {
+                stormingChoice: {
+                    stormingId: 'Returns',
+                    level: 'design-level',
+                    timelines: { Dispatch: 'Old' },
+                    hidden: ['resolvedHotspots'],
+                } satisfies StormingChoice,
+                setStormingChoice: (c: StormingChoice) => void choices.push(c),
+                setMapAll: () => {},
+                setStructureLevel: () => {},
+                setStructureContexts: () => {},
+                setHiddenContexts: () => {},
+            },
+        };
+        openViewTarget({ kind: 'storming', stormingId: 'Dispatch', level: 'big-picture', timelineId: 'Collect', exceptions: false }, to);
+        openViewTarget({ kind: 'storming', stormingId: 'Dispatch', level: 'big-picture' }, to);
+        expect(choices).toEqual([
+            { stormingId: 'Dispatch', level: 'big-picture', timelines: { Dispatch: 'Collect' }, hidden: ['exceptions', 'resolvedHotspots'] },
+            { stormingId: 'Dispatch', level: 'big-picture', timelines: {}, hidden: ['resolvedHotspots'] },
+        ]);
     });
 
     test('their 詰めて表示 too, so that the same layout takes their camera', () => {
