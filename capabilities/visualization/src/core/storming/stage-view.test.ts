@@ -797,6 +797,88 @@ describe('lines at Design Level: only what the placement cannot show, each sayin
     });
 });
 
+describe('the line into an exception’s lane at Design Level, when the design already joins its events (ADR 0032 §15)', () => {
+    /** A storming whose exception branches off after A, its first event X decided by `decider` from what A shows. */
+    const storming = (decider: string): string => `storming L {
+  event A
+  event B
+  event C
+  event X
+  actor Manager
+  aggregate Request
+  readmodel Requests { from A }
+  command Ask { emits A }
+  command Decide {
+${decider}
+    handledBy Request
+    emits B, X
+  }
+  stage S {
+    timeline Main {
+      A
+      B
+      C
+    }
+    exception Rejected "却下" {
+      A
+      X
+      then C
+    }
+  }
+}
+`;
+    const branch = (graph: ReturnType<typeof renderToGraph>) => graph.edges.find((e) => e.relation?.kind === 'branches')!;
+    const rejoin = (graph: ReturnType<typeof renderToGraph>) => graph.edges.find((e) => e.kind === 'esRejoin')!;
+
+    test('not drawn when a chain of lines joins them (A → Requests → Manager → Decide → Request → X); its label stays', async () => {
+        const s = await parse(storming('    by Manager\n    reads Requests'));
+        const graph = renderToGraph(projectView(s, DL), s);
+        expect(branch(graph)).toMatchObject({ hidden: true, labelDrawn: true });
+        expect(branch(graph).label?.ja.label).toBe('却下');
+        // the `then` is drawn as before
+        expect(rejoin(graph).hidden).toBeUndefined();
+        // still laid out: its label has its place
+        expect(layoutGrid(graph).edgeLayout[branch(graph).id]?.label).toBeDefined();
+    });
+
+    test('drawn when nothing joins them (the actor does not look at what A shows); at Big Picture, always', async () => {
+        const s = await parse(storming('    by Manager'));
+        const graph = renderToGraph(projectView(s, DL), s);
+        expect(branch(graph).hidden).toBeUndefined();
+        expect(branch(graph).labelDrawn).toBeUndefined();
+        expect(rejoin(graph).hidden).toBeUndefined();
+        const joined = await parse(storming('    by Manager\n    reads Requests'));
+        const big = renderToGraph(projectView(joined, BP), joined);
+        expect(branch(big).hidden).toBeUndefined();
+        expect(rejoin(big).hidden).toBeUndefined();
+    });
+
+    test('not through another event: a chain through B does not join A to X', async () => {
+        const s = await parse(`storming L {
+  event A
+  event B
+  event X
+  actor Clerk
+  policy OnB { on B issues Decide }
+  command Go { by Clerk on A emits B }
+  command Decide { emits X }
+  stage S {
+    timeline Main {
+      A
+      B
+    }
+    exception Rejected {
+      A
+      X
+    }
+  }
+}
+`);
+        const graph = renderToGraph(projectView(s, DL), s);
+        expect(branch(graph).hidden).toBeUndefined();
+    });
+});
+
 describe('without the exceptions (「例外を表示」 off)', () => {
     const text = `storming T {
   event A

@@ -255,11 +255,14 @@ export const edgeClassName = (p: EdgeProps): string => `de de-${p.kind} de-tone-
 
 /**
  * An edge drawn exactly along the route computed by the layout engine (including bends and label position), in the
- * coordinates of its `<svg>` (the item's origin): a wide transparent hit path, the line, its heads and its label.
+ * coordinates of its `<svg>` (the item's origin): a wide transparent hit path, the line, its heads and its label (only
+ * the label when the line is not drawn, `EdgeProps.lineless`).
  */
 export function EdgeContent({ p }: { p: EdgeProps }): ReactNode {
     const { points, kind, label, sub, faded, lx, ly, lw, lh, scale } = p;
     if (points.length < 2) return null;
+    // a line not drawn: its label alone, where it is laid out (an exception's lane's, which its button over the canvas presses)
+    if (p.lineless) return label && lw > 0 ? <EdgeLabel {...{ label, sub, faded, lx, ly, lw, lh, scale }} /> : null;
     const d = edgeOutlinePath(points);
     const [a, b] = [points[points.length - 2], points[points.length - 1]];
     const [s0, s1] = [points[0], points[1]];

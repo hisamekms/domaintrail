@@ -2411,7 +2411,9 @@ command; such an actor is not stuck on its command either, and when the event fe
 at, the path through the read model says it and no event → actor line is drawn beside it. A command goes to its handler, which decides and emits
 the command's events, so the `emits` arrows start at the handler; a command without `handledBy` emits them itself.
 At Design Level no line joins two events in time order where the placement shows it (the steps left to right): only an
-exception's branch and its `then` are drawn (Big Picture draws the time order). An issuer or handler an open hotspot
+exception's branch and its `then` are drawn, and the branch only where the design's lines (event → read model → issuer
+→ command → handler → event, say) do not already join its two events — the exception's label stays either way (Big
+Picture draws the time order). An issuer or handler an open hotspot
 leaves undecided is an empty dashed note where it would stand («未決定» 誰が処理する？), so a silenced gap stays in view;
 `dt check` lists them too. An
 event that arrives `from` an external system has that system before it. A hotspot is stuck on top of the sticky it is

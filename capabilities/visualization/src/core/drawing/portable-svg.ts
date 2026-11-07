@@ -814,22 +814,24 @@ class Drawing {
         return tag('g', { opacity: p.change === 'removed' ? 0.55 : undefined }, out.join(''));
     }
 
-    /** An edge along its route, its head and its label (with a halo of the paper, drawn under it). */
+    /** An edge along its route, its head and its label (with a halo of the paper, drawn under it); only the label when lineless. */
     edge(x: number, y: number, p: EdgeProps): string {
         if (p.points.length < 2) return '';
         const look = edgeLook(p.kind, p.tone, p.resolved);
         const d = p.points.map((pt, i) => `${i ? 'L' : 'M'}${num(x + pt.x)},${num(y + pt.y)}`).join(' ');
-        const out = [
-            tag('path', {
-                d,
-                fill: 'none',
-                ...paint('stroke', this.c(look.stroke)),
-                'stroke-width': look.width,
-                'stroke-dasharray': look.dash,
-                'marker-end': isUndirectedEdge(p.kind) ? undefined : this.markers.arrow(look.head),
-                'marker-start': p.kind === 'owns' ? this.markers.diamond() : undefined,
-            }),
-        ];
+        const out = p.lineless
+            ? []
+            : [
+                  tag('path', {
+                      d,
+                      fill: 'none',
+                      ...paint('stroke', this.c(look.stroke)),
+                      'stroke-width': look.width,
+                      'stroke-dasharray': look.dash,
+                      'marker-end': isUndirectedEdge(p.kind) ? undefined : this.markers.arrow(look.head),
+                      'marker-start': p.kind === 'owns' ? this.markers.diamond() : undefined,
+                  }),
+              ];
         if (p.label && p.lw > 0) out.push(this.edgeLabel(x, y, p, look));
         return tag('g', {}, out.join(''));
     }

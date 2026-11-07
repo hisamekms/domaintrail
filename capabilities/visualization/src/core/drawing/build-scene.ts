@@ -171,7 +171,8 @@ export function buildScene(graph: LaidOutGraph, opts: RenderOptions): Scene {
     const resolved = new Set(graph.nodes.filter((n) => n.status === 'resolved').map((n) => n.id));
     const edges: SceneEdge[] = [];
     for (const e of graph.edges) {
-        if (e.hidden) continue;
+        // a line not drawn; only its label, when it is drawn without its line (`GraphEdge.labelDrawn`)
+        if (e.hidden && !(e.labelDrawn && e.label)) continue;
         const owner = storming ? (elementOf.get(e.source) ?? e.source) : edgeOwner(e, structure);
         // an element's error is told by its mark and text (issue #33 §5); its lines keep their kind's colour
         const item = edgeItem(graph, e, opts, owner, toneOf(change(owner)));
@@ -180,6 +181,7 @@ export function buildScene(graph: LaidOutGraph, opts: RenderOptions): Scene {
             ...item.props,
             ...(e.kind === 'esHotspot' && resolved.has(e.source) && { resolved: true as const }),
             ...(e.dimmed && { dimmed: true as const }),
+            ...(e.hidden && { lineless: true as const }),
         };
         edges.push({ ...item, props });
     }

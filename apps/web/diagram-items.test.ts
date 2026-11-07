@@ -6,6 +6,7 @@ import {
     badgeWidth,
     DIAG_RADIUS,
     edgeClassName,
+    EdgeContent,
     EdgeMarks,
     edgeOutlinePath,
     NodeContent,
@@ -163,5 +164,35 @@ describe('the check of the hidden resolved hotspots on a sticky (ADR 0032 §10)'
         expect(pressable).toContain('dn-settled-chosen');
         expect(pressable).toContain('role="button"');
         expect(html({ ...event, settled: undefined })).not.toContain('dn-settled-mark');
+    });
+});
+
+describe('a line drawn without its line (ADR 0032 §15)', () => {
+    const edge: EdgeProps = {
+        points: [
+            { x: 0, y: 0 },
+            { x: 100, y: 0 },
+        ],
+        kind: 'esException',
+        label: '却下',
+        sub: '',
+        faded: false,
+        scale: 1,
+        lx: 30,
+        ly: -10,
+        lw: 40,
+        lh: 20,
+        tone: 'normal',
+    };
+    const html = (p: EdgeProps): string => renderToStaticMarkup(createElement('svg', null, createElement(EdgeContent, { p })));
+
+    test('draws its label alone, where it is laid out: no line, head nor hit path', () => {
+        const alone = html({ ...edge, lineless: true });
+        expect(alone).toContain('>却下</text>');
+        expect(alone).toContain('x="50"');
+        expect(alone).not.toContain('de-line');
+        expect(alone).not.toContain('de-head');
+        expect(alone).not.toContain('de-hit');
+        expect(html(edge)).toContain('de-line');
     });
 });
