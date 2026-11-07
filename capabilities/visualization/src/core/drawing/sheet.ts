@@ -2,6 +2,7 @@
 // Live View's toolbar shows them) and the name of its file. Pure: the caller describes what the diagram shows
 // (`SheetSubject`), and these say it.
 import { shownLabel, type DisplayMode, type StructureLevel } from '../graph/ir.js';
+import { mainFlows } from '../storming/flows.js';
 import { hides, type ViewLevel, type ViewOptions } from '../storming/ir.js';
 import type { DiagramTexts } from './texts.js';
 
@@ -20,11 +21,8 @@ export interface Named {
     label?: string | undefined;
 }
 
-/** The part of a storming an Event Storming view shows: everything, a stage, or one timeline. */
-export type StormingScope =
-    | { kind: 'all' }
-    | { kind: 'stage'; stage: Named }
-    | { kind: 'timeline'; timeline: Named; exception: boolean; stage?: Named | undefined };
+/** The timeline an Event Storming view's canvas carries: every flow, or one main flow. */
+export type StormingScope = { kind: 'all' } | { kind: 'timeline'; timeline: Named };
 
 /** What a diagram shows, as its view's toolbar sets it. */
 export type SheetSubject =
@@ -33,10 +31,10 @@ export type SheetSubject =
     | {
           view: 'storming';
           storming: Named;
-          /** Absent when the storming has no timelines (the toolbar has no timeline picker). */
+          /** Absent when the storming has one main flow at most (the toolbar has no timeline picker). */
           scope?: StormingScope | undefined;
           level: ViewLevel;
-          /** Whether the exceptions are drawn, when the storming has some and the view is not one timeline. */
+          /** Whether the exceptions' layer is included, when the storming has exceptions. */
           exceptions?: boolean | undefined;
       }
     | { view: 'states'; /** The aggregate: its ID (`Context.Name`), name and label. */ aggregate: Named & { name: string } };
@@ -47,7 +45,7 @@ const CONDITION = ' · ';
 /**
  * The line above a printed diagram (and an exported one, if asked): the workspace, the world, the view and what in it
  * is shown, then the conditions it is shown in, e.g. `ws › ドメインモデル › 構造図 · 詳細` or
- * `ws › イベントストーミング › 住民票 › コンビニでの発行 · デザインレベル · 例外を含む` (the storming world has one view).
+ * `ws › イベントストーミング › 住民票 › すべて · デザインレベル · 例外を含む` (the storming world has one view).
  * Names follow the display mode, as on the screen.
  */
 export function sheetHeading(workspace: string | undefined, subject: SheetSubject, t: DiagramTexts, mode: DisplayMode): string {
@@ -68,11 +66,7 @@ export function sheetHeading(workspace: string | undefined, subject: SheetSubjec
             crumbs.push(t.worlds.storming, name(subject.storming));
             const scope = subject.scope;
             if (scope?.kind === 'all') crumbs.push(t.allTimelines);
-            else if (scope?.kind === 'stage') crumbs.push(name(scope.stage));
-            else if (scope?.kind === 'timeline') {
-                const timeline = scope.exception ? t.exceptionTimeline(name(scope.timeline)) : name(scope.timeline);
-                crumbs.push(scope.stage ? t.stageTimeline(name(scope.stage), timeline) : timeline);
-            }
+            else if (scope?.kind === 'timeline') crumbs.push(name(scope.timeline));
             conditions.push(t.stormingLevels[subject.level].label);
             if (subject.exceptions !== undefined) conditions.push(subject.exceptions ? t.sheet.withExceptions : t.sheet.withoutExceptions);
             break;
@@ -106,8 +100,8 @@ export function exportFileName(workspace: string | undefined, subject: SheetSubj
             break;
         case 'storming': {
             const scope = subject.scope;
-            const part = !scope ? undefined : scope.kind === 'all' ? 'all' : scope.kind === 'stage' ? scope.stage.id : scope.timeline.id;
-            parts.push('storming', subject.storming.id, part, subject.level);
+            const part = !scope ? undefined : scope.kind === 'all' ? 'all' : scope.timeline.id;
+            parts.push('storming', subject.storming.id, part, subject.level, subject.exceptions === false ? 'without-exceptions' : undefined);
             break;
         }
         case 'states':
@@ -130,28 +124,18 @@ export interface StormingOutline {
     stages?: readonly Named[] | undefined;
 }
 
-/** What an Event Storming view of `storming` shows with `options` (its level and scope), as a sheet's subject. */
-export function stormingSheetSubject(storming: StormingOutline, options: ViewOptions): SheetSubject {
-    const stage = (id: string): Named => ({ id, label: storming.stages?.find((st) => st.id === id)?.label });
-    const timeline = options.timelineId === undefined ? undefined : storming.timelines.find((tl) => tl.id === options.timelineId);
-    const scope: StormingScope | undefined = !storming.timelines.length
-        ? undefined
-        : timeline
-          ? {
-                kind: 'timeline',
-                timeline: { id: timeline.id, label: timeline.label },
-                exception: timeline.exception === true,
-                stage: timeline.stageId === undefined ? undefined : stage(timeline.stageId),
-            }
-          : options.stageId !== undefined
-            ? { kind: 'stage', stage: stage(options.stageId) }
-            : { kind: 'all' };
+/**
+ * What an Event Storming view of `storming` shows with `options` (its level and whether the exceptions are laid out)
+ * and `main` (the main flow on its canvas; none: すべて), as a sheet's subject.
+ */
+export function stormingSheetSubject(storming: StormingOutline, options: ViewOptions, main?: Named): SheetSubject {
+    const flows = mainFlows(storming.timelines, storming.stages);
     const exceptions = storming.timelines.some((t) => t.exception);
     return {
         view: 'storming',
         storming: { id: storming.id, label: storming.label },
-        scope,
+        scope: flows.length < 2 ? undefined : main ? { kind: 'timeline', timeline: { id: main.id, label: main.label } } : { kind: 'all' },
         level: options.level,
-        exceptions: exceptions && !timeline ? !hides(options, 'exceptions') : undefined,
+        exceptions: exceptions ? !hides(options, 'exceptions') : undefined,
     };
 }

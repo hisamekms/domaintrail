@@ -7,7 +7,10 @@ import { ContextList } from '../context-picker';
 import { useLang, useT } from '../i18n';
 import { type CatalogFilter, contextLabels, nameIn } from '../model-utils';
 import type { LegendView } from '../legend';
-import { StormingFilter, StormingToolbar } from '../storming';
+import { focusOn, shownFocus, shownStorming, StormingFilter, StormingToolbar, type ScopeView } from '../storming';
+import { exceptionSpan } from '@domaintrail/visualization';
+import { nodeItemId, unionRects } from '../scene';
+import { drawnLanes, escapeEnds, ExceptionLanes } from './exception-lanes';
 import { applyTheme, type Theme } from '../theme';
 import { workspaceName } from '../app/health';
 import type { Legends } from '../app/legends';
@@ -64,6 +67,11 @@ export interface Workspace {
      * (per viewer), set by the session; and the stormings the page saw before, where removed stickies are found.
      */
     marks: { shown: CanvasMarks | null; set: (marks: CanvasMarks | null) => void; snapshots: readonly (readonly StormingView[])[] };
+    /**
+     * Shows a storming as a toolbar, the navigator or a link asks it (`ScopeView`): its choice and the exception
+     * emphasized (through the reader's settings), then the camera to a stage's frame or an exception's path, once drawn.
+     */
+    showStorming: (view: ScopeView) => void;
 }
 
 /** How many earlier versions of the stormings a page keeps, to draw removed stickies where they were. */
@@ -118,6 +126,55 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
 
     const onMount = useCallback((c: DiagramCanvas) => setCanvas(c), []);
 
+    // the camera to a stage's frame or an exception's path, once the view asked for is drawn
+    const [frame, setFrame] = useState<ScopeView['frame'] & { at: number }>();
+    const stormingRender = viewGraph.stormingShown?.render;
+    useEffect(() => {
+        if (!frame || !canvas || !stormingRender) return;
+        const ids = 'stage' in frame ? [`st:${frame.stage}`] : exceptionSpan(stormingRender, frame.exception);
+        let done = false;
+        const id = requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+                const rects = ids.flatMap((n) => canvas.itemBounds(nodeItemId(n)) ?? []);
+                const bounds = rects.length ? unionRects(rects) : undefined;
+                if (bounds) canvas.fitBounds(bounds, { maxZoom: 1, inset: 48, animate: true });
+                done = true;
+                setFrame(undefined);
+            }),
+        );
+        return () => {
+            if (!done) cancelAnimationFrame(id);
+        };
+    }, [frame, canvas, stormingRender, viewGraph.graph]);
+    const { setStormingChoice, setStormingFocus, stormingChoice } = settings;
+    const showStorming = useCallback(
+        (v: ScopeView): void => {
+            if (v.choice !== stormingChoice) setStormingChoice(v.choice);
+            setStormingFocus(v.focus);
+            if (v.frame) setFrame({ ...v.frame, at: Date.now() });
+        },
+        [stormingChoice, setStormingChoice, setStormingFocus],
+    );
+    // the exception emphasized is close to a selection: Escape ends it once no sticky is selected (a second Escape),
+    // and a press on the canvas's empty space ends both
+    const focused = nav.view.kind === 'storming' && shownFocus(stormings, stormingChoice, settings.stormingFocus) !== undefined;
+    useEffect(() => {
+        if (!canvas || !focused) return;
+        const el = canvas.container();
+        const onKey = (e: KeyboardEvent): void => {
+            if (e.key === 'Escape' && escapeEnds(canvas.selectedIds().length) === 'emphasis') setStormingFocus(null);
+        };
+        const onClick = (e: MouseEvent): void => {
+            if (e.target instanceof Element && e.target.closest('.react-flow__pane')) setStormingFocus(null);
+        };
+        el.addEventListener('keydown', onKey, true);
+        el.addEventListener('click', onClick);
+        return () => {
+            el.removeEventListener('keydown', onKey, true);
+            el.removeEventListener('click', onClick);
+        };
+    }, [canvas, focused, setStormingFocus]);
+
     return {
         canvas: readerCanvas,
         onMount,
@@ -131,6 +188,7 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
         exportOptions: { options: exportOptions, setOptions: setExportOptions },
         marks: { shown: marks, set: setMarks, snapshots },
         follow,
+        showStorming,
     };
 }
 
@@ -211,6 +269,7 @@ export function ViewWorkspace(props: {
                 <EdgeHint canvas={canvas} view={legendView} />
                 {view.kind === 'storming' && (
                     <>
+                        <StormingLanes workspace={workspace} mode={mode} />
                         <LinePopover canvas={canvas} />
                         <OffscreenPointers canvas={canvas} />
                     </>
@@ -308,7 +367,9 @@ export function ViewBar(props: {
                     <CatalogSearch filter={catalogFilter} onChange={setCatalogFilter} />
                 </ToolbarSubject>
             )}
-            {bar === 'storming' && <StormingToolbar stormings={stormings} choice={stormingChoice} mode={mode} onChange={setStormingChoice} />}
+            {bar === 'storming' && (
+                <StormingToolbar stormings={stormings} choice={stormingChoice} focus={settings.stormingFocus} mode={mode} onView={workspace.showStorming} />
+            )}
             <ToolbarEnd>
                 {bar === 'contextMap' && (
                     <FilterPopover count={activeFilterCount({ view: 'contextMap', mapAll })} onClear={() => setMapAll(false)}>
@@ -367,5 +428,26 @@ export function ViewBar(props: {
                 )}
             </ToolbarEnd>
         </div>
+    );
+}
+
+/** The exceptions' lanes over the storming shown (`ExceptionLanes`): a label pressed emphasizes its exception, or ends it. */
+function StormingLanes({ workspace, mode }: { workspace: Workspace; mode: DisplayMode }): ReactNode {
+    const { canvas, stormings, settings, viewGraph } = workspace;
+    const { stormingChoice: choice, stormingFocus } = settings;
+    const shown = shownStorming(stormings, choice);
+    const render = viewGraph.stormingShown?.render;
+    const graph = viewGraph.graph;
+    if (!shown || !render || !graph) return null;
+    const lanes = drawnLanes(graph, render, shown.storming.timelines);
+    const name = (id: string): string => nameIn(mode, id, shown.storming.timelines.find((t) => t.id === id)?.label);
+    return (
+        <ExceptionLanes
+            canvas={canvas}
+            lanes={lanes}
+            focus={shownFocus(stormings, choice, stormingFocus)}
+            name={name}
+            onPress={(id) => (id === undefined ? settings.setStormingFocus(null) : workspace.showStorming(focusOn(stormings, choice, shown.storming.id, id)))}
+        />
     );
 }

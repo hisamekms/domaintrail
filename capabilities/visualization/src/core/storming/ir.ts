@@ -215,6 +215,12 @@ export interface StageGrid {
     looseRow?: number;
     /** The edges into the first step of an exception's lane, with the exceptions they start (their labels caption it). */
     captions: Record<string, string[]>;
+    /**
+     * The step each element note stands at (`chains.ts`'s slot): the node of an event or a group step, by the note's
+     * render node ID; a note of no event in view stands at none. A main flow or an exception's path drawn in the layout
+     * of every flow (`flows.ts`) keeps a note with its step.
+     */
+    slots: Record<string, string>;
 }
 
 /** One view of a storming. Canonical: the same storming and options give the same graph, whatever the declaration order. */

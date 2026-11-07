@@ -10,7 +10,7 @@ export { exportFileName, sheetHeading, slug, type Named, type SheetSubject, type
 /** What the Event Storming view shows for `choice` (as `shownStorming` picks it), as a sheet's subject. */
 export function stormingSubject(stormings: readonly StormingView[], choice: StormingChoice): SheetSubject | undefined {
     const shown = shownStorming(stormings, choice);
-    return shown && stormingSheetSubject(shown.storming, shown.options);
+    return shown && stormingSheetSubject(shown.storming, shown.options, shown.main);
 }
 
 /** What a canvas view of the workspace shows, as its toolbar sets it (none for the catalog, or nothing to show). */

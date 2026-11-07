@@ -44,17 +44,11 @@ describe('the Live View of a workspace with stormings', () => {
             { id: 'Normal', label: '通常キャンセル' },
             { id: 'Failure', label: '車両解放失敗' },
         ]);
-        expect(Object.keys(view.views).sort()).toEqual([
-            'big-picture|',
-            'big-picture|Failure',
-            'big-picture|Normal',
-            'design-level|',
-            'design-level|Failure',
-            'design-level|Normal',
-        ]);
+        // the canvas of every flow at each level: one main flow is drawn in it (ADR 0032 §11)
+        expect(Object.keys(view.views).sort()).toEqual(['big-picture|', 'design-level|']);
         for (const [key, { render, graph }] of Object.entries(view.views)) {
             expect(stormingViewKey(render.options)).toBe(key);
-            // one graph per storming, level and timeline, as the page receives it
+            // one graph per storming and level, as the page receives it
             expect(graph.id).toBe(`storming:${view.id}:${render.options.level}:${render.options.timelineId ?? '*'}`);
             expect(Object.keys(graph.nodeLayout).sort()).toEqual(graph.nodes.map((n) => n.id).sort());
         }
@@ -72,7 +66,6 @@ describe('the Live View of a workspace with stormings', () => {
         expect(ids('big-picture|').filter((id) => id.startsWith('n:PaymentGateway'))).toEqual([]);
         const events = (key: string) => view.views[key].graph.nodes.filter((n) => n.kind === 'esEvent').map((n) => n.id);
         expect(events('big-picture|')).toEqual(events('design-level|'));
-        expect(ids('big-picture|Failure')).toEqual(['n:Compensation', 't:e:ShipmentCancelled', 't:e:ShipmentCancelled>e:ReleaseFailed']);
     });
 
     test('keeps a storming whose file stops parsing, as stale, and lays out an edit incrementally', async () => {
@@ -136,25 +129,17 @@ describe('the Live View of a storming with stages', () => {
             exception: true,
         });
         const keys = Object.keys(view.views);
-        for (const key of [
-            'big-picture|',
-            'big-picture|@Issuance',
-            'design-level|@Submission',
-            'big-picture|PinLockedBranch',
-            'big-picture|-exceptions',
-            'design-level|@Issuance-exceptions',
-        ])
-            expect(keys).toContain(key);
-        // a timeline's view is never without its exceptions
-        expect(keys).not.toContain('big-picture|PinLockedBranch-exceptions');
+        for (const key of ['big-picture|', 'big-picture|-exceptions', 'design-level|', 'design-level|-exceptions']) expect(keys).toContain(key);
+        // no stage nor timeline has a view of its own (ADR 0032 §11)
+        expect(keys).toHaveLength(4);
         for (const [key, { render, graph }] of Object.entries(view.views)) {
             expect(stormingViewKey(render.options)).toBe(key);
             expect(Object.keys(graph.nodeLayout).sort()).toEqual(graph.nodes.map((n) => n.id).sort());
-            // the integrated canvas and the stages on a grid; a timeline laid out as ever
-            expect(!!graph.grid).toBe(render.options.timelineId === undefined);
+            // on a grid
+            expect(!!graph.grid).toBe(true);
         }
         const again = (await viewService(dir).refresh()).stormings[0]!;
         expect(again.views['big-picture|'].graph.nodeLayout).toEqual(view.views['big-picture|'].graph.nodeLayout);
-        expect(again.views['big-picture|@Issuance'].graph.edgeLayout).toEqual(view.views['big-picture|@Issuance'].graph.edgeLayout);
+        expect(again.views['big-picture|'].graph.edgeLayout).toEqual(view.views['big-picture|'].graph.edgeLayout);
     });
 });

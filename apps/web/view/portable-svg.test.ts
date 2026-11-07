@@ -81,7 +81,7 @@ async function stormingGraph(): Promise<LaidOutGraph> {
         },
     });
     const { stormings } = await service.refresh();
-    return stormings[0]!.views['design-level|@Issuance']!.graph;
+    return stormings[0]!.views['design-level|']!.graph;
 }
 
 const shop: ViewPayload = (await viewPayloads(await exampleSources()))[0]!;
@@ -122,7 +122,7 @@ function wellFormed(svg: string): boolean {
 
 describe('the portable SVG', async () => {
     const graphs: Record<string, LaidOutGraph> = {
-        'the stages of a storming': await stormingGraph(),
+        'a storming with stages': await stormingGraph(),
         'the Context Map': shop.contextMap!,
         'the Structure View': shop.structure!,
         'the Structure View, overview': shop.overview!,
@@ -147,7 +147,7 @@ describe('the portable SVG', async () => {
     }
 
     test('a sticky note: its label wrapped, shrunk and cut short as the canvas fits it', () => {
-        const graph = graphs['the stages of a storming']!;
+        const graph = graphs['a storming with stages']!;
         const notes = scene(graph).nodes.filter((n) => NOTE_KINDS.has(n.props.kind));
         expect(notes.length).toBeGreaterThan(10);
         const { svg } = draw(graph);
@@ -176,7 +176,7 @@ describe('the portable SVG', async () => {
     });
 
     test('the heading above the diagram and the legend under it, when asked', () => {
-        const graph = graphs['the stages of a storming']!;
+        const graph = graphs['a storming with stages']!;
         const plain = draw(graph);
         const full = draw(graph, { heading: 'ws › イベントストーミング › 住民票', legend: true });
         expect(full.svg).toContain('>ws › イベントストーミング › 住民票</tspan>');

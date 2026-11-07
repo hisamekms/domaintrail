@@ -430,8 +430,8 @@ a decision).`,
         rules: (lang) => `- Read the storming first: its \`///\` description (the brief: purpose, scope, how far to go), its stages,
   timelines, exceptions and hotspots. Propose no event the storming already has (look for it under another name too)
   nor one the session so far turned down.
-- Stay within \`viewedAt\`: a stage in view, its flows only; a timeline in view, that one only; else the whole
-  storming. The exceptions only when the view shows them (\`exceptions: true\`) or there is no view.
+- Stay within \`viewedAt\`: a stage in view, its flows only; a timeline in view, that main flow only (with what
+  comes before it in earlier stages) and the exceptions branching off it; else the whole storming. The exceptions only when the view shows them (\`exceptions: true\`) or there is no view.
 - One candidate per gap (two consecutive events of one flow), the most telling first; one to three new events in it.
 - label: the new event as its sticky note reads (the first, when several), a short past-tense phrase in the words of
   the business (「在庫を引き当てた」, "Stock reserved").

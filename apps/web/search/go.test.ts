@@ -27,6 +27,7 @@ function recorded(): { moves: ModelMoves; calls: string[]; followee: () => Follo
         setHiddenContexts: () => {},
         setMapAll: () => {},
         setStormingChoice: () => {},
+        setStormingFocus: () => {},
         setCompact: () => {},
     };
     return {
@@ -90,14 +91,17 @@ describe('going to an item of the model', () => {
 
 describe('what going to a sticky took away', () => {
     const choice = (over: Partial<StormingChoice>): StormingChoice => ({ stormingId: 'Dispatch', level: 'big-picture', timelines: {}, ...over });
-    test('a level that draws it, the 絞り込み, a timeline left for the integrated canvas; nothing else', () => {
-        const before = choice({ timelines: { OtC: 'Normal', Dispatch: 'Night' }, hidden: ['resolvedHotspots'] });
+    test('a level that draws it, a main flow left for すべて, the exceptions included, the 絞り込み; nothing else', () => {
+        const before = choice({ timelines: { OtC: 'Normal', Dispatch: 'Night' }, hidden: ['exceptions', 'resolvedHotspots'] });
         const after = choice({ stormingId: 'OtC', level: 'design-level', timelines: { Dispatch: 'Night' } });
         const taken = stormingTaken(before, after, 'OtC');
-        expect(taken).toEqual({ level: true, filter: true, scope: true });
-        expect(stormingTakenText(MESSAGES.ja, taken)).toBe('デザインレベルにしました・すべて（統合）にしました・絞り込みを外しました');
-        expect(stormingTaken(choice({}), choice({ stormingId: 'OtC' }), 'OtC')).toEqual({ level: false, filter: false, scope: false });
-        expect(stormingTakenText(MESSAGES.ja, { level: false, filter: false, scope: false })).toBe('');
+        expect(taken).toEqual({ level: true, timeline: true, exceptions: true, filter: true });
+        expect(stormingTakenText(MESSAGES.ja, taken)).toBe('デザインレベルにしました・すべてにしました・例外を含めました・絞り込みを外しました');
+        const none = { level: false, timeline: false, exceptions: false, filter: false };
+        expect(stormingTaken(choice({}), choice({ stormingId: 'OtC' }), 'OtC')).toEqual(none);
+        expect(stormingTakenText(MESSAGES.ja, none)).toBe('');
+        // the exceptions included alone (an earlier version's 「例外を表示」 off too)
+        expect(stormingTakenText(MESSAGES.ja, stormingTaken(choice({ exceptions: false }), choice({}), 'Dispatch'))).toBe('例外を含めました');
         // back to the big picture is never said (going to a sticky never does it)
         expect(stormingTaken(choice({ level: 'design-level' }), choice({}), 'Dispatch').level).toBe(false);
     });

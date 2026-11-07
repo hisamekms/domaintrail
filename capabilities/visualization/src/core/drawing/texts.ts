@@ -21,10 +21,9 @@ export interface DiagramTexts {
         withoutExceptions: string;
     };
     stormingLevels: Record<ViewLevel, { label: string; hint: string }>;
+    /** Every flow of a storming, as the timeline picker names it beside its main flows. */
     allTimelines: string;
-    /** A timeline of a stage in the timeline picker. */
-    stageTimeline: (stage: string, timeline: string) => string;
-    /** An exception in the timeline picker. */
+    /** An exception named among the timelines. */
     exceptionTimeline: (name: string) => string;
     legend: string;
     legendRows: {
@@ -63,14 +62,13 @@ const ja: DiagramTexts = {
         structureLevels: { detail: '詳細', overview: '概観', aggregates: '集約' },
         allContexts: 'すべてのコンテキスト',
         withExceptions: '例外を含む',
-        withoutExceptions: '例外を除く',
+        withoutExceptions: '例外なし',
     },
     stormingLevels: {
         'big-picture': { label: 'ビッグピクチャー', hint: 'イベント・タイムライン・ホットスポットだけを表示' },
         'design-level': { label: 'デザインレベル', hint: 'コマンド・ポリシー・アクター・外部システム・集約・リードモデルも表示' },
     },
-    allTimelines: 'すべて（統合）',
-    stageTimeline: (stage, timeline) => `${stage} / ${timeline}`,
+    allTimelines: 'すべて',
     exceptionTimeline: (name) => `例外：${name}`,
     legend: '凡例',
     legendRows: {
@@ -126,8 +124,7 @@ const en: DiagramTexts = {
         'big-picture': { label: 'Big Picture', hint: 'Events, timelines and hotspots only' },
         'design-level': { label: 'Design Level', hint: 'Also commands, policies, actors, external systems, aggregates and read models' },
     },
-    allTimelines: 'All (integrated)',
-    stageTimeline: (stage, timeline) => `${stage} / ${timeline}`,
+    allTimelines: 'All',
     exceptionTimeline: (name) => `Exception: ${name}`,
     legend: 'Legend',
     legendRows: {

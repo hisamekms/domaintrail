@@ -11,7 +11,7 @@ import type { Conversation } from '../app/shell';
 import type { ViewSocket } from '../app/useViewSocket';
 import { useT } from '../i18n';
 import { contextLabels, resolve } from '../model-utils';
-import { revealIn, stormingGraph, type StormingChoice, type StormingDetailSession } from '../storming';
+import { chooseTimeline, revealIn, scopeView, stormingGraph, type StormingDetailSession } from '../storming';
 import { graphNodeOf, nodeItemId } from '../scene';
 import { highlightElement, showItem } from '../view/canvas';
 import { useCanvasValue } from '../view/diagram';
@@ -140,14 +140,15 @@ export function useSessionPage(input: {
         view,
         viewKey: viewGraph.cameraKey(view),
         graph: viewGraph.graph,
-        storming: viewGraph.shown && { id: viewGraph.shown.storming.id, options: viewGraph.shown.options },
+        storming: viewGraph.shown && { id: viewGraph.shown.storming.id, options: viewGraph.shown.options, main: viewGraph.shown.main?.id },
     });
     const selectedItem = useCanvasValue(canvas, (c) => c?.onlySelectedId(), []);
     const selectedNode = selectedItem && graphNodeOf(selectedItem);
-    const timelineId = viewGraph.shown?.options.timelineId;
+    // one main flow of one timeline on a canvas of sections (its notes its steps): a note there is an occurrence of it
+    const one = viewGraph.shown?.main?.timelines.length === 1 ? viewGraph.shown.main.timelines[0] : undefined;
     const timelineView =
-        view.kind === 'storming' && viewGraph.shown && timelineId !== undefined && viewGraph.stormingShown
-            ? { stormingId: viewGraph.shown.storming.id, timelineId, render: viewGraph.stormingShown.render }
+        view.kind === 'storming' && viewGraph.shown && one !== undefined && viewGraph.stormingShown?.render.grid
+            ? { stormingId: viewGraph.shown.storming.id, timelineId: one, render: viewGraph.stormingShown.render }
             : undefined;
     const selectionTarget = targetOfSelection({
         selected: nav.selected,
@@ -172,15 +173,8 @@ export function useSessionPage(input: {
                   ? resolvedSelection.agg.id
                   : undefined
             : undefined;
-    const shownOptions = view.kind === 'storming' ? viewGraph.shown?.options : undefined;
     const viewedAt = sentView({
         location,
-        ...(shownOptions && {
-            storming: {
-                ...(shownOptions.stageId !== undefined && { stageId: shownOptions.stageId }),
-                ...(shownOptions.hidden && { hidden: shownOptions.hidden }),
-            },
-        }),
         ...(view.kind === 'catalog' && { catalog: workspace.catalog.filter }),
         ...(statesOf !== undefined && { states: statesOf }),
     });
@@ -346,22 +340,23 @@ export function useSessionPage(input: {
             if (target.kind === 'DtElement') return openBest(target.element);
             const storming = stormings.find((s) => s.id === target.storming);
             if (!storming) return;
-            const { [target.storming]: _, ...others } = stormingChoice.timelines;
+            /** The storming of the target with all its timelines (すべて). */
+            const all = chooseTimeline(stormingChoice, target.storming, undefined);
             if (target.kind === 'DtesStorming') {
-                // the whole storming: its integrated canvas, at the level chosen, the storming in the inspector (its
+                // the whole storming: all its timelines, at the level chosen, the storming in the inspector (its
                 // description: an interview's brief)
-                setStormingChoice({ ...stormingChoice, stormingId: target.storming, level: stormingChoice.level, timelines: others });
+                setStormingChoice(all);
                 setView({ kind: 'storming' });
                 select(`es/${target.storming}`, { highlight: false });
                 return;
             }
             if (target.kind === 'DtesElement') {
                 const id = `es/${target.storming}/${target.local}`;
-                // a timeline, an exception or a stage: its own view, as the storming's picker opens it; a group: the
-                // view of its timeline. The declaration in the inspector.
+                // a timeline, an exception or a stage: as its row in the navigator shows it (`scopeView`); a group: as
+                // its timeline's. The declaration in the inspector.
                 const scope = viewOfDeclaration(storming.storming, target.local);
                 if (scope !== undefined) {
-                    setStormingChoice({ ...stormingChoice, stormingId: target.storming, timelines: { ...others, [target.storming]: scope } });
+                    workspace.showStorming(scopeView(stormings, stormingChoice, settings.stormingFocus, target.storming, scope));
                     setView({ kind: 'storming' });
                     select(id, { highlight: false });
                     return;
@@ -370,20 +365,16 @@ export function useSessionPage(input: {
                 const kind = firstDeclarations(storming.storming).get(target.local)?.kind;
                 const drawn = LEVEL_KINDS[stormingChoice.level].some((k) => k === kind);
                 const level = drawn ? stormingChoice.level : 'design-level';
-                setStormingChoice(revealIn(stormings, { ...stormingChoice, stormingId: target.storming, level, timelines: others }, id));
+                setStormingChoice(revealIn(stormings, { ...all, level }, id));
                 setView({ kind: 'storming' });
                 select(id, { highlight: false });
                 requestAnimationFrame(() => requestAnimationFrame(() => canvas && highlightElement(canvas, id)));
                 return;
             }
-            // an occurrence: its timeline's view, and the note of that step
-            const choice: StormingChoice = {
-                ...stormingChoice,
-                stormingId: target.storming,
-                level: stormingChoice.level,
-                timelines: { ...others, [target.storming]: target.timeline },
-            };
-            setStormingChoice(choice);
+            // an occurrence: as its timeline's row shows it, and the note of that step
+            const shownAt = scopeView(stormings, stormingChoice, settings.stormingFocus, target.storming, target.timeline);
+            const choice = shownAt.choice;
+            workspace.showStorming(shownAt);
             setView({ kind: 'storming' });
             select(`es/${target.storming}/${target.eventName}`, { highlight: false });
             const render = stormingGraph(stormings, choice)?.render;

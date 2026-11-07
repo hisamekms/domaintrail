@@ -282,7 +282,7 @@ type ViewOptions = {
   level: 'big-picture' | 'design-level'
   timelineId?: string // 省略 = 統合キャンバス
   stageId?: string // 段階ビュー（§3.7。timelineId とは併用しない）
-  hideExceptions?: true // 例外を表示しない（統合キャンバスと段階ビューのみ）
+  hidden?: ['exceptions'] // 例外のレイヤーを含めない（ADR 0032 §11。主な流れ1本や例外の強調はこの配置の上に描く）
 }
 ```
 
@@ -306,7 +306,7 @@ type ViewOptions = {
 - **Event Storming の文法で描く**【確定（2026-11-05 追加）】: Design Level は一般的な Event Storming の読み方で左→右に描く。Read Model → 発行者 → Command → 処理するもの → Event → Policy → Command …。`handledBy` のある Command は処理するものを経て Event に至る（Command → 処理するもの、処理するもの → Event。`emits` の意味的エッジのキーは変えない）。`handledBy` のない Command は Command → Event。Hotspot は `on` の付箋に貼る注記で、流れの1ステップにはしない（その Event の上に置く）。1つのビューで Event が複数のステップに描かれるとき（timeline のビューで繰り返す Event、段階・例外のある storming）は、その Event を `emits` する Command（とその Actor・Read Model・Aggregate）、その Event に `on` する Policy、その Event への Hotspot を、ステップごとに1枚ずつ描く（ID `n:<要素>#<k>`。§7.3・§10.2 の表示上の分割）。Policy の付箋は、自分のステップの次にある Command の付箋へ `issues` を描く（後ろに無ければすべてへ）。統合キャンバス（段階・例外のない storming）は Event を1枚に描くので、この分割はしない。どの付箋を選んでも同じ要素を選び（インスペクタは1つ）、同じ要素のほかの付箋を控えめに示す。変更マーク・参照・在席表示は要素に付くので全部の付箋に出る。チャットやカタログから要素へ飛ぶときは、画面の中央に最も近い付箋を選ぶ。
 - 複数 timeline フィルタ／抽象度切替は `.dtes` を変更しない。
 - **段階・例外のある storming**（§3.7）: 統合キャンバスは区画を時間順に左→右へ並べ、段階をラベル付きの枠で描く（§8.6）。**段階ビュー**（その段階の本流と例外を同じ描き方で統合）を段階ごとに選べる。名前付き timeline のビューは従来どおり。
-- **例外の表示切替**（「例外を表示」）: 統合キャンバスと段階ビューで、例外を描かないこともできる。そのとき例外のステップ、例外にしか現れない Event、それらだけに付いた Hotspot、例外の `then` を描かない。デザインレベルでは、例外にしか現れない Event だけに関わる要素（それだけを emits する Command、それだけに `on` する Policy とそれが issues する Command、それらの Command の横の Actor・外部システム・Read Model・集約のコピー）も描かない。例外そのものの timeline ビューには影響しない。表示状態は閲覧者ごとの UI 状態で、`.dtes` を変更しない。
+- **例外のレイヤー**（ADR 0032 §11。パンくずの横のトグル「↳ 例外」）: 例外を含めないこともできる。そのとき例外のステップ、例外にしか現れない Event、それらだけに付いた Hotspot、例外の `then` を描かない。デザインレベルでは、例外にしか現れない Event だけに関わる要素（それだけを emits する Command、それだけに `on` する Policy とそれが issues する Command、それらの Command の横の Actor・外部システム・Read Model・集約のコピー）も描かない。例外を1つ強調すると、すべてを描いたままその道筋だけを濃くする。表示状態は閲覧者ごとの UI 状態で、`.dtes` を変更しない。
 
 ## 7. グラフの3階層【確定】
 

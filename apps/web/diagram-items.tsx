@@ -231,7 +231,7 @@ export function InternalContent({ p }: { p: InternalProps }): ReactNode {
 }
 
 export const groupClassName = (p: GroupProps, selected: boolean): string =>
-    `dg dg-${p.kind} dn-change-${p.change} dn-diag-${p.diag}${selected ? ' dn-selected' : ''}`;
+    `dg dg-${p.kind} dn-change-${p.change} dn-diag-${p.diag}${p.unused ? ' dg-unused' : ''}${selected ? ' dn-selected' : ''}`;
 export const groupStyle = boxStyle;
 
 /** A container (bounded context, aggregate boundary): its label and description rows. Drawn behind nodes. */

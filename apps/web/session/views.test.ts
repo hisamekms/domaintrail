@@ -9,6 +9,7 @@ const words: ViewWords = {
     structureLevels: { detail: '詳細', overview: '概観', aggregates: '集約' },
     stormingLevels: { 'big-picture': 'ビッグピクチャー', 'design-level': 'デザインレベル' },
     allContexts: 'すべての BC',
+    withoutExceptions: '例外なし',
 };
 const scope: ViewScope = {
     mode: 'label',
@@ -17,7 +18,7 @@ const scope: ViewScope = {
     stormings: [{ id: 'Delivery', label: '配送', timelines: [{ id: 'Normal', label: '通常' }, { id: 'Failure' }] }],
 };
 const dt = (viewKey: string): ViewLocation => ({ kind: 'dt', viewKey, layoutKey: 'g@1' });
-const dtes = (stormingId: string, level: string, timelineId?: string): ViewLocation => ({
+const dtes = (stormingId: string, level: string, timelineId?: string): Extract<ViewLocation, { kind: 'dtes' }> => ({
     kind: 'dtes',
     stormingId,
     level,
@@ -62,6 +63,7 @@ describe('the view of a location', () => {
         expect(name(dtes('Delivery', 'design-level', 'Normal'))).toBe('配送 · デザインレベル · 通常');
         expect(name(dtes('Delivery', 'big-picture', 'Failure'))).toBe('配送 · ビッグピクチャー · Failure');
         expect(name(dtes('Gone', 'big-picture'))).toBe('Gone · ビッグピクチャー');
+        expect(name({ ...dtes('Delivery', 'big-picture'), exceptions: false })).toBe('配送 · ビッグピクチャー · 例外なし');
     });
 
     test('opens here only while its contexts, storming and timeline exist', () => {
@@ -148,8 +150,8 @@ describe('the view a message is sent from', () => {
             view: { kind: 'Catalog', query: '注文', sections: ['aggregates'], contexts: [] },
         });
         expect(sentView({ location: dt('catalog') })).toEqual({ view: { kind: 'Catalog', sections: [], contexts: [] } });
-        expect(sentView({ location: dtes('Delivery', 'design-level'), storming: { stageId: 'Shipping', hidden: ['exceptions'] } })).toEqual({
-            view: { kind: 'Storming', storming: 'Delivery', level: 'DesignLevel', stage: 'Shipping', exceptions: false },
+        expect(sentView({ location: { ...dtes('Delivery', 'design-level'), exceptions: false } })).toEqual({
+            view: { kind: 'Storming', storming: 'Delivery', level: 'DesignLevel', exceptions: false },
         });
         expect(sentView({ location: dtes('Delivery', 'big-picture', 'Normal') })).toEqual({
             view: { kind: 'Storming', storming: 'Delivery', level: 'BigPicture', timeline: 'Normal', exceptions: true },

@@ -51,7 +51,20 @@ export {
     type ViewOptions,
 } from './core/storming/ir.js';
 export { drawsElement, hiddenInDrawing, hideInDrawing } from './core/storming/hide.js';
+export {
+    exceptionLanes,
+    exceptionSpan,
+    flowInDrawing,
+    flowNotes,
+    mainFlowOf,
+    mainFlows,
+    type FlowChoice,
+    type FlowNotes,
+    type FlowTimeline,
+    type MainFlow,
+} from './core/storming/flows.js';
 export { stormingViewKey } from './core/storming/graph.js';
+export { projectView } from './core/storming/render.js';
 
 // ---- core: the drawing of a laid-out graph, shared by the Live View's canvas and `dt export svg` ------------------
 export {

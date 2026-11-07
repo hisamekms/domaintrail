@@ -158,14 +158,15 @@ const ja = {
     stormingLevels: DIAGRAM_TEXTS.ja.stormingLevels,
     timelineFilter: 'タイムライン',
     allTimelines: DIAGRAM_TEXTS.ja.allTimelines,
-    /** A stage's view in the timeline picker: its main flow and its exceptions. */
-    stageView: (stage: string) => `${stage}（例外を含む）`,
-    /** A timeline of a stage in the timeline picker. */
-    stageTimeline: DIAGRAM_TEXTS.ja.stageTimeline,
-    /** An exception in the timeline picker. */
+    /** An exception named among the timelines. */
     exceptionTimeline: DIAGRAM_TEXTS.ja.exceptionTimeline,
-    /** The storming's 絞り込み of the exceptions (on the integrated canvas and a stage). */
-    showExceptions: '例外を表示',
+    /** The exceptions' layer over the canvas (its toggle, its ▾, its ×) and a lane's label. */
+    exceptionLayer: {
+        label: '例外',
+        pick: '例外を1つ強調',
+        unfocus: '強調をやめる',
+        focused: (name: string) => `例外: ${name}`,
+    },
     /** The storming's 絞り込み of the resolved hotspots (hidden, a sticky keeps a check for them). */
     showResolvedHotspots: '解決済みを表示',
     staleStorming: (file: string) => `${file} に構文エラーがあるため、最後に解析できた内容を表示しています`,
@@ -224,7 +225,7 @@ const ja = {
         recent: '最近',
         more: (n: number) => `ほか ${n} 件`,
         /** What going to a found item took away so that it shows, said for a moment. */
-        taken: { level: (name: string) => `${name}にしました`, filter: '絞り込みを外しました', join: '・' },
+        taken: { level: (name: string) => `${name}にしました`, exceptions: '例外を含めました', filter: '絞り込みを外しました', join: '・' },
     },
     // the stickies' actions (ADR 0033): the toolbar above the selection, its menu, the keys, the palette, the edit windows
     stickies: {
@@ -1470,10 +1471,13 @@ const en: Messages = {
     stormingLevels: DIAGRAM_TEXTS.en.stormingLevels,
     timelineFilter: 'Timeline',
     allTimelines: DIAGRAM_TEXTS.en.allTimelines,
-    stageView: (stage) => `${stage} (with its exceptions)`,
-    stageTimeline: DIAGRAM_TEXTS.en.stageTimeline,
     exceptionTimeline: DIAGRAM_TEXTS.en.exceptionTimeline,
-    showExceptions: 'Show exceptions',
+    exceptionLayer: {
+        label: 'Exceptions',
+        pick: 'Emphasize one exception',
+        unfocus: 'Stop emphasizing',
+        focused: (name) => `Exception: ${name}`,
+    },
     showResolvedHotspots: 'Show resolved',
     staleStorming: (file) => `${file} has syntax errors: showing what it was when it last parsed`,
 
@@ -1523,7 +1527,7 @@ const en: Messages = {
         empty: 'Nothing found',
         recent: 'Recent',
         more: (n) => `${n} more`,
-        taken: { level: (name) => `Switched to ${name}`, filter: 'Cleared the filter', join: '; ' },
+        taken: { level: (name) => `Switched to ${name}`, exceptions: 'Included the exceptions', filter: 'Cleared the filter', join: '; ' },
     },
     stickies: {
         toolbar: 'Sticky actions',

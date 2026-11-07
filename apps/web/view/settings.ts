@@ -1,6 +1,7 @@
 import { STRUCTURE_LEVELS, type StructureLevel } from '@domaintrail/visualization';
+import { useState } from 'react';
 import { usePersistentState } from '../shared/layout';
-import type { StormingChoice } from '../storming';
+import type { StormingChoice, StormingFocus } from '../storming';
 
 /** localStorage key of 「詰めて表示」. */
 export const COMPACT_KEY = 'domaintrail.compact';
@@ -22,6 +23,9 @@ export interface ViewSettings {
     /** Event Storming: the storming, its level and its timeline filter (the page's state, never written to a .dtes file). */
     stormingChoice: StormingChoice;
     setStormingChoice: (choice: StormingChoice) => void;
+    /** Event Storming: the exception emphasized (ADR 0032 §11), close to a selection: never remembered nor followed. */
+    stormingFocus: StormingFocus | null;
+    setStormingFocus: (focus: StormingFocus | null) => void;
     /** Every diagram laid out with the compact spacing (「詰めて表示」); off: the normal spacing. */
     compact: boolean;
     setCompact: (compact: boolean) => void;
@@ -39,6 +43,7 @@ export function useViewSettings(): ViewSettings {
         timelines: {},
     });
     const [compact, setCompact] = usePersistentState(COMPACT_KEY, false);
+    const [stormingFocus, setStormingFocus] = useState<StormingFocus | null>(null);
     return {
         structureLevel,
         setStructureLevel,
@@ -50,6 +55,8 @@ export function useViewSettings(): ViewSettings {
         setMapAll,
         stormingChoice,
         setStormingChoice,
+        stormingFocus,
+        setStormingFocus,
         compact: compact === true,
         setCompact,
     };

@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { cliDeps, runCli } from '@domaintrail/dt';
 import { formatStorming } from '@domaintrail/storming';
 import { type Analysis } from '@domaintrail/analysis';
-import { stormingViewKey, type ViewOptions } from '@domaintrail/visualization';
+import { projectView, stormingViewKey, type ViewOptions } from '@domaintrail/visualization';
 import { EXAMPLES, check, tempCopyOfExamples, viewPayloads } from './helpers.js';
 
 /**
@@ -37,7 +37,10 @@ async function clean(files: Record<string, string>): Promise<Analysis> {
 /** The node IDs of one view of the workspace's only storming. */
 const view = async (files: Record<string, string>, options: ViewOptions): Promise<string[]> => {
     const [payload] = await viewPayloads(Object.entries(files).map(([p, text]) => ({ path: p, text })));
-    return payload.stormings[0]!.views[stormingViewKey(options)].render.nodes.map((n) => n.id);
+    const storming = payload.stormings[0]!;
+    // a timeline's own projection (its one-hop causal paths) has no view in the payload: projected here
+    const render = options.timelineId !== undefined ? projectView(storming.storming, options) : storming.views[stormingViewKey(options)]!.render;
+    return render.nodes.map((n) => n.id);
 };
 const BIG_PICTURE: ViewOptions = { level: 'big-picture' };
 const DESIGN_LEVEL: ViewOptions = { level: 'design-level' };

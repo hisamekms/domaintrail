@@ -46,3 +46,21 @@ describe('the camera of a presence update', () => {
         });
     });
 });
+
+describe('the location of a storming', () => {
+    const at = (extra: Record<string, unknown>): unknown =>
+        parseClientMessage(JSON.stringify({ type: 'presence.update', location: { ...location, ...extra } }));
+
+    test('its main flow and its exceptions’ layer excluded', () => {
+        expect(at({ timelineId: 'Normal', exceptions: false })).toEqual({
+            type: 'presence.update',
+            location: { ...location, timelineId: 'Normal', exceptions: false },
+        });
+    });
+
+    test('drops the message for exceptions other than excluded, or another key (a stage)', () => {
+        expect(at({ exceptions: true })).toBeUndefined();
+        expect(at({ exceptions: 'no' })).toBeUndefined();
+        expect(at({ stageId: 'Issuance' })).toBeUndefined();
+    });
+});

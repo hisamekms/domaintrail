@@ -392,6 +392,8 @@ function useFlowElements(state: CanvasState): { nodes: FlowNode[]; edges: ItemEd
 
 function toNode(item: BoxItem, { selected, copy, chosen }: ItemLook): ItemNode {
     const ghost = item.ghost === true;
+    // off the path of the exception emphasized: faint (`flowInDrawing`)
+    const dimmed = item.type !== 'internal' && item.props.dimmed === true;
     const same = copy !== undefined && !selected;
     return {
         id: item.id,
@@ -408,7 +410,7 @@ function toNode(item: BoxItem, { selected, copy, chosen }: ItemLook): ItemNode {
         focusable: false,
         zIndex: layerOf(item),
         handles: HANDLES,
-        ...(ghost && { className: 'diagram-ghost' }),
+        ...((ghost || dimmed) && { className: ghost ? 'diagram-ghost' : 'diagram-dimmed' }),
     };
 }
 
@@ -424,6 +426,7 @@ function toEdge(item: SceneEdge, { selected, hot }: ItemLook): ItemEdge {
         focusable: false,
         reconnectable: false,
         zIndex: LAYER.edge,
+        ...(item.props.dimmed && { className: 'diagram-dimmed' }),
     };
 }
 

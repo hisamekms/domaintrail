@@ -8,7 +8,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { startViewServer, type ViewServer } from '@domaintrail/dt';
-import { createFileLayoutStore, createGitRevisions, createViewService, ElkLayoutEngine, type ViewService } from '@domaintrail/visualization';
+import { createFileLayoutStore, createGitRevisions, createViewService, ElkLayoutEngine, projectView, type ViewService } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { createWorkspaceReader } from '@domaintrail/workspace';
 import { sourceSelection } from '@domaintrail/analysis';
@@ -188,7 +188,7 @@ describe('an event shared by timelines', () => {
     test('is one e:<eventId> note on the integrated canvas, and occurrence nodes with their timelines in each timeline view', async () => {
         const [storming] = (await viewService(await workspace({ 'shared.dtes': SHARED })).refresh()).stormings;
         expect(storming.timelines.map((t) => t.id)).toEqual(['T1', 'T2', 'T3']);
-        for (const level of ['big-picture', 'design-level']) {
+        for (const level of ['big-picture', 'design-level'] as const) {
             const integrated = storming.views[`${level}|`];
             const notes = integrated.graph.nodes.filter((n) => n.kind === 'esEvent');
             expect(notes.filter((n) => n.elementId === 'es/S/B').map((n) => n.id)).toEqual(['e:B']);
@@ -205,13 +205,13 @@ describe('an event shared by timelines', () => {
                 ['T2', 't:e:X>e:B'],
                 ['T3', 't:e:A>e:B'],
             ]) {
-                const view = storming.views[`${level}|${timelineId}`];
-                const ids = view.graph.nodes.map((n) => n.id);
+                // a timeline's own projection (no view of its own in the payload: one main flow is drawn on the canvas)
+                const render = projectView(storming.storming, { level, timelineId });
+                const ids = render.nodes.map((n) => n.id);
                 expect(ids).not.toContain('e:B');
                 expect(ids.every((id) => id.startsWith('t:') || id.startsWith('n:'))).toBe(true);
-                const b = view.render.nodes.filter((n) => n.type === 'event' && n.eventId === 'B');
+                const b = render.nodes.filter((n) => n.type === 'event' && n.eventId === 'B');
                 expect(b).toEqual([{ type: 'event', id: nodeId, eventId: 'B', occurrences: [{ timelineId, eventId: 'B', stepPath: [1] }] }]);
-                expect(view.graph.nodes.find((n) => n.id === nodeId)?.elementId).toBe('es/S/B');
             }
         }
     });

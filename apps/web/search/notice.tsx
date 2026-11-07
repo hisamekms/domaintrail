@@ -1,17 +1,28 @@
-// What going to a found item took away so that it shows — a level that draws it, a narrowing that hid it, a timeline
-// left for the integrated canvas — said in one short line for a moment, over the page.
+// What going to a found item took away so that it shows — a level that draws it, a narrowing that hid it, a main flow
+// left for every flow, the exceptions included — said in one short line for a moment, over the page.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { StructureLevel } from '@domaintrail/visualization';
 import type { Messages } from '../i18n';
 import { hiddenOf, type StormingChoice } from '../storming';
 import { shortName } from '../view/workspace';
 
-/** What going to a sticky changed of the storming view: its level, its 絞り込み, its timeline (for the integrated canvas). */
-export function stormingTaken(before: StormingChoice, after: StormingChoice, stormingId: string): { level: boolean; filter: boolean; scope: boolean } {
+/**
+ * What going to a sticky changed of the storming view (ADR 0032 §11): its level, its timeline (back to すべて), its
+ * exceptions' layer (included), its 絞り込み (the resolved hotspots shown again). The exception emphasized is not
+ * touched: going to a sticky is a selection, apart from it.
+ */
+export function stormingTaken(
+    before: StormingChoice,
+    after: StormingChoice,
+    stormingId: string,
+): { level: boolean; timeline: boolean; exceptions: boolean; filter: boolean } {
+    const was = hiddenOf(before);
+    const now = hiddenOf(after);
     return {
         level: before.level !== after.level && after.level === 'design-level',
-        filter: [...hiddenOf(before)].some((k) => !hiddenOf(after).has(k)),
-        scope: before.timelines[stormingId] !== undefined && after.timelines[stormingId] === undefined,
+        timeline: before.timelines[stormingId] !== undefined && after.timelines[stormingId] === undefined,
+        exceptions: was.has('exceptions') && !now.has('exceptions'),
+        filter: [...was].some((k) => k !== 'exceptions' && !now.has(k)),
     };
 }
 
@@ -19,7 +30,8 @@ export function stormingTaken(before: StormingChoice, after: StormingChoice, sto
 export function stormingTakenText(t: Messages, taken: ReturnType<typeof stormingTaken>): string {
     return [
         ...(taken.level ? [t.search.taken.level(t.stormingLevels['design-level'].label)] : []),
-        ...(taken.scope ? [t.search.taken.level(t.allTimelines)] : []),
+        ...(taken.timeline ? [t.search.taken.level(t.allTimelines)] : []),
+        ...(taken.exceptions ? [t.search.taken.exceptions] : []),
         ...(taken.filter ? [t.search.taken.filter] : []),
     ].join(t.search.taken.join);
 }

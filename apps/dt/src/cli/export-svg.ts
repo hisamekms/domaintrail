@@ -6,6 +6,9 @@
 import {
     buildScene,
     exportBounds,
+    flowInDrawing,
+    mainFlowOf,
+    mainFlows,
     hideInDrawing,
     laidOutHidden,
     legendContent,
@@ -29,6 +32,7 @@ import {
     type SheetSubject,
     type StructureLevel,
     type ViewLevel,
+    type ViewOptions,
 } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import styles from '../../../web/styles.css' with { type: 'text' };
@@ -37,11 +41,12 @@ import type { DiagramViews } from './ports.js';
 /** What `dt export svg` draws, as its options say it. */
 export interface SvgExportOptions {
     storming?: string | undefined;
-    stage?: string | undefined;
+    /** One main flow on the canvas, as the timeline picker shows it (any of its timelines' IDs; none: every flow). */
     timeline?: string | undefined;
     /** The storming's level (`big-picture`, `design`) or the Structure View's (`detail`, `overview`, `aggregates`). */
     level?: string | undefined;
-    exceptions?: 'show' | 'hide' | undefined;
+    /** The exceptions' layer: included (default) or not; `show` and `hide` are its earlier names. */
+    exceptions?: 'include' | 'exclude' | 'show' | 'hide' | undefined;
     /** The resolved hotspots: drawn (default) or not, as the 絞り込み's 「解決済みを表示」 (in any view of a storming). */
     resolvedHotspots?: 'show' | 'hide' | undefined;
     model?: boolean | undefined;
@@ -91,14 +96,12 @@ export function checkSvgOptions(o: SvgExportOptions): void {
     if (o.storming === undefined && !o.model) usage('Give the diagram to draw: --storming <ID> (an Event Storming) or --model (the domain model).');
     if (o.storming !== undefined) {
         if (o.view !== undefined || o.context !== undefined || o.all) usage('--view, --context and --all are options of --model.');
-        if (o.stage !== undefined && o.timeline !== undefined) usage('Give --stage or --timeline, not both.');
-        if (o.timeline !== undefined && o.exceptions !== undefined) usage('--exceptions applies to the whole storming or a stage, not to one timeline.');
         if (o.level !== undefined && !(o.level in STORMING_LEVELS))
             usage(`Unknown level '${o.level}' of a storming. Choose: ${Object.keys(STORMING_LEVELS).join(', ')}`);
         return;
     }
-    if (o.stage !== undefined || o.timeline !== undefined || o.exceptions !== undefined || o.resolvedHotspots !== undefined)
-        usage('--stage, --timeline, --exceptions and --resolved-hotspots are options of --storming.');
+    if (o.timeline !== undefined || o.exceptions !== undefined || o.resolvedHotspots !== undefined)
+        usage('--timeline, --exceptions and --resolved-hotspots are options of --storming.');
     const view = o.view ?? 'structure';
     if (view === 'map' && (o.context !== undefined || o.level !== undefined)) usage('--context and --level are options of --view structure.');
     if (view === 'structure' && o.all) usage('--all is an option of --view map.');
@@ -111,26 +114,24 @@ export function checkSvgOptions(o: SvgExportOptions): void {
 function stormingDiagram(stormings: readonly StormingView[], o: SvgExportOptions): Chosen {
     const storming = stormings.find((s) => s.id === o.storming);
     if (!storming) throw new SvgExportError(`Unknown storming '${o.storming}'. Stormings: ${listed(stormings.map((s) => s.id))}`, 1);
-    const stages = storming.stages ?? [];
-    if (o.stage !== undefined && !stages.some((st) => st.id === o.stage)) {
-        throw new SvgExportError(`Unknown stage '${o.stage}' of ${storming.id}. Stages: ${listed(stages.map((st) => st.id))}`, 1);
-    }
-    if (o.timeline !== undefined && !storming.timelines.some((t) => t.id === o.timeline)) {
-        throw new SvgExportError(`Unknown timeline '${o.timeline}' of ${storming.id}. Timelines: ${listed(storming.timelines.map((t) => t.id))}`, 1);
+    const flows = mainFlows(storming.timelines, storming.stages);
+    const main = o.timeline !== undefined ? mainFlowOf(flows, o.timeline) : undefined;
+    if (o.timeline !== undefined && !main) {
+        throw new SvgExportError(`Unknown main flow '${o.timeline}' of ${storming.id}. Main flows: ${listed(flows.map((f) => f.id))}`, 1);
     }
     const level = STORMING_LEVELS[o.level ?? 'big-picture']!;
-    // what is hidden, as the 絞り込み hides it (`HIDDEN_BY`): the exceptions by the integrated canvas's or a stage's layout
-    // without them (only when the storming has some), the resolved hotspots by leaving them out of the drawing
+    // what is hidden: the exceptions' layer by the layout without them (only when the storming has some), the resolved
+    // hotspots by leaving them out of the drawing
     const hidden = new Set<Hideable>([
-        ...(o.exceptions === 'hide' ? (['exceptions'] as const) : []),
+        ...(o.exceptions === 'exclude' || o.exceptions === 'hide' ? (['exceptions'] as const) : []),
         ...(o.resolvedHotspots === 'hide' ? (['resolvedHotspots'] as const) : []),
     ]);
-    const hide = laidOutHidden(storming.timelines.some((t) => t.exception) ? hidden : []);
-    const options =
-        o.timeline !== undefined ? { level, timelineId: o.timeline } : o.stage !== undefined ? { level, stageId: o.stage, ...hide } : { level, ...hide };
+    const options: ViewOptions = { level, ...laidOutHidden(storming.timelines.some((t) => t.exception) ? hidden : []) };
     const view = storming.views[stormingViewKey(options)];
     if (!view) throw new SvgExportError(`${storming.id} has no such view.`, 1);
-    return { graph: hideInDrawing(view.graph, hidden), subject: stormingSheetSubject(storming, options), legend: 'storming' };
+    // one main flow drawn in the layout of every flow, the others left out where they stood
+    const flowed = main && flows.length > 1 ? flowInDrawing(view.graph, view.render, storming.storming, storming.timelines, { main }) : view.graph;
+    return { graph: hideInDrawing(flowed, hidden), subject: stormingSheetSubject(storming, options, flows.length > 1 ? main : undefined), legend: 'storming' };
 }
 
 /** The domain model's view the options name. */

@@ -91,12 +91,12 @@ export function readerNavigation(nav: () => NavigationMoves, mine: () => void): 
 /** What the reader's controls change of what the views draw. */
 export type SettingsMoves = Pick<
     ViewSettings,
-    'setStructureLevel' | 'setStructureContexts' | 'setHiddenContexts' | 'setMapAll' | 'setStormingChoice' | 'setCompact'
+    'setStructureLevel' | 'setStructureContexts' | 'setHiddenContexts' | 'setMapAll' | 'setStormingChoice' | 'setStormingFocus' | 'setCompact'
 >;
 
 /**
  * The settings' changes as the reader's controls get them: every change of what a view draws (a level, a storming, a
- * timeline, the contexts, 詰めて表示) is the reader's own. `settings` gives the current settings.
+ * timeline, the exceptions' layer and the one emphasized, the contexts, 詰めて表示) is the reader's own. `settings` gives the current settings.
  */
 export function readerSettings(settings: () => SettingsMoves, mine: () => void): SettingsMoves {
     return {
@@ -105,6 +105,7 @@ export function readerSettings(settings: () => SettingsMoves, mine: () => void):
         setHiddenContexts: (contexts) => byReader(mine, settings().setHiddenContexts)(contexts),
         setMapAll: (all) => byReader(mine, settings().setMapAll)(all),
         setStormingChoice: (choice) => byReader(mine, settings().setStormingChoice)(choice),
+        setStormingFocus: (focus) => byReader(mine, settings().setStormingFocus)(focus),
         setCompact: (compact) => byReader(mine, settings().setCompact)(compact),
     };
 }

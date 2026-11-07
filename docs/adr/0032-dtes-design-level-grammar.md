@@ -275,7 +275,8 @@ sticky's top was tried in a preview and dropped: hotspots stay as §8 draws them
    also when open hotspots on it are still drawn. Hovering tells what was agreed (「解決済み: …」); pressing it selects
    the hotspot (the one on that copy), whose detail tells the question and the agreement. No new words. A sticky's
    detail lists every hotspot on it, open and resolved, whatever is hidden.
-3. **What a reader hides is one set** (`Hideable`, `HIDDEN_BY` in `core/storming/ir.ts`): `exceptions` and
+3. **What a reader hides is one set** (`Hideable`, `HIDDEN_BY` in `core/storming/ir.ts`; amended by §11: the exceptions
+   are toggled as a layer beside the breadcrumb, not in the 絞り込み): `exceptions` and
    `resolvedHotspots`, each with how it is hidden. `layout`: the view is laid out without it — another graph, keyed by
    `ViewOptions.hidden` (`-exceptions`, as before), laid out by the server. `drawing`: the same layout is drawn without
    it (`hideInDrawing`): in the page alone, and the same way by `dt export svg --resolved-hotspots hide` (beside
@@ -287,6 +288,62 @@ sticky's top was tried in a preview and dropped: hotspots stay as §8 draws them
    the palette and `#select=` links, the knowledge's links, the detail's links, a chat's reference and a turn's marks
    (`marksView`) choose the view, then show again the kinds that hide the element — one kind when that is enough, else
    all of them — then select it. The rule is written once, for every kind; the exceptions go through it too.
+
+### 11. The canvas carries a flow; the exceptions are a layer over it (2026-11-07)
+
+*Decided by the maintainer* 2026-11-07, after reviewing the view bar from zero with a preview of the states and how
+they change (every recommendation approved). The view bar mixed what is looked at and how: its second picker listed
+すべて（統合）, each stage 「…（例外を含む）」 and every timeline, exceptions among them, while 「例外を表示」 in the
+絞り込み could hide the exceptions of a stage the picker said included them. The mental model is now one sentence:
+**the canvas carries the flow chosen, and the exceptions are a layer laid over it.**
+
+1. **The breadcrumb is what the canvas carries**: the storming › its timeline — すべて, or one main flow; never an
+   exception. The trunk (the first main flow of each stage, one straight row through every stage) is one main flow,
+   every other main flow of a stage another, after the trunk before it (`mainFlows`); a storming with one main flow has
+   no second picker. **A stage has no view of its own any more**: it stays a frame in the drawing, and its row in the
+   navigator brings that frame into view.
+2. **One main flow is drawn in the layout of すべて** (`flowInDrawing`): the other main flows, and the exceptions
+   branching off them, are left out where they stood, so no sticky moves; a stage with nothing drawn keeps its frame,
+   dashed. The timeline view of one-hop causal paths is no longer what the canvas shows; only the canvas of every
+   flow, with and without the exceptions, is laid out.
+3. **The exceptions are a layer** with a toggle apart from the breadcrumb in its look (round, in the exceptions' pink):
+   ↳, 例外 and how many it lays over the canvas (those branching off the main flow shown). Its left part includes them
+   (the default) or not — 「例外を表示」 leaves the 絞り込み, which keeps 「解決済みを表示」 only; the layer stays one of
+   `HIDDEN_BY`'s `layout` kinds (§10), toggled from the bar —; its ▾ emphasizes one. A storming without exceptions has
+   no toggle.
+4. **Three states**: excluded (the main flows only), included (every lane, the default), and included with one
+   exception emphasized (「↳ 例外: 取消 ×」): everything drawn as when included, the exception's path — the main flow
+   before it branches off, its steps, from where it returns onwards — dark, the other exceptions and the notes off the
+   path faint. What is drawn does not change and nothing moves. (A case drawn without the other exceptions, tried
+   first, was dropped: everything is drawn, the rest faint.)
+5. **Entering the emphasis**: from the ▾, from **the label of an exception's lane on the canvas**, or from its row in
+   the navigator. Excluded, the exceptions are included first; when the main flow shown does not have the exception,
+   the timeline goes back to すべて.
+6. **The emphasis is close to a selection**: its ×, Escape and a press on the canvas's empty space end it, back to
+   included. It is kept apart from the stickies' selection (selecting a sticky keeps it): Escape ends the selection
+   first, then the emphasis; a press on the empty space ends both. It is never remembered (a reload ends it), never
+   followed (who follows gets the timeline and the layer, not the emphasis), never printed nor exported. Pressing the
+   emphasized lane's label again ends it.
+7. **The camera** moves to the path only when the emphasis comes from the ▾ or the navigator; a press on a label leaves
+   it where it is (what was pressed is in view).
+8. **A lane's label**: hovering it deepens its lane's band, so that what a press emphasizes shows first; the lane
+   emphasized has its label filled and its band outlined.
+9. **The navigator** keeps the stormings › stages › timelines. A stage's row brings its frame into view on the same
+   canvas; an exception's row emphasizes it (5); a main flow's row puts its main flow on the canvas, and the rows of one
+   main flow under several stages (the trunk's) are all shown selected.
+10. **An earlier state is read, not migrated**: `exceptions: false` and `hidden`'s `exceptions` → excluded; a stage's
+    place (`@<stage>`) → すべて; an exception's timeline → すべて, included (the emphasis is not kept, so none); a main
+    flow's timeline → that main flow. A trial of this version's flow is read the same way.
+11. **Following** stops at every move of the breadcrumb and the toggle (the reader's own), and a location carries the
+    storming, the level, the timeline (`timelineId`, the main flow) and the layer (`exceptions: false` when excluded) —
+    no stage, no emphasis. **Moving to a sticky not drawn** includes the exceptions first, then shows すべて, then what
+    the 絞り込み hides, one rule as in §10. **`dt export svg`** takes `--timeline <main flow>` and
+    `--exceptions include|exclude` (`show` and `hide` still taken as their earlier names; `--stage` is gone); the heading
+    reads 「… › storming › timeline · level · 例外を含む / 例外なし」, and the AI is told the timeline and the layer.
+
+*Decided here*, while implementing: the trunk's main flow is named and identified by its first stage's timeline (any
+of its timelines' IDs reads as it); the bands of the lanes are drawn by the page in the canvas's layer, behind the
+notes, and not printed nor exported; a caption naming several exceptions (a lane they share) emphasizes them in turn.
 
 ## Alternatives
 

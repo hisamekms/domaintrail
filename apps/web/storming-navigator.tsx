@@ -6,12 +6,12 @@ import { Collapse, groupCount, indent, Section, Twisty } from './explorer';
 import { useT } from './i18n';
 import { nameIn } from './model-utils';
 import { usePersistentState } from './shared/layout';
-import { chooseScope, shownScope, stageChoice, type StormingChoice } from './storming';
+import { shownFocus, shownStorming, stageChoice, type StormingChoice, type StormingFocus } from './storming';
 import { FoldButton, FoldedLabel, type TreeFold } from './tree-fold';
 
 /**
- * A row of the storming navigator: a storming, one of its stages or one of its timelines. `scope` is the view it
- * opens in its storming (`chooseScope`): '' the integrated canvas, `@<stage ID>` a stage, else the timeline's ID.
+ * A row of the storming navigator: a storming, one of its stages or one of its timelines. `scope` is what a press shows
+ * in its storming (`scopeView`): '' the storming, `@<stage ID>` the stage's frame, else the timeline's ID.
  */
 export interface NavigatorNode {
     readonly key: string;
@@ -100,15 +100,40 @@ export function stormingNavigatorTree(stormings: readonly StormingView[], mode: 
 export const navigatorRows = (nodes: readonly NavigatorNode[]): number => nodes.reduce((n, node) => n + 1 + navigatorRows(node.children), 0);
 
 /**
+ * Whether a row is what the canvas shows (ADR 0032 §11): a storming's when it carries all its timelines and nothing is
+ * emphasized; a main flow's when its main flow is on the canvas (the trunk's rows of every stage at once); an
+ * exception's when it is emphasized. A stage's only just after it was pressed (`pressed`): the canvas is the same.
+ */
+export function shownRow(
+    stormings: readonly StormingView[],
+    choice: StormingChoice,
+    focus: StormingFocus | null,
+    node: Pick<NavigatorNode, 'key' | 'kind' | 'stormingId' | 'id' | 'exception'>,
+    pressed: string | undefined,
+): boolean {
+    const shown = shownStorming(stormings, choice);
+    if (!shown || shown.storming.id !== node.stormingId) return false;
+    const emphasized = shownFocus(stormings, choice, focus);
+    if (node.kind === 'stage') return pressed === node.key;
+    if (node.kind === 'storming') return !shown.main && emphasized === undefined && pressed === undefined;
+    if (node.exception) return emphasized === node.id;
+    return emphasized === undefined && !!shown.main?.timelines.includes(node.id);
+}
+
+/**
  * The navigator of the event storming world, in place of the model tree: its filter, then the stormings with their
- * stages and timelines. A click on a row shows it — the storming's integrated canvas, a stage or a timeline — as the
- * view bar's pickers do (the two show the same choice), and selects it for the detail when it is a declaration.
+ * stages and timelines. A press on a row shows it (`scopeView`): a storming with all its timelines, a stage's frame
+ * brought into view, a main flow on the canvas, an exception emphasized; and selects it for the detail when it is a
+ * declaration. The rows of what the canvas shows are selected (`shownRow`), as the view bar shows it.
  */
 export function StormingNavigator(props: {
     stormings: readonly StormingView[];
     choice: StormingChoice;
+    /** The exception emphasized. */
+    focus: StormingFocus | null;
     mode: DisplayMode;
-    onChoose: (choice: StormingChoice) => void;
+    /** Shows a row's scope in its storming (`scopeView`). */
+    onScope: (stormingId: string, scope: string) => void;
     /** Selects the row's declaration (`es/<storming>` or `es/<storming>/<ID>`) for the detail. */
     onSelect: (id: string) => void;
     onClose: () => void;
@@ -121,7 +146,11 @@ export function StormingNavigator(props: {
     const [query, setQuery] = useState('');
     const filtering = query.trim() !== '';
     const tree = stormingNavigatorTree(props.stormings, props.mode, query);
-    const shown = shownScope(props.stormings, props.choice);
+    // a stage pressed: its row selected until what the canvas shows changes
+    const [pressed, setPressed] = useState<string | undefined>();
+    const showing = JSON.stringify([props.choice, props.focus]);
+    useEffect(() => setPressed(undefined), [showing]);
+    const isShown = (node: NavigatorNode): boolean => shownRow(props.stormings, props.choice, props.focus, node, pressed);
     const isOpen = (key: string): boolean => filtering || !collapsed.includes(key);
     const toggle = (key: string): void => {
         if (!filtering) setCollapsed(collapsed.includes(key) ? collapsed.filter((k) => k !== key) : [...collapsed, key]);
@@ -130,10 +159,10 @@ export function StormingNavigator(props: {
     const selectedRef = useRef<HTMLDivElement | null>(null);
     useEffect(() => {
         selectedRef.current?.scrollIntoView({ block: 'nearest' });
-    }, [shown?.stormingId, shown?.scope]);
+    }, [showing, pressed]);
 
     const row = (node: NavigatorNode, depth: number, visible: boolean): ReactNode => {
-        const selected = shown?.stormingId === node.stormingId && shown.scope === node.scope;
+        const selected = isShown(node);
         const open = isOpen(node.key);
         const hasChildren = node.children.length > 0;
         // a stage counts its timelines only while collapsed, when its rows do not tell it, as the model tree's groups do
@@ -148,7 +177,8 @@ export function StormingNavigator(props: {
                     aria-expanded={hasChildren ? open : undefined}
                     title={node.id}
                     onClick={() => {
-                        props.onChoose(chooseScope(props.choice, node.stormingId, node.scope));
+                        props.onScope(node.stormingId, node.scope);
+                        setPressed(node.kind === 'stage' ? node.key : undefined);
                         props.onSelect(node.kind === 'storming' ? `es/${node.stormingId}` : `es/${node.stormingId}/${node.id}`);
                     }}
                 >

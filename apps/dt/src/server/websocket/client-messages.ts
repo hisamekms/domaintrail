@@ -19,11 +19,12 @@ function location(v: unknown): ViewLocation | undefined {
     }
     if (
         v.kind === 'dtes' &&
-        hasOnly(v, ['kind', 'stormingId', 'level', 'timelineId', 'layoutKey']) &&
+        hasOnly(v, ['kind', 'stormingId', 'level', 'timelineId', 'exceptions', 'layoutKey']) &&
         isKey(v.stormingId) &&
         isKey(v.level) &&
         isKey(v.layoutKey) &&
-        (v.timelineId === undefined || isKey(v.timelineId))
+        (v.timelineId === undefined || isKey(v.timelineId)) &&
+        (v.exceptions === undefined || v.exceptions === false)
     ) {
         return {
             kind: 'dtes',
@@ -31,6 +32,7 @@ function location(v: unknown): ViewLocation | undefined {
             level: v.level,
             layoutKey: v.layoutKey,
             ...(typeof v.timelineId === 'string' && { timelineId: v.timelineId }),
+            ...(v.exceptions === false && { exceptions: false as const }),
         };
     }
     return undefined;
