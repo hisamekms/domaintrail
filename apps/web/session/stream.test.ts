@@ -102,6 +102,20 @@ describe('the main stream', () => {
         expect(items.filter((i) => i.kind === 'message').map((i) => i.kind === 'message' && i.request.id)).toEqual(['q1', 'q2', 'q3']);
     });
 
+    test('an answer separates the question card from the next AI turn in the chat', () => {
+        const answer = { answerTo: 'run1', answers: [{ question: 'q', text: 'Which?', chosen: [{ id: 'a', label: 'A' }] }] };
+        const working = { ...run2, input: { ...run2.input, answer }, state: 'Running', startedAt: at(10, 5) } as unknown as RunJson;
+        const items = streamItems({ revisions, runs: [run1, working], requests: [q1, q2] });
+        expect(items.filter((i) => i.kind === 'card' || i.kind === 'answer').map((i) => [i.kind, i.key])).toEqual([
+            ['card', 'card:run1'],
+            ['answer', 'answer:run2'],
+            ['card', 'card:run2'],
+        ]);
+        const cards = items.filter((i) => i.kind === 'card');
+        expect(cards.map((i) => i.runs.map((r) => r.run.id))).toEqual([['run1'], ['run2']]);
+        expect(cards.map((i) => i.updatedAt)).toEqual([at(7), at(10, 5)]);
+    });
+
     test("one agent message per run, at the run's latest change of state", () => {
         const lookup = revisionLookup({ revisions, runs: [] });
         const message = (r: RunJson): unknown => agentMessage(r, lookup);

@@ -4,7 +4,7 @@
 // the names of the participants. Everything is derived from the session's state on the page: nothing here is sent.
 import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { listedParticipants, type Peers } from './presence';
-import { changeUnits, type ChangeUnit } from './history';
+import { changeUnits, runAt, type ChangeUnit, type UnitRun } from './history';
 import { timeline } from './timeline';
 import { guideAnswers } from './guide-view';
 import { slashCommandSpec } from '@domaintrail/collaboration';
@@ -112,12 +112,20 @@ export function filesChanged(before: RevisionJson | undefined, after: RevisionJs
 
 /**
  * One item of the main stream. `at` is where it stands (ISO); `key` is stable across updates of the same item. A card
- * stays where its first run was queued, `updatedAt` telling when it last changed.
+ * stays where its first visible run was queued, `updatedAt` telling when it last changed.
  */
 export type StreamItem =
     | { readonly kind: 'session-start'; readonly key: string; readonly at: string; readonly revision: number }
     | { readonly kind: 'message'; readonly key: string; readonly at: string; readonly request: RequestJson }
-    | { readonly kind: 'card'; readonly key: string; readonly at: string; readonly updatedAt: string; readonly unit: ChangeUnit }
+    | {
+          readonly kind: 'card';
+          readonly key: string;
+          readonly at: string;
+          readonly updatedAt: string;
+          readonly unit: ChangeUnit;
+          readonly runs: readonly UnitRun[];
+      }
+    | { readonly kind: 'answer'; readonly key: string; readonly at: string; readonly run: RunJson }
     /**
      * A person's edit of a sticky (ADR 0033), where it was written: an activity row of theirs, never a message (the AI
      * is not asked, nothing unread). A re-application after a run and a conflict's choice are rows of the same kind.
@@ -220,7 +228,7 @@ export function agentMessage(run: RunJson, lookup: ReturnType<typeof revisionLoo
 
 /**
  * The main stream, oldest first: the session's start, every message as it was sent (each is chat; the AI's answers
- * among them), one card per change unit where its first run was queued (`history.ts`), the change proposals where
+ * among them), cards for change units with human answers between a question and the next AI card (`history.ts`), the change proposals where
  * they were made, the cards of the `/` commands where they started, and the revisions restored.
  */
 export function streamItems(
@@ -248,8 +256,25 @@ export function streamItems(
     // a person's edit of a sticky (ADR 0033) is in AI の作業, not in the chat: neither its message nor its unit
     for (const request of state.requests)
         if (!answers.has(request.id) && request.edit === undefined) items.push({ kind: 'message', key: `message:${request.id}`, at: request.sentAt, request });
-    for (const unit of changeUnits(state))
-        if (unit.outcome !== 'edited') items.push({ kind: 'card', key: `card:${unit.key}`, at: unit.start, updatedAt: unit.at, unit });
+    for (const unit of changeUnits(state)) {
+        if (unit.outcome === 'edited') continue;
+        let segment: UnitRun[] = [];
+        const addCard = (): void => {
+            if (segment.length === 0) return;
+            const first = segment[0].run;
+            const last = segment[segment.length - 1].run;
+            items.push({ kind: 'card', key: `card:${first.id}`, at: first.queuedAt, updatedAt: runAt(last), unit, runs: segment });
+        };
+        for (const entry of unit.runs) {
+            if (entry.run.input.answer) {
+                addCard();
+                segment = [];
+                items.push({ kind: 'answer', key: `answer:${entry.run.id}`, at: entry.run.queuedAt, run: entry.run });
+            }
+            segment.push(entry);
+        }
+        addCard();
+    }
     for (const run of state.runs) if (run.state === 'Edited') items.push({ kind: 'edit', key: `edit:${run.id}`, at: run.finishedAt, run });
     for (const proposal of state.proposals ?? []) items.push({ kind: 'proposal', key: `proposal:${proposal.id}`, at: proposal.proposedAt, proposal });
     // an answer command's answer is the AI's message: its card says only that the AI works on it (in Solo, its slot
@@ -292,7 +317,7 @@ export type ChatEntry =
 export function placeAiSlots(items: readonly StreamItem[], slots: ReadonlyMap<string, AiSlot>): ChatEntry[] {
     const byKey = new Map(items.map((i) => [i.key, i]));
     const cardOf = new Map<string, string>();
-    for (const i of items) if (i.kind === 'card') for (const { run } of i.unit.runs) cardOf.set(run.id, i.key);
+    for (const i of items) if (i.kind === 'card') for (const { run } of i.runs) cardOf.set(run.id, i.key);
     // the item each slot shows once it is there, the first message taking it
     const placed = new Map<string, StreamItem>();
     const taken = new Set<string>();

@@ -1,6 +1,6 @@
-// A card of the chat (ADR 0026, amendment): one change unit as an AI turn, updated in place — queued → running → done,
-// a question, declined, failed or cancelled — with the runs that continue it one under the other (the question, the
-// facilitator's answer or note, the result). Its state sits in the chat's status slot, at its header's right end; its actions float over its top right. At the top of each run (not in Solo), a quote of each message it applied (with what the
+// A card of the chat (ADR 0026, amendment): one AI turn, updated in place — queued → running → done,
+// a question, declined, failed or cancelled. A human answer starts a new card after the question; AI の作業 keeps the
+// related runs in one change unit. Its state sits in the chat's status slot, at its header's right end; its actions float over its top right. At the top of each run (not in Solo), a quote of each message it applied (with what the
 // reply says of each, ✓ 対応 ◐ 一部 – 未対応 ? 確認); a click goes to the message, a hover marks it. The AI's question
 // and what it assumed sit on surfaces of their own, their options and alternatives as cards with ♡ at the right. The
 // facilitator answers a question by choosing, approves an assumption or sends the requests again with an alternative,
@@ -23,7 +23,7 @@ import { cardMenuItems, cardRuns, obstacleText, queueAhead, quoteDisplay, type C
 import { changeFullName, changeKey, changeShortName, changeTarget, useModelChanges } from './changes';
 import { useChat, type Tx } from './chat-context';
 import { assumptionDecision, questionsState, type QuestionsState } from './decisions';
-import { changedPaths, cutList, requestersOf, unitName, type ChangeUnit } from './history';
+import { changedPaths, cutList, requestersOf, unitName, type ChangeUnit, type UnitRun } from './history';
 import { isReplyable } from './replies';
 import { AddReaction, ReactionRow, VoteMark } from './mark-controls';
 import { bodyText } from './mentions';
@@ -44,10 +44,20 @@ const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hou
 /** The mark of a request's status: ✓ done, ◐ partly, – not done, ? a question, ↩ answered as a question. */
 export const PROGRESS_MARK: Record<RequestProgress, string> = { Done: '✓', Partial: '◐', Skipped: '–', Question: '?', Answered: '↩' };
 
-export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; compact?: boolean; actions?: ReactNode }) {
+export function RunCard({
+    unit,
+    visibleRuns,
+    compact = false,
+    actions,
+}: {
+    unit: ChangeUnit;
+    visibleRuns?: readonly UnitRun[];
+    compact?: boolean;
+    actions?: ReactNode;
+}) {
     const chat = useChat();
     const { session, tx, nameOf, control } = chat;
-    const runs = cardRuns(unit, revisionLookup(session.state));
+    const runs = cardRuns(visibleRuns ? { ...unit, runs: visibleRuns } : unit, revisionLookup(session.state));
     const first = runs[0];
     const last = runs[runs.length - 1];
     const state = turnState(last.message);
@@ -71,7 +81,7 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
         </span>
     );
     return (
-        <div className={`run-card status-${last.message.kind}${compact ? ' compact' : ''}`} data-card={unit.key}>
+        <div className={`run-card status-${last.message.kind}${compact ? ' compact' : ''}`} data-card={first.run.id}>
             <span className="session-avatar chat-agent-avatar" aria-hidden>
                 <Bot size={13} />
             </span>
@@ -117,6 +127,7 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                         compact={compact}
                         about={about}
                         name={title.text}
+                        answerInStream={visibleRuns !== undefined}
                     />
                 ))}
             </div>
@@ -238,6 +249,7 @@ function RunSection({
     compact,
     about,
     name,
+    answerInStream,
 }: {
     run: CardRun;
     display: QuoteDisplay;
@@ -247,6 +259,7 @@ function RunSection({
     about: string;
     /** The card's name, as the canvas's bar names the changes 図で見る shows. */
     name: string;
+    answerInStream: boolean;
 }) {
     const { tx, nameOf, control, session, jump } = useChat();
     const runs = session.state.runs;
@@ -275,7 +288,7 @@ function RunSection({
                     </time>
                 </div>
             )}
-            {run.answer && !answerShown && <AnswerLine run={run} />}
+            {run.answer && !answerShown && !answerInStream && <AnswerLine run={run} />}
             {run.note && (
                 <p className="run-line">
                     ↳ {tx.chat.note} {nameOf(run.run.queuedBy)}: <span className="run-line-text">{run.note}</span>

@@ -65,8 +65,9 @@ export function replyLooks(lines: readonly ThreadLine[]): ReplyLook[] {
 export function threadLines(entries: readonly ChatEntry[]): ThreadLine[] {
     const cardOf = new Map<string, string>();
     const items = entries.flatMap((e): StreamItem[] => (e.kind === 'item' ? [e.item] : e.content.kind === 'item' ? [e.content.item] : []));
-    for (const i of items) if (i.kind === 'card') for (const { run } of i.unit.runs) cardOf.set(run.id, i.key);
+    for (const i of items) if (i.kind === 'card') for (const { run } of i.runs) cardOf.set(run.id, i.key);
     const toOf = (item: StreamItem): string | undefined => {
+        if (item.kind === 'answer') return cardOf.get(item.run.input.answer?.answerTo ?? '');
         // a record at the end of an interview's thread replies to its last message
         if (item.kind === 'record') return item.record.replyTo === undefined ? undefined : `message:${item.record.replyTo}`;
         if (item.kind !== 'message') return undefined;

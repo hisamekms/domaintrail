@@ -410,7 +410,7 @@ describe('the cards of the chat', () => {
             qb: { state: 'question', card: 'run1' },
         });
         const later = changeUnits({ runs: [asked, answered], revisions });
-        expect(messageMarks(later).get('qb')).toEqual({ state: 'running', card: 'run1' });
+        expect(messageMarks(later).get('qb')).toEqual({ state: 'running', card: 'run2' });
         expect(messageMarks(later).has('qc')).toBe(false);
         const failed = run('run3', 9, [qc], { state: 'Failed', baseRevision: 'r0', startedAt: at(9), reason: 'AgentError', finishedAt: at(10) });
         expect(messageMarks(changeUnits({ runs: [failed], revisions })).get('qc')).toEqual({ state: 'failed', card: 'run3' });

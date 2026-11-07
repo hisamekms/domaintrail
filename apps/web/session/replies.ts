@@ -69,7 +69,7 @@ export interface ReplyReference {
 /** The reference of a reply to `run`, from the session's units; `undefined` when the run is not in them. */
 export function replyReference(units: readonly ChangeUnit[], run: string): ReplyReference | undefined {
     for (const unit of units)
-        for (const u of unit.runs) {
+        for (const [index, u] of unit.runs.entries()) {
             if (u.run.id !== run) continue;
             const r = u.run;
             const reply = r.state === 'Completed' || r.state === 'NeedsClarification' || r.state === 'Declined' ? r.reply : undefined;
@@ -79,7 +79,7 @@ export function replyReference(units: readonly ChangeUnit[], run: string): Reply
                 name: unitName(unit).text,
                 summary: said === undefined || oneLine(said) === '' ? undefined : oneLine(said),
                 state: r.state,
-                card: unit.key,
+                card: unit.runs.slice(0, index + 1).findLast((entry) => entry.run.input.answer)?.run.id ?? unit.key,
             };
         }
     return undefined;
