@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import * as path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { analyzeStormings } from '@domaintrail/storming';
-import { focusBack, matchItems, type PaletteItem } from '../shared/palette';
+import { focusBack } from '../shared/palette';
 import { editValues, fieldValues, outsidePressCancels } from './forms';
 import { elementLink, linkedElement } from './link';
 import {
@@ -111,17 +111,6 @@ describe('a link to an element', () => {
         expect(linkedElement(new URL(link).hash)).toBe('es/OrderToCash/OrderPlaced');
         expect(linkedElement('')).toBeUndefined();
         expect(linkedElement('#other=1')).toBeUndefined();
-    });
-});
-
-describe('the command palette', () => {
-    const item = (label: string, detail?: string): PaletteItem => ({ id: label, label, ...(detail !== undefined && { detail }), section: 's', run: () => {} });
-    test('every word typed is in the label or the detail, ignoring case and width', () => {
-        const items = [item('注文を受け付けた', 'イベント · OrderPlaced'), item('リンクをコピー'), item('Ｃｈａｔ')];
-        expect(matchItems(items, '').map((i) => i.id)).toEqual(['注文を受け付けた', 'リンクをコピー', 'Ｃｈａｔ']);
-        expect(matchItems(items, 'orderplaced 注文').map((i) => i.id)).toEqual(['注文を受け付けた']);
-        expect(matchItems(items, 'chat').map((i) => i.id)).toEqual(['Ｃｈａｔ']);
-        expect(matchItems(items, 'なし')).toEqual([]);
     });
 });
 

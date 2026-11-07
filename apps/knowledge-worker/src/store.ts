@@ -7,9 +7,27 @@
 // it otherwise, which rolls the batch back, and the call is decided again over the items as they are now. So an
 // extraction never overwrites a correction or a deletion made while it was being decided: its operation on that item
 // is dropped when decided again (`StaleOperation`, `KnowledgeItemGone`), as the domain says.
+//
+// Retiring (廃止) writes the item's `retirement`; the AI's proposals are rows of `proposals`, decided by the context's
+// `admitProposal`, `decideApproval` and `decideDismissal`. A decision on a proposal is guarded by its state as an item
+// is by its `rev`: approving or dismissing one that another person decided meanwhile is decided again.
 import {
+    admitProposal,
     applyExtraction,
+    candidateOf,
+    proposalIdOf,
     auditOf,
+    auditOfProposal,
+    decideApproval,
+    decideDismissal,
+    openProposals,
+    proposalsTouched,
+    type ApprovalError,
+    type ApprovedProposal,
+    type ProposalRejection,
+    type RetireError,
+    type RetirementCandidate,
+    type RetirementInput,
     idempotencyKey,
     imagesIn,
     itemsTouched,
@@ -44,6 +62,7 @@ import {
     itemId,
     itemVersion,
     knowledgeItem,
+    retirementProposal,
     stickyRef,
     type Decoder,
 } from '@domaintrail/knowledge/protocol';
@@ -70,8 +89,19 @@ export interface ItemRow {
     readonly updated_at: string;
     readonly deleted_by: string | null;
     readonly deleted_at: string | null;
+    readonly retirement: string | null;
     readonly rev: number;
 }
+
+/** A proposal's row in `proposals`. */
+interface ProposalRow {
+    readonly id: string;
+    readonly state: string;
+    readonly body: string;
+}
+
+/** A row as the model's proposal; a row that is not one is a broken store, never input. */
+const proposalOf = (row: ProposalRow): Knowledge.RetirementProposal => retirementProposal(JSON.parse(row.body), `proposals[${row.id}]`);
 
 /** A row as the model's item; a row that is not one is a broken store, never input. */
 export function itemOf(row: ItemRow): Knowledge.KnowledgeItem {
@@ -93,6 +123,7 @@ export function itemOf(row: ItemRow): Knowledge.KnowledgeItem {
             updatedAt: row.updated_at,
             ...(row.deleted_by !== null && { deletedBy: row.deleted_by }),
             ...(row.deleted_at !== null && { deletedAt: row.deleted_at }),
+            ...(row.retirement !== null && { retirement: JSON.parse(row.retirement) }),
         },
         `items[${row.id}]`,
     );
@@ -245,6 +276,8 @@ export class D1KnowledgeStore implements KnowledgeStore {
         if (query.origin?.length) where.push(`i.origin IN (SELECT value FROM json_each(${bind(JSON.stringify(query.origin))}))`);
         if (query.perspective !== undefined) where.push(`i.perspective = ${bind(query.perspective)}`);
         if (query.session !== undefined) where.push(`i.created_in = ${bind(query.session)}`);
+        if (query.retired === undefined) where.push('i.retirement IS NULL');
+        else if (query.retired === 'only') where.push('i.retirement IS NOT NULL');
         const terms = (query.q ?? '').split(/\s+/).filter(Boolean).slice(0, 10);
         if (terms.length > 0)
             where.push(`i.seq IN (SELECT rowid FROM item_search WHERE ${terms.map((t) => `body LIKE ${bind(likeTerm(t))} ESCAPE '\\'`).join(' AND ')})`);
@@ -273,9 +306,9 @@ export class D1KnowledgeStore implements KnowledgeStore {
             .prepare(
                 `SELECT a.sticky AS sticky,
                         MAX(EXISTS (SELECT 1 FROM json_each(i.conflicts_with) c
-                                    JOIN items o ON o.project = i.project AND o.id = c.value AND o.state = 'Live')) AS conflict
+                                    JOIN items o ON o.project = i.project AND o.id = c.value AND o.state = 'Live' AND o.retirement IS NULL)) AS conflict
                  FROM item_about a JOIN items i ON i.project = a.project AND i.id = a.item
-                 WHERE a.project = ?1 AND i.state = 'Live' AND substr(a.sticky, 1, length(?2)) = ?2
+                 WHERE a.project = ?1 AND i.state = 'Live' AND i.retirement IS NULL AND substr(a.sticky, 1, length(?2)) = ?2
                  GROUP BY a.sticky ORDER BY a.sticky`,
             )
             .bind(project, prefix)
@@ -397,6 +430,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
                 updatedAt: i.updatedAt,
                 deletedBy: i.state === 'Deleted' ? i.deletedBy : null,
                 deletedAt: i.state === 'Deleted' ? i.deletedAt : null,
+                retirement: i.retirement ?? null,
                 body: searchBody(i),
                 images: imagesIn(i.content.text),
             })),
@@ -406,17 +440,17 @@ export class D1KnowledgeStore implements KnowledgeStore {
             this.db
                 .prepare(
                     `INSERT INTO items (project, id, state, version, title, text, when_label, kind, origin, perspective, about, sources, conflicts_with,
-                                        created_in, created_at, updated_at, deleted_by, deleted_at, rev)
+                                        created_in, created_at, updated_at, deleted_by, deleted_at, retirement, rev)
                      SELECT ?1, j.value ->> 'id', j.value ->> 'state', j.value ->> 'version', j.value ->> 'title', j.value ->> 'text', j.value ->> 'when',
                             j.value ->> 'kind', j.value ->> 'origin', j.value ->> 'perspective', j.value -> 'about', j.value -> 'sources',
                             j.value -> 'conflictsWith', j.value ->> 'createdIn', j.value ->> 'createdAt', j.value ->> 'updatedAt',
-                            j.value ->> 'deletedBy', j.value ->> 'deletedAt', 1
+                            j.value ->> 'deletedBy', j.value ->> 'deletedAt', j.value ->> 'retirement', 1
                      FROM json_each(?2) j WHERE true
                      ON CONFLICT (project, id) DO UPDATE SET
                        state = excluded.state, version = excluded.version, title = excluded.title, text = excluded.text, when_label = excluded.when_label,
                        kind = excluded.kind, origin = excluded.origin, perspective = excluded.perspective, about = excluded.about,
                        sources = excluded.sources, conflicts_with = excluded.conflicts_with, updated_at = excluded.updated_at,
-                       deleted_by = excluded.deleted_by, deleted_at = excluded.deleted_at, rev = items.rev + 1`,
+                       deleted_by = excluded.deleted_by, deleted_at = excluded.deleted_at, retirement = excluded.retirement, rev = items.rev + 1`,
                 )
                 .bind(project, rows),
             this.db.prepare("DELETE FROM item_about WHERE project = ?1 AND item IN (SELECT j.value ->> 'id' FROM json_each(?2) j)").bind(project, rows),
@@ -495,7 +529,20 @@ export class D1KnowledgeStore implements KnowledgeStore {
             const ids = itemsTouched(extraction);
             const rows = new Map((await this.rows(project, ids)).map((r) => [r.id, r]));
             const items = new Map([...rows].map(([id, r]) => [id, itemOf(r)]));
-            const outcome = applyExtraction(extraction, (id) => items.get(id), this.now());
+            // about the items, and those of the candidates' IDs wherever they are (a retry, or a collision)
+            const proposals = await this.proposalsFor(
+                project,
+                proposalsTouched(extraction),
+                extraction.operations.flatMap((o) =>
+                    o.kind === 'ProposeRetire' || o.kind === 'ProposeUnretire' ? [proposalIdOf(candidateOf(o, extraction.by))] : [],
+                ),
+            );
+            const outcome = applyExtraction(
+                extraction,
+                (id) => items.get(id),
+                this.now(),
+                () => proposals,
+            );
             const changes = outcome.applied.flatMap((a) => a.changes);
             const past = changes.flatMap((c) => (c.replaced ? [{ item: c.item.id, past: pastVersionOf(c.replaced, c.item) }] : []));
             const keep: KeptOutcome = {
@@ -514,6 +561,11 @@ export class D1KnowledgeStore implements KnowledgeStore {
                               changes.map((c) => auditOf(c.event)),
                           )
                         : []),
+                    ...this.proposalInserts(
+                        project,
+                        outcome.proposals,
+                        outcome.applied.flatMap((a) => (a.proposal ? [auditOfProposal(a.proposal.event, a.proposal.version)] : [])),
+                    ),
                     this.db
                         .prepare('INSERT INTO extractions (project, key, body_hash, outcome, applied_at) VALUES (?1, ?2, ?3, ?4, ?5)')
                         .bind(project, key, hash, JSON.stringify(keep), this.now().toISOString()),
@@ -527,6 +579,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
                 items: outcome.items.filter((i): i is Knowledge.LiveKnowledgeItem => i.state === 'Live'),
                 dropped: outcome.dropped,
                 replayed: false,
+                ...(outcome.proposals.length > 0 && { proposals: outcome.proposals }),
             };
         }
     }
@@ -706,6 +759,207 @@ export class D1KnowledgeStore implements KnowledgeStore {
             const restored = r.value.Live.aggregate;
             return { statements: this.writes(project, [restored], [], [auditOf(r.value.Live.events.KnowledgeItemRestored)]), value: ok(restored) };
         });
+    }
+
+    // ---- retiring ------------------------------------------------------------------------------------------------
+
+    /** The proposals about these items, and those of these IDs wherever they are. */
+    private async proposalsFor(project: string, items: readonly string[], ids: readonly string[]): Promise<Knowledge.RetirementProposal[]> {
+        if (items.length === 0 && ids.length === 0) return [];
+        const { results } = await this.db
+            .prepare(
+                'SELECT id, state, body FROM proposals WHERE project = ?1 AND (item IN (SELECT value FROM json_each(?2)) OR id IN (SELECT value FROM json_each(?3)))',
+            )
+            .bind(project, JSON.stringify(items), JSON.stringify(ids))
+            .all<ProposalRow>();
+        return results.map(proposalOf);
+    }
+
+    private async proposalRow(project: string, id: string): Promise<ProposalRow | undefined> {
+        return (
+            (await this.db.prepare('SELECT id, state, body FROM proposals WHERE project = ?1 AND id = ?2').bind(project, id).first<ProposalRow>()) ?? undefined
+        );
+    }
+
+    /**
+     * The statements that add new proposals, and the audit records of them. A row of the same ID is never overwritten
+     * (`DO NOTHING`): `admitProposal` found it already, as the same proposal sent again or as a collision.
+     */
+    private proposalInserts(
+        project: string,
+        proposals: readonly Knowledge.RetirementProposal[],
+        audit: readonly Knowledge.AuditEntry[],
+    ): D1PreparedStatement[] {
+        const statements: D1PreparedStatement[] = [];
+        if (proposals.length > 0)
+            statements.push(
+                this.db
+                    .prepare(
+                        `INSERT INTO proposals (project, id, item, state, body, proposed_at)
+                         SELECT ?1, j.value ->> 'id', j.value ->> 'item', j.value ->> 'state', j.value -> 'body', j.value ->> 'proposedAt' FROM json_each(?2) j
+                         WHERE true ON CONFLICT (project, id) DO NOTHING`,
+                    )
+                    .bind(project, JSON.stringify(proposals.map((p) => ({ id: p.id, item: p.item, state: p.state, body: p, proposedAt: p.proposedAt })))),
+            );
+        statements.push(...this.auditWrites(project, audit));
+        return statements;
+    }
+
+    /** The statement that writes a decided proposal over its open row (`openGuard` heads its batch), and the audit records. */
+    private proposalDecided(project: string, proposal: Knowledge.RetirementProposal, audit: readonly Knowledge.AuditEntry[]): D1PreparedStatement[] {
+        return [
+            this.db
+                .prepare("UPDATE proposals SET state = ?3, body = ?4 WHERE project = ?1 AND id = ?2 AND state = 'Open'")
+                .bind(project, proposal.id, proposal.state, JSON.stringify(proposal)),
+            ...this.auditWrites(project, audit),
+        ];
+    }
+
+    private auditWrites(project: string, audit: readonly Knowledge.AuditEntry[]): D1PreparedStatement[] {
+        if (audit.length === 0) return [];
+        return [
+            this.db
+                .prepare(
+                    `INSERT INTO audit (project, item, version, operation, actor, caller, reason, at)
+                     SELECT ?1, j.value ->> 'item', j.value ->> 'version', j.value ->> 'operation', j.value -> 'actor', ?3, j.value ->> 'reason', j.value ->> 'at'
+                     FROM json_each(?2) j ORDER BY j.key`,
+                )
+                .bind(project, JSON.stringify(audit), this.caller),
+        ];
+    }
+
+    /** The statement that fails the batch it heads unless the proposal is still open. */
+    private openGuard(project: string, id: string): D1PreparedStatement {
+        return this.db
+            .prepare("SELECT json(CASE WHEN (SELECT state FROM proposals WHERE project = ?1 AND id = ?2) = 'Open' THEN '1' ELSE 'stale' END)")
+            .bind(project, id);
+    }
+
+    async retire(
+        project: Knowledge.ProjectName,
+        id: Knowledge.KnowledgeItemId,
+        retirement: RetirementInput,
+        by: Knowledge.UserName,
+    ): Promise<Result<Knowledge.LiveKnowledgeItem, RetireError>> {
+        const ids = retirement.replacedBy !== undefined && retirement.replacedBy !== id ? [id, retirement.replacedBy] : [id];
+        return this.decideAndWrite<Result<Knowledge.LiveKnowledgeItem, RetireError>>(project, ids, async (rows) => {
+            const row = rows.get(id);
+            if (!row) return { statements: [], value: err({ type: 'KnowledgeItemNotFound' as const, itemId: id }) };
+            const item = itemOf(row);
+            if (item.state !== 'Live') return { statements: [], value: err({ type: 'KnowledgeItemGone' as const, itemId: id }) };
+            if (ids.length > 1) {
+                const other = rows.get(ids[1]);
+                const replacement = other ? itemOf(other) : undefined;
+                if (!replacement || replacement.state !== 'Live' || replacement.retirement !== undefined)
+                    return { statements: [], value: err({ type: 'ProposalRefused' as const, reason: 'replacementUnavailable' as const }) };
+            }
+            const r = knowledgeItemCommands.retire(item, { ...retirement, by, at: this.now() });
+            if (!r.ok) return { statements: [], value: r };
+            const next = r.value.Live.aggregate;
+            return { statements: this.writes(project, [next], [], [auditOf(r.value.Live.events.KnowledgeItemRetired)]), value: ok(next) };
+        });
+    }
+
+    async unretire(
+        project: Knowledge.ProjectName,
+        id: Knowledge.KnowledgeItemId,
+        by: Knowledge.UserName,
+    ): Promise<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone | Knowledge.NotRetired>> {
+        type Answer = Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone | Knowledge.NotRetired>;
+        return this.decideAndWrite<Answer>(project, [id], async (rows) => {
+            const row = rows.get(id);
+            if (!row) return { statements: [], value: err({ type: 'KnowledgeItemNotFound' as const, itemId: id }) };
+            const item = itemOf(row);
+            if (item.state !== 'Live') return { statements: [], value: err({ type: 'KnowledgeItemGone' as const, itemId: id }) };
+            const r = knowledgeItemCommands.unretire(item, { by, at: this.now() });
+            if (!r.ok) return { statements: [], value: r };
+            const next = r.value.Live.aggregate;
+            return { statements: this.writes(project, [next], [], [auditOf(r.value.Live.events.KnowledgeItemUnretired)]), value: ok(next) };
+        });
+    }
+
+    async propose(project: Knowledge.ProjectName, candidate: RetirementCandidate): Promise<Result<Knowledge.RetirementProposal, ProposalRejection>> {
+        const ids = [
+            ...new Set([
+                candidate.item,
+                ...(candidate.replacedBy ? [candidate.replacedBy] : []),
+                ...candidate.evidence.flatMap((e) => (e.kind === 'Decision' ? [e.item] : [])),
+            ]),
+        ];
+        return this.decideAndWrite<Result<Knowledge.RetirementProposal, ProposalRejection>>(project, ids, async (rows) => {
+            const items = new Map([...rows].map(([id, r]) => [id, itemOf(r)]));
+            // about the item, and the one of the candidate's ID wherever it is (a retry, or a collision)
+            const proposals = await this.proposalsFor(project, [candidate.item], [proposalIdOf(candidate)]);
+            const r = admitProposal(candidate, { lookup: (id) => items.get(id), proposals }, this.now());
+            if (!r.ok) return { statements: [], value: r };
+            const { proposal, event } = r.value;
+            const item = items.get(candidate.item);
+            if (!event || !item) return { statements: [], value: ok(proposal) };
+            return { statements: this.proposalInserts(project, [proposal], [auditOfProposal(event, item.version)]), value: ok(proposal) };
+        });
+    }
+
+    async proposals(project: Knowledge.ProjectName): Promise<readonly Knowledge.OpenRetirementProposal[]> {
+        const { results } = await this.db
+            .prepare("SELECT id, state, body FROM proposals WHERE project = ?1 AND state = 'Open' ORDER BY proposed_at DESC, id DESC LIMIT 500")
+            .bind(project)
+            .all<ProposalRow>();
+        const proposals = results.map(proposalOf);
+        const items = new Map((await this.rows(project, [...new Set(proposals.map((p) => p.item))])).map((r) => [r.id, itemOf(r)]));
+        return openProposals(proposals, (id) => items.get(id));
+    }
+
+    async approveProposal(
+        project: Knowledge.ProjectName,
+        id: Knowledge.RetirementProposalId,
+        by: Knowledge.UserName,
+    ): Promise<Result<ApprovedProposal, ApprovalError>> {
+        for (let attempt = 1; ; attempt++) {
+            const row = await this.proposalRow(project, id);
+            const proposal = row ? proposalOf(row) : undefined;
+            const ids = proposal ? [proposal.item, ...(proposal.replacedBy ? [proposal.replacedBy] : [])] : [];
+            const rows = new Map((await this.rows(project, ids)).map((r) => [r.id, r]));
+            const items = new Map([...rows].map(([i, r]) => [i, itemOf(r)]));
+            const r = decideApproval(id, proposal, (i) => items.get(i), by, this.now());
+            if (!r.ok) return r;
+            const read = ids.map((i) => ({ id: i, rev: rows.get(i)?.rev ?? null }));
+            try {
+                await this.db.batch([
+                    guard(this.db, project, read),
+                    this.openGuard(project, id),
+                    ...this.writes(project, [r.value.item], [], [auditOf(r.value.itemEvent)]),
+                    ...this.proposalDecided(project, r.value.proposal, []),
+                ]);
+            } catch (e) {
+                if (attempt >= ATTEMPTS) throw e;
+                continue;
+            }
+            return ok({ proposal: r.value.proposal, item: r.value.item });
+        }
+    }
+
+    async dismissProposal(
+        project: Knowledge.ProjectName,
+        id: Knowledge.RetirementProposalId,
+        by: Knowledge.UserName,
+    ): Promise<Result<Knowledge.DismissedRetirementProposal, Knowledge.ProposalNotFound | Knowledge.ProposalDecided>> {
+        for (let attempt = 1; ; attempt++) {
+            const row = await this.proposalRow(project, id);
+            const proposal = row ? proposalOf(row) : undefined;
+            const r = decideDismissal(id, proposal, by, this.now());
+            if (!r.ok) return r;
+            const item = proposal ? await this.row(project, proposal.item) : undefined;
+            try {
+                await this.db.batch([
+                    this.openGuard(project, id),
+                    ...this.proposalDecided(project, r.value.proposal, item ? [auditOfProposal(r.value.event, itemOf(item).version)] : []),
+                ]);
+            } catch (e) {
+                if (attempt >= ATTEMPTS) throw e;
+                continue;
+            }
+            return ok(r.value.proposal);
+        }
     }
 
     async putImage(project: Knowledge.ProjectName, image: KnowledgeImage): Promise<Knowledge.ImageId> {

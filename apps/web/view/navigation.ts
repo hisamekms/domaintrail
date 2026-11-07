@@ -20,6 +20,8 @@ export interface Navigation {
     setView: (v: View) => void;
     /** The selected item (the top of the history), if any. */
     selected: string | undefined;
+    /** The selections, oldest first (探す's 最近). */
+    history: readonly string[];
     sourceFocus: SourceFocus | undefined;
     setSourceFocus: (focus: SourceFocus | undefined) => void;
     /** Selects an item: updates the inspector, the history and the highlight in the current view. */
@@ -92,7 +94,7 @@ export function useNavigation(canvas: DiagramCanvas | null, current: ViewPayload
         [highlight],
     );
 
-    return { view, setView, selected, sourceFocus, setSourceFocus, select, backTo, goBack, reveal };
+    return { view, setView, selected, history, sourceFocus, setSourceFocus, select, backTo, goBack, reveal };
 }
 
 /**

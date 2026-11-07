@@ -70,8 +70,10 @@ export const liveItem = (
 export function memoryStore(items: readonly Knowledge.LiveKnowledgeItem[] = []): KnowledgeStore & {
     readonly items: Map<string, Knowledge.KnowledgeItem>;
     readonly applied: Knowledge.Extraction[];
+    readonly proposalsMade: Knowledge.RetirementProposal[];
     failing: boolean;
 } {
+    const proposals: Knowledge.RetirementProposal[] = [];
     const byId = new Map<string, Knowledge.KnowledgeItem>(items.map((i) => [i.id, i]));
     const results = new Map<string, AppliedExtraction>();
     const applied: Knowledge.Extraction[] = [];
@@ -82,27 +84,44 @@ export function memoryStore(items: readonly Knowledge.LiveKnowledgeItem[] = []):
     const store = {
         items: byId,
         applied,
+        proposalsMade: proposals,
         failing: false,
         async about(_project: Knowledge.ProjectName, stickies: readonly Knowledge.StickyRef[]) {
             if (store.failing) throw new Error('the store is unreachable');
-            return live().filter((i) => i.content.about.some((a) => stickies.includes(a)));
+            return live().filter((i) => i.retirement === undefined && i.content.about.some((a) => stickies.includes(a)));
         },
         async search(_project: Knowledge.ProjectName, query: KnowledgeQuery) {
             if (store.failing) throw new Error('the store is unreachable');
-            return { items: live().filter((i) => query.session === undefined || i.createdIn === query.session) };
+            const listed = (i: Knowledge.LiveKnowledgeItem): boolean =>
+                query.retired === 'include' ? true : query.retired === 'only' ? i.retirement !== undefined : i.retirement === undefined;
+            return {
+                items: live().filter(
+                    (i) =>
+                        listed(i) &&
+                        (query.session === undefined || i.createdIn === query.session) &&
+                        (query.about === undefined || i.content.about.some((a) => query.about?.includes(a))),
+                ),
+            };
         },
         async applyExtraction(_project: Knowledge.ProjectName, extraction: Knowledge.Extraction): Promise<AppliedExtraction> {
             if (store.failing) throw new Error('the store is unreachable');
             const key = idempotencyKey(extraction.by);
             const before = results.get(key);
             if (before) return { ...before, replayed: true };
-            const outcome = applyExtraction(extraction, (id) => byId.get(id), at);
+            const outcome = applyExtraction(
+                extraction,
+                (id) => byId.get(id),
+                at,
+                (item) => proposals.filter((p) => p.item === item),
+            );
             for (const item of outcome.items) byId.set(item.id, item);
             applied.push(extraction);
+            for (const p of outcome.proposals) proposals.push(p);
             const result: AppliedExtraction = {
                 items: outcome.items.filter((i): i is Knowledge.LiveKnowledgeItem => i.state === 'Live'),
                 dropped: outcome.dropped,
                 replayed: false,
+                ...(outcome.proposals.length > 0 && { proposals: outcome.proposals }),
             };
             results.set(key, result);
             return result;
@@ -119,6 +138,12 @@ export function memoryStore(items: readonly Knowledge.LiveKnowledgeItem[] = []):
         audit: unused,
         putImage: unused,
         getImage: unused,
+        retire: unused,
+        unretire: unused,
+        propose: unused,
+        proposals: unused,
+        approveProposal: unused,
+        dismissProposal: unused,
     };
     return store;
 }

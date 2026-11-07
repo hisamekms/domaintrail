@@ -16,6 +16,8 @@ export const KINDS: readonly Kind[] = ['rule', 'flow', 'example', 'term', 'pain'
 /** The filters' values: `none` of `when` is no filter's (an item about neither is shown unfiltered). */
 export const WHENS: readonly When[] = ['as_is', 'to_be'];
 export const ORIGINS: readonly Origin[] = ['said', 'agreed', 'investigated', 'inferred'];
+/** The reasons to retire an item, in the order they are offered (none chosen is allowed too). */
+export const RETIREMENT_REASONS: readonly Knowledge.RetirementReason[] = ['replaced', 'obsolete', 'wrong'];
 
 /** How a list is ordered: newest first (the default), or by kind and newest first within one. */
 export type Order = 'newest' | 'kind';
@@ -39,6 +41,9 @@ export function ordered(items: readonly KnowledgeItem[], order: Order): Knowledg
     const byKind = (a: KnowledgeItem, b: KnowledgeItem): number => KINDS.indexOf(a.content.labels.kind) - KINDS.indexOf(b.content.labels.kind);
     return [...items].sort((a, b) => (order === 'kind' ? byKind(a, b) || newestFirst(a, b) : newestFirst(a, b)));
 }
+
+/** Whether an item is retired (廃止). */
+export const isRetired = (item: KnowledgeItem): boolean => item.retirement !== undefined;
 
 /** A conflict between two items, each once: the newer first. */
 export interface ConflictPair {
@@ -95,6 +100,8 @@ export interface Filters {
     readonly kind: readonly Kind[];
     readonly origin: readonly Origin[];
     readonly perspective?: string;
+    /** 廃止も表示: the retired items too (hidden by default). */
+    readonly retired?: boolean;
 }
 
 export const NO_FILTERS: Filters = { q: '', when: [], kind: [], origin: [] };
@@ -146,6 +153,7 @@ export function queryOf(filters: Filters, cursor?: string): URLSearchParams {
     for (const o of filters.origin) params.append('origin', o);
     if (filters.perspective !== undefined) params.set('perspective', filters.perspective);
     if (filters.q.trim() !== '') params.set('q', filters.q.trim());
+    if (filters.retired) params.set('retired', 'include');
     if (cursor !== undefined) params.set('cursor', cursor);
     return params;
 }

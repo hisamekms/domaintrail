@@ -273,7 +273,8 @@ export async function writeDtShim(dt: PinnedDt, root: string, runtime: string = 
 /**
  * The launcher of `dt mcp` for the agent's Claude Code (ADR 0031: the answerer and the runner read knowledge through
  * the same tools as `dt mcp`): a `sh` script (a `.cmd` file on Windows) that changes to `cwd`, a private directory
- * outside the workspace, then runs the pinned `dt` with `-r <root>` (and `-c <config>`) and `mcp`. Claude Code starts
+ * outside the workspace, then runs the pinned `dt` with `-r <root>` (and `-c <config>`) and `mcp --without-retired` (the
+ * answerer and the runner are never given a retired item). Claude Code starts
  * it in its own working directory, the workspace or the answerer's view of it: run there, a runtime would pick up a
  * config file of it (a `bunfig.toml`) that an agent could have written. Nothing of it comes from the agent.
  */
@@ -285,7 +286,8 @@ export function knowledgeMcpLauncher(
     platform: NodeJS.Platform = process.platform,
 ): { readonly file: string; readonly text: string } {
     const command = dtCommandOf(dt);
-    const words = [command.command, ...command.args, '-r', root, ...(configPath ? ['-c', configPath] : []), 'mcp'];
+    // the retired items are never the agent's to read (ADR 0031, section 12)
+    const words = [command.command, ...command.args, '-r', root, ...(configPath ? ['-c', configPath] : []), 'mcp', '--without-retired'];
     [...words, cwd].forEach(checkWord);
     if (platform === 'win32') {
         for (const w of [...words, cwd]) if (CMD_SPECIAL.test(w)) throw new Error(`A path the dt mcp launcher cannot hold on Windows: ${JSON.stringify(w)}`);

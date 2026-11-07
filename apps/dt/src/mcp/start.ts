@@ -11,7 +11,7 @@ import { serveMcp } from './protocol.js';
 
 /** What the server says the client may tell the model about it. */
 export const MCP_INSTRUCTIONS =
-    "DomainTrail's knowledge of this project: what was said and found in its modeling sessions (why the model is so, rules, examples, terms, pains, wants, decisions), attached to the stickies of its Event Stormings. Before implementing or changing an element of the model, call knowledge_for_element with it (a sticky 'Storming.LocalId' or 'dt:Context.Aggregate.command'). Each item says how far to trust it (origin: said, agreed, investigated, inferred) and its date; items may conflict. Read-only.";
+    "DomainTrail's knowledge of this project: what was said and found in its modeling sessions (why the model is so, rules, examples, terms, pains, wants, decisions), attached to the stickies of its Event Stormings. Before implementing or changing an element of the model, call knowledge_for_element with it (a sticky 'Storming.LocalId' or 'dt:Context.Aggregate.command'). Each item says how far to trust it (origin: said, agreed, investigated, inferred) and its date; items may conflict. Retired items (no longer true, wrong or replaced) are left out unless asked for. Read-only.";
 
 export interface McpServerIO {
     /** The workspace's sources (`dt check`'s), read on every call. */
@@ -36,7 +36,7 @@ export async function startMcpServer(options: McpServerStartOptions, io: McpServ
         name: 'domaintrail',
         version,
         instructions: MCP_INSTRUCTIONS,
-        tools: knowledgeTools({ access, stickies }),
+        tools: knowledgeTools({ access, stickies, ...(options.withoutRetired && { withoutRetired: true }) }),
         input: io.input ?? process.stdin,
         output: io.output ?? process.stdout,
         log: options.log,

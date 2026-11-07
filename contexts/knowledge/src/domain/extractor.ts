@@ -76,6 +76,18 @@ export interface KnownItem {
     readonly createdAt: string;
 }
 
+/**
+ * A retired item as the extractor sees it: its title and reason only, so as not to make it again (its text is never
+ * given, so nothing rests on it). When the talk brings its topic up anew, the extractor proposes to unretire it.
+ */
+export interface RetiredItem {
+    /** The prompt's key (`r1`, `r2`, …), which the reply names. */
+    readonly key: string;
+    readonly id: string;
+    readonly title: string;
+    readonly reason?: Knowledge.RetirementReason;
+}
+
 /** A sticky the talk points at (a message's `#` chip): a strong hint of what a finding is about. */
 export interface KnownSticky {
     readonly ref: string;
@@ -101,6 +113,8 @@ export interface ExtractionInput {
     readonly workspaceStickies?: readonly WorkspaceSticky[];
     /** The workspace's stickies whose label the talk writes out without pointing at them (`mentionedStickies`). */
     readonly mentioned?: readonly string[];
+    /** The retired items about the same stickies and those of this session: titles and reasons only. */
+    readonly retired?: readonly RetiredItem[];
 }
 
 // ---- the agent API's extraction entry point --------------------------------------------------------------------------
@@ -225,7 +239,20 @@ export type ReplyOperation =
           readonly finding: ReplyFinding;
           readonly sources: readonly ReplySource[];
           readonly reason: string;
-      };
+      }
+    /** Propose to retire an item (a person approves): its reason, the replacing item for `replaced`, and the evidence. */
+    | {
+          readonly op: 'retire';
+          readonly item: string;
+          readonly retirement: Knowledge.RetirementReason;
+          readonly replacedBy?: string;
+          /** The decisions (items of kind `decision`) it rests on. */
+          readonly decisions: readonly string[];
+          readonly sources: readonly ReplySource[];
+          readonly reason: string;
+      }
+    /** Propose to undo a retirement: the talk brought the retired item's topic up anew (the messages). */
+    | { readonly op: 'unretire'; readonly item: string; readonly sources: readonly ReplySource[]; readonly reason: string };
 
 /** Where a reply or one of its operations is wrong. */
 export interface ReplyProblem {
@@ -239,7 +266,8 @@ export interface ExtractorReply {
     readonly rejected: readonly ReplyProblem[];
 }
 
-const OPS = ['add', 'addSource', 'update', 'conflict'] as const;
+const OPS = ['add', 'addSource', 'update', 'conflict', 'retire', 'unretire'] as const;
+const RETIREMENT_REASONS: readonly Knowledge.RetirementReason[] = ['replaced', 'obsolete', 'wrong'];
 
 /** The JSON schema of the reply (`--json-schema`): `{ operations: [...] }`, each operation one flat object. */
 export function extractorJsonSchema(): Record<string, unknown> {
@@ -254,7 +282,10 @@ export function extractorJsonSchema(): Record<string, unknown> {
                     type: 'object',
                     properties: {
                         op: { type: 'string', enum: [...OPS] },
-                        item: { type: 'string', pattern: '^k[0-9]+$' },
+                        item: { type: 'string', pattern: '^[kr][0-9]+$' },
+                        retirement: { type: 'string', enum: [...RETIREMENT_REASONS] },
+                        replacedBy: { type: 'string', pattern: '^k[0-9]+$' },
+                        decisions: { type: 'array', maxItems: EXTRACTION_LIMITS.sources, items: { type: 'string', pattern: '^k[0-9]+$' } },
                         title: string(EXTRACTION_LIMITS.title),
                         text: string(EXTRACTION_LIMITS.text),
                         when: { type: 'string', enum: [...KNOWLEDGE_WHENS] },
@@ -387,6 +418,37 @@ function readOperation(raw: unknown, path: string): Read<ReplyOperation> {
             if (!sources.ok) return sources;
             return ok({ op: 'conflict', item: target.value, finding: finding.value, sources: sources.value, reason: reason.value });
         }
+        case 'retire': {
+            const target = item();
+            if (!target.ok) return target;
+            const retirement = oneOf(raw.retirement, RETIREMENT_REASONS, `${path}.retirement`);
+            if (!retirement.ok) return retirement;
+            const decisions = Array.isArray(raw.decisions)
+                ? raw.decisions.filter((d): d is string => typeof d === 'string').slice(0, EXTRACTION_LIMITS.sources)
+                : [];
+            // the evidence: the messages, the decisions, or both (a proposal always has some)
+            const none: readonly ReplySource[] = [];
+            const sources: Read<readonly ReplySource[]> =
+                raw.sources === undefined && decisions.length > 0 ? ok(none) : readSources(raw.sources, `${path}.sources`);
+            if (!sources.ok) return sources;
+            const replacedBy = typeof raw.replacedBy === 'string' && raw.replacedBy ? raw.replacedBy : undefined;
+            return ok({
+                op: 'retire',
+                item: target.value,
+                retirement: retirement.value,
+                ...(replacedBy && { replacedBy }),
+                decisions,
+                sources: sources.value,
+                reason: reason.value,
+            });
+        }
+        case 'unretire': {
+            const target = item();
+            if (!target.ok) return target;
+            const sources = readSources(raw.sources, `${path}.sources`);
+            if (!sources.ok) return sources;
+            return ok({ op: 'unretire', item: target.value, sources: sources.value, reason: reason.value });
+        }
     }
 }
 
@@ -515,6 +577,30 @@ export function operationsOf(reply: ExtractorReply, input: ExtractionInput): Ext
         const made = Knowledge.makeReason(r);
         return made.ok ? { reason: made.value } : {};
     };
+    const retired = new Map((input.retired ?? []).map((r) => [r.key, r]));
+    /** The messages and decisions of a proposal as its evidence: at least one. */
+    const evidenceOf = (
+        sources: readonly ReplySource[],
+        decisions: readonly string[],
+        path: string,
+    ): Read<readonly [Knowledge.Evidence, ...Knowledge.Evidence[]]> => {
+        const evidence: Knowledge.Evidence[] = [];
+        if (sources.length > 0) {
+            const made = sourcesOf(sources, path);
+            if (made.ok) for (const s of made.value) evidence.push({ kind: 'Said', session: s.session, message: s.message, quote: s.quote });
+        }
+        for (const [i, key] of decisions.entries()) {
+            const decision = items.get(key);
+            const id = decision && Knowledge.makeKnowledgeItemId(decision.id);
+            if (!id?.ok || decision?.kind !== 'decision') {
+                rejected.push({ path: `${path}.decisions[${i}]`, message: `${key} is not a decision that was given; left out.` });
+                continue;
+            }
+            if (!evidence.some((e) => e.kind === 'Decision' && e.item === id.value)) evidence.push({ kind: 'Decision', item: id.value });
+        }
+        const [first, ...rest] = evidence;
+        return first ? ok([first, ...rest]) : problem(`${path}.sources`, 'A proposal rests on a message or a decision that was given.');
+    };
 
     for (const [index, o] of reply.operations.entries()) {
         const path = `reply.operations[${index}]`;
@@ -597,6 +683,50 @@ export function operationsOf(reply: ExtractorReply, input: ExtractionInput): Ext
                     base: item.value.base,
                     ...reasonOf(o.reason),
                 });
+                break;
+            }
+            case 'retire': {
+                const item = itemOf(o.item, path);
+                if (!item.ok) {
+                    fail(item.error);
+                    break;
+                }
+                const replacedBy = o.replacedBy === undefined ? undefined : itemOf(o.replacedBy, `${path}.replacedBy`);
+                if (replacedBy && !replacedBy.ok) {
+                    fail(replacedBy.error);
+                    break;
+                }
+                const evidence = evidenceOf(o.sources, o.decisions, path);
+                const why = Knowledge.makeReason(o.reason);
+                if (!evidence.ok || !why.ok) {
+                    fail(evidence.ok ? { path: `${path}.reason`, message: 'Not a reason.' } : evidence.error);
+                    break;
+                }
+                operations.push({
+                    kind: 'ProposeRetire',
+                    item: item.value.id,
+                    retirementReason: o.retirement,
+                    // a replacement only for `replaced`
+                    ...(replacedBy?.ok && o.retirement === 'replaced' && { replacedBy: replacedBy.value.id }),
+                    evidence: evidence.value,
+                    reason: why.value,
+                });
+                break;
+            }
+            case 'unretire': {
+                const target = retired.get(o.item);
+                const id = target && Knowledge.makeKnowledgeItemId(target.id);
+                if (!id?.ok) {
+                    fail({ path: `${path}.item`, message: `No retired item ${o.item} was given.` });
+                    break;
+                }
+                const evidence = evidenceOf(o.sources, [], path);
+                const why = Knowledge.makeReason(o.reason);
+                if (!evidence.ok || !why.ok) {
+                    fail(evidence.ok ? { path: `${path}.reason`, message: 'Not a reason.' } : evidence.error);
+                    break;
+                }
+                operations.push({ kind: 'ProposeUnretire', item: id.value, evidence: evidence.value, reason: why.value });
                 break;
             }
         }

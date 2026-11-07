@@ -30,7 +30,10 @@
 // the extractor can say what a finding is about by meaning when nobody pointed at a sticky. The items given are bounded
 // (`maxItems`), in this order: those made in this session (an update rewrites them), those about the stickies the talk
 // points at, those about the workspace's stickies the new messages write out by label (`mentionedStickies`). A search by
-// the messages' words is not used: the stores match every word of a query, and Japanese is not written in words.
+// the messages' words is not used: the stores match every word of a query, and Japanese is not written in words. The
+// retired items are never among them (the store's lists leave them out); the extractor is told of the retired ones of
+// this session and about the same stickies by their title and reason only (`maxRetired`), so as not to make them again,
+// and may propose to retire an item or to undo a retirement (ADR 0031, section 12).
 //
 // The facilitator may switch the extraction off for the session and on again (the scheduler). Switched on again, the
 // messages since the checkpoint older than `contextMinutes` are skipped (`resume`): the extraction picks up the talk of
@@ -44,6 +47,7 @@ import {
     type ExtractionUsage,
     type HotspotNameInput,
     type KnownItem,
+    type RetiredItem,
     type KnownSticky,
     operationsOf,
     readExtractorReply,
@@ -182,6 +186,8 @@ export interface SessionExtractionDeps {
     readonly maxFailures?: number;
     /** The most items given to the extractor (default 60). */
     readonly maxItems?: number;
+    /** The most retired items given to the extractor, by title and reason (default 30). */
+    readonly maxRetired?: number;
     /** The most new messages one extraction takes (default 150; the rest wait for the next). */
     readonly maxNewMessages?: number;
     /** The most of the workspace's stickies given (default `MAX_WORKSPACE_STICKIES`). */
@@ -281,8 +287,16 @@ export function extractionInput(
     likely: ReadonlySet<string> = new Set(),
     workspace: readonly WorkspaceSticky[] = [],
     mentioned: readonly string[] = [],
+    retiredItems: readonly Knowledge.LiveKnowledgeItem[] = [],
 ): ExtractionInput {
     const messages = talkMessages(context, fresh, likely);
+    // the retired ones by their title and reason only: never their text (ADR 0031, section 12)
+    const retired: RetiredItem[] = retiredItems.map((item, i) => ({
+        key: `r${i + 1}`,
+        id: item.id,
+        title: item.content.title,
+        ...(item.retirement?.reason && { reason: item.retirement.reason }),
+    }));
     const keys = new Map(items.map((item, i) => [item.id, `k${i + 1}`]));
     const known: KnownItem[] = items.map((item) => ({
         key: keys.get(item.id) ?? '',
@@ -307,6 +321,7 @@ export function extractionInput(
         stickies: stickiesOf([...context, ...fresh]),
         ...(workspace.length > 0 && { workspaceStickies: workspace }),
         ...(mentioned.length > 0 && { mentioned }),
+        ...(retired.length > 0 && { retired }),
     };
 }
 
@@ -317,6 +332,7 @@ export function createSessionExtraction(deps: SessionExtractionDeps): SessionExt
     const gateContextMs = deps.config.gateContextMinutes * 60_000;
     const maxFailures = deps.maxFailures ?? 2;
     const maxItems = deps.maxItems ?? 60;
+    const maxRetired = deps.maxRetired ?? 30;
     const maxNew = deps.maxNewMessages ?? 150;
     const maxStickies = deps.maxStickies;
     const sessionRef = Knowledge.makeSessionRef(session);
@@ -365,6 +381,24 @@ export function createSessionExtraction(deps: SessionExtractionDeps): SessionExt
         const byId = new Map<string, Knowledge.LiveKnowledgeItem>();
         for (const item of [...mine.items, ...pointed, ...written]) if (!byId.has(item.id)) byId.set(item.id, item);
         return [...byId.values()].slice(0, maxItems);
+    };
+
+    /**
+     * The retired items the extractor is told of (by title and reason, so as not to make them again), at most
+     * `maxRetired`: this session's, then those about the stickies the talk points at or writes out.
+     */
+    const retiredFor = async (targeted: readonly string[], mentioned: readonly string[]): Promise<readonly Knowledge.LiveKnowledgeItem[]> => {
+        const about = [...new Set([...targeted, ...mentioned])].flatMap((s) => {
+            const r = Knowledge.makeStickyRef(s);
+            return r.ok ? [r.value] : [];
+        });
+        const [mine, near] = await Promise.all([
+            store.search(project, { session: sessionRef.value, retired: 'only', limit: maxRetired }),
+            about.length ? store.search(project, { about: about.slice(0, 50), retired: 'only', limit: maxRetired }) : Promise.resolve({ items: [] }),
+        ]);
+        const byId = new Map<string, Knowledge.LiveKnowledgeItem>();
+        for (const item of [...mine.items, ...near.items]) if (item.retirement && !byId.has(item.id)) byId.set(item.id, item);
+        return [...byId.values()].slice(0, maxRetired);
     };
 
     /** The workspace's stickies for this extraction (none when the session has no workspace or it cannot be read). */
@@ -477,13 +511,14 @@ export function createSessionExtraction(deps: SessionExtractionDeps): SessionExt
                 .filter((r) => !pointedAt.has(r))
                 .slice(0, MAX_MENTIONED);
             let items: readonly Knowledge.LiveKnowledgeItem[];
+            let retired: readonly Knowledge.LiveKnowledgeItem[];
             try {
-                items = await itemsFor(targeted, mentioned);
+                [items, retired] = await Promise.all([itemsFor(targeted, mentioned), retiredFor(targeted, mentioned)]);
             } catch (e) {
                 log(`knowledge: the items could not be read for an extraction (${message(e)})`);
                 return 'store-failed';
             }
-            const input = extractionInput(session, number, context, fresh, items, new Set(reading.named), workspace, mentioned);
+            const input = extractionInput(session, number, context, fresh, items, new Set(reading.named), workspace, mentioned, retired);
             const answer = await deps.extractor.extract(input);
             if (answer.kind === 'unavailable') return 'unavailable';
             const result = answer.result;

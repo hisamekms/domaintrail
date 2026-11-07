@@ -1006,12 +1006,15 @@ Examples:
     program
         .command('mcp')
         .description("Start the MCP server over stdio: the project's knowledge, read-only, for Claude Code (runs until the client exits).")
+        .option('--without-retired', 'never give a retired item, nor offer include_retired (what the agent starts)')
         .addHelpText(
             'after',
             `
 Speaks the Model Context Protocol on stdin/stdout, with three read-only tools over the knowledge store of the
 workspace (\`knowledge\` in the config; ADR 0031): knowledge_for_element (a sticky 'Storming.LocalId', or a .dt element
-'dt:Context.Aggregate.command' through the stickies that \`ref\` it), knowledge_search and knowledge_get. Started by an
+'dt:Context.Aggregate.command' through the stickies that \`ref\` it), knowledge_search and knowledge_get. A retired
+item (廃止) is left out unless a tool's include_retired asks for it; with --without-retired (the agent's answerer and
+runner) it is never given, and the option is not offered. Started by an
 MCP client, not by hand; nothing but the protocol is written to stdout. With the \`cloudflare\` store, the
 workspace's security-relevant settings must have been approved (by \`dt open\`, \`dt collab\` or \`dt agent\` in a
 terminal): until then the tools answer that they are not. See \`dt guide mcp\`.
@@ -1020,11 +1023,11 @@ Examples:
   claude mcp add domaintrail -- dt mcp
   dt -r domain mcp`,
         )
-        .action(async () => {
+        .action(async (opts: { withoutRetired?: boolean }) => {
             const cfg = await config();
             // no one to ask (stdin is the protocol's): the settings approved before, by `dt open`, `dt collab` or `dt agent`
             const approval = await checkApproved(cfg, deps.trust);
-            await deps.startMcpServer({ config: cfg, approval, log: io.err });
+            await deps.startMcpServer({ config: cfg, approval, log: io.err, ...(opts.withoutRetired && { withoutRetired: true }) });
         });
 
     program

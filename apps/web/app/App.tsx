@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Blocks, StickyNote, type LucideIcon } from 'lucide-react';
 import type { Diagnostic } from '@domaintrail/kernel';
 import type { DomainModel } from '@domaintrail/modeling';
@@ -12,7 +12,7 @@ import { changeCount, ChangesList, problemCounts, ProblemsList } from '../lists'
 import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from '../model-utils';
 import { StatesCanvas } from '../states-canvas';
 import { useSessionPage } from '../session/page';
-import { type StormingChoice, chooseTimeline, drawnRender, isStormingSelection, revealIn, scopeView, StormingDetails, stormingExists } from '../storming';
+import { type StormingChoice, chooseStorming, drawnRender, isStormingSelection, revealIn, scopeView, StormingDetails, stormingExists } from '../storming';
 import { StormingNavigator } from '../storming-navigator';
 import { NameSwitch } from '../view/toolbar';
 import { ViewWorkspace, useViewWorkspace } from '../view/workspace';
@@ -27,6 +27,13 @@ import { workspaceName } from './health';
 import { HealthButton } from './status';
 import { useViewSocket } from './useViewSocket';
 import { CommandPalette, usePaletteKey } from '../shared/palette';
+import { SearchButton } from '../search/entry';
+import { searchSections } from '../search/find';
+import { goToModel } from '../search/go';
+import { modelFindables } from '../search/model';
+import { modelTakenText, SearchNotice, stormingTaken, stormingTakenText, useNotice } from '../search/notice';
+import { searchPaletteSections } from '../search/palette';
+import { modelDestination, modelNotes } from '../search/reveal';
 import { focusCanvas, useStickyActions } from '../stickies/layer';
 import { linkedElement } from '../stickies/link';
 import { currentReturn, RETURN_STATE, type ReturnPoint } from '../stickies/return';
@@ -73,7 +80,7 @@ export function App() {
 
     const workspace = useViewWorkspace(current, { mode, lang, theme });
     const { stormings, nav, worlds, settings, viewGraph } = workspace;
-    const { view, setView, selected, sourceFocus, setSourceFocus, select, backTo, goBack, reveal } = nav;
+    const { view, setView, selected, history, sourceFocus, setSourceFocus, select, backTo, goBack, reveal } = nav;
     const { shown } = viewGraph;
 
     /** Double-click in the explorer: the view that suits the item best. */
@@ -125,9 +132,15 @@ export function App() {
             const kind = firstDeclarations(storming.storming).get(local)?.kind;
             const drawn = LEVEL_KINDS[stormingChoice.level].some((k) => k === kind);
             const inView = view.kind === 'storming' && shown?.storming.id === stormingId && drawn && canvas?.findElement(id) !== undefined;
+            // its storming at a level that draws it (another storming: all its timelines); what keeps it out of the
+            // drawing is shown again then (`revealIn`: the exceptions included, すべて, the 絞り込み). The exception
+            // emphasized is not touched: this is a selection
+            const level = drawn ? stormingChoice.level : 'design-level';
             const there = inView
                 ? stormingChoice
-                : { ...chooseTimeline(stormingChoice, stormingId, undefined), level: drawn ? stormingChoice.level : 'design-level' };
+                : shown?.storming.id === stormingId
+                  ? { ...stormingChoice, level }
+                  : { ...chooseStorming(stormingChoice, stormingId), level };
             const next = revealIn(stormings, there, id);
             if (next !== stormingChoice) setStormingChoice(next);
             if (view.kind !== 'storming') setView({ kind: 'storming' });
@@ -189,7 +202,10 @@ export function App() {
         else comeBack(returnPoint);
     };
 
-    // the stickies' actions (ADR 0033): the toolbar, the menu, the keys and the windows over a storming, the palette's items
+    // a sticky found by 探す (`findSticky`, below): the same function for the stickies' findables
+    const findStickyRef = useRef<(id: string) => void>(() => {});
+    const findStickyFromSearch = useCallback((id: string) => findStickyRef.current(id), []);
+    // the stickies' actions (ADR 0033): the toolbar, the menu, the keys and the windows over a storming, 探す's items
     const stickyActions = useStickyActions({
         canvas,
         stormings,
@@ -209,6 +225,7 @@ export function App() {
             requestAnimationFrame(() => requestAnimationFrame(() => select(then)));
         },
         onOpenSticky: openSticky,
+        onFindSticky: findStickyFromSearch,
         // ナレッジを見る: the sticky's knowledge in the detail, under the tree (a session with a store only)
         ...(knowledge.available && {
             knowledge: {
@@ -227,11 +244,75 @@ export function App() {
         const next = selected !== undefined ? renamed?.get(selected) : undefined;
         if (next !== undefined && stormingExists(stormings, next) && !stormingExists(stormings, selected ?? '')) openSticky(next);
     }, [selected, renamed, stormings, openSticky]);
-    // the command palette (⌘K / Ctrl+K), shared by the features that give it items
+    // 探す (the app bar's search, ⌘K / Ctrl+K): the actions on the selection, the stickies and the domain model of both
+    // worlds; going to what is found shows what hides it first, and says so for a moment
     const mac = useMemo(isMac, []);
     const [paletteOpen, setPaletteOpen] = useState(false);
     const openPalette = useCallback(() => setPaletteOpen(true), []);
     usePaletteKey(mac, openPalette);
+    const notice = useNotice();
+    const { say } = notice;
+    // a sticky: `openSticky` (a level that draws it, what the 絞り込み hides of it shown); what it changed of the
+    // storming view is said once the choice is set
+    const takenFrom = useRef<{ choice: StormingChoice; storming: string } | undefined>(undefined);
+    useEffect(() => {
+        const from = takenFrom.current;
+        if (!from) return;
+        takenFrom.current = undefined;
+        say(stormingTakenText(t, stormingTaken(from.choice, stormingChoice, from.storming)));
+    }, [stormingChoice, say, t]);
+    const findSticky = (id: string): void => {
+        takenFrom.current = { choice: stormingChoice, storming: id.split('/')[1] ?? '' };
+        openSticky(id);
+        // nothing changed: nothing to say
+        requestAnimationFrame(() => requestAnimationFrame(() => (takenFrom.current = undefined)));
+    };
+    findStickyRef.current = findSticky;
+    const { filter: catalogFilter, setFilter: setCatalogFilter } = workspace.catalog;
+    /** Selects the item of `id` on the canvas once it is drawn (a few frames at most), then runs `then`. */
+    const showOnCanvas = useCallback(
+        (id: string, then: () => void): void => {
+            let frames = 60;
+            const tryShow = (): void => {
+                if (canvas?.findElement(id) === undefined && --frames > 0) return void requestAnimationFrame(tryShow);
+                if (canvas) highlightElement(canvas, id);
+                // after the canvas's selection became the navigation's
+                requestAnimationFrame(() => requestAnimationFrame(then));
+            };
+            requestAnimationFrame(tryShow);
+        },
+        [canvas],
+    );
+    const findModel = (id: string): void => {
+        if (!model || !current) return;
+        const dest = modelDestination(model, id, {
+            graphs: { detail: current.structure, overview: current.overview, aggregates: current.aggregates },
+            level: settings.structureLevel,
+            contexts: settings.structureContexts,
+            focusContexts: current.focusContexts,
+            catalog: catalogFilter,
+        });
+        if (!dest) return;
+        goToModel(dest, {
+            nav,
+            settings,
+            clearCatalogFilter: () => setCatalogFilter({ query: '', sections: [], contexts: null }),
+            openInspector,
+            show: showOnCanvas,
+        });
+        say(modelTakenText(t, modelNotes(dest.place)));
+    };
+    const findModelRef = useRef(findModel);
+    findModelRef.current = findModel;
+    const findables = useMemo(
+        () => [...stickyActions.findables, ...modelFindables(model, mode, t, (id) => findModelRef.current(id))],
+        [stickyActions.findables, model, mode, t],
+    );
+    const searchList = useCallback(
+        (query: string, expanded: ReadonlySet<string>) =>
+            searchPaletteSections(searchSections({ query, findables, actions: stickyActions.actions, world: worlds.world, mode, history, expanded }), mode, t),
+        [findables, stickyActions.actions, worlds.world, mode, history, t],
+    );
 
     // a link to an element (`#select=…`): opened once its storming is there, then the fragment is dropped
     const [linked, setLinked] = useState(() => linkedElement(window.location.hash));
@@ -287,6 +368,7 @@ export function App() {
                     }
                     sessionSlot={setSessionSlot}
                     journeySlot={setJourneySlot}
+                    find={<SearchButton mac={mac} onOpen={openPalette} />}
                     session={boot?.session && { mode: boot.session.mode, ready: session.conversation !== undefined }}
                     health={<HealthButton current={current} connection={connection} />}
                     settings={
@@ -362,7 +444,12 @@ export function App() {
                             content: <ProblemsList items={diagnostics} onLocate={locate} onClose={() => setExplorerOpen(false)} />,
                         },
                         ...(knowledge.available && {
-                            knowledge: { count: 0, content: <KnowledgeList onClose={() => setExplorerOpen(false)} closeLabel={t.closeExplorer} /> },
+                            // the count of 廃止の候補 waiting for a person (ADR 0031, section 12)
+                            knowledge: {
+                                count: knowledge.proposals.length,
+                                badge: knowledge.proposals.length > 0 ? <span className="activity-badge">{knowledge.proposals.length}</span> : undefined,
+                                content: <KnowledgeList onClose={() => setExplorerOpen(false)} closeLabel={t.closeExplorer} />,
+                            },
                         }),
                         changes: {
                             count: changes,
@@ -494,12 +581,11 @@ export function App() {
                                 <BaselineMenu baseline={current.baseline} anchor={baselineAnchor} onClose={closeBaselineMenu} />
                             )}
                             <KnowledgeNotice />
+                            <SearchNotice text={notice.text} />
                             {paletteOpen && (
                                 <CommandPalette
-                                    label={t.stickies.palette.title}
-                                    placeholder={t.stickies.palette.placeholder}
-                                    empty={t.stickies.palette.empty}
-                                    items={stickyActions.palette}
+                                    texts={{ label: t.search.open, placeholder: t.search.placeholder, empty: t.search.empty, more: t.search.more }}
+                                    sections={searchList}
                                     onClose={() => setPaletteOpen(false)}
                                 />
                             )}

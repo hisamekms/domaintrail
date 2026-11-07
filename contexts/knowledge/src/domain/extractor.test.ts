@@ -126,7 +126,7 @@ describe("reading the extractor's reply", () => {
         };
         expect(schema.required).toEqual(['operations']);
         expect(schema.properties.operations.items.required).toEqual(['op', 'reason']);
-        expect(schema.properties.operations.items.properties.item.pattern).toBe('^k[0-9]+$');
+        expect(schema.properties.operations.items.properties.item.pattern).toBe('^[kr][0-9]+$');
     });
 
     test('the usage reported: numbers only', () => {
@@ -284,5 +284,80 @@ describe('the reply made into operations', () => {
         const [op] = made.operations;
         expect(plain(made.operations.length)).toBe(1);
         expect(plain(op.kind === 'Update' && op.sources.map((s) => [s.message, s.quote]))).toEqual([['r-2', '当日中']]);
+    });
+});
+
+describe('the proposals to retire and to unretire', () => {
+    const withDecision: ExtractionInput = {
+        ...input,
+        items: [
+            ...input.items,
+            { ...input.items[0], key: 'k2', id: 'kn_0000000002', title: '見積もりは案件担当が出す', text: '決めた', kind: 'decision', when: 'to_be' },
+            { ...input.items[0], key: 'k3', id: 'kn_0000000003', title: '新しい見積もりの出し方', text: '新しい' },
+        ],
+        retired: [{ key: 'r1', id: 'kn_0000000009', title: '見積もりは翌日に出す', reason: 'obsolete' }],
+    };
+
+    test('retire: the item, its reason, the replacement for replaced, and the messages and decisions as evidence', () => {
+        const reply = read({
+            operations: [
+                {
+                    op: 'retire',
+                    item: 'k1',
+                    retirement: 'replaced',
+                    replacedBy: 'k3',
+                    decisions: ['k2', 'k3'],
+                    sources: [{ message: 'm2', quote: '急ぎの案件は当日中に出す' }],
+                    reason: '新しい決め方に置き換わった',
+                },
+                { op: 'retire', item: 'k1', retirement: 'obsolete', decisions: ['k2'], reason: '決定だけで' },
+                { op: 'retire', item: 'k1', retirement: 'wrong', reason: '根拠なし' },
+                { op: 'retire', item: 'k1', retirement: 'stale', sources: [{ message: 'm2', quote: 'x' }], reason: 'x' },
+            ],
+        });
+        expect(reply.rejected.map((r) => r.path)).toEqual(['reply.operations[2].sources', 'reply.operations[3].retirement']);
+        const made = operationsOf(reply, withDecision);
+        expect(plain(made.operations)).toEqual([
+            {
+                kind: 'ProposeRetire',
+                item: 'kn_0000000001',
+                retirementReason: 'replaced',
+                replacedBy: 'kn_0000000003',
+                evidence: [
+                    { kind: 'Said', session: 's1', message: 'r-2', quote: '急ぎの案件は当日中に出す' },
+                    { kind: 'Decision', item: 'kn_0000000002' },
+                ],
+                reason: '新しい決め方に置き換わった',
+            },
+            {
+                kind: 'ProposeRetire',
+                item: 'kn_0000000001',
+                retirementReason: 'obsolete',
+                evidence: [{ kind: 'Decision', item: 'kn_0000000002' }],
+                reason: '決定だけで',
+            },
+        ]);
+        // k3 is not a decision: left out of the evidence, said why
+        expect(made.rejected.map((r) => r.path)).toContain('reply.operations[0].decisions[1]');
+    });
+
+    test('unretire: a retired item by its key r…, with the messages; a k… key or an unknown one is dropped', () => {
+        const reply = read({
+            operations: [
+                { op: 'unretire', item: 'r1', sources: [{ message: 'm2', quote: '急ぎの案件は当日中に出す' }], reason: 'また話に出た' },
+                { op: 'unretire', item: 'k1', sources: [{ message: 'm2', quote: 'x' }], reason: 'x' },
+                { op: 'unretire', item: 'r7', sources: [{ message: 'm2', quote: 'x' }], reason: 'x' },
+            ],
+        });
+        const made = operationsOf(reply, withDecision);
+        expect(plain(made.operations)).toEqual([
+            {
+                kind: 'ProposeUnretire',
+                item: 'kn_0000000009',
+                evidence: [{ kind: 'Said', session: 's1', message: 'r-2', quote: '急ぎの案件は当日中に出す' }],
+                reason: 'また話に出た',
+            },
+        ]);
+        expect(made.rejected.map((r) => r.path)).toEqual(['reply.operations[1].item', 'reply.operations[2].item']);
     });
 });

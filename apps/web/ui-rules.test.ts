@@ -126,8 +126,12 @@ const RAW_BUTTONS: Readonly<Record<string, { readonly count: number; readonly re
         reason: "a side of a knowledge conflict (kind, title, labels) that opens it under the pair: a row or card whose whole box is the target (a list's row, a disclosure head): its layout is the card's, not a button's",
     },
     'knowledge/panel.tsx knowledge-chip': {
-        count: 2,
-        reason: "a filter of the ナレッジ list (AS-IS, ルール, 発言…), on or off, and an opened item's label as the same chip, which filters the list by it: a chip or badge of its own (a count, a reaction, a status pill): a view setting",
+        count: 4,
+        reason: "a filter of the ナレッジ list (AS-IS, ルール, 発言…, 廃止も表示), on or off, an opened item's label as the same chip, which filters the list by it, and a reason chosen to retire an item (置き換わった…, on or off): a chip or badge of its own (a count, a reaction, a status pill): a view setting",
+    },
+    'knowledge/panel.tsx knowledge-link': {
+        count: 1,
+        reason: "another knowledge item named in running text (the item that replaced a retired one, a proposal's item and evidence), opening it in the list: a reference in running text that jumps to its source: its look is the text it stands for",
     },
     'lists.tsx problem': {
         count: 1,
@@ -173,6 +177,10 @@ const RAW_BUTTONS: Readonly<Record<string, { readonly count: number; readonly re
     'shared/reference.tsx chat-reply-ref': {
         count: 1,
         reason: "the quote of what a reply answers, and a knowledge item's source: a reference in running text (a quote, a time, a chip of an element) that jumps to its source: its look is the text it stands for",
+    },
+    'search/entry.tsx app-bar-find': {
+        count: 1,
+        reason: "the app bar's 探す, shaped like a search field (🔍 探す and its key) that opens the palette: the view's chrome (the toolbar, the canvas controls, the app bar): labels collapse to icons by container queries; it changes nothing",
     },
     'session/chat.tsx role=menuitem': {
         count: 2,

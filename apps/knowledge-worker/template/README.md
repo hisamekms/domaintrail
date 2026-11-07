@@ -164,6 +164,12 @@ a `.dtes` file has an error. `dt publish --out <dir>` writes the forms as files 
   minutes, removes every version of it, its images, and the reasons of its audit records, and appends the IDs of its
   source messages to the **redaction log**, which every dt of the project reads to redact its own session database.
   `SWEEP_AFTER_SECONDS` (default 60) is how long a deleted item waits for the sweep.
+- **Retiring** (廃止, ADR 0031 section 12) keeps an item whole — its text, sources and versions — with its retirement
+  beside it (`items.retirement`: the reason, the replacing item, who and when); the lists and the counts leave it out
+  unless a search asks (`?retired=include` or `only`). The AI's **proposals** to retire an item (or to undo it) are
+  rows of `proposals`: made by an extraction or by a review (`POST /proposals`, a writing token), approved or dismissed
+  by a person (`POST /proposals/<rp_…>/approve`, `/dismiss`), the dismissed ones kept so that the same is not proposed
+  again. The sweep removes the proposals about a deleted item and those quoting its messages.
 - **The audit log** records each change with the model's actor (the extraction, or the person a call acted for) and the
   Access identity of the call (a person's e-mail, or `service:<Client ID>`).
 - **Search** uses D1's full-text search (FTS5, trigram tokenizer: any substring of three characters or more, Japanese
@@ -221,7 +227,9 @@ version's changelog (`node_modules/domaintrail/CHANGELOG.md`) for anything to do
 2. `npx wrangler d1 migrations apply knowledge --remote` (migrations are only ever added; apply them before deploying,
    so that the old Worker runs on the new schema for a moment, never the other way round; migration 2, which gives
    items their title, removes the items written before it, and the old Worker's writes fail until the new one is
-   deployed);
+   deployed; migration 3 adds retiring and its proposals — `items.retirement` and the table `proposals` — and
+   changes nothing that is there: until the new Worker is deployed, a dt of this version gets 404 for 廃止する and the
+   proposals, and its extractions' proposals are not kept);
 3. `npx wrangler deploy`;
 4. run the publish workflow once (`workflow_dispatch`), so that the page draws the stormings as the new version lays
    them out (the page says so when a published form is of a version it cannot draw).

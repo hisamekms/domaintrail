@@ -1,7 +1,10 @@
 // The page's frame (app/shell.tsx): the app bar across the top, the pillars under it.
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { I18nProvider } from '../i18n';
+import { SearchButton } from '../search/entry';
 import type { Panes } from './panes';
 import { AppShell } from './shell';
 
@@ -22,6 +25,7 @@ const html = renderToStaticMarkup(
             panes={panes}
             workspaceName="shop"
             world={<div className="world-slot" />}
+            find={<div className="find-slot" />}
             sessionSlot={() => {}}
             lists={{
                 tree: { count: 0, content: null },
@@ -40,10 +44,11 @@ const html = renderToStaticMarkup(
 const appBar = html.slice(html.indexOf('<header class="app-bar">'), html.indexOf('</header>'));
 
 describe('the app bar', () => {
-    test('the brand and the workspace, the world switch, then 問題 and the session’s place at the right end', () => {
+    test('the brand and the workspace, the world switch, 探す in the middle, then 問題 and the session’s place at the right end', () => {
         expect(appBar).toContain('<span class="brand">DomainTrail</span>');
         expect(appBar).toContain('>shop</span>');
-        const order = ['brand', 'world-slot', 'app-bar-space', 'app-bar-problems', 'app-bar-session'].map((c) => appBar.indexOf(c));
+        expect(appBar).toContain('<div class="app-bar-middle"><div class="find-slot"></div></div>');
+        const order = ['brand', 'world-slot', 'app-bar-journey', 'app-bar-middle', 'app-bar-problems', 'app-bar-session'].map((c) => appBar.indexOf(c));
         expect(order.every((at) => at >= 0)).toBe(true);
         expect([...order].sort((a, b) => a - b)).toEqual(order);
     });
@@ -51,6 +56,19 @@ describe('the app bar', () => {
     test('問題 shows its count and opens the problems list (pressed while it is shown)', () => {
         expect(appBar).toMatch(/class="activity app-bar-problems active" aria-pressed="true" aria-label="問題（2）"/);
         expect(appBar).toContain('<span class="activity-badge badge-error">2</span>');
+    });
+
+    test('探す: 🔍, its name and its key — ⌘K on a Mac, Ctrl K elsewhere', () => {
+        const button = (mac: boolean): string =>
+            renderToStaticMarkup(
+                <I18nProvider lang="ja">
+                    <SearchButton mac={mac} onOpen={() => {}} />
+                </I18nProvider>,
+            );
+        expect(button(true)).toMatch(/^<button type="button" class="app-bar-find" aria-label="探す" aria-keyshortcuts="Meta\+K"/);
+        expect(button(true)).toContain('<span class="app-bar-find-label">探す</span><kbd>⌘K</kbd>');
+        expect(button(false)).toContain('aria-keyshortcuts="Control+K"');
+        expect(button(false)).toContain('<kbd>Ctrl K</kbd>');
     });
 
     test('on the first display the panes do not move (no motion until the person acts)', () => {
@@ -173,5 +191,34 @@ describe('the right column', () => {
         expect(withChat).toMatch(
             /<div class="resizer resizer-x" role="separator" tabindex="0" aria-label="チャットの幅[^"]*" aria-orientation="vertical" aria-valuenow="380"/,
         );
+    });
+});
+
+/** The rules of styles.css in the block that opens with `opening` (up to its closing brace at the line's start). */
+function cssBlock(opening: string): string {
+    const styles = readFileSync(join(import.meta.dir, '..', 'styles.css'), 'utf8');
+    const start = styles.indexOf(opening);
+    if (start < 0) throw new Error(`no block ${opening}`);
+    return styles.slice(start, styles.indexOf('\n}', start));
+}
+
+describe('the app bar on a narrow window', () => {
+    test('at 40rem 探す is its magnifier alone (and the workspace’s name goes)', () => {
+        const narrow = cssBlock('@container app-bar (max-width: 40rem) {');
+        expect(narrow).toMatch(/\.workspace-name \{\s+display: none;/);
+        expect(narrow).toMatch(/\.app-bar-find-label,\s+\.app-bar-find kbd \{\s+display: none;/);
+        expect(narrow).toMatch(/\.app-bar-find \{\s+width: 36px;/);
+    });
+
+    test('at 30rem the brand’s name, the extraction switch and the AI state’s words go (its mark stays), the gaps narrow', () => {
+        const phone = cssBlock('@container app-bar (max-width: 30rem) {');
+        expect(phone).toMatch(/\.app-bar-brand \.brand,\s+\.app-bar \.knowledge-extraction \{\s+display: none;/);
+        expect(phone).toMatch(/\.app-bar \.chat-status-text \{\s+display: none;/);
+        expect(phone).not.toContain('chat-status-mark');
+        expect(cssBlock('@media (max-width: 30rem) {\n    .app-bar {')).toContain('gap: var(--space-1);');
+    });
+
+    test('a device without a keyboard shows no key', () => {
+        expect(cssBlock('@media (hover: none) and (pointer: coarse) {')).toMatch(/\.app-bar-find kbd \{\s+display: none;/);
     });
 });

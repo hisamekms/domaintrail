@@ -178,6 +178,34 @@ describe("a session's extraction", () => {
         expect<unknown>(input.stickies).toEqual([{ ref: 'Ordering.Estimate', label: '見積もり' }]);
     });
 
+    test('a retired item is never among the items: the extractor is told of it by its title and reason only, and may propose', async () => {
+        const messages = [message('ctx', 500), message('new', 1000)];
+        const live = { ...liveItem('kn_00000077', { createdIn: 'sess-0' }), content: content('見積もりは営業が出す', 'said', ['Ordering.Estimate']) };
+        const retired: Knowledge.LiveKnowledgeItem = {
+            ...liveItem('kn_00000078', { createdIn: 'sess-0' }),
+            content: content('昔は翌日に出していた、という詳しい本文', 'said', ['Ordering.Estimate'], '見積もりは翌日に出す（昔）'),
+            retirement: { reason: 'obsolete', by: 'access:a@example.com' as Knowledge.UserName, at: t(0) },
+        };
+        const extractor = fakeExtractor(
+            reply(
+                { op: 'retire', item: 'k1', retirement: 'obsolete', sources: [{ message: 'm2', quote: 'estimate' }], reason: 'もうそうしていない' },
+                { op: 'unretire', item: 'r1', sources: [{ message: 'm2', quote: 'estimate' }], reason: 'また話に出た' },
+            ),
+        );
+        const { extraction, checkpoints, store } = setup(messages, extractor, { items: [live, retired] });
+        await checkpoints.save(SESSION, { ...EMPTY_CHECKPOINT, number: 1, lastMessage: 'ctx', lastMessageAt: t(500) });
+        await extraction.extract('answer');
+        const [input] = extractor.inputs;
+        expect<unknown>(input.items.map((i) => i.id)).toEqual(['kn_00000077']);
+        expect<unknown>(input.retired).toEqual([{ key: 'r1', id: 'kn_00000078', title: '見積もりは翌日に出す（昔）', reason: 'obsolete' }]);
+        // nothing of its text reaches the extractor
+        expect(JSON.stringify(input)).not.toContain('詳しい本文');
+        expect<unknown>(store.proposalsMade.map((p) => [p.item, p.action])).toEqual([
+            ['kn_00000077', 'retire'],
+            ['kn_00000078', 'unretire'],
+        ]);
+    });
+
     test("the workspace's stickies: both models see the same ones; the items of those the new messages write out are given after the pointed-at ones", async () => {
         const messages = [message('ctx', 500), message('new', 1000, { text: '急ぎの見積もりは営業が当日中に出す', stickies: [] })];
         const focus: StickyFocus = {
