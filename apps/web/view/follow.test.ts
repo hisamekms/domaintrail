@@ -117,7 +117,7 @@ describe("the reader's own moves (one place)", () => {
         expect(calls).toEqual(['mine', 'a.setView', 'mine', 'b.select', 'mine', 'b.goBack', 'mine', 'b.reveal']);
     });
 
-    test('every change of what a view draws is the reader’s own: a level, a storming or timeline, the contexts, 詰めて表示', () => {
+    test('every change of what a view draws is the reader’s own: a level, a storming, its place or its flow, the contexts, 詰めて表示', () => {
         const calls: string[] = [];
         const set = (name: string) => (): void => {
             calls.push(name);
@@ -139,7 +139,9 @@ describe("the reader's own moves (one place)", () => {
         reader.setHiddenContexts([]);
         reader.setMapAll(true);
         reader.setStormingChoice({ stormingId: 'S', level: 'big-picture', timelines: {} });
+        // the flow switch (主な流れ, 例外も, 例外 ▾) changes the choice through the same setter
+        reader.setStormingChoice({ stormingId: 'S', level: 'big-picture', timelines: {}, flow: { exception: 'Failed' } });
         reader.setCompact(true);
-        expect(calls).toEqual(['level', 'contexts', 'hidden', 'mapAll', 'storming', 'compact'].flatMap((m) => ['mine', m]));
+        expect(calls).toEqual(['level', 'contexts', 'hidden', 'mapAll', 'storming', 'storming', 'compact'].flatMap((m) => ['mine', m]));
     });
 });

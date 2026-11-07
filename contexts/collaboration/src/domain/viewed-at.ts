@@ -91,7 +91,7 @@ function viewShown(v: unknown, at: string): Result<Collaboration.ViewShown, Inva
             return ok({ kind: 'Catalog', ...(query && { query }), sections: sections.value, contexts: contexts.value });
         }
         case 'Storming': {
-            const extra = only(v, ['kind', 'storming', 'level', 'timeline', 'stage', 'exceptions'], at);
+            const extra = only(v, ['kind', 'storming', 'level', 'timeline', 'stage', 'exceptions', 'exception'], at);
             if (extra) return err(extra);
             const storming = name(v.storming, f('storming'), Collaboration.makeStormingName);
             if (!storming.ok) return storming;
@@ -104,6 +104,9 @@ function viewShown(v: unknown, at: string): Result<Collaboration.ViewShown, Inva
             if (stage && !stage.ok) return stage;
             const exceptions = bool(v.exceptions ?? true, f('exceptions'));
             if (!exceptions.ok) return exceptions;
+            if (v.exception !== undefined && v.timeline !== undefined) return invalid(f('exception'), 'One main flow or one exception, not both.');
+            const exception = v.exception === undefined ? undefined : name(v.exception, f('exception'), Collaboration.makeTimelineName);
+            if (exception && !exception.ok) return exception;
             return ok({
                 kind: 'Storming',
                 storming: storming.value,
@@ -111,6 +114,7 @@ function viewShown(v: unknown, at: string): Result<Collaboration.ViewShown, Inva
                 ...(timeline && { timeline: timeline.value }),
                 ...(stage && { stage: stage.value }),
                 exceptions: exceptions.value,
+                ...(exception && { exception: exception.value }),
             });
         }
         default:
@@ -157,12 +161,14 @@ export function resolveViewedAt(viewed: Collaboration.ViewedAt, known: KnownView
         case 'Storming': {
             const storming = known.stormings.get(v.storming);
             if (!storming) return undefined;
-            const { timeline, stage, ...rest } = v;
+            const { timeline, stage, exception, ...rest } = v;
             return {
                 view: {
                     ...rest,
                     ...(timeline !== undefined && storming.timelines.has(timeline) && { timeline }),
                     ...(stage !== undefined && storming.stages.has(stage) && { stage }),
+                    // an exception not found: every exception, as the page shows it then
+                    ...(exception !== undefined && storming.timelines.has(exception) && { exception }),
                 },
                 ...states,
             };
@@ -182,7 +188,7 @@ export type ViewedAtLike = Plain<Collaboration.ViewedAt>;
 
 /**
  * The view as the AI's prompts show it, in the data block: `{ view: 'storming', storming: '@{es:Returns}', level:
- * 'design', stage, exceptions: true }`. Elements are named as the replies name them (`@{…}`).
+ * 'design', stage, exceptions: true, exception }`. Elements are named as the replies name them (`@{…}`).
  */
 export function viewedAtData(viewed: ViewedAtLike): Record<string, unknown> {
     const states = viewed.states === undefined ? {} : { stateDiagramOf: `@{${viewed.states}}` };
@@ -213,6 +219,7 @@ export function viewedAtData(viewed: ViewedAtLike): Record<string, unknown> {
                 ...(v.stage !== undefined && { stage: v.stage }),
                 ...(v.timeline !== undefined && { timeline: v.timeline }),
                 exceptions: v.exceptions,
+                ...(v.exception !== undefined && { exception: v.exception }),
                 ...states,
             };
     }

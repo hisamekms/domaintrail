@@ -9,7 +9,7 @@ const storming = { kind: 'Storming', storming: 'OrderToCash', level: 'DesignLeve
 const known: KnownViewNames = {
     contexts: new Set(['Sales', 'Billing']),
     aggregates: new Set(['Sales.Order']),
-    stormings: new Map([['OrderToCash', { timelines: new Set(['Normal']), stages: new Set(['Payment']) }]]),
+    stormings: new Map([['OrderToCash', { timelines: new Set(['Normal', 'PaymentFailed']), stages: new Set(['Payment']) }]]),
 };
 
 /** A view read from JSON: the test's inputs are valid. */
@@ -34,6 +34,9 @@ describe('readViewedAt', () => {
         expect(read({ view: { kind: 'Storming', storming: 'OrderToCash', level: 'BigPicture' } }) as unknown).toEqual({
             view: { kind: 'Storming', storming: 'OrderToCash', level: 'BigPicture', exceptions: true },
         });
+        // one exception's case: the exception chosen
+        const failed = { ...storming, exceptions: true, exception: 'PaymentFailed' };
+        expect(read({ view: failed }) as unknown).toEqual({ view: failed });
     });
 
     test('refuses what is not a view, naming the field', () => {
@@ -45,6 +48,10 @@ describe('readViewedAt', () => {
         expect(path({ view: { kind: 'Inspector' } })).toBe('viewedAt.view.kind');
         expect(path({ view: { kind: 'Storming', storming: 'A', level: 'Design' } })).toBe('viewedAt.view.level');
         expect(path({ view: { ...storming, timeline: 'Normal' } })).toBe('viewedAt.view.stage');
+        expect(path({ view: { kind: 'Storming', storming: 'A', level: 'BigPicture', timeline: 'Normal', exception: 'Failed' } })).toBe(
+            'viewedAt.view.exception',
+        );
+        expect(path({ view: { ...storming, exception: '' } })).toBe('viewedAt.view.exception');
         expect(path({ view: { kind: 'Structure', level: 'Detail', focus: ['Sales', 'Sales'] } })).toBe('viewedAt.view.focus[1]');
         expect(path({ view: { kind: 'Structure', level: 'Detail', focus: Array.from({ length: 51 }, (_, i) => `C${i}`) } })).toBe('viewedAt.view.focus');
         expect(path({ view: { kind: 'Catalog', query: 'x'.repeat(201) } })).toBe('viewedAt.view.query');
@@ -75,6 +82,10 @@ describe('resolveViewedAt', () => {
             view: { kind: 'Catalog', sections: [], contexts: [] },
         });
         expect(resolveViewedAt(read({ view: { ...storming, storming: 'Returns' } }), known)).toBeUndefined();
+        // an exception gone: every exception, as the page shows it then
+        expect(resolveViewedAt(read({ view: { ...storming, exceptions: true, exception: 'Gone' } }), known) as unknown).toEqual({
+            view: { ...storming, exceptions: true },
+        });
     });
 });
 
@@ -86,6 +97,11 @@ describe('viewedAtData', () => {
             level: 'design',
             stage: 'Payment',
             exceptions: false,
+        });
+        expect(viewedAtData(read({ view: { ...storming, exceptions: true, exception: 'PaymentFailed' } }))).toMatchObject({
+            stage: 'Payment',
+            exceptions: true,
+            exception: 'PaymentFailed',
         });
     });
 

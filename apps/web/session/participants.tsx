@@ -49,6 +49,7 @@ export function ParticipantsList(props: {
         },
         stormingLevels: { 'big-picture': t.stormingLevels['big-picture'].label, 'design-level': t.stormingLevels['design-level'].label },
         allContexts: tx.chat.allContexts,
+        flows: t.flows,
     };
 
     const focusOffline = focus !== undefined && offline.some((r) => r.id === focus.participant);

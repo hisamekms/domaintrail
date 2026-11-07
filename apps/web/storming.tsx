@@ -188,7 +188,7 @@ export function shownStorming(stormings: readonly StormingView[], choice: Stormi
 }
 
 /** The choice showing `stageId` (none: the whole storming) of `stormingId` with `flow`, as written (an earlier version's state dropped). */
-function placed(choice: StormingChoice, stormingId: string, stageId: string | undefined, flow: StormingFlow): StormingChoice {
+export function placed(choice: StormingChoice, stormingId: string, stageId: string | undefined, flow: StormingFlow): StormingChoice {
     const { [stormingId]: _, ...others } = choice.timelines;
     const { exceptions: __, hidden, ...rest } = choice;
     const kept = (hidden ?? []).filter(isHideable);

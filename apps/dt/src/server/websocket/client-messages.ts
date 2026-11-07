@@ -19,17 +19,23 @@ function location(v: unknown): ViewLocation | undefined {
     }
     if (
         v.kind === 'dtes' &&
-        hasOnly(v, ['kind', 'stormingId', 'level', 'timelineId', 'layoutKey']) &&
+        hasOnly(v, ['kind', 'stormingId', 'level', 'stageId', 'flow', 'timelineId', 'layoutKey']) &&
         isKey(v.stormingId) &&
         isKey(v.level) &&
         isKey(v.layoutKey) &&
-        (v.timelineId === undefined || isKey(v.timelineId))
+        (v.stageId === undefined || isKey(v.stageId)) &&
+        (v.flow === undefined || v.flow === 'main' || v.flow === 'exception') &&
+        (v.timelineId === undefined || isKey(v.timelineId)) &&
+        // an exception's case names the exception
+        (v.flow !== 'exception' || v.timelineId !== undefined)
     ) {
         return {
             kind: 'dtes',
             stormingId: v.stormingId,
             level: v.level,
             layoutKey: v.layoutKey,
+            ...(typeof v.stageId === 'string' && { stageId: v.stageId }),
+            ...((v.flow === 'main' || v.flow === 'exception') && { flow: v.flow }),
             ...(typeof v.timelineId === 'string' && { timelineId: v.timelineId }),
         };
     }

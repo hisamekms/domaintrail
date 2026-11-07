@@ -140,7 +140,12 @@ export function useSessionPage(input: {
         view,
         viewKey: viewGraph.cameraKey(view),
         graph: viewGraph.graph,
-        storming: viewGraph.shown && { id: viewGraph.shown.storming.id, options: viewGraph.shown.options },
+        storming: viewGraph.shown && {
+            id: viewGraph.shown.storming.id,
+            options: viewGraph.shown.options,
+            flow: viewGraph.shown.flow,
+            stageId: viewGraph.shown.stageId,
+        },
     });
     const selectedItem = useCanvasValue(canvas, (c) => c?.onlySelectedId(), []);
     const selectedNode = selectedItem && graphNodeOf(selectedItem);
@@ -172,10 +177,8 @@ export function useSessionPage(input: {
                   ? resolvedSelection.agg.id
                   : undefined
             : undefined;
-    const shownStorming = view.kind === 'storming' ? viewGraph.shown : undefined;
     const viewedAt = sentView({
         location,
-        ...(shownStorming && { storming: { stageId: shownStorming.stageId, flow: shownStorming.flow } }),
         ...(view.kind === 'catalog' && { catalog: workspace.catalog.filter }),
         ...(statesOf !== undefined && { states: statesOf }),
     });

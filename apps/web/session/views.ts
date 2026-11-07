@@ -3,6 +3,7 @@
 // it with a message), and the small rules of the chat's layout (consecutive bubbles of one author, the send shortcut's name).
 import type { Me, SendRequestBody, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
 import { type DisplayMode, STRUCTURE_LEVELS, type StormingFlow, type StructureLevel, VIEW_LEVELS, type ViewLevel } from '@domaintrail/visualization';
+import { placed } from '../storming';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { type CatalogFilter, nameIn } from '../model-utils';
 import type { View } from '../view/navigation';
@@ -20,7 +21,16 @@ export type ViewTarget =
           readonly focus?: { readonly contexts: readonly string[]; readonly hidden: readonly string[] };
       }
     | { readonly kind: 'catalog' }
-    | { readonly kind: 'storming'; readonly stormingId: string; readonly level: ViewLevel; readonly timelineId?: string };
+    | {
+          readonly kind: 'storming';
+          readonly stormingId: string;
+          readonly level: ViewLevel;
+          /** The place: a stage (none: the whole storming). */
+          readonly stageId?: string;
+          /** The flow, as a location has it (`ViewLocation`): with `timelineId`, one main flow or an exception's case. */
+          readonly flow?: 'main' | 'exception';
+          readonly timelineId?: string;
+      };
 
 const isStructureLevel = (s: string): s is StructureLevel => STRUCTURE_LEVELS.some((l) => l === s);
 const isViewLevel = (s: string): s is ViewLevel => VIEW_LEVELS.some((l) => l === s);
@@ -28,8 +38,8 @@ const list = (s: string): string[] => (s ? s.split('+') : []);
 
 /**
  * The view of a location: a `.dt` view by its view key (`contextMap:<all>`, `structure:<level>`,
- * `structure:focus:<contexts>|<hidden>|<level>`, `catalog`), a storming by its storming, level and timeline. Undefined
- * for a key this page does not know.
+ * `structure:focus:<contexts>|<hidden>|<level>`, `catalog`), a storming by its storming, level, place and flow.
+ * Undefined for a key this page does not know.
  */
 export function viewTargetOf(location: ViewLocation): ViewTarget | undefined {
     if (location.kind === 'dtes') {
@@ -38,6 +48,8 @@ export function viewTargetOf(location: ViewLocation): ViewTarget | undefined {
             kind: 'storming',
             stormingId: location.stormingId,
             level: location.level,
+            ...(location.stageId !== undefined && { stageId: location.stageId }),
+            ...(location.flow !== undefined && { flow: location.flow }),
             ...(location.timelineId !== undefined && { timelineId: location.timelineId }),
         };
     }
@@ -83,17 +95,24 @@ export function openViewTarget(target: ViewTarget, to: ViewOpener): void {
             if (target.focus) settings.setHiddenContexts([...target.focus.hidden]);
             return setView({ kind: 'structure' });
         case 'storming': {
-            const choice = settings.stormingChoice;
-            const { [target.stormingId]: _, ...others } = choice.timelines;
-            settings.setStormingChoice({
-                ...choice,
-                stormingId: target.stormingId,
-                level: target.level,
-                timelines: target.timelineId === undefined ? others : { ...others, [target.stormingId]: target.timelineId },
-            });
+            const choice = { ...settings.stormingChoice, level: target.level };
+            const { stormingId, stageId, timelineId } = target;
+            if (target.flow === undefined && timelineId !== undefined) {
+                // an earlier version's page: a timeline's view, read as its place and flow (`shownPlace`)
+                const { flow: _, ...at } = placed(choice, stormingId, undefined, 'all');
+                settings.setStormingChoice({ ...at, timelines: { ...at.timelines, [stormingId]: timelineId } });
+            } else settings.setStormingChoice(placed(choice, stormingId, stageId, flowOf(target)));
             return setView({ kind: 'storming' });
         }
     }
+}
+
+/** The flow a storming's target draws (`ViewLocation`'s `flow` and `timelineId`). */
+function flowOf(target: Extract<ViewTarget, { kind: 'storming' }>): StormingFlow {
+    const { flow, timelineId } = target;
+    if (flow === 'exception' && timelineId !== undefined) return { exception: timelineId };
+    if (flow === 'main') return timelineId !== undefined ? { main: timelineId } : 'main';
+    return 'all';
 }
 
 /** Longest catalog filter a message carries (the server's `VIEWED_AT_LIMITS.query`). */
@@ -105,14 +124,12 @@ export type SentView = NonNullable<SendRequestBody['viewedAt']>;
 const STRUCTURE_DETAIL = { detail: 'Detail', overview: 'Overview', aggregates: 'Aggregates' } as const;
 
 /**
- * The view a message is sent from: the location's view (`viewTargetOf`), with what the location does not tell — a
- * storming's stage and whether its exceptions are shown, the catalog's filter — and the aggregate whose state diagram
- * the inspector shows. Undefined for a view this page cannot name (one still loading).
+ * The view a message is sent from: the location's view (`viewTargetOf`: a storming's place and flow among it), with
+ * what the location does not tell — the catalog's filter — and the aggregate whose state diagram the inspector shows.
+ * Undefined for a view this page cannot name (one still loading).
  */
 export function sentView(input: {
     readonly location: ViewLocation;
-    /** The storming view's place (its stage) and the flow drawn there. */
-    readonly storming?: { readonly stageId?: string | undefined; readonly flow: StormingFlow };
     /** The catalog's filter. */
     readonly catalog?: CatalogFilter;
     /** The aggregate whose state diagram the inspector shows. */
@@ -135,23 +152,24 @@ export function sentView(input: {
             };
         }
         case 'storming': {
-            const stage = input.storming?.stageId;
+            const { stageId, timelineId } = target;
+            // an earlier version's page: a timeline's view, its exceptions with it
+            const flow = target.flow === undefined && timelineId !== undefined ? undefined : flowOf(target);
+            const one = typeof flow === 'object' && 'main' in flow;
             return {
                 view: {
                     kind: 'Storming',
                     storming: target.stormingId,
                     level: target.level === 'design-level' ? 'DesignLevel' : 'BigPicture',
-                    ...(target.timelineId !== undefined ? { timeline: target.timelineId } : stage !== undefined && { stage }),
-                    exceptions: drawsExceptions(input.storming?.flow ?? 'all'),
+                    ...(timelineId !== undefined && (flow === undefined || one) ? { timeline: timelineId } : stageId !== undefined && { stage: stageId }),
+                    exceptions: flow === undefined || flow === 'all' || (typeof flow === 'object' && 'exception' in flow),
+                    ...(typeof flow === 'object' && 'exception' in flow && { exception: flow.exception }),
                 },
                 ...states,
             };
         }
     }
 }
-
-/** Whether a flow draws exceptions: every one, or one exception's case. */
-const drawsExceptions = (flow: StormingFlow): boolean => flow === 'all' || (typeof flow === 'object' && 'exception' in flow);
 
 /** The words a view's name is made of, in the page's language. */
 export interface ViewWords {
@@ -160,6 +178,8 @@ export interface ViewWords {
     readonly stormingLevels: Readonly<Record<ViewLevel, string>>;
     /** The context map with every context. */
     readonly allContexts: string;
+    /** A storming's flow other than every flow: the main flows only, one main flow, one exception. */
+    readonly flows: { readonly main: string; readonly mainFlow: (name: string) => string; readonly exception: (name: string) => string };
 }
 
 /** What a view's name and whether it opens depend on: the model's contexts and the stormings, named in the display mode. */
@@ -167,10 +187,13 @@ export interface ViewScope {
     readonly mode: DisplayMode;
     readonly contexts: readonly string[];
     readonly contextLabels: Readonly<Record<string, string>>;
-    readonly stormings: readonly Pick<StormingView, 'id' | 'label' | 'timelines'>[];
+    readonly stormings: readonly Pick<StormingView, 'id' | 'label' | 'timelines' | 'stages'>[];
 }
 
-/** A readable name of a view: `構造図 · 詳細`, `構造図 · 販売 + 請求`, `配送キャンセル · デザインレベル · 通常キャンセル`. */
+/**
+ * A readable name of a view: `構造図 · 詳細`, `構造図 · 販売 + 請求`, `配送キャンセル · デザインレベル`, a storming's
+ * place and flow after its level: `住民票 · デザインレベル · 発行 · 例外: 暗証番号のロック`.
+ */
 export function viewName(target: ViewTarget, words: ViewWords, scope: ViewScope): string {
     switch (target.kind) {
         case 'catalog':
@@ -185,12 +208,22 @@ export function viewName(target: ViewTarget, words: ViewWords, scope: ViewScope)
         }
         case 'storming': {
             const storming = scope.stormings.find((s) => s.id === target.stormingId);
-            const timeline = target.timelineId === undefined ? undefined : storming?.timelines.find((t) => t.id === target.timelineId);
-            return [
-                nameIn(scope.mode, target.stormingId, storming?.label),
-                words.stormingLevels[target.level],
-                ...(target.timelineId === undefined ? [] : [nameIn(scope.mode, target.timelineId, timeline?.label)]),
-            ].join(' · ');
+            const { stageId, timelineId, flow } = target;
+            const timeline = timelineId === undefined ? undefined : nameIn(scope.mode, timelineId, storming?.timelines.find((t) => t.id === timelineId)?.label);
+            const stage = stageId === undefined ? undefined : nameIn(scope.mode, stageId, storming?.stages?.find((st) => st.id === stageId)?.label);
+            const flowName =
+                timeline === undefined
+                    ? flow === 'main'
+                        ? words.flows.main
+                        : undefined
+                    : flow === 'exception'
+                      ? words.flows.exception(timeline)
+                      : flow === 'main'
+                        ? words.flows.mainFlow(timeline)
+                        : timeline;
+            return [nameIn(scope.mode, target.stormingId, storming?.label), words.stormingLevels[target.level], stage, flowName]
+                .filter((x) => x !== undefined)
+                .join(' · ');
         }
     }
 }
@@ -205,7 +238,11 @@ export function canOpen(target: ViewTarget, scope: ViewScope): boolean {
             return !target.focus || target.focus.contexts.every((c) => scope.contexts.includes(c));
         case 'storming': {
             const storming = scope.stormings.find((s) => s.id === target.stormingId);
-            return !!storming && (target.timelineId === undefined || storming.timelines.some((t) => t.id === target.timelineId));
+            return (
+                !!storming &&
+                (target.stageId === undefined || !!storming.stages?.some((st) => st.id === target.stageId)) &&
+                (target.timelineId === undefined || storming.timelines.some((t) => t.id === target.timelineId))
+            );
         }
     }
 }

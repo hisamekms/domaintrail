@@ -10,7 +10,8 @@ import { followedFirst } from './collab-menu';
 import { aiToggle, approvedProposalsOf, followedPage, FollowFrame, followeeColor, FollowToggle, personMove, presentParticipants } from './follow';
 import { ParticipantsList } from './participants';
 import { cameraBounds, participantColor, sameCamera } from './presence';
-import type { ParticipantRow, ViewScope } from './views';
+import { openViewTarget, type ParticipantRow, type ViewScope } from './views';
+import type { StormingChoice } from '../storming';
 
 const storming = (stormingId: string, layoutKey = `${stormingId}@1`): ViewLocation => ({ kind: 'dtes', stormingId, level: 'big-picture', layoutKey });
 const scope: ViewScope = {
@@ -45,6 +46,47 @@ describe("following a participant's page", () => {
         expect(personMove({ location: { kind: 'dt', viewKey: 'structure:overview', layoutKey: 's@1' } }, storming('Dispatch'), scope, false)).toEqual({
             view: { kind: 'structure', level: 'overview' },
         });
+    });
+
+    test('their place and flow too: an exception’s case is another view, though of the same layout', () => {
+        const at = (extra: Pick<Extract<ViewLocation, { kind: 'dtes' }>, 'stageId' | 'flow' | 'timelineId'>): ViewLocation => ({
+            kind: 'dtes',
+            stormingId: 'Dispatch',
+            level: 'big-picture',
+            layoutKey: 'Dispatch@1',
+            ...extra,
+        });
+        const stages: ViewScope = {
+            ...scope,
+            stormings: [{ id: 'Dispatch', label: '配車', timelines: [{ id: 'Fail', stageId: 'Alloc', exception: true }], stages: [{ id: 'Alloc' }] }],
+        };
+        expect(
+            personMove({ location: at({ stageId: 'Alloc', flow: 'exception', timelineId: 'Fail' }), camera }, at({ stageId: 'Alloc' }), stages, false),
+        ).toEqual({
+            view: { kind: 'storming', stormingId: 'Dispatch', level: 'big-picture', stageId: 'Alloc', flow: 'exception', timelineId: 'Fail' },
+        });
+        expect(personMove({ location: at({ stageId: 'Alloc', flow: 'main' }), camera }, at({ stageId: 'Alloc', flow: 'main' }), stages, false)).toEqual({
+            camera,
+        });
+        // opened here as their place and flow, what the 絞り込み hides here kept
+        const choices: StormingChoice[] = [];
+        const settings = {
+            stormingChoice: { stormingId: 'Returns', level: 'design-level', timelines: { Dispatch: '@Old' }, hidden: ['resolvedHotspots'] },
+            setStormingChoice: (c: StormingChoice) => void choices.push(c),
+        } as const;
+        const to = {
+            setView: () => {},
+            settings: { ...settings, setMapAll: () => {}, setStructureLevel: () => {}, setStructureContexts: () => {}, setHiddenContexts: () => {} },
+        };
+        openViewTarget({ kind: 'storming', stormingId: 'Dispatch', level: 'big-picture', stageId: 'Alloc', flow: 'exception', timelineId: 'Fail' }, to);
+        openViewTarget({ kind: 'storming', stormingId: 'Dispatch', level: 'big-picture', flow: 'main' }, to);
+        // an earlier version's page: its timeline, read here as its place and flow
+        openViewTarget({ kind: 'storming', stormingId: 'Dispatch', level: 'big-picture', timelineId: 'Fail' }, to);
+        expect(choices).toEqual([
+            { stormingId: 'Dispatch', level: 'big-picture', timelines: { Dispatch: '@Alloc' }, flow: { exception: 'Fail' }, hidden: ['resolvedHotspots'] },
+            { stormingId: 'Dispatch', level: 'big-picture', timelines: {}, flow: 'main', hidden: ['resolvedHotspots'] },
+            { stormingId: 'Dispatch', level: 'big-picture', timelines: { Dispatch: 'Fail' }, hidden: ['resolvedHotspots'] },
+        ]);
     });
 
     test('their 詰めて表示 too, so that the same layout takes their camera', () => {
