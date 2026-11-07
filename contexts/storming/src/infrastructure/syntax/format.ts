@@ -18,8 +18,8 @@ export class FormatError extends Error {}
  * - No space around the dots of a `ref` path, nor around the hyphens of a `level` (`level big-picture`).
  * - Clauses go in one canonical order (ADR 0032), each with its comments (those on lines of their own above it and the
  *   one after it on its line): `ref`, then the relations `by`, `reads`, `handledBy`, `emits`, `on`, `issues`, `from`,
- *   then `status`, `resolution` and `level`; in a policy, `on`, `reads`, `issues`, `by` (§9); clauses of one kind keep
- *   their order. Repeated relations of one keyword
+ *   then `status`, `resolution` and `level`; in a policy, `on`, `reads`, `issues`, `by` (§9); in a command, `on` right
+ *   after `by` (§14: who, on noticing what, looking at what); clauses of one kind keep their order. Repeated relations of one keyword
  *   are one clause (`by A` and `by B` → `by A, B`, unless a comment is on one of them; `handledBy` and a hotspot's `on`,
  *   which take one, aside), with a
  *   space after each comma and none before it.
@@ -114,10 +114,12 @@ const CLAUSE_RANK: Readonly<Record<string, number>> = {
 /**
  * The ranks of a kind whose relations go in another order (ADR 0032 §9): a policy reads「〜が起きたら、〜を見て、〜を出す」,
  * `on`, `reads`, `issues`, then the `by` of a person applying it by hand (the clauses a policy does not take keep
- * their place).
+ * their place); a command, `by`, `on`, `reads`, `handledBy`, `emits` (§14).
  */
 const KIND_RANK: Readonly<Record<string, Readonly<Record<string, number>>>> = {
     EsPolicy: { ...CLAUSE_RANK, on: 5, reads: 5.5, issues: 6, by: 6.5, actor: 6.5 },
+    // §14: the issuer, the event it reacts to, then what it looks at
+    EsCommand: { ...CLAUSE_RANK, on: 1.5 },
 };
 const rankOf = (el: ast.EsNode, c: ast.EsClause): number =>
     (KIND_RANK[el.$type] ?? CLAUSE_RANK)[

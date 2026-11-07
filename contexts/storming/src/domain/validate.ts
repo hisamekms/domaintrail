@@ -49,7 +49,7 @@ const kindList = (kinds: readonly ElementKind[]): string => kinds.map((k) => art
 const line = (range: SourceRange): number => range.start.line;
 
 /**
- * The checks of a `.dtes` storming that need no `.dt` model (spec §11, ADR 0024: S001–S009 and S014–S031), on the storming
+ * The checks of a `.dtes` storming that need no `.dt` model (spec §11, ADR 0024: S001–S009 and S014–S033), on the storming
  * IR only:
  *   - S001: a local ID declared twice in a storming (across kinds, timelines and groups included), a storming ID twice
  *   - S002: a relation target or timeline step that names no declaration of its storming
@@ -81,6 +81,10 @@ const line = (range: SourceRange): number => range.start.line;
  *   - S029 (info): at Design Level (a command or policy in the storming), an event no command emits and from no external
  *   - S030: `reads` on a command a policy issues (without `by`): whoever decides has the `reads`, here the policy (ADR 0032 §9)
  *   - S031: a policy that issues more than one command: one policy per command, each with its own `reads` (ADR 0032 §9)
+ *   - S032: `on` on a command without `by`: only a person issuing it reacts to an event that way; a rule is a policy's
+ *     `on` (ADR 0032 §14)
+ *   - S033: `on` on a command `by` an external system: an external system reacting to our event is a policy issuing a
+ *     command it handles (ADR 0032 §14)
  * Not diagnosed (spec §11): timeline order against causality, Big Picture completeness (unreferenced events, events in
  * no timeline, read models without `from`). A policy with several `issues` is S031 (ADR 0032 §9), not an Info.
  */
@@ -200,10 +204,12 @@ function validateStorming(storming: Storming): Diagnostic[] {
         }
     }
     const designLevel = hasDesignLevel(storming);
-    /** The events a policy is `on`. */
+    /** The events a policy, or the actor issuing a command, is `on` (ADR 0032 §14). */
     const triggers = new Set(
         decls.flatMap((d) =>
-            d.kind === 'policy' && byId.get(d.id) === d ? d.clauses.flatMap((c) => (c.type === 'relation' && c.keyword === 'on' ? [c.target] : [])) : [],
+            (d.kind === 'policy' || d.kind === 'command') && byId.get(d.id) === d
+                ? d.clauses.flatMap((c) => (c.type === 'relation' && c.keyword === 'on' ? [c.target] : []))
+                : [],
         ),
     );
 
@@ -553,6 +559,44 @@ function validateStorming(storming: Storming): Diagnostic[] {
                 );
             }
         }
+        // S032, S033: a command's `on` says what the actor issuing it reacts to (ADR 0032 §14): a person's judgement on
+        // noticing an event; a rule, or an external system reacting, is a policy
+        const externals = el.clauses.flatMap((c) => (c.type === 'relation' && c.keyword === 'by' && byId.get(c.target)?.kind === 'external' ? [c.target] : []));
+        for (const c of el.clauses) {
+            if (c.type !== 'relation' || c.keyword !== 'on') continue;
+            if (!has(el, 'by')) {
+                const named = policies.map((p) => `'${p}'`);
+                out.push(
+                    esDiagnostic(
+                        'error',
+                        'S032',
+                        `Command '${el.id}' has \`on ${c.target}\` but no \`by\`; only the actor issuing a command reacts to an event this way, a rule reacting to it is a policy.`,
+                        c.range,
+                        {
+                            hint: policies.length
+                                ? `${policies.length > 1 ? `the policies ${listed(named)} issue` : `policy ${named[0]} issues`} it: write \`on ${c.target}\` in ${policies.length > 1 ? `the one that reacts to it` : 'that policy'} and remove it here`
+                                : `if a person notices '${c.target}' and issues it, add \`by <actor>\`; if it is a rule ("when ${c.target}, always …"), remove this \`on\` and put a policy between, \`policy <Id> { on ${c.target} issues ${el.id} }\``,
+                            elementId: elementId(el.id),
+                        },
+                    ),
+                );
+                continue;
+            }
+            if (externals.length) {
+                out.push(
+                    esDiagnostic(
+                        'error',
+                        'S033',
+                        `Command '${el.id}' has \`on ${c.target}\` and is issued by external system '${externals[0]}'; \`on\` on a command says what the actor issuing it reacts to, not an external system.`,
+                        c.range,
+                        {
+                            hint: `an external system reacting to our event is a policy: remove this \`on\`, and write \`policy <Id> { on ${c.target} issues <a command handledBy ${externals[0]}> }\` (the command addressed to it) instead`,
+                            elementId: elementId(el.id),
+                        },
+                    ),
+                );
+            }
+        }
         const gap = unasked(el);
         if (!gap) return;
         const missing = (['by', 'handledBy', 'emits'] as const).filter((m) => gap.missing.includes(m)).map((m) => MISSING[m]);
@@ -752,7 +796,6 @@ function misplacedHint(kind: NodeElementKind, keyword: RelationKeyword, target: 
     const policy = `\`policy <Id> { on <the event> issues ${target} }\``;
     if (kind === 'command') {
         if (keyword === 'issues') return `a command never issues a command: let it \`emits\` an event, and put a policy between, ${policy}`;
-        if (keyword === 'on') return `a command does not react to an event: a policy does, \`policy <Id> { on ${target} issues <this command> }\``;
         if (keyword === 'from') return `remove it: a command is issued \`by\` someone, who \`reads\` read models to decide it`;
     }
     if (kind === 'policy') {
@@ -799,6 +842,14 @@ function kindHint(owner: NodeElement, keyword: RelationKeyword, target: AnyDecla
                 if (target.kind === 'aggregate')
                     return `an aggregate is not read: write \`handledBy ${t}\` if it handles the command; what the issuer looks at is a read model`;
                 if (target.kind === 'actor' || target.kind === 'external') return `who issues the command is \`by ${t}\``;
+                break;
+            case 'on':
+                if (target.kind === 'command') return `the actor reacts to an event, not to a command: write \`on <an event '${t}' emits>\``;
+                if (target.kind === 'policy')
+                    return `the actor reacts to an event: write \`on\` the event policy '${t}' is \`on\`, or let policy '${t}' issue it`;
+                if (target.kind === 'readmodel') return `what the issuer looks at to decide is \`reads ${t}\`; \`on\` names the event it reacts to`;
+                if (target.kind === 'actor' || target.kind === 'external') return `who issues the command is \`by ${t}\`; \`on\` names the event it reacts to`;
+                if (target.kind === 'aggregate') return `who handles the command is \`handledBy ${t}\`; \`on\` names the event its issuer reacts to`;
                 break;
             case 'emits':
                 if (target.kind === 'command')

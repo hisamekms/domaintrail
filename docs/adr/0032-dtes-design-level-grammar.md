@@ -51,7 +51,8 @@ command BuildAllocation "配車を組む" {
 ```
 
 - Policy: `policy P { on <event>… issues <command>… }`, unchanged. A command a policy issues has no `by`: the policy
-  is its issuer.
+  is its issuer. The policy is the only link from an event to a command (amended by §14: a command issued `by` an
+  actor may be `on` the events that person reacts to).
 - New: `readmodel R { from <event>… }` (a read model fed by events), `event E { from <external> }` (an event that
   arrives from an external system without a command of ours), `hotspot H { on <any sticky but a hotspot> }`.
 - Exactly these seven keywords, no synonyms. A list is one clause: `emits A, B` is `emits A` and `emits B` (the IR
@@ -59,10 +60,10 @@ command BuildAllocation "配車を組む" {
   `from` become keywords: they are no longer IDs. `then <Event>` of an exception is unaffected.
 - Kinds (`RELATION_RULES`): `by` → actor, external; `reads` → read model; `handledBy` → aggregate, external (one);
   `emits` → event; policy `on` → event, `issues` → command; read model `from` → event; event `from` → external;
-  hotspot `on` → any node kind but a hotspot (one).
+  hotspot `on` → any node kind but a hotspot (one); command `on` → event (§14).
 - The semantic graph's edge kinds follow: `by`, `reads`, `handledBy`, `emits`, `on`, `issues`, `readmodel-from`
-  (event → read model), `event-from` (external → event), `hotspot-on`. `on`, `issues`, `emits`, `handledBy` and
-  `event-from` are causal. Of a second `handledBy` or hotspot `on`, only the first is an edge.
+  (event → read model), `event-from` (external → event), `hotspot-on` (and `command-on`, event → command, §14). `on`,
+  `issues`, `emits`, `handledBy` and `event-from` are causal (and `command-on`). Of a second `handledBy` or hotspot `on`, only the first is an edge.
 
 ### 2. Everything unnatural is an error at once, each with a concrete fix
 
@@ -73,7 +74,7 @@ and six rules are new:
 |---|---|---|
 | S003 | a relation to an element of the wrong kind | the relation that says what was meant: `by` an aggregate → `handledBy` it; `handledBy` an actor → `by` it; `reads` an event → a read model fed `from` it; `emits` a command → a policy between them; policy `issues` an event → the command's `emits`; policy `on` a command → `on` one of its events; read model `from` an external → an event `from` it; event `from` a command → that command's `emits`; … |
 | S004 | a second `handledBy` (and, as before, `ref`, hotspot `on`, `status`, `resolution`, `level`) | keep one |
-| S006 | a relation the element kind does not take | per case: a command's `issues` → a policy between; a command's `on` → a policy; a policy's `by`/`emits`/`handledBy`/`reads` → where it belongs; anything on an actor, external, aggregate → write it in the command |
+| S006 | a relation the element kind does not take | per case: a command's `issues` → a policy between; a command's `on` → a policy (amended by §14: a command takes `on` when an actor issues it); a policy's `by`/`emits`/`handledBy`/`reads` → where it belongs; anything on an actor, external, aggregate → write it in the command |
 | S008 | a policy without `on` or `issues` | add it, or (not decided) a hotspot `on` the policy |
 | S023 | `actor X` or `target X` in a body (v0.1) | `write by X` / `write handledBy X` (`dt migrate dtes` rewrites them); outside a command: remove it |
 | S024 | a command without its issuer (`by`, or a policy that `issues` it), without `handledBy`, or without `emits` | add what is decided; *don't guess*: add `hotspot <Id> "誰が処理する？" { on <command> }` |
@@ -109,7 +110,7 @@ prompts embed it after the storming's way of working when a prompt is about `.dt
 `dsl-quick` for `.dt`); the interviews, which write no file, do not. The runner's rule 3 says to write the relations
 in the grammar and never to fill a relation nobody knows by guessing, but to mark it with a hotspot on the element.
 `dt fmt` prints a body's clauses in one canonical order, each with its comments: `ref`, `by`, `reads`, `handledBy`,
-`emits`, `on`, `issues`, `from`, `status`, `resolution`, `level`.
+`emits`, `on`, `issues`, `from`, `status`, `resolution`, `level` (a policy's per §9.5, a command's per §14).
 
 ### 5. `dt migrate dtes`
 
@@ -396,6 +397,67 @@ with lanes only), and the notes are made per position (`notesAt` in `chains.ts`;
 note stands for, its `slot` the topmost one, where the grid places it). A view without lanes (a timeline's view, the
 integrated canvas of a storming without stages) has one slot per position and does not change.
 
+### 14. A person who notices an event issues the command: a command's `on` (2026-11-07)
+
+*Decided by the maintainer* 2026-11-07, on the DSS storming of §12 and §13: 「出勤した」 is the delivery staff's own act,
+which no system records, and on it 「配達員」 issues 「検知結果を取り込む」. §1 left a policy as the only link from an
+event to a command, so the AI either wrote a policy for what is no rule (nobody can state it as 「出勤したら必ず…」:
+the person decides, on noticing it) or left the event unconnected (S029). At Design Level an event may now lead to an
+actor who issues a command, without a policy: **event → actor → command**.
+
+1. **Grammar.** A command issued `by` an actor may say which events it reacts to with `on`, the keyword a policy and a
+   hotspot already use (no new keyword); a list as for the other relations, `on A, B`:
+
+   ```dtes
+   command ImportAlcoholResults "検知結果を取り込む" {
+     by DeliveryStaff
+     on ClockedIn // the issuer issues it on noticing this event
+     reads AlcoholCheckSheet // optional, as before
+     handledBy StaffAlcohol
+     emits AlcoholChecked, AlcoholDetected
+   }
+   ```
+
+2. **A rule or a judgement.** A rule you can state in one sentence (「〜したら必ず〜する」) is a policy, `policy { by
+   <actor> }` when a person applies it by hand (§7); a person's judgement on noticing an event is the command's `on`;
+   unsure which, a hotspot on the command, never a guess (§3).
+3. **Errors**, each with a concrete fix: `on` on a command without `by` (if a policy `issues` it, the hint names that
+   policy and says to put the event in its `on`; otherwise to add `by <actor>`, or to put a policy between for a
+   rule); `on` on a command whose `by` is (also) an external system (an external system reacting to our event is a
+   policy issuing a command handled by it, or addressed to it); `on` naming anything but an event is S003, with a hint
+   of the relation meant.
+4. **Meaning.** An event a command is `on` is a trigger, as a policy's is: no S029 for it. The actor takes part through
+   `by` (S027) as before.
+5. **`dt fmt`** orders a command's clauses `by`, `on`, `reads`, `handledBy`, `emits` (who, on noticing what, looking
+   at what, handled by whom, with which outcomes), and merges repeated `on`s as the other relations (§7).
+6. **Drawing.** The line runs from the event's note to the issuer's copy beside the command's note, and the `by` line
+   from there to the command: event → actor → command, as read model → actor → command. With `reads` too, the read
+   model still goes to the actor. The timeline filter keeps the one-hop path event → actor → command → event when both
+   events are in view, as event → policy → command → event.
+7. The AI-facing texts follow, as in §9.9: `dt guide dtes-quick` and `storming-rules`, the agent's prompt, the spec and
+   `docs/live-view.md`'s lines.
+
+*Decided here*, while implementing it:
+
+- **The edge kind is `command-on`** (event → command), not `on`. Like `hotspot-on`, `readmodel-from` and `event-from`,
+  a keyword whose meaning depends on its owner gets an edge kind of its own: every place that reads `on` as event →
+  policy (the timeline filter's paths, a policy's notes per step, §12's trigger through a read model, the elements of
+  the exceptions only, an event's reactions in the detail) stays right without a check of the target's kind, and the
+  drawing, which goes into the actor and not the command, has its own case. It is causal (`isCausal`: drawn as 流れ like
+  any relation, §8). The semantic graph has it only when an actor, and no external system, issues the command (an
+  invalid one is left out, as other invalid relations are).
+- **The diagnostics are S032** (`on` on a command without `by`; reported at the `on` clause, besides S024 when nothing
+  issues it) **and S033** (`on` on a command `by` an external system, also when an actor is `by` it too). A command a
+  policy issues *and* `by` someone is S025 only, as for §9's S030.
+- **Copies per step**: a command's notes stay anchored by its `emits` events (`notesAt`); the `on` line comes from the
+  event's note at the nearest position at or before the command's note (`feeding`, as for `readmodel-from`), to each
+  actor copy beside it. In ELK the actor then has two lines and is no longer stuck on its command (`attach`), with no
+  change to it.
+- **The timeline filter** keeps a command's `command-on` when its event is in view and the command is kept (it emits
+  an event in view), which also keeps the one-hop path.
+- **The line's words**: a relation `notices`, ja 「「{A}」を受けて「{B}」が動く」, en “{B}” acts on “{A}”. An event's
+  hidden connections in the detail (Big Picture) list such a command beside the policies reacting to it.
+
 ## Alternatives
 
 - **An arrow chain** (`UnassignedRequests -> Batch -> BuildAllocation -> CarAllocationPlan -> CarAllocated`): rejected
@@ -421,6 +483,6 @@ integrated canvas of a storming without stages) has one slot per position and do
 - The grammar now has the words `by`, `handledBy` and `from` as keywords: an element named so must be renamed (the
   migration lists such files).
 - The tree-sitter grammar and the Zed extension cover `.dt` only; nothing to change there.
-- The rule IDs go up to S031 (§7, §9); the guide's rules table and its one-problem examples cover each.
+- The rule IDs go up to S033 (§7, §9, §14); the guide's rules table and its one-problem examples cover each.
 - §9 makes the `.dtes` of 0.8 with a `reads` on a policy's command invalid until migrated (`dt migrate dtes` moves it
   when one policy issues the command); a policy issuing several commands has to be split by hand.

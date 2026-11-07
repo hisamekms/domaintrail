@@ -12,10 +12,10 @@ import type { EventOccurrence, NodeElementKind, SemanticEdgeKind, TimelineStep }
 /**
  * How a semantic edge is drawn (spec §9.4): solid causal, dotted related. A command's `handledBy` is drawn as a cause:
  * the command goes to its handler, which decides and emits the events (Event Storming's grammar, `chains.ts`); so is an
- * event arriving `from` an external system.
+ * event arriving `from` an external system, and an event the actor issuing a command reacts to (`command-on`).
  */
 export const isCausal = (kind: SemanticEdgeKind): boolean =>
-    kind === 'on' || kind === 'issues' || kind === 'emits' || kind === 'handledBy' || kind === 'event-from';
+    kind === 'on' || kind === 'command-on' || kind === 'issues' || kind === 'emits' || kind === 'handledBy' || kind === 'event-from';
 
 // ---- Timeline steps compared (spec §7.2, §8.3) ----
 

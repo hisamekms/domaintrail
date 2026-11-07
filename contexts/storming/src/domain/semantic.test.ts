@@ -75,6 +75,27 @@ describe('semantic graph (spec §9.1)', () => {
         ]);
     });
 
+    test("ADR 0032 §14: a command's `on` is Event → Command (`command-on`), only when an actor and no external system issues it", () => {
+        const s = storming(
+            ...events('E', 'F'),
+            el('actor', 'A'),
+            el('external', 'X'),
+            el('command', 'C', ['by', 'A'], ['on', 'E'], ['emits', 'F']),
+            el('command', 'D', ['on', 'E'], ['emits', 'F']),
+            el('command', 'K', ['by', 'A'], ['by', 'X'], ['on', 'E']),
+            el('command', 'L', ['by', 'A'], ['on', 'A']),
+        );
+        expect(buildSemanticGraph(s).edges.map(semanticEdgeKey)).toEqual([
+            'by:A->C',
+            'command-on:E->C',
+            'emits:C->F',
+            'emits:D->F',
+            'by:A->K',
+            'by:X->K',
+            'by:A->L',
+        ]);
+    });
+
     test('invalid relations, duplicate IDs and timelines are left out, nothing is inferred', () => {
         const s = storming(
             ...events('E'),

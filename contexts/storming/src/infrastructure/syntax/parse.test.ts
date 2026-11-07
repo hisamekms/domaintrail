@@ -361,6 +361,16 @@ describe('syntax errors (spec §11 Syntax: 不正なブロック, 未知の関�
         expect(r.diagnostics.every((d) => d.file === 'bad.dtes' && d.code === 'SYNTAX')).toBe(true);
     });
 
+    test('a command `by` an actor `on` the event it reacts to parses and validates (ADR 0032 §14)', async () => {
+        const [s] = await parseOne(
+            wrap(
+                'event ClockedIn "出勤した"\nevent Checked\nactor Staff\naggregate A\ncommand Import {\n  by Staff\n  on ClockedIn\n  handledBy A\n  emits Checked\n}\ntimeline T { ClockedIn Checked }',
+            ),
+        );
+        expect(element(s!, 'Import').clauses.map(shape)).toEqual([{ by: 'Staff' }, { on: 'ClockedIn' }, { handledBy: 'A' }, { emits: 'Checked' }]);
+        expect(validateStormings([s!])).toEqual([]);
+    });
+
     test('unknown local references are not syntax errors (S002 is the validator’s)', async () => {
         const [s] = await parseOne(wrap('command C { handledBy Nowhere\n emits Nothing }'));
         expect(element(s, 'C').clauses.map(shape)).toEqual([{ handledBy: 'Nowhere' }, { emits: 'Nothing' }]);

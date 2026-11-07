@@ -28,7 +28,10 @@ export function otherPlaces(storming: Storming, eventId: string, render: RenderG
     });
 }
 
-/** What Design Level draws around an event: the commands that cause it (each with who issues it, `by`) and the policies reacting. */
+/**
+ * What Design Level draws around an event: the commands that cause it (each with who issues it, `by`), and what reacts
+ * to it: the policies, and the commands whose issuer reacts to it (a command's `on`, ADR 0032 §14).
+ */
 export interface HiddenConnections {
     readonly causes: readonly { readonly command: string; readonly actors: readonly string[] }[];
     readonly reactions: readonly string[];
@@ -40,7 +43,7 @@ export function hiddenConnections(storming: Storming, eventId: string): HiddenCo
     const causes = edges
         .filter((e) => e.kind === 'emits' && e.targetId === eventId)
         .map((e) => ({ command: e.sourceId, actors: edges.filter((a) => a.kind === 'by' && a.targetId === e.sourceId).map((a) => a.sourceId) }));
-    const reactions = edges.filter((e) => e.kind === 'on' && e.sourceId === eventId).map((e) => e.targetId);
+    const reactions = edges.filter((e) => (e.kind === 'on' || e.kind === 'command-on') && e.sourceId === eventId).map((e) => e.targetId);
     return causes.length > 0 || reactions.length > 0 ? { causes, reactions } : undefined;
 }
 

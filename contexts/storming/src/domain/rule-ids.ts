@@ -1,5 +1,5 @@
 /**
- * Storming's rule IDs: S001–S031 (the Event Storming DSL `.dtes`, ADR 0024, ADR 0032) and SYNTAX for lexer/parser errors of
+ * Storming's rule IDs: S001–S033 (the Event Storming DSL `.dtes`, ADR 0024, ADR 0032) and SYNTAX for lexer/parser errors of
  * `.dtes` files. A diagnostic carries one as its code (the kernel's `RuleCode`).
  */
 export type StormingRuleId =
@@ -34,4 +34,6 @@ export type StormingRuleId =
     | 'S028'
     | 'S029'
     | 'S030'
-    | 'S031';
+    | 'S031'
+    | 'S032'
+    | 'S033';

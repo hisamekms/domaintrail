@@ -460,6 +460,33 @@ describe('Design Level elements in a view of stages', () => {
         expect(crossings(laidOut(render, s))).toEqual([]);
     });
 
+    test("a command's `on` runs from the event to the actor beside the command, at the step before (ADR 0032 §14)", async () => {
+        const s = await parse(`storming A {
+  event ClockedIn
+  event Passed
+  event Detected
+  actor Staff
+  aggregate Check
+  command Import { by Staff on ClockedIn handledBy Check emits Passed, Detected }
+  stage Attendance {
+    timeline Normal { ClockedIn Passed }
+    exception Found { ClockedIn Detected }
+  }
+}
+`);
+        for (const options of [DL, { ...DL, stageId: 'Attendance' }, { ...DL, timelineId: 'Normal' }, { ...DL, timelineId: 'Found' }]) {
+            const render = projectView(s, options);
+            const lines = render.edges.filter((e) => e.type === 'semantic').map((e) => `${e.kind}:${eventOf(render, e.source)}->${eventOf(render, e.target)}`);
+            expect(lines).toEqual(expect.arrayContaining(['command-on:ClockedIn->n:Staff@Import', 'by:n:Staff@Import->n:Import']));
+            expect(lines.filter((l) => l.startsWith('command-on:'))).toHaveLength(1);
+        }
+        const render = projectView(s, DL);
+        const cells = render.grid!.cells;
+        // the actor still stands on top of its command, the line comes from the step before
+        expect(cells['n:Staff@Import']).toEqual({ col: cells['n:Import']!.col, row: cells['n:Import']!.row - 1 });
+        expect(cells[only(render, 'ClockedIn').id]!.col).toBeLessThan(cells['n:Import']!.col);
+    });
+
     test('the cause of an event, with its actor and aggregate, in every view of it: the stages, the stage, a main flow and an exception', async () => {
         const s = await parse(text);
         // Pay emits Paid (the main flow) and Failed (the exception); no policy issues it

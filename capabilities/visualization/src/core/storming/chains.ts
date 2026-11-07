@@ -18,6 +18,9 @@
  *   read model (`readmodel-from`) runs to each copy of it, from the event's note at the nearest slot before the copy
  *   (every note with a single slot). When a policy's read model is fed by the event the policy is `on`, the line through
  *   the read model says the trigger: the policy's `on` line from that event note is not drawn (the others are).
+ * - **The issuer reacts** (ADR 0032 §14): a command's `on` (`command-on`) runs from the event to the copy of each actor
+ *   issuing it beside the command's note, from the event's note at the nearest slot at or before the note (as
+ *   `readmodel-from` does): event → actor → command, as read model → actor → command.
  * - **Copies per step** (spec §7.3, §10.2: drawing-only splits): the projection says at which *slot* (a step of a
  *   timeline, or one slot for the whole view) each event note stands, and at which position in time. A command whose
  *   events stand at several positions gets a note per position, `n:<command>#<k>` (with its own issuer, read model and
@@ -312,6 +315,13 @@ export function drawChains(
             case 'on':
                 for (const note of notesOf(e.targetId)) for (const p of eventsAt(e.sourceId, note)) add(e, p.id, `n:${note.key}`);
                 break;
+            case 'command-on':
+                // into the actors issuing the command, beside its note: they notice the event and issue it
+                for (const note of notesOf(e.targetId)) {
+                    const actors = (issuersOf.get(e.targetId) ?? []).filter((i) => kindOf(i) === 'actor').flatMap((i) => copyAt(i, note) ?? []);
+                    for (const p of feeding(eventsOf.get(e.sourceId) ?? [], note)) for (const actor of actors) add(e, p.id, actor);
+                }
+                break;
             case 'hotspot-on':
                 if (kindOf(e.targetId) === 'event') {
                     for (const note of notesOf(e.sourceId)) for (const p of eventsAt(e.targetId, note)) add(e, `n:${note.key}`, p.id);
@@ -377,7 +387,8 @@ function issued(policy: Note, commands: Note[]): Note[] {
 }
 
 /**
- * The notes of an event that feed a read model's note: those at the nearest slot at or before it, else at the first
+ * The notes of an event that feed a read model's note (or that the issuer of a command's note reacts to, `command-on`):
+ * those at the nearest slot at or before it, else at the first
  * slot after it; every one when the note has no slot or the event stands at a single place in time.
  */
 function feeding(places: readonly EventPlace[], note: Note): EventPlace[] {
