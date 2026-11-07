@@ -23,7 +23,7 @@ export interface Captured {
 const decoder = new TextDecoder();
 
 /** Validates sources given by bytes (UTF-8). */
-async function validate(deps: Pick<CollaborationDeps, 'validator'>, files: readonly { path: string; bytes: Uint8Array }[]): Promise<ValidationResult> {
+export async function validate(deps: Pick<CollaborationDeps, 'validator'>, files: readonly { path: string; bytes: Uint8Array }[]): Promise<ValidationResult> {
     return deps.validator.validate(files.map((f) => ({ path: f.path, text: decoder.decode(f.bytes) })));
 }
 

@@ -10,6 +10,7 @@ import { agentRunCommands, requestCommands, revisionCommands, sessionCommands } 
 import { approvalCommands, approvalOf } from '../domain/approvals.js';
 import { exclusiveGroup, markChange, markCommands, markKey, MAX_REACTION_EMOJI, reactionRoom } from '../domain/marks.js';
 import { elementChanges, stormingElements, type ElementChanges, type StormingElements } from '../domain/changes.js';
+import { reviewStormings, runReview, type AgentReviewReport, type StormingReview } from '../domain/review.js';
 import { compareFiles, lineDiff, MAX_DIFF_BYTES, statusCounts, type FileComparison, type FileStatus, type LineDiff } from '../domain/compare.js';
 import { resolveAnswer, resolvePick, type AnswerData, type PickData } from '../domain/reply.js';
 import { boundChanges, previousRunIds, type ComparedChange, type PreviousRunChanges } from '../domain/previous-runs.js';
@@ -19,7 +20,7 @@ import { targetStatus, type TargetStatus } from '../domain/targets.js';
 import { diagnosticsDiff, runReport, tally, type DiagnosticsDiff, type RunFacts } from '../domain/validation.js';
 import type { Actor } from './actor.js';
 import type { CollaborationDeps, Lease, OutboxEntry, RestoreOperation, StoredRun, Stores, ValidationResult, WorkspaceScan } from './ports.js';
-import { analysisOf, capture, sourcesOf, writeRefusal, type BlobMissing, type Captured } from './snapshots.js';
+import { analysisOf, capture, sourcesOf, validate, writeRefusal, type BlobMissing, type Captured } from './snapshots.js';
 import { publish, queueRequests, type NoRequests } from './queueing.js';
 import { createConversation, invalidTargets, overrideAnsweredTriages, sendIn, type ConversationUseCases } from './conversation.js';
 import { createInterviews, noteStormingRun, type InterviewUseCases } from './interviews.js';
@@ -147,6 +148,9 @@ export interface Comparison {
 
 /** The most characters of unified diff text a comparison carries; the files after it get no diff. */
 export const MAX_COMPARISON_DIFF = 512 * 1024;
+/** A review of stormings that could not all be read: nothing found, nothing to look at. */
+const EMPTY_REVIEW: StormingReview = { findings: [], renames: [], neighbourhood: [] };
+
 /** How many pairs of revisions `modelChanges` keeps the changes of, and how many revisions it keeps the analysis of. */
 const CHANGES_KEPT = 256;
 const ANALYSES_KEPT = 8;
@@ -446,7 +450,28 @@ export interface CollaborationUseCases extends ConversationUseCases, InterviewUs
         readonly token: string;
         readonly facts: RunFacts;
         readonly reply?: Collaboration.AgentReply;
+        /**
+         * The review at the run's end (ADR 0034): what stage 0 found when the agent was asked to check its neighbourhood
+         * (`found`, absent when it was not asked) and what the agent says it fixed and kept. What stage 0 still finds
+         * now (`left`) is decided here.
+         */
+        readonly review?: { readonly found?: readonly Collaboration.ReviewFinding[]; readonly report?: AgentReviewReport };
     }): Promise<Result<Finished, NotFound | LeaseLost | NotAllowed | BlobMissing | Collaboration.PathOutsideRoot | Collaboration.InvalidReply>>;
+    /**
+     * Stage 0 of the review of a running run (ADR 0034), for its lease's holder: its base revision against the workspace
+     * now, without recording a revision. `complete` is false when a side's `.dtes` files do not all parse (no finding
+     * is then given: the run's own check reports it).
+     */
+    reviewRunning(input: {
+        readonly run: AgentRunId;
+        readonly token: string;
+    }): Promise<Result<{ readonly review: StormingReview; readonly complete: boolean }, NotFound | LeaseLost | NotAllowed | BlobMissing>>;
+    /** Stage 0 of the review between two revisions of the session (the renames of a run, ADR 0034). */
+    stormingReview(input: {
+        readonly session: SessionId;
+        readonly before: RevisionId;
+        readonly after: RevisionId;
+    }): Promise<Result<{ readonly review: StormingReview; readonly complete: boolean }, NotFound | Collaboration.RevisionOfAnotherSession | BlobMissing>>;
     /** Ends a running run with the agent's question (plain text, and its structured reply when there is one). */
     askClarification(input: {
         readonly run: AgentRunId;
@@ -1054,7 +1079,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async finishRun({ run, token, facts, reply }) {
+        async finishRun({ run, token, facts, reply, review: reviewed }) {
             const before = await uow.transaction(
                 (stores): Result<{ replay: EndedRun | undefined; base: Collaboration.Revision | undefined }, NotFound | LeaseLost | NotAllowed> => {
                     const replay = replayOf(stores, run, token);
@@ -1076,6 +1101,10 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             const captured = await capture(deps);
             if (!captured.ok) return captured;
             const diff = diagnosticsDiff(baseAnalysis.value.diagnostics, captured.value.analysis.diagnostics);
+            // what stage 0 still finds once the run ends (ADR 0034): nothing when a side's stormings do not all parse
+            const stormingsParse = baseAnalysis.value.stormingsComplete && captured.value.analysis.stormingsComplete;
+            const left = stormingsParse ? reviewStormings(baseAnalysis.value.stormings, captured.value.analysis.stormings).findings : [];
+            const review = runReview({ found: reviewed?.found, left, report: reviewed?.report });
             return noted(
                 uow.transaction((stores) => {
                     const r = running(stores, run, token, clock.now());
@@ -1091,6 +1120,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                         resultRevision: result.revision.id,
                         changed: result.changed,
                         reply,
+                        ...(result.changed && review && { review }),
                         finishedAt: at,
                     });
                     // `changed` is decided from the revisions above, and the reply was checked
@@ -1561,6 +1591,50 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             // a blob missing now may be put back later: not kept
             if (!changes.ok) changesKept.delete(`${a.id}>${b.id}`);
             return changes;
+        },
+
+        async reviewRunning({ run, token }) {
+            const found = await uow.transaction((stores): Result<Collaboration.Revision | undefined, NotFound | LeaseLost | NotAllowed> => {
+                const r = running(stores, run, token, clock.now());
+                return r.ok ? ok(stores.revisions.load(r.value.baseRevision)) : r;
+            });
+            if (!found.ok) return found;
+            const base = found.value;
+            if (!base) throw new Error(`The base revision of run ${run} is missing`);
+            const was = await analysisKept(base);
+            if (!was.ok) {
+                analysesKept.delete(base.id);
+                return was;
+            }
+            const scan = await deps.workspace.read();
+            const is = await validate(deps, scan.files);
+            const complete = was.value.stormingsComplete && is.stormingsComplete;
+            return ok({ review: complete ? reviewStormings(was.value.stormings, is.stormings) : EMPTY_REVIEW, complete });
+        },
+
+        async stormingReview({ session, before, after }) {
+            const found = await uow.transaction((stores) => ({ a: stores.revisions.load(before), b: stores.revisions.load(after) }));
+            for (const [id, r] of [
+                [before, found.a],
+                [after, found.b],
+            ] as const) {
+                if (!r) return err(notFound('Revision', id));
+                if (r.session !== session) return err({ type: 'RevisionOfAnotherSession', revision: id });
+            }
+            const { a, b } = found;
+            if (!a || !b) throw new Error('Both revisions were found above');
+            const was = await analysisKept(a);
+            if (!was.ok) {
+                analysesKept.delete(a.id);
+                return was;
+            }
+            const is = await analysisKept(b);
+            if (!is.ok) {
+                analysesKept.delete(b.id);
+                return is;
+            }
+            const complete = was.value.stormingsComplete && is.value.stormingsComplete;
+            return ok({ review: complete ? reviewStormings(was.value.stormings, is.value.stormings) : EMPTY_REVIEW, complete });
         },
 
         async stormingElements({ session, revision }) {

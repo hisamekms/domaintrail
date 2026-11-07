@@ -44,7 +44,26 @@ export const REPLY_LIMITS = {
      * read-only answerer's (a message of the AI).
      */
     answer: 2000,
+    /** What the agent fixed in its review at the run's end (ADR 0034): items, and characters of each. */
+    reviewFixed: 10,
+    /** What it kept as it was in its review, with why: items (each `what` and `why` at most `reviewText` characters). */
+    reviewKept: 10,
+    reviewText: 300,
+    /** Knowledge items its review found at odds with the stickies as the run left them. */
+    reviewKnowledge: 5,
 } as const;
+
+/** A knowledge item's ID (`kn_…`, the knowledge context's `KnowledgeItemId`) and a sticky reference (`<Storming>.<Local>`). */
+const KNOWLEDGE_ID = /^kn_[0-9a-z]{8,32}$/;
+const STICKY_REF = /^[_a-zA-Z][_a-zA-Z0-9]*\.[_a-zA-Z][_a-zA-Z0-9]*$/;
+
+/** What the agent says of its review at the run's end (ADR 0034): what it fixed, what it kept and why, the knowledge at odds. */
+export interface ReviewReplyData {
+    readonly fixed: readonly string[];
+    readonly kept: readonly { readonly what: string; readonly why: string }[];
+    /** Knowledge items at odds with the stickies as the run left them: the item, the sticky, and why. */
+    readonly knowledge: readonly { readonly item: string; readonly sticky: string; readonly why: string }[];
+}
 
 export const REPLY_OUTCOMES = ['done', 'clarification', 'declined'] as const;
 /** How a run ended in the agent's words: carried out, asks first, or will not do it. */
@@ -83,6 +102,8 @@ export interface ReplyData<R> {
     }[];
     /** The answer, when the agent judged a request a question and answered it without editing (its status `answered`). */
     readonly answer?: string;
+    /** The review's report, from the turn that reviews the run (ADR 0034); never kept with the reply itself. */
+    readonly review?: ReviewReplyData;
 }
 
 /** Why a reply (or an answer) was refused: where in it, and what is wrong. */
@@ -179,7 +200,7 @@ export function readReply<R>(raw: unknown, request: RequestReader<R>, maxRequest
 
 function readOrThrow<R>(raw: unknown, request: RequestReader<R>, maxRequests: number): ReplyData<R> {
     const L = REPLY_LIMITS;
-    const v = object(raw, 'reply', ['outcome', 'title', 'summary', 'requests', 'questions', 'assumptions', 'answer']);
+    const v = object(raw, 'reply', ['outcome', 'title', 'summary', 'requests', 'questions', 'assumptions', 'answer', 'review']);
     const outcome = REPLY_OUTCOMES.find((o) => o === v.outcome);
     if (!outcome) throw new Refused('reply.outcome', `Expected one of ${REPLY_OUTCOMES.join(', ')}.`);
     const title = v.title === undefined ? undefined : text(v.title, 'reply.title', L.title, false);
@@ -249,7 +270,49 @@ function readOrThrow<R>(raw: unknown, request: RequestReader<R>, maxRequests: nu
     if (answer !== undefined && outcome !== 'done') throw new Refused('reply.answer', `Only a done reply answers, not ${outcome}.`);
     if (answer === undefined && requests.some((r) => r.status === 'answered'))
         throw new Refused('reply.answer', 'An answer is required when a request is answered.');
-    return { outcome, ...(title !== undefined && { title }), summary, requests, questions, assumptions, ...(answer !== undefined && { answer }) };
+    const review = v.review === undefined ? undefined : readReview(v.review);
+    return {
+        outcome,
+        ...(title !== undefined && { title }),
+        summary,
+        requests,
+        questions,
+        assumptions,
+        ...(answer !== undefined && { answer }),
+        ...(review !== undefined && { review }),
+    };
+}
+
+/** The review's report alone (`AgentFinishBody.review`), validated as in a reply. */
+export function readReviewReply(raw: unknown): Result<ReviewReplyData, ReplyProblem> {
+    try {
+        return ok(readReview(raw));
+    } catch (e) {
+        if (e instanceof Refused) return err({ path: e.path, message: e.message });
+        throw e;
+    }
+}
+
+/** The review's report: `fixed`, `kept` (`what`, `why`) and `knowledge` (`item`, `sticky`, `why`), each optional, within the limits. */
+function readReview(raw: unknown): ReviewReplyData {
+    const L = REPLY_LIMITS;
+    const v = object(raw, 'reply.review', ['fixed', 'kept', 'knowledge']);
+    const fixed = (v.fixed === undefined ? [] : list(v.fixed, 'reply.review.fixed', L.reviewFixed)).map((x, i) =>
+        text(x, `reply.review.fixed[${i}]`, L.reviewText),
+    );
+    const kept = (v.kept === undefined ? [] : list(v.kept, 'reply.review.kept', L.reviewKept)).map((x, i) => {
+        const p = `reply.review.kept[${i}]`;
+        const o = object(x, p, ['what', 'why']);
+        return { what: text(o.what, `${p}.what`, L.reviewText), why: text(o.why, `${p}.why`, L.reviewText) };
+    });
+    const knowledge = (v.knowledge === undefined ? [] : list(v.knowledge, 'reply.review.knowledge', L.reviewKnowledge)).map((x, i) => {
+        const p = `reply.review.knowledge[${i}]`;
+        const o = object(x, p, ['item', 'sticky', 'why']);
+        if (typeof o.item !== 'string' || !KNOWLEDGE_ID.test(o.item)) throw new Refused(`${p}.item`, 'Expected a knowledge item ID (kn_…).');
+        if (typeof o.sticky !== 'string' || !STICKY_REF.test(o.sticky)) throw new Refused(`${p}.sticky`, 'Expected a sticky as <Storming>.<Local>.');
+        return { item: o.item, sticky: o.sticky, why: text(o.why, `${p}.why`, L.reviewText) };
+    });
+    return { fixed, kept, knowledge };
 }
 
 /** A reader of request numbers as the prompt numbers them: 1 to `count`. */
@@ -317,6 +380,25 @@ export function replyJsonSchema(requests: number): Record<string, unknown> {
                     ['id', 'text', 'options', 'multiple'],
                 ),
             },
+            review: obj(
+                {
+                    fixed: { type: 'array', maxItems: L.reviewFixed, items: str(L.reviewText) },
+                    kept: { type: 'array', maxItems: L.reviewKept, items: obj({ what: str(L.reviewText), why: str(L.reviewText) }, ['what', 'why']) },
+                    knowledge: {
+                        type: 'array',
+                        maxItems: L.reviewKnowledge,
+                        items: obj(
+                            {
+                                item: { type: 'string', pattern: KNOWLEDGE_ID.source },
+                                sticky: { type: 'string', pattern: STICKY_REF.source },
+                                why: str(L.reviewText),
+                            },
+                            ['item', 'sticky', 'why'],
+                        ),
+                    },
+                },
+                [],
+            ),
             assumptions: {
                 type: 'array',
                 maxItems: L.assumptions,

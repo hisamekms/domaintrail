@@ -23,6 +23,7 @@ export {
     plainQuestion,
     readAnswer,
     readReply,
+    readReviewReply,
     REPLY_LIMITS,
     REPLY_OUTCOMES,
     replyJsonSchema,
@@ -31,6 +32,7 @@ export {
     type AnswerData,
     type PickData,
     type ReplyData,
+    type ReviewReplyData,
     type ReplyOutcome,
 } from './domain/reply.js';
 export {
@@ -329,6 +331,24 @@ export {
     type ViewedAtLike,
 } from './domain/viewed-at.js';
 export { readToolOutcome, succeeded } from './domain/validation.js';
+// the review at the end of a run (ADR 0034): stage 0's rules, the renames, the neighbourhood, and what a run keeps of it
+export {
+    findingData,
+    findingKey,
+    MAX_FINDINGS,
+    MAX_NEIGHBOURHOOD,
+    REVIEW_REPORT_LIMITS,
+    reviewFindings,
+    reviewStormings,
+    runReview,
+    type AgentReviewReport,
+    type NeighbourSticky,
+    type ReviewFindingData,
+    type ReviewFindingKind,
+    type StickyPlace,
+    type StickyRename,
+    type StormingReview,
+} from './domain/review.js';
 // the IDs from values known to be UUIDs (the ID generator's, input already checked); the generated constructors check
 export {
     knownAgentRunId,

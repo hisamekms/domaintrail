@@ -194,6 +194,50 @@ context Collaboration {
     Unreadable "前後の内容がない"
   }
 
+  /// 作業の終わりの見直しの段0（ADR 0034）が、作業の差分から規則で拾ったものの種類。
+  enum ReviewFindingKind "見直しが拾ったものの種類" {
+    /// この作業で解決したホットスポットの `on` の付箋が変わっていない。
+    ResolvedUnchanged "解決したが付箋はそのまま"
+    /// この作業で変えた付箋に、この作業が触れなかった開いたホットスポットが付いている。
+    ChangedOpen "付箋を変えたがホットスポットは開いたまま"
+    /// 変える前のラベル・名前を、ほかの付箋がまだ使っている。
+    StaleWording "前のラベル・名前が残る"
+    /// この作業で増えた付箋と同じラベルで、違う ID の付箋がある。
+    DuplicateLabel "同じラベルで別の ID"
+  }
+
+  /// 見直しが名指す付箋: ストーミングとその中の名前。
+  value ReviewSticky "見直しの付箋" {
+    storming: StormingName "ストーミング"
+    element: StormingLocalName "付箋"
+  }
+
+  /// 見直しの段0が拾ったもの1つ。組の規則ではホットスポットとその付箋、言葉の規則では残った付箋とこの作業で変えた付箋。
+  value ReviewFinding "見直しが拾ったもの" {
+    kind: ReviewFindingKind "種類"
+    sticky: ReviewSticky "付箋"
+    other: ReviewSticky? "組の相手"
+    /// 変える前のラベルか名前（前のラベル・名前が残るとき）。
+    was: Text? "前の言葉"
+  }
+
+  /// 見直しで AI が直さなかったものと、そのわけ。AI の申告で、信頼しない入力として上限とともに検証してから持つ。
+  value KeptFinding "直さなかったもの" {
+    what: Text "なにを"
+    why: Text "わけ"
+  }
+
+  /// 作業の終わりの見直し（ADR 0034）: 段0が作業の直後に拾ったもの、AI が同じ作業の中で近所を確かめて直したもの・直さなかった
+  /// わけ、終えたときに段0がまだ拾うもの。拾ったもの・残ったものはサーバーが決め、直したもの・直さなかったものは AI の申告。
+  value RunReview "作業の見直し" {
+    found: ReviewFinding[0..50] "見つけたもの"
+    left: ReviewFinding[0..50] "残ったもの"
+    fixed: Text[0..10] "直したもの"
+    kept: KeptFinding[0..10] "直さなかったもの"
+    /// 段1（作業中の AI に近所を確かめさせた）を行った。
+    asked: Bool "AI に確かめさせた"
+  }
+
   /// 人の手直しのあとで、AI の作業が同じ付箋のラベルや名前を別のものにしていた（ADR 0033）。AI の作業の値を残し、人に選んでもらう。
   value EditConflict "AI の作業との食い違い" {
     run: AgentRunId "食い違った実行"
@@ -235,6 +279,8 @@ context Collaboration {
       resultRevision: RevisionId "結果リビジョン"
       changed: Bool "変更あり"
       reply: AgentReply? "エージェントの返答"
+      /// 作業の終わりの見直し（ADR 0034）。ソースを変えなかった実行と、見直しの前からの実行にはない。
+      review: RunReview? "見直し"
       finishedAt: Timestamp "終了日時"
 
       /// エージェントが 0 で終了し、基準リビジョンより .dt のエラーが増えず、すべての .dtes が構文解析でき、dt fmt と dt check が
@@ -392,7 +438,7 @@ context Collaboration {
     /// 報告が成功の条件を満たせば完了、満たさなければ失敗（RuleNotMet）。成功の条件は変更の有無による（変えなかった実行は
     /// dt fmt / dt check を省いてよい）。
     /// 返答は完了のときだけ残す（失敗は事実が決め、返答を見せない）。
-    command finish(report: RunReport, resultRevision: RevisionId, changed: Bool, reply: AgentReply?, finishedAt: Timestamp) "実行を終える"
+    command finish(report: RunReport, resultRevision: RevisionId, changed: Bool, reply: AgentReply?, review: RunReview?, finishedAt: Timestamp) "実行を終える"
       Running -> Completed | Failed
       requires changedMatchesResult "変更の有無が結果リビジョンと合う" {
         (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
