@@ -3653,6 +3653,23 @@ runs get `dt mcp`'s tools when the store is usable when `dt agent` starts (`file
 approved, with the token), and cite the items they rest on. Outside one, Claude Code reads it through `dt mcp`
 (below), and with `cloudflare` the business reads it on the Worker's page (`dt publish`, below).
 
+**Retiring.** An item that no longer holds — a newer item says it better, it was true and is not any more, or it was
+wrong — is **retired** (廃止), not deleted: its text, sources and versions stay, as the record of what was said. A
+retired item is left out of the lists, of a sticky's knowledge and of the dots, and **the AI never reads it**: the
+answerer and the runner start `dt mcp --without-retired`, and the extractor is told only the retired items' titles and
+reasons, so as not to make one again. Anyone in the session retires an item (廃止する, a reason or none, 元に戻す for 10
+seconds) or undoes it (廃止を取り消す), in the Live View and on the Worker's page; both are in the audit log.
+
+The AI only **proposes**: the extractor, when the talk or a decision overturns an item (`retire`), or when it brings a
+retired item's topic up anew (`unretire`, instead of adding it again), and the review of a run, through the store
+(`KnowledgeStore.propose`). Every proposal has a reason and its evidence — decisions, changed stickies, messages —, and
+waits in 廃止の候補 at the head of the ナレッジ list until someone approves or dismisses it. An AS-IS item is never
+proposed for retirement for differing from the TO-BE (a sticky drawn otherwise, a TO-BE decision): the store refuses a
+proposal whose evidence is only that. A dismissed proposal is remembered: the same reason on the same evidence is not
+proposed again; new evidence (another message, a new decision, another sticky) proposes it again. With `files`, a
+retired item's file has a `retired:` map, and the proposals are `knowledge/proposals/<rp_…>.json`; with `cloudflare`,
+the Worker's migration 3 adds them (deploy the new Worker: its README's Upgrade).
+
 **Conflicts.** Two items that contradict each other are linked and shown side by side, with ホットスポットにする (a
 message that asks the AI to add a hotspot) and 食い違いではない (the link removed from both). A conflict whose other side
 was deleted no longer shows.
@@ -3674,16 +3691,20 @@ knowledge — what was said and found in its sessions (ADR 0031) — read-only, 
 names (`files`: the workspace's `knowledge/`; `cloudflare`: the Worker, with the service token that reads in
 `DOMAINTRAIL_KNOWLEDGE_CLIENT_ID` and `DOMAINTRAIL_KNOWLEDGE_CLIENT_SECRET`). Its tools:
 
-- `knowledge_for_element({ element })` — the items about an element, newest first, each with its ID, title, labels,
-  date and text (cut when long).
+- `knowledge_for_element({ element, include_retired })` — the items about an element, newest first, each with its ID,
+  title, labels, date and text (cut when long).
   `element` is a sticky, `<Storming>.<LocalId>` (`Ordering.CreateSpecification`), or a `.dt` element prefixed with
   `dt:` (`dt:Sales.Order.confirm`, `dt:Sales.Order`, `dt:Sales.OrderPlaced`), resolved through the stickies whose `ref`
   is that element or one inside it. The tool to call before implementing an element.
-- `knowledge_search({ query, about, when, kind, origin, perspective, limit })` — every given filter holds: `query` full
+- `knowledge_search({ query, about, when, kind, origin, perspective, limit, include_retired })` — every given filter holds: `query` full
   text (titles, texts and quotes), `about` stickies or `dt:` elements, `when` / `kind` / `origin` one value or a list, `perspective` a role,
   `limit` at most 50 (default 20).
 - `knowledge_get({ id, history })` — one item whole: its title and text, labels, stickies, conflicts and sources with their
   quotes; with `history`, its earlier versions (the `files` store keeps none: `git log -p knowledge/<id>.md`).
+
+A retired item is left out unless `include_retired` is true; then it is marked `RETIRED` with its reason and the item
+that replaced it, and `knowledge_get` marks it too. `dt mcp --without-retired` (what the session's AI starts) never
+gives one and offers no `include_retired`.
 
 The stormings are read again on every call. A wrong input, an unknown item or a store that cannot be reached is an
 error of the tool, with its reason. With `cloudflare`, the service token goes to `knowledge.url`, so `dt mcp` opens the
@@ -3739,8 +3760,10 @@ GitHub Actions example.
 
 The page shows the storming with a dot on each sticky that has knowledge (a mark for a conflict), a sticky's items
 when it is selected, the ナレッジ list with its search and filters, the items about stickies no published storming
-has (removed or renamed) apart, and the date of the drawing. Anyone who can open it may correct and delete, with
-元に戻す for 10 seconds.
+has (removed or renamed) apart, and the date of the drawing. Anyone who can open it may correct, retire and delete, with
+元に戻す for 10 seconds, and approve or dismiss the 廃止の候補; the retired items are hidden there too unless 廃止も表示.
+`dt publish` sends the drawing only: a retired item gives no dot on the page, nor is it listed among the items about
+missing stickies.
 
 <!-- topic: editors -->
 ## Editors
