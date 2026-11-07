@@ -199,8 +199,10 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
     if (render.grid) {
         // a view of stages: every render node is drawn, in its cell; the edge into an exception's lane names it
         const { cells, frames, looseRow, captions } = render.grid;
-        // at Design Level the grid's columns show the time order: only a lane's branch and a `then` are drawn
-        const quiet = (e: RenderEdge): boolean => design && ((e.type === 'sequence' && !captions[e.id]) || e.type === 'stage');
+        // at Design Level the grid's columns show the time order: only a lane's branch and a `then` are drawn, and the
+        // branch only where no line of the design joins its two events already (ADR 0032 §15)
+        const joined = design ? joinedByLines(render) : (): boolean => false;
+        const quiet = (e: RenderEdge): boolean => design && ((e.type === 'sequence' && (!captions[e.id] || joined(e.source, e.target))) || e.type === 'stage');
         const edge = (e: RenderEdge): GraphEdge => ({
             id: e.id,
             kind: edgeKind(e),
@@ -209,6 +211,8 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
             ...(captions[e.id] && { label: timelinesOf(captions[e.id]) }),
             ...explain(e, captions),
             ...(quiet(e) && { hidden: true as const }),
+            // a lane's branch not drawn still names its lane, where it is laid out
+            ...(quiet(e) && captions[e.id] && { labelDrawn: true as const }),
         });
         return {
             id: stormingGraphId(storming.id, render.options),
@@ -274,6 +278,35 @@ export function renderToGraph(render: RenderGraph, storming: Storming): Graph {
         });
     }
     return attach({ id: stormingGraphId(storming.id, render.options), nodes: [...nodes.values()], edges: [...edges.values(), ...gapEdges()] });
+}
+
+/**
+ * Whether the semantic lines of a view join one event note to another (ADR 0032 §15): a path along their direction,
+ * over every kind but a hotspot's `on` (a question, not a step), through the notes of other elements only — never
+ * another event, a hotspot or an open hotspot's empty slot. On the render nodes as drawn (a shared handler is one note).
+ */
+function joinedByLines(render: RenderGraph): (from: string, to: string) => boolean {
+    const byId = new Map(render.nodes.map((n) => [n.id, n]));
+    const next = new Map<string, string[]>();
+    for (const e of render.edges) if (e.type === 'semantic' && e.kind !== 'hotspot-on') next.set(e.source, [...(next.get(e.source) ?? []), e.target]);
+    const through = (id: string): boolean => {
+        const n = byId.get(id);
+        return n?.type === 'element' && n.kind !== 'hotspot';
+    };
+    return (from, to) => {
+        if (byId.get(from)?.type !== 'event' || byId.get(to)?.type !== 'event') return false;
+        const seen = new Set([from]);
+        const queue = [from];
+        for (let at = queue.shift(); at !== undefined; at = queue.shift()) {
+            for (const n of next.get(at) ?? []) {
+                if (n === to) return true;
+                if (seen.has(n) || !through(n)) continue;
+                seen.add(n);
+                queue.push(n);
+            }
+        }
+        return false;
+    };
 }
 
 /**

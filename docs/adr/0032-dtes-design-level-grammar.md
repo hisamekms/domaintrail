@@ -188,7 +188,8 @@ remain (commands without `handledBy`), and no S025, S027 or S028.
 - **No event → event lines at Design Level** (*Decided by the maintainer*): there the placement shows the time order
   (the steps left to right), so the time order is laid out but not drawn (`GraphEdge.hidden`), except where the
   placement cannot show it: the edge into a lane that branches off (an exception's branch) and a `then`. Big Picture
-  keeps its time order lines.
+  keeps its time order lines. (Amended by §15: the edge into a lane is not drawn either when the design's lines
+  already join its two events; its label stays.)
 
 ### 8. Three looks of lines, each explained (2026-11-06)
 
@@ -462,6 +463,36 @@ actor who issues a command, without a policy: **event → actor → command**.
   (the same post-pass of `drawChains` as for a policy's `on`).
 - **The line's words**: a relation `notices`, ja 「「{A}」を受けて「{B}」が動く」, en “{B}” acts on “{A}”. An event's
   hidden connections in the detail (Big Picture) list such a command beside the policies reacting to it.
+
+### 15. The line into a lane, when the design already joins its events (2026-11-07)
+
+*Decided by the maintainer* 2026-11-07, on the DSS storming of §12–§14: the exception 「点呼で運行不可」 branches off
+after 「点呼を依頼した」 into 「点呼で運行を認めなかった」. At Design Level the drawing already joins the two: 「点呼を
+依頼した」 → 「点呼依頼」 (read model) → 「現場管理者」 → 「点呼する」 → 「点呼」 (handler) → 「点呼で運行を認めなかった」;
+beside it, the dashed line into the lane (§7) joined them a second time, and read as one more step.
+
+1. **At Design Level, the line into an exception's lane is not drawn when the drawn lines of the design already join
+   its two events**: a path along the lines, from the note of the event it branches off to the note of the lane's
+   first event, through no other event. It is laid out as before (`GraphEdge.hidden`), so nothing moves.
+2. **When no such path is drawn, the line stays**: it is then the only thing showing where the exception branches off.
+3. **The lane's label stays**, where it was, and pressing it still emphasizes the exception (§11.5): on the canvas, in
+   print and in `dt export svg` alike.
+4. `then` lines, Big Picture, and the timeline's and integrated views (which already draw no time order at Design
+   Level) do not change.
+
+*Decided here*, while implementing it:
+
+- **Every semantic line counts but a hotspot's `on`** (`joinedByLines` in `graph.ts`): not only the causal ones (§8's
+  流れ: `on`, `command-on`, `issues`, `handledBy`, `emits`, `event-from`) but also `by`, `reads` and `readmodel-from`,
+  which the DSS path needs and which are drawn along the flow. A hotspot's `on` is a question, not a step, and the
+  path goes through no hotspot and no open hotspot's empty slot. It goes through the notes as drawn (a shared handler,
+  §6, is one note) and stops at any other event note, so a chain through a later event of the main flow does not count.
+- **Only the two ends that are events**: a lane branching off a group step (its source a group) keeps its line.
+- **The label is kept by a flag beside `hidden`**: `GraphEdge.labelDrawn` (an edge laid out, its line not drawn, its
+  label drawn). The scene keeps such an edge with `EdgeProps.lineless`, and the canvas, the print and the portable SVG
+  draw its label alone, where it is laid out — no line, no head, no hit path nor selection outline (there is no line
+  to point at or explain: the label's button over the canvas, §11, is what is pressed). Other hidden edges (the time
+  order, a stage's `after`) still draw nothing, their labels included.
 
 ## Alternatives
 

@@ -247,6 +247,40 @@ describe('hidden resolved hotspots in the portable SVG (ADR 0032 §10)', () => {
     });
 });
 
+describe('the line into an exception’s lane the design already joins, in the portable SVG (ADR 0032 §15)', () => {
+    test('its label is drawn, not its line', async () => {
+        const [payload] = await viewPayloads([
+            {
+                path: 'es.dtes',
+                text: `storming S {
+  event A
+  event B
+  event X
+  actor Manager
+  aggregate Request
+  readmodel Requests { from A }
+  command Ask { emits A }
+  command Decide { by Manager reads Requests handledBy Request emits B, X }
+  stage St {
+    timeline Main { A B }
+    exception Rejected "却下" { A X }
+  }
+}
+`,
+            },
+        ]);
+        const graph = payload!.stormings[0]!.views['design-level|']!.graph;
+        const drawn = scene(graph);
+        const branch = drawn.edges.find((e) => e.props.relation?.kind === 'branches')!;
+        expect(branch.props.lineless).toBe(true);
+        const alone: Scene = { ...drawn, edges: [branch] };
+        const { svg } = portableSvg({ scene: alone, bounds: exportBounds(graph), palette, fonts, measure });
+        expect(svg).toContain('>却下</text>');
+        expect(svg).not.toContain('stroke-dasharray');
+        expect(wellFormed(svg)).toBe(true);
+    });
+});
+
 describe('breaking a label into lines', () => {
     const at = (size: number) => (s: string) => measure.width(s, { family: 'x', size } satisfies Font);
 

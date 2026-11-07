@@ -106,6 +106,8 @@ export interface EdgeProps {
     resolved?: true;
     /** Off the path of the exception emphasized (`GraphEdge.dimmed`): drawn faint. */
     dimmed?: true;
+    /** Only its label is drawn, not its line (`GraphEdge.labelDrawn`): nothing of it to point at but the label. */
+    lineless?: true;
     /** What a storming's line means (`GraphEdge.relation`), its names in the display mode; the Live View words it. */
     relation?: { kind: LineRelation; names: string[] };
 }

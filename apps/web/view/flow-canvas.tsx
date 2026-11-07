@@ -229,7 +229,7 @@ function DomainEdge({ data }: EdgeProps<ItemEdge>): ReactNode {
     return (
         <g className={`${edgeClassName(item.props)}${data.hot ? ' de-hot' : ''}`} transform={`translate(${item.x},${item.y})`}>
             <EdgeContent p={item.props} />
-            <path className="diagram-outline-line" d={edgeOutlinePath(item.props.points)} />
+            {!item.props.lineless && <path className="diagram-outline-line" d={edgeOutlinePath(item.props.points)} />}
         </g>
     );
 }

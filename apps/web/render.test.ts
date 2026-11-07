@@ -356,3 +356,40 @@ describe('a handler shared by the commands converging on one event (ADR 0032)', 
         expect(emits.props.relation).toEqual({ kind: 'decides', names: ['Create', 'Receive'] });
     });
 });
+
+describe('the line into an exception’s lane the design already joins (ADR 0032 §15)', () => {
+    test('its label alone is drawn, where it is laid out; not at Big Picture', async () => {
+        const [payload] = await viewPayloads([
+            {
+                path: 'es.dtes',
+                text: `storming S {
+  event A
+  event B
+  event X
+  actor Manager
+  aggregate Request
+  readmodel Requests { from A }
+  command Ask { emits A }
+  command Decide { by Manager reads Requests handledBy Request emits B, X }
+  stage St {
+    timeline Main { A B }
+    exception Rejected "却下" { A X }
+  }
+}
+`,
+            },
+        ]);
+        const views = payload!.stormings[0]!.views;
+        const branch = (view: string) => {
+            const graph = views[view]!.graph;
+            const edge = graph.edges.find((e) => e.relation?.kind === 'branches')!;
+            return { item: buildScene(graph, optionsOf(payload!)).edges.find((e) => e.edge === edge.id), label: graph.edgeLayout[edge.id]!.label! };
+        };
+        const design = branch('design-level|');
+        expect(design.item?.props).toMatchObject({ lineless: true, label: '却下' });
+        expect([design.item!.x + design.item!.props.lx, design.item!.y + design.item!.props.ly]).toEqual([design.label.x, design.label.y]);
+        const big = branch('big-picture|');
+        expect(big.item?.props.label).toBe('却下');
+        expect(big.item?.props.lineless).toBeUndefined();
+    });
+});

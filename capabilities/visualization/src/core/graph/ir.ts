@@ -164,9 +164,15 @@ export interface GraphEdge {
     relation?: EdgeRelation;
     /**
      * Laid out but not drawn: at Event Storming's Design Level, the time order the placement already shows (the steps
-     * left to right), so that only the lines the placement cannot show are drawn (an exception's branch, a `then`).
+     * left to right), so that only the lines the placement cannot show are drawn (an exception's branch, unless the
+     * design's lines already join its two events, ADR 0032 §15; a `then`).
      */
     hidden?: true;
+    /**
+     * With `hidden`: its label is still drawn, where it is laid out (only the line is not). At Design Level, the line
+     * into an exception's lane that the design's lines already show (ADR 0032 §15): its label names the lane.
+     */
+    labelDrawn?: true;
     /** A line off the path of the exception emphasized (`flowInDrawing`): drawn faint. Absent in a graph as laid out. */
     dimmed?: true;
 }
