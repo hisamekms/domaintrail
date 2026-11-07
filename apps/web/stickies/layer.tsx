@@ -5,7 +5,7 @@
 // - the menu of every action that applies, by group with their keys, from 「…」 or a right-click on a sticky;
 // - the keys while stickies are selected: Enter adds them to the chat, F2 edits, ⌘⇧C copies the link (Escape, which
 //   clears the selection, is the canvas's own); a double-click edits;
-// - the command palette's items (⌘K): the actions on the selection, and every sticky by name;
+// - 探す's (the command palette's, ⌘K): the actions on the selection, and every sticky to find;
 // - the windows anchored to a sticky that edit it (`forms.tsx`), and a short status line (「編集しました」).
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Check, Ellipsis } from 'lucide-react';
@@ -16,6 +16,7 @@ import { useT, type Messages } from '../i18n';
 import { namer, nameIn } from '../model-utils';
 import { ActionMenu, type MenuItem } from '../shared/menu';
 import type { PaletteItem } from '../shared/palette';
+import type { Findable } from '../search/find';
 import { dtTarget } from '../storming';
 import { TOOLTIP_ATTR } from '../tooltip';
 import { unionRects } from '../scene';
@@ -109,6 +110,8 @@ export interface StickyActionsInput {
     readonly onSeeTimeline: (storming: string, timeline: string, then: string) => void;
     /** Shows a sticky: its storming's view that draws it, selected. */
     readonly onOpenSticky: (id: string) => void;
+    /** Goes to a sticky found by 探す. */
+    readonly onFindSticky: (id: string) => void;
     /** The session's knowledge (ADR 0031): which stickies have some, and showing a sticky's in the detail; absent without a store. */
     readonly knowledge?: { readonly has: (id: string) => boolean; readonly open: (id: string) => void };
 }
@@ -116,8 +119,10 @@ export interface StickyActionsInput {
 export interface StickyActions {
     /** Drawn over the canvas: the toolbar, the menu, the windows, the status line. */
     readonly overlay: ReactNode;
-    /** The command palette's items: the actions on the selection, then every sticky by name. */
-    readonly palette: readonly PaletteItem[];
+    /** 探す's actions on the selection. */
+    readonly actions: readonly PaletteItem[];
+    /** What 探す finds of the stickies: every sticky of every storming, in the order they are written. */
+    readonly findables: readonly Findable[];
 }
 
 /** A window open on a sticky: an editing action's (the fields it shows), or a new hotspot on it. */
@@ -514,36 +519,50 @@ export function useStickyActions(input: StickyActionsInput): StickyActions {
         </div>
     ) : null;
 
-    // the palette: the actions on the selection, then every sticky of every storming by name
-    const palette = useMemo((): PaletteItem[] => {
-        const actionItems: PaletteItem[] = actionsFor(selected, context).map((a) => ({
-            id: `action:${a.id}`,
-            label: label(a),
-            detail: s.palette.selected(selected.length),
-            icon: a.icon,
-            section: s.palette.actions,
-            ...(a.shortcut && { keys: shortcutText(a.shortcut, mac) }),
-            run: () => run(a.id),
-        }));
-        const stickyItems: PaletteItem[] = stormings.flatMap((v) =>
-            v.storming.elements.flatMap((el): PaletteItem[] =>
-                el.kind === 'timeline' || el.kind === 'stage'
-                    ? []
-                    : [
-                          {
-                              id: `sticky:${v.id}/${el.id}`,
-                              label: nameIn(mode, el.id, el.label),
-                              detail: `${t.esKinds[el.kind]} · ${nameIn(mode, v.id, v.label)} · ${el.id}`,
-                              section: s.palette.stickies,
-                              run: () => onOpenSticky(`es/${v.id}/${el.id}`),
-                          },
-                      ],
-            ),
-        );
-        return [...actionItems, ...stickyItems];
+    // 探す: the actions on the selection, and every sticky of every storming
+    const actions = useMemo(
+        (): PaletteItem[] =>
+            actionsFor(selected, context).map((a) => ({
+                id: `action:${a.id}`,
+                label: label(a),
+                detail: s.palette.selected(selected.length),
+                icon: a.icon,
+                ...(a.shortcut && { keys: shortcutText(a.shortcut, mac) }),
+                run: () => run(a.id),
+            })),
         // label and run follow the selection and the session, covered by these
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selected, context, stormings, mode, mac, session?.chat.added, onOpenSticky, t]);
+        [selected, context, mac, session?.chat.added, t],
+    );
+    const { onFindSticky } = input;
+    const findables = useMemo(
+        (): Findable[] =>
+            stormings.flatMap((v) =>
+                v.storming.elements.flatMap((el): Findable[] => {
+                    if (el.kind === 'timeline' || el.kind === 'stage') return [];
+                    const id = `es/${v.id}/${el.id}`;
+                    const clauses = 'clauses' in el ? el.clauses : [];
+                    const written = clauses.find((c) => c.type === 'ref');
+                    const ref = written?.type === 'ref' ? dtTarget(model, el.kind, written.path) : undefined;
+                    const resolved = clauses.some((c) => c.type === 'status' && c.value === 'resolved');
+                    return [
+                        {
+                            key: id,
+                            world: 'storming',
+                            kind: el.kind,
+                            name: el.id,
+                            label: el.label,
+                            kindName: t.esKinds[el.kind],
+                            place: nameIn(mode, v.id, v.label),
+                            ...(ref !== undefined && { ref }),
+                            ...(resolved && { resolved: true }),
+                            run: () => onFindSticky(id),
+                        },
+                    ];
+                }),
+            ),
+        [stormings, model, mode, t, onFindSticky],
+    );
 
-    return { overlay, palette };
+    return { overlay, actions, findables };
 }

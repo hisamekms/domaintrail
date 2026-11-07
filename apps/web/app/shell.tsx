@@ -69,7 +69,7 @@ export type LeftLists = Record<Exclude<LeftView, 'knowledge'>, LeftList> & { rea
 
 /**
  * The page's layout: the app bar across the top — the brand and the workspace's name, the world switch, a session's
- * current journey, then what concerns the whole page (問題, and a session's people, AI state and menu) — and under it three columns: the left
+ * current journey, 探す in the middle, then what concerns the whole page (問題, and a session's people, AI state and menu) — and under it three columns: the left
  * column — its activity bar, the navigator (the lists; the tree over the detail, the inspector, with a splitter between
  * them) and the health and the settings at its foot — the canvas with its banners, and the conversation at the right end,
  * when there is one. What goes in each place is the caller's.
@@ -84,6 +84,8 @@ export function AppShell(props: {
     sessionSlot: (slot: HTMLDivElement | null) => void;
     /** Where a session puts the current journey's chip, after the world switch. */
     journeySlot?: (slot: HTMLDivElement | null) => void;
+    /** 探す's way in, in the middle of the bar. */
+    find?: ReactNode;
     /** The session serving the page, known from the start (the page's boot): its controls' place is kept until they arrive. */
     session?: SessionBarState | undefined;
     lists: LeftLists;
@@ -148,7 +150,7 @@ export function AppShell(props: {
                 </span>
                 {props.world}
                 <div className="app-bar-journey" ref={props.journeySlot} />
-                <span className="app-bar-space" />
+                <div className="app-bar-middle">{props.find}</div>
                 <ProblemsButton panes={panes} list={props.lists.problems} />
                 <div className="app-bar-session" ref={setSlot}>
                     {/* the session's controls' place, kept until they arrive (a quiet blank, the width they had) */}

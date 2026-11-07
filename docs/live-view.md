@@ -22,10 +22,42 @@ It holds only what concerns the whole page. At the left, DomainTrail and the wor
 `domaintrail.jsonc`), then the world switch: **ドメインモデル** (the `.dt` model, seen through three views) and
 **イベントストーミング** (the `.dtes` stormings; it can be chosen with no storming yet, and then says how to start one).
 Switching worlds returns to the view, the storming and the conditions last used in each; the world and its view are
-remembered per browser, so a reload comes back to them. At the right end: 問題 (the
+remembered per browser, so a reload comes back to them. In the middle, **探す** (see [探す](#探す-find)), in the same
+place in both worlds. At the right end: 問題 (the
 number of errors, else warnings, as a badge; a click opens the problems in the left column's navigator, and closes it again), and in
 a session the collab menu, the AI's state and, in Solo, ⋯ (see below). On a narrow window the world switch shows its
-icons only, each named in its tooltip.
+icons only, each named in its tooltip; narrower (40rem) the workspace's name goes and 探す is its magnifier alone;
+at a phone's width (30rem) the brand's name, the knowledge extraction switch and the words of the AI's state go (its
+mark ○ stays, its words in its tooltip), so that the bar's right end stays in the window.
+
+### 探す (find)
+
+A button shaped like a search field — 🔍 探す and its key, `⌘K` on a Mac and `Ctrl K` elsewhere (none on a device
+without a keyboard) — opens the command palette; the key opens it from anywhere. One field for doing and going:
+
+- Nothing typed: the actions on the selected stickies (the menu's, with their keys), and **最近** — the last five
+  selections of both worlds.
+- Typed: the actions whose name holds it, then what it finds in **both worlds**, a section each — イベントストーミング
+  (every sticky of every storming) and ドメインモデル (contexts, elements, commands, states) — the world shown first,
+  each headed with how many it found. A row is the kind's mark (the sticky's colour, the model's), the label, the kind
+  and where it is (the storming; the context, and `› the aggregate` for a command or a state).
+- It finds by the **label and the name** (the ID) only, case and letter width ignored (NFKC): where it is narrows only
+  with another word (「返品 依頼」), the kind never matches. In the 名前 display mode the name is shown and the label found
+  besides. The label equal comes first, then starting with it, then holding it, then found by the name only (that row
+  shows the name at the right, in monospace, the part found marked); else the order they are written. Eight per
+  section, the rest on 「ほか n 件」.
+- A sticky whose `ref` names a model element has that element hung under it, joined by a line (「ref · …」), and the
+  model's section leaves it out; with the domain model shown first, an element hangs the stickies whose `ref` name it.
+  The same label without a `ref` is not joined.
+- Picking one goes there. A sticky: its storming at a level that draws it (the design level when it is not on the big
+  picture), the integrated canvas, what the 絞り込み hides of it shown, selected. An item of the model: a context, an
+  aggregate, an entity, a value object or a union on the structure view (an aggregate's detail on 状態); a command or a
+  state switches to the domain model too, its aggregate selected on the structure view and the detail on 状態 showing
+  it; what the structure view never draws on the catalog; anything else in the detail's source. When the view hides it —
+  a level that does not draw it, the contexts narrowed without its own, the catalog's filter — that is taken away
+  first. What was taken away is said for a moment under the app bar (「デザインレベルにしました」「絞り込みを外しました」).
+  Going there is the reader's own move: it stops [following](#following). Back is the browser's.
+- Participants and the facilitator find the same; outside a session the actions are seeing and copying only.
 
 In a session, after the world switch, the **current journey's chip** (the session has one current journey: the
 facilitator chooses it, the one person in Solo; with none chosen, the most recently created active one): 🧭 the journey
@@ -207,8 +239,8 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   `ref` the model has, its tooltip naming the element 「ドメインモデルの 注文 › 確定する を見る」; このタイムラインで見る for an
   event, opening a timeline it is in), 書く (ホットスポットを付ける on any sticky but a hotspot; 解決を書く on a hotspot) and そのほか (リンクをコピー
   `⌘⇧C`, a link that opens the Live View with that sticky selected). The arrow keys move in the menu, Escape closes
-  it. Outside a session only seeing and copying are offered. `⌘K` (Ctrl+K) opens the command palette: the actions on
-  the selection, then every sticky by name (its kind, storming and ID matched too).
+  it. Outside a session only seeing and copying are offered. [探す](#探す-find) (`⌘K`, Ctrl+K) lists the actions on the
+  selection too, and finds every sticky.
   **Editing a sticky** (in a session; anyone may): a double-click, `F2` or ✎ opens a small window under it with its
   ラベル (selected) and 名前 (its ID) — the fields its kind declares. A name is checked as typed (the `.dtes` ID's form, not a keyword, not taken in the
   storming); a new one says 「参照 n 件も書き換えます（.dtes n）」. Enter saves, Escape — or a press outside the window, not while typing with an IME — cancels (the windows show no key hints;

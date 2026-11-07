@@ -216,6 +216,16 @@ const ja = {
     stageAfter: 'この前の段階',
     showStage: 'この段階を表示',
     /** The detail of a storming element (docs/plans/layout.md, step 5): its rows' names (tooltips) and its actions. */
+    // 探す (the app bar's search, ⌘K): the stickies and the domain model of both worlds, and the actions on the selection
+    search: {
+        open: '探す',
+        placeholder: '付箋・モデル・操作を探す',
+        empty: '見つかりません',
+        recent: '最近',
+        more: (n: number) => `ほか ${n} 件`,
+        /** What going to a found item took away so that it shows, said for a moment. */
+        taken: { level: (name: string) => `${name}にしました`, filter: '絞り込みを外しました', join: '・' },
+    },
     // the stickies' actions (ADR 0033): the toolbar above the selection, its menu, the keys, the palette, the edit windows
     stickies: {
         toolbar: '付箋の操作',
@@ -272,12 +282,8 @@ const ja = {
             body: (hotspot: string, resolution: string) => `「${hotspot}」を「${resolution}」で解決にする`,
         },
         palette: {
-            title: 'コマンド',
-            placeholder: '操作や付箋を名前で探す',
-            empty: '見つかりません',
             actions: '選んだ付箋への操作',
             selected: (n: number) => `選んだ ${n} 件に`,
-            stickies: '付箋',
         },
         // AI の作業: a person's edit, its conflict with a run, its revert
         history: {
@@ -1495,6 +1501,14 @@ const en: Messages = {
     stageExceptions: 'Exceptions',
     stageAfter: 'Comes after',
     showStage: 'Show this stage',
+    search: {
+        open: 'Find',
+        placeholder: 'Find a sticky, a model element or an action',
+        empty: 'Nothing found',
+        recent: 'Recent',
+        more: (n) => `${n} more`,
+        taken: { level: (name) => `Switched to ${name}`, filter: 'Cleared the filter', join: '; ' },
+    },
     stickies: {
         toolbar: 'Sticky actions',
         more: 'More actions',
@@ -1550,12 +1564,8 @@ const en: Messages = {
             body: (hotspot, resolution) => `Resolve "${hotspot}": ${resolution}`,
         },
         palette: {
-            title: 'Commands',
-            placeholder: 'Find an action or a sticky by name',
-            empty: 'Nothing found',
             actions: 'On the selected stickies',
             selected: (n) => `On the ${n} selected`,
-            stickies: 'Stickies',
         },
         history: {
             edited: (who) => `${who} edited`,

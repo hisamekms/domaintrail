@@ -203,6 +203,8 @@
     /* the local selection: selected rows, the open list, pressed toggles */
     --selected-bg: var(--p-indigo-50);
     --selected-text: var(--p-indigo-900);
+    /* what was typed, marked where 探す found it */
+    --find-mark: color-mix(in srgb, var(--p-amber-300) 60%, transparent);
     /* the local selection on the canvas: a ring outside the node, apart from its kind's edge and the change's ring */
     --selected-ring: var(--action);
     /* the canvas behind the diagrams, and the outline of the item under the pointer or selected (as they were with
@@ -445,6 +447,7 @@
     --brand-wash-border: var(--p-indigo-night-600);
     --on-brand: var(--p-night-950);
     --focus: var(--p-indigo-300);
+    --find-mark: color-mix(in srgb, var(--p-amber-300) 30%, transparent);
     --selected-bg: var(--p-indigo-night-700);
     --selected-text: var(--p-indigo-100);
     --disabled-bg: var(--p-night-800);
@@ -2415,6 +2418,65 @@ select,
 .app-bar-space {
     flex: 1;
 }
+/* the middle of the bar, what the others leave: 探す centred in it (search/entry.tsx) */
+.app-bar-middle {
+    flex: 1 1 0;
+    min-width: 36px;
+    display: flex;
+    justify-content: center;
+}
+/* 探す: a button shaped like a search field — 🔍 探す, its key at the right end; on a narrow bar the magnifier alone */
+.app-bar-find {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    max-width: 17.5rem;
+    min-width: 0;
+    height: 28px;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface-muted);
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+.app-bar-find:hover {
+    border-color: var(--border-strong);
+    color: var(--text);
+}
+.app-bar-find:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
+}
+.app-bar-find svg {
+    flex: none;
+}
+.app-bar-find-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+}
+.app-bar-find kbd {
+    flex: none;
+    padding: 0 var(--space-1);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    font: inherit;
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+}
+/* a device without a keyboard: no key to show */
+@media (hover: none) and (pointer: coarse) {
+    .app-bar-find kbd {
+        display: none;
+    }
+}
 .app-bar > .name-switch,
 .app-bar-problems {
     flex: none;
@@ -2801,6 +2863,36 @@ select,
 @container app-bar (max-width: 40rem) {
     .workspace-name {
         display: none;
+    }
+    .app-bar-find {
+        width: 36px;
+        justify-content: center;
+        padding: 0;
+        border-color: transparent;
+        background: none;
+    }
+    .app-bar-find-label,
+    .app-bar-find kbd {
+        display: none;
+    }
+}
+/* a phone's width: the brand's name, the extraction switch and the AI state's words go (its mark stays, its words in
+   its tooltip), the bar's gaps narrow, so that its right end stays in it */
+@media (max-width: 30rem) {
+    .app-bar {
+        gap: var(--space-1);
+    }
+}
+@container app-bar (max-width: 30rem) {
+    .app-bar-brand .brand,
+    .app-bar .knowledge-extraction {
+        display: none;
+    }
+    .app-bar .chat-status-text {
+        display: none;
+    }
+    .session-chat.session-bar {
+        gap: 2px;
     }
 }
 /* a switch's choice: its icon, then its name (hidden on a narrow bar) */
@@ -10082,15 +10174,23 @@ button.knowledge-extraction:disabled {
     padding: var(--space-1);
     list-style: none;
 }
+/* a section's heading, its count at the right */
 .command-palette-section {
+    display: flex;
+    justify-content: space-between;
     padding: var(--space-2) var(--space-2) var(--space-1);
     font-size: var(--fs-small);
     color: var(--muted);
 }
+.command-palette-count {
+    font-variant-numeric: tabular-nums;
+}
 .command-palette-item {
+    position: relative;
     display: flex;
     align-items: baseline;
     gap: var(--space-2);
+    min-width: 0;
     padding: var(--space-1) var(--space-2);
     border-radius: 5px;
     cursor: pointer;
@@ -10106,19 +10206,125 @@ button.knowledge-extraction:disabled {
     color: var(--muted);
 }
 .command-palette-label {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 .command-palette-detail {
-    flex: 1;
+    flex: 1 1 0;
+    min-width: 2.5rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: var(--fs-small);
     color: var(--muted);
 }
+/* the name an item was found by (not its label), at the right */
+.command-palette-code {
+    flex: none;
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    color: var(--text-secondary);
+}
+.command-palette mark {
+    border-radius: 2px;
+    background: var(--find-mark);
+    color: inherit;
+}
+.command-palette-more {
+    padding-left: calc(var(--space-2) * 2 + var(--space-4));
+    font-size: var(--fs-small);
+    color: var(--muted);
+}
 .command-palette-empty {
     padding: var(--space-3);
     color: var(--muted);
+}
+/* a sticky and the model element its ref names (or the other way round): the one hung under the other, a line between
+   their marks */
+.command-palette-pair {
+    position: relative;
+}
+.command-palette-pair::before {
+    content: '';
+    position: absolute;
+    left: calc(var(--space-2) + 7px);
+    top: 1.25rem;
+    bottom: 0.875rem;
+    border-left: 2px solid var(--border-strong);
+    pointer-events: none;
+}
+.command-palette-item.mate .command-palette-icon {
+    position: relative;
+    background: var(--surface-raised);
+}
+.command-palette-item.mate[aria-selected='true'] .command-palette-icon {
+    background: var(--hover);
+}
+.command-palette-tag {
+    font-family: var(--mono);
+}
+/* a found item's kind: a sticky's paper with its edge, or the model's kind's dot */
+.search-mark {
+    display: block;
+    width: 12px;
+    height: 12px;
+    padding: 0;
+    border-left-width: 3px;
+    border-radius: 2px;
+}
+.search-dot {
+    display: block;
+    width: 10px;
+    height: 10px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: currentColor;
+}
+.search-dot.kind-context {
+    border-radius: 2px;
+    color: var(--model-context);
+}
+.search-dot.kind-primitive,
+.search-dot.kind-verified,
+.search-dot.kind-id,
+.search-dot.kind-enum {
+    border: 2px solid currentColor;
+    background: none;
+}
+.search-dot.kind-enum {
+    color: var(--model-value);
+}
+/* what going to a found item took away, for a moment, under the app bar */
+.search-notice {
+    position: fixed;
+    top: calc(44px + var(--space-2));
+    left: 50%;
+    z-index: 400;
+    transform: translateX(-50%);
+    padding: var(--space-1) var(--space-3);
+    border-radius: 6px;
+    background: var(--text);
+    color: var(--surface-raised);
+    font-size: var(--fs-small);
+    pointer-events: none;
+}
+.search-notice:empty {
+    display: none;
+}
+/* a phone: the palette at the top, the whole width */
+@media (max-width: 30rem) {
+    .command-palette {
+        width: calc(100vw - 16px);
+        margin-top: var(--space-2);
+    }
 }
 /* a person's edit in AI の作業 (session/edit-unit.tsx) */
 .edit-unit {

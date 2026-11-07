@@ -2414,8 +2414,8 @@ its view bar's subject (a breadcrumb at the left) and the level next to them; se
 デザインレベルのみ for an event marked `level design`).
 Selecting notes shows a toolbar above them, and 「…」 or a right-click the menu of every action on them: add them to the
 chat (`Enter`), edit the label and the name (`F2`, or a double-click), see the `.dt` element of a `ref` or a timeline
-the event is in, put a hotspot on any sticky but a hotspot (its question only: written at once, the AI names it afterwards), write a hotspot's resolution, copy a link to the note (`⌘⇧C`); `⌘K` finds
-actions and notes by name. Editing is in a session only (below). After a jump to the domain model or another
+the event is in, put a hotspot on any sticky but a hotspot (its question only: written at once, the AI names it afterwards), write a hotspot's resolution, copy a link to the note (`⌘⇧C`); 探す in the app bar (`⌘K`) finds
+actions, notes and the domain model's elements by name. Editing is in a session only (below). After a jump to the domain model or another
 timeline, the detail's back button (and the browser's Back) returns to the storming as it was shown.
 
 A storming with stages or exceptions is drawn in time order instead: the stages left to right, each a labelled frame,
