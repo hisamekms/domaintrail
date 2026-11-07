@@ -781,9 +781,9 @@ const MISSING = {
     emits: { clause: '`emits <event>`', what: 'its outcomes' },
 } as const;
 
-/** The question of the hotspot S024 suggests, of everything a command lacks: 「誰が発行し、誰が処理する？結果は？」. */
+/** The question of the hotspot S024 suggests, of everything a command lacks: 「誰が発行し、何が処理する？結果は？」. */
 function commandQuestion(missing: readonly Missing[]): string {
-    const who = [...(missing.includes('by') ? ['誰が発行'] : []), ...(missing.includes('handledBy') ? ['誰が処理'] : [])];
+    const who = [...(missing.includes('by') ? ['誰が発行'] : []), ...(missing.includes('handledBy') ? ['何が処理'] : [])];
     const asked = who.length === 2 ? `${who[0]}し、${who[1]}する？` : who.length === 1 ? `${who[0]}する？` : '';
     return `${asked}${missing.includes('emits') ? (asked ? '結果は？' : '結果は何？') : ''}`;
 }

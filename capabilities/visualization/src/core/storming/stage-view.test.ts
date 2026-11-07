@@ -727,7 +727,7 @@ describe('gaps an open hotspot keeps open, and a policy applied by hand (ADR 003
     on Asked
     issues Orphan
   }
-  hotspot WhoHandles "誰が処理する？" {
+  hotspot WhoHandles "何が処理する？" {
     on Undecided
   }
   stage S {

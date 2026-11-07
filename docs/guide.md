@@ -2072,7 +2072,7 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
   hotspot RetryLimit "支払は何回まで再試行する？" {
     on PaymentFailed
   }
-  hotspot WhoRefunds "返金は誰が処理する？" { // not decided: asked, never guessed (S024 is off while it is open)
+  hotspot WhoRefunds "返金は何が処理する？" { // not decided: asked, never guessed (S024 is off while it is open)
     on RefundOrder
   }
   hotspot IssuedEvent "請求書の発行をイベントにする？" {
@@ -2414,7 +2414,7 @@ At Design Level no line joins two events in time order where the placement shows
 exception's branch and its `then` are drawn, and the branch only where the design's lines (event → read model → issuer
 → command → handler → event, say) do not already join its two events — the exception's label stays either way (Big
 Picture draws the time order). An issuer or handler an open hotspot
-leaves undecided is an empty dashed note where it would stand («未決定» 誰が処理する？), so a silenced gap stays in view;
+leaves undecided is an empty dashed note where it would stand («未決定» 何が処理する？), so a silenced gap stays in view;
 `dt check` lists them too. An
 event that arrives `from` an external system has that system before it. A hotspot is stuck on top of the sticky it is
 `on` (an event, a command, a policy, …), not a step of the flow.
@@ -2854,7 +2854,7 @@ storming Checkout {
 **S024**: a command that does not say who issues it (`by`, or a policy that `issues` it), who handles it (`handledBy`)
 or what comes of it (`emits`): at Design Level a command is a whole row, read model → issuer → command → handler →
 event. Add what is decided. What is not decided is never guessed: put an open hotspot `on` the command, asking it
-(`hotspot WhoHandles "誰が処理する？" { on ConfirmOrder }`); while it is open, S024 is off for that command. Resolving the
+(`hotspot WhoHandles "何が処理する？" { on ConfirmOrder }`); while it is open, S024 is off for that command. Resolving the
 hotspot turns it on again, until the relation is written.
 
 ```dtes
