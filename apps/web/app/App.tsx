@@ -27,6 +27,7 @@ import { workspaceName } from './health';
 import { HealthButton } from './status';
 import { useViewSocket } from './useViewSocket';
 import { CommandPalette, usePaletteKey } from '../shared/palette';
+import { SearchButton } from '../search/entry';
 import { searchSections } from '../search/find';
 import { goToModel } from '../search/go';
 import { modelFindables } from '../search/model';
@@ -360,6 +361,7 @@ export function App() {
                     }
                     sessionSlot={setSessionSlot}
                     journeySlot={setJourneySlot}
+                    find={<SearchButton mac={mac} onOpen={openPalette} />}
                     session={boot?.session && { mode: boot.session.mode, ready: session.conversation !== undefined }}
                     health={<HealthButton current={current} connection={connection} />}
                     settings={

@@ -174,6 +174,10 @@ const RAW_BUTTONS: Readonly<Record<string, { readonly count: number; readonly re
         count: 1,
         reason: "the quote of what a reply answers, and a knowledge item's source: a reference in running text (a quote, a time, a chip of an element) that jumps to its source: its look is the text it stands for",
     },
+    'search/entry.tsx app-bar-find': {
+        count: 1,
+        reason: "the app bar's 探す, shaped like a search field (🔍 探す and its key) that opens the palette: the view's chrome (the toolbar, the canvas controls, the app bar): labels collapse to icons by container queries; it changes nothing",
+    },
     'session/chat.tsx role=menuitem': {
         count: 2,
         reason: "an item of a menu (role=menuitem): the menu's own row, named by what it does; the menu is opened by an open button",

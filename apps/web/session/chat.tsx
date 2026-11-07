@@ -748,11 +748,11 @@ function SessionBar(props: {
             {/* idle says nothing: only running, a question or a queued run shows; a click opens it in AI の作業 */}
             <span className="chat-status-slot" aria-live="polite">
                 {presence.kind === 'missing' && (
-                    <span className="chat-status status-ai-missing">
+                    <span className="chat-status status-ai-missing" data-tooltip={tx.chat.ai.presence(presence.role, presence.waiting)}>
                         <span className="chat-status-mark" aria-hidden>
                             ○
                         </span>
-                        {tx.chat.ai.presence(presence.role, presence.waiting)}
+                        <span className="chat-status-text">{tx.chat.ai.presence(presence.role, presence.waiting)}</span>
                     </span>
                 )}
                 {status.kind !== 'idle' && (
@@ -765,7 +765,7 @@ function SessionBar(props: {
                         <span className="chat-status-mark" aria-hidden>
                             {status.kind === 'running' ? '●' : status.kind === 'clarification' ? '?' : '…'}
                         </span>
-                        {label}
+                        <span className="chat-status-text">{label}</span>
                     </button>
                 )}
             </span>
