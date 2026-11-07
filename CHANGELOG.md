@@ -9,6 +9,195 @@ code).
 **After upgrading domaintrail**, read the **Upgrading** section of every version between the one you had and the new
 one, oldest first, and follow its steps. This file is in the package: `node_modules/domaintrail/CHANGELOG.md`.
 
+## [0.9.0] - 2026-11-07
+
+### Added
+
+- **Following** (`docs/live-view.md`, ADR 0026's appendix): only the reader and whom the reader follows move the
+  reader's camera. The AI is followed from the ○ / ◉ left of its status in the app bar or from its row in the
+  participants; while followed, a run's changes are brought into view (in the view that draws them). Sending a request
+  to the AI (a message for it, an answer, a pick, the facilitator's AI に送る, an approved proposal of one's own) follows
+  it on the sender's page only. A participant is followed from their row: the page opens the storming, level, timeline
+  and exceptions' layer they are on and fits what their canvas shows. Any move of the reader's own stops following; one
+  followee at a time; a thin frame in the followee's colour shows it. A participant's presence now carries the camera.
+- **Hiding the resolved hotspots** (ADR 0032 §10): 「解決済みを表示」 in the Event Storming 絞り込み, on by default, per
+  viewer; off, the resolved hotspots and their lines are not drawn and their places are left empty — no sticky moves.
+  Each sticky they are on keeps a green ✓ in its corner (left of its 「k/n」), which tells what was agreed on hover and
+  selects the hotspot; the sticky's detail lists all its hotspots whatever the filter. `dt export svg
+  --resolved-hotspots hide` draws the same. Going to an element the view does not draw (the palette, a `#select=` link,
+  the knowledge, the detail, a chat's reference, a turn's marks) shows it first, then selects it.
+- **Retiring knowledge** (廃止, ADR 0031 §12): an item that no longer holds is retired, not deleted — its text, sources
+  and versions stay — with a reason (置き換わった, with the item that replaces it; 当てはまらなくなった; 誤り) or
+  none, 元に戻す for 10 seconds, and 廃止を取り消す. A retired item leaves the lists, a sticky's detail and the dots
+  (廃止も表示 shows it faded), and the AI no longer reads it: the answerer and the runner start
+  `dt mcp --without-retired`, and the extractor gets only the retired items' titles and reasons. **The AI proposes,
+  people decide**: the extractor and the review of a run (below) propose to retire an item, or to undo a retirement,
+  with a reason and evidence, in 廃止の候補 at the head of the ナレッジ list (承認 / 却下, never in the chat); a
+  dismissed proposal comes back only on new evidence; an AS-IS item is never proposed for differing from the TO-BE.
+  The Worker's page retires and decides too. `dt mcp`'s `knowledge_for_element` and `knowledge_search` take
+  `include_retired`. The `files` store keeps a `retired:` map in the item's file and the proposals in
+  `knowledge/proposals/`; the `cloudflare` store needs the Worker's migration 3 (see Upgrading).
+- **探す** in the middle of the app bar (`docs/live-view.md`): a button shaped like a search field (🔍 探す ⌘K, Ctrl K
+  elsewhere), in both worlds, opening the palette that ⌘K opens. Empty, it lists the actions on the selected sticky and
+  the five last selections; typed, the matching actions, then what it finds in both worlds, a section each with its
+  count — the stickies of every storming and the domain model's contexts, elements, commands and states. It matches the
+  label and the name (the ID) only: equal first, then starting with it, then holding it, then the name only (shown
+  marked); eight per section, 「ほか n 件」 for the rest. A sticky whose `ref` names a model element has it hung under it.
+  Picking one goes there, taking away what hides it (a level, the exceptions, a main flow, the 絞り込み, the contexts
+  narrowed, the catalog's filter) and saying so for a moment.
+- **The review at a run's end** (`dt guide session`, ADR 0034): a run that changed stormings is checked before it ends —
+  dt's rules on its diff (a hotspot resolved while the sticky it is on stayed as it was, a sticky changed under a
+  hotspot left open, a former label or name another sticky still has, a new sticky with another one's label), then one
+  more turn of the same run over the neighbourhood of what it changed (the hotspots on it, one relation away, and the
+  decisions and rules about them, never AS-IS nor retired), in which the AI fixes what is at odds within the request and
+  says why for what it keeps. The run card shows 見直し — what was found, fixed and kept — and the
+  facilitator's 見直しを頼む while something is left. What the review finds at odds with knowledge goes to the next
+  extraction as a conflict, and an item it finds no longer holds becomes a 廃止の候補. A renamed sticky's knowledge
+  follows the new name. On by default; `agent.run.review: false` turns it off.
+
+### Changed
+
+- **`reads` is written on the row of whoever decides** (ADR 0032 §9; see Upgrading): a policy `reads` the read models it
+  looks at (「〜が起きたら、〜を見て、〜を出す」), and a command a policy issues has no `reads` (**S030**, an error whose
+  hint names the policy). A policy issues one command (**S031**, an error: split it, one policy per command). `dt fmt`
+  orders a policy's clauses `on`, `reads`, `issues`, `by`. `dt migrate dtes` also rewrites `.dtes` files of 0.8: it
+  moves the `reads` of a command a policy issues to that policy, with its comments.
+- **The Design Level draws a read model before whoever reads it**: read model → the policy's note (in both layouts, a
+  read model column between events and policies), no longer read model → command. Every `reads` line says, in
+  Japanese, 「「B」は「A」を見て判断する」.
+- **The Event Storming canvas carries a timeline, and the exceptions are a layer over it** (ADR 0032 §11,
+  `docs/live-view.md`): the breadcrumb is the storming › すべて or one main flow (the trunk through every stage is one;
+  no picker for a storming with one), and one main flow is drawn in the layout of すべて, the other main flows and the
+  exceptions branching off them left out where they stood — no sticky moves; a stage with nothing drawn keeps its
+  frame, dashed. Beside the breadcrumb, the toggle ↳ 例外 (in the exceptions' pink, with how many) includes the
+  exceptions (the default) or not — the former 「例外を表示」, out of the 絞り込み now — and its ▾ emphasizes one: its
+  path stays dark, the rest goes faint, nothing moves. A lane's label on the canvas emphasizes its exception too. The
+  emphasis is close to a selection: never remembered, followed nor printed; its ×, a second Escape or a press on the
+  empty canvas ends it. The navigator's rows show the same canvas: a stage's row brings its frame into view, a main
+  flow's row puts it on the canvas, an exception's row emphasizes it.
+- **`dt export svg`** (see Upgrading): `--timeline <ID>` draws one main flow, by the ID of any of its timelines, in the
+  layout of every flow; `--exceptions include|exclude` (`show` and `hide` are still taken, as their earlier names). The
+  heading says すべて or the main flow, and 例外を含む / 例外なし.
+- **The camera no longer moves for a run's changes** unless the reader follows the AI: the marks and the bar
+  (「ほかに n 件の変更 →」) say where they are (it moved when none was in view).
+- **The AI**, deciding what answers a hotspot, changes the sticky and writes the hotspot's resolution, both.
+- **The app bar on a narrow window**: under 40rem the workspace's name goes and 探す is its magnifier alone; at a
+  phone's width the brand's name, the extraction switch and the words of the AI's state go.
+
+### Removed
+
+- `reads` in a command a policy issues: an error (S030), moved by `dt migrate dtes`.
+- **The view of a stage and the view of an exception**: a stage is a frame on the canvas, an exception is emphasized
+  on the layer. `dt export svg --stage` is gone, and `--timeline` no longer takes an exception (see Upgrading).
+
+### Fixed
+
+- A run no longer fails as an agent error, with the subscriber claiming no further run until restarted, when dt writes
+  `domaintrail.journey.json` while the run runs (the facilitator acting on the journey, an approved request, an
+  interview's brief settled): the run's check of the files the agent changed skips it.
+- ⌘K no longer matches a sticky by its kind or its storming: a word in a storming's name (「注文」 in 「注文から入金まで」)
+  listed every sticky of it.
+
+### Upgrading
+
+`.dtes` files of 0.8 with `reads` in a command a policy issues, or a policy issuing several commands, no longer check.
+Commit first, so that each step is a diff to review.
+
+1. **Move `reads` to the policies:**
+
+   ```sh
+   dt migrate dtes --dry-run   # lists what would be moved and what is left
+   dt migrate dtes             # rewrites in place; exits 1 if something is left
+   ```
+
+   It moves the `reads` of a command issued by exactly one policy to that policy, with its comments:
+
+   ```dtes
+   // before (0.8)
+   command IssueInvoice "請求書を発行する" {
+     reads OrderTotal // 合計を見て請求額を決める
+     handledBy Invoice
+     emits InvoiceIssued
+   }
+   policy BillConfirmedOrder "注文が確定したら請求する" {
+     on OrderConfirmed
+     issues IssueInvoice
+   }
+   // after (0.9)
+   command IssueInvoice "請求書を発行する" {
+     handledBy Invoice
+     emits InvoiceIssued
+   }
+   policy BillConfirmedOrder "注文が確定したら請求する" {
+     on OrderConfirmed
+     reads OrderTotal // 合計を見て請求額を決める
+     issues IssueInvoice
+   }
+   ```
+
+   What it lists as left, to change by hand, then run it again:
+   - **S031**, a policy that issues several commands (the `reads` of its commands are left where they are): split it,
+     one policy per command, each `on` the same events.
+
+     ```dtes
+     // before: S031
+     policy BillConfirmedOrder {
+       on OrderConfirmed
+       issues IssueInvoice, RequestShipment
+     }
+     // after
+     policy BillConfirmedOrder {
+       on OrderConfirmed
+       issues IssueInvoice
+     }
+     policy ShipConfirmedOrder {
+       on OrderConfirmed
+       issues RequestShipment
+     }
+     ```
+
+   - **S030**, the `reads` of a command several policies issue (not copied to each): write it in the policy that looks
+     at it — in each, when they all do — and remove it from the command.
+
+     ```dtes
+     // before: S030
+     command RemindPayment {
+       reads Unpaid
+       handledBy Invoice
+       emits PaymentReminded
+     }
+     policy RemindWhenOverdue {
+       on PaymentOverdue
+       issues RemindPayment
+     }
+     // after (and the same in the other policy that issues RemindPayment, if it looks at Unpaid too)
+     command RemindPayment {
+       handledBy Invoice
+       emits PaymentReminded
+     }
+     policy RemindWhenOverdue {
+       on PaymentOverdue
+       reads Unpaid
+       issues RemindPayment
+     }
+     ```
+
+   As in 0.8.0, what nobody has decided is never guessed: put an open hotspot on the policy, asking it.
+2. **Run `dt fmt`** once and commit it apart: a policy's clauses are ordered `on`, `reads`, `issues`, `by` (a policy
+   `by` an actor gets its `by` last).
+3. **`dt export svg --stage <ID>`** is an error: drop it to draw every flow, with the stage's frame in it, or use
+   `--timeline <ID>` for a main flow. `--timeline` with an exception's ID is an error too: draw every flow (its
+   exceptions included by default). `--exceptions hide` / `show` still work; write `exclude` / `include`.
+4. **The `cloudflare` knowledge store**: apply the Worker's migration `0003_retirement.sql` and deploy the new Worker,
+   as its README's Upgrade says (`dist/knowledge-worker/README.md`): copy the new `worker.js`, `page/` and
+   `migrations/`, `npx wrangler d1 migrations apply knowledge --remote`, then `npx wrangler deploy`. Until it is
+   deployed, 廃止する and the proposals get 404. The `files` store needs nothing.
+5. **Regenerate** with `dt generate ts`: the generated contract tests fail to load with another minor version.
+6. **Config**: nothing to change. `agent.run.review` is new and on by default (one more turn for a run that changed
+   stormings); set it to `false` to turn the review off. The Live View's remembered choices of a storming's view are
+   read anew: a stage as every flow, an exception's timeline as every flow with its exceptions, 「例外を表示」 off as the
+   exceptions excluded.
+
 ## [0.8.1] - 2026-11-06
 
 ### Fixed
@@ -704,6 +893,7 @@ The first published version.
 - The Live View (`dt view`): the context map, the structure diagram (three levels), the catalog, the state diagram,
   the inspector with the source, problems and changes, updated on every save; in Japanese or English, light or dark.
 
+[0.9.0]: https://github.com/hisamekms/domaintrail/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/hisamekms/domaintrail/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/hisamekms/domaintrail/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/hisamekms/domaintrail/compare/v0.6.0...v0.7.0
