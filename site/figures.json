@@ -7,7 +7,7 @@
           "example": "questions",
           "storming": "CertificateIssuance",
           "level": "big-picture",
-          "exceptions": "show",
+          "exceptions": "include",
           "theme": "light",
           "lang": "ja"
         },
@@ -28,7 +28,6 @@
         "atstore-mainflow": {
           "example": "flows",
           "storming": "CertificateIssuance",
-          "stage": "AtStore",
           "level": "big-picture",
           "theme": "light",
           "lang": "ja"
@@ -36,9 +35,8 @@
         "atstore-exceptions": {
           "example": "exceptions",
           "storming": "CertificateIssuance",
-          "stage": "AtStore",
           "level": "big-picture",
-          "exceptions": "show",
+          "exceptions": "include",
           "theme": "light",
           "lang": "ja"
         },
@@ -46,7 +44,7 @@
           "example": "exceptions",
           "storming": "CertificateIssuance",
           "level": "big-picture",
-          "exceptions": "hide",
+          "exceptions": "exclude",
           "theme": "light",
           "lang": "ja"
         },
@@ -54,25 +52,23 @@
           "example": "exceptions",
           "storming": "CertificateIssuance",
           "level": "big-picture",
-          "exceptions": "show",
+          "exceptions": "include",
           "theme": "light",
           "lang": "ja"
         },
         "atstore-questions": {
           "example": "questions",
           "storming": "CertificateIssuance",
-          "stage": "AtStore",
           "level": "big-picture",
-          "exceptions": "show",
+          "exceptions": "include",
           "theme": "light",
           "lang": "ja"
         },
         "atstore-design": {
           "example": "design",
           "storming": "CertificateIssuance",
-          "stage": "AtStore",
           "level": "design",
-          "exceptions": "hide",
+          "exceptions": "exclude",
           "theme": "light",
           "lang": "ja"
         },
@@ -88,7 +84,7 @@
           "example": "design",
           "storming": "CertificateIssuance",
           "level": "design",
-          "exceptions": "show",
+          "exceptions": "include",
           "theme": "light",
           "lang": "ja"
         }

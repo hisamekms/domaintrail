@@ -2426,11 +2426,13 @@ note for both; a dashed arrow goes from an exception's last step back to the ste
 at them), commands (their issuers on top, a hotspot on the command above them), handlers (aggregates and external
 systems, and the external system an event comes from), the event (its hotspots on top), policies (their hotspots on
 top) — and the elements stand in a band above the row of the event
-they belong to, an exception's on its own lane: the chain reads left to right into each event. The timeline picker lists the
-stages (「コンビニでの発行（例外を含む）」) between すべて（統合） and the timelines; clicking a stage's frame selects
-it (its main flows, its exceptions and 「この段階を表示」). 「例外を表示」 in the view bar's 絞り込み (a storming with
-exceptions only) hides the exceptions of the integrated canvas and of a stage: their steps, the events only they have, the
-hotspots on those events and their `then` arrows; an exception's own view is unchanged.
+they belong to, an exception's on its own lane: the chain reads left to right into each event. The timeline picker
+lists すべて and the main flows (the trunks of every stage are one main flow); one main flow is drawn where すべて draws
+it, the other main flows and the exceptions branching off them left out, a stage left empty dashed. The exceptions are a
+layer over the canvas (the toggle 「↳ 例外」 beside the breadcrumb): excluded, the canvas is laid out without their steps,
+the events only they have, the hotspots on those events and their `then` arrows; its ▾, a lane's label on the canvas or
+an exception's row in the navigator emphasizes one, its path dark and the rest faint. Clicking a stage's frame selects
+it (its main flows and its exceptions); its row in the navigator brings the frame into view.
 
 <!-- topic: storming-rules -->
 ### Diagnostics of a storming
@@ -3247,17 +3249,19 @@ figures of a document or a site built in CI. `-o <file>` is required (`-o -` for
 
 ```sh
 dt export svg --storming ConvenienceStoreIssuance -o all.svg
-dt export svg --storming ConvenienceStoreIssuance --stage Issuance --level design --legend -o issuance.svg
+dt export svg --storming ConvenienceStoreIssuance --level design --legend -o design.svg
 dt export svg --storming ConvenienceStoreIssuance --timeline PinForgottenBranch --theme dark --lang en -o pin.svg
-dt export svg --storming ConvenienceStoreIssuance --exceptions hide --heading -o main-flows.svg
+dt export svg --storming ConvenienceStoreIssuance --exceptions exclude --heading -o main-flows.svg
+dt export svg --storming OrderToCash --timeline PaymentRetry --level design -o retry.svg
 dt export svg --storming OrderToCash --level design --resolved-hotspots hide -o open-questions.svg
 dt export svg --model --view map --all -o map.svg
 dt export svg --model --context Sales Billing --level aggregates -o - > sales.svg
 ```
 
-- **An Event Storming:** `--storming <ID>`, the whole storming by default, or `--stage <ID>` (its main flows and its
-  exceptions) or `--timeline <ID>`; `--level big-picture` (default) or `design`; `--exceptions hide` leaves the
-  exceptions out of the whole storming or a stage (「例外を表示」 off); `--resolved-hotspots hide` leaves the resolved
+- **An Event Storming:** `--storming <ID>`, every flow by default, or `--timeline <ID>` (one main flow, by the ID of
+  any of its timelines, drawn where every flow puts it); `--level big-picture` (default) or `design`;
+  `--exceptions exclude` leaves the exceptions' layer out (`include`, the default; `show` and `hide` are taken as their
+  earlier names); never an exception's emphasis; `--resolved-hotspots hide` leaves the resolved
   hotspots out of any view (「解決済みを表示」 off: their notes and lines are not drawn, their stickies keep a ✓, nothing moves).
 - **The domain model:** `--model`, the Structure View by default (`--level detail`, `overview` or `aggregates`;
   `--context <names…>` focuses it on some bounded contexts, their dependencies as stubs) or `--view map`, the Context
@@ -3273,7 +3277,7 @@ dt export svg --model --context Sales Billing --level aggregates -o - > sales.sv
   Live View lays them out there. The SVG names the Live View's font stacks and embeds no font: another machine draws
   it in its own (Noto Sans CJK on Linux), a little wider or narrower.
 - An unknown storming, stage, timeline or context is named with the choices (exit 1); options that do not go together
-  (`--stage` with `--timeline`, `--storming` with `--model`, …) exit 2.
+  (`--timeline` with `--model`, `--storming` with `--model`, …) exit 2.
 
 <!-- topic: output -->
 ## Output and exit codes
