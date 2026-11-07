@@ -42,6 +42,7 @@ export {
     isRetired,
     openProposals,
     proposalIdOf,
+    ProposalIdCollision,
     proposalsToForget,
     retirementProposalCommands,
     type Admitted,

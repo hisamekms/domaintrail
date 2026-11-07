@@ -397,6 +397,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
         return proposals;
     }
 
+    /** Writes proposals: a new one, or one decided (`admitProposal` and `decide…` checked its ID is its own). */
     async function writeProposals(proposals: readonly Knowledge.RetirementProposal[]): Promise<void> {
         if (proposals.length === 0) return;
         await mkdir(proposalsDir, { recursive: true });
@@ -601,13 +602,13 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                     if (reason) blocked.push({ index, reason });
                     else kept.push({ index, operation });
                 });
-                const proposing = new Set<string>(proposalsTouched(extraction));
-                const proposals = proposing.size > 0 ? (await allProposals()).filter((p) => proposing.has(p.item)) : [];
+                // every proposal of the project: a retry is found by its ID wherever it is (`admitProposal` filters by item)
+                const proposals = proposalsTouched(extraction).length > 0 ? await allProposals() : [];
                 const outcome = applyOperations(
                     { by: extraction.by, operations: kept.map((k) => k.operation) },
                     (id) => live.items.get(id) ?? deleted.items.get(id),
                     now(),
-                    (item) => proposals.filter((p) => p.item === item),
+                    () => proposals,
                 );
                 const indexOf = (operation: Knowledge.Operation): number => kept.find((k) => k.operation === operation)?.index ?? -1;
                 const dropped = [...blocked, ...outcome.dropped.map((d) => ({ index: indexOf(d.operation), reason: d.reason }))].sort(
@@ -768,11 +769,8 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
             checkProject(project);
             return exclusive(async () => {
                 const items = await everyItem();
-                const r = admitProposal(
-                    candidate,
-                    { lookup: (id) => items.get(id), proposals: (await allProposals()).filter((p) => p.item === candidate.item) },
-                    now(),
-                );
+                // every proposal of the project: a retry, or a collision, is found by its ID wherever it is
+                const r = admitProposal(candidate, { lookup: (id) => items.get(id), proposals: await allProposals() }, now());
                 if (!r.ok) return r;
                 const { proposal, event } = r.value;
                 const item = items.get(candidate.item);

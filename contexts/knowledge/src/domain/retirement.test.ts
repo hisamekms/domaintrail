@@ -10,11 +10,14 @@ import {
     decideDismissal,
     isMoot,
     openProposals,
+    ProposalIdCollision,
     proposalIdOf,
     proposalsToForget,
     type RetirementCandidate,
 } from './retirement.js';
 import { applyExtraction } from './extraction.js';
+import { auditOfProposal } from './records.js';
+import { sha256Hex } from './sha256.js';
 import { at, extraction, itemId, later, liveItem, reason, sessionRef, source, stickyRef, userName } from '../test-helpers.js';
 
 const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
@@ -290,5 +293,33 @@ describe('an extraction proposes', () => {
             at,
         );
         expect(outcome.dropped.map((d) => d.reason)).toEqual([{ type: 'RetiredItem', itemId: retired.id }]);
+    });
+});
+
+describe('the ID of a proposal, and what the audit log keeps of one', () => {
+    test('SHA-256, as the standard says', () => {
+        expect(sha256Hex('')).toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+        expect(sha256Hex('abc')).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+        expect(sha256Hex('a'.repeat(1000))).toBe('41edece42d63e8d9bf515a9ba6932e1c20cbc9f5a5d134645adb5db1b9737ea3');
+        expect(proposalIdOf(candidate())).toMatch(/^rp_[0-9a-f]{32}$/);
+    });
+
+    test('a proposal of the same ID that proposes something else is a collision, never answered for the candidate', () => {
+        const target = item('kn_00000001');
+        const made = value(admitProposal(candidate(), { lookup: lookupOf(target), proposals: [] }, at)).proposal;
+        const forged = { ...made, item: itemId('kn_00000002'), evidence: [said('m5')] as [Knowledge.Evidence] };
+        expect(() => admitProposal(candidate(), { lookup: lookupOf(target), proposals: [forged] }, at)).toThrow(ProposalIdCollision);
+    });
+
+    test('the audit record of a proposal holds its action and ID only: never its explanation nor its evidence', () => {
+        const target = item('kn_00000001');
+        const admitted = value(
+            admitProposal(candidate({ explanation: reason('山田さんが「もうやらない」と言った') }), { lookup: lookupOf(target), proposals: [] }, at),
+        );
+        if (!admitted.event) throw new Error('no event');
+        const record = auditOfProposal(admitted.event, target.version);
+        expect(record.reason).toBe(`retire (${admitted.proposal.id})` as Knowledge.Reason);
+        expect(JSON.stringify(record)).not.toContain('山田');
+        expect(JSON.stringify(record)).not.toContain('もうやっていない');
     });
 });

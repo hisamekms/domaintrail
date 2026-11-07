@@ -14,6 +14,8 @@
 import {
     admitProposal,
     applyExtraction,
+    candidateOf,
+    proposalIdOf,
     auditOf,
     auditOfProposal,
     decideApproval,
@@ -527,12 +529,19 @@ export class D1KnowledgeStore implements KnowledgeStore {
             const ids = itemsTouched(extraction);
             const rows = new Map((await this.rows(project, ids)).map((r) => [r.id, r]));
             const items = new Map([...rows].map(([id, r]) => [id, itemOf(r)]));
-            const proposals = await this.proposalsAbout(project, proposalsTouched(extraction));
+            // about the items, and those of the candidates' IDs wherever they are (a retry, or a collision)
+            const proposals = await this.proposalsFor(
+                project,
+                proposalsTouched(extraction),
+                extraction.operations.flatMap((o) =>
+                    o.kind === 'ProposeRetire' || o.kind === 'ProposeUnretire' ? [proposalIdOf(candidateOf(o, extraction.by))] : [],
+                ),
+            );
             const outcome = applyExtraction(
                 extraction,
                 (id) => items.get(id),
                 this.now(),
-                (item) => proposals.filter((p) => p.item === item),
+                () => proposals,
             );
             const changes = outcome.applied.flatMap((a) => a.changes);
             const past = changes.flatMap((c) => (c.replaced ? [{ item: c.item.id, past: pastVersionOf(c.replaced, c.item) }] : []));
@@ -552,7 +561,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
                               changes.map((c) => auditOf(c.event)),
                           )
                         : []),
-                    ...this.proposalWrites(
+                    ...this.proposalInserts(
                         project,
                         outcome.proposals,
                         outcome.applied.flatMap((a) => (a.proposal ? [auditOfProposal(a.proposal.event, a.proposal.version)] : [])),
@@ -754,12 +763,14 @@ export class D1KnowledgeStore implements KnowledgeStore {
 
     // ---- retiring ------------------------------------------------------------------------------------------------
 
-    /** Every proposal about these items, in any state. */
-    private async proposalsAbout(project: string, items: readonly string[]): Promise<Knowledge.RetirementProposal[]> {
-        if (items.length === 0) return [];
+    /** The proposals about these items, and those of these IDs wherever they are. */
+    private async proposalsFor(project: string, items: readonly string[], ids: readonly string[]): Promise<Knowledge.RetirementProposal[]> {
+        if (items.length === 0 && ids.length === 0) return [];
         const { results } = await this.db
-            .prepare('SELECT id, state, body FROM proposals WHERE project = ?1 AND item IN (SELECT value FROM json_each(?2))')
-            .bind(project, JSON.stringify(items))
+            .prepare(
+                'SELECT id, state, body FROM proposals WHERE project = ?1 AND (item IN (SELECT value FROM json_each(?2)) OR id IN (SELECT value FROM json_each(?3)))',
+            )
+            .bind(project, JSON.stringify(items), JSON.stringify(ids))
             .all<ProposalRow>();
         return results.map(proposalOf);
     }
@@ -770,8 +781,15 @@ export class D1KnowledgeStore implements KnowledgeStore {
         );
     }
 
-    /** The statements that write proposals as decided, and the audit records of them. */
-    private proposalWrites(project: string, proposals: readonly Knowledge.RetirementProposal[], audit: readonly Knowledge.AuditEntry[]): D1PreparedStatement[] {
+    /**
+     * The statements that add new proposals, and the audit records of them. A row of the same ID is never overwritten
+     * (`DO NOTHING`): `admitProposal` found it already, as the same proposal sent again or as a collision.
+     */
+    private proposalInserts(
+        project: string,
+        proposals: readonly Knowledge.RetirementProposal[],
+        audit: readonly Knowledge.AuditEntry[],
+    ): D1PreparedStatement[] {
         const statements: D1PreparedStatement[] = [];
         if (proposals.length > 0)
             statements.push(
@@ -779,21 +797,35 @@ export class D1KnowledgeStore implements KnowledgeStore {
                     .prepare(
                         `INSERT INTO proposals (project, id, item, state, body, proposed_at)
                          SELECT ?1, j.value ->> 'id', j.value ->> 'item', j.value ->> 'state', j.value -> 'body', j.value ->> 'proposedAt' FROM json_each(?2) j
-                         WHERE true ON CONFLICT (project, id) DO UPDATE SET state = excluded.state, body = excluded.body`,
+                         WHERE true ON CONFLICT (project, id) DO NOTHING`,
                     )
                     .bind(project, JSON.stringify(proposals.map((p) => ({ id: p.id, item: p.item, state: p.state, body: p, proposedAt: p.proposedAt })))),
             );
-        if (audit.length > 0)
-            statements.push(
-                this.db
-                    .prepare(
-                        `INSERT INTO audit (project, item, version, operation, actor, caller, reason, at)
-                         SELECT ?1, j.value ->> 'item', j.value ->> 'version', j.value ->> 'operation', j.value -> 'actor', ?3, j.value ->> 'reason', j.value ->> 'at'
-                         FROM json_each(?2) j ORDER BY j.key`,
-                    )
-                    .bind(project, JSON.stringify(audit), this.caller),
-            );
+        statements.push(...this.auditWrites(project, audit));
         return statements;
+    }
+
+    /** The statement that writes a decided proposal over its open row (`openGuard` heads its batch), and the audit records. */
+    private proposalDecided(project: string, proposal: Knowledge.RetirementProposal, audit: readonly Knowledge.AuditEntry[]): D1PreparedStatement[] {
+        return [
+            this.db
+                .prepare("UPDATE proposals SET state = ?3, body = ?4 WHERE project = ?1 AND id = ?2 AND state = 'Open'")
+                .bind(project, proposal.id, proposal.state, JSON.stringify(proposal)),
+            ...this.auditWrites(project, audit),
+        ];
+    }
+
+    private auditWrites(project: string, audit: readonly Knowledge.AuditEntry[]): D1PreparedStatement[] {
+        if (audit.length === 0) return [];
+        return [
+            this.db
+                .prepare(
+                    `INSERT INTO audit (project, item, version, operation, actor, caller, reason, at)
+                     SELECT ?1, j.value ->> 'item', j.value ->> 'version', j.value ->> 'operation', j.value -> 'actor', ?3, j.value ->> 'reason', j.value ->> 'at'
+                     FROM json_each(?2) j ORDER BY j.key`,
+                )
+                .bind(project, JSON.stringify(audit), this.caller),
+        ];
     }
 
     /** The statement that fails the batch it heads unless the proposal is still open. */
@@ -856,13 +888,14 @@ export class D1KnowledgeStore implements KnowledgeStore {
         ];
         return this.decideAndWrite<Result<Knowledge.RetirementProposal, ProposalRejection>>(project, ids, async (rows) => {
             const items = new Map([...rows].map(([id, r]) => [id, itemOf(r)]));
-            const proposals = await this.proposalsAbout(project, [candidate.item]);
+            // about the item, and the one of the candidate's ID wherever it is (a retry, or a collision)
+            const proposals = await this.proposalsFor(project, [candidate.item], [proposalIdOf(candidate)]);
             const r = admitProposal(candidate, { lookup: (id) => items.get(id), proposals }, this.now());
             if (!r.ok) return { statements: [], value: r };
             const { proposal, event } = r.value;
             const item = items.get(candidate.item);
             if (!event || !item) return { statements: [], value: ok(proposal) };
-            return { statements: this.proposalWrites(project, [proposal], [auditOfProposal(event, item.version)]), value: ok(proposal) };
+            return { statements: this.proposalInserts(project, [proposal], [auditOfProposal(event, item.version)]), value: ok(proposal) };
         });
     }
 
@@ -895,7 +928,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
                     guard(this.db, project, read),
                     this.openGuard(project, id),
                     ...this.writes(project, [r.value.item], [], [auditOf(r.value.itemEvent)]),
-                    ...this.proposalWrites(project, [r.value.proposal], []),
+                    ...this.proposalDecided(project, r.value.proposal, []),
                 ]);
             } catch (e) {
                 if (attempt >= ATTEMPTS) throw e;
@@ -919,7 +952,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
             try {
                 await this.db.batch([
                     this.openGuard(project, id),
-                    ...this.proposalWrites(project, [r.value.proposal], item ? [auditOfProposal(r.value.event, itemOf(item).version)] : []),
+                    ...this.proposalDecided(project, r.value.proposal, item ? [auditOfProposal(r.value.event, itemOf(item).version)] : []),
                 ]);
             } catch (e) {
                 if (attempt >= ATTEMPTS) throw e;

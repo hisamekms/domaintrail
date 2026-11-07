@@ -66,8 +66,9 @@ export const proposerActor = (p: Knowledge.Proposer): Knowledge.Actor =>
 
 /**
  * The audit log's record of a proposal made or dismissed, on the item it is about at its version then (an approval is
- * recorded by the item's retirement or unretirement, which names the proposal). A proposal's record has its action and
- * explanation as the reason; a dismissal names the proposal.
+ * recorded by the item's retirement or unretirement, which names the proposal). The reason holds the action and the
+ * proposal's ID only: its explanation and evidence may quote someone, and stay in the proposal, which the sweep
+ * removes with the item (`proposalsToForget`).
  */
 export function auditOfProposal(
     event: Knowledge.RetirementProposed | Knowledge.RetirementProposalDismissed,
@@ -79,7 +80,7 @@ export function auditOfProposal(
             version,
             operation: 'propose',
             actor: proposerActor(event.proposedBy),
-            reason: reasonOf(`${event.action} (${event.proposalId}): ${event.explanation}`.slice(0, 2000)),
+            reason: reasonOf(`${event.action} (${event.proposalId})`),
             at: event.proposedAt,
         };
     return {

@@ -388,7 +388,7 @@ describe('the files store', () => {
 });
 
 describe('retiring in the files store (廃止)', () => {
-    const said = (message: string): Knowledge.Evidence => ({
+    const said = (message: string): Extract<Knowledge.Evidence, { readonly kind: 'Said' }> => ({
         kind: 'Said',
         session: sessionRef('s2'),
         message: message as Knowledge.MessageRef,
@@ -505,13 +505,34 @@ describe('retiring in the files store (廃止)', () => {
         expect(await store.proposals(project)).toEqual([]);
     });
 
-    test('the sweep forgets the proposals about a deleted item', async () => {
+    test('the sweep forgets the proposals about a deleted item; nothing of their explanation or quotes is left in the audit log', async () => {
         await apply('s1', 1, add('kn_00000001'));
-        const p = await store.propose(project, candidate('kn_00000001'));
+        const p = await store.propose(
+            project,
+            candidate('kn_00000001', {
+                explanation: reason('山田さんが言うにはもうやらない'),
+                evidence: [{ ...said('m9'), quote: '山田の引用' as Knowledge.Quote }],
+            }),
+        );
         expect(p.ok).toBe(true);
+        const audit = await readFile(path.join(dir, 'audit.jsonl'), 'utf8');
+        expect(audit).toContain('"operation":"propose"');
+        expect(audit).not.toContain('山田');
         await store.delete(project, itemId('kn_00000001'), alice);
         tick(61_000);
         await store.sweep();
         expect(await readdir(path.join(dir, 'proposals'))).toEqual([]);
+        expect(await readFile(path.join(dir, 'audit.jsonl'), 'utf8')).not.toContain('山田');
+    });
+
+    test("a proposal file of the candidate's ID that proposes something else is a collision: refused, never overwritten", async () => {
+        await apply('s1', 1, add('kn_00000001'), add('kn_00000002'));
+        const p = await store.propose(project, candidate('kn_00000001'));
+        if (!p.ok) throw new Error('not proposed');
+        const file = path.join(dir, 'proposals', `${p.value.id}.json`);
+        const forged = (await readFile(file, 'utf8')).replace('kn_00000001', 'kn_00000002');
+        await writeFile(file, forged);
+        expect(await store.propose(project, candidate('kn_00000001')).catch((e: unknown) => (e instanceof Error ? e.name : e))).toBe('ProposalIdCollision');
+        expect(await readFile(file, 'utf8')).toBe(forged);
     });
 });

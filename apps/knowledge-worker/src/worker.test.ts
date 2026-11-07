@@ -370,9 +370,35 @@ describe('retiring (廃止)', () => {
             extraction('s2', 2, [{ kind: 'AddSource', item: id(2), base: 1, source: source('s2', 'm3'), agreed: false }]),
         );
         expect(plain(dropped.dropped.map((d) => d.reason))).toEqual([{ type: 'RetiredItem', itemId: id(2) }]);
+        // the audit keeps the action and the proposal's ID only, never the explanation
+        const reasons = await worker.db
+            .prepare("SELECT reason FROM audit WHERE project = ?1 AND operation = 'propose'")
+            .bind(project)
+            .all<{ reason: string }>();
+        expect(reasons.results.map((r) => r.reason)).toEqual([`retire (${applied.proposals?.[0]?.id})`]);
         await store.delete(project, id(1), user);
         await worker.scheduled(new Date(Date.now() + 10 * 60 * 1000));
         expect(await worker.db.prepare('SELECT count(*) AS n FROM proposals WHERE project = ?1').bind(project).first<{ n: number }>()).toEqual({ n: 0 });
+        const left = await worker.db.prepare('SELECT reason FROM audit WHERE project = ?1').bind(project).all<{ reason: string | null }>();
+        expect(JSON.stringify(left.results)).not.toContain('it never was so');
+    });
+
+    test("a row of the candidate's ID that proposes something else is a collision: refused, never overwritten", async () => {
+        const project = newProject();
+        await store.applyExtraction(project, extraction('s1', 1, [add(1, '一'), add(2, '二')]));
+        const proposed = await store.propose(project, candidate(1));
+        if (!proposed.ok) throw new Error('not proposed');
+        const forged = JSON.stringify({ ...(plain(proposed.value) as object), item: id(2) });
+        await worker.db
+            .prepare('UPDATE proposals SET body = ?3, item = ?4 WHERE project = ?1 AND id = ?2')
+            .bind(project, proposed.value.id, forged, id(2))
+            .run();
+        expect(await thrown(store.propose(project, candidate(1)))).toMatchObject({ status: 500 });
+        const row = await worker.db
+            .prepare('SELECT body FROM proposals WHERE project = ?1 AND id = ?2')
+            .bind(project, proposed.value.id)
+            .first<{ body: string }>();
+        expect(row?.body).toBe(forged);
     });
 });
 

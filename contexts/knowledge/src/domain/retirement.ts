@@ -17,10 +17,12 @@
 //   evidence that none of the dismissed ones had (a new decision, another sticky, another message). A sticky's change
 //   counts by its sticky, a message by its ID: the AI words the same evidence differently each time.
 //
-// The same candidate sent again (a retry) has the same ID (`proposalIdOf`), and is answered with the proposal made the
-// first time.
+// The same candidate sent again (a retry) has the same ID (`proposalIdOf`, SHA-256 of what it proposes), and is
+// answered with the proposal made the first time; a proposal of that ID that proposes something else is a collision,
+// never taken for it (`ProposalIdCollision`). A store looks the ID up in the whole project, not only about the item.
 import { decide, err, Knowledge, ok, type Result } from '../generated/index.js';
 import { knowledgeItemCommands } from './items.js';
+import { sha256Hex } from './sha256.js';
 
 /** What the AI proposes: retiring an item (with a reason, and a replacement for `replaced`), or undoing a retirement. */
 export interface RetirementCandidate {
@@ -44,7 +46,7 @@ export type ProposalRejection = Knowledge.MalformedProposal | Knowledge.Proposal
 export interface ProposalContext {
     /** The item, its replacement and the decisions it names, as the store holds them (deleted ones included). */
     readonly lookup: (id: Knowledge.KnowledgeItemId) => Knowledge.KnowledgeItem | undefined;
-    /** Every proposal about the item, in any state. */
+    /** Every proposal about the item, in any state, and the proposal of the candidate's ID wherever it is (in the project). */
     readonly proposals: readonly Knowledge.RetirementProposal[];
 }
 
@@ -56,14 +58,9 @@ export interface Admitted {
 
 const refused = (reason: Knowledge.ProposalRefusal): Result<never, ProposalRejection> => err({ type: 'ProposalRefused', reason });
 
-/** 64-bit FNV-1a, for the IDs of proposals. */
-function fnv1a64(text: string): bigint {
-    let h = 0xcbf29ce484222325n;
-    for (const byte of new TextEncoder().encode(text)) {
-        h ^= BigInt(byte);
-        h = (h * 0x100000001b3n) & 0xffffffffffffffffn;
-    }
-    return h;
+/** Another proposal holds the ID a candidate's is derived from: never taken for it (and never overwritten). */
+export class ProposalIdCollision extends Error {
+    override readonly name = 'ProposalIdCollision';
 }
 
 /** The key of a piece of evidence for the memory of dismissals: the decision, the sticky, the message. */
@@ -91,9 +88,23 @@ export function proposalIdOf(candidate: RetirementCandidate): Knowledge.Retireme
         candidate.replacedBy ?? '',
         ...candidate.evidence.map(evidenceKey).sort(),
     ].join('\u0000');
-    const made = Knowledge.makeRetirementProposalId(`rp_${fnv1a64(key).toString(36).padStart(13, '0')}`);
+    // 128 bits of SHA-256: no chance collision, and none to be made on purpose
+    const made = Knowledge.makeRetirementProposalId(`rp_${sha256Hex(key).slice(0, 32)}`);
     if (!made.ok) throw new Error('A proposal ID is not one');
     return made.value;
+}
+
+/** Whether a proposal is the one a candidate makes (a retry): the same proposer, item, action, reason, replacement and evidence. */
+function proposesTheSame(p: Knowledge.RetirementProposalCommon, c: RetirementCandidate): boolean {
+    const keys = (e: readonly Knowledge.Evidence[]): string => e.map(evidenceKey).sort().join('\u0000');
+    return (
+        proposerKey(p.proposedBy) === proposerKey(c.proposedBy) &&
+        p.item === c.item &&
+        p.action === c.action &&
+        p.reason === c.reason &&
+        p.replacedBy === c.replacedBy &&
+        keys(p.evidence) === keys(c.evidence)
+    );
 }
 
 /** Whether the item is retired. */
@@ -122,7 +133,10 @@ const usable = (item: Knowledge.KnowledgeItem | undefined): item is Knowledge.Li
 export function admitProposal(candidate: RetirementCandidate, context: ProposalContext, at: Date): Result<Admitted, ProposalRejection> {
     const id = proposalIdOf(candidate);
     const again = context.proposals.find((p) => p.id === id);
-    if (again) return ok({ proposal: again });
+    if (again) {
+        if (!proposesTheSame(again, candidate)) throw new ProposalIdCollision(`proposal ${id} proposes something else`);
+        return ok({ proposal: again });
+    }
     const item = context.lookup(candidate.item);
     if (item === undefined || item.state !== 'Live') return refused('itemUnavailable');
     const made = retirementProposalCommands.propose({

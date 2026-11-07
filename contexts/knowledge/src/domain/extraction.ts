@@ -71,7 +71,7 @@ export interface ExtractionOutcome {
 /** The items as the store holds them (deleted ones included, until the sweep); `undefined` for an item it has not. */
 export type ItemLookup = (id: Knowledge.KnowledgeItemId) => Knowledge.KnowledgeItem | undefined;
 
-/** Every proposal the store holds about an item, in any state. */
+/** Every proposal the store holds about an item, in any state (more may be given: those of the candidates' IDs). */
 export type ProposalLookup = (item: Knowledge.KnowledgeItemId) => readonly Knowledge.RetirementProposal[];
 
 /** The idempotency key of an extraction: its session and its number (ADR 0031, section 8). */
