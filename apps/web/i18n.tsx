@@ -351,7 +351,7 @@ const ja = {
             order: (a: string, b: string, names?: readonly string[]) => `${names?.length ? `${quoteJa(names)}で` : ''}「${a}」のあとに「${b}」`,
             question: (_a: string, b: string) => `「${b}」への問い`,
             undecidedIssuer: (_a: string, b: string) => `「${b}」を誰が行うかはまだ決まっていない`,
-            undecidedHandler: (_a: string, b: string) => `「${b}」を誰が処理するかはまだ決まっていない`,
+            undecidedHandler: (_a: string, b: string) => `「${b}」を何が処理するかはまだ決まっていない`,
         },
         /** The kind of an end that is not an element's (an open hotspot's empty slot). */
         undecided: '未決定',
@@ -1645,7 +1645,7 @@ const en: Messages = {
             order: (a: string, b: string, names?: readonly string[]) => `${names?.length ? `In ${quoteEn(names)}, ` : ''}“${b}” comes after “${a}”`,
             question: (_a: string, b: string) => `A question about “${b}”`,
             undecidedIssuer: (_a: string, b: string) => `Who does “${b}” is not decided yet`,
-            undecidedHandler: (_a: string, b: string) => `Who handles “${b}” is not decided yet`,
+            undecidedHandler: (_a: string, b: string) => `What handles “${b}” is not decided yet`,
         },
         undecided: 'Undecided',
         resolved: 'Resolved',

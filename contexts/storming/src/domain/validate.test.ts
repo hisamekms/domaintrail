@@ -802,7 +802,7 @@ describe('validateStormings', () => {
   command Asked {
     by Customer
   }
-  hotspot WhoHandles "誰が処理する？" {
+  hotspot WhoHandles "何が処理する？" {
     on Asked
   }`);
         const ds = validate(text);
@@ -817,7 +817,7 @@ describe('validateStormings', () => {
             "Command 'Unhandled' does not say who handles it. It emits 'ShipmentCancelled', but nothing handles it to produce that event. At Design Level a command's row is `by` (or a policy's `issues`) → `handledBy` → `emits`.",
         );
         expect(ds[1]!.hint).toBe(
-            'add `handledBy <aggregate or external>` if it is decided; don\'t guess: if it is not decided yet, add `hotspot UnhandledOpen "誰が処理する？" { on Unhandled }`, which records the open question and turns this error off',
+            'add `handledBy <aggregate or external>` if it is decided; don\'t guess: if it is not decided yet, add `hotspot UnhandledOpen "何が処理する？" { on Unhandled }`, which records the open question and turns this error off',
         );
         // a command a policy issues needs no `by` (ReleaseBike of the sample)
         expect(validate(cancel()).filter((d) => d.code === 'S024')).toEqual([]);
@@ -909,9 +909,9 @@ describe('validateStormings', () => {
         const text = cancel(`  command Silent
   hotspot SilentOpen "別の問い"`);
         const ds = validate(text).filter((d) => d.code === 'S024');
-        expect(ds[0]!.hint).toContain('add `hotspot SilentOpen2 "誰が発行し、誰が処理する？結果は？" { on Silent }`');
+        expect(ds[0]!.hint).toContain('add `hotspot SilentOpen2 "誰が発行し、何が処理する？結果は？" { on Silent }`');
         const handled = validate(cancel(`  command Half {\n    by Customer\n  }`)).find((d) => d.code === 'S024')!;
-        expect(handled.hint).toContain('"誰が処理する？結果は？"');
+        expect(handled.hint).toContain('"何が処理する？結果は？"');
     });
 
     test('a hotspot asks about the element of its first `on` only; a policy may be applied `by` an actor', () => {
