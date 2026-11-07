@@ -222,7 +222,8 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   model is fed by the event that triggers the policy, that path says the trigger and no event → policy line is drawn
   beside it; an event the actor issuing a command reacts to (the command's `on`, ADR 0032 §14) goes to that actor beside
   the command, event → actor → command, from the event's note at the nearest step at or before it (that actor is not
-  stuck on its command either); an event that arrives `from`
+  stuck on its command either; when the event feeds a read model the actor looks at, that path says it and no event →
+  actor line is drawn beside it); an event that arrives `from`
   an external system has that system before it; a hotspot is stuck on top of the sticky it is `on` (an event, a
   command, a policy, …), never a step of the flow, and at Big Picture only one on an event is drawn. Where an event is
   drawn at several steps, the command before it, its copies and the policy after it are drawn at each step (ADR 0024,

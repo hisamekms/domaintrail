@@ -455,6 +455,11 @@ actor who issues a command, without a policy: **event → actor → command**.
   change to it.
 - **The timeline filter** keeps a command's `command-on` when its event is in view and the command is kept (it emits
   an event in view), which also keeps the one-hop path.
+- **§12.2 applies to a command's `on` too** (a later commit, *decided by the maintainer*): when the event a command
+  is `on` feeds a read model the actor issuing it looks at (`reads`), and the drawing has event → that read model's
+  copy → the actor's copy, the `command-on` line from that event note is left out: the path through the read model says
+  the trigger. The `on` lines from events that feed none of the command's read models stay. Only the line is left out
+  (the same post-pass of `drawChains` as for a policy's `on`).
 - **The line's words**: a relation `notices`, ja 「「{A}」を受けて「{B}」が動く」, en “{B}” acts on “{A}”. An event's
   hidden connections in the detail (Big Picture) list such a command beside the policies reacting to it.
 

@@ -20,7 +20,8 @@
  *   the read model says the trigger: the policy's `on` line from that event note is not drawn (the others are).
  * - **The issuer reacts** (ADR 0032 §14): a command's `on` (`command-on`) runs from the event to the copy of each actor
  *   issuing it beside the command's note, from the event's note at the nearest slot at or before the note (as
- *   `readmodel-from` does): event → actor → command, as read model → actor → command.
+ *   `readmodel-from` does): event → actor → command, as read model → actor → command. When that event feeds a read
+ *   model the actor looks at for the command, the line through the read model says it, and this one is not drawn.
  * - **Copies per step** (spec §7.3, §10.2: drawing-only splits): the projection says at which *slot* (a step of a
  *   timeline, or one slot for the whole view) each event note stands, and at which position in time. A command whose
  *   events stand at several positions gets a note per position, `n:<command>#<k>` (with its own issuer, read model and
@@ -351,12 +352,13 @@ export function drawChains(
             ...(keys.length > 1 && { merged: keys }),
         });
     }
-    // a policy's trigger already drawn through the read model it looks at (event → read model → policy, or → the actor
-    // applying it → policy): its own `on` line from that event note is left out
+    // a trigger already drawn through the read model looked at (event → read model → policy, or → the actor applying
+    // it → policy; event → read model → the actor issuing a command, ADR 0032 §14): its own `on` line from that event
+    // note (a policy's, or a command's into the actor's copy) is left out
     const lines = new Set([...edges.values()].flatMap((e) => (e.type === 'semantic' ? [`${e.kind}:${e.source}->${e.target}`] : [])));
-    const looks = (reader: string, policy: string): boolean => reader === policy || lines.has(`by:${reader}->${policy}`);
+    const looks = (reader: string, target: string): boolean => reader === target || lines.has(`by:${reader}->${target}`);
     for (const [id, e] of edges) {
-        if (e.type !== 'semantic' || e.kind !== 'on') continue;
+        if (e.type !== 'semantic' || (e.kind !== 'on' && e.kind !== 'command-on')) continue;
         const through = [...edges.values()].some(
             (r) => r.type === 'semantic' && r.kind === 'reads' && looks(r.target, e.target) && lines.has(`readmodel-from:${e.source}->${r.source}`),
         );

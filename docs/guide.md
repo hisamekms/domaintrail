@@ -2407,7 +2407,8 @@ policy (read model → policy, the read model just before the policy), or the ac
 → actor → policy). When that read model is fed by the event that triggers the policy, the path through it says the
 trigger, and no event → policy line is drawn beside it. An event an actor reacts to (a command's `on`) goes to that
 actor beside the command, event → actor → command, from the event's note at the nearest step at or before the
-command; such an actor is not stuck on its command either. A command goes to its handler, which decides and emits
+command; such an actor is not stuck on its command either, and when the event feeds a read model that actor looks
+at, the path through the read model says it and no event → actor line is drawn beside it. A command goes to its handler, which decides and emits
 the command's events, so the `emits` arrows start at the handler; a command without `handledBy` emits them itself.
 At Design Level no line joins two events in time order where the placement shows it (the steps left to right): only an
 exception's branch and its `then` are drawn (Big Picture draws the time order). An issuer or handler an open hotspot
