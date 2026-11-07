@@ -347,16 +347,18 @@ describe('Design Level elements in a view of stages', () => {
         const cells = render.grid!.cells;
         const cell = (id: string) => cells[id]!;
         const at = (eventId: string) => cell(only(render, eventId).id);
-        // Pay emits Paid (the main flow) and Failed (the exception's lane): a chain into each, in the band above its lane
-        for (const eventId of ['Paid', 'Failed']) {
-            const { command, aggregate } = chainInto(render, only(render, eventId).id);
-            expect(render.nodes.find((n) => n.id === command)).toMatchObject({ elementId: 'Pay' });
-            expect(cell(command).row).toBe(at(eventId).row - 1);
-            expect(cell(aggregate!)).toEqual({ col: cell(command).col + 1, row: cell(command).row });
-            expect(cell(aggregate!).col).toBe(at(eventId).col - 1);
-            // the actor stuck on top of its command
-            expect(cell(`n:Customer@${command.slice(2)}`)).toEqual({ col: cell(command).col, row: cell(command).row - 1 });
-        }
+        // Pay emits Paid (the main flow) and Failed (the exception's lane), alternatives at one step: one chain, in the
+        // band above the topmost lane, into both (ADR 0032 §13)
+        const { command, aggregate } = chainInto(render, only(render, 'Paid').id);
+        expect(chainInto(render, only(render, 'Failed').id)).toEqual({ command, aggregate });
+        expect(render.nodes.find((n) => n.id === command)).toMatchObject({ elementId: 'Pay' });
+        expect(command).toBe('n:Pay');
+        expect(cell(command).row).toBe(at('Paid').row - 1);
+        expect(cell(aggregate!)).toEqual({ col: cell(command).col + 1, row: cell(command).row });
+        expect(cell(aggregate!).col).toBe(at('Paid').col - 1);
+        expect(at('Failed').col).toBe(at('Paid').col);
+        // the actor stuck on top of its command
+        expect(cell(`n:Customer@${command.slice(2)}`)).toEqual({ col: cell(command).col, row: cell(command).row - 1 });
         expect(at('Failed').row).toBeGreaterThan(at('Paid').row);
         // the hotspot on top of its event; the policy after its trigger, before the command it issues
         expect(cell('n:Limit')).toEqual({ col: at('Failed').col, row: at('Failed').row - 1 });
@@ -380,7 +382,7 @@ describe('Design Level elements in a view of stages', () => {
         const render = projectView(s, DL);
         const cells = render.grid!.cells;
         const commands = render.nodes.filter((n) => n.type === 'element' && n.kind === 'command').map((n) => n.id);
-        expect(commands).toEqual(['n:Pay#1', 'n:Pay#2', 'n:Retry']);
+        expect(commands).toEqual(['n:Pay', 'n:Retry']);
         for (const command of commands) {
             const c = cells[command]!;
             const key = command.slice(2);
@@ -401,6 +403,61 @@ describe('Design Level elements in a view of stages', () => {
             expect(Math.abs(a.col - b.col) + Math.abs(a.row - b.row)).toBe(1);
         }
         expect(crossings(g)).toEqual([]);
+    });
+
+    test('alternatives at one step share their notes: one command into both outcomes, one policy after both (ADR 0032 §13)', async () => {
+        const s = await parse(`storming A {
+  event ClockedIn
+  event Passed
+  event Detected
+  event RollCalled
+  actor Manager
+  aggregate Check
+  aggregate RollCall
+  readmodel Results { from Passed, Detected }
+  command Import { handledBy Check emits Passed, Detected }
+  command Conduct { handledBy RollCall emits RollCalled }
+  policy AfterCheck { on Passed, Detected reads Results issues Conduct by Manager }
+  hotspot Why { on Detected }
+  stage Attendance {
+    timeline Normal { ClockedIn Passed RollCalled }
+    exception Found { ClockedIn Detected then RollCalled }
+  }
+}
+`);
+        const render = projectView(s, DL);
+        const cells = render.grid!.cells;
+        const at = (eventId: string) => cells[only(render, eventId).id]!;
+        expect(at('Detected').col).toBe(at('Passed').col);
+        // one note of each, in the band above the main flow
+        const notes = (elementId: string) => render.nodes.filter((n) => n.type === 'element' && n.elementId === elementId).map((n) => n.id);
+        for (const [element, ids] of [
+            ['Import', ['n:Import']],
+            ['AfterCheck', ['n:AfterCheck']],
+            ['Results', ['n:Results@AfterCheck']],
+            ['Manager', ['n:Manager@AfterCheck']],
+        ] as const)
+            expect(notes(element)).toEqual([...ids]);
+        expect(cells['n:Import']!.row).toBe(at('Passed').row - 1);
+        expect(cells['n:AfterCheck']!.row).toBe(at('Passed').row - 1);
+        // its lines join the event notes of both lanes: the aggregate emits both; the read model is fed by both, which
+        // trigger the policy through it (ADR 0032 §12)
+        const lines = render.edges.filter((e) => e.type === 'semantic').map((e) => `${e.kind}:${eventOf(render, e.source)}->${eventOf(render, e.target)}`);
+        expect(lines).toEqual(
+            expect.arrayContaining([
+                'emits:n:Check@Import->Passed',
+                'emits:n:Check@Import->Detected',
+                'readmodel-from:Passed->n:Results@AfterCheck',
+                'readmodel-from:Detected->n:Results@AfterCheck',
+                'reads:n:Results@AfterCheck->n:Manager@AfterCheck',
+                'by:n:Manager@AfterCheck->n:AfterCheck',
+                'issues:n:AfterCheck->n:Conduct',
+            ]),
+        );
+        expect(lines.filter((l) => l.startsWith('on:'))).toEqual([]);
+        // a hotspot on an event stays on its own note
+        expect(cells['n:Why']).toEqual({ col: at('Detected').col, row: at('Detected').row - 1 });
+        expect(crossings(laidOut(render, s))).toEqual([]);
     });
 
     test('the cause of an event, with its actor and aggregate, in every view of it: the stages, the stage, a main flow and an exception', async () => {

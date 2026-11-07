@@ -299,7 +299,7 @@ describe('hidden resolved hotspots in a storming’s scene (ADR 0032 §10)', () 
   hotspot Retry { on Pay status resolved resolution "3回まで" }
   stage St {
     timeline Main { Asked Placed }
-    exception Failed { Asked Paid }
+    exception Failed { Asked Placed Paid }
   }
 }
 `;
@@ -319,7 +319,8 @@ describe('hidden resolved hotspots in a storming’s scene (ADR 0032 §10)', () 
         const placed = items(hidden, 'Placed')[0]!;
         expect(placed.props.settled?.map((r) => [r.label, r.resolution])).toEqual([['Settled', '決めた']]);
         expect(items(hidden, 'Open')[0]!.on).toBeUndefined();
-        // a command drawn once per step: a check on each copy, each standing for its own copy of the hotspot
+        // a command drawn once per step (its events at two steps): a check on each copy, each standing for its own copy
+        // of the hotspot
         const pays = items(hidden, 'Pay');
         expect(pays.length).toBe(2);
         for (const pay of pays) {

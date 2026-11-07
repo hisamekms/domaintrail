@@ -2402,7 +2402,10 @@ command — except that commands converging on the same event note through the s
 before it (its arrow to the event stands for all their `emits`; hovering it names them), and an external system an event comes from next to each note of that event, so their lines stay short (one
 that nothing uses is drawn once). Where one view draws an event at several steps (a timeline's view, a stage, a
 storming with stages), a command is drawn before each step of its events, with its own issuer, read model and handler,
-a policy after each step of the events it is `on`, and a hotspot on each note of its sticky, so every chain reads left to right into its own event. Selecting any of these notes
+a policy after each step of the events it is `on`, and a hotspot on each note of its sticky, so every chain reads left to right into its own event.
+Lanes side by side at one step (an exception beside its main flow, its first event where the main flow's is) are
+alternatives at the same time: a command, a policy and their copies are drawn once there, in the band of the topmost
+lane, with a line to the event of each lane (ADR 0032 §13). Selecting any of these notes
 selects the element and marks its other notes with a fainter dashed ring.
 Every note is a square of the same size: a long label is drawn smaller, and one too long even then is cut short with
 «…» (hovering it shows the whole label; S015 warns about it), so keep labels short (about 12 Japanese characters).

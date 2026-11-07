@@ -374,6 +374,28 @@ after an event fed into its read model loses the line from that event, a note af
 after every line of the view is drawn (`drawChains`), so that it is left out only where the path through the read model
 is drawn.
 
+### 13. Alternatives at one step share their notes (2026-11-07)
+
+*Decided by the maintainer* 2026-11-07, on the same storming as §12: 「検知結果を取り込む」 emits 「アルコールが検知
+されなかった」 (the main flow) and 「アルコールが検知された」 (an exception branching off at the same step), and
+「チェックが済んだら点呼する」 is `on` both. Copies per step (ADR 0024, amendment of 2026-11-05) drew the command, its
+handler, the policy, its read model and its actor once for each lane: two identical chains that differ only in the
+event, which reads as two things happening.
+
+1. **Copies are per position in time, not per lane.** A command whose events, or a policy whose triggers, stand at
+   several slots at the same position (lanes side by side at one step: the alternatives of that step) has one note
+   there, standing for all those slots. Slots at different positions keep a note each, as before.
+2. **The shared note stands in the band of the topmost lane** (the main flow before its exceptions, §11), and its lines
+   join the event notes of every lane it stands for: the handler's `emits` to each outcome, each trigger's `on` (or
+   `readmodel-from`, §12) into the policy. The issuer, read model, actor and handler beside it are shared with it. The
+   lower lane's band is left empty there.
+3. **A hotspot on an event stays on each note of that event**: it is about the event, which is still drawn in each lane.
+
+*Decided here*, while implementing it: the projection gives each event note its lane's row (`EventPlace.lane`, views
+with lanes only), and the notes are made per position (`notesAt` in `chains.ts`; `Note.slots` lists the slots a shared
+note stands for, its `slot` the topmost one, where the grid places it). A view without lanes (a timeline's view, the
+integrated canvas of a storming without stages) has one slot per position and does not change.
+
 ## Alternatives
 
 - **An arrow chain** (`UnassignedRequests -> Batch -> BuildAllocation -> CarAllocationPlan -> CarAllocated`): rejected
