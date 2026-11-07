@@ -713,7 +713,7 @@ describe('lines at Design Level: only what the placement cannot show, each sayin
     });
 });
 
-describe('without the exceptions (「例外を表示」 off)', () => {
+describe('the main flows only (the 流れ「主な流れ」)', () => {
     const text = `storming T {
   event A
   event B
@@ -747,8 +747,8 @@ describe('without the exceptions (「例外を表示」 off)', () => {
     test('their steps, the events only they have and the hotspots on those events are not drawn; nor their `then`s', async () => {
         const s = await parse(text);
         const all = projectView(s, BP);
-        const without = projectView(s, { level: 'big-picture', hidden: ['exceptions'] });
-        expect(without.options).toEqual({ level: 'big-picture', hidden: ['exceptions'] });
+        const without = projectView(s, { level: 'big-picture', flow: 'main' });
+        expect(without.options).toEqual({ level: 'big-picture', flow: 'main' });
         // Y is in no timeline: shown either way, below the stages
         expect(
             eventNodes(all)
@@ -765,9 +765,9 @@ describe('without the exceptions (「例外を表示」 off)', () => {
         expect(edgesOf(all, 'rejoin')).toEqual(['X -> C']);
         expect(edgesOf(without, 'rejoin')).toEqual([]);
         expect(stormingViewKey(without.options)).toBe('big-picture|-exceptions');
-        expect(stormingGraphId('T', { level: 'big-picture', stageId: 'P', hidden: ['exceptions'] })).toBe('storming:T:big-picture:@P-exceptions');
+        expect(stormingGraphId('T', { level: 'big-picture', stageId: 'P', flow: 'main' })).toBe('storming:T:big-picture:@P-exceptions');
         // a stage's view alike
-        const stage = projectView(s, { level: 'big-picture', stageId: 'P', hidden: ['exceptions'] });
+        const stage = projectView(s, { level: 'big-picture', stageId: 'P', flow: 'main' });
         expect(
             eventNodes(stage)
                 .map((n) => n.eventId)
@@ -778,7 +778,7 @@ describe('without the exceptions (「例外を表示」 off)', () => {
     });
 
     test('the user’s storming: the main flows only, still one straight row', () => {
-        const without = projectView(STAGED, { level: 'big-picture', hidden: ['exceptions'] });
+        const without = projectView(STAGED, { level: 'big-picture', flow: 'main' });
         expect(
             eventNodes(without)
                 .map((n) => n.eventId)
@@ -820,7 +820,7 @@ describe('without the exceptions at Design Level: the elements of the events onl
     test('the stages and the stage: hidden with the toggle off, drawn as before with it on', async () => {
         const s = await storming();
         for (const options of views) {
-            const without = projectView(s, { ...options, hidden: ['exceptions'] });
+            const without = projectView(s, { ...options, flow: 'main' });
             expect(ids(without)).toEqual(expect.arrayContaining(KEPT));
             for (const id of GONE) expect(ids(without)).not.toContain(id);
             // nothing of theirs is left below the sections, and no edge goes to a hidden element
@@ -880,7 +880,7 @@ describe('without the exceptions at Design Level: the elements of the events onl
   }
 }
 `);
-        const without = projectView(s, { ...DL, hidden: ['exceptions'] });
+        const without = projectView(s, { ...DL, flow: 'main' });
         expect(
             ids(without)
                 .filter((id) => id.startsWith('n:'))

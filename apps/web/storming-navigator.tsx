@@ -101,8 +101,10 @@ export const navigatorRows = (nodes: readonly NavigatorNode[]): number => nodes.
 
 /**
  * The navigator of the event storming world, in place of the model tree: its filter, then the stormings with their
- * stages and timelines. A click on a row shows it — the storming's integrated canvas, a stage or a timeline — as the
- * view bar's pickers do (the two show the same choice), and selects it for the detail when it is a declaration.
+ * stages and timelines. A click on a row shows it (`chooseScope`) — a storming or a stage, as a place with every flow;
+ * an exception, as its case at its stage; a main flow alone — and selects it for the detail when it is a declaration.
+ * One row is selected, as the view bar shows it (the exception or the main flow chosen, else the place), and the place
+ * of a timeline selected is marked faintly.
  */
 export function StormingNavigator(props: {
     stormings: readonly StormingView[];
@@ -134,6 +136,8 @@ export function StormingNavigator(props: {
 
     const row = (node: NavigatorNode, depth: number, visible: boolean): ReactNode => {
         const selected = shown?.stormingId === node.stormingId && shown.scope === node.scope;
+        // the place of the exception or the main flow shown (its stage, or the storming): marked faintly
+        const within = !selected && shown?.stormingId === node.stormingId && shown.place === node.scope && node.kind !== 'timeline';
         const open = isOpen(node.key);
         const hasChildren = node.children.length > 0;
         // a stage counts its timelines only while collapsed, when its rows do not tell it, as the model tree's groups do
@@ -142,13 +146,13 @@ export function StormingNavigator(props: {
             <div key={node.key}>
                 <div
                     ref={selected && visible ? selectedRef : undefined}
-                    className={`tree-item storming-nav-${node.kind}${selected ? ' selected' : ''}`}
+                    className={`tree-item storming-nav-${node.kind}${selected ? ' selected' : ''}${within ? ' within' : ''}`}
                     style={indent(depth)}
                     aria-current={selected || undefined}
                     aria-expanded={hasChildren ? open : undefined}
                     title={node.id}
                     onClick={() => {
-                        props.onChoose(chooseScope(props.choice, node.stormingId, node.scope));
+                        props.onChoose(chooseScope(props.stormings, props.choice, node.stormingId, node.scope));
                         props.onSelect(node.kind === 'storming' ? `es/${node.stormingId}` : `es/${node.stormingId}/${node.id}`);
                     }}
                 >

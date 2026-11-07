@@ -1,5 +1,5 @@
 import { Funnel, type LucideIcon } from 'lucide-react';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { useT } from '../i18n';
 import { useDismiss } from '../shared/layout';
 
@@ -83,33 +83,79 @@ export function ToolbarEnd({ children }: { children: ReactNode }) {
 export interface PickerOption {
     value: string;
     label: string;
+    /** The group it is listed under (a stage's name): a heading before the first option of each group. */
+    group?: string | undefined;
+    /** Drawn before its label (an exception's mark). */
+    icon?: ReactNode;
 }
 
 /**
- * A dropdown that picks one thing to look at (a storming, a timeline). The button shows the choice, cut short with an
- * ellipsis when narrow (the whole of it as a tooltip); the list opens below it, moves with the arrow keys, and closes
- * on a choice, on Escape or on a press outside it. With one option it is the option's name, not a button.
+ * A dropdown that picks one thing to look at (a storming, a stage). The button shows the choice, cut short with an
+ * ellipsis when narrow (the whole of it as a tooltip); the list opens below it (`MenuPicker`). With one option it is the
+ * option's name, not a button.
  */
 export function SubjectPicker(props: { label: string; value: string; options: PickerOption[]; onChange: (value: string) => void }) {
+    const { label, value, options, onChange } = props;
+    const text = useRef<HTMLSpanElement>(null);
+    const current = options.find((o) => o.value === value) ?? options[0];
+    const clipped = useClipped(text, current?.label ?? '');
+    if (!current) return null;
+    if (options.length === 1) return <SubjectName label={label} text={current.label} />;
+    return (
+        <MenuPicker
+            className="subject-picker"
+            buttonClass="toolbar-button"
+            label={label}
+            buttonLabel={`${label}: ${current.label}`}
+            tooltip={clipped ? `${label}: ${current.label}` : undefined}
+            value={current.value}
+            options={options}
+            onChange={onChange}
+        >
+            <span ref={text} className="toolbar-button-text">
+                {current.label}
+            </span>
+            <span className="toolbar-caret" aria-hidden>
+                ▾
+            </span>
+        </MenuPicker>
+    );
+}
+
+/**
+ * A button that opens a list to pick one option from (a listbox, its options under their groups' headings): it opens
+ * below the button, the chosen option focused; the arrow keys, Home and End move, and a choice, Escape, Tab or a press
+ * outside close it. `value`: the option chosen, if one of them is.
+ */
+export function MenuPicker(props: {
+    /** The list's name. */
+    label: string;
+    /** The button's accessible name (else its text). */
+    buttonLabel?: string | undefined;
+    tooltip?: string | undefined;
+    className: string;
+    buttonClass?: string | undefined;
+    value: string | undefined;
+    options: readonly PickerOption[];
+    onChange: (value: string) => void;
+    /** The button's content. */
+    children: ReactNode;
+}) {
     const { label, value, options, onChange } = props;
     const [open, setOpen] = useState(false);
     const root = useRef<HTMLDivElement>(null);
     const button = useRef<HTMLButtonElement>(null);
     const list = useRef<HTMLDivElement>(null);
-    const text = useRef<HTMLSpanElement>(null);
-    const current = options.find((o) => o.value === value) ?? options[0];
-    const clipped = useClipped(text, current?.label ?? '');
     const close = useCallback(() => setOpen(false), []);
     useDismiss(open, root, close);
     useMenuInside(open, list);
 
-    // the chosen option has the focus once the list opens
+    // the chosen option (else the first) has the focus once the list opens
     useEffect(() => {
-        if (open) list.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
+        if (!open) return;
+        const items = list.current?.querySelectorAll<HTMLElement>('[role="option"]');
+        (list.current?.querySelector<HTMLElement>('[aria-selected="true"]') ?? items?.[0])?.focus();
     }, [open]);
-
-    if (!current) return null;
-    if (options.length === 1) return <SubjectName label={label} text={current.label} />;
 
     const choose = (v: string): void => {
         setOpen(false);
@@ -137,16 +183,17 @@ export function SubjectPicker(props: { label: string; value: string; options: Pi
             if (e.key === 'Escape') button.current?.focus();
         }
     };
+    const focusable = options.some((o) => o.value === value) ? value : options[0]?.value;
 
     return (
-        <div className="subject-picker" ref={root}>
+        <div className={props.className} ref={root}>
             <button
                 ref={button}
-                className="toolbar-button"
+                className={`menu-picker-button${props.buttonClass ? ` ${props.buttonClass}` : ''}`}
                 aria-haspopup="listbox"
                 aria-expanded={open}
-                aria-label={`${label}: ${current.label}`}
-                data-tooltip={clipped ? `${label}: ${current.label}` : undefined}
+                aria-label={props.buttonLabel}
+                data-tooltip={props.tooltip}
                 onClick={() => setOpen(!open)}
                 onKeyDown={(e) => {
                     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -155,25 +202,22 @@ export function SubjectPicker(props: { label: string; value: string; options: Pi
                     }
                 }}
             >
-                <span ref={text} className="toolbar-button-text">
-                    {current.label}
-                </span>
-                <span className="toolbar-caret" aria-hidden>
-                    ▾
-                </span>
+                {props.children}
             </button>
             {open && (
                 <div className="toolbar-menu subject-menu motion-pop" role="listbox" aria-label={label} ref={list} onKeyDown={onListKey}>
-                    {options.map((o) => (
-                        <button
-                            key={o.value}
-                            role="option"
-                            aria-selected={o.value === current.value}
-                            tabIndex={o.value === current.value ? 0 : -1}
-                            onClick={() => choose(o.value)}
-                        >
-                            {o.label}
-                        </button>
+                    {options.map((o, i) => (
+                        <Fragment key={o.value}>
+                            {o.group !== undefined && o.group !== options[i - 1]?.group && (
+                                <div className="subject-menu-group" role="presentation">
+                                    {o.group}
+                                </div>
+                            )}
+                            <button role="option" aria-selected={o.value === value} tabIndex={o.value === focusable ? 0 : -1} onClick={() => choose(o.value)}>
+                                {o.icon}
+                                {o.label}
+                            </button>
+                        </Fragment>
                     ))}
                 </div>
             )}

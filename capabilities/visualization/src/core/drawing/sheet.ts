@@ -2,7 +2,7 @@
 // Live View's toolbar shows them) and the name of its file. Pure: the caller describes what the diagram shows
 // (`SheetSubject`), and these say it.
 import { shownLabel, type DisplayMode, type StructureLevel } from '../graph/ir.js';
-import { hides, type ViewLevel, type ViewOptions } from '../storming/ir.js';
+import type { StormingFlow, ViewLevel, ViewOptions } from '../storming/ir.js';
 import type { DiagramTexts } from './texts.js';
 
 /**
@@ -20,11 +20,16 @@ export interface Named {
     label?: string | undefined;
 }
 
-/** The part of a storming an Event Storming view shows: everything, a stage, or one timeline. */
-export type StormingScope =
+/** The place of a storming with stages an Event Storming view shows: the whole storming, or a stage. */
+export type StormingScope = { kind: 'all' } | { kind: 'stage'; stage: Named };
+
+/** The flow an Event Storming view draws, as its view bar's flow switch shows it. */
+export type SheetFlow =
+    | { kind: 'main' }
     | { kind: 'all' }
-    | { kind: 'stage'; stage: Named }
-    | { kind: 'timeline'; timeline: Named; exception: boolean; stage?: Named | undefined };
+    | { kind: 'exception'; timeline: Named }
+    /** One main flow. */
+    | { kind: 'mainFlow'; timeline: Named };
 
 /** What a diagram shows, as its view's toolbar sets it. */
 export type SheetSubject =
@@ -33,11 +38,11 @@ export type SheetSubject =
     | {
           view: 'storming';
           storming: Named;
-          /** Absent when the storming has no timelines (the toolbar has no timeline picker). */
+          /** Absent when the storming has no stages (the toolbar names the storming only). */
           scope?: StormingScope | undefined;
           level: ViewLevel;
-          /** Whether the exceptions are drawn, when the storming has some and the view is not one timeline. */
-          exceptions?: boolean | undefined;
+          /** Absent when the place has no flows to choose from (no exceptions, and not one main flow chosen). */
+          flow?: SheetFlow | undefined;
       }
     | { view: 'states'; /** The aggregate: its ID (`Context.Name`), name and label. */ aggregate: Named & { name: string } };
 
@@ -69,12 +74,17 @@ export function sheetHeading(workspace: string | undefined, subject: SheetSubjec
             const scope = subject.scope;
             if (scope?.kind === 'all') crumbs.push(t.allTimelines);
             else if (scope?.kind === 'stage') crumbs.push(name(scope.stage));
-            else if (scope?.kind === 'timeline') {
-                const timeline = scope.exception ? t.exceptionTimeline(name(scope.timeline)) : name(scope.timeline);
-                crumbs.push(scope.stage ? t.stageTimeline(name(scope.stage), timeline) : timeline);
-            }
             conditions.push(t.stormingLevels[subject.level].label);
-            if (subject.exceptions !== undefined) conditions.push(subject.exceptions ? t.sheet.withExceptions : t.sheet.withoutExceptions);
+            const flow = subject.flow;
+            if (flow) {
+                conditions.push(
+                    flow.kind === 'exception'
+                        ? t.flows.exception(name(flow.timeline))
+                        : flow.kind === 'mainFlow'
+                          ? t.flows.mainFlow(name(flow.timeline))
+                          : t.flows[flow.kind],
+                );
+            }
             break;
         }
         case 'states':
@@ -106,8 +116,9 @@ export function exportFileName(workspace: string | undefined, subject: SheetSubj
             break;
         case 'storming': {
             const scope = subject.scope;
-            const part = !scope ? undefined : scope.kind === 'all' ? 'all' : scope.kind === 'stage' ? scope.stage.id : scope.timeline.id;
-            parts.push('storming', subject.storming.id, part, subject.level);
+            const flow = subject.flow;
+            const flowPart = !flow || flow.kind === 'all' ? undefined : flow.kind === 'main' ? 'main' : flow.timeline.id;
+            parts.push('storming', subject.storming.id, !scope ? undefined : scope.kind === 'all' ? 'all' : scope.stage.id, flowPart, subject.level);
             break;
         }
         case 'states':
@@ -130,28 +141,40 @@ export interface StormingOutline {
     stages?: readonly Named[] | undefined;
 }
 
-/** What an Event Storming view of `storming` shows with `options` (its level and scope), as a sheet's subject. */
-export function stormingSheetSubject(storming: StormingOutline, options: ViewOptions): SheetSubject {
-    const stage = (id: string): Named => ({ id, label: storming.stages?.find((st) => st.id === id)?.label });
-    const timeline = options.timelineId === undefined ? undefined : storming.timelines.find((tl) => tl.id === options.timelineId);
-    const scope: StormingScope | undefined = !storming.timelines.length
+/**
+ * What an Event Storming view of `storming` shows with `options` (its level and place) and `flow` (the flow its view bar
+ * shows; by default the one `options` lays out: one main flow's timeline, the main flows only, or every flow), as a
+ * sheet's subject.
+ */
+export function stormingSheetSubject(storming: StormingOutline, options: ViewOptions, flow?: StormingFlow): SheetSubject {
+    const named = (x: Named | undefined, id: string): Named => ({ id, label: x?.label });
+    const stage = (id: string): Named =>
+        named(
+            storming.stages?.find((st) => st.id === id),
+            id,
+        );
+    const timeline = (id: string): Named =>
+        named(
+            storming.timelines.find((tl) => tl.id === id),
+            id,
+        );
+    const shown: StormingFlow = flow ?? (options.timelineId !== undefined ? { main: options.timelineId } : options.flow === 'main' ? 'main' : 'all');
+    const one = typeof shown === 'object' ? ('main' in shown ? shown.main : shown.exception) : undefined;
+    const placeId =
+        options.stageId ?? (one !== undefined && options.timelineId !== undefined ? storming.timelines.find((tl) => tl.id === one)?.stageId : undefined);
+    const scope: StormingScope | undefined = !storming.stages?.length
         ? undefined
-        : timeline
-          ? {
-                kind: 'timeline',
-                timeline: { id: timeline.id, label: timeline.label },
-                exception: timeline.exception === true,
-                stage: timeline.stageId === undefined ? undefined : stage(timeline.stageId),
-            }
-          : options.stageId !== undefined
-            ? { kind: 'stage', stage: stage(options.stageId) }
-            : { kind: 'all' };
-    const exceptions = storming.timelines.some((t) => t.exception);
-    return {
-        view: 'storming',
-        storming: { id: storming.id, label: storming.label },
-        scope,
-        level: options.level,
-        exceptions: exceptions && !timeline ? !hides(options, 'exceptions') : undefined,
-    };
+        : placeId !== undefined
+          ? { kind: 'stage', stage: stage(placeId) }
+          : { kind: 'all' };
+    const exceptions = storming.timelines.some((tl) => tl.exception && (placeId === undefined || tl.stageId === placeId));
+    const sheetFlow: SheetFlow | undefined =
+        typeof shown === 'object'
+            ? 'main' in shown
+                ? { kind: 'mainFlow', timeline: timeline(shown.main) }
+                : { kind: 'exception', timeline: timeline(shown.exception) }
+            : exceptions
+              ? { kind: shown }
+              : undefined;
+    return { view: 'storming', storming: { id: storming.id, label: storming.label }, scope, level: options.level, flow: sheetFlow };
 }

@@ -35,18 +35,14 @@ export { dependencyCounts } from './core/graph/context-map.js';
 
 // ---- core: the storming views ----------------------------------------------------------------------------------
 export {
-    HIDDEN_BY,
     HIDEABLE,
-    hides,
-    laidOutHidden,
     LEVEL_KINDS,
     VIEW_LEVELS,
-    type DrawnHideable,
     type GridCell,
     type Hideable,
-    type LaidOutHideable,
     type RenderGraph,
     type StageGrid,
+    type StormingFlow,
     type ViewLevel,
     type ViewOptions,
 } from './core/storming/ir.js';
@@ -108,6 +104,7 @@ export {
     type Named,
     type SheetSubject,
     type StormingOutline,
+    type SheetFlow,
     type StormingScope,
 } from './core/drawing/sheet.js';
 export { tableMeasure } from './core/drawing/text-measure.js';

@@ -8,7 +8,7 @@ import type { StormingView } from '@domaintrail/visualization/protocol';
 import { nameIn } from '../model-utils';
 import { buildScene, type ChangedElements, type RenderOptions } from '../render';
 import { rectCenter, rectContains, unionRects, type Point, type Rect, type Scene, type SceneItem, type SceneNode } from '../scene';
-import { revealIn, shownHidden, stormingGraph, type StormingChoice } from '../storming';
+import { choosePlace, revealIn, shownHidden, stormingDrawing, type StormingChoice } from '../storming';
 
 export type MarkKind = 'added' | 'changed' | 'removed';
 
@@ -263,7 +263,7 @@ export function outOfView(marked: ReadonlyMap<string, readonly Rect[]>, viewport
  * ghosts are not known there).
  */
 function drawnIn(stormings: readonly StormingView[], choice: StormingChoice, marks: ChangedElements): number {
-    const graph = stormingGraph(stormings, choice)?.graph;
+    const graph = stormingDrawing(stormings, choice);
     if (!graph) return 0;
     const hidden = shownHidden(stormings, choice);
     return [...marks.added, ...marks.changed].filter((id) => drawsElement(graph, id, hidden)).length;
@@ -278,7 +278,7 @@ const revealMarks = (stormings: readonly StormingView[], choice: StormingChoice,
  * or a level without them); removed ones are left out (they are drawn only where the page saw them).
  */
 export function notDrawn(stormings: readonly StormingView[], choice: StormingChoice, marks: ChangedElements): ChangedElements {
-    const graph = stormingGraph(stormings, choice)?.graph;
+    const graph = stormingDrawing(stormings, choice);
     const hidden = shownHidden(stormings, choice);
     const drawn = (id: string): boolean => graph !== undefined && drawsElement(graph, id, hidden);
     const exists = (id: string): boolean =>
@@ -298,10 +298,9 @@ export function marksView(stormings: readonly StormingView[], choice: StormingCh
     const revealed = revealMarks(stormings, choice, marks);
     if (revealed !== choice && drawnIn(stormings, revealed, marks) > 0) return revealed;
     const order = [...new Set([...marks.added, ...marks.changed, ...marks.removed].map(stormingOf))].filter((id) => stormings.some((s) => s.id === id));
-    const integrated = (storming: string, level: StormingChoice['level']): StormingChoice => {
-        const { [storming]: _, ...others } = choice.timelines;
-        return { ...choice, stormingId: storming, level, timelines: others };
-    };
+    // the whole storming, its flow kept where it can be
+    const integrated = (storming: string, level: StormingChoice['level']): StormingChoice =>
+        choosePlace(stormings, { ...choice, stormingId: storming, level }, '');
     for (const storming of order) {
         for (const level of [choice.level, choice.level === 'big-picture' ? 'design-level' : 'big-picture'] as const) {
             const c = revealMarks(stormings, integrated(storming, level), marks);

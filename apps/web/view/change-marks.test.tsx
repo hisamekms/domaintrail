@@ -154,7 +154,11 @@ describe('where the marks are shown', () => {
         const timeline: StormingChoice = { ...CHOICE, timelines: { Returns: 'Nowhere' } };
         expect(marksView(after.stormings, timeline, marks)).toBeUndefined();
         // a command is drawn at Design Level only
-        expect(marksView(withCommand.stormings, CHOICE, { ...NO_MARKS, added: ['es/Returns/Inspect'] })).toEqual({ ...CHOICE, level: 'design-level' });
+        expect(marksView(withCommand.stormings, CHOICE, { ...NO_MARKS, added: ['es/Returns/Inspect'] })).toEqual({
+            ...CHOICE,
+            level: 'design-level',
+            flow: 'all',
+        });
     });
 
     test('the marked stickies the view does not draw', () => {

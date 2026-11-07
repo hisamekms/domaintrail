@@ -2,7 +2,7 @@
 // participant's whereabouts seen from this page, the view a location stands for (to name it, to open it, and to send
 // it with a message), and the small rules of the chat's layout (consecutive bubbles of one author, the send shortcut's name).
 import type { Me, SendRequestBody, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
-import { type DisplayMode, hides, STRUCTURE_LEVELS, type StructureLevel, VIEW_LEVELS, type ViewLevel, type ViewOptions } from '@domaintrail/visualization';
+import { type DisplayMode, STRUCTURE_LEVELS, type StormingFlow, type StructureLevel, VIEW_LEVELS, type ViewLevel } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { type CatalogFilter, nameIn } from '../model-utils';
 import type { View } from '../view/navigation';
@@ -111,8 +111,8 @@ const STRUCTURE_DETAIL = { detail: 'Detail', overview: 'Overview', aggregates: '
  */
 export function sentView(input: {
     readonly location: ViewLocation;
-    /** The storming view's stage and what it is laid out without (`ViewOptions`: the exceptions). */
-    readonly storming?: Pick<ViewOptions, 'stageId' | 'hidden'>;
+    /** The storming view's place (its stage) and the flow drawn there. */
+    readonly storming?: { readonly stageId?: string | undefined; readonly flow: StormingFlow };
     /** The catalog's filter. */
     readonly catalog?: CatalogFilter;
     /** The aggregate whose state diagram the inspector shows. */
@@ -142,13 +142,16 @@ export function sentView(input: {
                     storming: target.stormingId,
                     level: target.level === 'design-level' ? 'DesignLevel' : 'BigPicture',
                     ...(target.timelineId !== undefined ? { timeline: target.timelineId } : stage !== undefined && { stage }),
-                    exceptions: !hides(input.storming ?? {}, 'exceptions'),
+                    exceptions: drawsExceptions(input.storming?.flow ?? 'all'),
                 },
                 ...states,
             };
         }
     }
 }
+
+/** Whether a flow draws exceptions: every one, or one exception's case. */
+const drawsExceptions = (flow: StormingFlow): boolean => flow === 'all' || (typeof flow === 'object' && 'exception' in flow);
 
 /** The words a view's name is made of, in the page's language. */
 export interface ViewWords {

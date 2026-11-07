@@ -148,7 +148,7 @@ describe('the view a message is sent from', () => {
             view: { kind: 'Catalog', query: '注文', sections: ['aggregates'], contexts: [] },
         });
         expect(sentView({ location: dt('catalog') })).toEqual({ view: { kind: 'Catalog', sections: [], contexts: [] } });
-        expect(sentView({ location: dtes('Delivery', 'design-level'), storming: { stageId: 'Shipping', hidden: ['exceptions'] } })).toEqual({
+        expect(sentView({ location: dtes('Delivery', 'design-level'), storming: { stageId: 'Shipping', flow: 'main' } })).toEqual({
             view: { kind: 'Storming', storming: 'Delivery', level: 'DesignLevel', stage: 'Shipping', exceptions: false },
         });
         expect(sentView({ location: dtes('Delivery', 'big-picture', 'Normal') })).toEqual({

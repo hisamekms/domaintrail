@@ -8,7 +8,13 @@ import { I18nProvider, MESSAGES } from './i18n';
 import type { Diagnostic } from '@domaintrail/kernel';
 import type { ElementActivity } from './session/element-activity';
 import {
+    chooseFlow,
+    choosePlace,
+    chooseScope,
+    chooseStorming,
     clearStormingFilter,
+    drawnAs,
+    FlowSwitch,
     hideableIn,
     revealIn,
     shownHidden,
@@ -21,6 +27,7 @@ import {
     stormingSelectionTitle,
     type StormingChoice,
     type StormingDetailSession,
+    withHidden,
 } from './storming';
 import { beginActions, problemText } from './storming-detail';
 import { Inspector, type InspectorProps } from './inspector';
@@ -206,7 +213,7 @@ describe('the detail of a storming element', () => {
 
 describe('a storming with stages', () => {
     const STAGED = readFile(path.join(import.meta.dir, '..', '..', 'test', 'fixtures', 'stages', 'convenience-store-stages.dtes'), 'utf8');
-    /** The choice with the exceptions hidden, on the integrated canvas or a scope of the staged storming. */
+    /** The choice with the exceptions hidden as an earlier version kept it, on the whole storming or a scope of the staged storming. */
     const off = (scope?: string): StormingChoice => ({
         stormingId: undefined,
         level: 'big-picture',
@@ -214,41 +221,57 @@ describe('a storming with stages', () => {
         hidden: ['exceptions'],
     });
 
-    test('a stage is chosen as `@<stage ID>` in the timeline picker; an unknown one is the integrated canvas', async () => {
+    test('a stage is a place, `@<stage ID>`; an unknown one is the whole storming', async () => {
         const { stormings } = await viewService(await STAGED).refresh();
-        const choice = (scope: string) => ({ stormingId: undefined, level: 'big-picture' as const, timelines: { ConvenienceStoreIssuance: scope } });
+        const choice = (scope: string): StormingChoice => ({
+            stormingId: undefined,
+            level: 'big-picture',
+            timelines: { ConvenienceStoreIssuance: scope },
+            flow: 'all',
+        });
         expect(shownStorming(stormings, choice(stageChoice('Issuance')))?.options).toEqual({ level: 'big-picture', stageId: 'Issuance' });
-        expect(shownStorming(stormings, choice('PinLockedBranch'))?.options).toEqual({ level: 'big-picture', timelineId: 'PinLockedBranch' });
         expect(shownStorming(stormings, choice('@Nowhere'))?.options).toEqual({ level: 'big-picture' });
     });
 
-    test('「例外を表示」 off hides the exceptions of the integrated canvas and a stage, never of a timeline’s view', async () => {
+    test('an earlier version’s state is read as a place and a flow', async () => {
         const staged = (await viewService(await STAGED).refresh()).stormings;
         const plain = (await viewService().refresh()).stormings;
-        expect(shownStorming(staged, off())?.options).toEqual({ level: 'big-picture', hidden: ['exceptions'] });
-        expect(shownStorming(staged, off(stageChoice('Issuance')))?.options).toEqual({ level: 'big-picture', stageId: 'Issuance', hidden: ['exceptions'] });
-        // as an earlier version kept it
+        // 「例外を表示」 off: the main flows only, on the whole storming and a stage (of a storming with exceptions)
+        expect(shownStorming(staged, off())).toMatchObject({ flow: 'main', options: { level: 'big-picture', flow: 'main' } });
+        expect(shownStorming(staged, off(stageChoice('Issuance')))?.options).toEqual({ level: 'big-picture', stageId: 'Issuance', flow: 'main' });
         const { hidden: _, ...legacy } = { ...off(), exceptions: false };
-        expect(shownStorming(staged, legacy)?.options).toEqual({ level: 'big-picture', hidden: ['exceptions'] });
-        expect(shownStorming(staged, off('PinLockedBranch'))?.options).toEqual({ level: 'big-picture', timelineId: 'PinLockedBranch' });
+        expect(shownStorming(staged, legacy)?.flow).toBe('main');
         expect(shownStorming(plain, off())?.options).toEqual({ level: 'big-picture' });
+        // an exception's timeline: its case at its stage; a main flow's: it alone
+        const old = (scope: string): StormingChoice => ({ stormingId: undefined, level: 'big-picture', timelines: { ConvenienceStoreIssuance: scope } });
+        expect(shownStorming(staged, old('PinLockedBranch'))).toMatchObject({
+            stageId: 'Issuance',
+            flow: { exception: 'PinLockedBranch' },
+            options: { level: 'big-picture', stageId: 'Issuance' },
+        });
+        expect(shownStorming(staged, old('IssuanceFlow'))).toMatchObject({
+            stageId: 'Issuance',
+            flow: { main: 'IssuanceFlow' },
+            options: { level: 'big-picture', timelineId: 'IssuanceFlow' },
+        });
+        // a flow written since: the timeline is only the place
+        expect(shownStorming(staged, { ...old('PinLockedBranch'), flow: 'main' })).toMatchObject({ stageId: 'Issuance', flow: 'main' });
+        // written again, in the new words
+        expect(chooseFlow(staged, off(), 'all')).toEqual({ stormingId: 'ConvenienceStoreIssuance', level: 'big-picture', timelines: {}, flow: 'all' });
     });
 
-    test('「例外を表示」 is in the 絞り込み, not the toolbar’s subject: only with exceptions and not on one timeline; hidden, it counts one, and clearing shows them', async () => {
+    test('the 絞り込み has no exceptions: the flow is beside the breadcrumb; 「すべて解除」 leaves the flow', async () => {
         const staged = (await viewService(await STAGED).refresh()).stormings;
-        const plain = (await viewService().refresh()).stormings;
         const render = (node: ReactNode): string => renderToStaticMarkup(<I18nProvider lang="ja">{node}</I18nProvider>);
-        const filter = (stormings: typeof staged, choice: StormingChoice): string =>
-            render(<StormingFilter stormings={stormings} choice={choice} onChange={() => {}} />);
-        expect(render(<StormingToolbar stormings={staged} choice={off()} mode="label" onChange={() => {}} />)).not.toContain('例外を表示');
-        expect(filter(staged, off())).toContain('aria-label="絞り込み（1 件適用中）"');
-        expect(filter(staged, off())).toContain('<span class="filter-count">1</span>');
-        expect(filter(staged, clearStormingFilter(off()))).toContain('aria-label="絞り込み"');
-        expect(filter(staged, clearStormingFilter(off()))).not.toContain('filter-count');
-        expect(filter(staged, off())).not.toContain('解決済みを表示');
-        expect(filter(staged, off('PinLockedBranch'))).toBe('');
-        expect(filter(plain, off())).toBe('');
-        expect(shownStorming(staged, clearStormingFilter(off()))?.options).toEqual({ level: 'big-picture' });
+        const filter = (choice: StormingChoice): string => render(<StormingFilter stormings={staged} choice={choice} onChange={() => {}} />);
+        // nothing to hide in it (no resolved hotspot): no button at all
+        expect(filter(off())).toBe('');
+        const bar = render(<StormingToolbar stormings={staged} choice={off()} mode="label" onChange={() => {}} />);
+        expect(bar).not.toContain('例外を表示');
+        expect(bar).not.toContain('例外を含む');
+        expect(bar).toContain('role="group" aria-label="流れ"');
+        expect(shownStorming(staged, clearStormingFilter(off()))?.flow).toBe('main');
+        expect(clearStormingFilter(withHidden(off(), 'resolvedHotspots', true))).toEqual(off());
     });
 
     test('the detail of a stage: the stage it comes after, its main flow, its exceptions (icons), and the way to its view', async () => {
@@ -298,48 +321,162 @@ describe('a storming with stages', () => {
     });
 });
 
-describe('what the 絞り込み hides, and moving to what it hides', () => {
+describe('the place and the flow (ADR 0032 §11)', () => {
+    // 配車: two stages, the second with two main flows; 注文: no stages and no exceptions, two main flows; 返品: one flow
+    const TEXT = `storming D "配車" {
+  event Req "依頼を受け付けた"
+  event Rej "取込に失敗した"
+  event Cancel "依頼が取り消された"
+  event Alloc "配車を組んだ"
+  event AllocFail "自動配車できなかった"
+  event Assign "担当を割り当てた"
+  event Route "ルートを計算した"
+  event Collect "回収した"
+  stage Intake "受付" {
+    timeline IntakeMain "通常" { Req }
+    exception IntakeErr "取込エラー" { Req Rej }
+    exception IntakeCancel "取消" { Req Cancel }
+  }
+  stage Allocation "配車" after Intake {
+    timeline AllocMain "通常" { Alloc Assign Route }
+    timeline AllocCollect "回収" { Assign Collect }
+    exception AllocFailed "失敗" { Alloc AllocFail then Assign }
+  }
+}
+storming O "注文" {
+  event Ordered "注文を受けた"
+  event Paid "支払を受けた"
+  event Shipped "出荷した"
+  timeline Normal "通常" { Ordered Paid Shipped }
+  timeline Quick "即時" { Ordered Shipped }
+}
+storming N "返品" {
+  event Asked "返品を受け付けた"
+  timeline Only "通常" { Asked }
+}`;
+    const start: StormingChoice = { stormingId: 'D', level: 'big-picture', timelines: {} };
+    const render = (node: ReactNode): string => renderToStaticMarkup(<I18nProvider lang="ja">{node}</I18nProvider>);
+    const flowOf = (stormings: Parameters<typeof shownStorming>[0], c: StormingChoice): unknown => {
+        const shown = shownStorming(stormings, c);
+        return { place: shown?.stageId ?? '', flow: shown?.flow };
+    };
+    /** The flow switch's choices as they read, the chosen ones in brackets. */
+    const switchOf = (html: string): string[] =>
+        [...html.matchAll(/<button([^>]*)>(.*?)<\/button>/g)].map(([, attrs, text]) => {
+            const words = text!.replace(/<[^>]+>/g, '').trim();
+            return /class="[^"]*\bactive\b/.test(attrs!) ? `[${words}]` : words;
+        });
+    const bar = (stormings: Parameters<typeof shownStorming>[0], c: StormingChoice): string[] =>
+        switchOf(render(<FlowSwitch stormings={stormings} choice={c} mode="label" onChange={() => {}} />));
+
+    test('the flow’s changes, as the preview’s: the place kept, one exception or one main flow chosen, a storming again with every flow', async () => {
+        const { stormings } = await viewService(TEXT).refresh();
+        expect(flowOf(stormings, start)).toEqual({ place: '', flow: 'all' });
+        const main = chooseFlow(stormings, start, 'main');
+        expect(flowOf(stormings, main)).toEqual({ place: '', flow: 'main' });
+        expect(shownStorming(stormings, main)?.options).toEqual({ level: 'big-picture', flow: 'main' });
+        // an exception on the whole storming: its case there
+        const failed = chooseFlow(stormings, main, { exception: 'AllocFailed' });
+        expect(flowOf(stormings, failed)).toEqual({ place: '', flow: { exception: 'AllocFailed' } });
+        expect(shownStorming(stormings, failed)?.options).toEqual({ level: 'big-picture' });
+        // one main flow: drawn alone, the place its stage
+        const collect = chooseFlow(stormings, failed, { main: 'AllocCollect' });
+        expect(flowOf(stormings, collect)).toEqual({ place: 'Allocation', flow: { main: 'AllocCollect' } });
+        expect(shownStorming(stormings, collect)?.options).toEqual({ level: 'big-picture', timelineId: 'AllocCollect' });
+        expect(flowOf(stormings, chooseFlow(stormings, collect, 'all'))).toEqual({ place: 'Allocation', flow: 'all' });
+        // another place: the exception kept when it is there, else every flow; one main flow is the main flows
+        expect(flowOf(stormings, choosePlace(stormings, failed, stageChoice('Allocation')))).toEqual({
+            place: 'Allocation',
+            flow: { exception: 'AllocFailed' },
+        });
+        expect(flowOf(stormings, choosePlace(stormings, failed, stageChoice('Intake')))).toEqual({ place: 'Intake', flow: 'all' });
+        expect(flowOf(stormings, choosePlace(stormings, collect, stageChoice('Intake')))).toEqual({ place: 'Intake', flow: 'main' });
+        // another storming: every flow
+        expect(flowOf(stormings, chooseStorming(main, 'O'))).toEqual({ place: '', flow: 'all' });
+        // the level is another axis
+        expect(shownStorming(stormings, { ...failed, level: 'design-level' })?.flow).toEqual({ exception: 'AllocFailed' });
+    });
+
+    test('the switch: 主な流れ (▾ where there are several), 例外も, 例外 ▾; 主な流れ ▾ alone without exceptions; nothing with one flow', async () => {
+        const { stormings } = await viewService(TEXT).refresh();
+        expect(bar(stormings, start)).toEqual(['主な流れ', '▾', '[例外も]', '例外▾']);
+        expect(bar(stormings, chooseFlow(stormings, start, 'main'))).toEqual(['[主な流れ]', '[▾]', '例外も', '例外▾']);
+        expect(bar(stormings, chooseFlow(stormings, start, { exception: 'IntakeCancel' }))).toEqual(['主な流れ', '▾', '例外も', '[例外: 取消▾]']);
+        expect(bar(stormings, chooseFlow(stormings, start, { main: 'AllocCollect' }))).toEqual(['[主な流れ: 回収]', '[▾]', '例外も', '例外▾']);
+        // a stage with one main flow: no ▾ to choose one
+        expect(bar(stormings, choosePlace(stormings, start, stageChoice('Intake')))).toEqual(['主な流れ', '[例外も]', '例外▾']);
+        // no exceptions, two main flows: 主な流れ ▾ only
+        expect(bar(stormings, chooseStorming(start, 'O'))).toEqual(['主な流れ▾']);
+        expect(bar(stormings, chooseFlow(stormings, chooseStorming(start, 'O'), { main: 'Quick' }))).toEqual(['[主な流れ: 即時▾]']);
+        expect(bar(stormings, chooseStorming(start, 'N'))).toEqual([]);
+        // the place is the breadcrumb: the storming › its stage, すべて the whole; no stage picker without stages
+        const crumbs = render(<StormingToolbar stormings={stormings} choice={start} mode="label" onChange={() => {}} />);
+        expect(crumbs).toContain('aria-label="ステージ: すべて"');
+        expect(crumbs).not.toContain('（例外を含む）');
+        expect(render(<StormingToolbar stormings={stormings} choice={chooseStorming(start, 'O')} mode="label" onChange={() => {}} />)).not.toContain(
+            'ステージ',
+        );
+    });
+
+    test('a case is drawn from the layout of every flow: the other exceptions left out where they stood', async () => {
+        const { stormings } = await viewService(TEXT).refresh();
+        const at = (c: StormingChoice) => stormingGraph(stormings, c)!.graph;
+        const cancel = chooseFlow(stormings, start, { exception: 'IntakeCancel' });
+        expect(at(cancel)).toBe(at(start));
+        const drawn = drawnAs(stormings, cancel, at(cancel));
+        const events = (g: typeof drawn): string[] => g.nodes.filter((n) => n.kind === 'esEvent').map((n) => n.elementId.split('/')[2]!);
+        expect(events(drawn)).not.toContain('Rej');
+        expect(events(drawn)).not.toContain('AllocFail');
+        expect(events(drawn)).toContain('Cancel');
+        expect(drawn.nodeLayout).toBe(at(start).nodeLayout);
+        // every flow: as laid out
+        expect(drawnAs(stormings, start, at(start))).toBe(at(start));
+    });
+});
+
+describe('what the 絞り込み hides, and moving to what it does not draw', () => {
     const TEXT = `storming R "R" {
   event Placed "注文された"
   event Paid "支払われた"
   event Failed "支払いに失敗した"
+  event Late "遅れた"
   hotspot Currency "通貨は？" { on Paid status resolved resolution "円だけ" }
   hotspot Retry "再試行は？" { on Failed }
   hotspot Notice "失敗の知らせ方は？" { on Failed status resolved resolution "メールで" }
   hotspot Closing "締めは？" { status resolved resolution "毎月末" }
   timeline Main "通常" { Placed Paid }
   exception Failure "失敗" { Placed Failed }
+  exception Delay "遅延" { Placed Late }
 }`;
-    const choice = (hidden?: Hideable[], timeline?: string): StormingChoice => ({
+    const choice = (hidden?: Hideable[], flow?: StormingChoice['flow']): StormingChoice => ({
         stormingId: 'R',
         level: 'big-picture',
-        timelines: timeline ? { R: timeline } : {},
+        timelines: {},
+        ...(flow && { flow }),
         ...(hidden && { hidden }),
     });
     const render = (node: ReactNode): string => renderToStaticMarkup(<I18nProvider lang="ja">{node}</I18nProvider>);
 
-    test('「解決済みを表示」 is in the 絞り込み of every view of a storming with a resolved hotspot, each kind hidden counting one', async () => {
+    test('「解決済みを表示」 is the 絞り込み’s only kind, in every view of a storming with a resolved hotspot', async () => {
         const { stormings } = await viewService(TEXT).refresh();
         const filter = (c: StormingChoice): string => render(<StormingFilter stormings={stormings} choice={c} onChange={() => {}} />);
         const r = stormings.find((x) => x.id === 'R')!;
-        expect(hideableIn(r, {})).toEqual(['exceptions', 'resolvedHotspots']);
+        expect(hideableIn(r)).toEqual(['resolvedHotspots']);
         expect(filter(choice())).toContain('aria-label="絞り込み"');
         expect(filter(choice())).not.toContain('filter-count');
+        expect(filter(choice())).not.toContain('例外');
         expect(filter(choice(['resolvedHotspots']))).toContain('<span class="filter-count">1</span>');
-        expect(filter(choice(['exceptions', 'resolvedHotspots']))).toContain('<span class="filter-count">2</span>');
-        // a timeline's view: its exceptions are what it shows; the resolved hotspots can still be hidden
-        expect(hideableIn(r, { timelineId: 'Failure' })).toEqual(['resolvedHotspots']);
-        expect(filter(choice(['exceptions', 'resolvedHotspots'], 'Failure'))).toContain('<span class="filter-count">1</span>');
-        expect(shownHidden(stormings, choice(['exceptions', 'resolvedHotspots'], 'Failure'))).toEqual(new Set(['resolvedHotspots']));
-        // without a resolved hotspot, no 「解決済みを表示」 (nor a 絞り込み, without exceptions either)
+        expect(filter(choice(['resolvedHotspots'], { exception: 'Failure' }))).toContain('<span class="filter-count">1</span>');
+        // the flow is not a narrowing: the main flows only count nothing
+        expect(filter(choice(undefined, 'main'))).not.toContain('filter-count');
+        // without a resolved hotspot, no 絞り込み
         const plain = (await viewService().refresh()).stormings[0]!;
-        expect(hideableIn(plain, {})).toEqual([]);
+        expect(hideableIn(plain)).toEqual([]);
     });
 
     test('hiding the resolved hotspots is the page’s own: the same view, the same layout, and nothing moves', async () => {
         const { stormings } = await viewService(TEXT).refresh();
         expect(shownStorming(stormings, choice(['resolvedHotspots']))?.options).toEqual({ level: 'big-picture' });
-        expect(shownStorming(stormings, choice(['exceptions', 'resolvedHotspots']))?.options).toEqual({ level: 'big-picture', hidden: ['exceptions'] });
         const graph = stormingGraph(stormings, choice())!.graph;
         expect(stormingGraph(stormings, choice(['resolvedHotspots']))!.graph).toBe(graph);
         const drawn = hideInDrawing(graph, shownHidden(stormings, choice(['resolvedHotspots'])));
@@ -353,22 +490,32 @@ describe('what the 絞り込み hides, and moving to what it hides', () => {
         expect(drawn.nodeLayout).toBe(graph.nodeLayout);
     });
 
-    test('moving to a hidden sticky shows what hides it first, whatever the kind: one kind when it is enough, else all', async () => {
+    test('moving to a sticky not drawn: the flow first (another case, else every flow), then what the 絞り込み hides', async () => {
         const { stormings } = await viewService(TEXT).refresh();
-        const both = choice(['exceptions', 'resolvedHotspots']);
-        const reveal = (id: string): StormingChoice => revealIn(stormings, both, `es/R/${id}`);
-        expect(reveal('Placed')).toBe(both);
-        // an exception's event, an open hotspot on it: the exceptions shown again
-        expect(reveal('Failed').hidden).toEqual(['resolvedHotspots']);
-        expect(reveal('Retry').hidden).toEqual(['resolvedHotspots']);
-        // a resolved hotspot on a sticky drawn, or on none: the resolved hotspots shown again
-        expect(reveal('Currency').hidden).toEqual(['exceptions']);
-        expect(reveal('Closing').hidden).toEqual(['exceptions']);
+        const main = choice(['resolvedHotspots'], 'main');
+        const reveal = (c: StormingChoice, id: string): StormingChoice => revealIn(stormings, c, `es/R/${id}`);
+        expect(reveal(main, 'Placed')).toBe(main);
+        // an exception's event, an open hotspot on it: every flow
+        expect(reveal(main, 'Failed')).toMatchObject({ flow: 'all', hidden: ['resolvedHotspots'] });
+        expect(reveal(main, 'Retry')).toMatchObject({ flow: 'all', hidden: ['resolvedHotspots'] });
+        // a resolved hotspot on a sticky drawn, or on none: the resolved hotspots shown again, the flow kept
+        expect(reveal(main, 'Currency')).toMatchObject({ flow: 'main' });
+        expect(reveal(main, 'Currency').hidden).toBeUndefined();
+        expect(reveal(main, 'Closing').flow).toBe('main');
         // a resolved hotspot on an exception's event: both
-        expect(reveal('Notice').hidden).toBeUndefined();
+        expect(reveal(main, 'Notice')).toMatchObject({ flow: 'all' });
+        expect(reveal(main, 'Notice').hidden).toBeUndefined();
+        // in a case, another exception's sticky: that exception's case
+        expect(reveal(choice(undefined, { exception: 'Failure' }), 'Late').flow).toEqual({ exception: 'Delay' });
         // an earlier version's choice too
         const { hidden: _, ...legacy } = { ...choice(), exceptions: false };
-        expect(revealIn(stormings, legacy, 'es/R/Failed')).toEqual(choice());
+        expect(shownStorming(stormings, revealIn(stormings, legacy, 'es/R/Failed'))?.flow).toBe('all');
+    });
+
+    test('a row or a link opens a timeline’s view: an exception as its case', async () => {
+        const { stormings } = await viewService(TEXT).refresh();
+        expect(shownStorming(stormings, chooseScope(stormings, choice(), 'R', 'Failure'))?.flow).toEqual({ exception: 'Failure' });
+        expect(shownStorming(stormings, chooseScope(stormings, choice(), 'R', 'Main'))?.options).toEqual({ level: 'big-picture', timelineId: 'Main' });
     });
 });
 
