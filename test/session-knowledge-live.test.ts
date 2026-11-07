@@ -196,4 +196,68 @@ describe('the Live View’s knowledge', () => {
         expect(await until('the redaction', async () => ((await body()) === '（墨消し）' ? true : undefined))).toBe(true);
         expect((await post('/items/kn_00000001/restore')).status).toBe(404);
     });
+    test('retires with undo, lists the proposals to retire, and approves or dismisses them, any participant', async () => {
+        const root = await mkdtemp(path.join(tmpdir(), 'domaintrail-knowledge-retire-'));
+        dirs.push(root);
+        await writeFile(path.join(root, 'shop.dt'), 'context Shop {\n  id OrderId: UUID\n}\n');
+        const store = createFilesKnowledgeStore({ dir: path.join(root, 'knowledge'), project, stateDir: path.join(root, 'state') });
+        const server = await startSessionServer({ root, debounceMs: 30, session: sessionConfig, knowledgeStore: store });
+        cleanups.push(() => server.stop());
+        await server.ready;
+        const joined = await fetch(`${server.url}api/session/join`, { method: 'POST', headers: json, body: JSON.stringify({ name: 'Ada' }) });
+        const cookie = (joined.headers.get('set-cookie') ?? '').split(';')[0];
+        const api = (p: string, init: { method?: string; body?: BodyInit } = {}): Promise<Response> =>
+            fetch(`${server.url}api/session/knowledge${p}`, { ...init, headers: { cookie, ...(init.body !== undefined && json) } });
+        const post = (p: string, body: unknown = {}): Promise<Response> => api(p, { method: 'POST', body: JSON.stringify(body) });
+        const source = { session: 'earlier', message: 'm1', at: new Date().toISOString(), quote: '締めは前日17時' };
+        await store.applyExtraction(
+            project,
+            wire.extraction(
+                {
+                    by: { session: 'earlier', number: 1 },
+                    operations: [
+                        { kind: 'Add', id: 'kn_00000001', content: content('締めは前日17時', ['Shop.Placed']), sources: [source] },
+                        { kind: 'Add', id: 'kn_00000002', content: content('締めは当日9時', ['Shop.Placed']), sources: [{ ...source, message: 'm2' }] },
+                    ],
+                },
+                'test',
+            ),
+        );
+        const listed = async (q = ''): Promise<string[]> =>
+            wire
+                .page(wire.liveItem)(await (await api(q)).json(), 'page')
+                .items.map((i) => i.id);
+
+        // 廃止する, with its reason and the newer item; hidden from the list and the dot; 元に戻す
+        const retired = await post('/items/kn_00000001/retire', { reason: 'replaced', replacedBy: 'kn_00000002' });
+        expect(retired.status).toBe(200);
+        expect(wire.liveItem(await retired.json(), 'item').retirement).toMatchObject({ reason: 'replaced', replacedBy: 'kn_00000002', by: 'guest:Ada' });
+        expect(await listed()).toEqual(['kn_00000002']);
+        expect((await listed('?retired=include')).sort()).toEqual(['kn_00000001', 'kn_00000002']);
+        expect((await post('/items/kn_00000001/retire', {})).status).toBe(409);
+        expect((await post('/items/kn_00000001/unretire')).status).toBe(200);
+        expect((await listed()).sort()).toEqual(['kn_00000001', 'kn_00000002']);
+        expect((await post('/items/kn_00000002/retire', { reason: 'stale' })).status).toBe(400);
+
+        // the review proposes; the list of 廃止の候補 shows it; a participant approves, another proposal is dismissed
+        const proposed = await store.propose(project, {
+            item: wire.itemId('kn_00000001', 't'),
+            action: 'retire',
+            reason: 'obsolete',
+            explanation: 'no longer done' as Knowledge.Reason,
+            evidence: [
+                { kind: 'Said', session: 'earlier' as Knowledge.SessionRef, message: 'm9' as Knowledge.MessageRef, quote: 'もうやらない' as Knowledge.Quote },
+            ],
+            proposedBy: { kind: 'Review', review: 'r1' as Knowledge.ReviewRef },
+        });
+        if (!proposed.ok) throw new Error('not proposed');
+        const proposals = wire.openProposals(await (await api('/proposals')).json(), 'proposals');
+        expect(proposals.map((p) => p.id)).toEqual([proposed.value.id]);
+        const approved = await post(`/proposals/${proposed.value.id}/approve`);
+        expect(approved.status).toBe(200);
+        expect(wire.approvedProposal(await approved.json(), 'body').item.retirement?.by).toBe('guest:Ada' as Knowledge.UserName);
+        expect((await post(`/proposals/${proposed.value.id}/dismiss`)).status).toBe(409);
+        expect(await listed()).toEqual(['kn_00000002']);
+        expect(wire.openProposals(await (await api('/proposals')).json(), 'proposals')).toEqual([]);
+    });
 });

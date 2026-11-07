@@ -136,6 +136,8 @@ export interface McpServerStartOptions {
     approval: SettingsApproval | undefined;
     /** Where it says what goes wrong (stderr: stdout is the protocol's). */
     log: (line: string) => void;
+    /** Never give a retired item (`--without-retired`: the agent's answerer and runner). */
+    withoutRetired?: boolean;
 }
 
 /** What `dt publish` asks. */

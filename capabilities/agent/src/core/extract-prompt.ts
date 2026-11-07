@@ -17,6 +17,16 @@ import { EXTRACTION_LIMITS, type ExtractionInput, type GateInput, HOTSPOT_NAME_M
 /** JSON that cannot close the block it is in: `<` and `>` are escaped (JSON reads them back unchanged). */
 const blockJson = (value: unknown): string => JSON.stringify(value, null, 2).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
 
+/**
+ * What every AI that proposes to retire an item is told (the extractor here, the review of a run): when to propose,
+ * and never to retire an AS-IS item for differing from the TO-BE (ADR 0031, section 12). The store refuses such a
+ * proposal too when its evidence is only the TO-BE (`admitProposal`).
+ */
+export const RETIREMENT_PROPOSAL_RULES = `Propose only when the talk or a decision clearly says so, never on a hunch. An item
+\`when\` \`as_is\` tells how things are done today: a TO-BE that differs (a sticky drawn otherwise, a decision about how
+it shall be) does not make it wrong — never propose to retire one for that; only when the talk says that today is not
+so.`;
+
 /** The extractor's instructions: what knowledge is, the labels, the operations, the guards' rules, the reply. Never changes per job. */
 export function extractorInstructions(): string {
     return `You are the extractor of a DomainTrail session. People model a business together — Event Storming stickies and a
@@ -85,10 +95,7 @@ Compare each finding of the new messages with the items, and decide one of:
   \`retirement\`: \`replaced\` (a newer item says it better: \`replacedBy\`, that item's key), \`obsolete\` (it was true
   and is not any more) or \`wrong\` (it never was); and the evidence: \`sources\` (the messages that show it, with
   quotes) and/or \`decisions\` (the keys of items of kind \`decision\` that overturn it). A person approves or dismisses
-  it; nothing is retired by you. Propose only when the talk or a decision clearly says so, never on a hunch. An item
-  \`when\` \`as_is\` tells how things are done today: a TO-BE that differs (a sticky drawn otherwise, a decision about how
-  it shall be) does not make it wrong — never propose to retire one for that; only when the talk says that today is not
-  so.
+  it; nothing is retired by you. ${RETIREMENT_PROPOSAL_RULES.replace(/\n/g, '\n  ')}
 - \`unretire\`: the talk brings up anew, firmly, the finding of a retired item (\`item\`: its key \`r…\`). Do not add it
   again: propose to undo its retirement, with the \`sources\` that bring it up.
 

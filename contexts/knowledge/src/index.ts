@@ -166,6 +166,7 @@ export {
     type SessionMessage,
     type SessionTalk,
 } from './application/extraction.js';
+export { proposeRetirements, readRetirementCandidates, type CandidateProblem, type ProposalOutcome } from './application/retirement-proposals.js';
 export { createRedactionSync, type RedactionCursors, type RedactionSync, type RedactionSyncDeps } from './application/redaction-sync.js';
 export { createExtractionScheduler, type ExtractionScheduler, type ExtractionSchedulerDeps, type Timers } from './application/extraction-scheduler.js';
 export { loadExtractionSwitch, type ExtractionSwitch, type ExtractionSwitches } from './application/extraction-switch.js';

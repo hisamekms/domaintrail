@@ -9,7 +9,15 @@ export { startSubscriber, type Subscriber, type SubscriberEnd, type SubscriberOp
 export { startAnswerer, type Answerer, type AnswererDeps, type AnswererEnd, type AnswererOptions } from './core/answerer.js';
 export { buildAnswerPrompt, buildProposePrompt, buildTriagePrompt, type DiagnosticsScope } from './core/answer-prompt.js';
 export { startExtractor, type Extractor, type ExtractorDeps, type ExtractorEnd, type ExtractorOptions } from './core/extractor.js';
-export { buildExtractionPrompt, buildGatePrompt, extractorContext, extractorInstructions, gateContext, gateInstructions } from './core/extract-prompt.js';
+export {
+    buildExtractionPrompt,
+    buildGatePrompt,
+    extractorContext,
+    extractorInstructions,
+    gateContext,
+    gateInstructions,
+    RETIREMENT_PROPOSAL_RULES,
+} from './core/extract-prompt.js';
 // the ways of working the prompts give, which the app takes from the guide it embeds
 export type { Practice } from './core/prompt.js';
 export {

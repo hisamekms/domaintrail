@@ -4,6 +4,10 @@
 //
 // Only dt can turn a `.dt` element into the stickies of the stormings that `ref` it, so the tools read the workspace's
 // `.dtes` on every call (`stickies`): the stormings may have changed since the server started.
+//
+// A retired item (廃止, ADR 0031 section 12) is left out unless `include_retired` asks for it, and then marked with its
+// reason and the item that replaced it. The agent's answerer and runner start `dt mcp --without-retired`: the option is
+// not offered, and `knowledge_get` answers that a retired item is retired, without its text (`withoutRetired`).
 import { Knowledge, type KnowledgeStore } from '@domaintrail/knowledge';
 import { declarations, type NodeElementKind, type Storming } from '@domaintrail/storming';
 import type { McpTool, McpToolResult } from './protocol.js';
@@ -47,6 +51,8 @@ export interface KnowledgeToolsOptions {
     readonly access: KnowledgeAccess;
     /** The stickies of the workspace's stormings now. */
     readonly stickies: () => Promise<StickyIndex>;
+    /** Never give a retired item, nor offer `include_retired` (the agent's roles: `dt mcp --without-retired`). */
+    readonly withoutRetired?: boolean;
 }
 
 // ---- the labels -------------------------------------------------------------------------------------------------
@@ -99,10 +105,23 @@ function shortText(text: string): string {
     return t.length <= LIST_TEXT_CHARS ? t : `${t.slice(0, LIST_TEXT_CHARS).trimEnd()}… (cut; knowledge_get has all of it)`;
 }
 
+const RETIREMENT_REASON: Readonly<Record<Knowledge.RetirementReason, string>> = {
+    replaced: 'replaced by a newer item',
+    obsolete: 'no longer holds',
+    wrong: 'wrong',
+};
+
+/** The line of a retired item: why, and what replaced it. Do not rely on it. */
+export function retiredLine(retirement: Knowledge.Retirement): string {
+    const why = retirement.reason ? RETIREMENT_REASON[retirement.reason] : 'no reason given';
+    return `RETIRED ${day(retirement.at)} (${why}${retirement.replacedBy ? `: read ${retirement.replacedBy} instead` : ''}): kept for the record; do not rely on it.`;
+}
+
 /** An item in a list: its ID and title, labels and date, the stickies it is about, its conflicts, and its text (cut). */
 export function itemSummary(item: Knowledge.LiveKnowledgeItem, stickies: StickyIndex): string {
     return [
         `## ${item.id} — ${item.content.title}`,
+        ...(item.retirement ? [retiredLine(item.retirement)] : []),
         `${labelsLine(item.content.labels)} (${dates(item)})`,
         ...(item.content.about.length ? [`about: ${item.content.about.map((a) => stickyText(a, stickies)).join(', ')}`] : []),
         ...(item.conflictsWith.length ? [`conflicts with: ${item.conflictsWith.join(', ')} (contradicts it; read both)`] : []),
@@ -202,6 +221,18 @@ function itemId(args: Readonly<Record<string, unknown>>): Knowledge.KnowledgeIte
     return made.value;
 }
 
+function includeRetired(args: Readonly<Record<string, unknown>>): boolean {
+    const v = args.include_retired;
+    if (v === undefined || v === null) return false;
+    if (typeof v !== 'boolean') throw new BadInput("'include_retired' must be true or false.");
+    return v;
+}
+
+const INCLUDE_RETIRED_SCHEMA = {
+    type: 'boolean',
+    description: 'Also the retired items (no longer true, wrong or replaced), marked as retired (default false).',
+} as const;
+
 function limitOf(args: Readonly<Record<string, unknown>>): number {
     const v = args.limit;
     if (v === undefined || v === null) return DEFAULT_SEARCH_LIMIT;
@@ -237,6 +268,16 @@ export function knowledgeTools(options: KnowledgeToolsOptions): McpTool[] {
             }
         };
 
+    /** The input's `include_retired`, never offered nor taken without retired items. */
+    const retiredAsked = (args: Readonly<Record<string, unknown>>): boolean => {
+        if (options.withoutRetired) {
+            if (args.include_retired !== undefined) throw new BadInput("'include_retired' is not offered here.");
+            return false;
+        }
+        return includeRetired(args);
+    };
+    const retiredProperty = options.withoutRetired ? {} : { include_retired: INCLUDE_RETIRED_SCHEMA };
+
     return [
         {
             name: 'knowledge_for_element',
@@ -250,6 +291,7 @@ export function knowledgeTools(options: KnowledgeToolsOptions): McpTool[] {
                         type: 'string',
                         description: "A sticky 'Storming.LocalId', or a .dt element prefixed with 'dt:' (e.g. 'dt:Sales.Order.confirm').",
                     },
+                    ...retiredProperty,
                 },
                 required: ['element'],
                 additionalProperties: false,
@@ -257,10 +299,11 @@ export function knowledgeTools(options: KnowledgeToolsOptions): McpTool[] {
             annotations: { title: 'Knowledge about an element', ...READ_ONLY },
             call: withStore(async (store, project, args) => {
                 const element = text(args, 'element', true);
+                const retired = retiredAsked(args);
                 const stickies = await options.stickies();
                 const resolved = resolveElement(element, stickies);
                 if (resolved.stickies.length === 0) return { text: resolved.note };
-                const items = await store.about(project, resolved.stickies);
+                const items = retired ? await aboutWithRetired(store, project, resolved.stickies) : await store.about(project, resolved.stickies);
                 if (items.length === 0) return { text: `${resolved.note}\nNo knowledge about it yet.` };
                 return { text: `${resolved.note}\n${items.length} item(s), newest first.\n\n${itemList(items, stickies)}` };
             }),
@@ -291,6 +334,7 @@ export function knowledgeTools(options: KnowledgeToolsOptions): McpTool[] {
                         maximum: MAX_SEARCH_LIMIT,
                         description: `At most this many items (default ${DEFAULT_SEARCH_LIMIT}).`,
                     },
+                    ...retiredProperty,
                 },
                 additionalProperties: false,
             },
@@ -303,6 +347,7 @@ export function knowledgeTools(options: KnowledgeToolsOptions): McpTool[] {
                 const origin = values(args, 'origin', ORIGINS);
                 const perspectiveText = text(args, 'perspective');
                 const limit = limitOf(args);
+                const retired = retiredAsked(args);
                 let perspective: Knowledge.Perspective | undefined;
                 if (perspectiveText !== undefined) {
                     const made = Knowledge.makePerspective(perspectiveText);
@@ -325,6 +370,7 @@ export function knowledgeTools(options: KnowledgeToolsOptions): McpTool[] {
                     ...(kind && { kind }),
                     ...(origin && { origin }),
                     ...(perspective !== undefined && { perspective }),
+                    ...(retired && { retired: 'include' as const }),
                     limit,
                 });
                 const head = [
@@ -357,12 +403,25 @@ export function knowledgeTools(options: KnowledgeToolsOptions): McpTool[] {
                 if (history !== undefined && typeof history !== 'boolean') throw new BadInput("'history' must be true or false.");
                 const found = await store.get(project, id, { history: history === true });
                 if (!found) return { text: `No knowledge item ${id}: the ID is wrong, or the item was deleted.`, isError: true };
+                if (found.item.retirement && options.withoutRetired)
+                    return { text: `Knowledge item ${id} is retired (no longer true, wrong or replaced): it is not to be relied on.`, isError: true };
                 const stickies = await options.stickies();
                 const conflicts = await Promise.all(found.item.conflictsWith.map(async (other) => ({ other, item: (await store.get(project, other))?.item })));
                 return { text: itemDetail(found.item, stickies, conflicts, history === true ? found.history : undefined) };
             }),
         },
     ];
+}
+
+/** The items about stickies, retired ones too: the live ones (`about`) and the retired ones (a search), newest first. */
+async function aboutWithRetired(
+    store: KnowledgeStore,
+    project: Knowledge.ProjectName,
+    stickies: readonly Knowledge.StickyRef[],
+): Promise<Knowledge.LiveKnowledgeItem[]> {
+    const live = await store.about(project, stickies);
+    const retired = (await store.search(project, { about: stickies.slice(0, 50), retired: 'only', limit: MAX_SEARCH_LIMIT })).items;
+    return [...live, ...retired].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 }
 
 /** An item whole (`knowledge_get`). */
@@ -378,6 +437,7 @@ export function itemDetail(
         `kind: ${labels.kind} (${KIND[labels.kind]}) · when: ${labels.when} (${WHEN[labels.when]}) · origin: ${labels.origin} (${ORIGIN[labels.origin]})${labels.perspective !== undefined ? ` · perspective: ${labels.perspective}` : ''}`,
         `version ${item.version} · created ${minute(item.createdAt)}${item.createdIn !== undefined ? ` in session ${item.createdIn}` : ''} · updated ${minute(item.updatedAt)}`,
         `about: ${item.content.about.length ? item.content.about.map((a) => stickyText(a, stickies)).join(', ') : '(no sticky)'}`,
+        ...(item.retirement ? [retiredLine(item.retirement)] : []),
         ...conflicts.map(({ other, item: o }) => `conflicts with ${other}: ${o ? o.content.title : '(deleted)'}`),
         '',
         item.content.text.trim(),
