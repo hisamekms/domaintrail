@@ -3250,7 +3250,7 @@ figures of a document or a site built in CI. `-o <file>` is required (`-o -` for
 ```sh
 dt export svg --storming ConvenienceStoreIssuance -o all.svg
 dt export svg --storming ConvenienceStoreIssuance --level design --legend -o design.svg
-dt export svg --storming ConvenienceStoreIssuance --timeline PinForgottenBranch --theme dark --lang en -o pin.svg
+dt export svg --storming ConvenienceStoreIssuance --theme dark --lang en -o all-en.svg
 dt export svg --storming ConvenienceStoreIssuance --exceptions exclude --heading -o main-flows.svg
 dt export svg --storming OrderToCash --timeline PaymentRetry --level design -o retry.svg
 dt export svg --storming OrderToCash --level design --resolved-hotspots hide -o open-questions.svg
