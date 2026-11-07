@@ -218,7 +218,9 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   issues; commands converging on one event note through the same handler share one handler note before it (hovering
   its arrow names them); a command a policy
   issues has no issuer: the policy decides, and the read model it looks at goes to the policy (ADR 0032 §9), standing just
-  before it; an event that arrives `from`
+  before it, or to the actor applying the policy by hand (read model → actor → policy, ADR 0032 §12); when the read
+  model is fed by the event that triggers the policy, that path says the trigger and no event → policy line is drawn
+  beside it; an event that arrives `from`
   an external system has that system before it; a hotspot is stuck on top of the sticky it is `on` (an event, a
   command, a policy, …), never a step of the flow, and at Big Picture only one on an event is drawn. Where an event is
   drawn at several steps, the command before it, its copies and the policy after it are drawn at each step (ADR 0024,

@@ -2385,7 +2385,9 @@ selecting it keeps its two stickies in full view.
 Design Level reads left to right as Event Storming does (ADR 0032): read model → issuer (an actor or external system,
 stuck on top of its command when no read model leads to it) → command → handler (an aggregate or external system) →
 event → policy → the command it issues → … A read model goes to whoever looks at it to decide: a command's issuer, or a
-policy (read model → policy, the read model just before the policy). A command goes to its handler, which decides and emits
+policy (read model → policy, the read model just before the policy), or the actor applying a policy by hand (read model
+→ actor → policy). When that read model is fed by the event that triggers the policy, the path through it says the
+trigger, and no event → policy line is drawn beside it. A command goes to its handler, which decides and emits
 the command's events, so the `emits` arrows start at the handler; a command without `handledBy` emits them itself.
 At Design Level no line joins two events in time order where the placement shows it (the steps left to right): only an
 exception's branch and its `then` are drawn (Big Picture draws the time order). An issuer or handler an open hotspot

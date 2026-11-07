@@ -64,7 +64,9 @@ describe('the lines of a storming, as the canvas says them', () => {
   command Place "受け付ける" { by Clerk reads Board handledBy Order emits Placed }
   command Close "閉じる" { handledBy Order emits Done }
   command Ask "問い合わせる" { by Clerk emits Done }
+  command Notify "知らせる" { handledBy Bank emits Done }
   policy Settle "精算する" { on Paid reads Board issues Close by Clerk }
+  policy Inform "終わったら知らせる" { on Done reads Board issues Notify }
   hotspot Who "誰が処理する？" { on Ask }
   timeline T "通常" { Placed Paid Done }
 }
@@ -79,7 +81,7 @@ describe('the lines of a storming, as the canvas says them', () => {
         for (const words of [
             '「係」が「受け付ける」',
             '「係」は「一覧」を見て判断する',
-            '「精算する」は「一覧」を見て判断する',
+            '「終わったら知らせる」は「一覧」を見て判断する',
             '「受け付ける」を「注文」が受けて処理する',
             '「注文」が処理して「受け付けた」',
             '「受け付けた」で「一覧」が更新される',
@@ -91,11 +93,13 @@ describe('the lines of a storming, as the canvas says them', () => {
             '「問い合わせる」を誰が処理するかはまだ決まっていない',
         ])
             expect([...said]).toContain(words);
-        // a read model goes to whoever decides, never to a command (ADR 0032 §9)
+        // a read model goes to whoever decides, never to a command: the issuer, the actor applying a policy by hand, or
+        // else the policy (ADR 0032 §9)
         const reads = scene.edges.filter((e) => e.props.relation?.kind === 'looksAt');
         expect(reads.map((e) => scene.nodes.find((n) => n.id === e.target)?.props.label).sort((a, b) => String(a).localeCompare(String(b)))).toEqual([
             '係',
-            '精算する',
+            '係',
+            '終わったら知らせる',
         ]);
     });
 });

@@ -66,7 +66,7 @@
 | Command | `handledBy G` | Aggregate または External System | **1** | Command を受けて処理し、結果の Event を生むもの |
 | Command | `emits E` | Event | 1..N | 発生し得る結果（処理するものが生む）。必須・排他・全列挙ではない |
 | Policy | `on E` | Event | **1..N** | いずれかの Event を契機に Policy が評価され得る（OR） |
-| Policy | `reads R` | Read Model | 0..N | Policy が判断に見る情報（ADR 0032 §9）。描画は Read Model → Policy |
+| Policy | `reads R` | Read Model | 0..N | Policy が判断に見る情報（ADR 0032 §9）。描画は Read Model → Policy（`by` があれば Read Model → Actor → Policy。§12） |
 | Policy | `issues C` | Command | **1** | 発行し得る Command。実行を保証しない。2つ以上は S031 |
 | Event / Aggregate / Command | `ref ...` | `.dt` | **0..1** | 型の合う `.dt` シンボルへの明示対応。他の要素では禁止 |
 | Policy | `by A` | Actor | 0..N | 人が手で適用するルールのとき、その人（ADR 0032） |
@@ -83,7 +83,7 @@
 
 ### 3.3 `reads` の明確化【確定】
 
-`reads DeliveryDetails` は「判断する者が判断に DeliveryDetails の情報を使う」を意味し、判断する者の行に書く（ADR 0032 §9）。人・外部システムが出す Command では Command に書き（その `by` の全員の付箋へ描く）、Policy が出す Command では Policy に書く（Read Model → Policy の付箋へ描く。Policy が出す Command の `reads` は S030）。Policy に `by` があるときも Policy に書く（当てはめる人が見るもの）。データベースクエリ、Actor が読む UI の実装、Command Handler が読む依存関係を特定しない。複数可。Read Model に `.dt` で対応する型がないことはエラーにしない。
+`reads DeliveryDetails` は「判断する者が判断に DeliveryDetails の情報を使う」を意味し、判断する者の行に書く（ADR 0032 §9）。人・外部システムが出す Command では Command に書き（その `by` の全員の付箋へ描く）、Policy が出す Command では Policy に書く（Read Model → Policy の付箋へ描く。Policy が出す Command の `reads` は S030）。Policy に `by` があるときも Policy に書く（当てはめる人が見るもの。描画は Read Model → その Actor の付箋 → Policy。ADR 0032 §12）。データベースクエリ、Actor が読む UI の実装、Command Handler が読む依存関係を特定しない。複数可。Read Model に `.dt` で対応する型がないことはエラーにしない。
 
 ### 3.8 未決定の関係【確定（2026-11-06 追加、ADR 0032）】
 
@@ -302,7 +302,7 @@ type ViewOptions = {
 - 名前付き timeline の選択に応じて、その timeline の EventOccurrence と関連要素を抽出。
 - 統合キャンバスでは timeline に属さない Event や孤立した要素も表示。
 - **使われるごとに描く要素**【確定（2026-11-03 追加）】: Design Level では Actor / External System（Command の発行者、`by`）、Read Model（Command の `reads`）、処理するもの（Command の `handledBy`）を、そのビューで使う Command ごとに1枚ずつ、その Command の隣に描く（線は付箋と Command の間の短い1本。Aggregate からは、その Command の Event への `emits` も出る）。どの Command にも使われないものは従来どおり1枚。表示上の分割で、`.dtes` も意味的なグラフも変わらない。
-- **関係の描き方（ADR 0032）**【確定（2026-11-06 改訂）】: 前後の2項目の `actor` は `by`（発行者：Actor か External System）、`target` は `handledBy`（処理するもの：Aggregate か External System）に読み替える。Read Model の付箋はその Command の発行者の付箋へつなぐ（発行者のいない Policy の Command では Command へ）ので、Read Model に導かれる発行者は Command の上に貼らず、Read Model → 発行者 → Command と並ぶ。`handledBy` が External System のときも同じく処理するものの付箋から `emits` を描く。Read Model の `from` は Event → Read Model の点線の矢印、Event の `from` は External System の付箋（その Event の付箋ごとに1枚）→ Event の因果の線。Hotspot はどの付箋にも `on` でき、その付箋（の各コピー）の上に貼る。Big Picture では、Design Level の付箋に `on` する Hotspot は描かない。同じ Event の付箋に至る複数の Command が同じもの（同じ Aggregate、または同じ External System）に処理されるとき、処理するものはその Event の付箋の前に1枚だけ描き（各 Command → その1枚、その1枚 → Event は1本。その線は元の Command の `emits` すべてを表し、ホバーで Command を示す）、Event の付箋をまたいでは合わせない（別ステップの同じ Event には別々に描く）。処理するものが違えば合わせず、発行者は Command ごと。Command は共有しない Event のために自分の処理するものも持つ。グリッドでは合流する Command を隣り合わせ、その行の中央に置く。
+- **関係の描き方（ADR 0032）**【確定（2026-11-06 改訂）】: 前後の2項目の `actor` は `by`（発行者：Actor か External System）、`target` は `handledBy`（処理するもの：Aggregate か External System）に読み替える。Read Model の付箋はその Command の発行者の付箋へつなぐ（発行者のいない Policy の Command では Command へ）ので、Read Model に導かれる発行者は Command の上に貼らず、Read Model → 発行者 → Command と並ぶ。Policy の `reads` は Policy へつなぎ、Policy に `by` があればその Actor の付箋へつなぐ（Read Model → Actor → Policy。ADR 0032 §12、2026-11-07 改訂）。Policy が `on` する Event がその Read Model に `from` で反映されるときは、Event → Read Model →（Actor →）Policy がきっかけを表すので、その Event から Policy への線は描かない。`handledBy` が External System のときも同じく処理するものの付箋から `emits` を描く。Read Model の `from` は Event → Read Model の点線の矢印、Event の `from` は External System の付箋（その Event の付箋ごとに1枚）→ Event の因果の線。Hotspot はどの付箋にも `on` でき、その付箋（の各コピー）の上に貼る。Big Picture では、Design Level の付箋に `on` する Hotspot は描かない。同じ Event の付箋に至る複数の Command が同じもの（同じ Aggregate、または同じ External System）に処理されるとき、処理するものはその Event の付箋の前に1枚だけ描き（各 Command → その1枚、その1枚 → Event は1本。その線は元の Command の `emits` すべてを表し、ホバーで Command を示す）、Event の付箋をまたいでは合わせない（別ステップの同じ Event には別々に描く）。処理するものが違えば合わせず、発行者は Command ごと。Command は共有しない Event のために自分の処理するものも持つ。グリッドでは合流する Command を隣り合わせ、その行の中央に置く。
 - **Event Storming の文法で描く**【確定（2026-11-05 追加）】: Design Level は一般的な Event Storming の読み方で左→右に描く。Read Model → 発行者 → Command → 処理するもの → Event → Policy → Command …。`handledBy` のある Command は処理するものを経て Event に至る（Command → 処理するもの、処理するもの → Event。`emits` の意味的エッジのキーは変えない）。`handledBy` のない Command は Command → Event。Hotspot は `on` の付箋に貼る注記で、流れの1ステップにはしない（その Event の上に置く）。1つのビューで Event が複数のステップに描かれるとき（timeline のビューで繰り返す Event、段階・例外のある storming）は、その Event を `emits` する Command（とその Actor・Read Model・Aggregate）、その Event に `on` する Policy、その Event への Hotspot を、ステップごとに1枚ずつ描く（ID `n:<要素>#<k>`。§7.3・§10.2 の表示上の分割）。Policy の付箋は、自分のステップの次にある Command の付箋へ `issues` を描く（後ろに無ければすべてへ）。統合キャンバス（段階・例外のない storming）は Event を1枚に描くので、この分割はしない。どの付箋を選んでも同じ要素を選び（インスペクタは1つ）、同じ要素のほかの付箋を控えめに示す。変更マーク・参照・在席表示は要素に付くので全部の付箋に出る。チャットやカタログから要素へ飛ぶときは、画面の中央に最も近い付箋を選ぶ。
 - 複数 timeline フィルタ／抽象度切替は `.dtes` を変更しない。
 - **段階・例外のある storming**（§3.7）: 統合キャンバスは区画を時間順に左→右へ並べ、段階をラベル付きの枠で描く（§8.6）。**段階ビュー**（その段階の本流と例外を同じ描き方で統合）を段階ごとに選べる。名前付き timeline のビューは従来どおり。
@@ -425,7 +425,7 @@ ADR 0032 で、関係は Event Storming のデザインレベルの文法その�
 - `Command → Event` (`emits`。描画は `handledBy` があれば処理するもの（Aggregate / External）の付箋から Event へ。§6)
 - `Actor / External → Command` (`by`, 関連)
 - `Read Model → Command` (Command の `reads`, 関連。描画は Read Model → その Command の発行者の付箋)
-- `Read Model → Policy` (Policy の `reads`, 関連。描画は Read Model → その Policy の付箋。ADR 0032 §9)
+- `Read Model → Policy` (Policy の `reads`, 関連。描画は Read Model → その Policy の付箋、Policy に `by` があればその Actor の付箋。ADR 0032 §9・§12)
 - `Command → Aggregate / External` (`handledBy`。描画は因果の線: Command が処理するものに至り、それが判断して Event を出す。§6)
 - `Event → Read Model` (Read Model の `from`, 反映)
 - `External → Event` (Event の `from`, 因果: Command を経ずに届く)
