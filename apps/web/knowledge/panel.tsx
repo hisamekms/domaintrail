@@ -370,10 +370,15 @@ function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefi
     const retired = item.retirement;
     return (
         <div className="knowledge-detail">
-            {retired?.replacedBy && (
+            {retired && (
                 <div className="knowledge-replaced">
-                    <span className="knowledge-meta">{t.replacedBy}</span>
-                    <ItemLink id={retired.replacedBy} />
+                    <span className="knowledge-retired-label">{retired.reason ? `${t.retired}: ${t.reasons[retired.reason]}` : t.retired}</span>
+                    {retired.replacedBy && (
+                        <>
+                            <span className="knowledge-meta">{t.replacedBy}</span>
+                            <ItemLink id={retired.replacedBy} />
+                        </>
+                    )}
                 </div>
             )}
             <div className="knowledge-body markdown">
@@ -397,36 +402,38 @@ function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefi
             )}
             <Versions item={item} history={history} />
             {retiring && <RetireForm item={item} onDone={() => setRetiring(false)} />}
-            <span className="knowledge-actions" hidden={retiring}>
-                <Act kind="open" icon={<Pencil size={12} aria-hidden />} onClick={() => setEditing(true)}>
-                    {t.correct}
-                </Act>
-                <Act kind="open" icon={<ImagePlus size={12} aria-hidden />} onClick={() => file.current?.click()}>
-                    {t.attachImage}
-                </Act>
-                {retired ? (
-                    <Act kind="decide-sub" icon={<ArchiveRestore size={12} aria-hidden />} onClick={() => void view?.unretire(item.id)}>
-                        {t.unretire}
+            {!retiring && (
+                <span className="knowledge-actions">
+                    <Act kind="open" icon={<Pencil size={12} aria-hidden />} onClick={() => setEditing(true)}>
+                        {t.correct}
                     </Act>
-                ) : (
-                    <Act kind="open" icon={<Archive size={12} aria-hidden />} onClick={() => setRetiring(true)}>
-                        {t.retire}
+                    <Act kind="open" icon={<ImagePlus size={12} aria-hidden />} onClick={() => file.current?.click()}>
+                        {t.attachImage}
                     </Act>
-                )}
-                <Act kind="decide-sub" icon={<Trash2 size={12} aria-hidden />} onClick={() => void view?.remove(item.id)}>
-                    {t.delete}
-                </Act>
-                <input
-                    ref={file}
-                    type="file"
-                    accept="image/png,image/jpeg,image/gif,image/webp"
-                    hidden
-                    onChange={(e) => {
-                        void attach(e.target.files?.[0]);
-                        e.target.value = '';
-                    }}
-                />
-            </span>
+                    {retired ? (
+                        <Act kind="decide-sub" icon={<ArchiveRestore size={12} aria-hidden />} onClick={() => void view?.unretire(item.id)}>
+                            {t.unretire}
+                        </Act>
+                    ) : (
+                        <Act kind="open" icon={<Archive size={12} aria-hidden />} onClick={() => setRetiring(true)}>
+                            {t.retire}
+                        </Act>
+                    )}
+                    <Act kind="decide-sub" icon={<Trash2 size={12} aria-hidden />} onClick={() => void view?.remove(item.id)}>
+                        {t.delete}
+                    </Act>
+                    <input
+                        ref={file}
+                        type="file"
+                        accept="image/png,image/jpeg,image/gif,image/webp"
+                        hidden
+                        onChange={(e) => {
+                            void attach(e.target.files?.[0]);
+                            e.target.value = '';
+                        }}
+                    />
+                </span>
+            )}
         </div>
     );
 }
