@@ -1,0 +1,41 @@
+import { expect, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
+import { codexHookSource, type CodexHookRole } from './codex-hook.js';
+
+test('Codex Hook permits role tools and rejects shell, non-DSL edits, and path escapes', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'dt-codex-hook-test-'));
+    const policy = path.join(root, 'policy.cjs');
+    const outside = mkdtempSync(path.join(tmpdir(), 'dt-codex-hook-outside-'));
+    try {
+        writeFileSync(path.join(root, 'model.dt'), 'context Example {}\n');
+        symlinkSync(outside, path.join(root, 'link'));
+        const allowed = (role: CodexHookRole, tool_name: string, command: string): boolean => {
+            writeFileSync(policy, codexHookSource(root, role));
+            const result = spawnSync(process.execPath, [policy], {
+                input: JSON.stringify({ tool_name, tool_input: { command } }), encoding: 'utf8',
+            });
+            expect(result.status).toBe(0);
+            if (!result.stdout) return true;
+            expect(JSON.parse(result.stdout).hookSpecificOutput.permissionDecision).toBe('deny');
+            return false;
+        };
+        expect(allowed('run', 'Bash', "rg --files -g '*.dt' -g '*.dtes'")).toBe(true);
+        expect(allowed('run', 'Bash', 'dt check')).toBe(true);
+        expect(allowed('run', 'Bash', 'echo unsafe')).toBe(false);
+        expect(allowed('run', 'apply_patch', '*** Begin Patch\n*** Update File: model.dt\n@@\n-old\n+new\n*** End Patch')).toBe(true);
+        expect(allowed('run', 'apply_patch', `*** Begin Patch\n*** Update File: ${path.join(realpathSync(root), 'model.dt')}\n@@\n-old\n+new\n*** End Patch`)).toBe(true);
+        expect(allowed('run', 'apply_patch', '*** Begin Patch\n*** Add File: script.ts\n+bad\n*** End Patch')).toBe(false);
+        expect(allowed('run', 'apply_patch', '*** Begin Patch\n*** Add File: ../escape.dt\n+bad\n*** End Patch')).toBe(false);
+        expect(allowed('run', 'apply_patch', '*** Begin Patch\n*** Add File: link/escape.dt\n+bad\n*** End Patch')).toBe(false);
+        expect(allowed('read', 'Bash', 'rg --files')).toBe(true);
+        expect(allowed('read', 'Bash', "rg -n '^' -- 'model.dt'")).toBe(true);
+        expect(allowed('read', 'apply_patch', '*** Begin Patch\n*** Update File: model.dt\n@@\n-old\n+new\n*** End Patch')).toBe(false);
+        expect(allowed('none', 'Bash', 'rg --files')).toBe(false);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+        rmSync(outside, { recursive: true, force: true });
+    }
+});

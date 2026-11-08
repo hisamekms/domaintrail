@@ -106,7 +106,10 @@ export function cliDeps(): CliDeps {
             onInterrupt(() => tunnel.stop());
             return tunnel;
         },
-        checkAgent: async () => (await import('@domaintrail/agent')).checkClaudeCode(),
+        checkAgent: async (agent) => {
+            const adapters = await import('@domaintrail/agent');
+            return agent === 'codex' ? adapters.checkCodex() : adapters.checkClaudeCode();
+        },
         localConfigState: (file) => gitFileState(file),
         trust: fileTrustStore(),
         ...(process.stdin.isTTY && process.stderr.isTTY && { confirm: askOnTerminal }),

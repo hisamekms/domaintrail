@@ -3913,7 +3913,14 @@ Sessions need Node.js 22.13 or later (for `node:sqlite`). In the repository,
 `dt open` and `dt collab` start the agent, with both roles, in their own process (as `dt agent` would, over loopback) when Claude Code is
 usable (`claude` on the `PATH`, answering `--version`, with the flags the agent needs); otherwise they start without
 it and print one line saying why (`AI: not started (…)`). `--no-agent` does not start it; `--agent claude` makes an
-unusable Claude Code an error. `dt view`, `dt session start`, `dt session link` and `dt session subscribe` were
+unusable Claude Code an error. `--agent codex` runs the installed Codex CLI for the runner, answers, triage and
+knowledge extraction; it errors if Codex is unavailable. `dt agent --code <code> --agent codex` selects it for a
+standalone agent. Codex uses a fresh CLI process for each turn, so the `warm` and `restartAfter` settings do not apply.
+Its default model is Codex's own; set `agent.run.model`, `agent.answer.model`, `agent.triage.model`, or
+`agent.extract.model` to choose a model. A Codex PreToolUse Hook enforces the default runner tool policy:
+DSL file reads and edits plus `dt fmt`, `dt check` and `dt guide`. Answer turns use a read-only Hook; triage and
+extraction have no tools. Codex does not accept custom Claude Code `agent.run.allowedTools` rules or `agent.read.paths`.
+`dt view`, `dt session start`, `dt session link` and `dt session subscribe` were
 removed: each fails with the name of its replacement.
 
 **Roles.** Everyone signed in is a **participant**: they see the Live View and the session's chat, a pillar at the

@@ -93,6 +93,8 @@ async function signInSolo(link: string): Promise<string> {
 
 /** What the fake CLI deps were asked, and what they answer. */
 interface Calls {
+    checked: string[];
+    selected: string[];
     view: unknown[];
     sessions: SessionServerOptionsLike[];
     agents: { roles: readonly string[]; once: boolean }[];
@@ -108,7 +110,7 @@ function fakeDeps(
     usable: Awaited<ReturnType<CliDeps['checkAgent']>>,
     opened: 'started' | 'resumed' | 'collaborated' = 'started',
 ): { deps: CliDeps; calls: Calls } {
-    const calls: Calls = { view: [], sessions: [], agents: [], connects: [], practices: [], stopped: 0 };
+    const calls: Calls = { checked: [], selected: [], view: [], sessions: [], agents: [], connects: [], practices: [], stopped: 0 };
     const deps: CliDeps = {
         ...cliDeps(),
         startViewServer: async (options) => {
@@ -131,8 +133,9 @@ function fakeDeps(
                 },
             };
         },
-        checkAgent: async () => usable,
+        checkAgent: async (agent) => { calls.checked.push(agent); return usable; },
         startAgent: async (options) => {
+            calls.selected.push(options.agent);
             calls.agents.push({ roles: options.roles, once: options.once });
             calls.connects.push(options.connect);
             calls.practices.push(options.practice);
@@ -282,6 +285,21 @@ describe('dt open and dt collab: the agent in process', () => {
         expect(r.err).toEqual(['AI: cannot start: claude not found on PATH']);
         expect(calls.stopped).toBe(1);
         expect((await run(deps, '-r', dir, 'open', '--agent', 'other')).code).toBe(1);
+    });
+
+    test('--agent codex selects Codex for both in-process roles and fails explicitly when unavailable', async () => {
+        const dir = await copy();
+        const ready = fakeDeps({ ok: true, version: '0.test' });
+        const started = await run(ready.deps, '-r', dir, 'open', '--agent', 'codex');
+        expect(started.code).toBe(0);
+        expect(ready.calls.checked).toEqual(['codex']);
+        expect(ready.calls.selected).toEqual(['codex']);
+        expect(started.out).toContain('AI: started in this process (codex 0.test; roles answer, run)');
+
+        const missing = fakeDeps({ ok: false, reason: 'codex not found on PATH' });
+        const failed = await run(missing.deps, '-r', dir, 'open', '--agent', 'codex');
+        expect(failed.err).toEqual(['AI: cannot start: codex not found on PATH']);
+        expect(missing.calls.stopped).toBe(1);
     });
 
     test('dt open --host <non-loopback> serves the Live View read-only: no session, no agent', async () => {
