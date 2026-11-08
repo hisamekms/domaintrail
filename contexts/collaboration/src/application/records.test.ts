@@ -7,6 +7,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { Collaboration as C, type Result } from '../generated/index.js';
+import { AI_PARTICIPANT_ID } from '../domain/ai.js';
 import { sha256Hex } from '../domain/sha256.js';
 import { writeJourney, type JourneyFile } from '../domain/journey.js';
 import { createUnitOfWork, openDatabase } from '../infrastructure/sqlite.js';
@@ -55,7 +56,7 @@ function memoryJourneys(initial?: string): JourneyFileStore {
     };
 }
 
-async function open(file = ':memory:') {
+async function open(file = ':memory:', mode: 'Solo' | 'Collab' = 'Collab') {
     let t = Date.parse('2026-11-04T09:00:00Z');
     let n = 0;
     const db = openDatabase(file);
@@ -72,19 +73,69 @@ async function open(file = ':memory:') {
         ids: { newId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}` },
     };
     const use: CollaborationUseCases = createCollaboration(deps);
-    const session = value(await use.openSession({ mode: 'Collab', facilitator: facilitatorId, name: value(C.makeDisplayName('Ada')) })).session.id;
-    value(await use.joinSession({ session, participant: bobId, name: value(C.makeDisplayName('Bob')) }));
+    const session = value(await use.openSession({ mode, facilitator: facilitatorId, name: value(C.makeDisplayName('Ada')) })).session.id;
+    if (mode === 'Collab') value(await use.joinSession({ session, participant: bobId, name: value(C.makeDisplayName('Bob')) }));
     const records = async (): Promise<readonly C.SessionRecord[]> => value(await use.sessionState({ session })).records;
     return { use, session, records, db };
 }
 
 describe('the acts recorded', () => {
+    test.each(['Solo', 'Collab'] as const)('a %s DL invitation reply reaches the edit queue through its ordinary route', async (mode) => {
+        const { use, session } = await open(':memory:', mode);
+        value(
+            await use.actOnJourney({
+                actor: facilitator,
+                act: { kind: 'goal', journey: 'es:Issue', goal: 'DesignLevel' },
+                session,
+                labels,
+            }),
+        );
+        const state = value(await use.sessionState({ session }));
+        const invitation = state.requests.find((request) => request.journeyNote?.invitation);
+        expect(invitation?.author).toBe(AI_PARTICIPANT_ID);
+        const instruction = '「Issue」の通常の流れに、根拠のある小さなデザインレベルの仮案を .dtes に描いてください。';
+        const sent = value(
+            await use.sendMessage({
+                session,
+                actor: mode === 'Solo' ? facilitator : bob,
+                targets: [],
+                body: value(C.makeText(instruction)),
+                replyTo: { kind: 'Message', request: invitation!.id },
+            }),
+        );
+        expect(sent.triage).toMatchObject({ state: 'Pending', addressedBy: mode === 'Solo' ? 'Solo' : 'Reply' });
+        const triage = sent.triage!.id;
+        value(await use.recordTriageStep({ triage, step: { stage: 'Clef', verdict: 'Unknown', durationMs: 0 } }));
+        const decided = value(
+            await use.recordTriageStep({
+                triage,
+                step: { stage: 'Model', verdict: 'ChangeRequest', durationMs: 0, confidence: 0.9, model: 'test', reason: 'explicit edit request' },
+            }),
+        );
+        if (mode === 'Solo') {
+            expect(decided.run).toMatchObject({ state: 'Queued', input: { requests: [{ request: sent.request.id }] } });
+        } else {
+            expect(decided.route).toBe('propose');
+            const proposed = value(
+                await use.proposeChange({
+                    triage,
+                    content: { targets: [], how: value(C.makeProposalText(instruction)), options: [] },
+                }),
+            );
+            const approved = value(await use.approveProposals({ session, actor: facilitator, proposals: [{ proposal: proposed.proposal.id }] }));
+            expect(approved.run).toMatchObject({ state: 'Queued', input: { requests: [{ request: sent.request.id }] } });
+        }
+    });
+
     test('a goal changed; marks merge while nothing comes between; an act that changed nothing is not recorded', async () => {
         const { use, session, records } = await open();
         const act = (a: Parameters<CollaborationUseCases['actOnJourney']>[0]['act']) => use.actOnJourney({ actor: facilitator, act: a, session, labels });
         value(await act({ kind: 'goal', journey: 'es:Issue', goal: 'DesignLevel' }));
+        const invitations = async () => value(await use.sessionState({ session })).requests.filter((r) => r.journeyNote?.invitation);
+        expect(await invitations()).toHaveLength(1);
         value(await act({ kind: 'mark', journey: 'es:Issue', step: 'exceptions', done: true }));
         value(await act({ kind: 'mark', journey: 'es:Issue', step: 'questions', done: true }));
+        expect(await invitations()).toHaveLength(1);
         // set again: the file does not change, nothing is recorded
         value(await act({ kind: 'mark', journey: 'es:Issue', step: 'questions', done: true }));
         expect((await records()).map((r) => r.fact)).toEqual([

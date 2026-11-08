@@ -32,6 +32,7 @@ import {
     type WorkspaceFiles,
 } from './ports.js';
 import { createActivityReporter } from './activity.js';
+import { changesWorkingContext, journeyContext, type JourneyContext } from './journey-boundary.js';
 import { buildPrompt, type Practice } from './prompt.js';
 import { buildReviewPrompts, hasReview } from './review-prompt.js';
 import type { AgentFinishReview } from '@domaintrail/collaboration/protocol';
@@ -114,6 +115,12 @@ export function changedPaths(before: ReadonlyMap<string, string>, after: Readonl
     return [...changed].sort();
 }
 
+/** A question may accompany an edit; publish it only after both workspace tools accept the edit. */
+export async function validateClarificationEdit(tools: DslTools): Promise<boolean> {
+    if (!(await tools.format())) return false;
+    return tools.check();
+}
+
 /** The changed paths that are not DSL sources, before or after: what the agent must not touch (ADR 0026). */
 export function changesOutsideSources(changed: readonly string[], sources: ReadonlySet<string>): string[] {
     return changed.filter((p) => !sources.has(p) || !(p.endsWith('.dt') || p.endsWith('.dtes')));
@@ -166,6 +173,7 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
     let lastAgentScan: ReadonlyMap<string, string> | undefined;
     /** The last entry of the session so far the agent's previous run was given. */
     let lastSoFar: number | undefined;
+    let lastJourney: JourneyContext | undefined;
 
     /** Stops claiming because of what the run `id` left (`shown`: escaped paths, or why they are unknown). */
     const halt = (id: string, shown: string): void => {
@@ -221,6 +229,14 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                 log(`run ${id}: not started (${started.status} ${started.type}); releasing it`);
                 await complete('released', id, () => api.release(id, token));
                 return;
+            }
+            if (started.value.journeys) {
+                const nextJourney = journeyContext(started.value.journeys);
+                if (changesWorkingContext(lastJourney, nextJourney)) {
+                    deps.runner.reset?.('the current journey or its Design Level goal changed');
+                    lastAgentScan = undefined;
+                }
+                lastJourney = nextJourney;
             }
             log(`run ${id}: started (${run.input.requests.length} request(s), base revision ${started.value.baseRevision.id})`);
 
@@ -380,6 +396,14 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
             // the reply names requests by their number in the prompt: back to the frozen input's IDs
             const reply = outcome.reply && mapRequests(outcome.reply, (n) => input.requests[n - 1]?.request ?? '');
             if (outcome.exitCode === 0 && outcome.outcome === 'clarification' && outcome.question !== undefined) {
+                // A provisional Design Level edit may accompany a question. Format and check it before publishing
+                // the question so the next turn and the UI see the canonical source. The normal review turn applies
+                // to completed work; a clarification keeps this edit open for the person's answer and next run.
+                if (changed > 0) {
+                    const valid = await validateClarificationEdit(deps.tools);
+                    ({ changed, outside } = await inspect(true));
+                    if (outside || !valid) return complete('failed (AgentError)', id, () => api.fail(id, token, 'AgentError'));
+                }
                 const question = outcome.question;
                 return complete(`asks for clarification (${changed} file(s) changed)`, id, () => api.clarification(id, token, question, reply));
             }

@@ -121,6 +121,12 @@ describe("the agent's dt (agent.run.dt)", () => {
             ok: true,
             args: ['-r', root, 'check', path.join(root, 'x', 'sales', 'order.dt'), path.join(root, 'x', 'es.dtes')],
         });
+        for (const flags of [
+            ['--storming-level=design-level'],
+            ['--storming-level', 'design-level', '--storming', 'Orders'],
+            ['--storming-level=design-level', '--storming', 'Orders', '--timeline', 'Normal_2'],
+        ])
+            expect(agentDtArguments(['check', ...flags], root, root)).toEqual({ ok: true, args: ['-r', root, 'check', ...flags] });
         for (const given of [
             ['generate', 'ts'],
             ['open'],
@@ -144,6 +150,11 @@ describe("the agent's dt (agent.run.dt)", () => {
             ['fmt', 'x.ts'],
             ['fmt', '../out.dt'],
             ['fmt', '/etc/x.dt'],
+            ['check', '--storming-level=design-level', '--timeline', 'Normal'],
+            ['check', '--storming-level=design-level', '--storming', '../outside'],
+            ['check', '--storming-level=design-level', '--storming', 'Orders;echo'],
+            ['check', '--storming-level=design-level', '--storming', 'Orders', '--timeline', 'Normal', 'x.dtes'],
+            ['check', '--format', 'json'],
         ])
             expect(agentDtArguments(given, root, root).ok).toBe(false);
     });
@@ -166,7 +177,19 @@ describe("the agent's dt (agent.run.dt)", () => {
                 expect(realpathSync(ran.cwd)).toBe(realpathSync(shim.dir));
                 const guide = JSON.parse(String(dt(['guide', 'storming-practice']).stdout)) as { args: string[] };
                 expect(guide.args).toEqual(['-r', root, 'guide', 'storming-practice']);
-                for (const bad of [['fmt', '--cwd', '/'], ['generate'], ['fmt', '../x.dt'], ['guide', '-c', '/x'], ['guide', 'dsl', 'requires'], ['open']]) {
+                const dl = JSON.parse(String(dt(['check', '--storming-level=design-level', '--storming', 'Orders', '--timeline', 'Normal']).stdout)) as {
+                    args: string[];
+                };
+                expect(dl.args).toEqual(['-r', root, 'check', '--storming-level=design-level', '--storming', 'Orders', '--timeline', 'Normal']);
+                for (const bad of [
+                    ['fmt', '--cwd', '/'],
+                    ['generate'],
+                    ['fmt', '../x.dt'],
+                    ['guide', '-c', '/x'],
+                    ['guide', 'dsl', 'requires'],
+                    ['check', '--storming-level=design-level', '--timeline', 'Normal'],
+                    ['open'],
+                ]) {
                     const r = dt(bad);
                     expect(r.status).toBe(2);
                     expect(String(r.stdout)).toBe('');

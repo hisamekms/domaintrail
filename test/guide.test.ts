@@ -98,6 +98,11 @@ describe('dt guide', () => {
         for (const [code, block] of examples) {
             expect(formatStorming(block)).toBe(block);
             const a = await check({ ...workspace(), 'example.dtes': block });
+            // S034 is opt-in CLI advice, exercised by the CLI's storming-advice tests, not by ordinary analysis.
+            if (code === 'S034') {
+                expect(a.diagnostics.filter((d) => d.severity !== 'info')).toEqual([]);
+                continue;
+            }
             // an info (S029) informs about the rest of a one-problem example: only its own rule counts
             const found = a.diagnostics.filter((d) => d.code === code || d.severity !== 'info');
             expect({ code, found: [...new Set(found.map((d): string => d.code))] }).toEqual({ code, found: [code] });

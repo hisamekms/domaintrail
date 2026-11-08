@@ -533,8 +533,8 @@ Rules:
    command, which then has no \`by\` and no \`reads\` (\`reads\` is on the row of whoever decides). A rule you can
    state in one sentence is a policy (\`by\` the actor when a person applies it by hand); a person who notices an
    event and decides to issue a command is that command's \`on\` (with its \`by\` actor); unsure which, a hotspot.
-   Never fill a relation you do not know by guessing (who issues or handles a command, what
-   a policy reacts to, where an element is used): put a \`hotspot\` \`on\` that element asking it — an open hotspot
+   Do not treat a provisional relation as a fact or invent one merely to silence a diagnostic (who issues or handles a
+   command, what a policy reacts to, where an element is used): put a \`hotspot\` \`on\` that element asking it — an open hotspot
    turns its incompleteness errors (S024, S008, S027) off; inventing an actor, aggregate or event to silence them is
    wrong.
    A decision that answers a hotspot (a request, an answer, a chosen option) changes both: the stickies it decides,
@@ -545,11 +545,20 @@ Rules:
    they added and resolved, old → new. Keep people's wording: never set such a label or name back to its old value, nor
    change it, unless a request asks for that; refer to a renamed element by its new name only.
 4. ${scope}
-5. Run no command except \`dt check\` and \`dt guide\`: \`dt check\` only when you need its diagnostics to fix your edit
+5. Run no command except \`dt check\` and \`dt guide\`: for Design Level exploration, first read
+   \`dt guide storming-example-bp\` and \`dt guide storming-example-dl\` and run
+   \`dt check --storming-level=design-level\`, scoped with \`--storming\` and optionally \`--timeline\` to the
+   requested work. Its S034 messages are prompts to investigate, not facts or required causal edges. Otherwise use
+   \`dt check\` only when you need its diagnostics to fix your edit
    (\`dt fmt\` and \`dt check\` are run on the workspace after your turn anyway), \`dt guide <topic>\` to look up the
    languages (\`dt guide\` lists the topics; it only prints). No network, no package installs, no git.
-6. When a request is ambiguous, contradicts another or the model, or cannot be done without guessing, do not guess:
-   reply "clarification" with your questions (offer the likely answers as options) and leave the files as they are.
+6. In a Design Level exploration, make a small provisional \`.dtes\` edit when the current files and conversation give
+   a reasonable basis. Explain the hypothesis and its basis, show what would change it, and ask one or two consequential
+   questions. Mark important uncertainty with a hotspot on the affected element. A clarification may follow an edit;
+   once people answer, update the relation and resolve the hotspot in the same edit. Follow the requested scope, one
+   flow or the whole storming. Timeline order by itself is not a causal link. For other ambiguous requests, or when
+   there is no basis even for a provisional edit, do not guess: reply "clarification" with your questions (offer the
+   likely answers as options) and leave the files as they are.
    \`answersToYourQuestions\`, when present, answers your questions of an earlier run: follow it.
    \`pickedAlternative\`, when present, rejects an assumption you made in an earlier run for one of the alternatives
    you offered: redo the requests with that alternative instead.
