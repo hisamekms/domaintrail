@@ -608,7 +608,7 @@ Examples:
             .option('-p, --port <port>', `port to listen on (default: ${section}.port, else 4321)`, parsePort)
             .option('--host <host>', hostHelp)
             .option('--base <ref>', 'compare the model with this git revision (e.g. main, HEAD~3) instead of the previous save')
-            .addOption(new Option('--agent <agent>', 'the agent to start in this process (an error if it cannot start)').choices(['claude']))
+            .addOption(new Option('--agent <agent>', 'the agent to start in this process (an error if it cannot start)').choices(['claude', 'codex']))
             .option('--no-agent', 'do not start the agent in this process (start one later with `dt agent`)')
             .option('--yes', 'approve changed security-relevant settings without asking (for scripts; they are printed)');
 
@@ -624,14 +624,16 @@ signs that browser in as you, the facilitator (a cookie; no join form); nothing 
 another link while it runs). Every message you send goes to the AI, which answers questions and applies change requests. It re-checks on
 every save and pushes updates to the browser. The chat, the runs and the revisions are kept across restarts, outside
 the workspace (~/.local/state/domaintrail/<workspace>/; \`dt session prune\` removes those of workspaces that are
-gone). The agent (Claude Code) starts in this process when \`claude\` is usable; otherwise the server starts
-without it and says why (\`dt agent\` connects one later). Refused while the workspace has an open collab session
+gone). Claude Code starts in this process when \`claude\` is usable; \`--agent codex\` selects the installed Codex CLI.
+If the default Claude Code is unavailable, the server starts without an agent and says why (\`dt agent\` connects one
+later). Refused while the workspace has an open collab session
 (\`dt collab\` resumes it). With --host on a non-loopback address, the Live View is served read-only: no chat, no agent.
 Use \`dt check\` for a one-shot result (e.g. from scripts or AI agents).
 
 Examples:
   dt open
   dt open --port 8080
+  dt open --agent codex        use the installed Codex CLI for runs and answers
   dt open --base main           mark what changed since main (the base can be switched in the page)
   dt open --no-agent            the chat without the AI in this process (dt agent elsewhere)
   dt open link                  another sign-in link, for another browser or after the first expired
@@ -652,7 +654,7 @@ Examples:
         };
         if (!isLoopback(host)) {
             // what remains of `dt view`: the Live View alone, read-only, for others to look at
-            if (opts.agent === 'claude') throw new CliError(`No agent with a read-only Live View: ${host} is not a loopback address.`);
+            if (opts.agent) throw new CliError(`No agent with a read-only Live View: ${host} is not a loopback address.`);
             const server = await deps.startViewServer({ ...workspaceOf(cfg), port, host, base: opts.base, log: io.out }).catch(base);
             await printConfig(cfg, []);
             io.out(`Live View (read-only: ${host} is not a loopback address; the chat and the agent are on loopback only): ${server.url}`);
@@ -873,7 +875,7 @@ Examples:
     program
         .command('agent')
         .description('Run the AI on the session running on the workspace: its answers and its runs (runs until Ctrl+C or the session closes).')
-        .addOption(new Option('--agent <agent>', 'the agent').choices(['claude']).default('claude'))
+        .addOption(new Option('--agent <agent>', 'the agent').choices(['claude', 'codex']).default('claude'))
         .addOption(new Option('--role <role>', 'take on one role only: answer (read-only answers) or run (the runs); default: both').choices([...AGENT_ROLES]))
         .option('--once', 'handle one run (waiting for one if none is queued), then exit')
         .requiredOption('--code <code>', 'the one-time pairing code of `dt collab agent-link` (or `dt open agent-link`)')
@@ -885,20 +887,21 @@ Examples:
 Connects to the session server running on the workspace (\`dt open\` or \`dt collab\`, e.g. started with --no-agent)
 through its agent API: the code printed by \`dt collab agent-link\` is exchanged once for the agent API's credential,
 kept in memory (never on disk). The runner takes the runs one at a
-time: Claude Code (\`claude\` on the PATH, with the tools of agent.run.allowedTools only) edits the .dt and .dtes files
+time: the chosen CLI (\`claude\` or \`codex\` on the PATH) edits the .dt and .dtes files
 (its \`dt\` is agent.run.dt, else this very CLI), then \`dt fmt\` and \`dt check\` run and the server records the result
-as a revision. A run that changes any other file fails. The answerer answers the questions addressed to the AI with
-read-only tools. Ctrl+C stops the agent and fails its run as interrupted. Another \`dt agent\` beside the one in
+as a revision. A run that changes any other file fails. The answerer answers the questions addressed to the AI in a
+read-only sandbox. Ctrl+C stops the agent and fails its run as interrupted. Another \`dt agent\` beside the one in
 process is allowed.
 
 Examples:
   dt collab agent-link          prints the code
   dt agent --code <code>
+  dt agent --code <code> --agent codex
   dt agent --code <code> --role run   the runs only (the answers from another dt agent --role answer)
   dt agent --code <code> --once
   dt -r examples/shop agent --code <code>`,
         )
-        .action(async (opts: { agent: 'claude'; role?: AgentRole; once?: boolean; code: string; url?: string; yes?: boolean }) => {
+        .action(async (opts: { agent: 'claude' | 'codex'; role?: AgentRole; once?: boolean; code: string; url?: string; yes?: boolean }) => {
             const cfg = await config();
             const approval = await approve(cfg, opts.yes);
             await printConfig(cfg, opts.role ? [opts.role] : AGENT_ROLES);
@@ -1195,7 +1198,7 @@ Examples:
     /** The agent's settings for `dt agent` or the agent in process. */
     const agentOptions = (
         cfg: ResolvedConfig,
-        agent: 'claude',
+        agent: 'claude' | 'codex',
         approval: SettingsApproval | undefined,
     ): Omit<AgentOptions, 'roles' | 'once' | 'log' | 'connect'> => {
         const configPath = program.opts<{ config?: string }>().config;
@@ -1226,14 +1229,15 @@ Examples:
         try {
             if (opts.agent === false) io.out('AI: not started (--no-agent); start it with `dt agent`');
             else {
-                const usable = await deps.checkAgent('claude');
+                const chosen = opts.agent ?? 'claude';
+                const usable = await deps.checkAgent(chosen);
                 if (!usable.ok) {
-                    if (opts.agent === 'claude') throw new CliError(`AI: cannot start: ${usable.reason}`);
+                    if (opts.agent) throw new CliError(`AI: cannot start: ${usable.reason}`);
                     io.out(`AI: not started (${usable.reason}); start it later with \`dt agent\``);
                 } else {
                     agent = await deps
                         .startAgent({
-                            ...agentOptions(cfg, 'claude', approval),
+                            ...agentOptions(cfg, chosen, approval),
                             // the credential in memory: never on disk
                             connect: { credential: { url: server.agentUrl, token: server.agentToken, session: server.session } },
                             roles: AGENT_ROLES,
@@ -1242,11 +1246,11 @@ Examples:
                         })
                         .catch((e: unknown) => {
                             if (!(e instanceof SessionError)) throw e;
-                            if (opts.agent === 'claude') throw new CliError(`AI: cannot start: ${e.message}`);
+                            if (opts.agent) throw new CliError(`AI: cannot start: ${e.message}`);
                             io.out(`AI: not started (${e.message}); start it later with \`dt agent\``);
                             return undefined;
                         });
-                    if (agent) io.out(`AI: started in this process (claude ${usable.version}; ${rolesText(agent.roles)})`);
+                    if (agent) io.out(`AI: started in this process (${chosen} ${usable.version}; ${rolesText(agent.roles)})`);
                 }
             }
         } catch (e) {
@@ -1334,8 +1338,8 @@ interface ServeOptions {
     port?: number;
     host?: string;
     base?: string;
-    /** `false` with `--no-agent`, `claude` given explicitly, else undefined (started when usable). */
-    agent?: 'claude' | false;
+    /** `false` with `--no-agent`, an agent given explicitly, else undefined (Claude started when usable). */
+    agent?: 'claude' | 'codex' | false;
     /** `--yes`: approve changed security-relevant settings without asking. */
     yes?: boolean;
 }

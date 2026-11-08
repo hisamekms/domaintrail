@@ -28,6 +28,9 @@ import {
     createClaudeAnswerer,
     createClaudeExtractor,
     createClaudeCodeRunner,
+    createCodexAnswerer,
+    createCodexExtractor,
+    createCodexRunner,
     createDtTools,
     createWarmClaudeRunner,
     createHttpAgentApi,
@@ -38,6 +41,8 @@ import {
     type Extractor,
     dtCommandOf,
     DT_WRITTEN_FILE_NAMES,
+    DEFAULT_AGENT_TOOLS,
+    DEFAULT_TRIAGE_MODEL,
     pinDt,
     type PinnedDt,
     type DiagnosticsScope,
@@ -86,7 +91,7 @@ import { dtWrittenKnowledgeDir, knowledgeForAgents } from './knowledge.js';
 export type { SubscriberEnd };
 
 /** The agents `dt agent` can run. */
-export const AGENTS = ['claude'] as const;
+export const AGENTS = ['claude', 'codex'] as const;
 export type AgentName = (typeof AGENTS)[number];
 
 export interface SubscriberOptions {
@@ -194,6 +199,8 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     if (!session.ok) throw new SessionError(`The session server refused the agent credential (${session.status} ${session.type}).`);
     if (session.value.session !== credential.session) throw new SessionError('The agent credential is not for the session the server runs.');
     if (session.value.state !== 'Open') throw new SessionError('The session is closed.');
+    if (options.agent === 'codex' && JSON.stringify(session.value.allowedTools) !== JSON.stringify(DEFAULT_AGENT_TOOLS))
+        throw new SessionError('agent.run.allowedTools contains Claude Code rules; Codex supports only the default tool policy.');
 
     const roles = new Set<AgentRole>(taken);
     const sources = options.sources ?? DEFAULT_SOURCES;
@@ -236,22 +243,34 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             ? startAnswerer(
                   {
                       api,
-                      agent: createClaudeAnswerer({
-                          root: viewDir,
-                          prepare,
-                          ...(extraViews && { extraRead: extraViews.extra }),
-                          ...(knowledgeMcp && { knowledge: knowledgeMcp }),
-                          ...((options.answerCommand ?? options.agentCommand) && { command: options.answerCommand ?? options.agentCommand }),
-                          answer: {
-                              warm: answerConfig.warm,
-                              restartAfter: answerConfig.restartAfter,
-                              idleTimeoutMs: answerConfig.idleTimeout * 60_000,
-                              ...((answerConfig.model ?? user.model) !== undefined && { model: answerConfig.model ?? user.model }),
-                              ...((answerConfig.effort ?? user.effort) !== undefined && { effort: answerConfig.effort ?? user.effort }),
-                          },
-                          triage: { model: triageConfig.model, warm: triageConfig.warm },
-                          log,
-                      }),
+                      agent:
+                          options.agent === 'codex'
+                              ? createCodexAnswerer({
+                                    root: viewDir,
+                                    prepare,
+                                    ...(extraViews && { extraRead: extraViews.extra }),
+                                    ...(knowledgeMcp && { knowledge: knowledgeMcp }),
+                                    ...((options.answerCommand ?? options.agentCommand) && { command: options.answerCommand ?? options.agentCommand }),
+                                    ...(answerConfig.model && { model: answerConfig.model }),
+                                    ...(answerConfig.effort && { effort: answerConfig.effort }),
+                                    ...(triageConfig.model !== DEFAULT_TRIAGE_MODEL && { triageModel: triageConfig.model }),
+                                })
+                              : createClaudeAnswerer({
+                                    root: viewDir,
+                                    prepare,
+                                    ...(extraViews && { extraRead: extraViews.extra }),
+                                    ...(knowledgeMcp && { knowledge: knowledgeMcp }),
+                                    ...((options.answerCommand ?? options.agentCommand) && { command: options.answerCommand ?? options.agentCommand }),
+                                    answer: {
+                                        warm: answerConfig.warm,
+                                        restartAfter: answerConfig.restartAfter,
+                                        idleTimeoutMs: answerConfig.idleTimeout * 60_000,
+                                        ...((answerConfig.model ?? user.model) !== undefined && { model: answerConfig.model ?? user.model }),
+                                        ...((answerConfig.effort ?? user.effort) !== undefined && { effort: answerConfig.effort ?? user.effort }),
+                                    },
+                                    triage: { model: triageConfig.model, warm: triageConfig.warm },
+                                    log,
+                                }),
                       workspace: { scan },
                       diagnostics: (scope) => workspaceDiagnostics(createWorkspaceReader(root, sourceSelection(sources, respectGitignore)), scope),
                       clock: systemClock,
@@ -271,11 +290,12 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     const knowledgeExtractor = roles.has('answer')
         ? await startKnowledgeExtractor({
               api,
-              ...((options.extract?.model ?? answerConfig.model ?? user.model) !== undefined && {
-                  model: options.extract?.model ?? answerConfig.model ?? user.model,
+              agent: options.agent,
+              ...((options.extract?.model ?? answerConfig.model ?? (options.agent === 'claude' ? user.model : undefined)) !== undefined && {
+                  model: options.extract?.model ?? answerConfig.model ?? (options.agent === 'claude' ? user.model : undefined),
               }),
-              ...((options.extract?.effort ?? answerConfig.effort ?? user.effort) !== undefined && {
-                  effort: options.extract?.effort ?? answerConfig.effort ?? user.effort,
+              ...((options.extract?.effort ?? answerConfig.effort ?? (options.agent === 'claude' ? user.effort : undefined)) !== undefined && {
+                  effort: options.extract?.effort ?? answerConfig.effort ?? (options.agent === 'claude' ? user.effort : undefined),
               }),
               timeoutMs: (options.extract?.timeout ?? 180) * 1000,
               gateModel: options.extract?.gateModel ?? triageConfig.model,
@@ -288,6 +308,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     // knowledge config: a stream of their own, so that an extraction never holds them up
     const helper = await startHelper({
         api,
+        agent: options.agent,
         gateModel: options.extract?.gateModel ?? triageConfig.model,
         ...((options.answerCommand ?? options.agentCommand) && { command: options.answerCommand ?? options.agentCommand }),
         ...(options.reconnect && { reconnect: options.reconnect }),
@@ -322,6 +343,8 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     }
 
     const runTargets = readOf('run');
+    // Codex's --add-dir grants writes, so its runner uses the same private read copies as the answerer.
+    const codexRunViews = options.agent === 'codex' ? await answererExtraViews(runTargets) : undefined;
     // the `files` knowledge store's directory: only dt writes it (an extraction may while a run runs), never the agent
     const knowledgeDir = options.knowledge && dtWrittenKnowledgeDir(options.knowledge.config, root);
     const dtWrittenDirs = knowledgeDir ? [knowledgeDir] : [];
@@ -346,16 +369,26 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             ...((run?.effort ?? user.effort) !== undefined && { effort: run?.effort ?? user.effort }),
         };
         runner =
-            (run?.warm ?? true)
-                ? await createWarmClaudeRunner({
-                      ...claude,
-                      restartAfter: run?.restartAfter,
-                      ...(run?.idleTimeout !== undefined && { idleTimeoutMs: run.idleTimeout * 60_000 }),
-                      log,
+            options.agent === 'codex'
+                ? await createCodexRunner({
+                      root,
+                      command: options.agentCommand,
+                      dt,
+                      ...(codexRunViews && { prepare: () => codexRunViews.refresh(), extraRead: codexRunViews.extra }),
+                      ...(run?.model && { model: run.model }),
+                      ...(run?.effort && { effort: run.effort }),
+                      ...(knowledgeMcp && { knowledge: knowledgeMcp }),
                   })
-                : await createClaudeCodeRunner(claude);
+                : (run?.warm ?? true)
+                  ? await createWarmClaudeRunner({
+                        ...claude,
+                        restartAfter: run?.restartAfter,
+                        ...(run?.idleTimeout !== undefined && { idleTimeoutMs: run.idleTimeout * 60_000 }),
+                        log,
+                    })
+                  : await createClaudeCodeRunner(claude);
     } catch (e) {
-        await Promise.all([answerer?.stop(), extractor?.stop(), launcher?.dispose()]);
+        await Promise.all([answerer?.stop(), extractor?.stop(), launcher?.dispose(), codexRunViews?.dispose()]);
         throw new SessionError(e instanceof Error ? e.message : String(e));
     }
     const subscriber: Subscriber = subscribe(
@@ -394,10 +427,12 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     // the runner's end ends the answerer and the extractor too (the session closed — after the last extraction —, the
     // server is gone, Ctrl+C, `--once`)
     const done = knowledgeGone(
-        subscriber.done.then(async (why) => {
-            await readOnlyEnd(why);
-            return why;
-        }),
+        subscriber.done
+            .then(async (why) => {
+                await readOnlyEnd(why);
+                return why;
+            })
+            .finally(() => codexRunViews?.dispose()),
     );
     return {
         session: session.value.session,
@@ -516,6 +551,7 @@ function bothExtractors(knowledge: Extractor | undefined, helper: Extractor): Ex
  */
 async function startHelper(options: {
     api: HelperApi;
+    agent: AgentName;
     gateModel: string;
     command?: AgentCommand;
     reconnect?: { minMs: number; maxMs: number; giveUpMs: number };
@@ -525,7 +561,14 @@ async function startHelper(options: {
     const helper = startExtractor(
         {
             api: helperStream(options.api),
-            agent: createClaudeExtractor({ root: dir, gateModel: options.gateModel, ...(options.command && { command: options.command }) }),
+            agent:
+                options.agent === 'codex'
+                    ? createCodexExtractor({
+                          root: dir,
+                          ...(options.gateModel !== DEFAULT_TRIAGE_MODEL && { gateModel: options.gateModel }),
+                          ...(options.command && { command: options.command }),
+                      })
+                    : createClaudeExtractor({ root: dir, gateModel: options.gateModel, ...(options.command && { command: options.command }) }),
             clock: systemClock,
             nonce: randomNonce,
             // a server without helper jobs is said once, as "no knowledge" would be: the helper's own words
@@ -543,6 +586,7 @@ async function startHelper(options: {
  */
 async function startKnowledgeExtractor(options: {
     api: Parameters<typeof startExtractor>[0]['api'];
+    agent: AgentName;
     model?: string;
     effort?: string;
     /** The light model that decides first whether to extract (`agent.extract.gateModel`). */
@@ -556,13 +600,22 @@ async function startKnowledgeExtractor(options: {
     const extractor = startExtractor(
         {
             api: options.api,
-            agent: createClaudeExtractor({
-                root: dir,
-                ...(options.model !== undefined && { model: options.model }),
-                ...(options.effort !== undefined && { effort: options.effort }),
-                gateModel: options.gateModel,
-                ...(options.command && { command: options.command }),
-            }),
+            agent:
+                options.agent === 'codex'
+                    ? createCodexExtractor({
+                          root: dir,
+                          ...(options.model !== undefined && { model: options.model }),
+                          ...(options.effort !== undefined && { effort: options.effort }),
+                          ...(options.gateModel !== DEFAULT_TRIAGE_MODEL && { gateModel: options.gateModel }),
+                          ...(options.command && { command: options.command }),
+                      })
+                    : createClaudeExtractor({
+                          root: dir,
+                          ...(options.model !== undefined && { model: options.model }),
+                          ...(options.effort !== undefined && { effort: options.effort }),
+                          gateModel: options.gateModel,
+                          ...(options.command && { command: options.command }),
+                      }),
             clock: systemClock,
             nonce: randomNonce,
             log: options.log,

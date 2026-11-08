@@ -62,7 +62,7 @@ export interface CliDeps {
      */
     startTunnel(options: { port: number; log: (line: string) => void }): Promise<StartedTunnel>;
     /** Whether the agent can run here (`claude` on the PATH, answering, with the flags the adapters need), or why not. */
-    checkAgent(agent: 'claude'): Promise<AgentUsability>;
+    checkAgent(agent: 'claude' | 'codex'): Promise<AgentUsability>;
     /**
      * Starts the agent (`dt agent`, or in process for `dt open` / `dt collab`) on the session server running on the
      * workspace. Rejects with `SessionError` when no server runs or its credential is refused.
@@ -267,7 +267,7 @@ export interface AgentOptions {
     respectGitignore: boolean;
     /** The config file given with `-c` (for `dt fmt` and `dt check` after the agent). */
     configPath?: string;
-    agent: 'claude';
+    agent: 'claude' | 'codex';
     /**
      * How to reach the agent API: the credential in memory (the agent in process), or a one-time pairing code to
      * exchange for it at `url` (default: the running server's).
