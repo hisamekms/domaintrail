@@ -39,6 +39,7 @@ import {
 } from './trust.js';
 import { PublishError } from './publish.js';
 import guide from '../../../../docs/guide.md' with { type: 'text' };
+import { designLevelAdvice } from './storming-advice.js';
 
 export interface CliIO {
     out: (line: string) => void;
@@ -134,12 +135,21 @@ async function knowledgeCheck(root: string, analysis: Analysis): Promise<Analysi
     };
 }
 
-async function runCheck(config: ResolvedConfig, io: CliIO, deps: CliDeps, report?: JsonReport): Promise<Analysis> {
+async function runCheck(
+    config: ResolvedConfig,
+    io: CliIO,
+    deps: CliDeps,
+    report?: JsonReport,
+    advice?: { storming?: string; timeline?: string },
+): Promise<Analysis> {
     const root = config.root;
     const sources = await deps.loadWorkspace(root, config.sources, config.respectGitignore);
     const checked = await journeyCheck(root, await analyze(sources));
     // the items' files are the `files` store's: with `cloudflare` the workspace has none to check
-    const analysis = config.knowledge.store === 'files' ? await knowledgeCheck(root, checked) : checked;
+    const base = config.knowledge.store === 'files' ? await knowledgeCheck(root, checked) : checked;
+    const analysis = advice
+        ? { ...base, diagnostics: [...base.diagnostics, ...designLevelAdvice(base.stormings.stormings, advice)].sort(compareDiagnostics) }
+        : base;
     const errors = analysis.diagnostics.filter((d) => d.severity === 'error').length;
     const warnings = analysis.diagnostics.filter((d) => d.severity === 'warning').length;
     const infos = analysis.diagnostics.filter((d) => d.severity === 'info').length;
@@ -219,13 +229,20 @@ Exits 0 when there are no errors, 1 on errors or when no .dt or .dtes file is fo
 Examples:
   dt check
   dt check --format json
+  dt check --storming-level design-level --storming OrderToCash --timeline Normal
   dt -r domain check
   dt -c config/domaintrail.jsonc check`,
         )
         .addOption(formatOption())
-        .action(async (opts: { format: Format }) => {
+        .addOption(new Option('--storming-level <level>', 'include explicit storming-level exploration advice').choices(['design-level']))
+        .option('--storming <id>', 'limit Design Level advice to one storming ID')
+        .option('--timeline <id>', 'limit Design Level advice to one timeline ID (use with --storming)')
+        .action(async (opts: { format: Format; stormingLevel?: 'design-level'; storming?: string; timeline?: string }) => {
+            if ((opts.storming || opts.timeline) && !opts.stormingLevel)
+                throw new CliError('--storming and --timeline require --storming-level design-level.', 2);
+            if (opts.timeline && !opts.storming) throw new CliError('--timeline requires --storming <id>.', 2);
             if (opts.format === 'json') report = {};
-            const a = await runCheck(await config(), io, deps, report);
+            const a = await runCheck(await config(), io, deps, report, opts.stormingLevel ? { storming: opts.storming, timeline: opts.timeline } : undefined);
             exitCode = a.ok && a.files.length > 0 ? 0 : 1;
         });
 

@@ -38,6 +38,7 @@ import {
     type DiagnosticsScope,
 } from './answer-prompt.js';
 import { AgentApiError, type AgentApi, type AnswerAgent, type AnswerTurnResult, type Clock, type WorkspaceFiles } from './ports.js';
+import { changesWorkingContext, journeyContext, type JourneyContext } from './journey-boundary.js';
 import { changedPaths } from './subscriber.js';
 import type { Practice } from './prompt.js';
 
@@ -111,6 +112,7 @@ export function startAnswerer(deps: AnswererDeps, options: AnswererOptions = {})
     let wakeWorker: () => void = () => {};
     /** The workspace as the read-only agent's previous answer or proposal left it. */
     let lastScan: ReadonlyMap<string, string> | undefined;
+    let lastJourney: JourneyContext | undefined;
 
     const finish = (why: AnswererEnd): void => {
         if (end) return;
@@ -163,6 +165,14 @@ export function startAnswerer(deps: AnswererDeps, options: AnswererOptions = {})
         if (job.kind === 'command') return commandResultOf(job, signal, started);
         const elapsed = (): number => Math.max(0, Math.round(now() - started));
         const failed = (error: string, model?: string): Record<string, unknown> => ({ error, durationMs: elapsed(), ...(model && { model }) });
+        if (job.journeys) {
+            const nextJourney = journeyContext(job.journeys);
+            if (changesWorkingContext(lastJourney, nextJourney)) {
+                deps.agent.reset?.('the current journey or its Design Level goal changed');
+                lastScan = undefined;
+            }
+            lastJourney = nextJourney;
+        }
         if (job.kind === 'triage') {
             const result = await deps.agent.triage({ prompt: buildTriagePrompt(job, deps.nonce()), signal });
             if (result.error !== undefined) return failed(result.error, result.model);

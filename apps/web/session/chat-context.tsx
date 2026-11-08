@@ -96,6 +96,8 @@ export interface ChatContextValue {
      * focus: the person starts it from there. What the composer held is replaced.
      */
     readonly putCommand: (id: string) => void;
+    /** Starts a visible, editable request draft from a journey invitation. */
+    readonly putDraft: (text: string) => void;
     /** Gives the composer the focus (in the chat), what it holds kept: an interview's その他. */
     readonly focusComposer: () => void;
     /**

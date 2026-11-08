@@ -5,7 +5,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { buildPrompt, MAX_CHANGED_SHOWN, MAX_QUESTION, OUTCOME_MARKER, parseReply } from './prompt.js';
-import { changedPaths, changesOutsideSources, showPaths } from './subscriber.js';
+import { changedPaths, changesOutsideSources, showPaths, validateClarificationEdit } from './subscriber.js';
 import {
     caseless,
     CONFIG_EDIT_DENIED,
@@ -185,7 +185,7 @@ describe('the prompt', () => {
             'Never copy or sync `.dtes` content into `.dt`',
             // the subscriber runs dt fmt and dt check after the turn: the agent runs dt check only for its diagnostics,
             // and dt guide to look the languages up
-            'Run no command except `dt check` and `dt guide`: `dt check` only when you need its diagnostics to fix your edit',
+            'Run no command except `dt check` and `dt guide`: for Design Level exploration',
             'are run on the workspace after your turn anyway',
             '`dt guide <topic>` to look up the',
             'do not guess',
@@ -225,6 +225,24 @@ describe('the prompt', () => {
     });
 });
 
+test('a clarification with provisional edits requires successful fmt and check before publication', async () => {
+    const calls: string[] = [];
+    const tools = (formatted: boolean, checked: boolean) => ({
+        format: async () => {
+            calls.push('format');
+            return formatted;
+        },
+        check: async () => {
+            calls.push('check');
+            return checked;
+        },
+    });
+    expect(await validateClarificationEdit(tools(true, true))).toBe(true);
+    expect(await validateClarificationEdit(tools(false, true))).toBe(false);
+    expect(await validateClarificationEdit(tools(true, false))).toBe(false);
+    expect(calls).toEqual(['format', 'check', 'format', 'format', 'check']);
+});
+
 describe('the .dtes syntax (ADR 0032)', () => {
     test("the .dtes syntax by example follows the storming's way of working, for requests about the stormings only", () => {
         const practice = { storming: 'STORMING', stormingSyntax: '### The .dtes syntax\n\nES-SYNTAX', modeling: 'MODELING' };
@@ -238,7 +256,7 @@ describe('the .dtes syntax (ADR 0032)', () => {
     test('rule 3: the relations in the grammar, and a hotspot, never a guess, for a relation nobody knows', () => {
         const prompt = buildPrompt(input([frozen({ kind: 'DtesStorming', storming: 'S' }, 'x')]), new Map(), 'n');
         expect(prompt).toContain("Write its relations in Event Storming's grammar (`dt guide dtes-quick`)");
-        expect(prompt).toContain('Never fill a relation you do not know by guessing');
+        expect(prompt).toContain('Do not treat a provisional relation as a fact or invent one merely to silence a diagnostic');
         expect(prompt).toContain('put a `hotspot` `on` that element asking it');
     });
 });

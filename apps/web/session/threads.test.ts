@@ -130,9 +130,41 @@ describe('how a reply shows', () => {
 
     test('a reply to a run hangs on its card right above it; else it quotes the card', () => {
         const under = state('Collab', [message('m1', 'f', 0), message('h1', 'p', 5, { run: 'r' })], [run('r', 'm1', 1)]);
-        expect(looks(threadLines(placeAiSlots(streamItems(under), new Map())))).toEqual(['message:m1 -', 'card:r head', 'message:h1 hangs:card:r']);
+        expect(looks(threadLines(placeAiSlots(streamItems(under), new Map())))).toEqual([
+            'message:m1 head',
+            'card:r hangs:message:m1+',
+            'message:h1 hangs:message:m1',
+        ]);
         const apart = state('Collab', [message('m1', 'f', 0), message('x', 'q', 3), message('h1', 'p', 5, { run: 'r' })], [run('r', 'm1', 1)]);
-        expect(looks(threadLines(placeAiSlots(streamItems(apart), new Map())))).toEqual(['message:m1 -', 'card:r -', 'message:x -', 'message:h1 quote']);
+        expect(looks(threadLines(placeAiSlots(streamItems(apart), new Map())))).toEqual([
+            'message:m1 head',
+            'card:r hangs:message:m1',
+            'message:x -',
+            'message:h1 quote',
+        ]);
+    });
+
+    test('a single-request AI turn follows the reply to a DL invitation in Collab', () => {
+        const s = state('Collab', [message('invite', 'ai', 0), message('request', 'f', 1, { message: 'invite' })], [run('work', 'request', 2)]);
+        const lines = threadLines(placeAiSlots(streamItems(s), new Map()));
+        expect(lines.map((l) => [l.key, l.to])).toEqual([
+            ['message:invite', undefined],
+            ['message:request', 'message:invite'],
+            ['card:work', 'message:request'],
+        ]);
+        expect(looks(lines)).toEqual(['message:invite head', 'message:request hangs:message:invite+', 'card:work hangs:message:invite']);
+
+        const separated = state(
+            'Collab',
+            [message('invite', 'ai', 0), message('request', 'f', 1, { message: 'invite' }), message('other', 'p', 2)],
+            [run('work', 'request', 3)],
+        );
+        expect(looks(threadLines(placeAiSlots(streamItems(separated), new Map())))).toEqual([
+            'message:invite head',
+            'message:request hangs:message:invite',
+            'message:other -',
+            'card:work quote',
+        ]);
     });
 
     test('a facilitator answer replies to the question, and its AI run replies to the answer', () => {
@@ -149,11 +181,16 @@ describe('how a reply shows', () => {
         const entries = placeAiSlots(streamItems(state('Collab', [message('m1', 'f', 0)], [asked, working])), new Map());
         expect(threadLines(entries).map((l) => [l.key, l.to])).toEqual([
             ['message:m1', undefined],
-            ['card:ask', undefined],
+            ['card:ask', 'message:m1'],
             ['answer:work', 'card:ask'],
             ['card:work', 'answer:work'],
         ]);
-        expect(looks(threadLines(entries))).toEqual(['message:m1 -', 'card:ask head', 'answer:work hangs:card:ask+', 'card:work hangs:card:ask']);
+        expect(looks(threadLines(entries))).toEqual([
+            'message:m1 head',
+            'card:ask hangs:message:m1+',
+            'answer:work hangs:message:m1+',
+            'card:work hangs:message:m1',
+        ]);
 
         const separated = placeAiSlots(streamItems(state('Collab', [message('m1', 'f', 0), message('other', 'p', 2)], [asked, working])), new Map());
         const lines = threadLines(separated);

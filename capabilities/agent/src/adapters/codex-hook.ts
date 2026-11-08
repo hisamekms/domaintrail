@@ -88,7 +88,7 @@ process.stdin.on('end', () => {
     const tool = event?.tool_name;
     const command = event?.tool_input?.command;
     const allowed = (tool === 'Bash' && typeof command === 'string' &&
-      (read(command) || (role === 'run' && (/^dt (?:fmt|check)$/.test(command) || /^dt guide(?: --all| [A-Za-z0-9][A-Za-z0-9-]*)?$/.test(command))))) ||
+      (read(command) || (role === 'run' && (/^dt (?:fmt|check)$/.test(command) || /^dt check --storming-level(?:=| )design-level(?: --storming [_a-zA-Z][a-zA-Z0-9_]*(?: --timeline [_a-zA-Z][a-zA-Z0-9_]*)?)?$/.test(command) || /^dt guide(?: --all| [A-Za-z0-9][A-Za-z0-9-]*)?$/.test(command))))) ||
       (tool === 'apply_patch' && patch(command)) ||
       ((role === 'run' || role === 'read') && typeof tool === 'string' && /^mcp__domaintrail__knowledge_(?:for_element|search|get)$/.test(tool));
     if (allowed) return;

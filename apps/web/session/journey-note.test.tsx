@@ -5,7 +5,7 @@ import { describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MESSAGES } from '../i18n';
 import { ChatProvider, type ChatContextValue } from './chat-context';
-import { JourneyNoteActions } from './journey-note';
+import { designLevelDraft, JourneyNoteActions } from './journey-note';
 import { TargetNamingProvider } from './naming';
 import type { NamingContext } from './targets';
 import { actKinds, decides } from '../test-helpers';
@@ -65,5 +65,16 @@ describe("dt's note after a brief is confirmed", () => {
         expect(html).toContain('lucide-eye');
         expect(html).toContain('Issue');
         expect(render({})).toBe('');
+    });
+
+    test('DL invitation offers one flow, whole storming, custom scope and later; drafts ask for an actual edit', () => {
+        const html = render({ journeyNote: { journey: 'es:Issue', targets: [], invitation: true } });
+        for (const label of ['一つの流れ', '全体', '自由指定', 'あとで']) expect(html).toContain(label);
+        expect(render({ journeyNote: { journey: 'es:Issue', targets: [], invitation: true } }, chat(false))).not.toContain('一つの流れ');
+        for (const scope of ['flow', 'all', 'custom'] as const) {
+            expect(designLevelDraft('Issue', scope, 'ja')).toContain('仮案を .dtes に描いてください');
+            expect(designLevelDraft('Issue', scope, 'en')).toContain('Please edit the .dtes defining storming Issue');
+        }
+        expect(designLevelDraft('Issue', 'flow', 'ja')).toContain('［流れ名］');
     });
 });

@@ -143,20 +143,33 @@ export async function fingerprintDt(dt: PinnedDt): Promise<string> {
 }
 
 /**
- * What the agent may ask of its `dt`: `fmt` or `check`, then `.dt` / `.dtes` files of the workspace; or `guide` alone,
+ * What the agent may ask of its `dt`: `fmt` or `check`, then `.dt` / `.dtes` files of the workspace;
+ * `check --storming-level=design-level` with optional storming/timeline IDs; or `guide` alone,
  * with one topic or rule name, or with `--all`. Nothing else.
  */
 export const AGENT_SUBCOMMANDS = ['fmt', 'check', 'guide'] as const;
 
 /** What the agent is told when its `dt` refuses (the launcher says the same). */
 const AGENT_DT_USAGE =
-    'Use `dt fmt` or `dt check`, optionally followed by .dt / .dtes files of the workspace, or `dt guide [<topic> | --all]`; no other options.';
+    'Use `dt fmt` or `dt check`, optionally followed by .dt / .dtes files of the workspace; `dt check --storming-level=design-level [--storming ID [--timeline ID]]`; or `dt guide [<topic> | --all]`; no other options.';
 
 /** A name `dt guide` takes: a topic (`storming-practice`) or a rule code (`M010`); never an option. */
 const GUIDE_NAME = /^[A-Za-z0-9][A-Za-z0-9-]*$/;
 
 /** Whether the arguments after `guide` are what it may take: none, one name, or `--all`. */
 const guideArguments = (rest: readonly string[]): boolean => rest.length === 0 || (rest.length === 1 && (rest[0] === '--all' || GUIDE_NAME.test(rest[0])));
+
+const STORMING_ID = /^[_a-zA-Z][a-zA-Z0-9_]*$/;
+
+/** The only check flags the agent may use: advice on a whole workspace, one storming, or one timeline. */
+function designLevelArguments(rest: readonly string[]): boolean {
+    let index = rest[0] === '--storming-level=design-level' ? 1 : rest[0] === '--storming-level' && rest[1] === 'design-level' ? 2 : -1;
+    if (index < 0) return false;
+    const scoped = rest[index] === '--storming' && STORMING_ID.test(rest[index + 1] ?? '');
+    if (scoped) index += 2;
+    if (scoped && rest[index] === '--timeline' && STORMING_ID.test(rest[index + 1] ?? '')) index += 2;
+    return index === rest.length;
+}
 
 /**
  * The arguments `dt` gets for what the agent typed in `cwd`: `-r <root>`, the subcommand, and the files made absolute
@@ -171,6 +184,7 @@ export function agentDtArguments(given: readonly string[], cwd: string, root: st
         if (!guideArguments(files)) return { ok: false, error: `dt: guide takes one topic or --all (${files.join(' ')}). ${usage}` };
         return { ok: true, args: ['-r', root, sub, ...files] };
     }
+    if (sub === 'check' && designLevelArguments(files)) return { ok: true, args: ['-r', root, sub, ...files] };
     const out: string[] = [];
     for (const f of files) {
         if (f.startsWith('-')) return { ok: false, error: `dt: options are not accepted (${f}). ${usage}` };
@@ -202,9 +216,17 @@ export function launcherScript(dt: PinnedDt, root: string, cwd: string): string 
         'const [sub, ...files] = process.argv.slice(2);',
         "if (sub !== 'fmt' && sub !== 'check' && sub !== 'guide') refuse('only fmt, check and guide are available.');",
         `const guideName = ${GUIDE_NAME.toString()};`,
+        `const stormingId = ${STORMING_ID.toString()};`,
         "const guideOk = files.length === 0 || (files.length === 1 && (files[0] === '--all' || guideName.test(files[0])));",
         "if (sub === 'guide' && !guideOk) refuse(`guide takes one topic or --all (${files.join(' ')}).`);",
-        "const abs = sub === 'guide' ? files : files.map((f) => {",
+        "let checkIndex = files[0] === '--storming-level=design-level' ? 1 : files[0] === '--storming-level' && files[1] === 'design-level' ? 2 : -1;",
+        "if (sub === 'check' && checkIndex >= 0) {",
+        "    const scoped = files[checkIndex] === '--storming' && stormingId.test(files[checkIndex + 1] ?? '');",
+        '    if (scoped) checkIndex += 2;',
+        "    if (scoped && files[checkIndex] === '--timeline' && stormingId.test(files[checkIndex + 1] ?? '')) checkIndex += 2;",
+        "    if (checkIndex !== files.length) refuse(`check options are not accepted (${files.join(' ')}).`);",
+        '}',
+        "const abs = sub === 'guide' || (sub === 'check' && checkIndex >= 0) ? files : files.map((f) => {",
         "    if (f.startsWith('-')) refuse(`options are not accepted (${f}).`);",
         '    if (!/\\.dt(es)?$/.test(f)) refuse(`not a .dt or .dtes file (${f}).`);',
         '    const a = resolve(process.cwd(), f);',

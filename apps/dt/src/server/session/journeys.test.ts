@@ -115,4 +115,17 @@ describe('the journey file in the session server', () => {
         // done: dt's note in the facilitator's language, /es:recap for an ES journey to align
         expect(state.requests.at(-1)).toMatchObject({ body: '“交付” is complete.\nNext, recap what you have.', journeyNote: { command: 'EsRecap' } });
     });
+
+    test('a participant BP→DL request invites only after facilitator approval', async () => {
+        const { server, collaboration, session } = await setup();
+        const { journeys } = await server();
+        const asked = await journeys.act(participant, 'Bob', { kind: 'goal', journey: 'es:Issue', goal: 'DesignLevel' });
+        const invitations = async () => made(await collaboration.sessionState({ session })).requests.filter((r) => r.journeyNote?.invitation);
+        expect(await invitations()).toHaveLength(0);
+        const id = 'request' in asked && asked.request ? asked.request.id : '';
+        expect(await journeys.decide(facilitator, id, true, 'ja')).toEqual({ done: true });
+        expect(await invitations()).toHaveLength(1);
+        expect(await journeys.act(facilitator, 'Ada', { kind: 'goal', journey: 'es:Issue', goal: 'DesignLevel' }, 'ja')).toEqual({ done: true });
+        expect(await invitations()).toHaveLength(1);
+    });
 });

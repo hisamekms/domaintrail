@@ -1,0 +1,41 @@
+storming Fulfillment "注文の履行" {
+  event OrderPlaced "注文された"
+  event OrderApproved "注文が承認された"
+  event StockReserved "在庫が確保された"
+  event ParcelDelivered "荷物が届いた" {
+    from Courier
+  }
+  event AuditRecorded "監査が記録された"
+
+  actor Clerk "担当者"
+  external Courier "配送会社"
+  aggregate Order "注文"
+  aggregate Inventory "在庫"
+
+  command ApproveOrder "注文を承認する" {
+    by Clerk
+    on OrderPlaced
+    handledBy Order
+    emits OrderApproved
+  }
+  policy ReserveAfterApproval "承認後に在庫を確保する" {
+    on OrderApproved
+    issues ReserveStock
+  }
+  command ReserveStock "在庫を確保する" {
+    handledBy Inventory
+    emits StockReserved
+  }
+
+  hotspot DeliveryHandoff "在庫確保から配送までの責任は誰が持つ？" {
+    on StockReserved
+  }
+
+  timeline Normal "通常" {
+    OrderPlaced
+    OrderApproved
+    StockReserved
+    ParcelDelivered
+    AuditRecorded
+  }
+}
