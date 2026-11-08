@@ -528,7 +528,8 @@ export function SessionChat(props: {
         const unit = units.find((u) => u.runs.some((r) => r.run.id === goTo.id));
         if (goTo.kind === 'message') jump(`message:${goTo.id}`);
         else if (goTo.kind === 'run') {
-            if (unit) jump(`card:${unit.key}`);
+            const card = items.find((i) => i.kind === 'card' && i.runs.some((r) => r.run.id === goTo.id));
+            if (card) jump(card.key);
         } else {
             setView('history');
             if (unit) setPeek((p) => ({ key: unit.key, n: (p?.n ?? 0) + 1 }));
@@ -1046,8 +1047,8 @@ interface Row {
     readonly render: (continues: boolean) => ReactNode;
 }
 
-/** What a row replies to: a message, or a run (on its card). */
-type ReplyTo = { readonly kind: 'Message'; readonly request: string } | { readonly kind: 'Run'; readonly run: string };
+/** What a row replies to: a message, a run (on its card), or a facilitator's answer. */
+type ReplyTo = { readonly kind: 'Message'; readonly request: string } | { readonly kind: 'Run' | 'Answer'; readonly run: string };
 
 function streamRows(shown: Shown, tx: Tx): Row[] {
     const slotted = new Set(shown.entries.flatMap((e) => (e.kind === 'slot' ? [e.request] : [])));
@@ -1110,7 +1111,20 @@ function streamRows(shown: Shown, tx: Tx): Row[] {
                         ),
                 };
             case 'card':
-                return { key: item.key, kind: item.kind, author: undefined, render: () => <RunCard unit={item.unit} /> };
+                return {
+                    key: item.key,
+                    kind: item.kind,
+                    author: undefined,
+                    render: () => (
+                        <RunCard
+                            unit={item.unit}
+                            visibleRuns={item.runs}
+                            reference={look.quote && item.runs[0]?.run.input.answer && <AnswerReferenceLine run={item.runs[0].run} />}
+                        />
+                    ),
+                };
+            case 'answer':
+                return { key: item.key, kind: item.kind, author: item.run.queuedBy, render: () => <AnswerRow run={item.run} quoted={look.quote} /> };
             case 'record':
                 return {
                     key: item.key,
@@ -1124,11 +1138,15 @@ function streamRows(shown: Shown, tx: Tx): Row[] {
         }
     };
     const toOf = (item: StreamItem): ReplyTo | undefined =>
-        item.kind === 'message'
-            ? item.request.replyTo
-            : item.kind === 'record' && item.record.replyTo !== undefined
-              ? { kind: 'Message', request: item.record.replyTo }
-              : undefined;
+        item.kind === 'card' && item.runs[0]?.run.input.answer
+            ? { kind: 'Answer', run: item.runs[0].run.id }
+            : item.kind === 'answer'
+              ? { kind: 'Run', run: item.run.input.answer!.answerTo }
+              : item.kind === 'message'
+                ? item.request.replyTo
+                : item.kind === 'record' && item.record.replyTo !== undefined
+                  ? { kind: 'Message', request: item.record.replyTo }
+                  : undefined;
     return shown.entries.map((entry, i): Row => {
         const look = looks[i] ?? { hangsOn: undefined, head: false, more: false, quote: false };
         if (entry.kind === 'item') return { id: rowId(entry.item), look, to: toOf(entry.item), ...itemRow(entry.item, look) };
@@ -1150,6 +1168,44 @@ function streamRows(shown: Shown, tx: Tx): Row[] {
         const row = itemRow(content.item, look);
         return { ...row, id, look, to, render: (continues) => <AiSlotRow request={entry.request} phase="item" item={row.render(continues)} /> };
     });
+}
+
+function AnswerRow({ run, quoted }: { run: SessionData['state']['runs'][number]; quoted: boolean }) {
+    const { session, tx, nameOf, solo } = useChat();
+    const answer = run.input.answer;
+    if (!answer) return null;
+    const author = nameOf(run.queuedBy);
+    return (
+        <div className="chat-row">
+            <Bubble
+                avatar={<Avatar id={run.queuedBy} name={author} />}
+                who={speakerName(run.queuedBy, session.me.participant.id, nameOf, tx.chat.you)}
+                badge={isFacilitator(session.state, run.queuedBy) && !solo && <span className="chat-role">{tx.chat.facilitatorShort}</span>}
+                at={run.queuedAt}
+                className="chat-bubble-answer"
+            >
+                {quoted && <ReplyReferenceLine run={answer.answerTo} />}
+                <span className="chat-role">{tx.chat.answered}</span>
+                <div className="chat-text">
+                    {answer.answers.map((a) => (
+                        <div key={a.question}>
+                            <span className="chat-role">{a.text}: </span>
+                            {[...a.chosen.map((o) => o.label), ...(a.freeText ? [a.freeText] : [])].join(' / ')}
+                        </div>
+                    ))}
+                </div>
+            </Bubble>
+        </div>
+    );
+}
+
+function AnswerReferenceLine({ run }: { run: SessionData['state']['runs'][number] }) {
+    const { session, tx, nameOf, jump } = useChat();
+    const who = speakerName(run.queuedBy, session.me.participant.id, nameOf, tx.chat.you);
+    const answer = run.input.answer;
+    if (!answer) return null;
+    const head = answer.answers.flatMap((a) => [...a.chosen.map((o) => o.label), ...(a.freeText ? [a.freeText] : [])]).join(tx.chat.listSeparator);
+    return <ReferenceLine who={who} head={head} tooltip={tx.chat.replies.messageReferenceHint(who)} onClick={() => jump(`answer:${run.id}`)} />;
 }
 
 /**
@@ -1424,6 +1480,9 @@ function RepliesTo({ to }: { to: ReplyTo }) {
     if (to.kind === 'Message') {
         const ref = replies.messageReferenceOf(to.request);
         who = ref && speakerName(ref.author, session.me.participant.id, nameOf, tx.chat.you);
+    } else if (to.kind === 'Answer') {
+        const run = session.state.runs.find((r) => r.id === to.run);
+        who = run && speakerName(run.queuedBy, session.me.participant.id, nameOf, tx.chat.you);
     } else {
         const ref = replies.referenceOf(to.run);
         who = ref && tx.chat.replies.reference(ref.name);

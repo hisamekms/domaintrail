@@ -134,4 +134,33 @@ describe('how a reply shows', () => {
         const apart = state('Collab', [message('m1', 'f', 0), message('x', 'q', 3), message('h1', 'p', 5, { run: 'r' })], [run('r', 'm1', 1)]);
         expect(looks(threadLines(placeAiSlots(streamItems(apart), new Map())))).toEqual(['message:m1 -', 'card:r -', 'message:x -', 'message:h1 quote']);
     });
+
+    test('a facilitator answer replies to the question, and its AI run replies to the answer', () => {
+        const asked = { ...run('ask', 'm1', 1), state: 'NeedsClarification', question: 'Which?', finishedAt: at(2) };
+        const working = {
+            ...run('work', 'm1', 3),
+            state: 'Running',
+            startedAt: at(3),
+            input: {
+                requests: [{ request: 'm1', author: 'f', targets: [], body: 'b' }],
+                answer: { answerTo: 'ask', answers: [{ question: 'q', text: 'Which?', chosen: [{ id: 'a', label: 'A' }] }] },
+            },
+        };
+        const entries = placeAiSlots(streamItems(state('Collab', [message('m1', 'f', 0)], [asked, working])), new Map());
+        expect(threadLines(entries).map((l) => [l.key, l.to])).toEqual([
+            ['message:m1', undefined],
+            ['card:ask', undefined],
+            ['answer:work', 'card:ask'],
+            ['card:work', 'answer:work'],
+        ]);
+        expect(looks(threadLines(entries))).toEqual(['message:m1 -', 'card:ask head', 'answer:work hangs:card:ask+', 'card:work hangs:card:ask']);
+
+        const separated = placeAiSlots(streamItems(state('Collab', [message('m1', 'f', 0), message('other', 'p', 2)], [asked, working])), new Map());
+        const lines = threadLines(separated);
+        expect(lines.at(-2)).toEqual({ key: 'answer:work', to: 'card:ask' });
+        expect(lines.at(-1)).toEqual({ key: 'card:work', to: 'answer:work' });
+        const style = replyLooks(lines);
+        expect(style.at(-2)?.quote).toBe(true);
+        expect(style.at(-1)?.hangsOn).toBe('answer:work');
+    });
 });
